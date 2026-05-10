@@ -8,7 +8,7 @@ namespace FashionRise.Infrastructure.Platform
     public static class AndroidGalleryPick
     {
         public static bool IsSupported =>
-            Application.platform == RuntimePlatform.Android;
+            UnityEngine.Application.platform == RuntimePlatform.Android;
 
         public static void BeginPickToImportsFolder()
         {
@@ -17,14 +17,14 @@ namespace FashionRise.Infrastructure.Platform
 
             try
             {
-                var imports = Path.Combine(Application.persistentDataPath, "Imports");
+                var imports = Path.Combine(UnityEngine.Application.persistentDataPath, "Imports");
                 Directory.CreateDirectory(imports);
                 using var c = new AndroidJavaClass("com.fashionrise.gallery.GalleryPick");
                 c.CallStatic("beginPick", imports);
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                UnityEngine.Debug.LogException(ex);
             }
         }
     }

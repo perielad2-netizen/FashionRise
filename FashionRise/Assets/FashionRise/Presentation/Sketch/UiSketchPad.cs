@@ -253,7 +253,7 @@ namespace FashionRise.Presentation.Sketch
         /// <summary>Writes PNG under persistentDataPath/Sketches; returns full file path.</summary>
         public string SavePngToPersistentData(string fileNamePrefix = "sketch")
         {
-            var dir = Path.Combine(Application.persistentDataPath, "Sketches");
+            var dir = Path.Combine(UnityEngine.Application.persistentDataPath, "Sketches");
             Directory.CreateDirectory(dir);
             var name = $"{fileNamePrefix}_{System.DateTime.UtcNow:yyyyMMdd_HHmmssfff}.png";
             var path = Path.Combine(dir, name);

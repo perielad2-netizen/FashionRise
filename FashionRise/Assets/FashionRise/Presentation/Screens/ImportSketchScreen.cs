@@ -93,8 +93,8 @@ namespace FashionRise.Presentation.Screens
             for (var i = _listHost.childCount - 1; i >= 0; i--)
                 Destroy(_listHost.GetChild(i).gameObject);
 
-            var imports = Path.Combine(Application.persistentDataPath, "Imports");
-            var sketches = Path.Combine(Application.persistentDataPath, "Sketches");
+            var imports = Path.Combine(UnityEngine.Application.persistentDataPath, "Imports");
+            var sketches = Path.Combine(UnityEngine.Application.persistentDataPath, "Sketches");
             Directory.CreateDirectory(imports);
             Directory.CreateDirectory(sketches);
 
@@ -117,8 +117,8 @@ namespace FashionRise.Presentation.Screens
         {
             var dirs = new[]
             {
-                Path.Combine(Application.persistentDataPath, "Sketches"),
-                Path.Combine(Application.persistentDataPath, "Imports")
+                Path.Combine(UnityEngine.Application.persistentDataPath, "Sketches"),
+                Path.Combine(UnityEngine.Application.persistentDataPath, "Imports")
             };
             var acc = new List<(string path, long ticks)>();
             foreach (var dir in dirs)

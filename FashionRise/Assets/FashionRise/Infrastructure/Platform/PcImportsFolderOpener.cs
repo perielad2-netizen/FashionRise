@@ -9,7 +9,7 @@ namespace FashionRise.Infrastructure.Platform
     public static class PcImportsFolderOpener
     {
         public static bool IsSupported =>
-            Application.platform is RuntimePlatform.WindowsPlayer
+            UnityEngine.Application.platform is RuntimePlatform.WindowsPlayer
                 or RuntimePlatform.WindowsEditor
                 or RuntimePlatform.OSXPlayer
                 or RuntimePlatform.OSXEditor
@@ -18,7 +18,7 @@ namespace FashionRise.Infrastructure.Platform
 
         public static void TryOpenImportsFolder()
         {
-            var imports = Path.Combine(Application.persistentDataPath, "Imports");
+            var imports = Path.Combine(UnityEngine.Application.persistentDataPath, "Imports");
             Directory.CreateDirectory(imports);
             var full = Path.GetFullPath(imports);
 
@@ -36,12 +36,12 @@ namespace FashionRise.Infrastructure.Platform
 #elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
                 Process.Start("xdg-open", full);
 #else
-                Application.OpenURL("file://" + full.Replace("\\", "/"));
+                UnityEngine.Application.OpenURL("file://" + full.Replace("\\", "/"));
 #endif
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"Could not open Imports folder: {ex.Message}\n{full}");
+                UnityEngine.Debug.LogWarning($"Could not open Imports folder: {ex.Message}\n{full}");
             }
         }
     }
