@@ -1,0 +1,70 @@
+# --- Secrets (never commit) ---
+.env
+.env.*
+!.env.example
+backend/.env
+*.pem
+*.key
+
+# --- OS ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# --- Python / FastAPI (backend/) ---
+backend/.venv/
+backend/venv/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+*.egg
+
+# --- Unity (FashionRise/ is the editor project root) ---
+FashionRise/[Ll]ibrary/
+FashionRise/[Tt]emp/
+FashionRise/[Oo]bj/
+FashionRise/[Bb]uild/
+FashionRise/[Bb]uilds/
+FashionRise/[Ll]ogs/
+FashionRise/[Uu]ser[Ss]ettings/
+FashionRise/MemoryCaptures/
+FashionRise/Recordings/
+FashionRise/SerializedBuildInfo/
+FashionRise/*.sln.DotSettings.user
+
+# Crash / debug
+FashionRise/sysinfo.txt
+FashionRise/UpgradeLog.htm
+UpgradeLog.htm
+*.stackdump
+
+# Built players (if you output next to repo)
+*.apk
+*.aab
+*.ipa
+
+# --- IDE / tooling ---
+.vs/
+.idea/
+*.user
+*.userprefs
+*.pidb
+*.mdb
+*.opendb
+*.VC.db
+*.svd
+
+# Optional: uncomment if you prefer not to track VS Code workspace settings
+# .vscode/

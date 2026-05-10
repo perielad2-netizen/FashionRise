@@ -1,0 +1,2 @@
+# Normalize line endings; Git on Windows may still show CRLF/LF notices — harmless.
+* text=auto

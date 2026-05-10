@@ -1,0 +1,1186 @@
+PROMPT 0 — MASTER PROJECT CONTEXT
+You are a senior Unity architect, senior mobile/tablet UX designer, senior C# engineer, senior FastAPI backend engineer, PostgreSQL database architect, DevOps engineer, and fashion-tech product architect.
+
+We are building a serious premium fashion design mobile/tablet app in Unity.
+
+This is not a childish dress-up game.
+This is a beautiful, aspirational, modern, realistic fashion creation platform for girls and young creators.
+
+The app lets users:
+- design real-looking clothes from scratch or templates
+- sketch fashion ideas
+- later enhance sketches with AI
+- choose realistic fabrics and materials
+- apply designs to a realistic female fashion model avatar
+- preview final looks in a premium studio/runway style
+- save designs to their public profile
+- export PNG images
+- let friends rate designs from 1 to 10
+- eventually generate designer handoff packages so talented creators can send ideas to real fashion designers
+
+PLATFORM TARGET:
+- Primary: tablets
+- Secondary: mobile phones
+- Architecture should remain desktop-ready later
+- No web client for now
+
+BACKEND TARGET:
+We already have a production Ubuntu Linux server with:
+- Nginx
+- PostgreSQL
+
+Therefore do NOT design this as Firebase-first.
+
+Use this stack:
+Client:
+- Unity
+- C#
+- URP
+- tablet-first UI
+- mobile-supported
+- REST API client layer
+
+Backend:
+- FastAPI
+- PostgreSQL
+- SQLAlchemy
+- Alembic
+- JWT authentication
+- REST API
+- file/image upload
+- local server storage first
+- S3-compatible storage later
+- OpenAPI docs
+- Nginx reverse proxy
+- production deployment on Ubuntu
+
+AI:
+- AI sketch enhancement should be service-ready from day one
+- Do not hardcode one AI provider
+- Create clean interfaces and placeholder endpoints for future AI providers
+- Later the AI system may support sketch cleanup, concept polish, material suggestions, style suggestions, and designer feedback
+
+IMPORTANT WORKING STYLE:
+- First analyze, then plan, then implement
+- Do not dump random code without architecture
+- Build clean modular systems
+- No spaghetti code
+- No giant MonoBehaviour classes
+- No hardcoded UI data inside controllers
+- No direct backend calls inside UI scripts
+- Use service interfaces and adapters
+- Keep Unity client independent from backend implementation details
+- Keep backend clean, scalable, and production-minded
+- Build as if a real startup team will continue this project later
+
+QUALITY BAR:
+This must feel like a premium startup product foundation, not a school project.
+
+Before coding, present:
+1. Full architecture plan
+2. Folder structure for Unity
+3. Folder structure for FastAPI backend
+4. Database model overview
+5. API endpoint overview
+6. Development phases
+7. Future upgrade points
+
+PROMPT 1 — CREATE THE FULL ARCHITECTURE
+Create the full architecture for the project.
+
+Project name:
+FashionRise
+
+Product:
+A premium tablet-first fashion design app/game where users create realistic clothing designs, choose fabrics, preview them on a realistic model avatar, save to profile/gallery, export PNGs, and later use AI and designer handoff features.
+
+Create two main projects:
+
+1. Unity client
+2. FastAPI backend
+
+UNITY CLIENT ARCHITECTURE:
+Use clean folders:
+- Assets/FashionRise/Core
+- Assets/FashionRise/Domain
+- Assets/FashionRise/Application
+- Assets/FashionRise/Services
+- Assets/FashionRise/Infrastructure
+- Assets/FashionRise/UI
+- Assets/FashionRise/Presentation
+- Assets/FashionRise/Data
+- Assets/FashionRise/Content
+- Assets/FashionRise/Config
+- Assets/FashionRise/Editor
+- Assets/FashionRise/ArtPlaceholders
+
+Unity must include systems for:
+- app startup
+- navigation
+- onboarding
+- guest/login placeholder
+- home dashboard
+- create design flow
+- garment template selection
+- fabric/material selection
+- color palette selection
+- realistic model preview placeholder
+- gallery/profile
+- PNG export
+- API client service layer
+- local mock services for offline development
+- backend API adapters for production
+
+UNITY DESIGN PRINCIPLES:
+- tablet-first
+- mobile-supported
+- desktop-ready architecture
+- touch-friendly
+- elegant premium UI
+- not childish
+- realistic fashion direction
+- modular services
+- data-driven catalogs
+- backend-independent UI
+
+BACKEND ARCHITECTURE:
+Use FastAPI with:
+- app/main.py
+- app/core
+- app/api
+- app/models
+- app/schemas
+- app/services
+- app/repositories
+- app/db
+- app/auth
+- app/storage
+- app/ai
+- app/config
+- alembic
+- tests
+
+Backend must support:
+- users
+- auth
+- JWT access/refresh tokens
+- user profiles
+- garment designs
+- material/fabric catalog
+- color palettes
+- public gallery
+- ratings 1-10
+- exported images
+- AI job placeholders
+- design revisions placeholder
+- moderation-ready fields
+- admin-ready metadata
+- OpenAPI documentation
+
+DATABASE:
+Use PostgreSQL.
+
+Create initial database tables:
+- users
+- user_profiles
+- garment_designs
+- garment_templates
+- material_definitions
+- color_palettes
+- gallery_items
+- ratings
+- design_exports
+- ai_jobs
+- design_revisions
+
+API ENDPOINTS:
+Plan endpoints for:
+- auth/register
+- auth/login
+- auth/refresh
+- auth/me
+- profiles/me
+- profiles/{user_id}
+- designs
+- designs/{id}
+- materials
+- palettes
+- gallery
+- gallery/{id}
+- ratings
+- exports
+- uploads
+- ai/jobs
+
+OUTPUT:
+First give me:
+1. Architecture summary
+2. Unity folder structure
+3. Backend folder structure
+4. Database schema overview
+5. API overview
+6. Phase-by-phase implementation plan
+
+Do not write all code yet.
+Only write architecture first.
+
+PROMPT 2 — UNITY CLIENT V1
+Now implement Version 1 of the Unity client.
+
+Do not implement backend yet in this prompt.
+Create the Unity-side foundation with mock services and API-ready interfaces.
+
+VERSION 1 UNITY GOALS:
+- premium tablet-first MVP
+- mobile-supported
+- desktop-ready architecture
+- clean C# architecture
+- mock data first
+- real backend adapters prepared later
+- beautiful modern UI direction
+- realistic fashion product feel
+
+FEATURES TO IMPLEMENT:
+
+1. APP FLOW
+Create screens:
+- SplashScreen
+- WelcomeScreen
+- LoginChoiceScreen
+- HomeDashboardScreen
+- CreateDesignScreen
+- MaterialSelectionScreen
+- ModelPreviewScreen
+- GalleryScreen
+- ProfileScreen
+- DesignDetailScreen
+- SettingsScreen
+
+2. NAVIGATION SYSTEM
+Create clean navigation:
+- IScreen
+- ScreenController
+- NavigationService
+- ScreenTransitionService
+
+3. DOMAIN MODELS
+Create C# models:
+- UserProfile
+- CreatorStats
+- GarmentDesign
+- GarmentTemplate
+- GarmentCategory
+- MaterialDefinition
+- ColorPalette
+- StyleTag
+- GalleryItem
+- RatingSummary
+- ExportPackage
+- DesignMetadata
+
+4. SERVICE INTERFACES
+Create:
+- IAuthService
+- IUserProfileService
+- IDesignSaveService
+- IMaterialCatalogService
+- IColorPaletteService
+- IGarmentTemplateService
+- IGalleryService
+- IRatingService
+- IExportService
+- IAIEnhancementService
+
+5. MOCK SERVICES
+Create mock/local implementations:
+- MockAuthService
+- MockUserProfileService
+- MockDesignSaveService
+- MockMaterialCatalogService
+- MockColorPaletteService
+- MockGarmentTemplateService
+- MockGalleryService
+- MockRatingService
+- MockExportService
+- MockAIEnhancementService
+
+6. CREATE DESIGN FLOW
+User can:
+- choose garment category:
+  - dress
+  - top
+  - skirt
+  - two-piece
+- choose base template
+- choose neckline
+- choose sleeve type
+- choose length
+- choose fit
+- choose waist style
+- choose color palette
+- choose material/fabric
+- preview on model
+- save design
+- export PNG placeholder
+
+7. MATERIAL DATABASE
+Create realistic fabric/material mock catalog:
+- satin
+- silk
+- cotton
+- linen
+- denim
+- wool
+- chiffon
+- tulle
+- velvet
+- leather
+- knit
+
+Each material must include:
+- id
+- displayName
+- description
+- sheenLevel
+- softnessLevel
+- weightClass
+- drapeCharacter
+- stretchLevel
+- formalCasualTag
+- luxuryScore
+- seasonTags
+- recommendedGarmentCategories
+- placeholderMaterialReference
+- futureSourcingMetadata
+
+8. MODEL PREVIEW
+Create a placeholder realistic model preview system:
+- ModelPreviewController
+- AvatarPresentationConfig
+- GarmentPreviewApplier
+- PreviewCameraController
+- StudioLightingController
+
+Use placeholders but design architecture so we can later swap in high-quality avatar assets and real garment systems.
+
+9. UI STYLE SYSTEM
+Create reusable UI style/theme structure:
+- colors
+- typography roles
+- spacing
+- button style
+- card style
+- modal style
+- tabs
+- screen containers
+
+Visual style:
+- premium
+- modern
+- feminine
+- soft luxury
+- clean
+- not childish
+- not too pink
+- elegant
+- fashion-forward
+
+10. EXPORT SYSTEM
+Create architecture for PNG export:
+- IExportService
+- ExportRequest
+- ExportResult
+- ExportPackage
+- UnityPngExportService placeholder
+
+11. API-READY LAYER
+Create placeholder API adapter classes but do not connect yet:
+- ApiClient
+- ApiConfig
+- ApiAuthService
+- ApiDesignService
+- ApiGalleryService
+- ApiMaterialService
+
+They can throw NotImplementedException or use mock data, but structure must be ready.
+
+12. DOCUMENTATION
+Create:
+- README_Unity.md
+- Unity architecture notes
+- screen flow notes
+- services notes
+- future backend integration notes
+
+IMPORTANT:
+- Do not put backend logic inside UI
+- Do not hardcode lists inside UI controllers
+- Use services and data models
+- Keep everything clean and extendable
+- Mark future hooks:
+  - [V2_READY]
+  - [V3_READY]
+  - [AI_READY]
+  - [DESKTOP_READY]
+  - [API_READY]
+
+Before implementation, show the exact file list you will create.
+Then implement phase by phase.
+
+PROMPT 3 — FASTAPI BACKEND V1
+Now create the FastAPI backend for FashionRise.
+
+Build a production-minded backend for Ubuntu + Nginx + PostgreSQL.
+
+TECH STACK:
+- Python
+- FastAPI
+- PostgreSQL
+- SQLAlchemy 2.x
+- Alembic
+- Pydantic
+- JWT authentication
+- passlib/bcrypt
+- python-multipart for uploads
+- environment-based config
+- CORS
+- local file storage first
+- S3-compatible storage-ready abstraction later
+
+PROJECT STRUCTURE:
+Create:
+- backend/app/main.py
+- backend/app/core/config.py
+- backend/app/core/security.py
+- backend/app/core/errors.py
+- backend/app/db/session.py
+- backend/app/db/base.py
+- backend/app/models
+- backend/app/schemas
+- backend/app/repositories
+- backend/app/services
+- backend/app/api
+- backend/app/api/v1
+- backend/app/api/v1/routes
+- backend/app/auth
+- backend/app/storage
+- backend/app/ai
+- backend/alembic
+- backend/tests
+- backend/requirements.txt
+- backend/.env.example
+- backend/README.md
+
+DATABASE MODELS:
+Create SQLAlchemy models for:
+1. User
+- id
+- email
+- username
+- hashed_password
+- is_active
+- is_admin
+- created_at
+- updated_at
+
+2. UserProfile
+- id
+- user_id
+- display_name
+- bio
+- avatar_url
+- cover_url
+- style_tags
+- designs_count
+- followers_count placeholder
+- rating_average placeholder
+- created_at
+- updated_at
+
+3. GarmentDesign
+- id
+- user_id
+- title
+- description
+- garment_category
+- template_id
+- material_id
+- color_palette_id
+- design_data JSONB
+- metadata JSONB
+- visibility
+- status
+- created_at
+- updated_at
+
+4. GarmentTemplate
+- id
+- name
+- category
+- description
+- template_data JSONB
+- preview_url
+- is_active
+
+5. MaterialDefinition
+- id
+- name
+- family
+- description
+- sheen_level
+- softness_level
+- weight_class
+- drape_character
+- stretch_level
+- luxury_score
+- season_tags JSONB
+- recommended_categories JSONB
+- metadata JSONB
+- texture_url
+- is_active
+
+6. ColorPalette
+- id
+- name
+- colors JSONB
+- tags JSONB
+- is_active
+
+7. GalleryItem
+- id
+- design_id
+- user_id
+- title
+- image_url
+- visibility
+- rating_average
+- rating_count
+- likes_count
+- created_at
+
+8. Rating
+- id
+- gallery_item_id
+- user_id
+- score integer 1-10
+- created_at
+- updated_at
+
+9. DesignExport
+- id
+- design_id
+- user_id
+- export_type
+- file_url
+- metadata JSONB
+- created_at
+
+10. AIJob
+- id
+- user_id
+- design_id nullable
+- job_type
+- status
+- input_data JSONB
+- result_data JSONB
+- error_message
+- created_at
+- updated_at
+
+11. DesignRevision
+- id
+- design_id
+- user_id
+- revision_number
+- design_data JSONB
+- notes
+- created_at
+
+AUTH:
+Implement:
+- register
+- login
+- refresh token placeholder or full implementation
+- get current user
+- password hashing
+- JWT access token
+
+API ROUTES:
+Create /api/v1 routes:
+
+Auth:
+- POST /auth/register
+- POST /auth/login
+- GET /auth/me
+
+Profiles:
+- GET /profiles/me
+- PUT /profiles/me
+- GET /profiles/{user_id}
+
+Designs:
+- POST /designs
+- GET /designs/my
+- GET /designs/{design_id}
+- PUT /designs/{design_id}
+- DELETE /designs/{design_id}
+
+Materials:
+- GET /materials
+- GET /materials/{material_id}
+
+Templates:
+- GET /templates
+- GET /templates/{template_id}
+
+Palettes:
+- GET /palettes
+
+Gallery:
+- POST /gallery
+- GET /gallery
+- GET /gallery/{gallery_item_id}
+- GET /gallery/user/{user_id}
+
+Ratings:
+- POST /ratings
+- GET /ratings/gallery/{gallery_item_id}
+
+Exports:
+- POST /exports
+- GET /exports/design/{design_id}
+
+Uploads:
+- POST /uploads/image
+
+AI:
+- POST /ai/jobs
+- GET /ai/jobs/{job_id}
+
+BUSINESS RULES:
+- Rating must be 1 to 10
+- One user can rate the same gallery item once, update if rating again
+- Users can edit only their own designs
+- Users can edit only their own profile
+- Public gallery shows only public items
+- Soft moderation fields should exist for future
+
+STORAGE:
+Implement local file storage service:
+- save image upload
+- return file URL/path
+Create interface/abstraction so S3-compatible storage can replace it later.
+
+SEED DATA:
+Create seed script or startup-safe seed function for:
+- materials
+- garment templates
+- color palettes
+
+DOCUMENTATION:
+Create README with:
+- setup
+- virtualenv
+- install requirements
+- .env config
+- run dev server
+- alembic migration
+- PostgreSQL setup
+- Nginx deployment notes placeholder
+
+QUALITY:
+- clean code
+- typed schemas
+- clear separation of models/schemas/services/repositories/routes
+- no toy backend
+- production-minded
+
+Before implementation, show the backend file plan.
+Then implement phase by phase.
+
+PROMPT 4 — CONNECT UNITY TO BACKEND
+Now connect the Unity client to the FastAPI backend.
+
+Do not remove mock services.
+The app must support switching between:
+1. Mock/local mode
+2. API/backend mode
+
+UNITY REQUIREMENTS:
+Create:
+- ApiConfig
+- ApiClient
+- ApiResponse<T>
+- ApiException
+- TokenStorageService
+- AuthApiService
+- UserProfileApiService
+- DesignApiService
+- MaterialApiService
+- TemplateApiService
+- PaletteApiService
+- GalleryApiService
+- RatingApiService
+- ExportApiService
+- UploadApiService
+- AIJobApiService
+
+AUTH FLOW:
+- register
+- login
+- store JWT token securely
+- attach Authorization Bearer token to API requests
+- get current user
+- logout clears token
+
+API CLIENT:
+- base URL configurable
+- timeout handling
+- error handling
+- JSON serialization
+- upload multipart image
+- retry logic placeholder
+- offline mode placeholder
+
+UNITY SCREENS TO CONNECT:
+- LoginChoiceScreen:
+  - continue as guest still works
+  - login/register mode prepared
+- ProfileScreen:
+  - load profile from API when logged in
+- CreateDesignScreen:
+  - load templates/materials/palettes from API
+- GalleryScreen:
+  - load public gallery from API
+- DesignDetailScreen:
+  - load design detail
+  - submit rating 1-10
+- Export:
+  - upload exported PNG to backend
+
+IMPORTANT:
+- UI must call service interfaces only
+- UI must not call ApiClient directly
+- Keep mock mode working
+- Add config switch:
+  - USE_MOCK_SERVICES
+  - USE_API_SERVICES
+
+BACKEND REQUIREMENTS:
+If needed, adjust backend CORS and static file serving for uploaded images.
+
+DOCUMENTATION:
+Update:
+- Unity backend connection guide
+- API config guide
+- local development guide
+- production server connection guide
+
+QUALITY:
+- robust error messages
+- loading states
+- graceful failures
+- no app crash if server unavailable
+- token handling clean and replaceable later
+
+Before coding, show connection plan and exact files to change/create.
+
+PROMPT 5 — PRODUCTION DEPLOYMENT UBUNTU + NGINX + POSTGRESQL
+Create a production deployment guide and scripts for the FastAPI backend on Ubuntu Linux with Nginx and PostgreSQL.
+
+SERVER STACK:
+- Ubuntu Linux
+- Nginx
+- PostgreSQL
+- Python virtual environment
+- FastAPI app served with Gunicorn + Uvicorn workers
+- systemd service
+- HTTPS-ready Nginx config
+- environment variables
+- local uploads folder
+- logs
+
+CREATE FILES:
+- deploy/README_DEPLOYMENT.md
+- deploy/fashionrise.service
+- deploy/nginx_fashionrise.conf
+- deploy/setup_server.sh
+- deploy/update_app.sh
+- deploy/env.production.example
+- deploy/backup_postgres.sh
+- deploy/restore_postgres.sh
+
+DEPLOYMENT GUIDE MUST INCLUDE:
+1. Install Python, venv, PostgreSQL, Nginx
+2. Create PostgreSQL database and user
+3. Clone/copy backend code
+4. Create .env file
+5. Install requirements
+6. Run Alembic migrations
+7. Seed initial material/template/palette data
+8. Configure systemd service
+9. Configure Nginx reverse proxy
+10. Configure SSL with Certbot placeholder
+11. Restart services
+12. Test health endpoint
+13. Test OpenAPI docs
+14. Configure uploads folder permissions
+15. Backup and restore PostgreSQL
+16. Update deployment workflow
+
+BACKEND REQUIREMENTS:
+Add:
+- GET /health endpoint
+- logging config
+- production CORS config
+- static uploaded file serving behind Nginx or app route
+- safe environment config
+
+SECURITY NOTES:
+- do not commit .env
+- use strong JWT secret
+- restrict DB user permissions
+- configure firewall
+- use HTTPS
+- set upload size limits
+- validate image uploads
+
+QUALITY:
+Make the deployment professional and practical.
+Commands should be copy-paste friendly.
+
+PROMPT 6 — VERSION 2 UPGRADE: AI + REALISM + SOCIAL
+Upgrade FashionRise to Version 2.
+
+Do not rewrite the project.
+Preserve V1 architecture.
+Keep backend and Unity connected.
+Extend cleanly.
+
+VERSION 2 GOALS:
+- AI-assisted sketch workflow
+- more realistic garment creation
+- richer fabric/material database
+- better model preview
+- social/rating improvements
+- better gallery
+- premium tablet/mobile UX polish
+
+UNITY V2 FEATURES:
+
+1. SKETCH WORKFLOW
+Add:
+- SketchCanvasScreen
+- ImportSketchScreen
+- SketchEnhancementScreen
+- ConceptResultScreen
+
+User can:
+- draw rough sketch
+- import sketch image
+- request AI cleanup placeholder
+- request polished concept placeholder
+- save sketch reference to design
+
+Create Unity models:
+- SketchInputData
+- SketchEnhancementRequest
+- SketchEnhancementResult
+- ConceptRefinementRequest
+- ConceptRefinementResult
+- StyleVariationRequest
+- StyleVariationResult
+
+Create services:
+- ISketchProcessingService
+- IConceptPolishService
+- IStyleSuggestionService
+- IImageRefinementService
+
+2. BACKEND AI JOBS
+Upgrade backend AI job system:
+- POST /ai/sketch/clean
+- POST /ai/sketch/polish
+- POST /ai/style/suggest
+- GET /ai/jobs/{id}
+
+For now implement placeholder/mock AI processing but design it so later we can connect paid AI APIs.
+
+3. ADVANCED GARMENT SYSTEM
+Add categories:
+- evening gown
+- cocktail dress
+- casual dress
+- blouse
+- jacket
+- pants
+- coordinated set
+
+Add parameters:
+- neckline variants
+- sleeve structure
+- hemline
+- silhouette tuning
+- volume
+- drape style
+- layering
+- trim details
+- decorative accents
+- seam accent options
+
+4. UPGRADED MATERIAL DATABASE
+Add fields:
+- material family
+- premium tier
+- real-world usage notes
+- drape tags
+- seasonal suitability
+- occasion suitability
+- primary/secondary/accent role
+- pairing recommendations
+- care complexity
+- texture set refs
+- render parameter group
+- supplier metadata placeholder
+
+5. PREVIEW UPGRADE
+Add:
+- front preview
+- back preview
+- side preview placeholder
+- turntable preview
+- runway preview
+- studio lookbook preview
+
+6. SOCIAL SYSTEM
+Add:
+- rating from 1 to 10
+- like/favorite
+- public profile design grid
+- design detail page
+- share card export
+- comments placeholder
+
+7. BACKEND SOCIAL
+Add backend support for:
+- likes/favorites
+- comments placeholder table
+- improved gallery sorting:
+  - newest
+  - top rated
+  - trending placeholder
+- user public profile gallery
+
+8. UI/UX POLISH
+Improve:
+- loading states
+- empty states
+- error states
+- save confirmations
+- transitions
+- premium tablet layouts
+- mobile responsive layouts
+
+DOCUMENTATION:
+Update Unity and backend docs.
+
+MARK:
+- [V3_READY]
+- [AI_READY]
+- [PRO_HANDOFF_READY]
+- [DESKTOP_READY]
+
+Before coding, present the V2 upgrade plan and migration strategy.
+
+PROMPT 7 — VERSION 3 UPGRADE: PROFESSIONAL PLATFORM
+Upgrade FashionRise to Version 3.
+
+Do not rewrite existing systems.
+Preserve V1 and V2.
+Extend professionally.
+
+VERSION 3 VISION:
+Turn FashionRise into a premium fashion-tech creator platform that helps discover real design talent and prepares designs for real-world designer handoff.
+
+FEATURES:
+
+1. PROFESSIONAL DESIGN EXPORTS
+Add export package types:
+- beauty render
+- front render
+- back render
+- side render placeholder
+- material summary
+- color palette summary
+- garment metadata summary
+- design notes summary
+- concept board
+- designer handoff sheet
+
+Models:
+- DesignPresentationPackage
+- GarmentSpecSummary
+- MaterialUsageSummary
+- DesignNotesSummary
+- DesignerHandoffPackage
+- ProductionReadinessFlags
+
+2. DESIGNER HANDOFF SYSTEM
+Create services:
+- IDesignerHandoffService
+- IProductionPackageService
+- IDesignReviewService
+
+Backend endpoints:
+- POST /handoff/packages
+- GET /handoff/packages/{id}
+- GET /handoff/design/{design_id}
+
+Handoff package should include:
+- design info
+- sketch refs
+- final images
+- material choices
+- notes
+- measurements placeholder
+- revision history
+- production readiness flags
+
+3. PROFESSIONAL PORTFOLIO
+Upgrade profiles:
+- featured designs
+- portfolio cover
+- style identity tags
+- favorite silhouettes
+- favorite fabrics
+- creator bio
+- public stats
+- badges placeholder
+- talent discovery score placeholder
+
+4. CHALLENGES / DISCOVERY
+Add:
+- weekly design challenge
+- themed submission flow
+- top-rated creators
+- trending designs
+- curated discovery feed
+- beginner/intermediate/advanced tags
+
+Backend tables:
+- challenges
+- challenge_submissions
+- creator_badges placeholder
+
+5. DESIGN REVISION HISTORY
+Add:
+- duplicate design
+- create revision
+- compare revisions
+- track material changes
+- track silhouette changes
+- track notes history
+- revision timeline
+
+6. ADVANCED FASHION METADATA
+Add metadata:
+- occasion type
+- season
+- style family
+- target mood
+- luxury score
+- wearability score
+- complexity estimate
+- production difficulty placeholder
+- material suitability score
+- stylistic confidence placeholder
+- handoff notes
+
+7. AI FUTURE READINESS
+Prepare architecture for:
+- style feedback
+- material suggestions
+- silhouette refinement suggestions
+- construction plausibility checks
+- beginner assistant
+- trend-aware inspiration
+
+8. MODERATION / PLATFORM READINESS
+Add fields and structures:
+- content status
+- report flags
+- moderation metadata
+- featured state
+- trending state
+- challenge submission state
+
+9. UX POLISH
+Keep it:
+- premium
+- feminine
+- elegant
+- serious
+- inspiring
+- simple
+- not cluttered
+- not childish
+
+DOCUMENTATION:
+Update:
+- V3 architecture
+- handoff system guide
+- export package guide
+- challenge system guide
+- AI roadmap
+- backend roadmap
+- deployment notes
+
+MARK:
+- [LIVE_SERVICE_READY]
+- [PRO_HANDOFF_READY]
+- [AI_READY]
+- [DESKTOP_READY]
+
+Before coding, present the V3 architecture and rollout plan.
+
+PROMPT 8 — FINAL QUALITY REVIEW
+Review the entire FashionRise project as a senior architect.
+
+Check:
+- Unity architecture
+- backend architecture
+- API contracts
+- database schema
+- service boundaries
+- UI coupling
+- future upgrade readiness
+- production deployment readiness
+- security
+- mobile/tablet UX
+- AI readiness
+- designer handoff readiness
+
+Find:
+- technical debt
+- risky shortcuts
+- bad coupling
+- missing abstractions
+- missing error handling
+- missing loading states
+- backend security issues
+- database issues
+- API design issues
+- Unity performance issues
+- mobile/tablet usability issues
+
+Then produce:
+1. Critical fixes
+2. Important improvements
+3. Nice-to-have improvements
+4. Suggested refactors
+5. Production readiness checklist
+6. Next development roadmap
+
+Do not rewrite everything automatically.
+First give the review and recommended action plan.
+

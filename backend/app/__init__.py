@@ -1,0 +1,1 @@
+"""FashionRise FastAPI application."""

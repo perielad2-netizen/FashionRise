@@ -1,0 +1,140 @@
+# FashionRise — API overview
+
+**Base path (versioned):** `/api/v1`  
+**Public ops (no prefix):** `/health`, `/ready`, `/static/uploads/`, `/docs`  
+**Format:** JSON; **uploads:** `multipart/form-data`  
+**Auth:** `Authorization: Bearer <access_token>` for protected routes.  
+**Docs:** Swagger UI at **`/docs`** (restrict or disable in hardened production if desired).
+
+---
+
+## Auth (`/api/v1/auth`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/register` | Body: `email`, `username`, `password`, optional `display_name` → tokens |
+| POST | `/auth/login` | Body: `email`, `password` → tokens |
+| POST | `/auth/refresh` | Body: `refresh_token` → new access + refresh (rotation) |
+| GET | `/auth/me` | Current user (`UserRead`) |
+
+**Note:** There is **no** `POST /auth/logout` yet; clients discard tokens. Refresh revocation happens on rotation.
+
+---
+
+## Profiles (`/api/v1/profiles`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/profiles/me` | Authenticated profile |
+| PUT | `/profiles/me` | Partial update (`ProfileUpdate`) |
+| GET | `/profiles/{user_id}` | Public profile by UUID |
+
+---
+
+## Catalogs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/templates` | List garment templates |
+| GET | `/templates/{template_id}` | Template detail |
+| GET | `/materials` | List materials |
+| GET | `/materials/{material_id}` | Material detail |
+| GET | `/palettes` | List color palettes |
+
+**Note:** No **`GET /palettes/{id}`**; Unity `PaletteApiService` filters list client-side.
+
+---
+
+## Designs (`/api/v1/designs`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/designs` | Create draft (`DesignCreate`) |
+| GET | `/designs/my` | Current user’s designs |
+| GET | `/designs/{design_id}` | Detail (owner or public + `moderation_status=ok`) |
+| PUT | `/designs/{design_id}` | Update (`DesignUpdate`) — owner only |
+| DELETE | `/designs/{design_id}` | Delete — owner only |
+
+---
+
+## Gallery (`/api/v1/gallery`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/gallery` | Create gallery item (`GalleryCreate`) — auth |
+| GET | `/gallery` | Public feed; query **`sort`**: `newest` (default), `top_rated`, `trending`; `limit`, `offset` |
+| GET | `/gallery/user/{user_id}` | User’s **public** items |
+| GET | `/gallery/{gallery_item_id}/comments` | List moderated comments |
+| POST | `/gallery/{gallery_item_id}/comments` | Body: `{ "body": "..." }` — auth |
+| POST | `/gallery/{gallery_item_id}/like` | Like — auth; **204**; duplicate → **409** |
+| DELETE | `/gallery/{gallery_item_id}/like` | Unlike — auth; **204** |
+| GET | `/gallery/{gallery_item_id}` | Detail; if **Bearer** sent, response includes **`liked_by_me`** (bool) |
+
+**DB:** `gallery_likes`, `gallery_comments` (Alembic **`002`**).
+
+---
+
+## Ratings (`/api/v1/ratings`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/ratings` | Body: `gallery_item_id`, `score` (1–10) — **upsert** per user |
+| GET | `/ratings/gallery/{gallery_item_id}` | List ratings for item |
+
+---
+
+## Exports (`/api/v1/exports`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/exports` | Register export (`ExportCreate`) after upload |
+| GET | `/exports/design/{design_id}` | List exports for design (authenticated owner context) |
+
+---
+
+## Uploads (`/api/v1/uploads`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/uploads/image` | Multipart field **`file`**; returns `url`, `stored_key`. Validates size, MIME, **magic bytes** (JPEG/PNG/WebP). |
+
+---
+
+## AI (`/api/v1/ai`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/ai/sketch/clean` | V2: enqueue **`sketch_clean`** job; body optional `SketchPipelineBody` (`design_id`, `input_data`) |
+| POST | `/ai/sketch/polish` | V2: enqueue **`sketch_polish`** |
+| POST | `/ai/style/suggest` | V2: enqueue **`style_suggest`** |
+| POST | `/ai/jobs` | Create job (`AIJobCreate`) — generic |
+| GET | `/ai/jobs/{job_id}` | Job status |
+
+Worker is still **placeholder** (job completes immediately with noop `result_data`); routes are stable for real providers later.
+
+**Note:** **`GET /ai/capabilities`** is not implemented yet.
+
+---
+
+## System (root)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Liveness (no DB) |
+| GET | `/ready` | Readiness (DB `SELECT 1`) |
+
+---
+
+## Admin (future)
+
+- Prefix e.g. `/api/v1/admin/...` with role checks.
+
+---
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-05-10 | Initial endpoint list |
+| 2026-05-10 | Aligned with implemented routes (PUT profiles, `/uploads/image`, exports paths, ratings paths); noted gaps (logout, palette by id, capabilities) |
+| 2026-05-10 | V2 (Prompt 6): gallery sort, likes, comments; AI sketch/style routes; `liked_by_me` on gallery detail |

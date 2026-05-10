@@ -1,0 +1,27 @@
+[Unit]
+Description=FashionRise FastAPI (Gunicorn + Uvicorn workers)
+Documentation=https://github.com/yourorg/fashionrise
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=fashionrise
+Group=fashionrise
+WorkingDirectory=/opt/fashionrise/backend
+EnvironmentFile=/opt/fashionrise/backend/.env
+ExecStart=/opt/fashionrise/backend/.venv/bin/gunicorn app.main:app \
+  -k uvicorn.workers.UvicornWorker \
+  -w 4 \
+  -b 127.0.0.1:8000 \
+  --timeout 120 \
+  --access-logfile - \
+  --error-logfile -
+Restart=on-failure
+RestartSec=5
+# Hardening (adjust if you use features that need more)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
