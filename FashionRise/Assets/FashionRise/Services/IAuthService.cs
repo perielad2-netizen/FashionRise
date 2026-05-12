@@ -8,19 +8,17 @@ namespace FashionRise.Services
         bool IsSignedIn { get; }
         string? CurrentSessionUserId { get; }
 
-        Task<AuthResult> SignInGuestAsync(CancellationToken cancellationToken = default);
-
         Task<AuthResult> SignInAsync(string email, string password,
             CancellationToken cancellationToken = default);
 
         Task<AuthResult> RegisterAsync(string email, string username, string password,
             string? displayName, CancellationToken cancellationToken = default);
 
-        /// <summary>True when a backend JWT is available (not guest-only).</summary>
+        /// <summary>True when a stored access token is present (API mode).</summary>
         bool HasBackendSession { get; }
 
-        /// <summary>True for continue-as-guest in API mode.</summary>
-        bool IsGuestSession { get; }
+        /// <summary>Loads <c>/auth/me</c> when tokens exist but user id is not cached yet (e.g. cold start).</summary>
+        Task TryRestorePersistedSessionAsync(CancellationToken cancellationToken = default);
 
         Task SignOutAsync(CancellationToken cancellationToken = default);
     }

@@ -74,7 +74,8 @@ namespace FashionRise.Presentation.Screens
                 var r = await App.ConceptPolish.PolishAsync(new ConceptRefinementRequest
                 {
                     DesignId = TryDesignId(),
-                    Notes = "polish concept"
+                    Notes = "polish concept",
+                    LocalSketchForVision = App.CreateDesign.SketchReference
                 }).ConfigureAwait(true);
                 Finish(r.JobId, r.Summary);
             }
@@ -92,7 +93,8 @@ namespace FashionRise.Presentation.Screens
                 var r = await App.StyleSuggest.SuggestAsync(new StyleVariationRequest
                 {
                     DesignId = TryDesignId(),
-                    MoodNotes = "evening, sculptural"
+                    MoodNotes = "evening, sculptural",
+                    LocalSketchForVision = App.CreateDesign.SketchReference
                 }).ConfigureAwait(true);
                 Finish(r.JobId, r.Summary);
             }
@@ -110,7 +112,8 @@ namespace FashionRise.Presentation.Screens
                 var r = await App.ImageRefine.RefineAsync(new ConceptRefinementRequest
                 {
                     DesignId = TryDesignId(),
-                    Notes = "refine edges"
+                    Notes = "refine edges",
+                    LocalSketchForVision = App.CreateDesign.SketchReference
                 }).ConfigureAwait(true);
                 Finish(r.JobId, r.Summary);
             }

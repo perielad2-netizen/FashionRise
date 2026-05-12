@@ -11,13 +11,15 @@ namespace FashionRise.Infrastructure.Mocks
     public sealed class MockGalleryService : IGalleryService
     {
         readonly IAuthService _auth;
+        readonly IFollowService _follow;
         readonly List<GalleryItem> _feed;
         readonly Dictionary<string, HashSet<string>> _likedByUser = new(StringComparer.Ordinal);
         readonly Dictionary<string, List<GalleryComment>> _comments = new(StringComparer.Ordinal);
 
-        public MockGalleryService(IAuthService auth)
+        public MockGalleryService(IAuthService auth, IFollowService follow)
         {
             _auth = auth;
+            _follow = follow;
             _feed = new List<GalleryItem>
             {
                 new()
@@ -55,17 +57,51 @@ namespace FashionRise.Infrastructure.Mocks
                 _comments[g.Id] = new List<GalleryComment>();
         }
 
-        public Task<IReadOnlyList<GalleryItem>> GetFeedAsync(GallerySort sort = GallerySort.Newest,
+        public async Task<IReadOnlyList<GalleryItem>> GetFeedAsync(GallerySort sort = GallerySort.Newest,
             CancellationToken cancellationToken = default)
         {
             IEnumerable<GalleryItem> q = _feed;
-            q = sort switch
+            if (sort == GallerySort.Following)
             {
-                GallerySort.TopRated => q.OrderByDescending(x => x.Rating.Average),
-                GallerySort.Trending => q.OrderByDescending(x => x.LikesCount)
-                    .ThenByDescending(x => x.Rating.Average),
-                _ => q.AsEnumerable()
-            };
+                var ids = await _follow.GetFollowedUserIdsAsync(cancellationToken).ConfigureAwait(true);
+                if (ids.Count == 0)
+                    q = Array.Empty<GalleryItem>();
+                else
+                {
+                    var set = new HashSet<string>(ids, StringComparer.Ordinal);
+                    q = _feed.Where(x => set.Contains(x.OwnerUserId)).OrderByDescending(x => x.LikesCount);
+                }
+            }
+            else
+            {
+                q = sort switch
+                {
+                    GallerySort.TopRated => q.OrderByDescending(x => x.Rating.Average),
+                    GallerySort.Trending => q.OrderByDescending(x => x.LikesCount)
+                        .ThenByDescending(x => x.Rating.Average),
+                    _ => q.AsEnumerable()
+                };
+            }
+            var uid = _auth.CurrentSessionUserId;
+            var list = q.Select(CloneWithLikeState).ToList();
+            if (!string.IsNullOrEmpty(uid) && _likedByUser.TryGetValue(uid, out var liked))
+            {
+                foreach (var item in list)
+                    item.LikedByMe = liked.Contains(item.Id);
+            }
+
+            return list;
+        }
+
+        public Task<IReadOnlyList<GalleryItem>> GetUserPublicGalleryAsync(string ownerUserId,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(ownerUserId))
+                return Task.FromResult((IReadOnlyList<GalleryItem>)Array.Empty<GalleryItem>());
+            var key = ownerUserId.Trim();
+            IEnumerable<GalleryItem> q = _feed.Where(x =>
+                string.Equals(x.OwnerUserId, key, StringComparison.Ordinal));
+            q = q.OrderByDescending(x => x.Id);
             var uid = _auth.CurrentSessionUserId;
             var list = q.Select(CloneWithLikeState).ToList();
             if (!string.IsNullOrEmpty(uid) && _likedByUser.TryGetValue(uid, out var liked))
@@ -141,6 +177,26 @@ namespace FashionRise.Infrastructure.Mocks
             if (!_comments.TryGetValue(galleryItemId, out var list))
                 list = new List<GalleryComment>();
             return Task.FromResult((IReadOnlyList<GalleryComment>)list.ToList());
+        }
+
+        public Task<GalleryItem> PublishDesignAsync(string designId, string title, string? imageUrl,
+            CancellationToken cancellationToken = default)
+        {
+            var uid = _auth.CurrentSessionUserId ?? "mock-user";
+            var id = "gal_" + Guid.NewGuid().ToString("N")[..10];
+            var item = new GalleryItem
+            {
+                Id = id,
+                OwnerUserId = uid,
+                DesignId = designId,
+                Title = string.IsNullOrWhiteSpace(title) ? "Untitled" : title.Trim(),
+                ThumbnailPlaceholderKey = imageUrl ?? "",
+                Rating = new RatingSummary { Average = 0, Count = 0, MyScore = null },
+                LikesCount = 0
+            };
+            _feed.Insert(0, item);
+            _comments[id] = new List<GalleryComment>();
+            return Task.FromResult(CloneWithLikeState(item));
         }
 
         public Task<GalleryComment> PostCommentAsync(string galleryItemId, string body,

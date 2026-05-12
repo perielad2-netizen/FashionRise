@@ -2,15 +2,16 @@
 
 ## Purpose
 
-FashionRise is a **premium** fashion creation platform (not a casual dress-up game): realistic clothing design, sketching, data-driven materials and palettes, avatar preview, studio-style presentation, public profile/gallery, PNG export, friend ratings (1–10), and future **AI enhancement** plus **designer handoff**.
+FashionRise is a **premium** fashion creation platform (not a casual dress-up game): realistic clothing design, sketching, data-driven materials and palettes, avatar preview, studio-style presentation, public profile/gallery (including **per-creator** public lists and **follow** feeds), PNG export, ratings (1–10), **AI sketch jobs** (OpenAI when configured), and future **designer handoff** depth.
 
 ## Platform targets
 
 | Priority | Platform | Notes |
 |----------|----------|--------|
-| Primary | Tablets | Touch-first, generous layout |
-| Secondary | Phones | Same flows, denser layouts |
-| Future | Desktop (Unity) | Architecture stays compatible |
+| **v1 ship** | **Windows PC** (Unity standalone) | Primary desktop dev + builds |
+| **v1 ship** | **Android** | Phone/tablet; gallery import plugin under `Assets/Plugins/Android/` |
+| **Later** | iOS / iPadOS | Bundle id placeholder `com.fashionrise.ios`; not configured yet |
+| Layout | Tablets + phones | Touch-first; `DeviceLayoutPolicy` adjusts density |
 | Excluded for now | Web client | API designed so a web client could be added later |
 
 ## System context

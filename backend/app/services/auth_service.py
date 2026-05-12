@@ -3,7 +3,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -15,16 +15,26 @@ from app.models.user_profile import UserProfile
 from app.schemas.auth import UserLogin, UserRegister
 
 
+def _normalize_email(email: str) -> str:
+    return str(email).strip().lower()
+
+
+def _login_password(plain: str) -> str:
+    """Trim accidental whitespace from UI / paste (password body is rarely intentionally all-space)."""
+    return (plain or "").strip()
+
+
 def register_user(db: Session, data: UserRegister) -> User:
-    if db.scalar(select(User).where(User.email == data.email)):
+    email_norm = _normalize_email(str(data.email))
+    if db.scalar(select(User).where(func.lower(User.email) == email_norm)):
         raise ConflictError("Email already registered")
     if db.scalar(select(User).where(User.username == data.username)):
         raise ConflictError("Username already taken")
 
     user = User(
-        email=str(data.email),
+        email=email_norm,
         username=data.username,
-        hashed_password=hash_password(data.password),
+        hashed_password=hash_password(_login_password(data.password)),
     )
     db.add(user)
     db.flush()
@@ -39,8 +49,9 @@ def register_user(db: Session, data: UserRegister) -> User:
 
 
 def authenticate(db: Session, data: UserLogin) -> User:
-    user = db.scalar(select(User).where(User.email == str(data.email)))
-    if not user or not verify_password(data.password, user.hashed_password):
+    email_norm = _normalize_email(str(data.email))
+    user = db.scalar(select(User).where(func.lower(User.email) == email_norm))
+    if not user or not verify_password(_login_password(data.password), user.hashed_password):
         raise UnauthorizedError("Invalid email or password")
     if not user.is_active:
         raise UnauthorizedError("Account disabled")
@@ -83,3 +94,14 @@ def refresh_session(db: Session, raw_refresh: str) -> tuple[str, str]:
     db.add(row)
     db.commit()
     return issue_tokens(db, user)
+
+
+def revoke_all_refresh_tokens_for_user(db: Session, user: User) -> None:
+    """Invalidate every active refresh token for this user (sign-out all sessions)."""
+    now = datetime.now(timezone.utc)
+    db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    db.commit()

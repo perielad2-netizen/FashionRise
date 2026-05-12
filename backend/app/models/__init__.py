@@ -11,6 +11,7 @@ from app.models.material_definition import MaterialDefinition
 from app.models.rating import Rating
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
+from app.models.user_follow import UserFollow
 from app.models.user_profile import UserProfile
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "Rating",
     "RefreshToken",
     "User",
+    "UserFollow",
     "UserProfile",
 ]

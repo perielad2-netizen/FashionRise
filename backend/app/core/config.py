@@ -1,21 +1,27 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Always load backend/.env (same file Alembic uses), not cwd-relative ".env" — avoids migrating one DB while the API connects to another.
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+_BACKEND_ENV = _BACKEND_ROOT / ".env"
+_settings_env_kw: dict = {"env_file_encoding": "utf-8", "extra": "ignore"}
+if _BACKEND_ENV.is_file():
+    _settings_env_kw["env_file"] = str(_BACKEND_ENV)
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(**_settings_env_kw)
 
     app_name: str = "FashionRise API"
     environment: Literal["development", "staging", "production"] = "development"
     debug: bool = False
     testing: bool = False
+
+    sqlalchemy_echo: bool = False
 
     database_url: str = "postgresql+psycopg2://fashionrise:fashionrise@localhost:5432/fashionrise"
 
@@ -32,6 +38,17 @@ class Settings(BaseSettings):
     upload_subdir: str = "uploads"
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+    ai_worker_enabled: bool = True
+    ai_worker_poll_interval_seconds: float = 1.5
+    ai_worker_batch_size: int = 12
+
+    # OpenAI (optional — sketch pipeline jobs use vision + JSON when OPENAI_API_KEY is set)
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
+    openai_base_url: str | None = None
+    openai_timeout_seconds: float = 120.0
+    openai_http_timeout_seconds: float = 45.0
 
     max_upload_size_mb: int = 25
     allowed_upload_image_types: str = "image/jpeg,image/png,image/webp"

@@ -1,12 +1,12 @@
 # FashionRise — Unity client (V1)
 
-Premium tablet-first foundation: **mock services**, **service interfaces**, **API stubs**, and **uGUI** screens wired through `FashionRiseApp` + `ScreenController`.
+Premium tablet-first foundation: **service interfaces**, **FastAPI by default**, optional **mocks**, and **uGUI** screens wired through `FashionRiseApp` + `ScreenController`.
 
 ## Target platforms (shipping order)
 
 1. **Windows PC** (standalone 64-bit) — primary desktop.
 2. **Android** (phone / tablet) — same UX; sketch import uses the system gallery via `Assets/Plugins/Android/`.
-3. **iOS / iPadOS** — not configured yet; bundle id placeholder is `com.fashionrise.ios` for when you add an Apple build target.
+3. **iOS / iPadOS** — sketch import uses **Photos** (`PHPicker` on iOS 14+, legacy picker on 12–13) via `Assets/Plugins/iOS/FashionRiseGalleryPickBridge.mm`; bundle id placeholder is `com.fashionrise.ios` until you finalize signing.
 
 Use **File → Build Settings** to switch **PC** vs **Android**. For Google Play, use **IL2CPP** + **ARM64** (project sets **ARMv7 + ARM64**; adjust if you go 64-bit only).
 
@@ -29,13 +29,14 @@ Optional: assign a `FashionRiseTheme` asset (Create → FashionRise → UI Theme
 
 - `Core/` — `FashionRiseApp`, `AppServices`, navigation ids, helpers.
 - `Domain/` — models (designs, materials, palettes, gallery, export).
-- `Application/` — `CreateDesignSession`, export DTOs.
-- `Services/` — interfaces only (`IAuthService`, `IGalleryService`, …).
+- `Application/` — `CreateDesignSession`, export DTOs, **PlayerPrefs** helpers (`DesignAutosavePreferences`, `AuthoringModePreferences`, **`SketchFigurePreferences`**).
+- `Services/` — interfaces only (`IAuthService`, `IUserProfileService`, `IDesignSaveService`, `IDesignHandoffService`, `IGalleryService`, `IFollowService`, `IShareLinkService`, …).
 - `Infrastructure/Mocks/` — offline implementations + seed data usage.
-- `Infrastructure/Api/` — `ApiClient`, `ApiConfig`, `TokenStorageService`, `*ApiService` HTTP adapters, `PublishingExportService`.
+- `Infrastructure/Api/` — `ApiClient`, `ApiConfig`, `TokenStorageService`, `*ApiService` HTTP adapters (including **`DesignHandoffApiService`**), `PublishingExportService`, `TokenAwareSketchPipelineService`.
+- `Infrastructure/Platform/` — **Android** gallery (`AndroidGalleryPick`, `FashionRiseAndroidBridge`), **iOS** Photos pick (`IOSGalleryPick`, same bridge `UnitySendMessage`), PC folder launchers (`PcImportsFolderOpener`, `PcHandoffsFolderOpener`).
 - `Infrastructure/Export/` — `UnityPngExportService` (screenshot placeholder).
-- `Presentation/` — screens, navigation, model-preview placeholders.
-- `UI/` — `FrUiFactory`, layout helpers.
+- `Presentation/` — screens, navigation, model-preview placeholders; **Guided vs Pro** authoring via `AuthoringModePreferences` (Settings toggle; Create hides pro-only tools in Guided). **Sketch canvas:** dual-layer `UiSketchPad` (croquis/photo + ink), `SketchDefaultFigureGenerator`, `SketchFigurePreferences`.
+- `UI/` — `FrUiFactory`, `FrButtonEmphasis`, **`NativeShareSheet`**, **`ShareClipboard`**, layout helpers.
 - `Data/` — static seeds (materials, templates, palettes).
 - `Content/` — `FashionRiseTheme` ScriptableObject.
 - `Config/` — `DeviceLayoutPolicy` (tablet vs phone heuristics).
@@ -54,3 +55,19 @@ Unity 2022 may still report **CS8632** for `string?` etc. even with `"nullable":
 ## Backend
 
 REST integration: `docs/unity-backend-integration.md` (inspector setup, auth, CORS, production) and `docs/05-api.md`.
+
+## Shipped UX (social / gallery)
+
+- **Gallery:** Newest, Top rated, Trending, **Following** (signed-in); optional **creator-only** list via `GalleryNavContext.OwnerUserId`; **`CommunitySort`** when opening the community feed from home (default **Gallery** = newest, **Following feed** = following); **Back** from design detail keeps creator filter + sort; **Community feed (all creators)** clears creator filter in place.
+- **Design detail:** Rate **1–10**, like, **follow / unfollow**, **post comment** (typed), native share actions (link/card/PDF URL share sheet + copy fallback), handoff tools (copy JSON, generate `spec_sheet_pdf`, open/share/download PDF, **save JSON/PDF to** `persistentDataPath/Handoffs`, **Open Handoffs folder (PC)**), and **open this creator’s public gallery**.
+- **Profile:** **Refresh**, **Reputation** (score + tier from API), **Following** count, **My public gallery** (filtered gallery for the signed-in user).
+- **Home / Settings:** **Authoring mode: Guided / Pro** (home shows current; Settings toggles).
+- **Create design:** **Show revision history**, revision selection (**newer/older**), **Restore selected revision values**, and **Restore latest revision values** (pulls server revision `design_data` into current draft controls). **Pro** shows full handoff/export tools; **Guided** keeps the flow simpler.
+
+## Changelog (this file)
+
+| Date | Change |
+|------|--------|
+| 2026-05-12 | Sketch canvas: default male/female croquis, reference dim, brush sizes/colors, eraser, dual-layer pad. |
+| 2026-05-12 | Default sketch models: **`Resources/SketchReference/female_model.png`**, **`male_model.png`** (replace to update art). |
+| 2026-05-11 | Doc sync: folder map (handoff, share, Guided/Pro, preferences); shipped UX (reputation, home/settings mode); changelog added. |

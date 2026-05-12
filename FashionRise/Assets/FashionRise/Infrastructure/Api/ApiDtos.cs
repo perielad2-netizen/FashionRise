@@ -25,6 +25,16 @@ namespace FashionRise.Infrastructure.Api
     }
 
     [Serializable]
+    public sealed class FollowStatusReadDto
+    {
+        [JsonProperty("user_id")]
+        public Guid UserId { get; set; }
+
+        [JsonProperty("following")]
+        public bool Following { get; set; }
+    }
+
+    [Serializable]
     public sealed class ProfileReadDto
     {
         public Guid Id { get; set; }
@@ -35,8 +45,13 @@ namespace FashionRise.Infrastructure.Api
         public string? CoverUrl { get; set; }
         public List<object> StyleTags { get; set; } = new();
         public int DesignsCount { get; set; }
+        public int PublishedCount { get; set; }
         public int FollowersCount { get; set; }
+        public int LikesReceivedCount { get; set; }
         public double? RatingAverage { get; set; }
+        public int RatingCount { get; set; }
+        public double ReputationScore { get; set; }
+        public string ReputationTier { get; set; } = "";
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -61,6 +76,18 @@ namespace FashionRise.Infrastructure.Api
         public JArray? ModerationLabels { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    [Serializable]
+    public sealed class DesignRevisionReadDto
+    {
+        public Guid Id { get; set; }
+        public Guid DesignId { get; set; }
+        public Guid UserId { get; set; }
+        public int RevisionNumber { get; set; }
+        public JObject DesignData { get; set; } = new();
+        public string? Notes { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 
     [Serializable]

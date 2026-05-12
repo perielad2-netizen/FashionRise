@@ -29,33 +29,36 @@ namespace FashionRise.Infrastructure.Api
                 }
             };
 
-            var data = d.DesignData;
+            ApplyDesignDataToDesign(d.DesignData, gd);
+            return gd;
+        }
+
+        public static void ApplyDesignDataToDesign(JObject? data, GarmentDesign design)
+        {
             if (data == null || !data.HasValues)
-                return gd;
+                return;
 
             if (Enum.TryParse<NecklineType>(data.Value<string>("neckline"), true, out var nl))
-                gd.Neckline = nl;
+                design.Neckline = nl;
             if (Enum.TryParse<SleeveType>(data.Value<string>("sleeve"), true, out var sl))
-                gd.Sleeve = sl;
+                design.Sleeve = sl;
             if (Enum.TryParse<GarmentLength>(data.Value<string>("length"), true, out var len))
-                gd.Length = len;
+                design.Length = len;
             if (Enum.TryParse<FitStyle>(data.Value<string>("fit"), true, out var fit))
-                gd.Fit = fit;
+                design.Fit = fit;
             if (Enum.TryParse<WaistStyle>(data.Value<string>("waist"), true, out var waist))
-                gd.Waist = waist;
+                design.Waist = waist;
             if (Enum.TryParse<SilhouetteVolume>(data.Value<string>("silhouette_volume"), true, out var sv))
-                gd.SilhouetteVolume = sv;
+                design.SilhouetteVolume = sv;
             if (Enum.TryParse<DrapeExpression>(data.Value<string>("drape_expression"), true, out var dr))
-                gd.DrapeExpression = dr;
+                design.DrapeExpression = dr;
             if (Enum.TryParse<LayeringDepth>(data.Value<string>("layering_depth"), true, out var ly))
-                gd.LayeringDepth = ly;
+                design.LayeringDepth = ly;
             if (Enum.TryParse<SeamAccentStyle>(data.Value<string>("seam_accent"), true, out var seam))
-                gd.SeamAccent = seam;
-            gd.TrimNotes = data.Value<string>("trim_notes") ?? "";
-            gd.AccentNotes = data.Value<string>("accent_notes") ?? "";
-            gd.SketchReference = data.Value<string>("sketch_reference") ?? "";
-
-            return gd;
+                design.SeamAccent = seam;
+            design.TrimNotes = data.Value<string>("trim_notes") ?? "";
+            design.AccentNotes = data.Value<string>("accent_notes") ?? "";
+            design.SketchReference = data.Value<string>("sketch_reference") ?? "";
         }
 
         public static GarmentCategory ParseCategory(string raw)
@@ -77,9 +80,8 @@ namespace FashionRise.Infrastructure.Api
             };
         }
 
-        public static object ToDesignCreateBody(GarmentDesign design)
-        {
-            var designData = new Dictionary<string, object>
+        public static Dictionary<string, object> BuildDesignDataDictionary(GarmentDesign design) =>
+            new()
             {
                 ["neckline"] = design.Neckline.ToString(),
                 ["sleeve"] = design.Sleeve.ToString(),
@@ -94,6 +96,10 @@ namespace FashionRise.Infrastructure.Api
                 ["accent_notes"] = design.AccentNotes,
                 ["sketch_reference"] = design.SketchReference
             };
+
+        public static object ToDesignCreateBody(GarmentDesign design)
+        {
+            var designData = BuildDesignDataDictionary(design);
 
             Guid? tpl = TryGuid(design.TemplateId);
             Guid? mat = TryGuid(design.MaterialId);
@@ -119,21 +125,7 @@ namespace FashionRise.Infrastructure.Api
 
         public static object ToDesignUpdateBody(GarmentDesign design)
         {
-            var designData = new Dictionary<string, object>
-            {
-                ["neckline"] = design.Neckline.ToString(),
-                ["sleeve"] = design.Sleeve.ToString(),
-                ["length"] = design.Length.ToString(),
-                ["fit"] = design.Fit.ToString(),
-                ["waist"] = design.Waist.ToString(),
-                ["silhouette_volume"] = design.SilhouetteVolume.ToString(),
-                ["drape_expression"] = design.DrapeExpression.ToString(),
-                ["layering_depth"] = design.LayeringDepth.ToString(),
-                ["seam_accent"] = design.SeamAccent.ToString(),
-                ["trim_notes"] = design.TrimNotes,
-                ["accent_notes"] = design.AccentNotes,
-                ["sketch_reference"] = design.SketchReference
-            };
+            var designData = BuildDesignDataDictionary(design);
 
             return new
             {
@@ -326,6 +318,16 @@ namespace FashionRise.Infrastructure.Api
                 AuthorUserId = c.UserId.ToString(),
                 Body = c.Body,
                 CreatedAtUtc = c.CreatedAt.ToUniversalTime()
+            };
+
+        public static DesignRevisionSnapshot ToDesignRevisionSnapshot(DesignRevisionReadDto d) =>
+            new()
+            {
+                Id = d.Id.ToString(),
+                DesignId = d.DesignId.ToString(),
+                RevisionNumber = d.RevisionNumber,
+                Notes = d.Notes,
+                CreatedAtUtc = d.CreatedAt.ToUniversalTime()
             };
     }
 }

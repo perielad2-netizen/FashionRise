@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace FashionRise.Infrastructure.Platform
 {
-    /// <summary>Receives <c>UnitySendMessage</c> from <c>com.fashionrise.gallery.GalleryPick</c> (Android).</summary>
+    /// <summary>Receives <c>UnitySendMessage</c> from Android <c>GalleryPick</c> or iOS <c>FashionRiseGalleryPickBridge</c>.</summary>
     public sealed class FashionRiseAndroidBridge : MonoBehaviour
     {
         public const string GameObjectName = "FashionRiseAndroidBridge";

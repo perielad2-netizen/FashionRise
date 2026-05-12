@@ -29,6 +29,8 @@ namespace FashionRise.Domain
     {
         public string? DesignId { get; set; }
         public string Notes { get; set; } = "";
+        /// <summary>Optional local file: URI or path — embedded as image_base64 for the worker when using API mode.</summary>
+        public string LocalSketchForVision { get; set; } = "";
     }
 
     [Serializable]
@@ -44,6 +46,8 @@ namespace FashionRise.Domain
     {
         public string? DesignId { get; set; }
         public string MoodNotes { get; set; } = "";
+        /// <summary>Optional local sketch — embedded as image_base64 when using API mode.</summary>
+        public string LocalSketchForVision { get; set; } = "";
     }
 
     [Serializable]

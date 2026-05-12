@@ -20,12 +20,9 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
         user_id=user.id,
         design_id=data.design_id,
         job_type=data.job_type,
-        status="completed",
+        status="queued",
         input_data=data.input_data,
-        result_data={
-            "message": "noop provider — wire real worker later",
-            "pipeline": data.job_type,
-        },
+        result_data=None,
         error_message=None,
     )
     db.add(job)

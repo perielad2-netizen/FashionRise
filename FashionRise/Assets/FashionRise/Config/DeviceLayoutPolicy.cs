@@ -17,7 +17,7 @@ namespace FashionRise.Config
             return dp >= TabletMinShortEdgeDp;
         }
 
-        public static float ContentPadding => IsTabletLike() ? 48f : 24f;
+        public static float ContentPadding => IsTabletLike() ? 44f : 28f;
 
         public static float TitleFontSize => IsTabletLike() ? 34f : 26f;
 

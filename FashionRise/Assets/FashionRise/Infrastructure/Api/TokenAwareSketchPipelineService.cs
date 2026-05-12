@@ -7,16 +7,16 @@ using FashionRise.Services;
 namespace FashionRise.Infrastructure.Api
 {
     /// <summary>
-    /// Uses HTTP sketch routes when <see cref="IAuthService.HasBackendSession"/>; otherwise mocks (guest has no JWT).
+    /// Calls FastAPI sketch routes when <see cref="IAuthService.HasBackendSession"/>; otherwise local mocks (offline / mock backend).
     /// </summary>
-    public sealed class GuestAwareSketchPipelineService : ISketchProcessingService, IConceptPolishService,
+    public sealed class TokenAwareSketchPipelineService : ISketchProcessingService, IConceptPolishService,
         IStyleSuggestionService, IImageRefinementService
     {
         readonly IAuthService _auth;
         readonly SketchPipelineApiService _api;
         readonly MockSketchPipelineService _mock = new();
 
-        public GuestAwareSketchPipelineService(IAuthService auth, SketchPipelineApiService api)
+        public TokenAwareSketchPipelineService(IAuthService auth, SketchPipelineApiService api)
         {
             _auth = auth;
             _api = api;

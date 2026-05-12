@@ -28,6 +28,8 @@ namespace FashionRise.Application
         public string PendingReferenceImagePath { get; set; } = "";
         public string LastSketchJobId { get; set; } = "";
         public string LastSketchSummary { get; set; } = "";
+        /// <summary>After a successful API save, reuse this id so the next save updates the same row.</summary>
+        public string PersistedDesignId { get; set; } = "";
 
         public void Reset()
         {
@@ -50,13 +52,17 @@ namespace FashionRise.Application
             PendingReferenceImagePath = "";
             LastSketchJobId = "";
             LastSketchSummary = "";
+            PersistedDesignId = "";
         }
 
         public GarmentDesign ToDraft(string ownerUserId, string title)
         {
+            var id = string.IsNullOrEmpty(PersistedDesignId)
+                ? Guid.NewGuid().ToString("N")
+                : PersistedDesignId;
             return new GarmentDesign
             {
-                Id = Guid.NewGuid().ToString("N"),
+                Id = id,
                 OwnerUserId = ownerUserId,
                 Category = Category,
                 TemplateId = TemplateId,

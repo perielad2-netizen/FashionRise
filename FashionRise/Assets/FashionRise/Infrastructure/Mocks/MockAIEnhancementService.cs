@@ -24,5 +24,9 @@ namespace FashionRise.Infrastructure.Mocks
             _jobs.TryGetValue(jobId, out var s);
             return Task.FromResult(s ?? "unknown");
         }
+
+        public Task<string?> GetJobStructuredDetailTextAsync(string jobId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
     }
 }

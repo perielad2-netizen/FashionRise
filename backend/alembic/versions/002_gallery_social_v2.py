@@ -52,9 +52,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_gallery_comments_user_id"), table_name="gallery_comments")
-    op.drop_index(op.f("ix_gallery_comments_gallery_item_id"), table_name="gallery_comments")
-    op.drop_table("gallery_comments")
-    op.drop_index(op.f("ix_gallery_likes_user_id"), table_name="gallery_likes")
-    op.drop_index(op.f("ix_gallery_likes_gallery_item_id"), table_name="gallery_likes")
-    op.drop_table("gallery_likes")
+    op.drop_index(op.f("ix_gallery_comments_user_id"), table_name="gallery_comments", if_exists=True)
+    op.drop_index(
+        op.f("ix_gallery_comments_gallery_item_id"), table_name="gallery_comments", if_exists=True
+    )
+    op.drop_table("gallery_comments", if_exists=True)
+    op.drop_index(op.f("ix_gallery_likes_user_id"), table_name="gallery_likes", if_exists=True)
+    op.drop_index(op.f("ix_gallery_likes_gallery_item_id"), table_name="gallery_likes", if_exists=True)
+    op.drop_table("gallery_likes", if_exists=True)

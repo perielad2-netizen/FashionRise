@@ -54,6 +54,8 @@ Required for production **JWT refresh** (not listed in original product tables b
 | `public_slug` or `public_id` | string unique | shareable |
 | `created_at`, `updated_at` | timestamptz | |
 
+**API note:** `GET /profiles/me` and `GET /profiles/{user_id}` return **`ProfileRead`** with extra **computed** fields (not stored as columns on `user_profiles`): `published_count`, `likes_received_count`, `rating_count`, `reputation_score`, `reputation_tier` — see `docs/05-api.md`.
+
 ### `garment_templates`
 
 | Column | Type | Notes |

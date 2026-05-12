@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using FashionRise.Services;
+
 namespace FashionRise.Infrastructure.Api
 {
     public sealed class AuthApiService : IAuthService
@@ -9,7 +10,6 @@ namespace FashionRise.Infrastructure.Api
         readonly ApiClient _client;
         readonly TokenStorageService _tokens;
         string? _userId;
-        bool _guest;
 
         public AuthApiService(ApiClient client, TokenStorageService tokens)
         {
@@ -17,31 +17,32 @@ namespace FashionRise.Infrastructure.Api
             _tokens = tokens;
         }
 
-        public bool IsSignedIn => _guest || !string.IsNullOrEmpty(_userId);
+        public bool IsSignedIn => _tokens.HasTokens && !string.IsNullOrEmpty(_userId);
 
         public string? CurrentSessionUserId => _userId;
 
-        public bool HasBackendSession => !_guest && _tokens.HasTokens;
+        public bool HasBackendSession => _tokens.HasTokens;
 
-        public bool IsGuestSession => _guest;
-
-        public Task<AuthResult> SignInGuestAsync(CancellationToken cancellationToken = default)
+        public async Task TryRestorePersistedSessionAsync(CancellationToken cancellationToken = default)
         {
-            _guest = true;
-            _userId = "guest-" + Guid.NewGuid().ToString("N")[..8];
-            _tokens.Clear();
-            return Task.FromResult(new AuthResult
+            if (!_tokens.HasTokens || !string.IsNullOrEmpty(_userId))
+                return;
+            try
             {
-                Success = true,
-                UserId = _userId,
-                Message = "Guest (local). Sign in for cloud saves and uploads."
-            });
+                var me = await _client.GetJsonAsync<UserReadDto>("/auth/me", cancellationToken, true)
+                    .ConfigureAwait(true);
+                _userId = me.Id.ToString();
+            }
+            catch (Exception)
+            {
+                _userId = null;
+                _tokens.Clear();
+            }
         }
 
         public async Task<AuthResult> SignInAsync(string email, string password,
             CancellationToken cancellationToken = default)
         {
-            _guest = false;
             try
             {
                 var tokens = await _client.PostJsonAsync<TokenResponseDto>("/auth/login",
@@ -65,7 +66,6 @@ namespace FashionRise.Infrastructure.Api
         public async Task<AuthResult> RegisterAsync(string email, string username, string password,
             string? displayName, CancellationToken cancellationToken = default)
         {
-            _guest = false;
             try
             {
                 var tokens = await _client.PostJsonAsync<TokenResponseDto>("/auth/register",
@@ -87,12 +87,24 @@ namespace FashionRise.Infrastructure.Api
             }
         }
 
-        public Task SignOutAsync(CancellationToken cancellationToken = default)
+        public async Task SignOutAsync(CancellationToken cancellationToken = default)
         {
-            _guest = false;
+            if (HasBackendSession)
+            {
+                try
+                {
+                    await _client
+                        .PostExpectNoContentAsync("/auth/logout", null, cancellationToken, useBearer: true)
+                        .ConfigureAwait(true);
+                }
+                catch (Exception)
+                {
+                    // Offline or expired access token — still clear local session.
+                }
+            }
+
             _userId = null;
             _tokens.Clear();
-            return Task.CompletedTask;
         }
     }
 }

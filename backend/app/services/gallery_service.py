@@ -9,6 +9,7 @@ from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
 from app.models.user import User
+from app.models.user_follow import UserFollow
 from app.schemas.gallery import GalleryCommentCreate, GalleryCreate, GallerySort
 
 
@@ -51,6 +52,20 @@ def list_public_gallery(
     else:
         q = q.order_by(GalleryItem.created_at.desc())
     q = q.limit(limit).offset(offset)
+    return list(db.scalars(q).all())
+
+
+def list_following_feed(
+    db: Session, *, viewer: User, limit: int = 50, offset: int = 0
+) -> list[GalleryItem]:
+    sub = select(UserFollow.following_id).where(UserFollow.follower_id == viewer.id)
+    q = (
+        _public_gallery_base()
+        .where(GalleryItem.user_id.in_(sub))
+        .order_by(GalleryItem.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     return list(db.scalars(q).all())
 
 

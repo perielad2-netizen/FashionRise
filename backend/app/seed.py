@@ -1,9 +1,13 @@
 """Idempotent catalog seed (materials, templates, palettes)."""
 
+import logging
 import uuid
 from typing import Any
 
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
+
+_log = logging.getLogger(__name__)
 
 from app.db.session import SessionLocal
 from app.models.color_palette import ColorPalette
@@ -340,7 +344,14 @@ def run_seed_if_configured() -> None:
     s = get_settings()
     if s.testing or s.environment != "development":
         return
-    run_seed()
+    try:
+        run_seed()
+    except (ProgrammingError, OperationalError) as e:
+        _log.warning(
+            "Catalog seed skipped (database missing tables or unreachable): %s. "
+            "From backend/: run `alembic upgrade head`, then restart.",
+            e,
+        )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using FashionRise.Domain;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -8,7 +9,8 @@ using UnityEngine.UI;
 namespace FashionRise.Presentation.Sketch
 {
     /// <summary>
-    /// Raster sketch surface for Pillar A — pointer draw, undo, PNG export. [V3_READY] layers / vectors.
+    /// Dual-layer raster pad: reference (croquis / photo) underneath, ink on top. Default figures load from
+    /// <c>Resources/SketchReference/</c> when present, else procedural fallback.
     /// </summary>
     [RequireComponent(typeof(RawImage))]
     [DisallowMultipleComponent]
@@ -17,26 +19,42 @@ namespace FashionRise.Presentation.Sketch
         [SerializeField] int textureWidth = 768;
         [SerializeField] int textureHeight = 1024;
         [SerializeField] Color brushColor = new(0.11f, 0.09f, 0.08f, 1f);
-        [SerializeField] [Range(1, 32)] int brushRadius = 4;
+        [SerializeField] [Range(1, 48)] int brushRadius = 4;
 
         const int MaxUndo = 14;
+        static readonly Color32 InkClear = new(0, 0, 0, 0);
+        static readonly Color32 White = new(255, 255, 255, 255);
 
         RawImage _raw = null!;
         Texture2D _tex = null!;
-        Color32[]? _referenceBase;
+        Color32[] _referencePixels = null!;
+        Color32[] _inkPixels = null!;
         readonly List<Color32[]> _undo = new();
         bool _drawing;
         Vector2 _lastPixel;
+        bool _eraser;
+        [SerializeField] [Range(0.25f, 1f)] float referenceStrength = 1f;
+        Color32[] _scratchComposite = null!;
 
         void Awake()
         {
             _raw = GetComponent<RawImage>();
+            var n = textureWidth * textureHeight;
+            _referencePixels = new Color32[n];
+            _inkPixels = new Color32[n];
+            for (var i = 0; i < n; i++)
+            {
+                _referencePixels[i] = White;
+                _inkPixels[i] = InkClear;
+            }
+
             _tex = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp
             };
-            FillWhite();
+            _scratchComposite = new Color32[n];
+            CompositeToTexture();
             _tex.Apply();
             _raw.texture = _tex;
             _raw.uvRect = new Rect(0f, 0f, 1f, 1f);
@@ -48,37 +66,72 @@ namespace FashionRise.Presentation.Sketch
                 Destroy(_tex);
         }
 
-        void FillWhite()
+        public bool EraserActive
         {
-            var w = new Color32(255, 255, 255, 255);
-            var buf = new Color32[textureWidth * textureHeight];
-            for (var i = 0; i < buf.Length; i++)
-                buf[i] = w;
-            _tex.SetPixels32(buf);
+            get => _eraser;
+            set => _eraser = value;
         }
 
-        void ApplyBasePixels()
+        /// <summary>How strongly the reference shows through (1 = full, lower = fainter for tracing).</summary>
+        public float ReferenceStrength
         {
-            if (_referenceBase == null)
-                FillWhite();
-            else
-            {
-                var copy = new Color32[_referenceBase.Length];
-                Array.Copy(_referenceBase, copy, _referenceBase.Length);
-                _tex.SetPixels32(copy);
-            }
+            get => referenceStrength;
+            set => referenceStrength = Mathf.Clamp(value, 0.25f, 1f);
         }
 
-        public bool HasReferenceUnderlay => _referenceBase != null;
+        public void SetBrushRadius(int radius) =>
+            brushRadius = Mathf.Clamp(radius, 1, 48);
+
+        public int BrushRadius => brushRadius;
+
+        public void SetBrushColor(Color c) => brushColor = c;
+
+        public Color BrushColor => brushColor;
+
+        public bool HasReferenceUnderlay => _hasFigureOrPhoto;
+
+        bool _hasFigureOrPhoto;
+
+        /// <summary>Apply default female/male underlay from <c>Resources/SketchReference</c> when available; else procedural croquis.</summary>
+        public void ApplyDefaultFigure(SketchFigureTemplate template)
+        {
+            if (!SketchDefaultFigureGenerator.TryFillReferenceFromBundledImage(_referencePixels, textureWidth,
+                    textureHeight, template))
+                SketchDefaultFigureGenerator.FillReference(_referencePixels, textureWidth, textureHeight, template);
+            ClearInkOnly();
+            _hasFigureOrPhoto = true;
+            CompositeToTexture();
+            _tex.Apply();
+            _undo.Clear();
+        }
+
+        /// <summary>White reference, no underlay.</summary>
+        public void ClearReferenceToBlank()
+        {
+            for (var i = 0; i < _referencePixels.Length; i++)
+                _referencePixels[i] = White;
+            ClearInkOnly();
+            _hasFigureOrPhoto = false;
+            CompositeToTexture();
+            _tex.Apply();
+            _undo.Clear();
+        }
+
+        void ClearInkOnly()
+        {
+            for (var i = 0; i < _inkPixels.Length; i++)
+                _inkPixels[i] = InkClear;
+        }
 
         public void ClearAll()
         {
             PushUndoSnapshot();
-            ApplyBasePixels();
+            ClearInkOnly();
+            CompositeToTexture();
             _tex.Apply();
         }
 
-        /// <summary>Load an image as a non-destructive underlay; ink draws on top. Clear resets to this image.</summary>
+        /// <summary>Load an image as the reference layer only; ink is cleared.</summary>
         public bool TryLoadUnderlayFromFile(string absolutePath, out string? errorMessage)
         {
             errorMessage = null;
@@ -110,15 +163,20 @@ namespace FashionRise.Presentation.Sketch
 
                 var prev = RenderTexture.active;
                 RenderTexture.active = rt;
-                _tex.ReadPixels(new Rect(0, 0, textureWidth, textureHeight), 0, 0);
-                _tex.Apply();
+                var temp = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false);
+                temp.ReadPixels(new Rect(0, 0, textureWidth, textureHeight), 0, 0);
+                temp.Apply();
                 RenderTexture.active = prev;
                 RenderTexture.ReleaseTemporary(rt);
 
-                var snap = _tex.GetPixels32();
-                _referenceBase = new Color32[snap.Length];
-                Array.Copy(snap, _referenceBase, snap.Length);
+                var snap = temp.GetPixels32();
+                Destroy(temp);
+                Array.Copy(snap, _referencePixels, Mathf.Min(snap.Length, _referencePixels.Length));
+                ClearInkOnly();
+                _hasFigureOrPhoto = true;
                 _undo.Clear();
+                CompositeToTexture();
+                _tex.Apply();
                 return true;
             }
             catch (Exception ex)
@@ -134,19 +192,55 @@ namespace FashionRise.Presentation.Sketch
                 return false;
             var prev = _undo[^1];
             _undo.RemoveAt(_undo.Count - 1);
-            _tex.SetPixels32(prev);
+            Array.Copy(prev, _inkPixels, _inkPixels.Length);
+            CompositeToTexture();
             _tex.Apply();
             return true;
         }
 
         void PushUndoSnapshot()
         {
-            var snap = _tex.GetPixels32();
-            var copy = new Color32[snap.Length];
-            System.Array.Copy(snap, copy, snap.Length);
-            _undo.Add(copy);
+            var snap = new Color32[_inkPixels.Length];
+            Array.Copy(_inkPixels, snap, _inkPixels.Length);
+            _undo.Add(snap);
             while (_undo.Count > MaxUndo)
                 _undo.RemoveAt(0);
+        }
+
+        void CompositeToTexture()
+        {
+            var n = textureWidth * textureHeight;
+            for (var i = 0; i < n; i++)
+            {
+                var r = _referencePixels[i];
+                var dimR = (byte)(White.r + (r.r - White.r) * referenceStrength);
+                var dimG = (byte)(White.g + (r.g - White.g) * referenceStrength);
+                var dimB = (byte)(White.b + (r.b - White.b) * referenceStrength);
+                var dimA = (byte)(White.a + (r.a - White.a) * referenceStrength);
+                var rd = new Color32(dimR, dimG, dimB, dimA);
+                var ink = _inkPixels[i];
+                if (ink.a < 8)
+                {
+                    _scratchComposite[i] = rd;
+                    continue;
+                }
+
+                var a = ink.a / 255f;
+                _scratchComposite[i] = new Color32(
+                    (byte)Mathf.Clamp(Mathf.RoundToInt(ink.r * a + rd.r * (1f - a)), 0, 255),
+                    (byte)Mathf.Clamp(Mathf.RoundToInt(ink.g * a + rd.g * (1f - a)), 0, 255),
+                    (byte)Mathf.Clamp(Mathf.RoundToInt(ink.b * a + rd.b * (1f - a)), 0, 255),
+                    255);
+            }
+
+            _tex.SetPixels32(_scratchComposite);
+        }
+
+        /// <summary>Re-run reference × ink composite (e.g. after changing reference dim).</summary>
+        public void RefreshComposite()
+        {
+            CompositeToTexture();
+            _tex.Apply();
         }
 
         public void OnPointerDown(PointerEventData eventData)
@@ -157,6 +251,7 @@ namespace FashionRise.Presentation.Sketch
             {
                 _lastPixel = p;
                 StampBrush(p);
+                CompositeToTexture();
                 _tex.Apply();
             }
         }
@@ -201,6 +296,7 @@ namespace FashionRise.Presentation.Sketch
                 StampBrush(p);
             }
 
+            CompositeToTexture();
             _tex.Apply();
         }
 
@@ -209,54 +305,59 @@ namespace FashionRise.Presentation.Sketch
             var cx = Mathf.Clamp(Mathf.RoundToInt(pixelPos.x), 0, textureWidth - 1);
             var cy = Mathf.Clamp(Mathf.RoundToInt(pixelPos.y), 0, textureHeight - 1);
             var r = brushRadius;
-            var c32 = (Color32)brushColor;
-            for (var dy = -r; dy <= r; dy++)
-            for (var dx = -r; dx <= r; dx++)
+            if (_eraser)
             {
-                if (dx * dx + dy * dy > r * r)
-                    continue;
-                var x = cx + dx;
-                var y = cy + dy;
-                if (x < 0 || x >= textureWidth || y < 0 || y >= textureHeight)
-                    continue;
-                _tex.SetPixel(x, y, c32);
+                for (var dy = -r; dy <= r; dy++)
+                for (var dx = -r; dx <= r; dx++)
+                {
+                    if (dx * dx + dy * dy > r * r)
+                        continue;
+                    var x = cx + dx;
+                    var y = cy + dy;
+                    if (x < 0 || x >= textureWidth || y < 0 || y >= textureHeight)
+                        continue;
+                    _inkPixels[x + y * textureWidth] = InkClear;
+                }
+            }
+            else
+            {
+                var c32 = (Color32)brushColor;
+                c32.a = 255;
+                for (var dy = -r; dy <= r; dy++)
+                for (var dx = -r; dx <= r; dx++)
+                {
+                    if (dx * dx + dy * dy > r * r)
+                        continue;
+                    var x = cx + dx;
+                    var y = cy + dy;
+                    if (x < 0 || x >= textureWidth || y < 0 || y >= textureHeight)
+                        continue;
+                    _inkPixels[x + y * textureWidth] = c32;
+                }
             }
         }
 
-        /// <summary>True if the user changed pixels vs blank canvas or vs loaded reference.</summary>
-        public bool HasInk(int threshold = 10)
+        /// <summary>True if ink differs from empty (alpha).</summary>
+        public bool HasInk(int alphaThreshold = 12)
         {
-            var px = _tex.GetPixels32();
-            if (_referenceBase == null)
+            foreach (var c in _inkPixels)
             {
-                foreach (var c in px)
-                {
-                    if (c.r < 255 - threshold || c.g < 255 - threshold || c.b < 255 - threshold)
-                        return true;
-                }
-
-                return false;
-            }
-
-            for (var i = 0; i < px.Length; i++)
-            {
-                if (InkDelta(px[i], _referenceBase[i]) > threshold)
+                if (c.a > alphaThreshold)
                     return true;
             }
 
             return false;
         }
 
-        static int InkDelta(Color32 a, Color32 b) =>
-            Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b) + Mathf.Abs(a.a - b.a);
-
-        /// <summary>Writes PNG under persistentDataPath/Sketches; returns full file path.</summary>
+        /// <summary>Writes flattened PNG (reference + ink) under persistentDataPath/Sketches.</summary>
         public string SavePngToPersistentData(string fileNamePrefix = "sketch")
         {
             var dir = Path.Combine(UnityEngine.Application.persistentDataPath, "Sketches");
             Directory.CreateDirectory(dir);
             var name = $"{fileNamePrefix}_{System.DateTime.UtcNow:yyyyMMdd_HHmmssfff}.png";
             var path = Path.Combine(dir, name);
+            CompositeToTexture();
+            _tex.Apply();
             File.WriteAllBytes(path, _tex.EncodeToPNG());
             return path;
         }

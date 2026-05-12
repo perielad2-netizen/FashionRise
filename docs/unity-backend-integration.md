@@ -11,8 +11,8 @@ On the **`FashionRiseApp`** component:
 - **`Api Config`**
   - **`Base Url`**: e.g. `http://127.0.0.1:8000/api/v1` (no trailing slash required).
   - **`Request Timeout Seconds`**: default 30.
-  - **`Use Mock Services`**: when **true** (default), the app uses `Mock*` services unless overridden below.
-  - **`Use Api Services`**: when **true**, the app uses the HTTP stack (see resolution below).
+  - **`Use Mock Services`**: when **true**, the app uses `Mock*` services (**default: false** — day-to-day dev uses FastAPI).
+  - **`Use Api Services`**: when **true**, the app uses the HTTP stack (**default: true**).
   - **`Offline Mode Placeholder`**: if enabled, `ApiClient` throws before any network call (for future offline UX tests).
   - **`Retry Attempts Placeholder`**: reserved; `ApiClient.WithRetryPlaceholder` is currently a no-op pass-through.
 
@@ -32,12 +32,14 @@ On the **`FashionRiseApp`** component:
 | `ApiException` | HTTP errors + FastAPI `detail` parsing |
 | `TokenStorageService` | Load/save/clear JWT pair |
 | `AuthApiService` | `IAuthService` → `/auth/*` |
-| `UserProfileApiService` | `IUserProfileService` → `/profiles/*` |
-| `DesignApiService` | `IDesignSaveService` → `/designs/*` |
+| `UserProfileApiService` | `IUserProfileService` → `/profiles/*` (includes **reputation** + aggregate fields on `ProfileRead`) |
+| `DesignApiService` | `IDesignSaveService` → `/designs/*` (revisions + save) |
+| `DesignHandoffApiService` | `IDesignHandoffService` → `/designs/{id}/handoff?export_kind=…` |
 | `MaterialApiService` | `IMaterialCatalogService` → `/materials` |
 | `TemplateApiService` | `IGarmentTemplateService` → `/templates` |
 | `PaletteApiService` | `IColorPaletteService` → `/palettes` |
-| `GalleryApiService` | `IGalleryService` → `/gallery` |
+| `GalleryApiService` | `IGalleryService` → `/gallery`, `/gallery/user/{user_id}`, item comments/likes, `POST /gallery` |
+| `FollowApiService` | `IFollowService` → `/profiles/.../follow`, `/profiles/me/following-ids`, follow-status |
 | `RatingApiService` | `IRatingService` → `/ratings` |
 | `UploadApiService` | `POST /uploads/image` |
 | `ExportApiService` | `POST /exports`, `GET /exports/design/{id}` |
@@ -46,21 +48,32 @@ On the **`FashionRiseApp`** component:
 
 JSON uses **Newtonsoft.Json** with **snake_case** naming to match FastAPI’s default payloads.
 
+## Share links (Unity)
+
+- **`ApiConfig`**: optional **Share Web Base Url** (e.g. `https://fashionrise.app`) → links look like `{base}/gallery/item/{gallery_item_uuid}`. If empty, **`Share Url Scheme`** (default `fashionrise`) → `fashionrise://gallery/{uuid}` for future Android / universal links.
+- **`IShareLinkService`**: `BuildGalleryItemUrl`, `BuildShareCardText` (title + URL + optional image URL for chat rich previews).
+- After **Publish to gallery**, the client tries a **native share sheet** (iOS/Android) for the share card, else **clipboard**; **Design detail** has **Copy** and **Share…** for link and card. Same pattern for **spec-sheet PDF URL** where supported.
+- **Gallery preview capture:** `UnityPngExportService` saves the screenshot with a **full path** under `Application.persistentDataPath` (required on Windows/macOS Editor so `PublishingExportService` reads the same file for `POST /uploads/image`).
+
 ## Auth behaviour
 
-- **Guest:** `SignInGuestAsync` sets a local guest id and **clears** tokens. `HasBackendSession` is **false**; cloud save/upload paths show a friendly message or skip upload. **Sketch / AI pipeline buttons** use **local mock** results in API mode so guests avoid **401** on `/ai/sketch/*`; after **login/register**, the same buttons call the real API.
+- **No guest mode:** QA and dev use **register/login** (or **mock sign-in** when the app is in mock backend mode). There is no tokenless “continue as guest” on the API stack.
+- **Cold start:** if PlayerPrefs still holds access/refresh tokens, `SplashScreen` calls `TryRestorePersistedSessionAsync` (`GET /auth/me`); on success navigation skips **Welcome** and opens **Home**.
 - **Register / login:** tokens stored; `Authorization: Bearer` applied on authenticated routes.
-- **Logout:** `SignOutAsync` clears tokens and guest flags on `AuthApiService`.
+- **Sketch / AI pipeline:** `TokenAwareSketchPipelineService` calls FastAPI when `HasBackendSession` (tokens present); otherwise local mocks (offline or mock backend).
+- **Logout:** `SignOutAsync` clears tokens and cached user id on `AuthApiService`.
 
 ## Screens wired to the API (via interfaces)
 
 | Screen | Behaviour |
 |--------|-----------|
-| `LoginChoiceScreen` | Guest; mock **Sign in (mock)** only when **not** using the API backend; in API mode that control is **hidden** and email/password/username + register/login are shown |
-| `ProfileScreen` | Loads profile/stats; loading and error text |
-| `CreateDesignScreen` | Catalogs from API when in API mode; export **saves draft first** when `HasBackendSession`, then PNG + optional upload |
-| `GalleryScreen` | Public feed; empty-state and error handling |
-| `DesignDetailScreen` | Gallery item + design detail + rating with error handling |
+| `LoginChoiceScreen` | Mock **Sign in (mock)** only when **not** using the API backend; in API mode that control is **hidden** and email/password/username + register/login are shown |
+| `ProfileScreen` | Profile/stats; **Reputation** (score + tier) + followers; **Refresh**; **Following: N**; **My public gallery** → `Gallery` + `GalleryNavContext`; draft list when API + signed in |
+| `HomeDashboardScreen` | Shows **Authoring mode: Guided / Pro** (from `AuthoringModePreferences`) |
+| `SettingsScreen` | **Toggle Guided / Pro mode**; draft autosave controls; **Sign out** |
+| `CreateDesignScreen` | Catalogs from API when in API mode; **Guided** hides pro-only buttons; **Publish to gallery** runs PNG export + upload (no `POST /exports` for that preview — `SkipExportRegistration`) then `POST /gallery` with `image_url` when `HasBackendSession`; handoff **copy / spec / PDF** tools in **Pro**; **Export PNG** still registers exports |
+| `GalleryScreen` | Community feed (`GallerySort`: newest / top rated / trending / **following**); optional **creator filter** via `GalleryNavContext`; **Community feed (all creators)** clears filter; **401** hint for anonymous following feed |
+| `DesignDetailScreen` | Item + design summary + **rating 1–10** + like + **follow/unfollow** + **comment** + **share (native / copy)** + owner **handoff** (copy / save / spec / PDF open+share+download) + **Open creator's public gallery** |
 
 ## Backend: CORS and static uploads
 

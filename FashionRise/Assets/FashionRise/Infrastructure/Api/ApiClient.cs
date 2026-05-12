@@ -70,6 +70,23 @@ namespace FashionRise.Infrastructure.Api
             }).ConfigureAwait(false);
         }
 
+        /// <summary>GET returning raw JSON text (e.g. handoff manifest) without deserialization.</summary>
+        public async Task<string> GetRawJsonAsync(string relativePath, CancellationToken ct,
+            bool useBearer = true)
+        {
+            AssertOnline();
+            return await WithRetryPlaceholder(async () =>
+            {
+                using var msg = new HttpRequestMessage(HttpMethod.Get, AbsoluteUrl(relativePath));
+                ApplyAuth(msg, useBearer);
+                using var resp = await _http.SendAsync(msg, ct).ConfigureAwait(false);
+                var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode)
+                    throw ApiException.FromHttpResponse(resp, body);
+                return body;
+            }).ConfigureAwait(false);
+        }
+
         public async Task<TResponse> PostJsonAsync<TResponse>(string relativePath, object body,
             CancellationToken ct, bool useBearer = false)
         {

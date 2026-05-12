@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -18,6 +19,18 @@ namespace FashionRise.Infrastructure.Mocks
             _designs.Insert(0, design);
             return Task.FromResult(design);
         }
+
+        public Task<int> AppendRevisionSnapshotAsync(string designId, GarmentDesign design, string? notes = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(1);
+
+        public Task<IReadOnlyList<DesignRevisionSnapshot>> ListRevisionSnapshotsAsync(string designId,
+            int limit = 30, int offset = 0, CancellationToken cancellationToken = default) =>
+            Task.FromResult((IReadOnlyList<DesignRevisionSnapshot>)Array.Empty<DesignRevisionSnapshot>());
+
+        public Task<GarmentDesign?> ApplyRevisionToDesignAsync(string designId, int revisionNumber, GarmentDesign baseDesign,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<GarmentDesign?>(baseDesign);
 
         public Task<IReadOnlyList<GarmentDesign>> ListMyDesignsAsync(
             CancellationToken cancellationToken = default)

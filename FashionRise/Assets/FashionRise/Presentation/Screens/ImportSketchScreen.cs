@@ -12,7 +12,7 @@ using UnityEngine.UI;
 
 namespace FashionRise.Presentation.Screens
 {
-    /// <summary>Import PNG/JPEG from persistent Sketches + Imports folders. [V3_READY] native OS picker.</summary>
+    /// <summary>Import PNG/JPEG from persistent Sketches + Imports folders. Native pickers: Android (SAF), iOS (Photos).</summary>
     public sealed class ImportSketchScreen : ScreenBase
     {
         public override ScreenId Id => ScreenId.ImportSketch;
@@ -38,6 +38,9 @@ namespace FashionRise.Presentation.Screens
 
             if (AndroidGalleryPick.IsSupported)
                 FrUiFactory.AddButton(col, "Pick from gallery (Android)", t, () => AndroidGalleryPick.BeginPickToImportsFolder());
+
+            if (IOSGalleryPick.IsSupported)
+                FrUiFactory.AddButton(col, "Pick from Photos (iOS)", t, () => IOSGalleryPick.BeginPickToImportsFolder());
 
             if (PcImportsFolderOpener.IsSupported)
                 FrUiFactory.AddButton(col, "Open Imports folder (PC)", t, PcImportsFolderOpener.TryOpenImportsFolder);
@@ -67,16 +70,19 @@ namespace FashionRise.Presentation.Screens
 
         void OnEnable()
         {
-            if (AndroidGalleryPick.IsSupported)
-                FashionRiseAndroidBridge.GalleryPickCompleted += OnAndroidGalleryCompleted;
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+            FashionRiseAndroidBridge.GalleryPickCompleted += OnNativeGalleryPickCompleted;
+#endif
         }
 
         void OnDisable()
         {
-            FashionRiseAndroidBridge.GalleryPickCompleted -= OnAndroidGalleryCompleted;
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+            FashionRiseAndroidBridge.GalleryPickCompleted -= OnNativeGalleryPickCompleted;
+#endif
         }
 
-        void OnAndroidGalleryCompleted(string? path)
+        void OnNativeGalleryPickCompleted(string? path)
         {
             if (path == null)
             {
@@ -102,7 +108,7 @@ namespace FashionRise.Presentation.Screens
             if (files.Count == 0)
             {
                 _info.text =
-                    "No PNG/JPEG yet. Android: use Pick from gallery. PC: Open Imports folder or save from the canvas.\n" +
+                    "No PNG/JPEG yet. Android: Pick from gallery. iOS: Pick from Photos. PC: Open Imports folder or save from the canvas.\n" +
                     imports;
                 return;
             }

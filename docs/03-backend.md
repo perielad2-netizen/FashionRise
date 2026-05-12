@@ -7,7 +7,7 @@
 ```text
 backend/
   app/
-    main.py              # create_app(), logging, CORS, /health, /ready, static mount, lifespan
+    main.py              # create_app(), logging, CORS, /health, /ready, static mount, lifespan (seed, schema probe, optional AI worker)
     seed.py              # Idempotent catalog seed; python -m app.seed for one-off runs
     core/
       config.py          # Pydantic Settings; production safety checks
@@ -15,6 +15,7 @@ backend/
       errors.py          # AppError + handlers
       logging_config.py  # stdout logging (LOG_LEVEL)
       upload_validation.py  # Image size / MIME / magic-byte checks
+      rate_limit.py        # SlowAPI limiter (see README security notes)
     api/
       v1/
         router.py        # include_router * /api/v1
@@ -53,13 +54,19 @@ backend/
 
 | Area | Responsibility |
 |------|----------------|
-| `app/core/config.py` | Env-based settings; **production** forbids weak `SECRET_KEY`, `CORS=*`, `DEBUG=true` (unless `TESTING=true`) |
+| `app/core/config.py` | Env-based settings; loads **`backend/.env`** by absolute path (not cwd-relative); **production** forbids weak `SECRET_KEY`, `CORS=*`, `DEBUG=true` (unless `TESTING=true`) |
 | `app/core/logging_config.py` | Root logger for app + workers |
 | `app/core/upload_validation.py` | Stream read cap; JPEG/PNG/WebP sniff |
 | `app/auth/` | JWT access; refresh tokens hashed in DB |
 | `app/storage/` | Local files; S3-compatible driver later |
 | `app/services/` | Transactions, rules |
 | `app/ai/` | Job boundary; real workers TBD |
+
+## Database & migrations (dev recovery)
+
+- **Alembic** uses the same **`DATABASE_URL`** as the API (`get_settings().database_url`).
+- If **`alembic current`** shows **`003`** but tables are missing (e.g. empty DB stamped manually), run from **`backend/`**: **`alembic downgrade base`** then **`alembic upgrade head`**. Downgrades on revisions **`001`–`003`** use **`if_exists=True`** on `DROP INDEX` / `DROP TABLE` so partial schemas do not block recovery (**this wipes app tables** in that database).
+- **Lifespan:** dev catalog **seed** catches missing-table errors and logs a warning; a **schema probe** logs if `material_definitions` is absent; the in-process **AI worker** stops after the first schema `ProgrammingError` until process restart (avoids log spam).
 
 ## OpenAPI
 

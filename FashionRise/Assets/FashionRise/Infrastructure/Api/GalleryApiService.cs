@@ -19,15 +19,28 @@ namespace FashionRise.Infrastructure.Api
             {
                 GallerySort.TopRated => "top_rated",
                 GallerySort.Trending => "trending",
+                GallerySort.Following => "following",
                 _ => "newest"
             };
 
         public async Task<IReadOnlyList<GalleryItem>> GetFeedAsync(GallerySort sort = GallerySort.Newest,
             CancellationToken cancellationToken = default)
         {
+            var useBearer = sort == GallerySort.Following;
             var list = await _client
                 .GetJsonAsync<List<GalleryReadDto>>($"/gallery?sort={SortParam(sort)}", cancellationToken,
-                    useBearer: false)
+                    useBearer)
+                .ConfigureAwait(true);
+            return list.Select(ApiDomainMapper.ToGalleryItem).ToList();
+        }
+
+        public async Task<IReadOnlyList<GalleryItem>> GetUserPublicGalleryAsync(string ownerUserId,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(ownerUserId) || !Guid.TryParse(ownerUserId.Trim(), out var uid))
+                return Array.Empty<GalleryItem>();
+            var list = await _client
+                .GetJsonAsync<List<GalleryReadDto>>($"/gallery/user/{uid:D}", cancellationToken, false)
                 .ConfigureAwait(true);
             return list.Select(ApiDomainMapper.ToGalleryItem).ToList();
         }
@@ -72,6 +85,27 @@ namespace FashionRise.Infrastructure.Api
                     cancellationToken, true)
                 .ConfigureAwait(true);
             return ApiDomainMapper.ToGalleryComment(c);
+        }
+
+        public async Task<GalleryItem> PublishDesignAsync(string designId, string title, string? imageUrl,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Guid.TryParse(designId, out var gid))
+                throw new ArgumentException("designId must be a server design UUID.", nameof(designId));
+            var t = string.IsNullOrWhiteSpace(title) ? "Untitled" : title.Trim();
+            if (t.Length > 300)
+                t = t.Substring(0, 300);
+            var body = new
+            {
+                design_id = gid,
+                title = t,
+                image_url = imageUrl,
+                visibility = "public"
+            };
+            var dto = await _client
+                .PostJsonAsync<GalleryReadDto>("/gallery", body, cancellationToken, true)
+                .ConfigureAwait(true);
+            return ApiDomainMapper.ToGalleryItem(dto);
         }
     }
 }

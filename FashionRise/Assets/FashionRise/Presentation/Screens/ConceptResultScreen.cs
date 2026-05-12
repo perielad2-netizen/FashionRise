@@ -1,3 +1,7 @@
+using System;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using FashionRise.Core.Navigation;
 using FashionRise.UI;
 using UnityEngine;
@@ -39,10 +43,38 @@ namespace FashionRise.Presentation.Screens
             });
         }
 
-        protected override void OnShown(object? payload) =>
-            _body.text =
-                $"Job: {App.CreateDesign.LastSketchJobId}\n" +
-                $"{App.CreateDesign.LastSketchSummary}\n\n" +
-                $"Sketch ref: {App.CreateDesign.SketchReference}";
+        public override async Task ShowAsync(object? payload = null, CancellationToken cancellationToken = default)
+        {
+            gameObject.SetActive(true);
+            var sb = new StringBuilder();
+            sb.AppendLine($"Job: {App.CreateDesign.LastSketchJobId}");
+            sb.AppendLine($"{App.CreateDesign.LastSketchSummary}");
+            sb.AppendLine();
+            sb.AppendLine($"Sketch ref: {App.CreateDesign.SketchReference}");
+            _body.text = sb.ToString();
+
+            if (App.IsApiBackend && App.Auth.HasBackendSession &&
+                !string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchJobId))
+            {
+                try
+                {
+                    var detail = await App.Ai
+                        .GetJobStructuredDetailTextAsync(App.CreateDesign.LastSketchJobId, cancellationToken)
+                        .ConfigureAwait(true);
+                    if (!string.IsNullOrEmpty(detail))
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine(detail);
+                        _body.text = sb.ToString();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"(Could not load job details: {ex.Message})");
+                    _body.text = sb.ToString();
+                }
+            }
+        }
     }
 }

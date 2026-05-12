@@ -1,6 +1,7 @@
 using FashionRise.Core.Navigation;
 using FashionRise.Infrastructure.Api;
 using FashionRise.Infrastructure.Platform;
+using FashionRise.Presentation;
 using FashionRise.Presentation.Navigation;
 using FashionRise.Presentation.Screens;
 using UnityEngine;
@@ -20,7 +21,7 @@ namespace FashionRise.Core
 
         void Awake()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (FindObjectOfType<FashionRiseAndroidBridge>() == null)
             {
                 var go = new GameObject(FashionRiseAndroidBridge.GameObjectName);
@@ -42,6 +43,10 @@ namespace FashionRise.Core
             sc.Initialize(app);
             _nav = new NavigationService(sc);
             app.BindNavigation(_nav);
+            var autosave = GetComponent<DesignAutosaveDriver>();
+            if (autosave == null)
+                autosave = gameObject.AddComponent<DesignAutosaveDriver>();
+            autosave.Init(app);
             _ = _nav.NavigateToAsync(ScreenId.Splash);
         }
     }

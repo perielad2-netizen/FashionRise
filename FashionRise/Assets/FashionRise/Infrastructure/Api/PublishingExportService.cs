@@ -9,7 +9,8 @@ using UnityEngine;
 namespace FashionRise.Infrastructure.Api
 {
     /// <summary>
-    /// Runs the inner PNG export, then uploads and registers an export row when <see cref="IAuthService.HasBackendSession"/>.
+    /// Runs the inner PNG export, then uploads when <see cref="IAuthService.HasBackendSession"/>.
+    /// Registers <c>POST /exports</c> unless <c>ExportRequest.SkipExportRegistration</c> is true (gallery preview URL only).
     /// </summary>
     public sealed class PublishingExportService : IExportService
     {
@@ -46,7 +47,9 @@ namespace FashionRise.Infrastructure.Api
             try
             {
                 var path = result.Package.LocalPngPath;
-                var bytes = await ApiClient.ReadFileWhenReadyAsync(path, cancellationToken).ConfigureAwait(true);
+                // Android can finish writing the capture a few seconds after the call returns.
+                var bytes = await ApiClient.ReadFileWhenReadyAsync(path, cancellationToken, maxWaitMs: 8000)
+                    .ConfigureAwait(true);
                 if (bytes == null || bytes.Length == 0)
                 {
                     result.Message += " Could not read PNG file for upload.";
@@ -58,6 +61,14 @@ namespace FashionRise.Infrastructure.Api
                     fileName = request.FileName + ".png";
 
                 var url = await _uploads.UploadImageAsync(bytes, fileName, cancellationToken).ConfigureAwait(true);
+                result.UploadedImageUrl = url;
+
+                if (request.SkipExportRegistration)
+                {
+                    result.Message += " Uploaded preview (gallery only, no export row).";
+                    return result;
+                }
+
                 await _exports.RegisterExportAsync(request.DesignId, "png", url, cancellationToken)
                     .ConfigureAwait(true);
                 result.Message += " Uploaded and registered export.";

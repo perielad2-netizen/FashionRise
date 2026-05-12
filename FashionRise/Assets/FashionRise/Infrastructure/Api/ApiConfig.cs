@@ -15,6 +15,11 @@ namespace FashionRise.Infrastructure.Api
         [Tooltip("When on, the app uses the FastAPI client (default for development).")]
         [SerializeField] bool useApiServices = true;
 
+        [Tooltip("Optional HTTPS site for share links, e.g. https://fashionrise.app — path will be /gallery/item/{uuid}. Leave empty to use the custom URL scheme (deep link).")]
+        [SerializeField] string shareWebBaseUrl = "";
+        [Tooltip("Used when Share Web Base Url is empty. Example: fashionrise → fashionrise://gallery/{itemId}")]
+        [SerializeField] string shareUrlScheme = "fashionrise";
+
         public string BaseUrl
         {
             get => baseUrl;
@@ -62,5 +67,9 @@ namespace FashionRise.Infrastructure.Api
                 return true;
             return !useMockServices;
         }
+
+        public string ShareWebBaseUrl => shareWebBaseUrl ?? "";
+
+        public string ShareUrlScheme => string.IsNullOrWhiteSpace(shareUrlScheme) ? "fashionrise" : shareUrlScheme;
     }
 }

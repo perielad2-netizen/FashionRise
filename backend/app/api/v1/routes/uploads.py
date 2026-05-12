@@ -1,9 +1,10 @@
 import io
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from app.auth.dependencies import CurrentUser
+from app.core.rate_limit import limiter
 from app.core.config import get_settings
 from app.core.upload_validation import extension_for_kind, read_stream_with_limit, sniff_image_kind
 from app.schemas.upload import ImageUploadResponse
@@ -13,7 +14,9 @@ router = APIRouter()
 
 
 @router.post("/image", response_model=ImageUploadResponse)
+@limiter.limit("40/minute")
 def upload_image(
+    request: Request,
     user: CurrentUser,
     file: UploadFile = File(...),
 ) -> ImageUploadResponse:

@@ -30,6 +30,14 @@ namespace FashionRise.Presentation.Navigation
             await _controller.ShowAsync(screen, payload, cancellationToken).ConfigureAwait(true);
         }
 
+        public async Task ResetToAsync(ScreenId screen, object? payload = null,
+            CancellationToken cancellationToken = default)
+        {
+            _stack.Clear();
+            Current = screen;
+            await _controller.ShowAsync(screen, payload, cancellationToken).ConfigureAwait(true);
+        }
+
         public async Task GoBackAsync(CancellationToken cancellationToken = default)
         {
             if (_stack.Count == 0)

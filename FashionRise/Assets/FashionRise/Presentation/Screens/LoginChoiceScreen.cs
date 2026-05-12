@@ -22,24 +22,16 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             _layoutCol = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.MiddleCenter);
+            FrUiFactory.AddBrandLogoRow(_layoutCol, t, 220f, 72f);
             FrUiFactory.AddLabel(_layoutCol, "H", "Sign in", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.MiddleCenter);
 
             _status = FrUiFactory.AddLabel(_layoutCol, "St", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,
-                TextAnchor.MiddleCenter);
+                TextAnchor.MiddleCenter, useSecondaryTextColor: true);
             var statusLe = _status.gameObject.AddComponent<LayoutElement>();
             statusLe.minHeight = 96f;
             statusLe.preferredHeight = 140f;
             _status.verticalOverflow = VerticalWrapMode.Overflow;
-
-            FrUiFactory.AddButton(_layoutCol, "Continue as guest", t, async () =>
-            {
-                ClearStatus();
-                var r = await App.Auth.SignInGuestAsync().ConfigureAwait(true);
-                ShowResult(r.Message);
-                if (r.Success && App.Navigation != null)
-                    await App.Navigation.NavigateToAsync(ScreenId.HomeDashboard).ConfigureAwait(true);
-            });
 
             _mockSignInButton = FrUiFactory.AddButton(_layoutCol, "Sign in (mock)", t, async () =>
             {
@@ -53,7 +45,7 @@ namespace FashionRise.Presentation.Screens
                 await App.Auth.SignInAsync("creator@fashionrise.app", "mock").ConfigureAwait(true);
                 if (App.Navigation != null)
                     await App.Navigation.NavigateToAsync(ScreenId.HomeDashboard).ConfigureAwait(true);
-            });
+            }, FrButtonEmphasis.Primary);
         }
 
         protected override void OnShown(object? payload)
@@ -75,7 +67,8 @@ namespace FashionRise.Presentation.Screens
             _username = FrUiFactory.AddInputField(_layoutCol, "Username (register)", "username", t,
                 Mathf.RoundToInt(t.BodySize));
 
-            FrUiFactory.AddButton(_layoutCol, "Sign in (API)", t, async () => { await ApiSignInAsync().ConfigureAwait(true); });
+            FrUiFactory.AddButton(_layoutCol, "Sign in (API)", t, async () => { await ApiSignInAsync().ConfigureAwait(true); },
+                FrButtonEmphasis.Primary);
             FrUiFactory.AddButton(_layoutCol, "Register (API)", t, async () => { await ApiRegisterAsync().ConfigureAwait(true); });
             _apiFieldsBuilt = true;
         }
@@ -98,7 +91,7 @@ namespace FashionRise.Presentation.Screens
                 return;
             }
 
-            var r = await App.Auth.SignInAsync(email, _password.text).ConfigureAwait(true);
+            var r = await App.Auth.SignInAsync(email, _password.text.Trim()).ConfigureAwait(true);
             ShowResult(r.Message);
             if (r.Success && App.Navigation != null)
                 await App.Navigation.NavigateToAsync(ScreenId.HomeDashboard).ConfigureAwait(true);
@@ -111,7 +104,7 @@ namespace FashionRise.Presentation.Screens
                 return;
             var email = _email.text.Trim();
             var username = _username.text.Trim();
-            var password = _password.text;
+            var password = _password.text.Trim();
             if (!TryValidateRegister(email, username, password, out var err))
             {
                 ShowResult(err);

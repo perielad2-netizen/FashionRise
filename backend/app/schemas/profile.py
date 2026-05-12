@@ -16,10 +16,20 @@ class ProfileRead(BaseModel):
     cover_url: str | None
     style_tags: list[Any]
     designs_count: int
+    published_count: int
     followers_count: int
+    likes_received_count: int
     rating_average: float | None
+    rating_count: int
+    reputation_score: float
+    reputation_tier: str
     created_at: datetime
     updated_at: datetime
+
+
+class FollowStatusRead(BaseModel):
+    user_id: uuid.UUID
+    following: bool
 
 
 class ProfileUpdate(BaseModel):

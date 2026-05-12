@@ -12,6 +12,9 @@ Desktop.ini
 .DS_Store
 
 # --- Python / FastAPI (backend/) ---
+# Runtime uploads / handoffs (created by local API; do not commit)
+backend/data/storage/
+
 backend/.venv/
 backend/venv/
 .venv/

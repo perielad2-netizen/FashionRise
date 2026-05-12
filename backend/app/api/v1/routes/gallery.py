@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import CurrentUser, get_optional_user
+from app.core.errors import UnauthorizedError
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.gallery import (
@@ -32,8 +33,14 @@ def list_gallery(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     sort: GallerySort = Query("newest"),
+    user: User | None = Depends(get_optional_user),
 ) -> list[GalleryRead]:
-    rows = gallery_service.list_public_gallery(db, limit=limit, offset=offset, sort=sort)
+    if sort == "following":
+        if user is None:
+            raise UnauthorizedError("Sign in to view your following feed")
+        rows = gallery_service.list_following_feed(db, viewer=user, limit=limit, offset=offset)
+    else:
+        rows = gallery_service.list_public_gallery(db, limit=limit, offset=offset, sort=sort)
     return [GalleryRead.model_validate(r) for r in rows]
 
 

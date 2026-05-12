@@ -77,5 +77,7 @@ namespace FashionRise.Infrastructure.Api
 
         public bool IsTimeout =>
             StatusCode == (int)HttpStatusCode.RequestTimeout || Message.Contains("timeout", StringComparison.OrdinalIgnoreCase);
+
+        public bool IsRateLimited => StatusCode == (int)HttpStatusCode.TooManyRequests;
     }
 }

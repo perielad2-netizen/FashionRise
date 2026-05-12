@@ -28,6 +28,12 @@
 | GET | `/profiles/me` | Authenticated profile |
 | PUT | `/profiles/me` | Partial update (`ProfileUpdate`) |
 | GET | `/profiles/{user_id}` | Public profile by UUID |
+| GET | `/profiles/me/following-ids` | UUIDs the current user follows — auth |
+| GET | `/profiles/{user_id}/follow-status` | `{ "user_id", "following": bool }` — optional auth |
+| POST | `/profiles/{user_id}/follow` | Follow creator — auth (**409** if self) |
+| DELETE | `/profiles/{user_id}/follow` | Unfollow — auth |
+
+**`ProfileRead` (computed, not all stored on `user_profiles`):** `designs_count`, `published_count`, `followers_count`, `likes_received_count`, `rating_average`, `rating_count`, **`reputation_score`** (0–100), **`reputation_tier`** (`newcomer` \| `rising` \| `established` \| `icon`). Derived from designs, gallery items, follows, likes, and per-item ratings.
 
 ---
 
@@ -54,6 +60,10 @@
 | GET | `/designs/{design_id}` | Detail (owner or public + `moderation_status=ok`) |
 | PUT | `/designs/{design_id}` | Update (`DesignUpdate`) — owner only |
 | DELETE | `/designs/{design_id}` | Delete — owner only |
+| GET | `/designs/{design_id}/revisions` | List revision snapshots — owner |
+| POST | `/designs/{design_id}/revisions` | Append snapshot (`design_data`, optional `notes`) — owner |
+| GET | `/designs/{design_id}/revisions/{revision_number}` | Read one revision — owner |
+| GET | `/designs/{design_id}/handoff` | Owner JSON handoff; query **`export_kind`**: `manifest_v1` (default), `spec_sheet_v1`, `spec_sheet_pdf` (generates placeholder PDF + export row) |
 
 ---
 
@@ -62,7 +72,7 @@
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/gallery` | Create gallery item (`GalleryCreate`) — auth |
-| GET | `/gallery` | Public feed; query **`sort`**: `newest` (default), `top_rated`, `trending`; `limit`, `offset` |
+| GET | `/gallery` | Public feed; query **`sort`**: `newest` (default), `top_rated`, `trending`, **`following`** (Bearer required — **401** if anonymous); `limit`, `offset` |
 | GET | `/gallery/user/{user_id}` | User’s **public** items |
 | GET | `/gallery/{gallery_item_id}/comments` | List moderated comments |
 | POST | `/gallery/{gallery_item_id}/comments` | Body: `{ "body": "..." }` — auth |
@@ -70,7 +80,7 @@
 | DELETE | `/gallery/{gallery_item_id}/like` | Unlike — auth; **204** |
 | GET | `/gallery/{gallery_item_id}` | Detail; if **Bearer** sent, response includes **`liked_by_me`** (bool) |
 
-**DB:** `gallery_likes`, `gallery_comments` (Alembic **`002`**).
+**DB:** `gallery_likes`, `gallery_comments` (Alembic **`002`**); **`user_follows`** + profile follower counts (**`003`**) for `sort=following` and profile follow APIs.
 
 ---
 
@@ -138,3 +148,5 @@ Worker is still **placeholder** (job completes immediately with noop `result_dat
 | 2026-05-10 | Initial endpoint list |
 | 2026-05-10 | Aligned with implemented routes (PUT profiles, `/uploads/image`, exports paths, ratings paths); noted gaps (logout, palette by id, capabilities) |
 | 2026-05-10 | V2 (Prompt 6): gallery sort, likes, comments; AI sketch/style routes; `liked_by_me` on gallery detail |
+| 2026-05-11 | Gallery `sort=following` + **401** note; profile **follow** routes; DB note for **`003`** `user_follows` |
+| 2026-05-11 | **Profiles:** `ProfileRead` reputation + aggregates; follow-status shape. **Designs:** revisions + **`handoff`** + **`export_kind`**. |

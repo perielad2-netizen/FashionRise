@@ -1184,3 +1184,57 @@ Then produce:
 Do not rewrite everything automatically.
 First give the review and recommended action plan.
 
+Use the FashionRise premium design system.
+
+Theme colors:
+
+Midnight Navy:
+HEX #111827
+RGB 17,24,39
+
+Fashion Pink:
+HEX #EC4899
+RGB 236,72,153
+
+Rose Gold:
+HEX #D4AF9B
+RGB 212,175,155
+
+Soft Cream:
+HEX #F8F4F0
+RGB 248,244,240
+
+Warm Light Surface:
+HEX #FFFAF5
+RGB 255,250,245
+
+Deep Text:
+HEX #1C1C1E
+RGB 28,28,30
+
+Secondary Text:
+HEX #6B7280
+RGB 107,114,128
+
+Design direction:
+- premium
+- elegant
+- fashion-tech
+- feminine but modern
+- luxury without clutter
+- soft luxury aesthetic
+- touch-friendly
+- clean editorial spacing
+- not childish
+- not toy-like
+
+Use:
+- elegant rounded corners
+- soft shadows
+- minimal premium gradients only where tasteful
+- clean typography hierarchy
+- large touch targets
+- modern card-based layouts
+- premium transitions
+
+use logo in D:\projects\FashionRise\fashion_rise_logo.png

@@ -12,5 +12,8 @@ namespace FashionRise.Services
             CancellationToken cancellationToken = default);
 
         Task<string> GetJobStatusAsync(string jobId, CancellationToken cancellationToken = default);
+
+        /// <summary>Multi-line detail from job <c>result_data</c> (OpenAI bullets, source line). Null if unavailable.</summary>
+        Task<string?> GetJobStructuredDetailTextAsync(string jobId, CancellationToken cancellationToken = default);
     }
 }

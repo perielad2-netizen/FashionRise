@@ -16,10 +16,12 @@ namespace FashionRise.Core
         public IAuthService Auth { get; }
         public IUserProfileService UserProfile { get; }
         public IDesignSaveService DesignSave { get; }
+        public IDesignHandoffService Handoff { get; }
         public IMaterialCatalogService Materials { get; }
         public IColorPaletteService Palettes { get; }
         public IGarmentTemplateService Templates { get; }
         public IGalleryService Gallery { get; }
+        public IFollowService Follow { get; }
         public IRatingService Ratings { get; }
         public IExportService Export { get; }
         public IAIEnhancementService Ai { get; }
@@ -27,6 +29,7 @@ namespace FashionRise.Core
         public IConceptPolishService ConceptPolish { get; }
         public IStyleSuggestionService StyleSuggest { get; }
         public IImageRefinementService ImageRefine { get; }
+        public IShareLinkService ShareLinks { get; }
         public CreateDesignSession CreateDesign { get; }
         public INavigationService? Navigation { get; private set; }
 
@@ -35,10 +38,12 @@ namespace FashionRise.Core
             IAuthService auth,
             IUserProfileService userProfile,
             IDesignSaveService designSave,
+            IDesignHandoffService handoff,
             IMaterialCatalogService materials,
             IColorPaletteService palettes,
             IGarmentTemplateService templates,
             IGalleryService gallery,
+            IFollowService follow,
             IRatingService ratings,
             IExportService export,
             IAIEnhancementService ai,
@@ -46,16 +51,19 @@ namespace FashionRise.Core
             IConceptPolishService conceptPolish,
             IStyleSuggestionService styleSuggest,
             IImageRefinementService imageRefine,
+            IShareLinkService shareLinks,
             CreateDesignSession createDesign)
         {
             IsApiBackend = isApiBackend;
             Auth = auth;
             UserProfile = userProfile;
             DesignSave = designSave;
+            Handoff = handoff;
             Materials = materials;
             Palettes = palettes;
             Templates = templates;
             Gallery = gallery;
+            Follow = follow;
             Ratings = ratings;
             Export = export;
             Ai = ai;
@@ -63,6 +71,7 @@ namespace FashionRise.Core
             ConceptPolish = conceptPolish;
             StyleSuggest = styleSuggest;
             ImageRefine = imageRefine;
+            ShareLinks = shareLinks;
             CreateDesign = createDesign;
         }
 
@@ -71,17 +80,22 @@ namespace FashionRise.Core
         public static AppServices CreateDefaultMocks()
         {
             var auth = new MockAuthService();
-            var gallery = new MockGalleryService(auth);
+            var follow = new MockFollowService(auth);
+            var gallery = new MockGalleryService(auth, follow);
             var sketch = new MockSketchPipelineService();
+            var designSave = new MockDesignSaveService();
+            var handoff = new MockDesignHandoffService(designSave);
             return new AppServices(
                 false,
                 auth,
                 new MockUserProfileService(auth),
-                new MockDesignSaveService(),
+                designSave,
+                handoff,
                 new MockMaterialCatalogService(),
                 new MockColorPaletteService(),
                 new MockGarmentTemplateService(),
                 gallery,
+                follow,
                 new MockRatingService(gallery),
                 new MockExportService(),
                 new MockAIEnhancementService(),
@@ -89,6 +103,7 @@ namespace FashionRise.Core
                 sketch,
                 sketch,
                 sketch,
+                new MockShareLinkService(),
                 new CreateDesignSession());
         }
 
@@ -100,27 +115,32 @@ namespace FashionRise.Core
             var auth = new AuthApiService(client, tokens);
             var profiles = new UserProfileApiService(client);
             var designs = new DesignApiService(client);
+            var handoff = new DesignHandoffApiService(client);
             var materials = new MaterialApiService(client);
             var templates = new TemplateApiService(client);
             var palettes = new PaletteApiService(client);
             var gallery = new GalleryApiService(client);
+            var follow = new FollowApiService(client);
             var ratings = new RatingApiService(client);
             var uploads = new UploadApiService(client);
             var exports = new ExportApiService(client);
             var ai = new AIJobApiService(client);
             var sketchApi = new SketchPipelineApiService(client);
-            var sketch = new GuestAwareSketchPipelineService(auth, sketchApi);
+            var sketch = new TokenAwareSketchPipelineService(auth, sketchApi);
             var innerCapture = new UnityPngExportService();
             var export = new PublishingExportService(innerCapture, uploads, exports, auth);
+            var shareLinks = new ShareLinkService(config);
             return new AppServices(
                 true,
                 auth,
                 profiles,
                 designs,
+                handoff,
                 materials,
                 palettes,
                 templates,
                 gallery,
+                follow,
                 ratings,
                 export,
                 ai,
@@ -128,6 +148,7 @@ namespace FashionRise.Core
                 sketch,
                 sketch,
                 sketch,
+                shareLinks,
                 new CreateDesignSession());
         }
 

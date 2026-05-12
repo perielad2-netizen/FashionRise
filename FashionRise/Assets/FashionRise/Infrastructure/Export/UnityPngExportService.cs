@@ -21,8 +21,10 @@ namespace FashionRise.Infrastructure.Export
             var safeName = string.IsNullOrWhiteSpace(request.FileName)
                 ? "fashionrise_export"
                 : Path.GetFileNameWithoutExtension(request.FileName);
+            // Editor / standalone: bare filename is saved under the project folder, not persistentDataPath.
+            // Use a full path so PublishingExportService can read the same file for POST /uploads/image.
             var path = Path.Combine(UnityEngine.Application.persistentDataPath, safeName + ".png");
-            ScreenCapture.CaptureScreenshot(safeName + ".png");
+            ScreenCapture.CaptureScreenshot(path);
 
             var package = new ExportPackage
             {

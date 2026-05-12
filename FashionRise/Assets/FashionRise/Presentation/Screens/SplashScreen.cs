@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Threading.Tasks;
 using FashionRise.Core.Navigation;
 using FashionRise.UI;
 using UnityEngine;
@@ -16,10 +17,9 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.MiddleCenter);
-            FrUiFactory.AddLabel(col, "Brand", "FashionRise", t, Mathf.RoundToInt(t.TitleSize + 8), FontStyle.Bold,
-                TextAnchor.MiddleCenter);
+            FrUiFactory.AddBrandLogoRow(col, t, 320f, 120f);
             FrUiFactory.AddLabel(col, "Tag", "Premium fashion creation", t, Mathf.RoundToInt(t.SubtitleSize),
-                FontStyle.Italic, TextAnchor.MiddleCenter);
+                FontStyle.Italic, TextAnchor.MiddleCenter, useSecondaryTextColor: true);
         }
 
         protected override void OnShown(object? payload)
@@ -33,7 +33,14 @@ namespace FashionRise.Presentation.Screens
         IEnumerator Advance()
         {
             yield return new WaitForSeconds(1.15f);
-            if (App.Navigation != null)
+            var task = App.Auth.TryRestorePersistedSessionAsync();
+            while (!task.IsCompleted)
+                yield return null;
+            if (App.Navigation == null)
+                yield break;
+            if (App.Auth.IsSignedIn)
+                _ = App.Navigation.NavigateToAsync(ScreenId.HomeDashboard);
+            else
                 _ = App.Navigation.NavigateToAsync(ScreenId.Welcome);
         }
     }

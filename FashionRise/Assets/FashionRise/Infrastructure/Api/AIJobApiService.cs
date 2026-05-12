@@ -30,5 +30,15 @@ namespace FashionRise.Infrastructure.Api
                 .ConfigureAwait(true);
             return job.Status;
         }
+
+        public async Task<string?> GetJobStructuredDetailTextAsync(string jobId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Guid.TryParse(jobId, out var jid))
+                return null;
+            var job = await _client.GetJsonAsync<AIJobReadDto>($"/ai/jobs/{jid}", cancellationToken, true)
+                .ConfigureAwait(true);
+            return AiJobResultFormatter.FormatJobBody(job.Status, job.ResultData, job.ErrorMessage);
+        }
     }
 }

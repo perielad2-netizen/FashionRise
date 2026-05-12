@@ -21,10 +21,11 @@ namespace FashionRise.Infrastructure.Mocks
             return Task.FromResult(new UserProfile
             {
                 UserId = id,
-                DisplayName = id.StartsWith("guest", StringComparison.OrdinalIgnoreCase)
-                    ? "Guest Creator"
-                    : "Atelier Member",
+                DisplayName = "Atelier Member",
                 Bio = "Building a capsule of modern, realistic silhouettes.",
+                FollowersCount = 12,
+                ReputationScore = 41.5,
+                ReputationTier = "rising",
                 IsPublic = true,
                 PublicSlug = id,
                 FeaturedDesignIds = Array.Empty<string>()
@@ -39,6 +40,9 @@ namespace FashionRise.Infrastructure.Mocks
                 UserId = userId,
                 DisplayName = "Public Creator",
                 Bio = "FashionRise profile (mock).",
+                FollowersCount = 8,
+                ReputationScore = 29.0,
+                ReputationTier = "rising",
                 IsPublic = true,
                 PublicSlug = userId
             });

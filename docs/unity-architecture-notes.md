@@ -8,7 +8,7 @@
 | **Domain** | Pure models: designs, materials, palettes, gallery, export packages |
 | **Application** | `CreateDesignSession`, `ExportRequest`, `UnityPngExportService` |
 | **Services** | Interfaces consumed by Presentation |
-| **Infrastructure** | `Mocks/*`; `Api/` — `ApiClient`, DTOs, mappers, `*ApiService` (`Auth`, `UserProfile`, `Design`, `Material`, `Template`, `Palette`, `Gallery`, `Rating`, `Upload`, `Export`, `AIJob`), `PublishingExportService`, `TokenStorageService` |
+| **Infrastructure** | `Mocks/*`; `Api/` — `ApiClient`, DTOs, mappers, `*ApiService` (`Auth`, `UserProfile`, `Design`, `Material`, `Template`, `Palette`, `Gallery`, `Follow`, `Rating`, `Upload`, `Export`, `AIJob`), `PublishingExportService`, `TokenStorageService` |
 | **Presentation** | Screens, navigation, model preview orchestration |
 | **UI** | Theme ScriptableObject + reusable uGUI components |
 | **Data** | Seed data for mocks (materials, templates, palettes, gallery) |

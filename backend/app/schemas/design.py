@@ -31,6 +31,23 @@ class DesignUpdate(BaseModel):
     status: str | None = None
 
 
+class DesignRevisionCreate(BaseModel):
+    design_data: dict[str, Any] = Field(default_factory=dict)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class DesignRevisionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    design_id: uuid.UUID
+    user_id: uuid.UUID
+    revision_number: int
+    design_data: dict[str, Any]
+    notes: str | None
+    created_at: datetime
+
+
 class DesignRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

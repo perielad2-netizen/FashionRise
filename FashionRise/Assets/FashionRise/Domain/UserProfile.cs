@@ -9,6 +9,9 @@ namespace FashionRise.Domain
         public string UserId { get; set; } = "";
         public string DisplayName { get; set; } = "";
         public string Bio { get; set; } = "";
+        public int FollowersCount { get; set; }
+        public double ReputationScore { get; set; }
+        public string ReputationTier { get; set; } = "";
         public bool IsPublic { get; set; } = true;
         public string PublicSlug { get; set; } = "";
         public IReadOnlyList<string> FeaturedDesignIds { get; set; } = Array.Empty<string>();

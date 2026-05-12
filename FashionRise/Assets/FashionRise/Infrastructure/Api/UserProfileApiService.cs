@@ -36,9 +36,9 @@ namespace FashionRise.Infrastructure.Api
             return new CreatorStats
             {
                 DesignCount = p.DesignsCount,
-                PublishedCount = 0,
+                PublishedCount = p.PublishedCount,
                 AverageRating = p.RatingAverage ?? 0,
-                RatingCount = 0
+                RatingCount = p.RatingCount
             };
         }
 
@@ -48,6 +48,9 @@ namespace FashionRise.Infrastructure.Api
                 UserId = p.UserId.ToString(),
                 DisplayName = p.DisplayName,
                 Bio = p.Bio ?? "",
+                FollowersCount = p.FollowersCount,
+                ReputationScore = p.ReputationScore,
+                ReputationTier = p.ReputationTier ?? "",
                 IsPublic = true,
                 PublicSlug = p.DisplayName.Replace(" ", "-").ToLowerInvariant(),
                 FeaturedDesignIds = Array.Empty<string>()
