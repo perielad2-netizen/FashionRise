@@ -47,6 +47,16 @@ FashionRise/Recordings/
 FashionRise/SerializedBuildInfo/
 FashionRise/*.sln.DotSettings.user
 
+# Accidental other Unity projects / Library dumps (do not commit)
+/[Cc]s3/
+/[Ss]lice*/
+/[Ss]laice*/
+/[Ii]nfiniti*/
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
+
 # Crash / debug
 FashionRise/sysinfo.txt
 FashionRise/UpgradeLog.htm
