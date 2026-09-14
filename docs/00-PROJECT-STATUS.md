@@ -48,8 +48,8 @@ After Magic finishes and opens **Your look**, the user can still navigate back t
 
 ### Suggested order for the *next* session
 
-1. **Play-test Magic** after API restart — if still too photoreal, add sketch-as-reference via Images edit API.  
-2. **Kid loop polish** — empty/error copy; optional big brush-only kid toolbar.  
+1. **Kid UX / one-shot Magic flow** — after Magic, don’t invite a second “Make it magical!”; Your look primary = Share / Draw again. Start kid chrome redesign (fun, game-like).  
+2. **Keep sketch-faithful Magic** — tune edit prompt only if looks drift; don’t regress to text-only generate.  
 3. **Viral share v2** — stronger caption + one-tap gallery publish; then AI share-video spike.  
 4. **Pro door** — leave atelier under More… until viral loop feels great.
 
