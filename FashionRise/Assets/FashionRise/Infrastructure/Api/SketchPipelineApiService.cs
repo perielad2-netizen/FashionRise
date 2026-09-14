@@ -50,8 +50,48 @@ namespace FashionRise.Infrastructure.Api
                 .PostJsonAsync<AIJobReadDto>("/ai/sketch/polish",
                     new { design_id = TryGuid(request.DesignId), input_data = inputData }, cancellationToken, true)
                 .ConfigureAwait(true);
-            var final = await WaitForJobCompletionAsync(_client, job.Id, cancellationToken).ConfigureAwait(true);
-            return ToConcept(final);
+            try
+            {
+                request.OnJobStarted?.Invoke(job.Id.ToString());
+            }
+            catch (Exception callbackEx)
+            {
+                UnityEngine.Debug.LogWarning($"FashionRise OnJobStarted callback failed: {callbackEx.Message}");
+            }
+
+            try
+            {
+                var final = await WaitForJobCompletionAsync(_client, job.Id, cancellationToken)
+                    .ConfigureAwait(true);
+                return ToConcept(final);
+            }
+            catch (Exception ex)
+            {
+                // Job often finishes on the server even when a poll blip aborts the client wait.
+                UnityEngine.Debug.LogWarning(
+                    $"FashionRise polish wait interrupted for job {job.Id}: {ex.Message}. Trying recovery GET…");
+                for (var recoveryAttempt = 0; recoveryAttempt < 5; recoveryAttempt++)
+                {
+                    try
+                    {
+                        if (recoveryAttempt > 0)
+                            await Task.Delay(750 * recoveryAttempt, cancellationToken).ConfigureAwait(true);
+                        var recovered = await _client
+                            .GetJsonAsync<AIJobReadDto>($"/ai/jobs/{job.Id}", cancellationToken, true)
+                            .ConfigureAwait(true);
+                        if (string.Equals(recovered.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(recovered.Status, "failed", StringComparison.OrdinalIgnoreCase))
+                            return ToConcept(recovered);
+                    }
+                    catch (Exception recoveryEx)
+                    {
+                        UnityEngine.Debug.LogWarning(
+                            $"FashionRise polish recovery GET attempt {recoveryAttempt + 1} failed: {recoveryEx.Message}");
+                    }
+                }
+
+                throw;
+            }
         }
 
         public async Task<StyleVariationResult> SuggestAsync(StyleVariationRequest request,
@@ -143,7 +183,8 @@ namespace FashionRise.Infrastructure.Api
             CancellationToken cancellationToken)
         {
             const int delayMs = 500;
-            const int maxAttempts = 480; // ~4 min — polish + DALL·E can be slow
+            // ~5 min — polish + gpt-image edit is often 45–90s; keep polling through transient HTTP blips
+            const int maxAttempts = 600;
             for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -160,6 +201,23 @@ namespace FashionRise.Infrastructure.Api
                     throw new ApiException(ex.StatusCode,
                         "Rate limited while polling the AI job. Wait briefly and retry, or avoid many parallel sketch runs from the same network.",
                         ex.ResponseBody, ex);
+                }
+                catch (ApiException)
+                {
+                    // Transient HTTP blips during long image jobs — keep polling.
+                }
+                catch (System.Net.Http.HttpRequestException)
+                {
+                    // "An error occurred while sending the request" — common mid-Magic; retry.
+                }
+                catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // HttpClient timeout on a single poll — retry.
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    // Unity / Mono sometimes wraps socket failures oddly — keep polling.
+                    UnityEngine.Debug.LogWarning($"FashionRise AI poll blip: {ex.GetType().Name}: {ex.Message}");
                 }
 
                 await Task.Delay(delayMs, cancellationToken).ConfigureAwait(true);

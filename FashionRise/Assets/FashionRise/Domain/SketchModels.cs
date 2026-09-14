@@ -31,6 +31,11 @@ namespace FashionRise.Domain
         public string Notes { get; set; } = "";
         /// <summary>Optional local file: URI or path — embedded as image_base64 for the worker when using API mode.</summary>
         public string LocalSketchForVision { get; set; } = "";
+        /// <summary>
+        /// Invoked as soon as the polish job id is known (before the long wait), so the UI can recover if polling fails.
+        /// </summary>
+        [NonSerialized]
+        public Action<string>? OnJobStarted;
     }
 
     [Serializable]

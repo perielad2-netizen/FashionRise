@@ -59,17 +59,43 @@ namespace FashionRise.Infrastructure.Api
             bool useBearer = true)
         {
             AssertOnline();
-            return await WithRetryPlaceholder(async () =>
+            const int maxAttempts = 4;
+            Exception? last = null;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                using var msg = new HttpRequestMessage(HttpMethod.Get, AbsoluteUrl(relativePath));
-                ApplyAuth(msg, useBearer);
-                using var resp = await _http.SendAsync(msg, ct).ConfigureAwait(false);
-                var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                if (!resp.IsSuccessStatusCode)
-                    throw ApiException.FromHttpResponse(resp, body);
-                return JsonConvert.DeserializeObject<T>(body, ApiJson.Settings)
-                       ?? throw new ApiException((int)resp.StatusCode, "Empty JSON body", body);
-            }).ConfigureAwait(false);
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    return await WithRetryPlaceholder(async () =>
+                    {
+                        using var msg = new HttpRequestMessage(HttpMethod.Get, AbsoluteUrl(relativePath));
+                        ApplyAuth(msg, useBearer);
+                        using var resp = await _http.SendAsync(msg, ct).ConfigureAwait(false);
+                        var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        if (!resp.IsSuccessStatusCode)
+                            throw ApiException.FromHttpResponse(resp, body);
+                        return JsonConvert.DeserializeObject<T>(body, ApiJson.Settings)
+                               ?? throw new ApiException((int)resp.StatusCode, "Empty JSON body", body);
+                    }).ConfigureAwait(false);
+                }
+                catch (ApiException)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex) when (attempt < maxAttempts &&
+                                           (ex is HttpRequestException || ex is TaskCanceledException ||
+                                            ex is IOException))
+                {
+                    last = ex;
+                    await Task.Delay(200 * attempt, ct).ConfigureAwait(false);
+                }
+            }
+
+            throw last ?? new ApiException(0, "GET failed after retries");
         }
 
         /// <summary>GET returning raw JSON text (e.g. handoff manifest) without deserialization.</summary>
