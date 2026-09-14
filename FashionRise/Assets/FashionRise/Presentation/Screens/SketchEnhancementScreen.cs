@@ -30,7 +30,8 @@ namespace FashionRise.Presentation.Screens
             _status = FrUiFactory.AddLabel(col, "St", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,
                 TextAnchor.UpperLeft);
 
-            var magic = FrUiFactory.AddButton(col, "Make it magical!", t, () => { _ = RunPolishAsync(); });
+            var magic = FrUiFactory.AddButton(col, "Make it magical!", t, () => { _ = RunPolishAsync(); },
+                FrButtonEmphasis.Primary);
             var le = magic.GetComponent<LayoutElement>();
             if (le != null)
             {
@@ -38,14 +39,12 @@ namespace FashionRise.Presentation.Screens
                 le.preferredHeight = 72f;
             }
 
+            // Always visible — open Your look even if Magic's poll failed after the server finished.
+            FrUiFactory.AddButton(col, "See last result", t, () => { _ = OpenLastResultAsync(); },
+                FrButtonEmphasis.Primary);
             FrUiFactory.AddButton(col, "More AI tools…", t, ToggleMore);
             FrUiFactory.AddButton(col, "Clean lines", t, () => { _ = RunCleanAsync(); });
             FrUiFactory.AddButton(col, "Style ideas", t, () => { _ = RunStyleAsync(); });
-            FrUiFactory.AddButton(col, "See last result", t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.NavigateToAsync(ScreenId.ConceptResult);
-            });
             FrUiFactory.AddButton(col, "Back", t, () =>
             {
                 if (App.Navigation != null)
@@ -81,7 +80,7 @@ namespace FashionRise.Presentation.Screens
                 return;
             SetSiblingActive(col, "Clean lines_Btn", open);
             SetSiblingActive(col, "Style ideas_Btn", open);
-            SetSiblingActive(col, "See last result_Btn", open);
+            // "See last result" stays visible so a finished look can always be opened.
         }
 
         static void SetSiblingActive(Transform col, string name, bool active)
@@ -89,6 +88,30 @@ namespace FashionRise.Presentation.Screens
             var child = col.Find(name);
             if (child != null)
                 child.gameObject.SetActive(active);
+        }
+
+        async Task OpenLastResultAsync()
+        {
+            _status.text = "Loading your last look…";
+            try
+            {
+                if (App.IsApiBackend && App.Auth.HasBackendSession &&
+                    !string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchJobId))
+                {
+                    var url = await App.Ai
+                        .GetJobImageUrlAsync(App.CreateDesign.LastSketchJobId)
+                        .ConfigureAwait(true);
+                    if (!string.IsNullOrEmpty(url))
+                        App.CreateDesign.LastPolishedImageUrl = url!;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"FashionRise See last result refresh failed: {ex.Message}");
+            }
+
+            if (App.Navigation != null)
+                _ = App.Navigation.NavigateToAsync(ScreenId.ConceptResult);
         }
 
         async Task RunCleanAsync()
@@ -135,7 +158,12 @@ namespace FashionRise.Presentation.Screens
                 {
                     DesignId = null,
                     Notes = "polish concept",
-                    LocalSketchForVision = App.CreateDesign.SketchReference
+                    LocalSketchForVision = App.CreateDesign.SketchReference,
+                    OnJobStarted = jobId =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(jobId))
+                            App.CreateDesign.LastSketchJobId = jobId;
+                    }
                 }).ConfigureAwait(true);
                 Finish(r.JobId, r.Summary, r.ImageUrl);
                 if (string.IsNullOrEmpty(r.ImageUrl))
@@ -145,12 +173,38 @@ namespace FashionRise.Presentation.Screens
             }
             catch (Exception ex)
             {
-                _status.text = ex.Message;
                 Debug.LogWarning($"FashionRise Magic failed: {ex}");
+                // Server may already have finished — recover into Your look if possible.
+                if (await TryRecoverCompletedLookAsync().ConfigureAwait(true))
+                    return;
+                _status.text =
+                    ex.Message + "\n\nIf Magic finished on the server, tap See last result.";
             }
             finally
             {
                 _busy = false;
+            }
+        }
+
+        async Task<bool> TryRecoverCompletedLookAsync()
+        {
+            if (!App.IsApiBackend || !App.Auth.HasBackendSession ||
+                string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchJobId))
+                return false;
+            try
+            {
+                var url = await App.Ai
+                    .GetJobImageUrlAsync(App.CreateDesign.LastSketchJobId)
+                    .ConfigureAwait(true);
+                if (string.IsNullOrEmpty(url))
+                    return false;
+                Finish(App.CreateDesign.LastSketchJobId, App.CreateDesign.LastSketchSummary, url);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"FashionRise Magic recovery failed: {ex.Message}");
+                return false;
             }
         }
 
