@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-05-13 (session handoff — sketch pad v2, auth hardening, iOS import, Unity fixes)
+**Last updated:** 2026-09-14 (Magic look in-app: resilient poll + job-id early store + See last result + Your look RawImage; kid UI redesign still pending — see `docs/01-KID-UX-VISION.md`)
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 

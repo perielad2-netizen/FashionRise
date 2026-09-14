@@ -32,6 +32,8 @@ namespace FashionRise.Core
         public IShareLinkService ShareLinks { get; }
         public CreateDesignSession CreateDesign { get; }
         public INavigationService? Navigation { get; private set; }
+        /// <summary>API root when using FastAPI (e.g. http://127.0.0.1:8001/api/v1); empty in mock mode.</summary>
+        public string ApiBaseUrl { get; }
 
         public AppServices(
             bool isApiBackend,
@@ -52,7 +54,8 @@ namespace FashionRise.Core
             IStyleSuggestionService styleSuggest,
             IImageRefinementService imageRefine,
             IShareLinkService shareLinks,
-            CreateDesignSession createDesign)
+            CreateDesignSession createDesign,
+            string apiBaseUrl = "")
         {
             IsApiBackend = isApiBackend;
             Auth = auth;
@@ -73,6 +76,7 @@ namespace FashionRise.Core
             ImageRefine = imageRefine;
             ShareLinks = shareLinks;
             CreateDesign = createDesign;
+            ApiBaseUrl = apiBaseUrl ?? "";
         }
 
         public void BindNavigation(INavigationService navigation) => Navigation = navigation;
@@ -149,7 +153,8 @@ namespace FashionRise.Core
                 sketch,
                 sketch,
                 shareLinks,
-                new CreateDesignSession());
+                new CreateDesignSession(),
+                config.BaseUrl ?? "");
         }
 
         /// <summary>Build from inspector flags on <see cref="ApiConfig"/>.</summary>
