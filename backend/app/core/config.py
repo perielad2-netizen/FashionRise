@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     storage_backend: Literal["local"] = "local"
     local_storage_root: str = "./data/storage"
-    public_upload_base_url: str = "http://localhost:8000/static/uploads"
+    public_upload_base_url: str = "http://127.0.0.1:8001/static/uploads"
     upload_subdir: str = "uploads"
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
@@ -47,8 +47,12 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str | None = None
-    openai_timeout_seconds: float = 120.0
-    openai_http_timeout_seconds: float = 45.0
+    openai_timeout_seconds: float = 180.0
+    openai_http_timeout_seconds: float = 60.0
+    # sketch_polish look image (images.edit). Set OPENAI_IMAGE_MODEL=off to disable.
+    openai_image_model: str = "gpt-image-1"
+    openai_image_size: str = "1024x1536"
+    openai_image_quality: str = "standard"
 
     max_upload_size_mb: int = 25
     allowed_upload_image_types: str = "image/jpeg,image/png,image/webp"
@@ -74,6 +78,14 @@ class Settings(BaseSettings):
             raise ValueError("CORS_ORIGINS must not be * in production; list explicit HTTPS origins")
         if self.debug:
             raise ValueError("DEBUG must be false in production")
+        return self
+
+    @model_validator(mode="after")
+    def resolve_local_storage_root(self) -> "Settings":
+        """Keep uploads under backend/ even if process cwd is the repo root."""
+        root = Path(self.local_storage_root)
+        if not root.is_absolute():
+            self.local_storage_root = str((_BACKEND_ROOT / root).resolve())
         return self
 
     def cors_origin_list(self) -> list[str]:

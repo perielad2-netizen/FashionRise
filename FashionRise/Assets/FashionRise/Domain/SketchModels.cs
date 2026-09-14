@@ -39,6 +39,8 @@ namespace FashionRise.Domain
         public string JobId { get; set; } = "";
         public string Status { get; set; } = "";
         public string Summary { get; set; } = "";
+        /// <summary>Public HTTP URL of the generated look image when the polish job produced one.</summary>
+        public string ImageUrl { get; set; } = "";
     }
 
     [Serializable]

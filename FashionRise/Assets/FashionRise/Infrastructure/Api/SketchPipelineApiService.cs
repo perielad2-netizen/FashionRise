@@ -141,8 +141,9 @@ namespace FashionRise.Infrastructure.Api
         static async Task<AIJobReadDto> WaitForJobCompletionAsync(ApiClient client, Guid jobId,
             CancellationToken cancellationToken)
         {
-            const int delayMs = 400;
-            const int maxAttempts = 300;
+            const int delayMs = 500;
+            // ~5 min — polish + gpt-image edit is often 45–90s
+            const int maxAttempts = 600;
             for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -159,6 +160,18 @@ namespace FashionRise.Infrastructure.Api
                     throw new ApiException(ex.StatusCode,
                         "Rate limited while polling the AI job. Wait briefly and retry, or avoid many parallel sketch runs from the same network.",
                         ex.ResponseBody, ex);
+                }
+                catch (ApiException)
+                {
+                    // Transient HTTP blips during long image jobs — keep polling.
+                }
+                catch (System.Net.Http.HttpRequestException)
+                {
+                    // "An error occurred while sending the request" — common mid-Magic; retry.
+                }
+                catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // HttpClient timeout on a single poll — retry.
                 }
 
                 await Task.Delay(delayMs, cancellationToken).ConfigureAwait(true);
@@ -183,8 +196,21 @@ namespace FashionRise.Infrastructure.Api
         static SketchEnhancementResult ToEnhance(AIJobReadDto j) =>
             new() { JobId = j.Id.ToString(), Status = j.Status, Summary = MessageFrom(j) };
 
-        static ConceptRefinementResult ToConcept(AIJobReadDto j) =>
-            new() { JobId = j.Id.ToString(), Status = j.Status, Summary = MessageFrom(j) };
+        static ConceptRefinementResult ToConcept(AIJobReadDto j)
+        {
+            var imageUrl = AIJobApiService.ExtractImageUrl(j.ResultData) ?? "";
+            if (!string.IsNullOrEmpty(imageUrl))
+                UnityEngine.Debug.Log($"FashionRise polish job {j.Id}: image_url={imageUrl}");
+            else if (j.ResultData != null)
+                UnityEngine.Debug.LogWarning($"FashionRise polish job {j.Id}: completed but no image_url");
+            return new ConceptRefinementResult
+            {
+                JobId = j.Id.ToString(),
+                Status = j.Status,
+                Summary = MessageFrom(j),
+                ImageUrl = imageUrl
+            };
+        }
 
         static StyleVariationResult ToStyle(AIJobReadDto j) =>
             new() { JobId = j.Id.ToString(), Status = j.Status, Summary = MessageFrom(j) };
