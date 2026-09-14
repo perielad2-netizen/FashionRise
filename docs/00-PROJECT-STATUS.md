@@ -3,27 +3,31 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-09-14 (Magic uses sketch **image edit** for fidelity; +3 poses = 8 croquis)
+**Last updated:** 2026-09-14 night — **Your look image works in Unity**; Windows tree synced to GitHub
 
-**Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
+**Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Active work branch: **`cursor/windows-sync-clean-77c6`** ([PR #2](https://github.com/perielad2-netizen/FashionRise/pull/2)). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
 ---
 
 ## Session pause — where we stopped (read this first in a new chat)
 
-**Paused:** 2026-09-07 evening. **Resume here next session.**
+**Paused:** 2026-09-14 ~22:50 local. **Resume here next session.**
 
-### What works now
+### What works now (verified)
 
-- Local API on **port 8001** (`http://127.0.0.1:8001/api/v1`). Unity **FashionRise_UI → FashionRise App → Api Config → Base Url** must match.
-- Account: **`perielad@gmail.com`** / **`NoaPeri`** (reset via `backend/scripts/set_user_password.py` if needed).
-- Kid loop: Girl/Boy (+ pose croquis) → sketch → **Magic** → **Your look** shows **generated AI image** (not only text) + Share.
-- OpenAI: vision polish uses **`gpt-4o-mini`**; look image uses **`gpt-image-1`** (~1 min, b64 → local storage → static URL). Account has **no dall-e-3**.
-- Verified in Play mode: emerald gown image on **Your look** with Source OpenAI metadata.
+- Local API on **port 8001**. Unity Base Url must match (`http://127.0.0.1:8001/api/v1`).
+- Kid loop: sketch → **Magic** → **Your look** shows the AI look image in-app (not only browser).
+- Confirmed in Simulator: **Your look** + Share, Console `ConceptResult loading look: http://127.0.0.1:8001/static/uploads/ai/...png`.
+- Magic look generation prefers OpenAI **`images.edit`** with sketch + high input fidelity (sketch-faithful looks — user liked this).
+- Windows project synced to GitHub (`cursor/local-windows-sync-77c6` full backup; **`cursor/windows-sync-clean-77c6`** cleaned + Magic handoff fix).
+
+### UX bug still to fix (next session — kid chrome)
+
+After Magic finishes and opens **Your look**, the user can still navigate back to Magic and press **Make it magical!** again, which starts a **new** job / feels like “session lost.” Next UI pass should make the happy path one-shot: Magic runs once → land on Your look → primary actions are Share / Draw again (not a second Magical press). Full kid/game UI redesign is still pending (see `docs/01-KID-UX-VISION.md`).
 
 ### Product note (Magic style)
 
-**2026-09-14 night:** Magic look generation now prefers OpenAI **`images.edit`** with the child's sketch bytes + `input_fidelity=high` (text-only `images.generate` is fallback only). This is the core fidelity fix — earlier results looked “pretty” but unrelated because they were invented from text. Croquis poses expanded to **8** (Stand/Walk/Show/Hip/Turn/Arms/Side/Back); run `tools/generate_extra_croquis.py` if `female_06..08` / `male_06..08` missing. **Restart API** after pull.
+**2026-09-14:** Sketch-faithful look via **`images.edit`** is shipping and validated. Croquis poses expanded earlier; regenerate extras with `tools/generate_extra_croquis.py` if needed. **Restart API** after pull.
 
 ### Shipped this session (tech)
 
