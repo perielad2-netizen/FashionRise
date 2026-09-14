@@ -12,10 +12,12 @@
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/auth/register` | Body: `email`, `username`, `password`, optional `display_name` → tokens |
-| POST | `/auth/login` | Body: `email`, `password` → tokens |
+| POST | `/auth/register` | Body: `email`, `username`, `password`, optional `display_name` → tokens (email stored **lowercased**; password trimmed before hash) |
+| POST | `/auth/login` | Body: `email`, `password` → tokens (email matched **case-insensitively**; password **trimmed** before verify) |
 | POST | `/auth/refresh` | Body: `refresh_token` → new access + refresh (rotation) |
 | GET | `/auth/me` | Current user (`UserRead`) |
+
+**Client expectations:** `401` on login = wrong password or unknown email (same error shape). `409` on register = duplicate email or username. If a row exists but login always fails, password likely does not match the stored bcrypt hash — use **`python scripts/set_user_password.py`** (`backend/README.md`) or **`alembic downgrade base` → `upgrade head`** and re-register for a clean dev DB.
 
 **Note:** There is **no** `POST /auth/logout` yet; clients discard tokens. Refresh revocation happens on rotation.
 

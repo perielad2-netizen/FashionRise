@@ -39,6 +39,8 @@ namespace FashionRise.Domain
         public string JobId { get; set; } = "";
         public string Status { get; set; } = "";
         public string Summary { get; set; } = "";
+        /// <summary>Public URL of the AI-polished look image when the backend generated one.</summary>
+        public string ImageUrl { get; set; } = "";
     }
 
     [Serializable]

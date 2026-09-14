@@ -9,7 +9,7 @@ The Unity client can run in **mock mode** (offline-friendly defaults) or **API m
 On the **`FashionRiseApp`** component:
 
 - **`Api Config`**
-  - **`Base Url`**: e.g. `http://127.0.0.1:8000/api/v1` (no trailing slash required).
+  - **`Base Url`**: e.g. `http://127.0.0.1:8001/api/v1` (no trailing slash required).
   - **`Request Timeout Seconds`**: default 30.
   - **`Use Mock Services`**: when **true**, the app uses `Mock*` services (**default: false** — day-to-day dev uses FastAPI).
   - **`Use Api Services`**: when **true**, the app uses the HTTP stack (**default: true**).
@@ -18,7 +18,7 @@ On the **`FashionRiseApp`** component:
 
 **Resolution:** `ApiConfig.ShouldUseApiBackend()` returns **true** if `Use Api Services` is set, or if `Use Mock Services` is **cleared**. If both mock and API flags are **true**, API wins and a warning is logged.
 
-**Editor shortcut:** **FashionRise → Use Local API (127.0.0.1:8000) — apply to scene** (`FashionRiseBootstrapMenu.cs`) sets `ApiConfig` on the scene’s `FashionRiseApp` for local backend work.
+**Editor shortcut:** **FashionRise → Use Local API (127.0.0.1:8001) — apply to scene** (`FashionRiseBootstrapMenu.cs`) sets `ApiConfig` on the scene’s `FashionRiseApp` for local backend work.
 
 **Tokens:** `TokenStorageService` persists access/refresh tokens in **PlayerPrefs** (`fr_access_token`, `fr_refresh_token`). Replace with secure storage on shipping builds.
 
@@ -59,7 +59,7 @@ JSON uses **Newtonsoft.Json** with **snake_case** naming to match FastAPI’s de
 
 - **No guest mode:** QA and dev use **register/login** (or **mock sign-in** when the app is in mock backend mode). There is no tokenless “continue as guest” on the API stack.
 - **Cold start:** if PlayerPrefs still holds access/refresh tokens, `SplashScreen` calls `TryRestorePersistedSessionAsync` (`GET /auth/me`); on success navigation skips **Welcome** and opens **Home**.
-- **Register / login:** tokens stored; `Authorization: Bearer` applied on authenticated routes.
+- **Register / login:** tokens stored; `Authorization: Bearer` applied on authenticated routes. Server **lowercases** email and **strips** password before bcrypt verify/hash; **`LoginChoiceScreen`** trims password on API sign-in. See **`docs/05-api.md`** for **`401`** vs **`409`** expectations.
 - **Sketch / AI pipeline:** `TokenAwareSketchPipelineService` calls FastAPI when `HasBackendSession` (tokens present); otherwise local mocks (offline or mock backend).
 - **Logout:** `SignOutAsync` clears tokens and cached user id on `AuthApiService`.
 
@@ -67,7 +67,8 @@ JSON uses **Newtonsoft.Json** with **snake_case** naming to match FastAPI’s de
 
 | Screen | Behaviour |
 |--------|-----------|
-| `LoginChoiceScreen` | Mock **Sign in (mock)** only when **not** using the API backend; in API mode that control is **hidden** and email/password/username + register/login are shown |
+| `LoginChoiceScreen` | Mock **Sign in (mock)** only when **not** using the API backend; in API mode that control is **hidden** and email/password/username + register/login are shown; API sign-in **trims** password |
+| `SketchCanvasScreen` | Dual-layer sketch pad; default croquis from **`Resources/SketchReference`**; pad **bootstrap runs in `OnShown`** (after `ScreenController.Inject`) so `App.CreateDesign` is valid |
 | `ProfileScreen` | Profile/stats; **Reputation** (score + tier) + followers; **Refresh**; **Following: N**; **My public gallery** → `Gallery` + `GalleryNavContext`; draft list when API + signed in |
 | `HomeDashboardScreen` | Shows **Authoring mode: Guided / Pro** (from `AuthoringModePreferences`) |
 | `SettingsScreen` | **Toggle Guided / Pro mode**; draft autosave controls; **Sign out** |
@@ -79,7 +80,7 @@ JSON uses **Newtonsoft.Json** with **snake_case** naming to match FastAPI’s de
 
 - **Desktop / Editor:** Unity is not a browser; CORS usually does not apply.
 - **WebGL:** You must allow your hosting origin in `CORS_ORIGINS` (comma-separated) or use a gateway; `*` is only appropriate for dev.
-- Uploaded images are served from **`PUBLIC_UPLOAD_BASE_URL`** (see backend `.env`); align this with where Unity resolves image URLs (e.g. `http://127.0.0.1:8000/static/uploads/...`).
+- Uploaded images are served from **`PUBLIC_UPLOAD_BASE_URL`** (see backend `.env`); align this with where Unity resolves image URLs (e.g. `http://127.0.0.1:8001/static/uploads/...`).
 
 ## Production server
 
@@ -89,9 +90,9 @@ JSON uses **Newtonsoft.Json** with **snake_case** naming to match FastAPI’s de
 
 ## Local development checklist
 
-1. Start API: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000` from `backend/`.
+1. Start API: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8001` from `backend/`.
 2. `alembic upgrade head`; optional dev seed (materials/templates/palettes).
-3. Unity: clear **`Use Mock Services`** or enable **`Use Api Services`**; set **`Base Url`** to `http://127.0.0.1:8000/api/v1` (use machine LAN IP from device builds).
+3. Unity: clear **`Use Mock Services`** or enable **`Use Api Services`**; set **`Base Url`** to `http://127.0.0.1:8001/api/v1` (use machine LAN IP from device builds).
 4. Register a user from **Login** screen (password ≥ 8 characters).
 
 ## Contract

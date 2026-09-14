@@ -1,4 +1,5 @@
 using System;
+using FashionRise.Application;
 using FashionRise.Domain;
 using UnityEngine;
 
@@ -13,31 +14,113 @@ namespace FashionRise.Presentation.Sketch
         public const string FemaleResourcePath = "SketchReference/female_model";
         public const string MaleResourcePath = "SketchReference/male_model";
 
-        static readonly Color32 Paper = new(247, 244, 239, 255);
+        static readonly Color32 Paper = new(255, 255, 255, 255);
         static readonly Color32 Fill = new(218, 214, 208, 255);
         static readonly Color32 Stroke = new(88, 84, 80, 255);
 
-        /// <summary>Blit bundled PNG from Resources into <paramref name="dest"/> (pad size). Returns false if asset missing.</summary>
-        public static bool TryFillReferenceFromBundledImage(Color32[] dest, int w, int h, SketchFigureTemplate template)
+        public static string ResourcePathFor(SketchFigureTemplate template, int poseIndex)
         {
-            var path = template == SketchFigureTemplate.Male ? MaleResourcePath : FemaleResourcePath;
+            var gender = template == SketchFigureTemplate.Male ? "male" : "female";
+            var n = Mathf.Clamp(poseIndex, 0, SketchFigurePreferences.PoseCount - 1) + 1;
+            return $"SketchReference/{gender}_{n:00}";
+        }
+
+        /// <summary>Blit bundled PNG from Resources into <paramref name="dest"/> (pad size). Returns false if asset missing.</summary>
+        public static bool TryFillReferenceFromBundledImage(Color32[] dest, int w, int h, SketchFigureTemplate template,
+            int poseIndex = 0)
+        {
+            var path = ResourcePathFor(template, poseIndex);
             var src = Resources.Load<Texture2D>(path);
+            if (src == null)
+            {
+                // Legacy single-file assets
+                path = template == SketchFigureTemplate.Male ? MaleResourcePath : FemaleResourcePath;
+                src = Resources.Load<Texture2D>(path);
+            }
+
             if (src == null)
                 return false;
 
-            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            BlitAspectFit(src, dest, w, h, Paper);
+            return true;
+        }
+
+        /// <summary>
+        /// Scale source to fit inside <paramref name="w"/>×<paramref name="h"/> without stretching;
+        /// letterbox / pillarbox with <paramref name="paper"/>.
+        /// </summary>
+        public static void BlitAspectFit(Texture src, Color32[] dest, int w, int h, Color32 paper)
+        {
+            for (var i = 0; i < dest.Length; i++)
+                dest[i] = paper;
+
+            if (src == null || src.width < 1 || src.height < 1 || w < 1 || h < 1)
+                return;
+
+            var srcAspect = src.width / (float)src.height;
+            var dstAspect = w / (float)h;
+            int dw;
+            int dh;
+            int ox;
+            int oy;
+            if (srcAspect > dstAspect)
+            {
+                dw = w;
+                dh = Mathf.Max(1, Mathf.RoundToInt(w / srcAspect));
+                ox = 0;
+                oy = (h - dh) / 2;
+            }
+            else
+            {
+                dh = h;
+                dw = Mathf.Max(1, Mathf.RoundToInt(h * srcAspect));
+                ox = (w - dw) / 2;
+                oy = 0;
+            }
+
+            var rt = RenderTexture.GetTemporary(dw, dh, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
             Graphics.Blit(src, rt);
             var prev = RenderTexture.active;
             RenderTexture.active = rt;
-            var temp = new Texture2D(w, h, TextureFormat.RGBA32, false);
-            temp.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+            var temp = new Texture2D(dw, dh, TextureFormat.RGBA32, false);
+            temp.ReadPixels(new Rect(0, 0, dw, dh), 0, 0);
             temp.Apply();
             RenderTexture.active = prev;
             RenderTexture.ReleaseTemporary(rt);
             var px = temp.GetPixels32();
             UnityEngine.Object.Destroy(temp);
-            Array.Copy(px, dest, Mathf.Min(px.Length, dest.Length));
-            return true;
+
+            for (var y = 0; y < dh; y++)
+            {
+                var destY = oy + y;
+                if ((uint)destY >= (uint)h)
+                    continue;
+                var srcRow = y * dw;
+                var destRow = destY * w;
+                for (var x = 0; x < dw; x++)
+                {
+                    var destX = ox + x;
+                    if ((uint)destX >= (uint)w)
+                        continue;
+                    var s = px[srcRow + x];
+                    if (s.a >= 250)
+                    {
+                        dest[destRow + destX] = new Color32(s.r, s.g, s.b, 255);
+                        continue;
+                    }
+
+                    if (s.a < 8)
+                        continue;
+
+                    var a = s.a / 255f;
+                    var d = dest[destRow + destX];
+                    dest[destRow + destX] = new Color32(
+                        (byte)Mathf.Clamp(Mathf.RoundToInt(s.r * a + d.r * (1f - a)), 0, 255),
+                        (byte)Mathf.Clamp(Mathf.RoundToInt(s.g * a + d.g * (1f - a)), 0, 255),
+                        (byte)Mathf.Clamp(Mathf.RoundToInt(s.b * a + d.b * (1f - a)), 0, 255),
+                        255);
+                }
+            }
         }
 
         public static void FillReference(Color32[] buf, int w, int h, SketchFigureTemplate template)

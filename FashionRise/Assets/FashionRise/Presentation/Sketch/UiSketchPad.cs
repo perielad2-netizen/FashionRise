@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using FashionRise.Application;
 using FashionRise.Domain;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -88,15 +89,22 @@ namespace FashionRise.Presentation.Sketch
 
         public Color BrushColor => brushColor;
 
+        public int TextureWidth => textureWidth;
+
+        public int TextureHeight => textureHeight;
+
+        public float TextureAspect => textureHeight > 0 ? textureWidth / (float)textureHeight : 0.75f;
+
         public bool HasReferenceUnderlay => _hasFigureOrPhoto;
 
         bool _hasFigureOrPhoto;
 
         /// <summary>Apply default female/male underlay from <c>Resources/SketchReference</c> when available; else procedural croquis.</summary>
-        public void ApplyDefaultFigure(SketchFigureTemplate template)
+        public void ApplyDefaultFigure(SketchFigureTemplate template, int? poseIndex = null)
         {
+            var pose = poseIndex ?? SketchFigurePreferences.DefaultPoseIndex;
             if (!SketchDefaultFigureGenerator.TryFillReferenceFromBundledImage(_referencePixels, textureWidth,
-                    textureHeight, template))
+                    textureHeight, template, pose))
                 SketchDefaultFigureGenerator.FillReference(_referencePixels, textureWidth, textureHeight, template);
             ClearInkOnly();
             _hasFigureOrPhoto = true;
@@ -156,22 +164,8 @@ namespace FashionRise.Presentation.Sketch
                     return false;
                 }
 
-                var rt = RenderTexture.GetTemporary(textureWidth, textureHeight, 0, RenderTextureFormat.ARGB32,
-                    RenderTextureReadWrite.Linear);
-                Graphics.Blit(src, rt);
+                SketchDefaultFigureGenerator.BlitAspectFit(src, _referencePixels, textureWidth, textureHeight, White);
                 Destroy(src);
-
-                var prev = RenderTexture.active;
-                RenderTexture.active = rt;
-                var temp = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false);
-                temp.ReadPixels(new Rect(0, 0, textureWidth, textureHeight), 0, 0);
-                temp.Apply();
-                RenderTexture.active = prev;
-                RenderTexture.ReleaseTemporary(rt);
-
-                var snap = temp.GetPixels32();
-                Destroy(temp);
-                Array.Copy(snap, _referencePixels, Mathf.Min(snap.Length, _referencePixels.Length));
                 ClearInkOnly();
                 _hasFigureOrPhoto = true;
                 _undo.Clear();

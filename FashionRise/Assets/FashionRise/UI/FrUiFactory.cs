@@ -251,8 +251,70 @@ namespace FashionRise.UI
 
             input.textComponent = text;
             input.placeholder = ph;
+            if (string.Equals(placeholder, "password", System.StringComparison.OrdinalIgnoreCase))
+                input.contentType = InputField.ContentType.Password;
 
             return input;
+        }
+
+        public static Toggle AddCheckbox(Transform parent, string name, string label, FashionRiseTheme theme,
+            bool isOn)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(Toggle));
+            go.transform.SetParent(parent, false);
+            var le = go.AddComponent<LayoutElement>();
+            le.minHeight = DeviceLayoutPolicy.IsTabletLike() ? 44f : 40f;
+            le.flexibleWidth = 1f;
+            var h = go.GetComponent<HorizontalLayoutGroup>();
+            h.spacing = 12f;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlHeight = true;
+            h.childForceExpandHeight = false;
+            h.childControlWidth = true;
+            h.childForceExpandWidth = false;
+            h.padding = new RectOffset(4, 4, 0, 0);
+
+            var boxGo = new GameObject("Box", typeof(Image));
+            boxGo.transform.SetParent(go.transform, false);
+            var boxImg = boxGo.GetComponent<Image>();
+            boxImg.color = theme.Card;
+            var boxOutline = boxGo.AddComponent<Outline>();
+            boxOutline.effectColor = new Color(theme.AccentMuted.r, theme.AccentMuted.g, theme.AccentMuted.b, 0.45f);
+            boxOutline.effectDistance = new Vector2(1f, -1f);
+            var boxLe = boxGo.AddComponent<LayoutElement>();
+            boxLe.minWidth = 28f;
+            boxLe.preferredWidth = 28f;
+            boxLe.minHeight = 28f;
+            boxLe.preferredHeight = 28f;
+
+            var checkGo = new GameObject("Checkmark", typeof(Image));
+            checkGo.transform.SetParent(boxGo.transform, false);
+            var checkImg = checkGo.GetComponent<Image>();
+            checkImg.color = theme.Accent;
+            checkImg.raycastTarget = false;
+            var checkRt = checkGo.GetComponent<RectTransform>();
+            checkRt.anchorMin = new Vector2(0.2f, 0.2f);
+            checkRt.anchorMax = new Vector2(0.8f, 0.8f);
+            checkRt.offsetMin = Vector2.zero;
+            checkRt.offsetMax = Vector2.zero;
+
+            var labelGo = new GameObject("Label", typeof(Text));
+            labelGo.transform.SetParent(go.transform, false);
+            var txt = labelGo.GetComponent<Text>();
+            txt.font = DefaultUiFont;
+            txt.text = label;
+            txt.fontSize = Mathf.RoundToInt(theme.BodySize);
+            txt.color = theme.PrimaryText;
+            txt.alignment = TextAnchor.MiddleLeft;
+            var labelLe = labelGo.AddComponent<LayoutElement>();
+            labelLe.flexibleWidth = 1f;
+            labelLe.minHeight = 28f;
+
+            var toggle = go.GetComponent<Toggle>();
+            toggle.targetGraphic = boxImg;
+            toggle.graphic = checkImg;
+            toggle.isOn = isOn;
+            return toggle;
         }
     }
 }

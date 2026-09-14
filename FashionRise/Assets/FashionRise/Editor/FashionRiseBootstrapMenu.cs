@@ -22,7 +22,7 @@ namespace FashionRise.EditorTools
         /// One-click: point all <see cref="FashionRiseApp"/> in open scenes at local FastAPI and turn off mocks.
         /// Save the scene (Ctrl+S) so the next Play uses these values.
         /// </summary>
-        [MenuItem("FashionRise/Use Local API (127.0.0.1:8000) — apply to scene")]
+        [MenuItem("FashionRise/Use Local API (127.0.0.1:8001) — apply to scene")]
         static void ApplyLocalApiToScene()
         {
             var count = 0;
@@ -32,7 +32,7 @@ namespace FashionRise.EditorTools
                 var api = so.FindProperty("apiConfig");
                 if (api == null)
                     continue;
-                api.FindPropertyRelative("baseUrl")!.stringValue = "http://127.0.0.1:8000/api/v1";
+                api.FindPropertyRelative("baseUrl")!.stringValue = "http://127.0.0.1:8001/api/v1";
                 api.FindPropertyRelative("useMockServices")!.boolValue = false;
                 api.FindPropertyRelative("useApiServices")!.boolValue = true;
                 so.ApplyModifiedProperties();

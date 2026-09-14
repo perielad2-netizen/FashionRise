@@ -59,7 +59,7 @@ backend/
 | `app/core/upload_validation.py` | Stream read cap; JPEG/PNG/WebP sniff |
 | `app/auth/` | JWT access; refresh tokens hashed in DB |
 | `app/storage/` | Local files; S3-compatible driver later |
-| `app/services/` | Transactions, rules |
+| `app/services/` | Transactions, rules; **`auth_service`** normalizes email (lowercase), case-insensitive login lookup, trims passwords for hash/verify |
 | `app/ai/` | Job boundary; real workers TBD |
 
 ## Database & migrations (dev recovery)
@@ -78,5 +78,6 @@ backend/
 - **`GET /ready`** — DB connectivity  
 - **Uploads:** `MAX_UPLOAD_SIZE_MB`, `ALLOWED_UPLOAD_IMAGE_TYPES`, magic-byte validation  
 - **Deployment:** `deploy/` — systemd, Nginx, Postgres backup/restore, `env.production.example`
+- **Auth (login/register):** emails stored and matched **lowercased**; passwords **stripped** before bcrypt. **`401`** on login = invalid email/password (same message for both); **`409`** on register = duplicate email or username. Dev password reset: **`python scripts/set_user_password.py …`** from `backend/` (see `README.md` → Dev utilities).
 
 _Update this file when routers, workers, or storage drivers change._

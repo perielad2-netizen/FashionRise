@@ -27,6 +27,8 @@ namespace FashionRise.Infrastructure.Api
 
         public void Dispose() => _http.Dispose();
 
+        public string BaseUrl => _config.BaseUrl ?? "";
+
         string AbsoluteUrl(string relativePath)
         {
             var root = _config.BaseUrl.TrimEnd('/');
