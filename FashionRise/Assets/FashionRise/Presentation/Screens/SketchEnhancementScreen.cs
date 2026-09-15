@@ -52,6 +52,13 @@ namespace FashionRise.Presentation.Screens
             FrUiFactory.AddButton(col, "More…", t, ToggleMore);
             FrUiFactory.AddButton(col, "Clean lines", t, () => { _ = RunCleanAsync(); });
             FrUiFactory.AddButton(col, "Style ideas", t, () => { _ = RunStyleAsync(); });
+            FrUiFactory.AddButton(col, "Edit sketch", t, () =>
+            {
+                App.CreateDesign.ClearLastLook();
+                if (App.Navigation != null)
+                    _ = App.Navigation.NavigateToAsync(ScreenId.SketchCanvas,
+                        new SketchNavContext { RestoreSketch = true });
+            });
             FrUiFactory.AddButton(col, "Back", t, () =>
             {
                 if (App.Navigation != null)
