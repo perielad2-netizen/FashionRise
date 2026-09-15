@@ -8,10 +8,20 @@ using UnityEngine.UI;
 
 namespace FashionRise.Presentation.Screens
 {
-    /// <summary>Queues sketch_clean / polish / style jobs (API or mock). [AI_READY]</summary>
+    /// <summary>
+    /// Kid Magic step. Happy path is one-shot: run Magic → open Your look.
+    /// If a look already exists, the primary action is See your look (not Magical again).
+    /// </summary>
     public sealed class SketchEnhancementScreen : ScreenBase
     {
+        Text _blurb = null!;
         Text _status = null!;
+        Button _magicBtn = null!;
+        Button _seeLookBtn = null!;
+        Button _retryBtn = null!;
+        bool _moreOpen;
+        bool _autoMagicArmed;
+        bool _busy;
 
         public override ScreenId Id => ScreenId.SketchEnhancement;
 
@@ -20,38 +30,169 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "H", "Sketch enhancement", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            FrUiFactory.AddLabel(col, "H", "Magic", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.UpperCenter);
+            _blurb = FrUiFactory.AddLabel(col, "B",
+                "One tap turns your sketch into a cleaner fashion look.", t,
+                Mathf.RoundToInt(t.BodySize), FontStyle.Normal, TextAnchor.UpperCenter,
+                useSecondaryTextColor: true);
             _status = FrUiFactory.AddLabel(col, "St", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,
                 TextAnchor.UpperLeft);
 
-            FrUiFactory.AddButton(col, "AI cleanup (sketch/clean)", t, () => { _ = RunCleanAsync(); });
-            FrUiFactory.AddButton(col, "Polish concept (sketch/polish)", t, () => { _ = RunPolishAsync(); });
-            FrUiFactory.AddButton(col, "Style suggestions (style/suggest)", t, () => { _ = RunStyleAsync(); });
-            FrUiFactory.AddButton(col, "Refine image (maps to polish)", t, () => { _ = RunRefineAsync(); });
-            FrUiFactory.AddButton(col, "View last result", t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.NavigateToAsync(ScreenId.ConceptResult);
-            });
+            _magicBtn = FrUiFactory.AddButton(col, "Make it magical!", t, () => { _ = RunPolishAsync(); },
+                FrButtonEmphasis.Primary);
+            Enlarge(_magicBtn);
+
+            _seeLookBtn = FrUiFactory.AddButton(col, "See your look", t, () => { _ = OpenLastResultAsync(); },
+                FrButtonEmphasis.Primary);
+            Enlarge(_seeLookBtn);
+
+            // Retry stays under More so kids don't re-run Magic by accident.
+            _retryBtn = FrUiFactory.AddButton(col, "Try magic again", t, () => { _ = RunPolishAsync(); });
+            FrUiFactory.AddButton(col, "More…", t, ToggleMore);
+            FrUiFactory.AddButton(col, "Clean lines", t, () => { _ = RunCleanAsync(); });
+            FrUiFactory.AddButton(col, "Style ideas", t, () => { _ = RunStyleAsync(); });
             FrUiFactory.AddButton(col, "Back", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.GoBackAsync();
             });
+
+            SetMoreVisible(false);
+            RefreshHappyPathChrome();
         }
 
-        protected override void OnShown(object? payload) =>
-            _status.text = $"Sketch ref: {App.CreateDesign.SketchReference}\nChoose a pipeline step.";
+        protected override void OnShown(object? payload)
+        {
+            _autoMagicArmed = payload is SketchNavContext { AutoMagic: true } ||
+                              payload is true ||
+                              (payload is string s && string.Equals(s, "auto", StringComparison.OrdinalIgnoreCase));
+            SetMoreVisible(_moreOpen);
+            RefreshHappyPathChrome();
+
+            if (_autoMagicArmed)
+            {
+                _autoMagicArmed = false;
+                // Fresh sketch → Magic: clear any previous look so Magical is the action.
+                if (!HasReadyLook())
+                    _ = RunPolishAsync();
+                else
+                    _ = OpenLastResultAsync();
+            }
+        }
+
+        void ToggleMore()
+        {
+            _moreOpen = !_moreOpen;
+            SetMoreVisible(_moreOpen);
+            RefreshHappyPathChrome();
+        }
+
+        void SetMoreVisible(bool open)
+        {
+            var col = transform.Find("Root/Col");
+            if (col == null)
+                return;
+            SetSiblingActive(col, "Clean lines_Btn", open);
+            SetSiblingActive(col, "Style ideas_Btn", open);
+        }
+
+        void RefreshHappyPathChrome()
+        {
+            var ready = HasReadyLook();
+            if (_busy)
+            {
+                _blurb.text = "Hang tight — Magic is working on your sketch.";
+                if (!_status.text.StartsWith("Working", StringComparison.Ordinal) &&
+                    !_status.text.StartsWith("Magic is already", StringComparison.Ordinal))
+                    _status.text = "Working magic… this can take about a minute.";
+                _magicBtn.gameObject.SetActive(false);
+                _seeLookBtn.gameObject.SetActive(false);
+                _retryBtn.gameObject.SetActive(false);
+                return;
+            }
+
+            if (ready)
+            {
+                _blurb.text = "Your look is ready — open it, or try Magic again under More.";
+                _status.text = "Ready.";
+                _magicBtn.gameObject.SetActive(false);
+                _seeLookBtn.gameObject.SetActive(true);
+                _retryBtn.gameObject.SetActive(_moreOpen);
+            }
+            else
+            {
+                _blurb.text = "One tap turns your sketch into a cleaner fashion look.";
+                if (string.IsNullOrWhiteSpace(_status.text) ||
+                    _status.text is "Ready." or "Ready when you are.")
+                    _status.text = "Ready when you are.";
+                _magicBtn.gameObject.SetActive(true);
+                _seeLookBtn.gameObject.SetActive(false);
+                _retryBtn.gameObject.SetActive(false);
+            }
+        }
+
+        bool HasReadyLook() =>
+            App != null &&
+            (!string.IsNullOrWhiteSpace(App.CreateDesign.LastPolishedImageUrl) ||
+             !string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchJobId));
+
+        static void SetSiblingActive(Transform col, string name, bool active)
+        {
+            var child = col.Find(name);
+            if (child != null)
+                child.gameObject.SetActive(active);
+        }
+
+        static void Enlarge(Button btn)
+        {
+            var le = btn.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.minHeight = 72f;
+                le.preferredHeight = 72f;
+            }
+
+            var txt = btn.GetComponentInChildren<Text>();
+            if (txt != null)
+                txt.fontSize = Mathf.Max(txt.fontSize, 22);
+        }
+
+        async Task OpenLastResultAsync()
+        {
+            _status.text = "Opening your look…";
+            try
+            {
+                if (App.IsApiBackend && App.Auth.HasBackendSession &&
+                    !string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchJobId))
+                {
+                    var url = await App.Ai
+                        .GetJobImageUrlAsync(App.CreateDesign.LastSketchJobId)
+                        .ConfigureAwait(true);
+                    if (!string.IsNullOrEmpty(url))
+                        App.CreateDesign.LastPolishedImageUrl = url!;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"FashionRise See your look refresh failed: {ex.Message}");
+            }
+
+            if (App.Navigation != null)
+                _ = App.Navigation.NavigateToAsync(ScreenId.ConceptResult);
+        }
 
         async Task RunCleanAsync()
         {
-            _status.text = "Running cleanup…";
+            if (_busy) return;
+            _busy = true;
+            RefreshHappyPathChrome();
+            _status.text = "Cleaning lines…";
             try
             {
                 var r = await App.SketchClean.CleanAsync(new SketchEnhancementRequest
                 {
-                    DesignId = TryDesignId(),
+                    DesignId = null,
                     Input = new SketchInputData
                     {
                         Notes = "cleanup",
@@ -64,36 +205,97 @@ namespace FashionRise.Presentation.Screens
             {
                 _status.text = ex.Message;
             }
+            finally
+            {
+                _busy = false;
+                RefreshHappyPathChrome();
+            }
         }
 
         async Task RunPolishAsync()
         {
-            _status.text = "Polishing…";
+            if (_busy)
+            {
+                _status.text = "Magic is already working… hang tight.";
+                RefreshHappyPathChrome();
+                return;
+            }
+
+            _busy = true;
+            RefreshHappyPathChrome();
+            _status.text = "Working magic… this can take about a minute.";
             try
             {
                 var r = await App.ConceptPolish.PolishAsync(new ConceptRefinementRequest
                 {
-                    DesignId = TryDesignId(),
+                    DesignId = null,
                     Notes = "polish concept",
-                    LocalSketchForVision = App.CreateDesign.SketchReference
+                    LocalSketchForVision = App.CreateDesign.SketchReference,
+                    OnJobStarted = jobId =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(jobId))
+                            App.CreateDesign.LastSketchJobId = jobId;
+                    }
                 }).ConfigureAwait(true);
-                Finish(r.JobId, r.Summary);
+                Finish(r.JobId, r.Summary, r.ImageUrl);
+                if (string.IsNullOrEmpty(r.ImageUrl))
+                    Debug.LogWarning($"FashionRise Magic finished job {r.JobId} with empty image_url");
+                else
+                    Debug.Log($"FashionRise Magic finished job {r.JobId} image_url={r.ImageUrl}");
             }
             catch (Exception ex)
             {
-                _status.text = ex.Message;
+                Debug.LogWarning($"FashionRise Magic failed: {ex}");
+                if (await TryRecoverCompletedLookAsync().ConfigureAwait(true))
+                    return;
+                _status.text =
+                    "Magic hiccuped.\n\nIf it finished, tap See your look — or open More… and try Magic again.";
+                // Recover path: if we at least have a job id, surface See your look.
+                RefreshHappyPathChrome();
+            }
+            finally
+            {
+                _busy = false;
+                if (App.Navigation == null ||
+                    string.IsNullOrWhiteSpace(App.CreateDesign.LastPolishedImageUrl))
+                    RefreshHappyPathChrome();
+            }
+        }
+
+        async Task<bool> TryRecoverCompletedLookAsync()
+        {
+            if (!App.IsApiBackend || !App.Auth.HasBackendSession ||
+                string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchJobId))
+                return false;
+            try
+            {
+                var url = await App.Ai
+                    .GetJobImageUrlAsync(App.CreateDesign.LastSketchJobId)
+                    .ConfigureAwait(true);
+                if (string.IsNullOrEmpty(url))
+                    return false;
+                Finish(App.CreateDesign.LastSketchJobId, App.CreateDesign.LastSketchSummary, url);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"FashionRise Magic recovery failed: {ex.Message}");
+                return false;
             }
         }
 
         async Task RunStyleAsync()
         {
-            _status.text = "Suggesting styles…";
+            if (_busy) return;
+            _busy = true;
+            RefreshHappyPathChrome();
+            _status.text = "Gathering style ideas…";
             try
             {
                 var r = await App.StyleSuggest.SuggestAsync(new StyleVariationRequest
                 {
-                    DesignId = TryDesignId(),
-                    MoodNotes = "evening, sculptural",
+                    DesignId = null,
+                    MoodNotes = "fun, wearable, viral share",
                     LocalSketchForVision = App.CreateDesign.SketchReference
                 }).ConfigureAwait(true);
                 Finish(r.JobId, r.Summary);
@@ -102,38 +304,20 @@ namespace FashionRise.Presentation.Screens
             {
                 _status.text = ex.Message;
             }
-        }
-
-        async Task RunRefineAsync()
-        {
-            _status.text = "Refining…";
-            try
+            finally
             {
-                var r = await App.ImageRefine.RefineAsync(new ConceptRefinementRequest
-                {
-                    DesignId = TryDesignId(),
-                    Notes = "refine edges",
-                    LocalSketchForVision = App.CreateDesign.SketchReference
-                }).ConfigureAwait(true);
-                Finish(r.JobId, r.Summary);
-            }
-            catch (Exception ex)
-            {
-                _status.text = ex.Message;
+                _busy = false;
+                RefreshHappyPathChrome();
             }
         }
 
-        string? TryDesignId()
-        {
-            /* Optional: attach to last saved design in API mode — omitted for minimal V2 slice */
-            return null;
-        }
-
-        void Finish(string jobId, string summary)
+        void Finish(string jobId, string summary, string? imageUrl = null)
         {
             App.CreateDesign.LastSketchJobId = jobId;
             App.CreateDesign.LastSketchSummary = summary;
-            _status.text = $"Job {jobId}\n{summary}\n\nOpening result screen…";
+            App.CreateDesign.LastPolishedImageUrl = imageUrl?.Trim() ?? "";
+            App.CreateDesign.LastPolishedImageLocalPath = "";
+            _status.text = "Done — opening your look…";
             if (App.Navigation != null)
                 _ = App.Navigation.NavigateToAsync(ScreenId.ConceptResult);
         }

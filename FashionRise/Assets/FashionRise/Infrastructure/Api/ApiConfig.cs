@@ -6,8 +6,8 @@ namespace FashionRise.Infrastructure.Api
     [Serializable]
     public sealed class ApiConfig
     {
-        [SerializeField] string baseUrl = "http://127.0.0.1:8000/api/v1";
-        [SerializeField] int requestTimeoutSeconds = 30;
+        [SerializeField] string baseUrl = "http://127.0.0.1:8001/api/v1";
+        [SerializeField] int requestTimeoutSeconds = 180;
         [SerializeField] bool offlineModePlaceholder;
         [SerializeField] int retryAttemptsPlaceholder;
         [Tooltip("When on, the app uses Mock* services (no HTTP). Off by default so dev matches FastAPI.")]

@@ -27,8 +27,8 @@ class LocalStorageBackend:
         with path.open("wb") as out:
             while chunk := data.read(1024 * 1024):
                 out.write(chunk)
-        rel = f"{self._subdir}/{key}".replace("\\", "/")
-        return f"{self._public_base}/{rel}"
+        # public_upload_base_url mounts upload_subdir (e.g. /static/uploads → …/uploads)
+        return f"{self._public_base}/{key.lstrip('/')}"
 
     def delete_file(self, *, key: str) -> None:
         path = self._full_path(key)

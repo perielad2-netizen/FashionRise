@@ -28,8 +28,21 @@ namespace FashionRise.Application
         public string PendingReferenceImagePath { get; set; } = "";
         public string LastSketchJobId { get; set; } = "";
         public string LastSketchSummary { get; set; } = "";
+        /// <summary>Public HTTP URL of the last Magic polish look image (if any).</summary>
+        public string LastPolishedImageUrl { get; set; } = "";
+        /// <summary>Local cache of the polished image for Share (downloaded from <see cref="LastPolishedImageUrl"/>).</summary>
+        public string LastPolishedImageLocalPath { get; set; } = "";
         /// <summary>After a successful API save, reuse this id so the next save updates the same row.</summary>
         public string PersistedDesignId { get; set; } = "";
+
+        /// <summary>Clears the last Magic look so the kid loop can start a fresh polish.</summary>
+        public void ClearLastLook()
+        {
+            LastSketchJobId = "";
+            LastSketchSummary = "";
+            LastPolishedImageUrl = "";
+            LastPolishedImageLocalPath = "";
+        }
 
         public void Reset()
         {
@@ -50,8 +63,7 @@ namespace FashionRise.Application
             AccentNotes = "";
             SketchReference = "";
             PendingReferenceImagePath = "";
-            LastSketchJobId = "";
-            LastSketchSummary = "";
+            ClearLastLook();
             PersistedDesignId = "";
         }
 

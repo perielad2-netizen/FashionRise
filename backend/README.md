@@ -67,10 +67,10 @@ alembic upgrade head
 ### Run (development)
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-- OpenAPI UI: http://localhost:8000/docs  
+- OpenAPI UI: http://localhost:8001/docs  
 - Health: `GET /health`  
 - Readiness (DB ping): `GET /ready`
 

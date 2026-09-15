@@ -4,24 +4,28 @@
 
 ---
 
-## Product pillars — full FashionRise (pro + beginners + makers)
+## Product pillars — full FashionRise (kid front door + talent + pro)
 
-_Check these off as slices ship. Same codebase: **Pro** depth, **Guided** mode for approachable UX._
+_Check these off as slices ship. Same codebase: **kid-simple front door** by default; **Pro** depth under More… / Guided↔Pro._
 
 ### Pillar A — Serious sketch & authoring
 
 - [x] Raster sketch surface: draw, undo stack, clear, PNG export — `Presentation/Sketch/UiSketchPad.cs`, wired from `SketchCanvasScreen` (`SketchReference` → `file:…` under persistent data)
 - [x] Local image import: `persistentDataPath/Sketches` + **`Imports`** (PNG/JPEG), Import screen — **Pipeline** (as-is) vs **Trace** (underlay on `UiSketchPad`); **Android** gallery + **PC** Imports folder + **iOS** Photos picker
 - [x] Dual raster layers (reference + ink): default **female/male** underlay from **`Resources/SketchReference/female_model`** / **`male_model`** (PNG), procedural fallback if missing; **Custom** via Import → Trace; **Blank paper**; **Dim/Bright ref**; pro ink row. Export flattened PNG.
+- [x] **Kid front door (2026-09-07):** Home **Girl/Boy** → Sketch (**Magic!**) → Enhancement auto-polish → **Your look** Share/Draw again; pro atelier under Home **More…**; `SketchNavContext`
 - [ ] Vector / per-stroke model; export beyond local PNG (**Android** gallery + **iOS** Photos + PC folder opener **done**)
+- [ ] Show **AI result image** on Concept result (not summary-only); optional kid-simple brush row
 - [x] Revision snapshot **API** (`POST` / `GET` `/designs/{id}/revisions`, `GET` `/designs/{id}/revisions/{n}`) — owner only; **Unity** timed autosave + save draft + revision append
 - [x] AI jobs: **in-process worker** + optional **`python -m app.ai_worker`**; sketch pipeline uses **OpenAI vision** when configured (`OPENAI_API_KEY`, etc.), else **stub** completion — see `backend/scripts/check_sketch_ai.py`
-- [x] Guided vs Pro UI toggle — **`AuthoringModePreferences`** (PlayerPrefs) + **Settings** “Toggle Guided / Pro mode”; **Home** shows current mode; **Create design** hides pro-only controls (V2 garment toggles, model preview, revision history block, handoff/PDF tools, PC Handoffs folder) in **Guided** mode
+- [x] Guided vs Pro UI toggle — **`AuthoringModePreferences`** (PlayerPrefs) + **Settings** “Toggle Guided / Pro mode”; **Create design** hides pro-only controls in **Guided** mode; Home no longer leads with mode line
 
-### Pillar B — Share & social proof
+### Pillar B — Share & social proof / virality
 
 - [x] Publish to gallery from **Create design** (preview upload uses `ExportRequest.SkipExportRegistration` — no extra `POST /exports`; then `POST /gallery` with `image_url`; opens Gallery)
 - [x] Share link + **share card** (plain text: title, URL, optional preview `image_url` line) — `IShareLinkService`, HTTPS base or `fashionrise://gallery/{id}`; clipboard on publish + Design detail buttons
+- [x] **Kid Share!** from Magic result — `NativeShareSheet.TryShareImageFile` (sketch PNG / caption fallback)
+- [ ] One-tap **publish + share** from Magic result; **AI share video** spike
 - [x] Feed discovery — backend `GET /gallery?sort=` (`newest` | `top_rated` | `trending` | **`following`** auth); Unity **Gallery**: **Newest / Top rated / Trending / Following** + **Refresh feed** (`GalleryScreen.cs`)
 - [x] **Follow creators** — `user_follows` table + `POST/DELETE /profiles/{user_id}/follow`, `GET …/follow-status`, `GET /profiles/me/following-ids`; gallery `sort=following`; Unity `IFollowService`, **Design detail** Follow/Unfollow (`alembic` revision **003**)
 - [x] **Per-creator discovery** — `GET /gallery/user/{user_id}`; Unity `IGalleryService.GetUserPublicGalleryAsync`, `GalleryNavContext`, **Creator gallery** mode + **Community feed (all creators)** escape, **Design detail** “Open creator's public gallery”, **Profile** “My public gallery”
@@ -54,6 +58,7 @@ _Check these off as slices ship. Same codebase: **Pro** depth, **Guided** mode f
 - [x] Register, login, **refresh**, **`GET /auth/me`**; Unity **Sign out** (client token clear + `CreateDesignSession.Reset` + `ResetToAsync` login screen). Server `POST /auth/logout` optional later
 - [x] Password hashing; refresh token **rotation** on refresh endpoint
 - [x] Unity: API login/register (no guest); persisted-session restore on splash; `TokenStorageService`; `AuthApiService`
+- [x] **Email + password hygiene:** register stores **lowercased** email; login matches **case-insensitively** (`func.lower`); **strip** passwords on register/login; dev **`python scripts/set_user_password.py email "password"`** (`backend/README.md`) for resets without wiping DB
 
 ## Phase 2 — Catalogs & design CRUD
 
@@ -85,7 +90,7 @@ _Check these off as slices ship. Same codebase: **Pro** depth, **Guided** mode f
 - [x] Backend: gallery **`sort`**, **`gallery_likes`**, **`gallery_comments`**, optional auth on item detail → **`liked_by_me`**
 - [x] Unity: sketch screens (`SketchCanvas`, `ImportSketch`, `SketchEnhancement`, `ConceptResult`), `SketchPipelineApiService` + mocks, `ScreenId` + home entry
 - [x] Unity: extended **`GarmentCategory`**, design_data V2 fields (silhouette/drape/layering/seam + sketch ref), material **`metadata.v2`** mapping, preview framing presets
-- [x] **Sketch capture (first slice):** in-app raster pad — `UiSketchPad` + `SketchCanvasScreen`
+- [x] **Sketch capture (v2 slice):** dual-layer **`UiSketchPad`** + **`SketchCanvasScreen`** (reference + ink, default **`Resources/SketchReference/*.png`**, procedural fallback, pro toolbar); pad bootstrap in **`OnShown`** after `App.Inject`; trace via Import; PNG export for enhancement
 - [x] **Publish gallery preview (Editor/PC):** `ScreenCapture.CaptureScreenshot` uses **full path** under `persistentDataPath` so preview upload finds the PNG (`UnityPngExportService`)
 - [ ] Image import / picker polish; share-card export; full UX polish pass
 

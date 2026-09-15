@@ -40,6 +40,7 @@ namespace FashionRise.Core
             }
 
             var app = AppServices.CreateFromConfig(apiConfig);
+            Debug.Log($"FashionRise API BaseUrl = '{apiConfig.BaseUrl}' (api={app.IsApiBackend})");
             sc.Initialize(app);
             _nav = new NavigationService(sc);
             app.BindNavigation(_nav);

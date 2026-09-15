@@ -29,22 +29,38 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             _theme = t;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
+            root.GetComponent<Image>().color = Color.white;
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "H", "Sketch canvas", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            FrUiFactory.AddLabel(col, "H", "Your sketch", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.UpperCenter);
             FrUiFactory.AddLabel(col, "B",
-                "Reference below (croquis or your photo). Draw on the layer above — colors, brush size, eraser. Continue saves the combined PNG.",
+                "Draw clothes on the model. When you are happy, tap Magic!",
                 t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal, TextAnchor.UpperCenter, useSecondaryTextColor: true);
 
-            var padGo = new GameObject("SketchPad", typeof(RectTransform), typeof(RawImage), typeof(UiSketchPad));
-            padGo.transform.SetParent(col, false);
-            var padLe = padGo.AddComponent<LayoutElement>();
-            padLe.minHeight = 240f;
-            padLe.preferredHeight = 400f;
-            padLe.flexibleHeight = 1f;
+            // Flexible host fills leftover space; pad fits inside at pad texture aspect (no stretch on tablet).
+            var hostGo = new GameObject("SketchPadHost", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            hostGo.transform.SetParent(col, false);
+            var hostImg = hostGo.GetComponent<Image>();
+            hostImg.color = Color.white;
+            hostImg.raycastTarget = false;
+            var hostLe = hostGo.GetComponent<LayoutElement>();
+            hostLe.minHeight = 240f;
+            hostLe.preferredHeight = 400f;
+            hostLe.flexibleHeight = 1f;
+            hostLe.flexibleWidth = 1f;
+
+            var padGo = new GameObject("SketchPad", typeof(RectTransform), typeof(RawImage), typeof(UiSketchPad),
+                typeof(AspectRatioFitter));
+            padGo.transform.SetParent(hostGo.transform, false);
             var padRt = padGo.GetComponent<RectTransform>();
-            padRt.sizeDelta = new Vector2(0f, 400f);
+            padRt.anchorMin = new Vector2(0.5f, 0.5f);
+            padRt.anchorMax = new Vector2(0.5f, 0.5f);
+            padRt.pivot = new Vector2(0.5f, 0.5f);
+            padRt.sizeDelta = new Vector2(400f, 533f);
             _pad = padGo.GetComponent<UiSketchPad>();
+            var fitter = padGo.GetComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            fitter.aspectRatio = _pad.TextureAspect;
             var rim = padGo.GetComponent<RawImage>();
             rim.raycastTarget = true;
             rim.color = Color.white;
@@ -67,8 +83,8 @@ namespace FashionRise.Presentation.Screens
                 _pad.ClearAll();
                 _hint.text = "Drawing cleared; reference unchanged.";
             });
-            FrUiFactory.AddButton(col, "Continue to enhancement", t, ContinueToEnhancement, FrButtonEmphasis.Primary);
-            FrUiFactory.AddButton(col, "Import sketch", t, () =>
+            FrUiFactory.AddButton(col, "Magic!", t, ContinueToEnhancement, FrButtonEmphasis.Primary);
+            FrUiFactory.AddButton(col, "Import photo", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.ImportSketch);
@@ -83,29 +99,47 @@ namespace FashionRise.Presentation.Screens
         void AddFigureRow(Transform col, FashionRiseTheme t)
         {
             var row = NewToolbarRow(col);
-            AddTightButton(row, "Female", t, () =>
+            AddTightButton(row, "Girl", t, () =>
             {
                 SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Female;
-                _pad.ApplyDefaultFigure(SketchFigureTemplate.Female);
-                _hint.text = "Female model — draw on top.";
+                ApplyCurrentFigure("Girl model — draw on top.");
             });
-            AddTightButton(row, "Male", t, () =>
+            AddTightButton(row, "Boy", t, () =>
             {
                 SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Male;
-                _pad.ApplyDefaultFigure(SketchFigureTemplate.Male);
-                _hint.text = "Male model — draw on top.";
+                ApplyCurrentFigure("Boy model — draw on top.");
             });
-            AddTightButton(row, "Custom…", t, () =>
+            AddTightButton(row, "Photo…", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.ImportSketch);
             });
-            AddTightButton(row, "Blank paper", t, () =>
+            AddTightButton(row, "Blank", t, () =>
             {
                 _pad.ClearReferenceToBlank();
-                _hint.text = "White reference — draw freely.";
+                _hint.text = "Blank paper — draw freely.";
             });
-            _dimRefBtn = AddTightButton(row, "Dim ref", t, ToggleReferenceDim);
+            _dimRefBtn = AddTightButton(row, "Dim", t, ToggleReferenceDim);
+
+            var poseRow = NewToolbarRow(col);
+            for (var i = 0; i < SketchFigurePreferences.PoseCount; i++)
+            {
+                var pose = i;
+                var label = SketchFigurePreferences.PoseLabel(pose);
+                AddTightButton(poseRow, label, t, () =>
+                {
+                    SketchFigurePreferences.DefaultPoseIndex = pose;
+                    var who = SketchFigurePreferences.DefaultTemplate == SketchFigureTemplate.Male ? "Boy" : "Girl";
+                    ApplyCurrentFigure($"{who} · {label} — draw on top.");
+                });
+            }
+        }
+
+        void ApplyCurrentFigure(string hint)
+        {
+            _pad.ApplyDefaultFigure(SketchFigurePreferences.DefaultTemplate,
+                SketchFigurePreferences.DefaultPoseIndex);
+            _hint.text = hint;
         }
 
         void AddToolRow(Transform col, FashionRiseTheme t)
@@ -184,31 +218,35 @@ namespace FashionRise.Presentation.Screens
             _pad.RefreshComposite();
             var txt = _dimRefBtn.GetComponentInChildren<Text>();
             if (txt != null)
-                txt.text = _refDimmed ? "Bright ref" : "Dim ref";
-            _hint.text = _refDimmed ? "Reference dimmed for easier tracing." : "Reference at full strength.";
+                txt.text = _refDimmed ? "Bright" : "Dim";
+            _hint.text = _refDimmed ? "Model faded — easier to draw." : "Model bright.";
         }
 
-        void BootstrapPadReference()
+        void BootstrapPadReference(SketchFigureTemplate? forcedFigure)
         {
             if (App == null)
                 return;
+
+            if (forcedFigure.HasValue)
+                SketchFigurePreferences.DefaultTemplate = forcedFigure.Value;
 
             var pending = App.CreateDesign.PendingReferenceImagePath?.Trim();
             if (!string.IsNullOrEmpty(pending) && File.Exists(pending))
             {
                 App.CreateDesign.PendingReferenceImagePath = "";
                 if (_pad.TryLoadUnderlayFromFile(pending, out var err))
-                    _hint.text = "Custom reference loaded — draw on top.";
+                    _hint.text = "Your photo is ready — draw on top.";
                 else
                 {
-                    _hint.text = string.IsNullOrEmpty(err) ? "Could not load reference; using default model." : err;
-                    _pad.ApplyDefaultFigure(SketchFigurePreferences.DefaultTemplate);
+                    _hint.text = string.IsNullOrEmpty(err) ? "Could not load photo; using default model." : err;
+                    ApplyCurrentFigure(_hint.text);
                 }
             }
             else
             {
-                _pad.ApplyDefaultFigure(SketchFigurePreferences.DefaultTemplate);
-                _hint.text = "Default model — switch Male/Female, Dim ref, or Custom photo.";
+                var who = SketchFigurePreferences.DefaultTemplate == SketchFigureTemplate.Male ? "Boy" : "Girl";
+                var pose = SketchFigurePreferences.DefaultPoseIndex + 1;
+                ApplyCurrentFigure($"{who} · pose {pose} — draw your design, then Magic!");
             }
 
             RefreshEraseButtonStyle();
@@ -219,11 +257,25 @@ namespace FashionRise.Presentation.Screens
             if (App == null)
                 return;
 
+            SketchFigureTemplate? forced = null;
+            if (payload is SketchNavContext ctx && ctx.Figure.HasValue)
+                forced = ctx.Figure;
+            else if (payload is SketchFigureTemplate t)
+                forced = t;
+
             if (!_padBootstrapped)
             {
                 _padBootstrapped = true;
-                BootstrapPadReference();
+                BootstrapPadReference(forced);
                 return;
+            }
+
+            if (forced.HasValue)
+            {
+                SketchFigurePreferences.DefaultTemplate = forced.Value;
+                var who = forced.Value == SketchFigureTemplate.Male ? "Boy" : "Girl";
+                var pose = SketchFigurePreferences.DefaultPoseIndex + 1;
+                ApplyCurrentFigure($"{who} · pose {pose} — draw your design, then Magic!");
             }
 
             var pending = App.CreateDesign.PendingReferenceImagePath?.Trim();
@@ -233,21 +285,21 @@ namespace FashionRise.Presentation.Screens
             App.CreateDesign.PendingReferenceImagePath = "";
             if (!File.Exists(pending))
             {
-                _hint.text = "Reference file is missing.";
+                _hint.text = "Photo file is missing.";
                 return;
             }
 
             if (_pad.TryLoadUnderlayFromFile(pending, out var err))
-                _hint.text = "Reference loaded — draw on top.";
+                _hint.text = "Photo loaded — draw on top.";
             else
-                _hint.text = string.IsNullOrEmpty(err) ? "Could not load reference." : err;
+                _hint.text = string.IsNullOrEmpty(err) ? "Could not load photo." : err;
         }
 
         void ContinueToEnhancement()
         {
             if (!_pad.HasInk())
             {
-                _hint.text = "Draw on the canvas first (ink on croquis, photo, or blank paper).";
+                _hint.text = "Draw a little first — then Magic can help.";
                 return;
             }
 
@@ -255,7 +307,8 @@ namespace FashionRise.Presentation.Screens
             App.CreateDesign.SketchReference = "file:" + path.Replace('\\', '/');
             _hint.text = " ";
             if (App.Navigation != null)
-                _ = App.Navigation.NavigateToAsync(ScreenId.SketchEnhancement);
+                _ = App.Navigation.NavigateToAsync(ScreenId.SketchEnhancement,
+                    new SketchNavContext { AutoMagic = true });
         }
     }
 }

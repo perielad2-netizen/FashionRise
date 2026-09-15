@@ -18,7 +18,7 @@ namespace FashionRise.Presentation.Screens
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.MiddleCenter);
             FrUiFactory.AddBrandLogoRow(col, t, 320f, 120f);
-            FrUiFactory.AddLabel(col, "Tag", "Premium fashion creation", t, Mathf.RoundToInt(t.SubtitleSize),
+            FrUiFactory.AddLabel(col, "Tag", "Draw. Magic. Share.", t, Mathf.RoundToInt(t.SubtitleSize),
                 FontStyle.Italic, TextAnchor.MiddleCenter, useSecondaryTextColor: true);
         }
 

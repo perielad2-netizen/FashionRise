@@ -1,4 +1,4 @@
-"""In-process consumer for queued AI jobs (OpenAI vision for sketch pipeline when configured; otherwise stub)."""
+"""In-process consumer for queued AI jobs (OpenAI vision + optional look image for polish; otherwise stub)."""
 
 import logging
 from typing import Any
