@@ -229,8 +229,10 @@ namespace FashionRise.Presentation.Screens
                 var r = await App.ConceptPolish.PolishAsync(new ConceptRefinementRequest
                 {
                     DesignId = null,
-                    Notes = "polish concept",
+                    Notes = BuildMagicNotes(),
                     LocalSketchForVision = App.CreateDesign.SketchReference,
+                    FabricName = App.CreateDesign.SketchFabricName ?? "",
+                    ColorName = App.CreateDesign.SketchColorName ?? "",
                     OnJobStarted = jobId =>
                     {
                         if (!string.IsNullOrWhiteSpace(jobId))
@@ -320,6 +322,52 @@ namespace FashionRise.Presentation.Screens
             _status.text = "Done — opening your look…";
             if (App.Navigation != null)
                 _ = App.Navigation.NavigateToAsync(ScreenId.ConceptResult);
+        }
+
+        string BuildMagicNotes()
+        {
+            var fabric = App.CreateDesign.SketchFabricName?.Trim() ?? "";
+            if (string.IsNullOrEmpty(fabric))
+                fabric = App.CreateDesign.MaterialId?.Trim() ?? "";
+            var color = App.CreateDesign.SketchColorName?.Trim() ?? "";
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append("Polish this kid fashion sketch into a chic, shareable look. ");
+            sb.Append("Keep the same pose and garment shapes. ");
+            if (!string.IsNullOrEmpty(fabric))
+            {
+                sb.Append("Primary fabric chosen by the designer: ").Append(fabric).Append(". ");
+                sb.Append(FabricLookHint(fabric)).Append(' ');
+            }
+
+            if (!string.IsNullOrEmpty(color))
+                sb.Append("Accent / ink color direction: ").Append(color).Append(". ");
+
+            sb.Append(
+                "Make the clothes look fashion-forward and nearly real — believable fabric, drape, and lighting — " +
+                "while staying true to what was drawn.");
+            return sb.ToString();
+        }
+
+        static string FabricLookHint(string fabric)
+        {
+            switch (fabric.Trim().ToLowerInvariant())
+            {
+                case "silk":
+                    return "Render garments in luxurious silk: soft sheen, fluid drape, subtle highlights.";
+                case "denim":
+                    return "Render garments in fashion denim: visible twill weave, structured seams, casual-chic.";
+                case "velvet":
+                    return "Render garments in rich velvet: deep pile, soft light absorption, luxe runway feel.";
+                case "glitter":
+                    return "Render garments with glam glitter/sparkle fabric: catch lights, party-fashion energy.";
+                case "leather":
+                    return "Render garments in fashion leather: smooth grain, soft specular edges, modern edge.";
+                case "cotton":
+                    return "Render garments in soft fashion cotton: matte, clean folds, fresh ready-to-wear.";
+                default:
+                    return $"Emphasize realistic {fabric} material qualities on the garments.";
+            }
         }
     }
 }

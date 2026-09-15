@@ -676,6 +676,8 @@ namespace FashionRise.Presentation.Screens
             }
 
             FlashHint(ColorNames[_colorIndex]);
+            if (App != null)
+                App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
         }
 
         void SelectFabric(int index)
@@ -688,6 +690,11 @@ namespace FashionRise.Presentation.Screens
             if (_fabricFaces[_fabricIndex] != null)
                 _fabricFaces[_fabricIndex].transform.localScale = Vector3.one * 1.06f;
             FlashHint(Fabrics[_fabricIndex].name + " fabric");
+            if (App != null)
+            {
+                App.CreateDesign.SketchFabricName = Fabrics[_fabricIndex].name;
+                App.CreateDesign.MaterialId = Fabrics[_fabricIndex].name.ToLowerInvariant();
+            }
         }
 
         void ApplyFabricBrush(int index)
@@ -837,6 +844,14 @@ namespace FashionRise.Presentation.Screens
 
             var path = _pad.SavePngToPersistentData("canvas");
             App.CreateDesign.SketchReference = "file:" + path.Replace('\\', '/');
+            if (_fabricIndex >= 0)
+            {
+                App.CreateDesign.SketchFabricName = Fabrics[_fabricIndex].name;
+                App.CreateDesign.MaterialId = Fabrics[_fabricIndex].name.ToLowerInvariant();
+            }
+
+            if (_colorIndex >= 0 && _colorIndex < ColorNames.Length)
+                App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
             FlashHint("Magic…");
             if (App.Navigation != null)
                 _ = App.Navigation.NavigateToAsync(ScreenId.SketchEnhancement,

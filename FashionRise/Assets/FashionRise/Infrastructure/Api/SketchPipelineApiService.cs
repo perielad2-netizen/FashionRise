@@ -44,6 +44,11 @@ namespace FashionRise.Infrastructure.Api
                 ["notes"] = request.Notes,
                 ["local_path_placeholder"] = request.LocalSketchForVision ?? ""
             };
+            // Optional studio chips — backend folds these into the image edit prompt.
+            if (!string.IsNullOrWhiteSpace(request.FabricName))
+                inputData["fabric"] = request.FabricName.Trim();
+            if (!string.IsNullOrWhiteSpace(request.ColorName))
+                inputData["color"] = request.ColorName.Trim();
             await EmbedVisionImageAsync(inputData, request.LocalSketchForVision, cancellationToken)
                 .ConfigureAwait(true);
             var job = await _client

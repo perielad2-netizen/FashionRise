@@ -26,6 +26,10 @@ namespace FashionRise.Application
         public string SketchReference { get; set; } = "";
         /// <summary>Absolute path to an image to load as trace reference on the sketch canvas; cleared after load.</summary>
         public string PendingReferenceImagePath { get; set; } = "";
+        /// <summary>Fabric chip chosen on the sketch studio (e.g. Silk) — sent into Magic notes.</summary>
+        public string SketchFabricName { get; set; } = "";
+        /// <summary>Last ink/color name chosen on the sketch studio (e.g. Rose).</summary>
+        public string SketchColorName { get; set; } = "";
         public string LastSketchJobId { get; set; } = "";
         public string LastSketchSummary { get; set; } = "";
         /// <summary>Public HTTP URL of the last Magic polish look image (if any).</summary>
@@ -63,6 +67,8 @@ namespace FashionRise.Application
             AccentNotes = "";
             SketchReference = "";
             PendingReferenceImagePath = "";
+            SketchFabricName = "";
+            SketchColorName = "";
             ClearLastLook();
             PersistedDesignId = "";
         }

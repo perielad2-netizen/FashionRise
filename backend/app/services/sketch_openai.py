@@ -86,13 +86,14 @@ def _system_prompt(job_type: str) -> str:
         )
     if job_type == "sketch_polish":
         return (
-            "You are a senior fashion design mentor helping kids and teens polish a garment sketch into a wow look. "
+            "You are a senior fashion design mentor helping kids and teens turn a garment sketch into a "
+            "wow, fashion-forward look. "
             "Respond ONLY with valid JSON using keys: "
             "summary (one short exciting sentence for the creator), "
             "polish_bullets (array of 3–5 concise tips), "
-            "image_prompt (one short English paragraph listing ONLY what is visible in the attached sketch: "
-            "pose, hat/hair, neckline, sleeves, skirt/pants length, notable shapes. "
-            "This text will guide an image EDIT of the same sketch — do not invent details that are not drawn)."
+            "image_prompt (one short English paragraph describing the SAME outfit visible in the sketch: "
+            "pose, neckline, sleeves, skirt/pants length, colors, and how the chosen fabric should look "
+            "in a chic near-realistic fashion illustration. Do not invent a different outfit)."
         )
     return (
         "You are a fashion stylist AI. Use mood notes and optional sketch image. "
@@ -107,6 +108,15 @@ def _user_text(job: AIJob) -> str:
     notes = d.get("notes")
     if isinstance(notes, str) and notes.strip():
         parts.append(f"Designer notes:\n{notes.strip()}")
+    fabric = d.get("fabric")
+    if isinstance(fabric, str) and fabric.strip():
+        parts.append(
+            f"Primary fabric (must appear in image_prompt and the final look): {fabric.strip()}. "
+            "Describe realistic material qualities for this fabric."
+        )
+    color = d.get("color")
+    if isinstance(color, str) and color.strip():
+        parts.append(f"Color direction from the studio palette: {color.strip()}.")
     mood = d.get("mood_notes")
     if isinstance(mood, str) and mood.strip():
         parts.append(f"Mood / direction:\n{mood.strip()}")
@@ -119,7 +129,37 @@ def _user_text(job: AIJob) -> str:
     return "\n\n".join(parts) if parts else "Infer from the attached sketch image only."
 
 
-def _build_image_prompt(structured: Any, summary: str) -> str:
+def _fabric_from_job(job: AIJob | None) -> str:
+    if job is None:
+        return ""
+    d = job.input_data or {}
+    fabric = d.get("fabric")
+    if isinstance(fabric, str) and fabric.strip():
+        return fabric.strip()
+    notes = d.get("notes")
+    if isinstance(notes, str) and "Primary fabric chosen by the designer:" in notes:
+        try:
+            after = notes.split("Primary fabric chosen by the designer:", 1)[1]
+            return after.split(".", 1)[0].strip()
+        except Exception:
+            return ""
+    return ""
+
+
+def _fabric_render_hint(fabric: str) -> str:
+    key = fabric.strip().lower()
+    hints = {
+        "silk": "luxurious silk with soft sheen, fluid drape, and delicate light highlights",
+        "denim": "fashion denim with visible twill weave, structured seams, and casual-chic finish",
+        "velvet": "rich velvet with deep pile, soft light absorption, and luxe runway depth",
+        "glitter": "glam glitter/sparkle fabric with catch-lights and party-fashion energy",
+        "leather": "fashion leather with smooth grain, soft specular edges, and modern polish",
+        "cotton": "soft fashion cotton with matte folds and clean ready-to-wear texture",
+    }
+    return hints.get(key, f"realistic {fabric} material with believable drape and surface detail")
+
+
+def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None) -> str:
     prompt = ""
     if isinstance(structured, dict):
         prompt = str(structured.get("image_prompt") or "").strip()
@@ -131,16 +171,24 @@ def _build_image_prompt(structured: Any, summary: str) -> str:
     if not prompt:
         prompt = summary or "Polish this fashion sketch"
 
+    fabric = _fabric_from_job(job)
+    fabric_clause = ""
+    if fabric:
+        fabric_clause = (
+            f"The designer chose {fabric} — render the garments in {_fabric_render_hint(fabric)}. "
+        )
+
     return (
-        "Edit THIS uploaded fashion sketch. Keep the SAME pose, body proportions, hat shape, neckline, "
-        "sleeve style, hem length, and outfit silhouette. Only clean the linework and add a light color wash / "
-        "simple fabric shading that matches the drawing. "
+        "Edit THIS uploaded fashion sketch into a chic, high-fashion look. "
+        "Keep the SAME pose, body proportions, neckline, sleeve style, hem length, and outfit silhouette. "
+        "Upgrade the clothes to look nearly real and runway-ready: believable fabric, elegant drape, "
+        "soft studio lighting, and fashion-magazine polish — still clearly the same design the child drew. "
+        f"{fabric_clause}"
         f"{prompt} "
-        "Result must still be recognizable as the child's sketch — a refined fashion croquis illustration on "
-        "white paper with visible ink/pencil lines. "
-        "Do NOT invent a new character, outfit, or storybook scene. "
-        "Strictly avoid: photorealism, photography, CGI, magazine lookbook, different clothes, "
-        "different hat, cropped body, text, watermark, collage, checkerboard."
+        "Result: a fashionable fashion illustration / editorial croquis on a clean light background, "
+        "full figure visible, no cropped legs. "
+        "Do NOT invent a new character or different clothes. "
+        "Avoid: cartoonish flat fills, fuzzy undefined texture, storybook scenes, text, watermark, collage."
     )[:3800]
 
 
@@ -260,7 +308,7 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     if model.lower() in {"", "none", "off", "false", "0"}:
         return None
 
-    prompt = _build_image_prompt(structured, summary)
+    prompt = _build_image_prompt(structured, summary, job)
     size = (settings.openai_image_size or "1024x1536").strip()
     quality = (settings.openai_image_quality or "standard").strip()
 
