@@ -34,7 +34,7 @@ This folder is the **single source of truth** for FashionRise architecture and p
 - **Name**: FashionRise  
 - **Remote**: [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (`main`).  
 - **Product**: Premium fashion design app — sketch capture, garments, materials, gallery, export, ratings; AI and maker handoff later.  
-- **Clients**: Unity (URP); **v1 ship targets:** Windows PC + **Android**; iOS/iPad later.  
+- **Clients**: Unity (URP); **v1 ship targets:** Windows PC + **Android**; **iOS** sketch import (Photos) implemented; full iOS product polish later.  
 - **Backend**: FastAPI, PostgreSQL, JWT, Nginx on Ubuntu; local storage first, S3-compatible later.
 
 ## Revision log
@@ -49,6 +49,7 @@ This folder is the **single source of truth** for FashionRise architecture and p
 | 2026-05-10 | — | Handoff refresh: GitHub link, **“When you open Cursor next”** in `00-PROJECT-STATUS`; API-first Unity; repo map + identity updated |
 | 2026-05-11 | — | Docs sweep: Pillar B progress (`00`, `06`), gallery + profiles API (`05`), Unity integration + services + screen payloads + client index (`unity-*`, `02`); rate limits marked done in phases |
 | 2026-05-11 | — | `GalleryNavContext.CommunitySort`, home **Following feed** + publish/home gallery explicit newest; `03` rate_limit note; `unity-screen-flow` Back semantics |
+| 2026-05-13 | — | Session handoff sweep: **`00`** pause + next steps; **`06`** Phase 1 auth + Phase 5b sketch; **`02`** Application + sketch row; **`03`** auth_service + dev password script; **`05-api`** auth table + 401/409 note; **`unity-backend-integration`** auth + `SketchCanvasScreen`; **`README_Unity`** changelog; **`backend/README`** already has Dev utilities; root **`README`**. |
 | 2026-05-12 | — | **iOS Photos import** for sketch `Imports`; `06` Pillar A import line; `00` handoff + changelog; `README_Unity` platforms + platform folder |
 | 2026-05-11 | — | **Session pause:** `00` handoff (pause block + next steps); `06` Guided/Pro, reputation v1, handoff slice, CI note; `05-api` profiles + designs handoff/revisions; `03-backend` + `backend/README` migration recovery; `04` profile API note; `02` + `unity-backend-integration` alignment |
 

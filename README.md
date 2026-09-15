@@ -17,4 +17,4 @@ cd FashionRise/backend && cp .env.example .env   # then edit .env
 
 Do not commit `backend/.env` or Unity `Library/`.
 
-**Changelog (root):** 2026-05-12 — **iOS** sketch import: Photos → `Imports` (see `FashionRise/Assets/Plugins/iOS/FashionRiseGalleryPickBridge.mm`, `IOSGalleryPick.cs`, `docs/00-PROJECT-STATUS.md`). 2026-05-11 — documentation session pause: see **`docs/00-PROJECT-STATUS.md`** (*Session pause — where we stopped*) for the next-session checklist; migration recovery notes in **`backend/README.md`**.
+**Changelog (root):** 2026-09-07 — **Kid front door** (Girl/Boy → Magic → Share) + vision reframe in **`docs/00-PROJECT-STATUS.md`**. 2026-05-13 — sketch dual-layer + auth hygiene. 2026-05-12 — **iOS** sketch import. 2026-05-11 — session pause / migration recovery.

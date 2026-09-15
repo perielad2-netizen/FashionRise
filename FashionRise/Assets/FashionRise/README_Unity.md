@@ -17,7 +17,7 @@ Use **File → Build Settings** to switch **PC** vs **Android**. For Google Play
 3. Press **Play**. If the scene has no `FashionRiseApp` yet, the project **creates the UI automatically** (splash → welcome → …).
 4. Optional in Edit mode: menu **FashionRise → Create Bootstrap UI (Canvas + Screens)** to place the same hierarchy in the scene and **save** it (so Play does not spawn a fresh copy each time).
 
-**Networking:** `FashionRiseApp` → **Api Config** defaults to **FastAPI** at `http://127.0.0.1:8000/api/v1` with mocks **off**. Run the backend locally or switch **Use Mock Services** only when you need offline UI work.
+**Networking:** `FashionRiseApp` → **Api Config** defaults to **FastAPI** at `http://127.0.0.1:8001/api/v1` with mocks **off**. Run the backend locally or switch **Use Mock Services** only when you need offline UI work.
 
 If the **Console** shows red errors, open **Window → General → Console**, fix compile errors first — Unity may not run scripts until the project compiles cleanly.
 
@@ -61,13 +61,16 @@ REST integration: `docs/unity-backend-integration.md` (inspector setup, auth, CO
 - **Gallery:** Newest, Top rated, Trending, **Following** (signed-in); optional **creator-only** list via `GalleryNavContext.OwnerUserId`; **`CommunitySort`** when opening the community feed from home (default **Gallery** = newest, **Following feed** = following); **Back** from design detail keeps creator filter + sort; **Community feed (all creators)** clears creator filter in place.
 - **Design detail:** Rate **1–10**, like, **follow / unfollow**, **post comment** (typed), native share actions (link/card/PDF URL share sheet + copy fallback), handoff tools (copy JSON, generate `spec_sheet_pdf`, open/share/download PDF, **save JSON/PDF to** `persistentDataPath/Handoffs`, **Open Handoffs folder (PC)**), and **open this creator’s public gallery**.
 - **Profile:** **Refresh**, **Reputation** (score + tier from API), **Following** count, **My public gallery** (filtered gallery for the signed-in user).
-- **Home / Settings:** **Authoring mode: Guided / Pro** (home shows current; Settings toggles).
-- **Create design:** **Show revision history**, revision selection (**newer/older**), **Restore selected revision values**, and **Restore latest revision values** (pulls server revision `design_data` into current draft controls). **Pro** shows full handoff/export tools; **Guided** keeps the flow simpler.
+- **Home:** **Kid front door** — **Girl model** / **Boy model** → sketch; **More…** reveals Gallery / Atelier / Profile / Settings.
+- **Sketch → Magic → Share:** canvas **Magic!** auto-runs polish; **Your look** has **Share!** (`TryShareImageFile`) + **Draw again**.
+- **Settings:** **Authoring mode: Guided / Pro** toggle.
+- **Create design:** revision history tools; **Pro** shows full handoff/export; **Guided** keeps the flow simpler.
 
 ## Changelog (this file)
 
 | Date | Change |
 |------|--------|
-| 2026-05-12 | Sketch canvas: default male/female croquis, reference dim, brush sizes/colors, eraser, dual-layer pad. |
-| 2026-05-12 | Default sketch models: **`Resources/SketchReference/female_model.png`**, **`male_model.png`** (replace to update art). |
+| 2026-09-07 | Kid front door Home/Sketch/Magic/Result; `SketchNavContext`; `NativeShareSheet.TryShareImageFile`. |
+| 2026-05-13 | Session handoff: **`00`**, **`06`**, **`02`**, **`03`**, **`05-api`**, **`unity-backend-integration`**, root **`README`** — sketch pad v2, auth, next picks. |
+| 2026-05-12 | Sketch canvas: dual-layer pad, default models **`Resources/SketchReference/female_model.png`** / **`male_model.png`** (replace to update art), reference dim, brush sizes/colors, eraser. |
 | 2026-05-11 | Doc sync: folder map (handoff, share, Guided/Pro, preferences); shipped UX (reputation, home/settings mode); changelog added. |

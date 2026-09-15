@@ -8,7 +8,7 @@ All project code and content under **`Assets/FashionRise/`**:
 |------|----------------|
 | **`Core/`** | App lifecycle, composition root, DI installers, logging, errors/results, main-thread helpers, global constants. |
 | **`Domain/`** | Entities, value objects (e.g. design ids, rating scores), validation that must hold on-device; minimize `UnityEngine` in pure types. |
-| **`Application/`** | Use-cases: auth session, home dashboard, create-design flow, save/publish, gallery, ratings, PNG export, AI job requests; **PlayerPrefs** helpers e.g. **`DesignAutosavePreferences`**, **`AuthoringModePreferences`**. |
+| **`Application/`** | Use-cases: auth session, home dashboard, create-design flow, save/publish, gallery, ratings, PNG export, AI job requests; **PlayerPrefs** helpers **`DesignAutosavePreferences`**, **`AuthoringModePreferences`**, **`SketchFigurePreferences`** (default sketch croquis template). |
 | **`Services/`** | **Interfaces only**: `IAuthService`, `IUserProfileService`, `IDesignSaveService`, `IDesignHandoffService`, `IMaterialCatalogService`, `IGarmentTemplateService`, `IColorPaletteService`, `IGalleryService`, `IFollowService`, `IRatingService`, `IExportService`, `IShareLinkService`, `IAIEnhancementService`, `INavigationService`. HTTP/upload wiring lives in Infrastructure (`*ApiService`, `ApiClient`). |
 | **`Infrastructure/`** | **Adapters**: HTTP client, auth/refresh, JSON, DTO↔domain mappers, file IO, PNG encoding; `Api/` routes; `Mocks/` offline implementations. |
 | **`UI/`** | Reusable controls: buttons, cards, sliders, palette widgets, typography; touch-friendly; **no** business rules. |
@@ -35,6 +35,7 @@ All project code and content under **`Assets/FashionRise/`**:
 | Realistic model preview (placeholder) | `Presentation/Preview` + URP scene hooks |
 | Gallery / profile / follows | `IGalleryService` (feed, **per-user public gallery**, publish, likes, comments), `IUserProfileService`, `IFollowService` |
 | PNG export | Export use-case + infrastructure encode + upload/register export |
+| Sketch canvas | **`Presentation/Sketch/UiSketchPad`** + **`SketchCanvasScreen`** — dual-layer reference + ink, default models under **`Resources/SketchReference/`**, Import → Trace, enhancement `file:` ref |
 
 ## Design principles
 

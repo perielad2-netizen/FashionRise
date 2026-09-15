@@ -13,13 +13,14 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.MiddleCenter);
-            FrUiFactory.AddBrandLogoRow(col, t, 280f, 96f);
-            FrUiFactory.AddLabel(col, "H", "Welcome", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            FrUiFactory.AddBrandLogoRow(col, t, 300f, 110f);
+            FrUiFactory.AddLabel(col, "H", "WELCOME", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.MiddleCenter);
             FrUiFactory.AddLabel(col, "B",
-                "Design realistic garments, refine fabrics, and preview in a studio setting — built for tablets, ready for what is next.",
-                t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal, TextAnchor.MiddleCenter, useSecondaryTextColor: true);
-            FrUiFactory.AddButton(col, "Continue", t, () =>
+                "Draw fashion ideas. Magic polishes them. Share your look.",
+                t, Mathf.RoundToInt(t.SubtitleSize), FontStyle.Bold, TextAnchor.MiddleCenter,
+                useSecondaryTextColor: true);
+            FrUiFactory.AddButton(col, "LET'S GO", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.LoginChoice);
