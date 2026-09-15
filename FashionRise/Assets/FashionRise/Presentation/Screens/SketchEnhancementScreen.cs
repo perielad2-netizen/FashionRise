@@ -8,10 +8,17 @@ using UnityEngine.UI;
 
 namespace FashionRise.Presentation.Screens
 {
-    /// <summary>Kid front door: one Magic action. Extra AI tools stay under More.</summary>
+    /// <summary>
+    /// Kid Magic step. Happy path is one-shot: run Magic → open Your look.
+    /// If a look already exists, the primary action is See your look (not Magical again).
+    /// </summary>
     public sealed class SketchEnhancementScreen : ScreenBase
     {
+        Text _blurb = null!;
         Text _status = null!;
+        Button _magicBtn = null!;
+        Button _seeLookBtn = null!;
+        Button _retryBtn = null!;
         bool _moreOpen;
         bool _autoMagicArmed;
         bool _busy;
@@ -25,25 +32,24 @@ namespace FashionRise.Presentation.Screens
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
             FrUiFactory.AddLabel(col, "H", "Magic", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "B", "AI polishes your sketch into a cleaner fashion look.", t,
+            _blurb = FrUiFactory.AddLabel(col, "B",
+                "One tap turns your sketch into a cleaner fashion look.", t,
                 Mathf.RoundToInt(t.BodySize), FontStyle.Normal, TextAnchor.UpperCenter,
                 useSecondaryTextColor: true);
             _status = FrUiFactory.AddLabel(col, "St", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,
                 TextAnchor.UpperLeft);
 
-            var magic = FrUiFactory.AddButton(col, "Make it magical!", t, () => { _ = RunPolishAsync(); },
+            _magicBtn = FrUiFactory.AddButton(col, "Make it magical!", t, () => { _ = RunPolishAsync(); },
                 FrButtonEmphasis.Primary);
-            var le = magic.GetComponent<LayoutElement>();
-            if (le != null)
-            {
-                le.minHeight = 72f;
-                le.preferredHeight = 72f;
-            }
+            Enlarge(_magicBtn);
 
-            // Always visible — open Your look even if Magic's poll failed after the server finished.
-            FrUiFactory.AddButton(col, "See last result", t, () => { _ = OpenLastResultAsync(); },
+            _seeLookBtn = FrUiFactory.AddButton(col, "See your look", t, () => { _ = OpenLastResultAsync(); },
                 FrButtonEmphasis.Primary);
-            FrUiFactory.AddButton(col, "More AI tools…", t, ToggleMore);
+            Enlarge(_seeLookBtn);
+
+            // Retry stays under More so kids don't re-run Magic by accident.
+            _retryBtn = FrUiFactory.AddButton(col, "Try magic again", t, () => { _ = RunPolishAsync(); });
+            FrUiFactory.AddButton(col, "More…", t, ToggleMore);
             FrUiFactory.AddButton(col, "Clean lines", t, () => { _ = RunCleanAsync(); });
             FrUiFactory.AddButton(col, "Style ideas", t, () => { _ = RunStyleAsync(); });
             FrUiFactory.AddButton(col, "Back", t, () =>
@@ -53,19 +59,25 @@ namespace FashionRise.Presentation.Screens
             });
 
             SetMoreVisible(false);
+            RefreshHappyPathChrome();
         }
 
         protected override void OnShown(object? payload)
         {
-            _status.text = "Ready when you are.";
             _autoMagicArmed = payload is SketchNavContext { AutoMagic: true } ||
                               payload is true ||
                               (payload is string s && string.Equals(s, "auto", StringComparison.OrdinalIgnoreCase));
             SetMoreVisible(_moreOpen);
+            RefreshHappyPathChrome();
+
             if (_autoMagicArmed)
             {
                 _autoMagicArmed = false;
-                _ = RunPolishAsync();
+                // Fresh sketch → Magic: clear any previous look so Magical is the action.
+                if (!HasReadyLook())
+                    _ = RunPolishAsync();
+                else
+                    _ = OpenLastResultAsync();
             }
         }
 
@@ -73,6 +85,7 @@ namespace FashionRise.Presentation.Screens
         {
             _moreOpen = !_moreOpen;
             SetMoreVisible(_moreOpen);
+            RefreshHappyPathChrome();
         }
 
         void SetMoreVisible(bool open)
@@ -82,8 +95,47 @@ namespace FashionRise.Presentation.Screens
                 return;
             SetSiblingActive(col, "Clean lines_Btn", open);
             SetSiblingActive(col, "Style ideas_Btn", open);
-            // "See last result" stays visible so a finished look can always be opened.
         }
+
+        void RefreshHappyPathChrome()
+        {
+            var ready = HasReadyLook();
+            if (_busy)
+            {
+                _blurb.text = "Hang tight — Magic is working on your sketch.";
+                if (!_status.text.StartsWith("Working", StringComparison.Ordinal) &&
+                    !_status.text.StartsWith("Magic is already", StringComparison.Ordinal))
+                    _status.text = "Working magic… this can take about a minute.";
+                _magicBtn.gameObject.SetActive(false);
+                _seeLookBtn.gameObject.SetActive(false);
+                _retryBtn.gameObject.SetActive(false);
+                return;
+            }
+
+            if (ready)
+            {
+                _blurb.text = "Your look is ready — open it, or try Magic again under More.";
+                _status.text = "Ready.";
+                _magicBtn.gameObject.SetActive(false);
+                _seeLookBtn.gameObject.SetActive(true);
+                _retryBtn.gameObject.SetActive(_moreOpen);
+            }
+            else
+            {
+                _blurb.text = "One tap turns your sketch into a cleaner fashion look.";
+                if (string.IsNullOrWhiteSpace(_status.text) ||
+                    _status.text is "Ready." or "Ready when you are.")
+                    _status.text = "Ready when you are.";
+                _magicBtn.gameObject.SetActive(true);
+                _seeLookBtn.gameObject.SetActive(false);
+                _retryBtn.gameObject.SetActive(false);
+            }
+        }
+
+        bool HasReadyLook() =>
+            App != null &&
+            (!string.IsNullOrWhiteSpace(App.CreateDesign.LastPolishedImageUrl) ||
+             !string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchJobId));
 
         static void SetSiblingActive(Transform col, string name, bool active)
         {
@@ -92,9 +144,23 @@ namespace FashionRise.Presentation.Screens
                 child.gameObject.SetActive(active);
         }
 
+        static void Enlarge(Button btn)
+        {
+            var le = btn.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.minHeight = 72f;
+                le.preferredHeight = 72f;
+            }
+
+            var txt = btn.GetComponentInChildren<Text>();
+            if (txt != null)
+                txt.fontSize = Mathf.Max(txt.fontSize, 22);
+        }
+
         async Task OpenLastResultAsync()
         {
-            _status.text = "Loading your last look…";
+            _status.text = "Opening your look…";
             try
             {
                 if (App.IsApiBackend && App.Auth.HasBackendSession &&
@@ -109,7 +175,7 @@ namespace FashionRise.Presentation.Screens
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"FashionRise See last result refresh failed: {ex.Message}");
+                Debug.LogWarning($"FashionRise See your look refresh failed: {ex.Message}");
             }
 
             if (App.Navigation != null)
@@ -120,6 +186,7 @@ namespace FashionRise.Presentation.Screens
         {
             if (_busy) return;
             _busy = true;
+            RefreshHappyPathChrome();
             _status.text = "Cleaning lines…";
             try
             {
@@ -141,6 +208,7 @@ namespace FashionRise.Presentation.Screens
             finally
             {
                 _busy = false;
+                RefreshHappyPathChrome();
             }
         }
 
@@ -149,10 +217,12 @@ namespace FashionRise.Presentation.Screens
             if (_busy)
             {
                 _status.text = "Magic is already working… hang tight.";
+                RefreshHappyPathChrome();
                 return;
             }
 
             _busy = true;
+            RefreshHappyPathChrome();
             _status.text = "Working magic… this can take about a minute.";
             try
             {
@@ -176,15 +246,19 @@ namespace FashionRise.Presentation.Screens
             catch (Exception ex)
             {
                 Debug.LogWarning($"FashionRise Magic failed: {ex}");
-                // Server may already have finished — recover into Your look if possible.
                 if (await TryRecoverCompletedLookAsync().ConfigureAwait(true))
                     return;
                 _status.text =
-                    ex.Message + "\n\nIf Magic finished on the server, tap See last result.";
+                    "Magic hiccuped.\n\nIf it finished, tap See your look — or open More… and try Magic again.";
+                // Recover path: if we at least have a job id, surface See your look.
+                RefreshHappyPathChrome();
             }
             finally
             {
                 _busy = false;
+                if (App.Navigation == null ||
+                    string.IsNullOrWhiteSpace(App.CreateDesign.LastPolishedImageUrl))
+                    RefreshHappyPathChrome();
             }
         }
 
@@ -214,6 +288,7 @@ namespace FashionRise.Presentation.Screens
         {
             if (_busy) return;
             _busy = true;
+            RefreshHappyPathChrome();
             _status.text = "Gathering style ideas…";
             try
             {
@@ -232,6 +307,7 @@ namespace FashionRise.Presentation.Screens
             finally
             {
                 _busy = false;
+                RefreshHappyPathChrome();
             }
         }
 

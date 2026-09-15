@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-09-14 night — **Your look image works in Unity**; Windows tree synced to GitHub
+**Last updated:** 2026-09-15 — one-shot Magic UX (See your look primary; Magical retry under More)
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Active work branch: **`cursor/windows-sync-clean-77c6`** ([PR #2](https://github.com/perielad2-netizen/FashionRise/pull/2)). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
@@ -11,47 +11,32 @@
 
 ## Session pause — where we stopped (read this first in a new chat)
 
-**Paused:** 2026-09-14 ~22:50 local. **Resume here next session.**
+**Paused:** 2026-09-15. **Resume here next session.**
 
 ### What works now (verified)
 
 - Local API on **port 8001**. Unity Base Url must match (`http://127.0.0.1:8001/api/v1`).
-- Kid loop: sketch → **Magic** → **Your look** shows the AI look image in-app (not only browser).
-- Confirmed in Simulator: **Your look** + Share, Console `ConceptResult loading look: http://127.0.0.1:8001/static/uploads/ai/...png`.
-- Magic look generation prefers OpenAI **`images.edit`** with sketch + high input fidelity (sketch-faithful looks — user liked this).
-- Windows project synced to GitHub (`cursor/local-windows-sync-77c6` full backup; **`cursor/windows-sync-clean-77c6`** cleaned + Magic handoff fix).
+- Kid loop: sketch → **Magic** (auto) → **Your look** shows the AI look image in-app.
+- Sketch-faithful Magic via OpenAI **`images.edit`**.
+- Windows project on GitHub: **`cursor/windows-sync-clean-77c6`**.
 
-### UX bug still to fix (next session — kid chrome)
+### UX this session (one-shot Magic)
 
-After Magic finishes and opens **Your look**, the user can still navigate back to Magic and press **Make it magical!** again, which starts a **new** job / feels like “session lost.” Next UI pass should make the happy path one-shot: Magic runs once → land on Your look → primary actions are Share / Draw again (not a second Magical press). Full kid/game UI redesign is still pending (see `docs/01-KID-UX-VISION.md`).
+Fixed the trap where pressing **Make it magical!** again felt like “session lost”:
+- If a look already exists → Magic primary is **See your look**
+- **Try magic again** lives under **More…**
+- Magical hidden while busy
+- Your look: **Share!** / **Draw again** (clears last look) / Home — no “Try more magic”
 
-### Product note (Magic style)
-
-**2026-09-14:** Sketch-faithful look via **`images.edit`** is shipping and validated. Croquis poses expanded earlier; regenerate extras with `tools/generate_extra_croquis.py` if needed. **Restart API** after pull.
-
-### Shipped this session (tech)
-
-| Area | Change |
-|------|--------|
-| Unity sketch UX | Aspect-fit pad, white paper, remember-me login, pose library (`female_01..05`, `male_01..05`) under `Resources/SketchReference/` |
-| Backend Magic image | After `sketch_polish` vision JSON, generate image, save via `LocalStorageBackend`, set `result_data.image_url` |
-| Config | `OPENAI_IMAGE_*` in `.env` / `.env.example`; `PUBLIC_UPLOAD_BASE_URL=http://127.0.0.1:8001/static/uploads`; **storage root resolves under `backend/`** (not cwd) in `config.py` |
-| Unity Your look | `ConceptResultScreen` loads `image_url` (refetch from job); rewrites `localhost` → API host; caches PNG for Share |
-| Fallbacks | Image models: `gpt-image-1` → `gpt-image-1-mini` → `dall-e-2`; set `OPENAI_IMAGE_MODEL=off` to disable |
-
-### Dev gotchas (don’t re-debug blindly)
-
-1. Start API from **`backend/`** (or rely on absolute storage resolve after restart). Relative `./data/storage` used to write to repo-root when cwd was wrong → static **404**.
-2. `gpt-image-1` is **slow** (~45–60s after chat/completions). Wait for log: `stored look image`.
-3. Images API: no `response_format` param; often **b64 only** (no URL).
-4. Unity must wait for job **completed** (includes image gen) before navigating; **See last result** now re-fetches `image_url`.
+Full kid/game chrome redesign still pending — see `docs/01-KID-UX-VISION.md`.
 
 ### Suggested order for the *next* session
 
-1. **Kid UX / one-shot Magic flow** — after Magic, don’t invite a second “Make it magical!”; Your look primary = Share / Draw again. Start kid chrome redesign (fun, game-like).  
-2. **Keep sketch-faithful Magic** — tune edit prompt only if looks drift; don’t regress to text-only generate.  
-3. **Viral share v2** — stronger caption + one-tap gallery publish; then AI share-video spike.  
-4. **Pro door** — leave atelier under More… until viral loop feels great.
+1. **Play-test** one-shot Magic on device/Simulator after `git pull` of this branch.  
+2. **Kid chrome Layer 1** — Home / Sketch / Magic / Your look visual polish + light motion.  
+3. **Keep sketch-faithful Magic** — tune edit prompt only if looks drift.  
+4. **Viral share v2** — stronger caption + one-tap gallery publish.  
+5. **Pro door** — leave atelier under More… until viral loop feels great.
 
 ### Product vision (locked)
 

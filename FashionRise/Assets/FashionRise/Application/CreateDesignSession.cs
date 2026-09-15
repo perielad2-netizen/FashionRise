@@ -35,6 +35,15 @@ namespace FashionRise.Application
         /// <summary>After a successful API save, reuse this id so the next save updates the same row.</summary>
         public string PersistedDesignId { get; set; } = "";
 
+        /// <summary>Clears the last Magic look so the kid loop can start a fresh polish.</summary>
+        public void ClearLastLook()
+        {
+            LastSketchJobId = "";
+            LastSketchSummary = "";
+            LastPolishedImageUrl = "";
+            LastPolishedImageLocalPath = "";
+        }
+
         public void Reset()
         {
             Category = GarmentCategory.Dress;
@@ -54,10 +63,7 @@ namespace FashionRise.Application
             AccentNotes = "";
             SketchReference = "";
             PendingReferenceImagePath = "";
-            LastSketchJobId = "";
-            LastSketchSummary = "";
-            LastPolishedImageUrl = "";
-            LastPolishedImageLocalPath = "";
+            ClearLastLook();
             PersistedDesignId = "";
         }
 

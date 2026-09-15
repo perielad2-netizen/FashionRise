@@ -60,16 +60,7 @@ namespace FashionRise.Presentation.Screens
             bodyLe.preferredHeight = 120f;
 
             FrUiFactory.AddButton(col, "Share!", t, ShareLook, FrButtonEmphasis.Primary);
-            FrUiFactory.AddButton(col, "Draw again", t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.NavigateToAsync(ScreenId.HomeDashboard);
-            });
-            FrUiFactory.AddButton(col, "Try more magic", t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.NavigateToAsync(ScreenId.SketchEnhancement);
-            });
+            FrUiFactory.AddButton(col, "Draw again", t, DrawAgain);
             FrUiFactory.AddButton(col, "Home", t, () =>
             {
                 if (App.Navigation != null)
@@ -79,6 +70,14 @@ namespace FashionRise.Presentation.Screens
 
         void OnDestroy() => ClearPreviewTexture();
 
+        void DrawAgain()
+        {
+            // Fresh kid loop — don't leave Magical as a trap back into the same finished look.
+            App.CreateDesign.ClearLastLook();
+            if (App.Navigation != null)
+                _ = App.Navigation.NavigateToAsync(ScreenId.HomeDashboard);
+        }
+
         public override async Task ShowAsync(object? payload = null, CancellationToken cancellationToken = default)
         {
             gameObject.SetActive(true);
@@ -87,15 +86,26 @@ namespace FashionRise.Presentation.Screens
 
             var sb = new StringBuilder();
             sb.AppendLine("Magic finished!");
-            if (!string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchSummary))
-                sb.AppendLine(App.CreateDesign.LastSketchSummary);
+            // Keep kid copy short — one friendly line from the summary if present.
+            var summary = App.CreateDesign.LastSketchSummary?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(summary))
+            {
+                var firstLine = summary.Split('\n')[0].Trim();
+                if (firstLine.Length > 140)
+                    firstLine = firstLine.Substring(0, 137) + "…";
+                if (!string.IsNullOrEmpty(firstLine) &&
+                    !firstLine.StartsWith("Source:", StringComparison.OrdinalIgnoreCase) &&
+                    !firstLine.StartsWith("Model:", StringComparison.OrdinalIgnoreCase))
+                    sb.AppendLine(firstLine);
+            }
+
             sb.AppendLine();
             sb.AppendLine("Share your look, or draw another one.");
             _body.text = sb.ToString();
 
             var imageUrl = App.CreateDesign.LastPolishedImageUrl?.Trim() ?? "";
 
-            // Always re-read image_url from the job — session may be empty (See last result)
+            // Always re-read image_url from the job — session may be empty (See your look)
             // or set before the worker finished storing the PNG.
             if (App.IsApiBackend && App.Auth.HasBackendSession &&
                 !string.IsNullOrWhiteSpace(App.CreateDesign.LastSketchJobId))
@@ -111,26 +121,23 @@ namespace FashionRise.Presentation.Screens
                         App.CreateDesign.LastPolishedImageUrl = imageUrl;
                     }
 
+                    // Structured OpenAI detail stays in Console for debug — not on the kid screen.
                     var detail = await App.Ai
                         .GetJobStructuredDetailTextAsync(App.CreateDesign.LastSketchJobId, cancellationToken)
                         .ConfigureAwait(true);
                     if (!string.IsNullOrEmpty(detail))
-                    {
-                        sb.AppendLine();
-                        sb.AppendLine(detail);
-                        _body.text = sb.ToString();
-                    }
+                        Debug.Log($"FashionRise look detail:\n{detail}");
                 }
                 catch (Exception ex)
                 {
-                    _body.text = sb + $"\n\n(Could not load job details: {ex.Message})";
+                    Debug.LogWarning($"FashionRise Could not load job details: {ex.Message}");
                 }
             }
 
             if (!string.IsNullOrEmpty(imageUrl))
             {
                 var loadUrl = RewriteUploadUrlToApiHost(imageUrl);
-                _body.text = sb + "\nLoading your AI look…";
+                _body.text = sb + "\nLoading your look…";
                 Debug.Log($"FashionRise ConceptResult loading look: {loadUrl}");
                 try
                 {
@@ -138,7 +145,8 @@ namespace FashionRise.Presentation.Screens
                     if (IsPreviewVisible())
                         _body.text = sb.ToString();
                     else
-                        _body.text = sb + $"\n(Could not show the AI image{(string.IsNullOrEmpty(err) ? "" : ": " + err)} — you can still share your sketch.)";
+                        _body.text = sb +
+                                     $"\n(Could not show the image{(string.IsNullOrEmpty(err) ? "" : ": " + err)} — you can still share.)";
                 }
                 catch (Exception ex)
                 {
