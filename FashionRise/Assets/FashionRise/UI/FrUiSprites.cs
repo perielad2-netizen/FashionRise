@@ -18,6 +18,7 @@ namespace FashionRise.UI
         static Sprite? s_girl;
         static Sprite? s_boy;
         static Sprite? s_sparkle;
+        static Sprite? s_fill;
 
         public static Sprite Circle => s_circle ??= MakeCircle(64);
         public static Sprite RoundSoft => s_roundSoft ??= MakeRoundedRect(64, 64, 18);
@@ -32,6 +33,7 @@ namespace FashionRise.UI
         public static Sprite IconGirl => s_girl ??= MakePersonIcon(true);
         public static Sprite IconBoy => s_boy ??= MakePersonIcon(false);
         public static Sprite IconSparkle => s_sparkle ??= MakeSparkleIcon();
+        public static Sprite IconFill => s_fill ??= MakeFillIcon();
 
         public static Sprite FabricSwatch(Color baseColor, int seed)
         {
@@ -265,6 +267,22 @@ namespace FashionRise.UI
                 Stamp(px, n, 20, 20, 44, 44, 2, Soft);
                 Stamp(px, n, 20, 44, 44, 20, 2, Soft);
                 Dot(px, n, 32, 32, 3, new Color32(236, 72, 153, 255));
+            });
+
+        static Sprite MakeFillIcon() =>
+            MakeIcon((px, n) =>
+            {
+                // Paint bucket silhouette
+                for (var y = 28; y <= 46; y++)
+                for (var x = 22; x <= 42; x++)
+                {
+                    if (y >= 28 + (x - 22) / 4 && y <= 46 - (x - 32) * (x - 32) / 40)
+                        px[x + y * n] = Ink;
+                }
+
+                Stamp(px, n, 30, 20, 38, 28, 2, Soft);
+                Dot(px, n, 40, 18, 3, new Color32(236, 72, 153, 255));
+                Dot(px, n, 44, 22, 2, new Color32(236, 72, 153, 200));
             });
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using FashionRise.Application;
 using FashionRise.Content;
@@ -28,12 +29,17 @@ namespace FashionRise.Presentation.Screens
 
         Image? _pencilFace;
         Image? _eraserFace;
+        Image? _fillFace;
         readonly Image[] _sizeFaces = new Image[3];
         readonly Image[] _colorRings = new Image[8];
         readonly Image[] _fabricFaces = new Image[6];
+        readonly string?[] _fabricForColor = new string[8];
+        Text? _pairHint;
         int _sizeIndex = 1;
         int _colorIndex;
         int _fabricIndex = -1;
+        enum DrawTool { Pencil, Eraser, Fill }
+        DrawTool _tool = DrawTool.Pencil;
 
         static readonly int[] BrushSizes = { 3, 9, 20 };
 
@@ -43,7 +49,7 @@ namespace FashionRise.Presentation.Screens
             new(0.86f, 0.18f, 0.36f),
             new(0.12f, 0.30f, 0.68f),
             new(0.96f, 0.58f, 0.18f),
-            new(0.18f, 0.58f, 0.42f),
+            new(0.18f, 0.62f, 0.32f),
             new(0.78f, 0.40f, 0.72f),
             new(0.97f, 0.94f, 0.90f),
             new(0.48f, 0.48f, 0.52f),
@@ -51,7 +57,7 @@ namespace FashionRise.Presentation.Screens
 
         static readonly string[] ColorNames =
         {
-            "Ink", "Rose", "Navy", "Gold", "Mint", "Orchid", "Cream", "Grey"
+            "Ink", "Rose", "Navy", "Gold", "Green", "Orchid", "Cream", "Grey"
         };
 
         static readonly (string name, Color color, int radius)[] Fabrics =
@@ -259,6 +265,7 @@ namespace FashionRise.Presentation.Screens
 
             _pencilFace = MakeIconTool(rail, "Pencil", FrUiSprites.IconPencil, t, SelectPencil, 58f).GetComponent<Image>();
             _eraserFace = MakeIconTool(rail, "Eraser", FrUiSprites.IconEraser, t, SelectEraser, 58f).GetComponent<Image>();
+            _fillFace = MakeIconTool(rail, "Fill", FrUiSprites.IconFill, t, SelectFill, 58f).GetComponent<Image>();
 
             AddSectionLabel(rail, "SIZE", t);
             for (var i = 0; i < 3; i++)
@@ -321,6 +328,12 @@ namespace FashionRise.Presentation.Screens
                 _fabricFaces[i] = MakeFabricChip(rail, Fabrics[i].name, Fabrics[i].color, idx,
                     () => SelectFabric(idx));
             }
+
+            _pairHint = FrUiFactory.AddLabel(rail, "Pairs", "Tap color, then fabric", t, 10, FontStyle.Normal,
+                TextAnchor.MiddleCenter, useSecondaryTextColor: true);
+            var pairLe = _pairHint.GetComponent<LayoutElement>() ?? _pairHint.gameObject.AddComponent<LayoutElement>();
+            pairLe.minHeight = 36f;
+            pairLe.preferredHeight = 44f;
 
             AddSectionLabel(rail, "MODEL", t);
             MakeIconTool(rail, "Girl", FrUiSprites.IconGirl, t, () =>
@@ -619,32 +632,39 @@ namespace FashionRise.Presentation.Screens
 
         void SelectPencil()
         {
+            _tool = DrawTool.Pencil;
+            _pad.FillBucketActive = false;
             _pad.EraserActive = false;
-            if (_fabricIndex >= 0)
-                ApplyFabricBrush(_fabricIndex);
-            else
-            {
-                _pad.SetBrushColor(InkColors[_colorIndex]);
-                _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
-            }
-
-            HighlightTool(true);
+            _pad.SetBrushColor(InkColors[_colorIndex]);
+            _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
+            HighlightTool();
             FlashHint("Pencil — draw clothes");
         }
 
         void SelectEraser()
         {
+            _tool = DrawTool.Eraser;
+            _pad.FillBucketActive = false;
             _pad.EraserActive = true;
-            HighlightTool(false);
+            HighlightTool();
             FlashHint("Eraser — rub to erase");
+        }
+
+        void SelectFill()
+        {
+            _tool = DrawTool.Fill;
+            _pad.EraserActive = false;
+            _pad.FillBucketActive = true;
+            _pad.SetBrushColor(InkColors[_colorIndex]);
+            HighlightTool();
+            FlashHint("Fill — tap inside a closed shape");
         }
 
         void SetSize(int index)
         {
             _sizeIndex = Mathf.Clamp(index, 0, BrushSizes.Length - 1);
-            _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
-            if (!_pad.EraserActive)
-                HighlightTool(true);
+            if (_tool != DrawTool.Fill)
+                _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
 
             for (var i = 0; i < _sizeFaces.Length; i++)
             {
@@ -662,9 +682,33 @@ namespace FashionRise.Presentation.Screens
         {
             _colorIndex = Mathf.Clamp(index, 0, InkColors.Length - 1);
             _pad.SetBrushColor(InkColors[_colorIndex]);
-            _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
-            _pad.EraserActive = false;
-            HighlightTool(true);
+            if (_tool == DrawTool.Eraser)
+                SelectPencil();
+            else if (_tool == DrawTool.Fill)
+            {
+                _pad.FillBucketActive = true;
+                _pad.EraserActive = false;
+            }
+            else
+            {
+                _pad.EraserActive = false;
+                _pad.FillBucketActive = false;
+                _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
+            }
+
+            var bound = _fabricForColor[_colorIndex];
+            if (!string.IsNullOrEmpty(bound))
+            {
+                for (var i = 0; i < Fabrics.Length; i++)
+                {
+                    if (!string.Equals(Fabrics[i].name, bound, System.StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    _fabricIndex = i;
+                    break;
+                }
+            }
+
+            HighlightTool();
             for (var i = 0; i < _colorRings.Length; i++)
             {
                 if (_colorRings[i] == null)
@@ -675,41 +719,45 @@ namespace FashionRise.Presentation.Screens
                 _colorRings[i].transform.localScale = i == _colorIndex ? Vector3.one * 1.12f : Vector3.one;
             }
 
-            FlashHint(ColorNames[_colorIndex]);
-            if (App != null)
-                App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
+            RefreshPairHint();
+            FlashHint(string.IsNullOrEmpty(bound)
+                ? ColorNames[_colorIndex] + " — pick a fabric"
+                : ColorNames[_colorIndex] + " → " + bound);
+            PersistMaterialSession();
         }
 
         void SelectFabric(int index)
         {
             _fabricIndex = Mathf.Clamp(index, 0, Fabrics.Length - 1);
-            ApplyFabricBrush(_fabricIndex);
-            _pad.EraserActive = false;
-            HighlightTool(true);
+            // Pair fabric with the active ink color (keep painting THAT color)
+            _fabricForColor[_colorIndex] = Fabrics[_fabricIndex].name;
+            _pad.SetBrushColor(InkColors[_colorIndex]);
+            if (_tool == DrawTool.Fill)
+            {
+                _pad.FillBucketActive = true;
+                _pad.EraserActive = false;
+            }
+            else
+            {
+                _tool = DrawTool.Pencil;
+                _pad.EraserActive = false;
+                _pad.FillBucketActive = false;
+                _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
+            }
+
+            HighlightTool();
             ClearFabricSelection();
             if (_fabricFaces[_fabricIndex] != null)
                 _fabricFaces[_fabricIndex].transform.localScale = Vector3.one * 1.06f;
-            FlashHint(Fabrics[_fabricIndex].name + " fabric");
-            if (App != null)
-            {
-                App.CreateDesign.SketchFabricName = Fabrics[_fabricIndex].name;
-                App.CreateDesign.MaterialId = Fabrics[_fabricIndex].name.ToLowerInvariant();
-            }
+            RefreshPairHint();
+            FlashHint(ColorNames[_colorIndex] + " → " + Fabrics[_fabricIndex].name);
+            PersistMaterialSession();
         }
 
         void ApplyFabricBrush(int index)
         {
-            var f = Fabrics[index];
-            _pad.SetBrushColor(f.color);
-            _pad.SetBrushRadius(f.radius);
-            _sizeIndex = f.radius <= 8 ? 0 : f.radius <= 13 ? 1 : 2;
-            for (var i = 0; i < _sizeFaces.Length; i++)
-            {
-                if (_sizeFaces[i] != null)
-                    _sizeFaces[i].color = i == _sizeIndex
-                        ? new Color(_theme.Accent.r, _theme.Accent.g, _theme.Accent.b, 0.35f)
-                        : _theme.ButtonFace;
-            }
+            // Kept for compatibility — fabric no longer recolors the brush (pairs with ink color).
+            _fabricIndex = Mathf.Clamp(index, 0, Fabrics.Length - 1);
         }
 
         void ClearFabricSelection()
@@ -721,19 +769,83 @@ namespace FashionRise.Presentation.Screens
             }
         }
 
-        void HighlightTool(bool pencil)
+        void HighlightTool()
         {
-            if (_pencilFace != null)
-                _pencilFace.color = pencil ? _theme.Accent : _theme.ButtonFace;
-            if (_eraserFace != null)
-                _eraserFace.color = pencil ? _theme.ButtonFace : new Color(1f, 0.82f, 0.88f, 1f);
+            void Style(Image? face, bool on)
+            {
+                if (face == null)
+                    return;
+                face.color = on ? _theme.Accent : _theme.ButtonFace;
+                var icon = face.transform.Find("Icon")?.GetComponent<Image>();
+                if (icon != null)
+                    icon.color = on ? Color.white : _theme.MidnightNavy;
+            }
 
-            var pIcon = _pencilFace != null ? _pencilFace.transform.Find("Icon")?.GetComponent<Image>() : null;
-            var eIcon = _eraserFace != null ? _eraserFace.transform.Find("Icon")?.GetComponent<Image>() : null;
-            if (pIcon != null)
-                pIcon.color = pencil ? Color.white : _theme.MidnightNavy;
-            if (eIcon != null)
-                eIcon.color = _theme.MidnightNavy;
+            Style(_pencilFace, _tool == DrawTool.Pencil);
+            Style(_eraserFace, _tool == DrawTool.Eraser);
+            Style(_fillFace, _tool == DrawTool.Fill);
+            if (_tool == DrawTool.Eraser && _eraserFace != null)
+                _eraserFace.color = new Color(1f, 0.82f, 0.88f, 1f);
+        }
+
+        void RefreshPairHint()
+        {
+            if (_pairHint == null)
+                return;
+            var pairs = BuildMaterialPairs();
+            _pairHint.text = string.IsNullOrEmpty(pairs)
+                ? "Tap color, then fabric"
+                : pairs.Replace(';', '\n');
+        }
+
+        string BuildMaterialPairs()
+        {
+            var parts = new List<string>();
+            for (var i = 0; i < _fabricForColor.Length; i++)
+            {
+                var f = _fabricForColor[i];
+                if (string.IsNullOrEmpty(f))
+                    continue;
+                parts.Add(ColorNames[i] + ":" + f);
+            }
+
+            return string.Join(";", parts);
+        }
+
+        void PersistMaterialSession()
+        {
+            if (App == null)
+                return;
+            App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
+            if (_fabricIndex >= 0)
+            {
+                App.CreateDesign.SketchFabricName = Fabrics[_fabricIndex].name;
+                App.CreateDesign.MaterialId = Fabrics[_fabricIndex].name.ToLowerInvariant();
+            }
+
+            App.CreateDesign.SketchMaterialPairs = BuildMaterialPairs();
+        }
+
+        void RestoreMaterialPairsFromSession()
+        {
+            var raw = App?.CreateDesign.SketchMaterialPairs?.Trim() ?? "";
+            if (string.IsNullOrEmpty(raw))
+                return;
+            foreach (var part in raw.Split(';'))
+            {
+                var bits = part.Split(':');
+                if (bits.Length != 2)
+                    continue;
+                var colorName = bits[0].Trim();
+                var fabricName = bits[1].Trim();
+                var ci = System.Array.FindIndex(ColorNames,
+                    n => string.Equals(n, colorName, System.StringComparison.OrdinalIgnoreCase));
+                if (ci < 0)
+                    continue;
+                _fabricForColor[ci] = fabricName;
+            }
+
+            RefreshPairHint();
         }
 
         void CyclePose()
@@ -798,15 +910,31 @@ namespace FashionRise.Presentation.Screens
                 return;
 
             SketchFigureTemplate? forced = null;
-            if (payload is SketchNavContext ctx && ctx.Figure.HasValue)
-                forced = ctx.Figure;
+            var restore = false;
+            if (payload is SketchNavContext ctx)
+            {
+                if (ctx.Figure.HasValue)
+                    forced = ctx.Figure;
+                restore = ctx.RestoreSketch;
+            }
             else if (payload is SketchFigureTemplate fig)
                 forced = fig;
+
+            RestoreMaterialPairsFromSession();
 
             if (!_padBootstrapped)
             {
                 _padBootstrapped = true;
                 BootstrapPadReference(forced);
+                if (restore)
+                    TryRestoreInkLayer();
+                return;
+            }
+
+            if (restore)
+            {
+                TryRestoreInkLayer();
+                FlashHint("Edit your sketch — then MAGIC!");
                 return;
             }
 
@@ -834,6 +962,23 @@ namespace FashionRise.Presentation.Screens
                 FlashHint(string.IsNullOrEmpty(err) ? "Could not load photo" : err);
         }
 
+        void TryRestoreInkLayer()
+        {
+            var ink = App.CreateDesign.LastInkImagePath?.Trim() ?? "";
+            if (string.IsNullOrEmpty(ink))
+            {
+                // Fall back: keep whatever is on the pad if still in memory
+                if (_pad.HasInk())
+                    FlashHint("Your sketch is still here");
+                return;
+            }
+
+            if (_pad.TryLoadInkFromFile(ink, out var err))
+                FlashHint("Sketch restored — edit away!");
+            else
+                FlashHint(string.IsNullOrEmpty(err) ? "Could not restore sketch" : err);
+        }
+
         void ContinueToEnhancement()
         {
             if (!_pad.HasInk())
@@ -842,16 +987,19 @@ namespace FashionRise.Presentation.Screens
                 return;
             }
 
+            PersistMaterialSession();
             var path = _pad.SavePngToPersistentData("canvas");
             App.CreateDesign.SketchReference = "file:" + path.Replace('\\', '/');
-            if (_fabricIndex >= 0)
+            try
             {
-                App.CreateDesign.SketchFabricName = Fabrics[_fabricIndex].name;
-                App.CreateDesign.MaterialId = Fabrics[_fabricIndex].name.ToLowerInvariant();
+                var inkPath = _pad.SaveInkPngToPersistentData("ink");
+                App.CreateDesign.LastInkImagePath = inkPath;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"FashionRise could not save ink layer: {ex.Message}");
             }
 
-            if (_colorIndex >= 0 && _colorIndex < ColorNames.Length)
-                App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
             FlashHint("Magic…");
             if (App.Navigation != null)
                 _ = App.Navigation.NavigateToAsync(ScreenId.SketchEnhancement,

@@ -30,6 +30,13 @@ namespace FashionRise.Application
         public string SketchFabricName { get; set; } = "";
         /// <summary>Last ink/color name chosen on the sketch studio (e.g. Rose).</summary>
         public string SketchColorName { get; set; } = "";
+        /// <summary>
+        /// Color→fabric pairs from the studio, e.g. <c>Green:Silk;Grey:Denim</c>.
+        /// Magic uses these so a silk blouse and denim jeans stay distinct.
+        /// </summary>
+        public string SketchMaterialPairs { get; set; } = "";
+        /// <summary>Ink-only PNG path so Edit sketch can restore strokes.</summary>
+        public string LastInkImagePath { get; set; } = "";
         public string LastSketchJobId { get; set; } = "";
         public string LastSketchSummary { get; set; } = "";
         /// <summary>Public HTTP URL of the last Magic polish look image (if any).</summary>
@@ -69,6 +76,8 @@ namespace FashionRise.Application
             PendingReferenceImagePath = "";
             SketchFabricName = "";
             SketchColorName = "";
+            SketchMaterialPairs = "";
+            LastInkImagePath = "";
             ClearLastLook();
             PersistedDesignId = "";
         }

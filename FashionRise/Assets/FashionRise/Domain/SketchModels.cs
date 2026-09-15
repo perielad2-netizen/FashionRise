@@ -35,6 +35,8 @@ namespace FashionRise.Domain
         public string FabricName { get; set; } = "";
         /// <summary>Color name from sketch studio (Rose, Navy, …).</summary>
         public string ColorName { get; set; } = "";
+        /// <summary>Color→fabric pairs, e.g. <c>Green:Silk;Grey:Denim</c>.</summary>
+        public string MaterialPairs { get; set; } = "";
         /// <summary>
         /// Invoked as soon as the polish job id is known (before the long wait), so the UI can recover if polling fails.
         /// </summary>

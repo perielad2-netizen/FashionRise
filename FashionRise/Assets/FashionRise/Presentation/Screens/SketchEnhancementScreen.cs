@@ -233,6 +233,7 @@ namespace FashionRise.Presentation.Screens
                     LocalSketchForVision = App.CreateDesign.SketchReference,
                     FabricName = App.CreateDesign.SketchFabricName ?? "",
                     ColorName = App.CreateDesign.SketchColorName ?? "",
+                    MaterialPairs = App.CreateDesign.SketchMaterialPairs ?? "",
                     OnJobStarted = jobId =>
                     {
                         if (!string.IsNullOrWhiteSpace(jobId))
@@ -330,21 +331,38 @@ namespace FashionRise.Presentation.Screens
             if (string.IsNullOrEmpty(fabric))
                 fabric = App.CreateDesign.MaterialId?.Trim() ?? "";
             var color = App.CreateDesign.SketchColorName?.Trim() ?? "";
+            var pairs = App.CreateDesign.SketchMaterialPairs?.Trim() ?? "";
 
             var sb = new System.Text.StringBuilder();
             sb.Append("Polish this kid fashion sketch into a chic, shareable look. ");
-            sb.Append("Keep the same pose and garment shapes. ");
-            if (!string.IsNullOrEmpty(fabric))
+            sb.Append("Keep the SAME garment shapes AND the SAME colors visible in the sketch. ");
+            sb.Append("Do not recolor a green blouse into gray or merge separate garments into one dress. ");
+
+            if (!string.IsNullOrEmpty(pairs))
+            {
+                sb.Append("Color-to-fabric map (apply per region by matching sketch ink colors): ");
+                foreach (var part in pairs.Split(';'))
+                {
+                    var bits = part.Split(':');
+                    if (bits.Length != 2)
+                        continue;
+                    var cName = bits[0].Trim();
+                    var fName = bits[1].Trim();
+                    sb.Append(cName).Append(" areas use ").Append(fName)
+                        .Append(" (").Append(FabricLookHint(fName)).Append("). ");
+                }
+            }
+            else if (!string.IsNullOrEmpty(fabric))
             {
                 sb.Append("Primary fabric chosen by the designer: ").Append(fabric).Append(". ");
                 sb.Append(FabricLookHint(fabric)).Append(' ');
             }
 
             if (!string.IsNullOrEmpty(color))
-                sb.Append("Accent / ink color direction: ").Append(color).Append(". ");
+                sb.Append("Last selected studio color: ").Append(color).Append(". ");
 
             sb.Append(
-                "Make the clothes look fashion-forward and nearly real — believable fabric, drape, and lighting — " +
+                "Make each colored region look fashion-forward and nearly real for its paired fabric — " +
                 "while staying true to what was drawn.");
             return sb.ToString();
         }

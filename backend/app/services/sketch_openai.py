@@ -114,6 +114,21 @@ def _user_text(job: AIJob) -> str:
             f"Primary fabric (must appear in image_prompt and the final look): {fabric.strip()}. "
             "Describe realistic material qualities for this fabric."
         )
+    pairs = d.get("material_pairs")
+    if isinstance(pairs, str) and pairs.strip():
+        mapped = []
+        for part in pairs.split(";"):
+            bits = part.split(":", 1)
+            if len(bits) != 2:
+                continue
+            c_name, f_name = bits[0].strip(), bits[1].strip()
+            if c_name and f_name:
+                mapped.append(f"{c_name} ink → {f_name} fabric ({_fabric_render_hint(f_name)})")
+        if mapped:
+            parts.append(
+                "Per-region color→fabric map (match these colors in the sketch; do not recolor):\n- "
+                + "\n- ".join(mapped)
+            )
     color = d.get("color")
     if isinstance(color, str) and color.strip():
         parts.append(f"Color direction from the studio palette: {color.strip()}.")
@@ -173,16 +188,20 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
 
     fabric = _fabric_from_job(job)
     fabric_clause = ""
-    if fabric:
+    pairs_clause = _material_pairs_clause(job)
+    if pairs_clause:
+        fabric_clause = pairs_clause
+    elif fabric:
         fabric_clause = (
             f"The designer chose {fabric} — render the garments in {_fabric_render_hint(fabric)}. "
         )
 
     return (
         "Edit THIS uploaded fashion sketch into a chic, high-fashion look. "
-        "Keep the SAME pose, body proportions, neckline, sleeve style, hem length, and outfit silhouette. "
-        "Upgrade the clothes to look nearly real and runway-ready: believable fabric, elegant drape, "
-        "soft studio lighting, and fashion-magazine polish — still clearly the same design the child drew. "
+        "Keep the SAME pose, body proportions, neckline, sleeve style, hem length, outfit silhouette, "
+        "AND the SAME colors already painted in the sketch (e.g. a green blouse must stay green; "
+        "a gray skirt must stay gray — never merge them into one recolored dress). "
+        "Upgrade each garment region with nearly-real fabric, elegant drape, and soft studio lighting. "
         f"{fabric_clause}"
         f"{prompt} "
         "Result: a fashionable fashion illustration / editorial croquis on a clean light background, "
@@ -190,6 +209,30 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         "Do NOT invent a new character or different clothes. "
         "Avoid: cartoonish flat fills, fuzzy undefined texture, storybook scenes, text, watermark, collage."
     )[:3800]
+
+
+def _material_pairs_clause(job: AIJob | None) -> str:
+    if job is None:
+        return ""
+    d = job.input_data or {}
+    pairs = d.get("material_pairs")
+    if not isinstance(pairs, str) or not pairs.strip():
+        return ""
+    chunks: list[str] = []
+    for part in pairs.split(";"):
+        bits = part.split(":", 1)
+        if len(bits) != 2:
+            continue
+        c_name, f_name = bits[0].strip(), bits[1].strip()
+        if not c_name or not f_name:
+            continue
+        chunks.append(
+            f"Wherever the sketch shows {c_name} ink, render that garment region in "
+            f"{_fabric_render_hint(f_name)} while keeping the {c_name} color family."
+        )
+    if not chunks:
+        return ""
+    return " ".join(chunks) + " "
 
 
 def _image_edit_file(sketch: bytes, mime: str) -> tuple[str, BytesIO, str]:

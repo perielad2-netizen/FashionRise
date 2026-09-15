@@ -34,6 +34,7 @@ namespace FashionRise.Presentation.Sketch
         bool _drawing;
         Vector2 _lastPixel;
         bool _eraser;
+        bool _fillBucket;
         [SerializeField] [Range(0.25f, 1f)] float referenceStrength = 1f;
         Color32[] _scratchComposite = null!;
 
@@ -70,7 +71,23 @@ namespace FashionRise.Presentation.Sketch
         public bool EraserActive
         {
             get => _eraser;
-            set => _eraser = value;
+            set
+            {
+                _eraser = value;
+                if (value)
+                    _fillBucket = false;
+            }
+        }
+
+        public bool FillBucketActive
+        {
+            get => _fillBucket;
+            set
+            {
+                _fillBucket = value;
+                if (value)
+                    _eraser = false;
+            }
         }
 
         /// <summary>How strongly the reference shows through (1 = full, lower = fainter for tracing).</summary>
@@ -239,22 +256,32 @@ namespace FashionRise.Presentation.Sketch
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            _drawing = true;
-            PushUndoSnapshot();
-            if (TryPixel(eventData, out var p))
+            if (!TryPixel(eventData, out var p))
+                return;
+
+            if (_fillBucket)
             {
-                _lastPixel = p;
-                StampBrush(p);
+                PushUndoSnapshot();
+                FloodFill(Mathf.RoundToInt(p.x), Mathf.RoundToInt(p.y));
                 CompositeToTexture();
                 _tex.Apply();
+                _drawing = false;
+                return;
             }
+
+            _drawing = true;
+            PushUndoSnapshot();
+            _lastPixel = p;
+            StampBrush(p);
+            CompositeToTexture();
+            _tex.Apply();
         }
 
         public void OnPointerUp(PointerEventData eventData) => _drawing = false;
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (!_drawing || !TryPixel(eventData, out var p))
+            if (_fillBucket || !_drawing || !TryPixel(eventData, out var p))
                 return;
             LinePixels(_lastPixel, p);
             _lastPixel = p;
@@ -331,6 +358,70 @@ namespace FashionRise.Presentation.Sketch
             }
         }
 
+        /// <summary>
+        /// Paint-bucket fill: flood connected pixels similar to the tap (empty pockets or same color).
+        /// Stops at different ink / outlines so closed garment areas fill cleanly.
+        /// </summary>
+        void FloodFill(int startX, int startY)
+        {
+            startX = Mathf.Clamp(startX, 0, textureWidth - 1);
+            startY = Mathf.Clamp(startY, 0, textureHeight - 1);
+            var target = _inkPixels[startX + startY * textureWidth];
+            var fill = (Color32)brushColor;
+            fill.a = 255;
+            if (ColorsMatch(target, fill, 8))
+                return;
+
+            // Cap work so a tap on open background can't freeze the device.
+            var maxPixels = textureWidth * textureHeight;
+            var visited = new bool[maxPixels];
+            var queue = new Queue<int>(4096);
+            var start = startX + startY * textureWidth;
+            queue.Enqueue(start);
+            visited[start] = true;
+            var painted = 0;
+
+            while (queue.Count > 0 && painted < maxPixels)
+            {
+                var i = queue.Dequeue();
+                if (!ColorsMatch(_inkPixels[i], target, 28))
+                    continue;
+
+                _inkPixels[i] = fill;
+                painted++;
+
+                var x = i % textureWidth;
+                var y = i / textureWidth;
+                TryEnqueue(x + 1, y);
+                TryEnqueue(x - 1, y);
+                TryEnqueue(x, y + 1);
+                TryEnqueue(x, y - 1);
+            }
+
+            void TryEnqueue(int x, int y)
+            {
+                if (x < 0 || y < 0 || x >= textureWidth || y >= textureHeight)
+                    return;
+                var idx = x + y * textureWidth;
+                if (visited[idx])
+                    return;
+                visited[idx] = true;
+                queue.Enqueue(idx);
+            }
+        }
+
+        static bool ColorsMatch(Color32 a, Color32 b, int tol)
+        {
+            // Treat nearly-empty ink as the same "empty" region for filling closed shapes.
+            if (a.a < 12 && b.a < 12)
+                return true;
+            if (a.a < 12 || b.a < 12)
+                return false;
+            return Mathf.Abs(a.r - b.r) <= tol &&
+                   Mathf.Abs(a.g - b.g) <= tol &&
+                   Mathf.Abs(a.b - b.b) <= tol;
+        }
+
         /// <summary>True if ink differs from empty (alpha).</summary>
         public bool HasInk(int alphaThreshold = 12)
         {
@@ -354,6 +445,77 @@ namespace FashionRise.Presentation.Sketch
             _tex.Apply();
             File.WriteAllBytes(path, _tex.EncodeToPNG());
             return path;
+        }
+
+        /// <summary>Saves ink layer only (transparent PNG) so Edit sketch can restore strokes.</summary>
+        public string SaveInkPngToPersistentData(string fileNamePrefix = "ink")
+        {
+            var dir = Path.Combine(UnityEngine.Application.persistentDataPath, "Sketches");
+            Directory.CreateDirectory(dir);
+            var name = $"{fileNamePrefix}_{System.DateTime.UtcNow:yyyyMMdd_HHmmssfff}.png";
+            var path = Path.Combine(dir, name);
+            var inkTex = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            inkTex.SetPixels32(_inkPixels);
+            inkTex.Apply();
+            File.WriteAllBytes(path, inkTex.EncodeToPNG());
+            Destroy(inkTex);
+            return path;
+        }
+
+        /// <summary>Restores ink from a previously saved ink PNG (keeps current reference/mannequin).</summary>
+        public bool TryLoadInkFromFile(string absolutePath, out string? errorMessage)
+        {
+            errorMessage = null;
+            var path = (absolutePath ?? "").Trim();
+            if (path.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+                path = path["file:".Length..].TrimStart('/');
+
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                errorMessage = "Ink file not found.";
+                return false;
+            }
+
+            try
+            {
+                var bytes = File.ReadAllBytes(path);
+                var src = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (!src.LoadImage(bytes))
+                {
+                    Destroy(src);
+                    errorMessage = "Could not read ink PNG.";
+                    return false;
+                }
+
+                ClearInkOnly();
+                // Nearest-neighbor blit into ink buffer
+                for (var y = 0; y < textureHeight; y++)
+                for (var x = 0; x < textureWidth; x++)
+                {
+                    var u = (x + 0.5f) / textureWidth;
+                    var v = (y + 0.5f) / textureHeight;
+                    var c = (Color32)src.GetPixelBilinear(u, v);
+                    if (c.a < 8)
+                        continue;
+                    c.a = 255;
+                    _inkPixels[x + y * textureWidth] = c;
+                }
+
+                Destroy(src);
+                _undo.Clear();
+                CompositeToTexture();
+                _tex.Apply();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+                return false;
+            }
         }
     }
 }

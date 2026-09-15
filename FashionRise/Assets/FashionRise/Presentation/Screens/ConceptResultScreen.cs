@@ -53,7 +53,7 @@ namespace FashionRise.Presentation.Screens
             _previewHost = stage.GetComponent<RectTransform>();
             _previewHost.anchorMin = new Vector2(0f, 0f);
             _previewHost.anchorMax = new Vector2(1f, 1f);
-            _previewHost.offsetMin = new Vector2(24f, 168f);
+            _previewHost.offsetMin = new Vector2(24f, 218f);
             _previewHost.offsetMax = new Vector2(-24f, -96f);
             var stageImg = stage.GetComponent<Image>();
             stageImg.sprite = FrUiSprites.RoundSoft;
@@ -102,7 +102,7 @@ namespace FashionRise.Presentation.Screens
             bottomRt.anchorMin = new Vector2(0f, 0f);
             bottomRt.anchorMax = new Vector2(1f, 0f);
             bottomRt.pivot = new Vector2(0.5f, 0f);
-            bottomRt.sizeDelta = new Vector2(0f, 160f);
+            bottomRt.sizeDelta = new Vector2(0f, 210f);
             var bottomV = bottom.GetComponent<VerticalLayoutGroup>();
             bottomV.padding = new RectOffset(20, 20, 6, 14);
             bottomV.spacing = 8f;
@@ -119,6 +119,7 @@ namespace FashionRise.Presentation.Screens
             bodyLe.preferredHeight = 32f;
 
             FrUiFactory.AddButton(bottom.transform, "SHARE!", t, ShareLook, FrButtonEmphasis.Primary);
+            FrUiFactory.AddButton(bottom.transform, "Edit sketch", t, EditSketch);
 
             var row = new GameObject("NavRow", typeof(RectTransform), typeof(HorizontalLayoutGroup),
                 typeof(LayoutElement));
@@ -144,9 +145,20 @@ namespace FashionRise.Presentation.Screens
 
         void OnDestroy() => ClearPreviewTexture();
 
+        void EditSketch()
+        {
+            // Keep ink + material pairs; clear only the Magic look so Magical isn't sticky.
+            App.CreateDesign.ClearLastLook();
+            if (App.Navigation != null)
+                _ = App.Navigation.NavigateToAsync(ScreenId.SketchCanvas,
+                    new SketchNavContext { RestoreSketch = true });
+        }
+
         void DrawAgain()
         {
             App.CreateDesign.ClearLastLook();
+            App.CreateDesign.LastInkImagePath = "";
+            App.CreateDesign.SketchMaterialPairs = "";
             if (App.Navigation != null)
                 _ = App.Navigation.NavigateToAsync(ScreenId.HomeDashboard);
         }

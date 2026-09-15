@@ -7,5 +7,8 @@ namespace FashionRise.Domain
 
         /// <summary>When true, enhancement screen auto-runs polish once.</summary>
         public bool AutoMagic { get; set; }
+
+        /// <summary>When true, sketch canvas restores the last ink layer for redesign.</summary>
+        public bool RestoreSketch { get; set; }
     }
 }
