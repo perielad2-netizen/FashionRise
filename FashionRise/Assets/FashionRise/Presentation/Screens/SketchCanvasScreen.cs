@@ -249,21 +249,16 @@ namespace FashionRise.Presentation.Screens
                 typeof(AspectRatioFitter));
             padGo.transform.SetParent(stage.transform, false);
             var padRt = padGo.GetComponent<RectTransform>();
-            padRt.anchorMin = Vector2.zero;
-            padRt.anchorMax = Vector2.one;
-            padRt.offsetMin = Vector2.zero;
-            padRt.offsetMax = Vector2.zero;
-            _pad = padGo.GetComponent<UiSketchPad>();
-            var fitter = padGo.GetComponent<AspectRatioFitter>();
-            // Prefer full vertical fill on phone/tablet studio
-            fitter.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
-            fitter.aspectRatio = _pad.TextureAspect;
-            var padMotionRt = padRt;
+            // Full stage height; width follows croquis aspect (tools overlay sides)
             padRt.anchorMin = new Vector2(0.5f, 0f);
             padRt.anchorMax = new Vector2(0.5f, 1f);
             padRt.pivot = new Vector2(0.5f, 0.5f);
             padRt.offsetMin = new Vector2(0f, 2f);
             padRt.offsetMax = new Vector2(0f, -2f);
+            _pad = padGo.GetComponent<UiSketchPad>();
+            var fitter = padGo.GetComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
+            fitter.aspectRatio = _pad.TextureAspect;
             var rim = padGo.GetComponent<RawImage>();
             rim.raycastTarget = true;
             rim.color = Color.white;
