@@ -30,20 +30,20 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "H", "Magic", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            FrUiFactory.AddLabel(col, "H", "MAGIC", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.UpperCenter);
             _blurb = FrUiFactory.AddLabel(col, "B",
-                "One tap turns your sketch into a cleaner fashion look.", t,
-                Mathf.RoundToInt(t.BodySize), FontStyle.Normal, TextAnchor.UpperCenter,
+                "One tap. Your sketch becomes a runway look.", t,
+                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Bold, TextAnchor.UpperCenter,
                 useSecondaryTextColor: true);
             _status = FrUiFactory.AddLabel(col, "St", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,
-                TextAnchor.UpperLeft);
+                TextAnchor.UpperCenter);
 
-            _magicBtn = FrUiFactory.AddButton(col, "Make it magical!", t, () => { _ = RunPolishAsync(); },
+            _magicBtn = FrUiFactory.AddButton(col, "MAKE IT MAGICAL!", t, () => { _ = RunPolishAsync(); },
                 FrButtonEmphasis.Primary);
             Enlarge(_magicBtn);
 
-            _seeLookBtn = FrUiFactory.AddButton(col, "See your look", t, () => { _ = OpenLastResultAsync(); },
+            _seeLookBtn = FrUiFactory.AddButton(col, "SEE YOUR LOOK", t, () => { _ = OpenLastResultAsync(); },
                 FrButtonEmphasis.Primary);
             Enlarge(_seeLookBtn);
 
@@ -114,15 +114,15 @@ namespace FashionRise.Presentation.Screens
 
             if (ready)
             {
-                _blurb.text = "Your look is ready — open it, or try Magic again under More.";
-                _status.text = "Ready.";
+                _blurb.text = "Your look is ready!";
+                _status.text = "Open it — or try Magic again under More…";
                 _magicBtn.gameObject.SetActive(false);
                 _seeLookBtn.gameObject.SetActive(true);
                 _retryBtn.gameObject.SetActive(_moreOpen);
             }
             else
             {
-                _blurb.text = "One tap turns your sketch into a cleaner fashion look.";
+                _blurb.text = "One tap. Your sketch becomes a runway look.";
                 if (string.IsNullOrWhiteSpace(_status.text) ||
                     _status.text is "Ready." or "Ready when you are.")
                     _status.text = "Ready when you are.";

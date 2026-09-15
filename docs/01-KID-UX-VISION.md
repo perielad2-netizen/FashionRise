@@ -1,24 +1,22 @@
-# FashionRise — kid UX vision & next slices
+# FashionRise — kid UX vision
 
 **Updated:** 2026-09-15
 
-## Shipped this session
-- Magic image shows in **Your look** (prior session)
-- **One-shot Magic happy path:** if a look already exists, Magic’s primary button is **See your look** (not Magical again). Retry is under **More… → Try magic again**.
-- While Magic is working, Magical is hidden so a second tap can’t start a conflicting job.
-- **Your look** drops “Try more magic”; **Draw again** clears the last look and returns Home.
-- Kid copy on Your look stays short (AI detail stays in Console).
+## Direction (inspired by fashion games, not a shop clone)
+Kids/teens 6+: visual-first runway studio. **Draw → Magic → Share** stays the product — we borrow:
+- Big model choice tiles
+- Soft studio atmosphere (blush / sky wash)
+- Bold primary CTAs (`CHOOSE`, `MAGIC!`, `SHARE!`)
+- Look framed on a stage
 
-## Layer 1 — Kid chrome (next)
-- Soft paper-room backgrounds, bigger CTAs, logo hero on Home
-- Pose carousel tiles instead of dense tool rows
-- Light motion: button squash, brief “done” beat when Your look opens
+We **do not** ship currency grids, inventory shops, or dress-up item catalogs in this pass.
 
-## Layer 2 — Dress-up studio
-- Colors / fabrics / accessory stickers on sketch or result
+## Shipped — Layer 1 chrome
+- Theme: rose runway studio (blush → sky gradient + soft light blobs)
+- Home: FashionRise logo hero + Girl/Boy croquis tiles
+- Sketch / Magic / Your look: stage frames, louder CTAs, pulse/press motion
+- One-shot Magic path preserved (See your look vs Magical)
 
-## Layer 3 — Share loop
-- Stronger one-tap Share + gallery runway
-
-## Principle
-One Magical run per sketch → land on Your look → Share or Draw again. Never invite a second Magical press as the obvious next step.
+## Next layers
+2. Pose carousel + color/fabric tray  
+3. Accessory stickers + share polish  

@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-09-15 — one-shot Magic UX (See your look primary; Magical retry under More)
+**Last updated:** 2026-09-15 — kid glam UI Layer 1 (studio chrome + model choice tiles)
 
-**Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Active work branch: **`cursor/windows-sync-clean-77c6`** ([PR #2](https://github.com/perielad2-netizen/FashionRise/pull/2)). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
+**Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Active work branch: **`cursor/kid-glam-ui-77c6`**. Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
 ---
 
@@ -13,30 +13,18 @@
 
 **Paused:** 2026-09-15. **Resume here next session.**
 
-### What works now (verified)
+### What works now
 
-- Local API on **port 8001**. Unity Base Url must match (`http://127.0.0.1:8001/api/v1`).
-- Kid loop: sketch → **Magic** (auto) → **Your look** shows the AI look image in-app.
-- Sketch-faithful Magic via OpenAI **`images.edit`**.
-- Windows project on GitHub: **`cursor/windows-sync-clean-77c6`**.
+- Magic look image in-app + one-shot Magic UX (prior).
+- **Kid glam Layer 1 UI:** blush→sky studio atmosphere, FashionRise logo hero, Girl/Boy croquis tiles, stage frames on sketch/look, bold CTAs + pulse/press motion.
+- Branch: `cursor/kid-glam-ui-77c6` (based on windows sync + Magic fixes).
 
-### UX this session (one-shot Magic)
+### Suggested next session
 
-Fixed the trap where pressing **Make it magical!** again felt like “session lost”:
-- If a look already exists → Magic primary is **See your look**
-- **Try magic again** lives under **More…**
-- Magical hidden while busy
-- Your look: **Share!** / **Draw again** (clears last look) / Home — no “Try more magic”
-
-Full kid/game chrome redesign still pending — see `docs/01-KID-UX-VISION.md`.
-
-### Suggested order for the *next* session
-
-1. **Play-test** one-shot Magic on device/Simulator after `git pull` of this branch.  
-2. **Kid chrome Layer 1** — Home / Sketch / Magic / Your look visual polish + light motion.  
-3. **Keep sketch-faithful Magic** — tune edit prompt only if looks drift.  
-4. **Viral share v2** — stronger caption + one-tap gallery publish.  
-5. **Pro door** — leave atelier under More… until viral loop feels great.
+1. Play-test glam UI on Simulator after pull.  
+2. Pose carousel + lighter sketch toolbar.  
+3. Color / fabric tray (Layer 2).  
+4. Share polish / gallery runway.
 
 ### Product vision (locked)
 

@@ -29,34 +29,28 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             _theme = t;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
-            root.GetComponent<Image>().color = Color.white;
-            var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "H", "Your sketch", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap * 0.85f, TextAnchor.UpperCenter);
+            FrUiFactory.AddLabel(col, "H", "DRAW", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.UpperCenter);
             FrUiFactory.AddLabel(col, "B",
-                "Draw clothes on the model. When you are happy, tap Magic!",
-                t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal, TextAnchor.UpperCenter, useSecondaryTextColor: true);
+                "Clothes on the model — then Magic!",
+                t, Mathf.RoundToInt(t.SubtitleSize), FontStyle.Bold, TextAnchor.UpperCenter, useSecondaryTextColor: true);
 
-            // Flexible host fills leftover space; pad fits inside at pad texture aspect (no stretch on tablet).
-            var hostGo = new GameObject("SketchPadHost", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
-            hostGo.transform.SetParent(col, false);
+            // Soft stage around the paper.
+            var stage = FrUiFactory.AddStageFrame(col, "SketchPadHost", t, 260f, 420f);
+            stage.GetComponent<LayoutElement>().flexibleHeight = 1f;
+            var hostGo = stage.gameObject;
             var hostImg = hostGo.GetComponent<Image>();
             hostImg.color = Color.white;
-            hostImg.raycastTarget = false;
-            var hostLe = hostGo.GetComponent<LayoutElement>();
-            hostLe.minHeight = 240f;
-            hostLe.preferredHeight = 400f;
-            hostLe.flexibleHeight = 1f;
-            hostLe.flexibleWidth = 1f;
 
             var padGo = new GameObject("SketchPad", typeof(RectTransform), typeof(RawImage), typeof(UiSketchPad),
                 typeof(AspectRatioFitter));
             padGo.transform.SetParent(hostGo.transform, false);
             var padRt = padGo.GetComponent<RectTransform>();
-            padRt.anchorMin = new Vector2(0.5f, 0.5f);
-            padRt.anchorMax = new Vector2(0.5f, 0.5f);
-            padRt.pivot = new Vector2(0.5f, 0.5f);
-            padRt.sizeDelta = new Vector2(400f, 533f);
+            padRt.anchorMin = new Vector2(0.06f, 0.05f);
+            padRt.anchorMax = new Vector2(0.94f, 0.95f);
+            padRt.offsetMin = Vector2.zero;
+            padRt.offsetMax = Vector2.zero;
             _pad = padGo.GetComponent<UiSketchPad>();
             var fitter = padGo.GetComponent<AspectRatioFitter>();
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
@@ -83,7 +77,14 @@ namespace FashionRise.Presentation.Screens
                 _pad.ClearAll();
                 _hint.text = "Drawing cleared; reference unchanged.";
             });
-            FrUiFactory.AddButton(col, "Magic!", t, ContinueToEnhancement, FrButtonEmphasis.Primary);
+            var magic = FrUiFactory.AddButton(col, "MAGIC!", t, ContinueToEnhancement, FrButtonEmphasis.Primary);
+            var magicLe = magic.GetComponent<LayoutElement>();
+            if (magicLe != null)
+            {
+                magicLe.minHeight = 72f;
+                magicLe.preferredHeight = 72f;
+            }
+
             FrUiFactory.AddButton(col, "Import photo", t, () =>
             {
                 if (App.Navigation != null)

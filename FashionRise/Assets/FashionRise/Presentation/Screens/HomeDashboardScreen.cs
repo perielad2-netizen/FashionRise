@@ -1,6 +1,7 @@
 using FashionRise.Application;
 using FashionRise.Core.Navigation;
 using FashionRise.Domain;
+using FashionRise.Presentation.Sketch;
 using FashionRise.UI;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,8 +9,8 @@ using UnityEngine.UI;
 namespace FashionRise.Presentation.Screens
 {
     /// <summary>
-    /// Kid front door: Girl / Boy → sketch → magic → share.
-    /// Pro atelier (create, gallery social, settings) stays under More.
+    /// Kid front door — visual-first model pick (inspired by fashion games, FashionRise owns the create loop).
+    /// Pro atelier stays under More.
     /// </summary>
     public sealed class HomeDashboardScreen : ScreenBase
     {
@@ -24,22 +25,21 @@ namespace FashionRise.Presentation.Screens
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
 
-            FrUiFactory.AddBrandLogoRow(col, t, 280f, 96f);
-            FrUiFactory.AddLabel(col, "H", "Draw. Magic. Share.", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            // Brand is the hero signal on this screen.
+            FrUiFactory.AddBrandLogoRow(col, t, 300f, 108f);
+            FrUiFactory.AddLabel(col, "H", "CHOOSE YOUR MODEL", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "B",
-                "Pick a model, draw your idea, tap Magic — then share your look.",
-                t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal, TextAnchor.UpperCenter, useSecondaryTextColor: true);
+            FrUiFactory.AddLabel(col, "B", "Then draw. Magic. Share.", t, Mathf.RoundToInt(t.SubtitleSize),
+                FontStyle.Bold, TextAnchor.UpperCenter, useSecondaryTextColor: true);
 
-            var girl = FrUiFactory.AddButton(col, "Girl model", t, () => OpenSketch(SketchFigureTemplate.Female),
-                FrButtonEmphasis.Primary);
-            EnlargePrimary(girl);
-            var boy = FrUiFactory.AddButton(col, "Boy model", t, () => OpenSketch(SketchFigureTemplate.Male),
-                FrButtonEmphasis.Primary);
-            EnlargePrimary(boy);
+            var row = FrUiFactory.AddHorizontalRow(col, "ModelRow", t.ControlGap);
+            FrUiFactory.AddModelChoiceTile(row, "Girl", "GIRL", SketchDefaultFigureGenerator.FemaleResourcePath, t,
+                () => OpenSketch(SketchFigureTemplate.Female));
+            FrUiFactory.AddModelChoiceTile(row, "Boy", "BOY", SketchDefaultFigureGenerator.MaleResourcePath, t,
+                () => OpenSketch(SketchFigureTemplate.Male));
 
-            FrUiFactory.AddButton(col, "More…", t, ToggleMore);
-            _moreHint = FrUiFactory.AddLabel(col, "MorePanel", "", t, Mathf.RoundToInt(t.BodySize * 0.95f),
+            FrUiFactory.AddButton(col, "More studio…", t, ToggleMore);
+            _moreHint = FrUiFactory.AddLabel(col, "MorePanel", "", t, Mathf.RoundToInt(t.CaptionSize),
                 FontStyle.Normal, TextAnchor.UpperCenter, useSecondaryTextColor: true);
 
             FrUiFactory.AddButton(col, "Gallery", t, () =>
@@ -89,11 +89,9 @@ namespace FashionRise.Presentation.Screens
         void SetMoreVisible(bool open)
         {
             _moreHint.text = open
-                ? "Studio tools for growing talent — gallery, atelier, profile."
+                ? "Gallery, atelier, profile — when you want more."
                 : " ";
 
-            // Gallery / Atelier / Profile / Settings are the last four buttons under More…
-            // They stay in hierarchy; we only toggle interactable + alpha via sibling names.
             var col = transform.Find("Root/Col");
             if (col == null)
                 return;
@@ -108,18 +106,6 @@ namespace FashionRise.Presentation.Screens
             var child = col.Find(name);
             if (child != null)
                 child.gameObject.SetActive(active);
-        }
-
-        static void EnlargePrimary(Button btn)
-        {
-            var le = btn.GetComponent<LayoutElement>();
-            if (le == null)
-                return;
-            le.minHeight = 72f;
-            le.preferredHeight = 72f;
-            var txt = btn.GetComponentInChildren<Text>();
-            if (txt != null)
-                txt.fontSize = Mathf.Max(txt.fontSize, 22);
         }
     }
 }

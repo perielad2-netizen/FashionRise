@@ -25,25 +25,21 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "H", "Your look", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            FrUiFactory.AddLabel(col, "H", "YOUR LOOK", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.UpperCenter);
+            FrUiFactory.AddLabel(col, "Tag", "exactly what you drew — polished", t,
+                Mathf.RoundToInt(t.CaptionSize), FontStyle.Italic, TextAnchor.UpperCenter, useSecondaryTextColor: true);
 
-            var previewHost = new GameObject("LookPreviewHost", typeof(RectTransform), typeof(LayoutElement));
-            previewHost.transform.SetParent(col, false);
-            var hostLe = previewHost.GetComponent<LayoutElement>();
-            hostLe.minHeight = 280f;
-            hostLe.preferredHeight = 480f;
-            hostLe.flexibleWidth = 1f;
-            hostLe.flexibleHeight = 0f;
+            var previewHost = FrUiFactory.AddStageFrame(col, "LookPreviewHost", t, 300f, 500f);
 
             var previewGo = new GameObject("LookPreview", typeof(RectTransform), typeof(RawImage),
                 typeof(AspectRatioFitter));
-            previewGo.transform.SetParent(previewHost.transform, false);
+            previewGo.transform.SetParent(previewHost, false);
             var previewRt = previewGo.GetComponent<RectTransform>();
-            previewRt.anchorMin = new Vector2(0.5f, 0.5f);
-            previewRt.anchorMax = new Vector2(0.5f, 0.5f);
-            previewRt.pivot = new Vector2(0.5f, 0.5f);
-            previewRt.sizeDelta = new Vector2(360f, 480f);
+            previewRt.anchorMin = new Vector2(0.08f, 0.06f);
+            previewRt.anchorMax = new Vector2(0.92f, 0.94f);
+            previewRt.offsetMin = Vector2.zero;
+            previewRt.offsetMax = Vector2.zero;
             _preview = previewGo.GetComponent<RawImage>();
             _preview.color = Color.white;
             _preview.raycastTarget = false;
@@ -51,15 +47,15 @@ namespace FashionRise.Presentation.Screens
             var fitter = previewGo.GetComponent<AspectRatioFitter>();
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             fitter.aspectRatio = 0.75f;
-            previewHost.SetActive(false);
+            previewHost.gameObject.SetActive(false);
 
             _body = FrUiFactory.AddLabel(col, "B", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,
-                TextAnchor.UpperLeft);
+                TextAnchor.UpperCenter);
             var bodyLe = _body.gameObject.AddComponent<LayoutElement>();
-            bodyLe.minHeight = 72f;
-            bodyLe.preferredHeight = 120f;
+            bodyLe.minHeight = 56f;
+            bodyLe.preferredHeight = 88f;
 
-            FrUiFactory.AddButton(col, "Share!", t, ShareLook, FrButtonEmphasis.Primary);
+            FrUiFactory.AddButton(col, "SHARE!", t, ShareLook, FrButtonEmphasis.Primary);
             FrUiFactory.AddButton(col, "Draw again", t, DrawAgain);
             FrUiFactory.AddButton(col, "Home", t, () =>
             {
@@ -85,22 +81,20 @@ namespace FashionRise.Presentation.Screens
             SetPreviewVisible(false);
 
             var sb = new StringBuilder();
-            sb.AppendLine("Magic finished!");
-            // Keep kid copy short — one friendly line from the summary if present.
+            sb.AppendLine("You made this!");
             var summary = App.CreateDesign.LastSketchSummary?.Trim() ?? "";
             if (!string.IsNullOrEmpty(summary))
             {
                 var firstLine = summary.Split('\n')[0].Trim();
-                if (firstLine.Length > 140)
-                    firstLine = firstLine.Substring(0, 137) + "…";
+                if (firstLine.Length > 110)
+                    firstLine = firstLine.Substring(0, 107) + "…";
                 if (!string.IsNullOrEmpty(firstLine) &&
                     !firstLine.StartsWith("Source:", StringComparison.OrdinalIgnoreCase) &&
                     !firstLine.StartsWith("Model:", StringComparison.OrdinalIgnoreCase))
                     sb.AppendLine(firstLine);
             }
 
-            sb.AppendLine();
-            sb.AppendLine("Share your look, or draw another one.");
+            sb.AppendLine("Share it — or draw another look.");
             _body.text = sb.ToString();
 
             var imageUrl = App.CreateDesign.LastPolishedImageUrl?.Trim() ?? "";
