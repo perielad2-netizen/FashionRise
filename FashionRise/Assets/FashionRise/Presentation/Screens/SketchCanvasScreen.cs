@@ -13,8 +13,8 @@ using UnityEngine.UI;
 namespace FashionRise.Presentation.Screens
 {
     /// <summary>
-    /// Kid fashion studio: full-height mannequin, brush tools left, colors/fabrics right.
-    /// Draw → MAGIC! — not a wall of category buttons.
+    /// Modern kid fashion studio — icon tools, circular color picker, fabric chips,
+    /// full-height mannequin. Draw → MAGIC!
     /// </summary>
     public sealed class SketchCanvasScreen : ScreenBase
     {
@@ -26,13 +26,10 @@ namespace FashionRise.Presentation.Screens
         bool _padBootstrapped;
         bool _refDimmed;
 
-        Button _pencilBtn = null!;
-        Button _eraserBtn = null!;
         Image? _pencilFace;
         Image? _eraserFace;
         readonly Image[] _sizeFaces = new Image[3];
-        readonly Image[] _sizeDots = new Image[3];
-        readonly Image[] _colorFaces = new Image[8];
+        readonly Image[] _colorRings = new Image[8];
         readonly Image[] _fabricFaces = new Image[6];
         int _sizeIndex = 1;
         int _colorIndex;
@@ -43,18 +40,18 @@ namespace FashionRise.Presentation.Screens
         static readonly Color[] InkColors =
         {
             new(0.10f, 0.08f, 0.08f),
-            new(0.78f, 0.12f, 0.28f),
-            new(0.12f, 0.28f, 0.62f),
-            new(0.95f, 0.55f, 0.15f),
-            new(0.20f, 0.55f, 0.38f),
-            new(0.72f, 0.42f, 0.72f),
-            new(0.95f, 0.92f, 0.88f),
-            new(0.45f, 0.45f, 0.48f),
+            new(0.86f, 0.18f, 0.36f),
+            new(0.12f, 0.30f, 0.68f),
+            new(0.96f, 0.58f, 0.18f),
+            new(0.18f, 0.58f, 0.42f),
+            new(0.78f, 0.40f, 0.72f),
+            new(0.97f, 0.94f, 0.90f),
+            new(0.48f, 0.48f, 0.52f),
         };
 
         static readonly string[] ColorNames =
         {
-            "Ink", "Rose", "Navy", "Gold", "Emerald", "Orchid", "Cream", "Grey"
+            "Ink", "Rose", "Navy", "Gold", "Mint", "Orchid", "Cream", "Grey"
         };
 
         static readonly (string name, Color color, int radius)[] Fabrics =
@@ -83,140 +80,135 @@ namespace FashionRise.Presentation.Screens
 
         void BuildTopBar(RectTransform root, FashionRiseTheme t)
         {
-            var top = new GameObject("TopBar", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup));
+            var top = new GameObject("TopBar", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             var topRt = top.GetComponent<RectTransform>();
             topRt.SetParent(root, false);
             topRt.anchorMin = new Vector2(0f, 1f);
             topRt.anchorMax = new Vector2(1f, 1f);
             topRt.pivot = new Vector2(0.5f, 1f);
-            topRt.sizeDelta = new Vector2(0f, 72f);
+            topRt.sizeDelta = new Vector2(0f, 70f);
             topRt.anchoredPosition = Vector2.zero;
-            top.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.42f);
             var topH = top.GetComponent<HorizontalLayoutGroup>();
-            topH.padding = new RectOffset(12, 12, 8, 8);
-            topH.spacing = 10f;
+            topH.padding = new RectOffset(14, 14, 10, 8);
+            topH.spacing = 12f;
             topH.childAlignment = TextAnchor.MiddleCenter;
             topH.childControlWidth = true;
             topH.childForceExpandWidth = false;
             topH.childControlHeight = true;
             topH.childForceExpandHeight = true;
 
-            var back = FrUiFactory.AddButton(top.transform, "←", t, () =>
+            var back = MakeCircleIconButton(top.transform, "Back", null, "‹", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.GoBackAsync();
-            });
-            ShrinkBarButton(back, 52f);
+            }, 48f);
+            var backLe = back.gameObject.AddComponent<LayoutElement>();
+            backLe.minWidth = 48f;
+            backLe.preferredWidth = 48f;
+            backLe.minHeight = 48f;
 
-            _hint = FrUiFactory.AddLabel(top.transform, "Hint", "Pick a brush — draw your look", t,
-                Mathf.RoundToInt(t.BodySize), FontStyle.Bold, TextAnchor.MiddleCenter);
-            var hintLe = _hint.GetComponent<LayoutElement>() ?? _hint.gameObject.AddComponent<LayoutElement>();
+            var hintWrap = new GameObject("HintWrap", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            hintWrap.transform.SetParent(top.transform, false);
+            var hintImg = hintWrap.GetComponent<Image>();
+            hintImg.sprite = FrUiSprites.RoundPill;
+            hintImg.type = Image.Type.Sliced;
+            hintImg.color = new Color(1f, 1f, 1f, 0.78f);
+            var hintLe = hintWrap.GetComponent<LayoutElement>();
             hintLe.flexibleWidth = 1f;
-            hintLe.minHeight = 36f;
+            hintLe.minHeight = 44f;
+            hintLe.preferredHeight = 44f;
+            _hint = FrUiFactory.AddLabel(hintWrap.transform, "Hint", "Draw your look", t,
+                Mathf.RoundToInt(t.BodySize), FontStyle.Bold, TextAnchor.MiddleCenter);
+            var hTxt = _hint.GetComponent<LayoutElement>();
+            if (hTxt != null)
+            {
+                hTxt.minHeight = 36f;
+                hTxt.preferredHeight = 36f;
+                hTxt.flexibleWidth = 1f;
+            }
 
-            var magic = FrUiFactory.AddButton(top.transform, "MAGIC!", t, ContinueToEnhancement,
-                FrButtonEmphasis.Primary);
-            ShrinkBarButton(magic, 132f);
-            var magicMotion = magic.GetComponent<FrUiMotion>();
-            if (magicMotion != null)
-                magicMotion.EnablePulse(true);
+            var hRt = _hint.GetComponent<RectTransform>();
+            hRt.anchorMin = Vector2.zero;
+            hRt.anchorMax = Vector2.one;
+            hRt.offsetMin = new Vector2(12f, 4f);
+            hRt.offsetMax = new Vector2(-12f, -4f);
+
+            var magic = MakeMagicButton(top.transform, t);
+            var magicLe = magic.gameObject.AddComponent<LayoutElement>();
+            magicLe.minWidth = 128f;
+            magicLe.preferredWidth = 136f;
+            magicLe.minHeight = 50f;
+            magicLe.preferredHeight = 50f;
+        }
+
+        Button MakeMagicButton(Transform parent, FashionRiseTheme t)
+        {
+            var go = new GameObject("Magic", typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var face = go.GetComponent<Image>();
+            face.sprite = FrUiSprites.RoundPill;
+            face.type = Image.Type.Sliced;
+            face.color = t.Accent;
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0.55f, 0.12f, 0.28f, 0.28f);
+            shadow.effectDistance = new Vector2(0f, -5f);
+
+            var icon = new GameObject("Spark", typeof(Image));
+            icon.transform.SetParent(go.transform, false);
+            var iconImg = icon.GetComponent<Image>();
+            iconImg.sprite = FrUiSprites.IconSparkle;
+            iconImg.color = Color.white;
+            iconImg.raycastTarget = false;
+            var irt = icon.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0f, 0.5f);
+            irt.anchorMax = new Vector2(0f, 0.5f);
+            irt.pivot = new Vector2(0f, 0.5f);
+            irt.anchoredPosition = new Vector2(14f, 0f);
+            irt.sizeDelta = new Vector2(26f, 26f);
+
+            var txtGo = new GameObject("Text", typeof(Text));
+            txtGo.transform.SetParent(go.transform, false);
+            var txt = txtGo.GetComponent<Text>();
+            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            txt.text = "MAGIC!";
+            txt.fontSize = 20;
+            txt.fontStyle = FontStyle.Bold;
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.color = Color.white;
+            txt.raycastTarget = false;
+            var trt = txtGo.GetComponent<RectTransform>();
+            trt.anchorMin = Vector2.zero;
+            trt.anchorMax = Vector2.one;
+            trt.offsetMin = new Vector2(34f, 0f);
+            trt.offsetMax = new Vector2(-10f, 0f);
+
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = face;
+            btn.onClick.AddListener(ContinueToEnhancement);
+            var motion = go.AddComponent<FrUiMotion>();
+            motion.EnablePulse(true);
+            HookPress(go, motion);
+            return btn;
         }
 
         void BuildStudio(RectTransform root, FashionRiseTheme t)
         {
-            // Full-bleed stage: mannequin owns the height; tool rails float on each side.
             var studio = new GameObject("Studio", typeof(RectTransform));
             var studioRt = studio.GetComponent<RectTransform>();
             studioRt.SetParent(root, false);
             studioRt.anchorMin = Vector2.zero;
             studioRt.anchorMax = Vector2.one;
-            studioRt.offsetMin = new Vector2(4f, 6f);
-            studioRt.offsetMax = new Vector2(-4f, -76f);
+            studioRt.offsetMin = new Vector2(0f, 4f);
+            studioRt.offsetMax = new Vector2(0f, -72f);
 
             BuildMannequinStage(studioRt, t);
-            // Rails after stage so they sit on top and receive taps
-            BuildLeftRail(studioRt, t);
-            BuildRightRail(studioRt, t);
-        }
-
-        void BuildLeftRail(RectTransform studio, FashionRiseTheme t)
-        {
-            var rail = MakeScrollRail(studio, "LeftRail", true, 100f, t);
-            AddRailCaption(rail, "BRUSH", t);
-
-            _pencilBtn = AddLabeledTool(rail, "Pencil", "Pencil", t, SelectPencil, out _pencilFace);
-            _eraserBtn = AddLabeledTool(rail, "Eraser", "Eraser", t, SelectEraser, out _eraserFace);
-
-            AddRailCaption(rail, "SIZE", t);
-            for (var i = 0; i < 3; i++)
-            {
-                var idx = i;
-                var dotPx = 10f + i * 10f;
-                AddSizeTool(rail, idx, dotPx, t, () => SetSize(idx));
-            }
-
-            AddRailCaption(rail, "EDIT", t);
-            AddLabeledTool(rail, "Undo", "Undo", t, () =>
-            {
-                if (!_pad.UndoStroke())
-                    FlashHint("Nothing to undo");
-                else
-                    FlashHint("Undone!");
-            }, out _);
-            AddLabeledTool(rail, "Clear", "Clear", t, () =>
-            {
-                _pad.ClearAll();
-                FlashHint("Fresh page");
-            }, out _);
-            AddLabeledTool(rail, "Fade", "Fade", t, ToggleReferenceDim, out _);
-        }
-
-        void BuildRightRail(RectTransform studio, FashionRiseTheme t)
-        {
-            var rail = MakeScrollRail(studio, "RightRail", false, 110f, t);
-
-            AddRailCaption(rail, "COLOR", t);
-            var colorGrid = MakeGrid(rail, "ColorGrid", 2, 6f);
-            for (var i = 0; i < InkColors.Length; i++)
-            {
-                var idx = i;
-                _colorFaces[i] = AddColorSwatch(colorGrid, InkColors[i], ColorNames[i], () =>
-                {
-                    _fabricIndex = -1;
-                    ClearFabricSelection();
-                    SetColor(idx);
-                });
-            }
-
-            AddRailCaption(rail, "FABRIC", t);
-            for (var i = 0; i < Fabrics.Length; i++)
-            {
-                var idx = i;
-                _fabricFaces[i] = AddFabricTile(rail, Fabrics[i].name, Fabrics[i].color, () => SelectFabric(idx));
-            }
-
-            AddRailCaption(rail, "MODEL", t);
-            AddLabeledTool(rail, "Girl", "Girl", t, () =>
-            {
-                SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Female;
-                ApplyCurrentFigure("Girl model");
-            }, out _);
-            AddLabeledTool(rail, "Boy", "Boy", t, () =>
-            {
-                SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Male;
-                ApplyCurrentFigure("Boy model");
-            }, out _);
-            AddLabeledTool(rail, "Photo", "Photo", t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.NavigateToAsync(ScreenId.ImportSketch);
-            }, out _);
-            AddLabeledTool(rail, "Pose", "Pose", t, CyclePose, out _);
+            BuildLeftTools(studioRt, t);
+            BuildRightPalette(studioRt, t);
         }
 
         void BuildMannequinStage(RectTransform studio, FashionRiseTheme t)
         {
-            var stage = new GameObject("MannequinStage", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+            var stage = new GameObject("MannequinStage", typeof(RectTransform), typeof(Image));
             stage.transform.SetParent(studio, false);
             var stageRt = stage.GetComponent<RectTransform>();
             stageRt.anchorMin = Vector2.zero;
@@ -224,37 +216,33 @@ namespace FashionRise.Presentation.Screens
             stageRt.offsetMin = Vector2.zero;
             stageRt.offsetMax = Vector2.zero;
             var stageImg = stage.GetComponent<Image>();
-            stageImg.color = new Color(1f, 1f, 1f, 0.5f);
-            var outline = stage.AddComponent<Outline>();
-            outline.effectColor = new Color(t.Champagne.r, t.Champagne.g, t.Champagne.b, 0.75f);
-            outline.effectDistance = new Vector2(2.5f, -2.5f);
-            var shadow = stage.AddComponent<Shadow>();
-            shadow.effectColor = new Color(0.25f, 0.1f, 0.16f, 0.2f);
-            shadow.effectDistance = new Vector2(0f, -10f);
+            stageImg.color = new Color(1f, 1f, 1f, 0.22f);
+            stageImg.raycastTarget = false;
 
-            var spot = new GameObject("Spotlight", typeof(RectTransform), typeof(Image));
-            spot.transform.SetParent(stage.transform, false);
-            var spotRt = spot.GetComponent<RectTransform>();
-            spotRt.anchorMin = new Vector2(0.05f, 0.01f);
-            spotRt.anchorMax = new Vector2(0.95f, 0.99f);
-            spotRt.offsetMin = Vector2.zero;
-            spotRt.offsetMax = Vector2.zero;
-            var spotImg = spot.GetComponent<Image>();
-            spotImg.color = new Color(t.Champagne.r, t.Champagne.g, t.Champagne.b, 0.3f);
-            spotImg.raycastTarget = false;
-            var spotMotion = spot.AddComponent<FrUiMotion>();
-            spotMotion.EnablePulse(true);
+            // Soft runway glow behind the figure
+            var glow = new GameObject("RunwayGlow", typeof(RectTransform), typeof(Image));
+            glow.transform.SetParent(stage.transform, false);
+            var glowRt = glow.GetComponent<RectTransform>();
+            glowRt.anchorMin = new Vector2(0.18f, 0.02f);
+            glowRt.anchorMax = new Vector2(0.82f, 0.98f);
+            glowRt.offsetMin = Vector2.zero;
+            glowRt.offsetMax = Vector2.zero;
+            var glowImg = glow.GetComponent<Image>();
+            glowImg.sprite = FrUiSprites.Circle;
+            glowImg.color = new Color(t.Champagne.r, t.Champagne.g, t.Champagne.b, 0.45f);
+            glowImg.raycastTarget = false;
+            var glowMotion = glow.AddComponent<FrUiMotion>();
+            glowMotion.EnablePulse(true);
 
             var padGo = new GameObject("SketchPad", typeof(RectTransform), typeof(RawImage), typeof(UiSketchPad),
                 typeof(AspectRatioFitter));
             padGo.transform.SetParent(stage.transform, false);
             var padRt = padGo.GetComponent<RectTransform>();
-            // Full stage height; width follows croquis aspect (tools overlay sides)
             padRt.anchorMin = new Vector2(0.5f, 0f);
             padRt.anchorMax = new Vector2(0.5f, 1f);
             padRt.pivot = new Vector2(0.5f, 0.5f);
-            padRt.offsetMin = new Vector2(0f, 2f);
-            padRt.offsetMax = new Vector2(0f, -2f);
+            padRt.offsetMin = new Vector2(0f, 8f);
+            padRt.offsetMax = new Vector2(0f, -8f);
             _pad = padGo.GetComponent<UiSketchPad>();
             var fitter = padGo.GetComponent<AspectRatioFitter>();
             fitter.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
@@ -264,45 +252,133 @@ namespace FashionRise.Presentation.Screens
             rim.color = Color.white;
         }
 
-        static Transform MakeScrollRail(RectTransform parent, string name, bool left, float width, FashionRiseTheme t)
+        void BuildLeftTools(RectTransform studio, FashionRiseTheme t)
+        {
+            var rail = MakeFloatingRail(studio, "LeftTools", true, 78f, t);
+            AddSectionLabel(rail, "DRAW", t);
+
+            _pencilFace = MakeIconTool(rail, "Pencil", FrUiSprites.IconPencil, t, SelectPencil, 58f).GetComponent<Image>();
+            _eraserFace = MakeIconTool(rail, "Eraser", FrUiSprites.IconEraser, t, SelectEraser, 58f).GetComponent<Image>();
+
+            AddSectionLabel(rail, "SIZE", t);
+            for (var i = 0; i < 3; i++)
+            {
+                var idx = i;
+                var size = 14f + i * 10f;
+                _sizeFaces[i] = MakeSizeChip(rail, idx, size, t, () => SetSize(idx));
+            }
+
+            AddSectionLabel(rail, "FIX", t);
+            MakeIconTool(rail, "Undo", FrUiSprites.IconUndo, t, () =>
+            {
+                if (!_pad.UndoStroke())
+                    FlashHint("Nothing to undo");
+                else
+                    FlashHint("Undone");
+            }, 52f);
+            MakeIconTool(rail, "Clear", FrUiSprites.IconClear, t, () =>
+            {
+                _pad.ClearAll();
+                FlashHint("Fresh page");
+            }, 52f);
+            MakeIconTool(rail, "Fade", FrUiSprites.IconFade, t, ToggleReferenceDim, 52f);
+        }
+
+        void BuildRightPalette(RectTransform studio, FashionRiseTheme t)
+        {
+            var rail = MakeFloatingRail(studio, "RightPalette", false, 92f, t);
+
+            AddSectionLabel(rail, "COLOR", t);
+            var colorRow = new GameObject("Colors", typeof(RectTransform), typeof(GridLayoutGroup),
+                typeof(LayoutElement), typeof(ContentSizeFitter));
+            colorRow.transform.SetParent(rail, false);
+            var grid = colorRow.GetComponent<GridLayoutGroup>();
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 2;
+            grid.cellSize = new Vector2(36f, 36f);
+            grid.spacing = new Vector2(8f, 8f);
+            grid.childAlignment = TextAnchor.UpperCenter;
+            var gridLe = colorRow.GetComponent<LayoutElement>();
+            gridLe.minHeight = 160f;
+            gridLe.preferredHeight = 160f;
+            colorRow.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            for (var i = 0; i < InkColors.Length; i++)
+            {
+                var idx = i;
+                _colorRings[i] = MakeColorDot(colorRow.transform, InkColors[i], () =>
+                {
+                    _fabricIndex = -1;
+                    ClearFabricSelection();
+                    SetColor(idx);
+                });
+            }
+
+            AddSectionLabel(rail, "FABRIC", t);
+            for (var i = 0; i < Fabrics.Length; i++)
+            {
+                var idx = i;
+                _fabricFaces[i] = MakeFabricChip(rail, Fabrics[i].name, Fabrics[i].color, idx,
+                    () => SelectFabric(idx));
+            }
+
+            AddSectionLabel(rail, "MODEL", t);
+            MakeIconTool(rail, "Girl", FrUiSprites.IconGirl, t, () =>
+            {
+                SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Female;
+                ApplyCurrentFigure("Girl model");
+            }, 52f);
+            MakeIconTool(rail, "Boy", FrUiSprites.IconBoy, t, () =>
+            {
+                SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Male;
+                ApplyCurrentFigure("Boy model");
+            }, 52f);
+            MakeIconTool(rail, "Photo", FrUiSprites.IconPhoto, t, () =>
+            {
+                if (App.Navigation != null)
+                    _ = App.Navigation.NavigateToAsync(ScreenId.ImportSketch);
+            }, 52f);
+            MakeIconTool(rail, "Pose", FrUiSprites.IconPose, t, CyclePose, 52f);
+        }
+
+        static Transform MakeFloatingRail(RectTransform parent, string name, bool left, float width,
+            FashionRiseTheme t)
         {
             var shell = new GameObject(name, typeof(RectTransform), typeof(Image));
             shell.transform.SetParent(parent, false);
-            var shellRt = shell.GetComponent<RectTransform>();
+            var rt = shell.GetComponent<RectTransform>();
             if (left)
             {
-                shellRt.anchorMin = new Vector2(0f, 0f);
-                shellRt.anchorMax = new Vector2(0f, 1f);
-                shellRt.pivot = new Vector2(0f, 0.5f);
-                shellRt.sizeDelta = new Vector2(width, 0f);
-                shellRt.anchoredPosition = new Vector2(0f, 0f);
+                rt.anchorMin = new Vector2(0f, 0.02f);
+                rt.anchorMax = new Vector2(0f, 0.98f);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.sizeDelta = new Vector2(width, 0f);
+                rt.anchoredPosition = new Vector2(8f, 0f);
             }
             else
             {
-                shellRt.anchorMin = new Vector2(1f, 0f);
-                shellRt.anchorMax = new Vector2(1f, 1f);
-                shellRt.pivot = new Vector2(1f, 0.5f);
-                shellRt.sizeDelta = new Vector2(width, 0f);
-                shellRt.anchoredPosition = Vector2.zero;
+                rt.anchorMin = new Vector2(1f, 0.02f);
+                rt.anchorMax = new Vector2(1f, 0.98f);
+                rt.pivot = new Vector2(1f, 0.5f);
+                rt.sizeDelta = new Vector2(width, 0f);
+                rt.anchoredPosition = new Vector2(-8f, 0f);
             }
 
-            shell.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.72f);
-            var shellOutline = shell.AddComponent<Outline>();
-            shellOutline.effectColor = new Color(t.AccentMuted.r, t.AccentMuted.g, t.AccentMuted.b, 0.45f);
-            shellOutline.effectDistance = new Vector2(1.5f, -1.5f);
-            var shellShadow = shell.AddComponent<Shadow>();
-            shellShadow.effectColor = new Color(0.2f, 0.08f, 0.14f, 0.16f);
-            shellShadow.effectDistance = new Vector2(left ? 4f : -4f, -4f);
+            var face = shell.GetComponent<Image>();
+            face.sprite = FrUiSprites.RoundSoft;
+            face.type = Image.Type.Sliced;
+            face.color = new Color(1f, 1f, 1f, 0.82f);
+            var shadow = shell.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0.2f, 0.08f, 0.14f, 0.18f);
+            shadow.effectDistance = new Vector2(left ? 5f : -5f, -6f);
 
-            var scrollGo = new GameObject("Scroll", typeof(RectTransform), typeof(ScrollRect), typeof(Image));
+            var scrollGo = new GameObject("Scroll", typeof(RectTransform), typeof(ScrollRect), typeof(RectMask2D));
             scrollGo.transform.SetParent(shell.transform, false);
             var scrollRt = scrollGo.GetComponent<RectTransform>();
             scrollRt.anchorMin = Vector2.zero;
             scrollRt.anchorMax = Vector2.one;
-            scrollRt.offsetMin = new Vector2(4f, 4f);
-            scrollRt.offsetMax = new Vector2(-4f, -4f);
-            scrollGo.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.01f);
-            scrollGo.GetComponent<Image>().raycastTarget = true;
+            scrollRt.offsetMin = new Vector2(6f, 8f);
+            scrollRt.offsetMax = new Vector2(-6f, -8f);
 
             var content = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup),
                 typeof(ContentSizeFitter));
@@ -311,117 +387,145 @@ namespace FashionRise.Presentation.Screens
             contentRt.anchorMin = new Vector2(0f, 1f);
             contentRt.anchorMax = new Vector2(1f, 1f);
             contentRt.pivot = new Vector2(0.5f, 1f);
-            contentRt.anchoredPosition = Vector2.zero;
-            contentRt.sizeDelta = new Vector2(0f, 0f);
+            contentRt.sizeDelta = Vector2.zero;
             var v = content.GetComponent<VerticalLayoutGroup>();
-            v.padding = new RectOffset(6, 6, 8, 12);
-            v.spacing = 6f;
+            v.padding = new RectOffset(4, 4, 4, 10);
+            v.spacing = 8f;
             v.childAlignment = TextAnchor.UpperCenter;
             v.childControlWidth = true;
             v.childForceExpandWidth = true;
             v.childControlHeight = true;
             v.childForceExpandHeight = false;
-            var fit = content.GetComponent<ContentSizeFitter>();
-            fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            fit.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            content.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             var scroll = scrollGo.GetComponent<ScrollRect>();
             scroll.content = contentRt;
+            scroll.viewport = scrollRt;
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = 28f;
-            scroll.viewport = scrollRt;
-
+            scroll.scrollSensitivity = 32f;
             return content.transform;
         }
 
-        static Transform MakeGrid(Transform parent, string name, int columns, float spacing)
+        static void AddSectionLabel(Transform parent, string text, FashionRiseTheme t)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(GridLayoutGroup), typeof(LayoutElement),
-                typeof(ContentSizeFitter));
-            go.transform.SetParent(parent, false);
-            var grid = go.GetComponent<GridLayoutGroup>();
-            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = columns;
-            grid.cellSize = new Vector2(48f, 48f);
-            grid.spacing = new Vector2(spacing, spacing);
-            grid.childAlignment = TextAnchor.UpperCenter;
-            var le = go.GetComponent<LayoutElement>();
-            le.minHeight = 110f;
-            le.preferredHeight = 110f;
-            le.flexibleWidth = 1f;
-            var fit = go.GetComponent<ContentSizeFitter>();
-            fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            return go.transform;
-        }
-
-        static void AddRailCaption(Transform rail, string text, FashionRiseTheme t)
-        {
-            var label = FrUiFactory.AddLabel(rail, text, text, t, Mathf.RoundToInt(t.CaptionSize), FontStyle.Bold,
+            var label = FrUiFactory.AddLabel(parent, text, text, t, 11, FontStyle.Bold,
                 TextAnchor.MiddleCenter, useSecondaryTextColor: true);
             var le = label.GetComponent<LayoutElement>() ?? label.gameObject.AddComponent<LayoutElement>();
-            le.minHeight = 16f;
-            le.preferredHeight = 18f;
+            le.minHeight = 14f;
+            le.preferredHeight = 16f;
         }
 
-        Button AddLabeledTool(Transform parent, string name, string label, FashionRiseTheme t, UnityAction onClick,
-            out Image face)
+        Button MakeIconTool(Transform parent, string name, Sprite icon, FashionRiseTheme t, UnityAction onClick,
+            float size)
         {
             var go = new GameObject(name + "_Tool", typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
-            face = go.GetComponent<Image>();
+            var face = go.GetComponent<Image>();
+            face.sprite = FrUiSprites.Circle;
             face.color = t.ButtonFace;
             var le = go.GetComponent<LayoutElement>();
-            le.minHeight = 48f;
-            le.preferredHeight = 50f;
-            le.flexibleWidth = 1f;
-            var outline = go.AddComponent<Outline>();
-            outline.effectColor = new Color(t.AccentMuted.r, t.AccentMuted.g, t.AccentMuted.b, 0.5f);
-            outline.effectDistance = new Vector2(1.2f, -1.2f);
+            le.minHeight = size;
+            le.preferredHeight = size;
+            le.minWidth = size;
+            le.preferredWidth = size;
+            le.flexibleWidth = 0f;
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0.2f, 0.1f, 0.15f, 0.16f);
+            shadow.effectDistance = new Vector2(0f, -3f);
 
-            var txtGo = new GameObject("Label", typeof(Text));
-            txtGo.transform.SetParent(go.transform, false);
-            var txt = txtGo.GetComponent<Text>();
-            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            txt.text = label;
-            txt.fontSize = 15;
-            txt.fontStyle = FontStyle.Bold;
-            txt.alignment = TextAnchor.MiddleCenter;
-            txt.color = t.MidnightNavy;
-            txt.raycastTarget = false;
-            var trt = txtGo.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
-            trt.offsetMin = Vector2.zero;
-            trt.offsetMax = Vector2.zero;
+            var iconGo = new GameObject("Icon", typeof(Image));
+            iconGo.transform.SetParent(go.transform, false);
+            var iconImg = iconGo.GetComponent<Image>();
+            iconImg.sprite = icon;
+            iconImg.color = t.MidnightNavy;
+            iconImg.raycastTarget = false;
+            iconImg.preserveAspect = true;
+            var irt = iconGo.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0.5f, 0.5f);
+            irt.anchorMax = new Vector2(0.5f, 0.5f);
+            irt.sizeDelta = new Vector2(size * 0.55f, size * 0.55f);
 
             var btn = go.GetComponent<Button>();
             btn.targetGraphic = face;
             btn.onClick.AddListener(onClick);
-            HookPress(go, go.AddComponent<FrUiMotion>());
+            var motion = go.AddComponent<FrUiMotion>();
+            HookPress(go, motion);
             return btn;
         }
 
-        void AddSizeTool(Transform parent, int index, float dotPx, FashionRiseTheme t, UnityAction onClick)
+        Button MakeCircleIconButton(Transform parent, string name, Sprite? icon, string fallbackGlyph,
+            FashionRiseTheme t, UnityAction onClick, float size)
+        {
+            var go = new GameObject(name + "_Circle", typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var face = go.GetComponent<Image>();
+            face.sprite = FrUiSprites.Circle;
+            face.color = new Color(1f, 1f, 1f, 0.9f);
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0.2f, 0.1f, 0.15f, 0.14f);
+            shadow.effectDistance = new Vector2(0f, -3f);
+
+            if (icon != null)
+            {
+                var iconGo = new GameObject("Icon", typeof(Image));
+                iconGo.transform.SetParent(go.transform, false);
+                var iconImg = iconGo.GetComponent<Image>();
+                iconImg.sprite = icon;
+                iconImg.color = t.MidnightNavy;
+                iconImg.raycastTarget = false;
+                var irt = iconGo.GetComponent<RectTransform>();
+                irt.anchorMin = new Vector2(0.5f, 0.5f);
+                irt.anchorMax = new Vector2(0.5f, 0.5f);
+                irt.sizeDelta = new Vector2(size * 0.5f, size * 0.5f);
+            }
+            else
+            {
+                var txtGo = new GameObject("Glyph", typeof(Text));
+                txtGo.transform.SetParent(go.transform, false);
+                var txt = txtGo.GetComponent<Text>();
+                txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                txt.text = fallbackGlyph;
+                txt.fontSize = 28;
+                txt.fontStyle = FontStyle.Bold;
+                txt.alignment = TextAnchor.MiddleCenter;
+                txt.color = t.MidnightNavy;
+                txt.raycastTarget = false;
+                var trt = txtGo.GetComponent<RectTransform>();
+                trt.anchorMin = Vector2.zero;
+                trt.anchorMax = Vector2.one;
+                trt.offsetMin = Vector2.zero;
+                trt.offsetMax = Vector2.zero;
+            }
+
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = face;
+            btn.onClick.AddListener(onClick);
+            var motion = go.AddComponent<FrUiMotion>();
+            HookPress(go, motion);
+            var rt = go.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(size, size);
+            return btn;
+        }
+
+        Image MakeSizeChip(Transform parent, int index, float dotPx, FashionRiseTheme t, UnityAction onClick)
         {
             var go = new GameObject("Size" + index, typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
             var face = go.GetComponent<Image>();
+            face.sprite = FrUiSprites.Circle;
             face.color = t.ButtonFace;
-            _sizeFaces[index] = face;
             var le = go.GetComponent<LayoutElement>();
             le.minHeight = 44f;
-            le.preferredHeight = 46f;
-            le.flexibleWidth = 1f;
-            go.AddComponent<Outline>().effectColor = new Color(t.AccentMuted.r, t.AccentMuted.g, t.AccentMuted.b, 0.4f);
+            le.preferredHeight = 44f;
 
             var dot = new GameObject("Dot", typeof(Image));
             dot.transform.SetParent(go.transform, false);
             var dotImg = dot.GetComponent<Image>();
+            dotImg.sprite = FrUiSprites.Circle;
             dotImg.color = t.MidnightNavy;
             dotImg.raycastTarget = false;
-            _sizeDots[index] = dotImg;
             var drt = dot.GetComponent<RectTransform>();
             drt.anchorMin = new Vector2(0.5f, 0.5f);
             drt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -431,47 +535,57 @@ namespace FashionRise.Presentation.Screens
             btn.targetGraphic = face;
             btn.onClick.AddListener(onClick);
             HookPress(go, go.AddComponent<FrUiMotion>());
-        }
-
-        Image AddColorSwatch(Transform parent, Color color, string tip, UnityAction onClick)
-        {
-            var go = new GameObject(tip + "_Color", typeof(Image), typeof(Button), typeof(LayoutElement));
-            go.transform.SetParent(parent, false);
-            var face = go.GetComponent<Image>();
-            face.color = color;
-            var outline = go.AddComponent<Outline>();
-            outline.effectColor = new Color(0.2f, 0.1f, 0.15f, 0.4f);
-            outline.effectDistance = new Vector2(1.5f, -1.5f);
-            var btn = go.GetComponent<Button>();
-            btn.targetGraphic = face;
-            btn.onClick.AddListener(onClick);
-            HookPress(go, go.AddComponent<FrUiMotion>());
             return face;
         }
 
-        Image AddFabricTile(Transform parent, string name, Color color, UnityAction onClick)
+        Image MakeColorDot(Transform parent, Color color, UnityAction onClick)
+        {
+            var go = new GameObject("ColorDot", typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var ring = go.GetComponent<Image>();
+            ring.sprite = FrUiSprites.Circle;
+            ring.color = new Color(1f, 1f, 1f, 0.95f);
+
+            var fill = new GameObject("Fill", typeof(Image));
+            fill.transform.SetParent(go.transform, false);
+            var fillImg = fill.GetComponent<Image>();
+            fillImg.sprite = FrUiSprites.Circle;
+            fillImg.color = color;
+            fillImg.raycastTarget = false;
+            var frt = fill.GetComponent<RectTransform>();
+            frt.anchorMin = new Vector2(0.5f, 0.5f);
+            frt.anchorMax = new Vector2(0.5f, 0.5f);
+            frt.sizeDelta = new Vector2(28f, 28f);
+
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = ring;
+            btn.onClick.AddListener(onClick);
+            HookPress(go, go.AddComponent<FrUiMotion>());
+            return ring;
+        }
+
+        Image MakeFabricChip(Transform parent, string name, Color color, int seed, UnityAction onClick)
         {
             var go = new GameObject(name + "_Fabric", typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
             var face = go.GetComponent<Image>();
-            face.color = color;
+            face.sprite = FrUiSprites.FabricSwatch(color, 100 + seed);
+            face.color = Color.white;
             var le = go.GetComponent<LayoutElement>();
-            le.minHeight = 42f;
-            le.preferredHeight = 44f;
-            le.flexibleWidth = 1f;
-            var outline = go.AddComponent<Outline>();
-            outline.effectColor = new Color(0.2f, 0.1f, 0.15f, 0.35f);
-            outline.effectDistance = new Vector2(1.5f, -1.5f);
+            le.minHeight = 40f;
+            le.preferredHeight = 40f;
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0.15f, 0.08f, 0.12f, 0.2f);
+            shadow.effectDistance = new Vector2(0f, -2f);
 
             var txtGo = new GameObject("Name", typeof(Text));
             txtGo.transform.SetParent(go.transform, false);
             var txt = txtGo.GetComponent<Text>();
             txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             txt.text = name;
-            txt.fontSize = 13;
+            txt.fontSize = 12;
             txt.fontStyle = FontStyle.Bold;
             txt.alignment = TextAnchor.MiddleCenter;
-            // Dark fabrics get light text
             var lum = color.r * 0.3f + color.g * 0.59f + color.b * 0.11f;
             txt.color = lum < 0.45f ? Color.white : new Color(0.15f, 0.1f, 0.14f, 1f);
             txt.raycastTarget = false;
@@ -490,7 +604,7 @@ namespace FashionRise.Presentation.Screens
 
         static void HookPress(GameObject go, FrUiMotion motion)
         {
-            var trigger = go.AddComponent<EventTrigger>();
+            var trigger = go.GetComponent<EventTrigger>() ?? go.AddComponent<EventTrigger>();
             void Hook(EventTriggerType type, UnityAction<BaseEventData> cb)
             {
                 var e = new EventTrigger.Entry { eventID = type };
@@ -501,18 +615,6 @@ namespace FashionRise.Presentation.Screens
             Hook(EventTriggerType.PointerDown, _ => motion.SetPressed(true));
             Hook(EventTriggerType.PointerUp, _ => motion.SetPressed(false));
             Hook(EventTriggerType.PointerExit, _ => motion.SetPressed(false));
-        }
-
-        static void ShrinkBarButton(Button btn, float width)
-        {
-            var le = btn.GetComponent<LayoutElement>();
-            if (le == null)
-                return;
-            le.flexibleWidth = 0f;
-            le.minWidth = width;
-            le.preferredWidth = width;
-            le.minHeight = 48f;
-            le.preferredHeight = 48f;
         }
 
         void SelectPencil()
@@ -527,7 +629,7 @@ namespace FashionRise.Presentation.Screens
             }
 
             HighlightTool(true);
-            FlashHint("Pencil — draw clothes!");
+            FlashHint("Pencil — draw clothes");
         }
 
         void SelectEraser()
@@ -540,20 +642,17 @@ namespace FashionRise.Presentation.Screens
         void SetSize(int index)
         {
             _sizeIndex = Mathf.Clamp(index, 0, BrushSizes.Length - 1);
-            if (_fabricIndex < 0 || _pad.EraserActive)
-                _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
-            else
-                _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
-
+            _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
             if (!_pad.EraserActive)
                 HighlightTool(true);
 
             for (var i = 0; i < _sizeFaces.Length; i++)
             {
-                if (_sizeFaces[i] != null)
-                    _sizeFaces[i].color = i == _sizeIndex ? _theme.AccentMuted : _theme.ButtonFace;
-                if (_sizeDots[i] != null)
-                    _sizeDots[i].color = i == _sizeIndex ? _theme.Accent : _theme.MidnightNavy;
+                if (_sizeFaces[i] == null)
+                    continue;
+                _sizeFaces[i].color = i == _sizeIndex
+                    ? new Color(_theme.Accent.r, _theme.Accent.g, _theme.Accent.b, 0.35f)
+                    : _theme.ButtonFace;
             }
 
             FlashHint(_sizeIndex == 0 ? "Thin pencil" : _sizeIndex == 1 ? "Medium brush" : "Bold brush");
@@ -566,20 +665,17 @@ namespace FashionRise.Presentation.Screens
             _pad.SetBrushRadius(BrushSizes[_sizeIndex]);
             _pad.EraserActive = false;
             HighlightTool(true);
-            for (var i = 0; i < _colorFaces.Length; i++)
+            for (var i = 0; i < _colorRings.Length; i++)
             {
-                if (_colorFaces[i] == null)
+                if (_colorRings[i] == null)
                     continue;
-                var o = _colorFaces[i].GetComponent<Outline>();
-                if (o == null)
-                    continue;
-                o.effectDistance = i == _colorIndex ? new Vector2(3.5f, -3.5f) : new Vector2(1.5f, -1.5f);
-                o.effectColor = i == _colorIndex
-                    ? new Color(_theme.Accent.r, _theme.Accent.g, _theme.Accent.b, 0.95f)
-                    : new Color(0.2f, 0.1f, 0.15f, 0.4f);
+                _colorRings[i].color = i == _colorIndex
+                    ? _theme.Accent
+                    : new Color(1f, 1f, 1f, 0.95f);
+                _colorRings[i].transform.localScale = i == _colorIndex ? Vector3.one * 1.12f : Vector3.one;
             }
 
-            FlashHint(ColorNames[_colorIndex] + " ready");
+            FlashHint(ColorNames[_colorIndex]);
         }
 
         void SelectFabric(int index)
@@ -590,15 +686,7 @@ namespace FashionRise.Presentation.Screens
             HighlightTool(true);
             ClearFabricSelection();
             if (_fabricFaces[_fabricIndex] != null)
-            {
-                var o = _fabricFaces[_fabricIndex].GetComponent<Outline>();
-                if (o != null)
-                {
-                    o.effectDistance = new Vector2(3.5f, -3.5f);
-                    o.effectColor = new Color(_theme.Accent.r, _theme.Accent.g, _theme.Accent.b, 0.95f);
-                }
-            }
-
+                _fabricFaces[_fabricIndex].transform.localScale = Vector3.one * 1.06f;
             FlashHint(Fabrics[_fabricIndex].name + " fabric");
         }
 
@@ -611,9 +699,9 @@ namespace FashionRise.Presentation.Screens
             for (var i = 0; i < _sizeFaces.Length; i++)
             {
                 if (_sizeFaces[i] != null)
-                    _sizeFaces[i].color = i == _sizeIndex ? _theme.AccentMuted : _theme.ButtonFace;
-                if (_sizeDots[i] != null)
-                    _sizeDots[i].color = i == _sizeIndex ? _theme.Accent : _theme.MidnightNavy;
+                    _sizeFaces[i].color = i == _sizeIndex
+                        ? new Color(_theme.Accent.r, _theme.Accent.g, _theme.Accent.b, 0.35f)
+                        : _theme.ButtonFace;
             }
         }
 
@@ -621,13 +709,8 @@ namespace FashionRise.Presentation.Screens
         {
             for (var i = 0; i < _fabricFaces.Length; i++)
             {
-                if (_fabricFaces[i] == null)
-                    continue;
-                var o = _fabricFaces[i].GetComponent<Outline>();
-                if (o == null)
-                    continue;
-                o.effectDistance = new Vector2(1.5f, -1.5f);
-                o.effectColor = new Color(0.2f, 0.1f, 0.15f, 0.35f);
+                if (_fabricFaces[i] != null)
+                    _fabricFaces[i].transform.localScale = Vector3.one;
             }
         }
 
@@ -636,13 +719,14 @@ namespace FashionRise.Presentation.Screens
             if (_pencilFace != null)
                 _pencilFace.color = pencil ? _theme.Accent : _theme.ButtonFace;
             if (_eraserFace != null)
-                _eraserFace.color = pencil ? _theme.ButtonFace : new Color(0.95f, 0.78f, 0.82f, 1f);
-            var pTxt = _pencilBtn != null ? _pencilBtn.GetComponentInChildren<Text>() : null;
-            var eTxt = _eraserBtn != null ? _eraserBtn.GetComponentInChildren<Text>() : null;
-            if (pTxt != null)
-                pTxt.color = pencil ? Color.white : _theme.MidnightNavy;
-            if (eTxt != null)
-                eTxt.color = pencil ? _theme.MidnightNavy : _theme.MidnightNavy;
+                _eraserFace.color = pencil ? _theme.ButtonFace : new Color(1f, 0.82f, 0.88f, 1f);
+
+            var pIcon = _pencilFace != null ? _pencilFace.transform.Find("Icon")?.GetComponent<Image>() : null;
+            var eIcon = _eraserFace != null ? _eraserFace.transform.Find("Icon")?.GetComponent<Image>() : null;
+            if (pIcon != null)
+                pIcon.color = pencil ? Color.white : _theme.MidnightNavy;
+            if (eIcon != null)
+                eIcon.color = _theme.MidnightNavy;
         }
 
         void CyclePose()
@@ -671,7 +755,7 @@ namespace FashionRise.Presentation.Screens
             _refDimmed = !_refDimmed;
             _pad.ReferenceStrength = _refDimmed ? 0.4f : 1f;
             _pad.RefreshComposite();
-            FlashHint(_refDimmed ? "Model faded — easier to draw" : "Model bright");
+            FlashHint(_refDimmed ? "Model faded" : "Model bright");
         }
 
         void BootstrapPadReference(SketchFigureTemplate? forcedFigure)
@@ -709,8 +793,8 @@ namespace FashionRise.Presentation.Screens
             SketchFigureTemplate? forced = null;
             if (payload is SketchNavContext ctx && ctx.Figure.HasValue)
                 forced = ctx.Figure;
-            else if (payload is SketchFigureTemplate t)
-                forced = t;
+            else if (payload is SketchFigureTemplate fig)
+                forced = fig;
 
             if (!_padBootstrapped)
             {
