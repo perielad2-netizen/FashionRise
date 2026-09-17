@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     ai_worker_poll_interval_seconds: float = 1.5
     ai_worker_batch_size: int = 12
 
-    # OpenAI (optional — sketch pipeline jobs use vision + JSON when OPENAI_API_KEY is set)
+    # OpenAI (optional — sketch + tech_pack jobs use vision + JSON when OPENAI_API_KEY is set)
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str | None = None

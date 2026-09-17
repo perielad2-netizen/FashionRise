@@ -13,18 +13,21 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.MiddleCenter);
-            FrUiFactory.AddBrandLogoRow(col, t, 300f, 110f);
-            FrUiFactory.AddLabel(col, "H", "WELCOME", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
-                TextAnchor.MiddleCenter);
+
+            FrUiFactory.AddOverline(col, "Ov", "Atelier · AI · Couture", t);
+            FrUiFactory.AddBrandLogoRow(col, t, 320f, 118f);
+            FrUiFactory.AddEditorialLabel(col, "H", "Design what you\nwant to wear.", t,
+                Mathf.RoundToInt(t.DisplaySize), true, TextAnchor.MiddleCenter);
             FrUiFactory.AddLabel(col, "B",
-                "Draw fashion ideas. Magic polishes them. Share your look.",
-                t, Mathf.RoundToInt(t.SubtitleSize), FontStyle.Bold, TextAnchor.MiddleCenter,
+                "Sketch on a fashion figure. Magic turns it into a look.\nCreate Real Design builds a production tech pack.",
+                t, Mathf.RoundToInt(t.SubtitleSize), FontStyle.Normal, TextAnchor.MiddleCenter,
                 useSecondaryTextColor: true);
-            FrUiFactory.AddButton(col, "LET'S GO", t, () =>
+
+            FrUiFactory.AddButton(col, "Enter the atelier", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.LoginChoice);
-            }, FrButtonEmphasis.Primary);
+            }, FrButtonEmphasis.AiAction);
         }
     }
 }

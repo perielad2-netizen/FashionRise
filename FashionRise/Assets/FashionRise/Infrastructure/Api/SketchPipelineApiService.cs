@@ -12,7 +12,7 @@ namespace FashionRise.Infrastructure.Api
 {
     /// <summary>Maps V2 sketch/style routes to AI job responses. [AI_READY]</summary>
     public sealed class SketchPipelineApiService : ISketchProcessingService, IConceptPolishService,
-        IStyleSuggestionService, IImageRefinementService
+        IStyleSuggestionService, IImageRefinementService, ITechPackService
     {
         readonly ApiClient _client;
 
@@ -263,6 +263,65 @@ namespace FashionRise.Infrastructure.Api
                 Status = j.Status,
                 Summary = MessageFrom(j),
                 ImageUrl = imageUrl
+            };
+        }
+
+
+        public async Task<TechPackResult> GenerateAsync(TechPackRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var inputData = new Dictionary<string, object>
+            {
+                ["notes"] = request.Notes ?? "",
+                ["local_path_placeholder"] = request.LocalSketchForVision ?? ""
+            };
+            if (!string.IsNullOrWhiteSpace(request.FabricName))
+                inputData["fabric"] = request.FabricName.Trim();
+            if (!string.IsNullOrWhiteSpace(request.ColorName))
+                inputData["color"] = request.ColorName.Trim();
+            if (!string.IsNullOrWhiteSpace(request.MaterialPairs))
+                inputData["material_pairs"] = request.MaterialPairs.Trim();
+            if (!string.IsNullOrWhiteSpace(request.PolishedImageUrl))
+                inputData["polished_image_url"] = request.PolishedImageUrl.Trim();
+            await EmbedVisionImageAsync(inputData, request.LocalSketchForVision, cancellationToken)
+                .ConfigureAwait(true);
+            // Prefer polished look for vision when local sketch missing but URL is public
+            if (!inputData.ContainsKey("image_base64") && !inputData.ContainsKey("image_url") &&
+                !string.IsNullOrWhiteSpace(request.PolishedImageUrl))
+                await EmbedVisionImageAsync(inputData, request.PolishedImageUrl, cancellationToken)
+                    .ConfigureAwait(true);
+
+            var job = await _client
+                .PostJsonAsync<AIJobReadDto>("/ai/tech-pack",
+                    new { design_id = TryGuid(request.DesignId), input_data = inputData }, cancellationToken, true)
+                .ConfigureAwait(true);
+            try { request.OnJobStarted?.Invoke(job.Id.ToString()); }
+            catch (Exception callbackEx)
+            {
+                UnityEngine.Debug.LogWarning($"FashionRise TechPack OnJobStarted failed: {callbackEx.Message}");
+            }
+
+            var final = await WaitForJobCompletionAsync(_client, job.Id, cancellationToken).ConfigureAwait(true);
+            return ToTechPack(final);
+        }
+
+        static TechPackResult ToTechPack(AIJobReadDto j)
+        {
+            var rd = j.ResultData;
+            var front = AIJobApiService.ExtractImageUrl(rd) ?? "";
+            var back = rd?.Value<string>("back_image_url") ?? "";
+            var pattern = rd?.Value<string>("pattern_image_url") ?? "";
+            var disclaimer = rd?.Value<string>("disclaimer") ?? "";
+            return new TechPackResult
+            {
+                JobId = j.Id.ToString(),
+                Status = j.Status,
+                Summary = MessageFrom(j),
+                Disclaimer = disclaimer,
+                FrontImageUrl = front,
+                BackImageUrl = back,
+                PatternImageUrl = pattern,
+                RawJson = rd != null ? rd.ToString(Newtonsoft.Json.Formatting.Indented) : "{}"
             };
         }
 

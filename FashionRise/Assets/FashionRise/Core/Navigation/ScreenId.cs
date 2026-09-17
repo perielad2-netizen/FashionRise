@@ -16,6 +16,7 @@ namespace FashionRise.Core.Navigation
         SketchCanvas = 11,
         ImportSketch = 12,
         SketchEnhancement = 13,
-        ConceptResult = 14
+        ConceptResult = 14,
+        TechPack = 15
     }
 }

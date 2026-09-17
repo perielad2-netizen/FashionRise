@@ -72,6 +72,7 @@ namespace FashionRise.Core
             AddScreen<ImportSketchScreen>("ImportSketchScreen");
             AddScreen<SketchEnhancementScreen>("SketchEnhancementScreen");
             AddScreen<ConceptResultScreen>("ConceptResultScreen");
+            AddScreen<TechPackScreen>("TechPackScreen");
 
             canvasGo.AddComponent<FashionRiseApp>();
 

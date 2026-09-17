@@ -19,6 +19,7 @@ namespace FashionRise.Presentation.Screens
         Button _magicBtn = null!;
         Button _seeLookBtn = null!;
         Button _retryBtn = null!;
+        FrAiLoadingFx? _loading;
         bool _moreOpen;
         bool _autoMagicArmed;
         bool _busy;
@@ -29,27 +30,28 @@ namespace FashionRise.Presentation.Screens
         {
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
+            _loading = FrAiLoadingFx.Create(root, t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "H", "MAGIC", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            FrUiFactory.AddOverline(col, "Ov", "AI atelier", t);
+            FrUiFactory.AddEditorialLabel(col, "H", "Magic", t, Mathf.RoundToInt(t.DisplaySize * 0.85f), true,
                 TextAnchor.UpperCenter);
             _blurb = FrUiFactory.AddLabel(col, "B",
                 "One tap. Your sketch becomes a runway look.", t,
-                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Bold, TextAnchor.UpperCenter,
+                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Normal, TextAnchor.UpperCenter,
                 useSecondaryTextColor: true);
             _status = FrUiFactory.AddLabel(col, "St", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,
                 TextAnchor.UpperCenter);
 
-            _magicBtn = FrUiFactory.AddButton(col, "MAKE IT MAGICAL!", t, () => { _ = RunPolishAsync(); },
-                FrButtonEmphasis.Primary);
+            _magicBtn = FrUiFactory.AddButton(col, "Make it Magical", t, () => { _ = RunPolishAsync(); },
+                FrButtonEmphasis.AiAction);
             Enlarge(_magicBtn);
 
-            _seeLookBtn = FrUiFactory.AddButton(col, "SEE YOUR LOOK", t, () => { _ = OpenLastResultAsync(); },
+            _seeLookBtn = FrUiFactory.AddButton(col, "See your look", t, () => { _ = OpenLastResultAsync(); },
                 FrButtonEmphasis.Primary);
             Enlarge(_seeLookBtn);
 
-            // Retry stays under More so kids don't re-run Magic by accident.
             _retryBtn = FrUiFactory.AddButton(col, "Try magic again", t, () => { _ = RunPolishAsync(); });
-            FrUiFactory.AddButton(col, "More…", t, ToggleMore);
+            FrUiFactory.AddButton(col, "More…", t, ToggleMore, FrButtonEmphasis.Ghost);
             FrUiFactory.AddButton(col, "Clean lines", t, () => { _ = RunCleanAsync(); });
             FrUiFactory.AddButton(col, "Style ideas", t, () => { _ = RunStyleAsync(); });
             FrUiFactory.AddButton(col, "Edit sketch", t, () =>
@@ -63,7 +65,7 @@ namespace FashionRise.Presentation.Screens
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.GoBackAsync();
-            });
+            }, FrButtonEmphasis.Ghost);
 
             SetMoreVisible(false);
             RefreshHappyPathChrome();
@@ -231,6 +233,8 @@ namespace FashionRise.Presentation.Screens
             _busy = true;
             RefreshHappyPathChrome();
             _status.text = "Working magic… this can take about a minute.";
+            _loading?.Show("Scanning your sketch…");
+            _loading?.SetStatus("Drawing fabric & silhouette…");
             try
             {
                 var r = await App.ConceptPolish.PolishAsync(new ConceptRefinementRequest
@@ -245,6 +249,7 @@ namespace FashionRise.Presentation.Screens
                     {
                         if (!string.IsNullOrWhiteSpace(jobId))
                             App.CreateDesign.LastSketchJobId = jobId;
+                        _loading?.SetStatus("Refining your runway look…");
                     }
                 }).ConfigureAwait(true);
                 Finish(r.JobId, r.Summary, r.ImageUrl);
@@ -266,6 +271,7 @@ namespace FashionRise.Presentation.Screens
             finally
             {
                 _busy = false;
+                _loading?.Hide();
                 if (App.Navigation == null ||
                     string.IsNullOrWhiteSpace(App.CreateDesign.LastPolishedImageUrl))
                     RefreshHappyPathChrome();

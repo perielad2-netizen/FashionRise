@@ -43,6 +43,13 @@ namespace FashionRise.Application
         public string LastPolishedImageUrl { get; set; } = "";
         /// <summary>Local cache of the polished image for Share (downloaded from <see cref="LastPolishedImageUrl"/>).</summary>
         public string LastPolishedImageLocalPath { get; set; } = "";
+        /// <summary>Last Create Real Design / tech pack job id.</summary>
+        public string LastTechPackJobId { get; set; } = "";
+        /// <summary>Raw JSON from the last tech pack result for the Tech Pack screen.</summary>
+        public string LastTechPackJson { get; set; } = "";
+        public string LastTechPackFrontImageUrl { get; set; } = "";
+        public string LastTechPackBackImageUrl { get; set; } = "";
+        public string LastTechPackPatternImageUrl { get; set; } = "";
         /// <summary>After a successful API save, reuse this id so the next save updates the same row.</summary>
         public string PersistedDesignId { get; set; } = "";
 
@@ -53,6 +60,15 @@ namespace FashionRise.Application
             LastSketchSummary = "";
             LastPolishedImageUrl = "";
             LastPolishedImageLocalPath = "";
+        }
+
+        public void ClearTechPack()
+        {
+            LastTechPackJobId = "";
+            LastTechPackJson = "";
+            LastTechPackFrontImageUrl = "";
+            LastTechPackBackImageUrl = "";
+            LastTechPackPatternImageUrl = "";
         }
 
         public void Reset()
@@ -79,6 +95,7 @@ namespace FashionRise.Application
             SketchMaterialPairs = "";
             LastInkImagePath = "";
             ClearLastLook();
+            ClearTechPack();
             PersistedDesignId = "";
         }
 

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.ai_job import AIJob
-from app.services import sketch_openai
+from app.services import sketch_openai, tech_pack_openai
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,10 @@ def run_worker_tick(db: Session, *, limit: int = 12) -> int:
         if job is None:
             break
         try:
-            if job.job_type in sketch_openai.SKETCH_JOB_TYPES and sketch_openai.is_configured():
+            if job.job_type in tech_pack_openai.TECH_PACK_JOB_TYPES:
+                # Always route here: OpenAI when configured, otherwise rich Unity stub.
+                job.result_data = tech_pack_openai.complete_tech_pack_job(job)
+            elif job.job_type in sketch_openai.SKETCH_JOB_TYPES and sketch_openai.is_configured():
                 job.result_data = sketch_openai.complete_sketch_job(job)
             else:
                 job.result_data = _stub_result(job)

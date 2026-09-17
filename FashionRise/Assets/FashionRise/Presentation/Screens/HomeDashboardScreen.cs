@@ -8,15 +8,13 @@ using UnityEngine.UI;
 
 namespace FashionRise.Presentation.Screens
 {
-    /// <summary>
-    /// Front door — pick a fashion figure, then sketch. Magic. Share.
-    /// </summary>
+    /// <summary>Front door — pick a fashion figure, then sketch. Magic. Tech pack.</summary>
     public sealed class HomeDashboardScreen : ScreenBase
     {
-        public override ScreenId Id => ScreenId.HomeDashboard;
-
         Text _moreHint = null!;
         bool _moreOpen;
+
+        public override ScreenId Id => ScreenId.HomeDashboard;
 
         void Awake()
         {
@@ -24,12 +22,13 @@ namespace FashionRise.Presentation.Screens
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
 
-            // Brand is the hero signal on this screen.
-            FrUiFactory.AddBrandLogoRow(col, t, 300f, 108f);
-            FrUiFactory.AddLabel(col, "H", "CHOOSE YOUR MODEL", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
-                TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "B", "Sketch. Magic. Share.", t, Mathf.RoundToInt(t.SubtitleSize),
-                FontStyle.Bold, TextAnchor.UpperCenter, useSecondaryTextColor: true);
+            FrUiFactory.AddOverline(col, "Ov", "Fashion atelier", t);
+            FrUiFactory.AddBrandLogoRow(col, t, 280f, 96f);
+            FrUiFactory.AddEditorialLabel(col, "H", "Choose your model", t,
+                Mathf.RoundToInt(t.DisplaySize * 0.72f), true, TextAnchor.UpperCenter);
+            FrUiFactory.AddLabel(col, "B", "Sketch. Magic. Create Real Design.", t,
+                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Normal, TextAnchor.UpperCenter,
+                useSecondaryTextColor: true);
 
             var row = FrUiFactory.AddHorizontalRow(col, "ModelRow", t.ControlGap);
             FrUiFactory.AddModelChoiceTile(row, "Women", "WOMEN", SketchDefaultFigureGenerator.FemaleResourcePath, t,
@@ -37,7 +36,7 @@ namespace FashionRise.Presentation.Screens
             FrUiFactory.AddModelChoiceTile(row, "Men", "MEN", SketchDefaultFigureGenerator.MaleResourcePath, t,
                 () => OpenSketch(SketchFigureTemplate.Male));
 
-            FrUiFactory.AddButton(col, "More studio…", t, ToggleMore);
+            FrUiFactory.AddButton(col, "More studio…", t, ToggleMore, FrButtonEmphasis.Ghost);
             _moreHint = FrUiFactory.AddLabel(col, "MorePanel", "", t, Mathf.RoundToInt(t.CaptionSize),
                 FontStyle.Normal, TextAnchor.UpperCenter, useSecondaryTextColor: true);
 
@@ -66,10 +65,7 @@ namespace FashionRise.Presentation.Screens
             SetMoreVisible(false);
         }
 
-        protected override void OnShown(object? payload)
-        {
-            SetMoreVisible(_moreOpen);
-        }
+        protected override void OnShown(object? payload) => SetMoreVisible(_moreOpen);
 
         void OpenSketch(SketchFigureTemplate figure)
         {
@@ -85,26 +81,22 @@ namespace FashionRise.Presentation.Screens
             SetMoreVisible(_moreOpen);
         }
 
-        void SetMoreVisible(bool open)
+        void SetMoreVisible(bool visible)
         {
-            _moreHint.text = open
-                ? "Gallery, atelier, profile — when you want more."
-                : " ";
-
-            var col = transform.Find("Root/Col");
-            if (col == null)
-                return;
-            SetSiblingActive(col, "Gallery_Btn", open);
-            SetSiblingActive(col, "Atelier (pro create)_Btn", open);
-            SetSiblingActive(col, "Profile_Btn", open);
-            SetSiblingActive(col, "Settings_Btn", open);
+            _moreHint.text = visible
+                ? "Gallery · Atelier · Profile · Settings"
+                : "";
+            SetBtn("Gallery", visible);
+            SetBtn("Atelier (pro create)", visible);
+            SetBtn("Profile", visible);
+            SetBtn("Settings", visible);
         }
 
-        static void SetSiblingActive(Transform col, string name, bool active)
+        void SetBtn(string label, bool on)
         {
-            var child = col.Find(name);
-            if (child != null)
-                child.gameObject.SetActive(active);
+            var tr = transform.Find($"Root/Col/{label}_Btn");
+            if (tr != null)
+                tr.gameObject.SetActive(on);
         }
     }
 }

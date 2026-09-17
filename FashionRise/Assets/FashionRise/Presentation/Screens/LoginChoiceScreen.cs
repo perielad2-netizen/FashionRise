@@ -24,8 +24,9 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             _layoutCol = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.MiddleCenter);
-            FrUiFactory.AddBrandLogoRow(_layoutCol, t, 220f, 72f);
-            FrUiFactory.AddLabel(_layoutCol, "H", "Sign in", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            FrUiFactory.AddBrandLogoRow(_layoutCol, t, 240f, 80f);
+            FrUiFactory.AddOverline(_layoutCol, "Ov", "Members", t);
+            FrUiFactory.AddEditorialLabel(_layoutCol, "H", "Sign in", t, Mathf.RoundToInt(t.TitleSize), true,
                 TextAnchor.MiddleCenter);
 
             _status = FrUiFactory.AddLabel(_layoutCol, "St", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,

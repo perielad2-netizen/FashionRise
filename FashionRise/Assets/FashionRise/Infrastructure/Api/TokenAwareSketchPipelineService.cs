@@ -10,7 +10,7 @@ namespace FashionRise.Infrastructure.Api
     /// Calls FastAPI sketch routes when <see cref="IAuthService.HasBackendSession"/>; otherwise local mocks (offline / mock backend).
     /// </summary>
     public sealed class TokenAwareSketchPipelineService : ISketchProcessingService, IConceptPolishService,
-        IStyleSuggestionService, IImageRefinementService
+        IStyleSuggestionService, IImageRefinementService, ITechPackService
     {
         readonly IAuthService _auth;
         readonly SketchPipelineApiService _api;
@@ -45,5 +45,11 @@ namespace FashionRise.Infrastructure.Api
             _auth.HasBackendSession
                 ? _api.RefineAsync(request, cancellationToken)
                 : _mock.RefineAsync(request, cancellationToken);
+
+        public Task<TechPackResult> GenerateAsync(TechPackRequest request,
+            CancellationToken cancellationToken = default) =>
+            _auth.HasBackendSession
+                ? _api.GenerateAsync(request, cancellationToken)
+                : _mock.GenerateAsync(request, cancellationToken);
     }
 }

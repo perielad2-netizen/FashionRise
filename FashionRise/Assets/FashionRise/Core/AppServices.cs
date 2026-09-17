@@ -30,6 +30,7 @@ namespace FashionRise.Core
         public IConceptPolishService ConceptPolish { get; }
         public IStyleSuggestionService StyleSuggest { get; }
         public IImageRefinementService ImageRefine { get; }
+        public ITechPackService TechPack { get; }
         public IShareLinkService ShareLinks { get; }
         public CreateDesignSession CreateDesign { get; }
         public INavigationService? Navigation { get; private set; }
@@ -52,6 +53,7 @@ namespace FashionRise.Core
             IConceptPolishService conceptPolish,
             IStyleSuggestionService styleSuggest,
             IImageRefinementService imageRefine,
+            ITechPackService techPack,
             IShareLinkService shareLinks,
             CreateDesignSession createDesign,
             string apiBaseUrl = "")
@@ -74,6 +76,7 @@ namespace FashionRise.Core
             ConceptPolish = conceptPolish;
             StyleSuggest = styleSuggest;
             ImageRefine = imageRefine;
+            TechPack = techPack;
             ShareLinks = shareLinks;
             CreateDesign = createDesign;
         }
@@ -102,6 +105,7 @@ namespace FashionRise.Core
                 new MockRatingService(gallery),
                 new MockExportService(),
                 new MockAIEnhancementService(),
+                sketch,
                 sketch,
                 sketch,
                 sketch,
@@ -147,6 +151,7 @@ namespace FashionRise.Core
                 ratings,
                 export,
                 ai,
+                sketch,
                 sketch,
                 sketch,
                 sketch,

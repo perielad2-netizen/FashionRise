@@ -68,6 +68,23 @@ def test_catalog_endpoints_and_ai_upload_export_flow(client):
     assert ai_style.status_code == 201, ai_style.text
     assert ai_style.json()["job_type"] == "style_suggest"
 
+    ai_tech = client.post(
+        "/api/v1/ai/tech-pack",
+        headers=headers,
+        json={
+            "design_id": design_id,
+            "input_data": {
+                "notes": "A-line dress",
+                "fabric": "silk",
+                "color": "coral",
+                "material_pairs": "coral:silk:#FF6F61",
+            },
+        },
+    )
+    assert ai_tech.status_code == 201, ai_tech.text
+    assert ai_tech.json()["job_type"] == "tech_pack"
+    assert ai_tech.json()["status"] == "queued"
+
     ai_custom = client.post(
         "/api/v1/ai/jobs",
         headers=headers,
