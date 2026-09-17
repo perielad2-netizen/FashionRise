@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-09-17 — Create Real Design tech pack + 2-page PDF export
+**Last updated:** 2026-09-17 — Magic locked to the uploaded sketch (pause here)
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
@@ -11,24 +11,24 @@
 
 ## Session pause — where we stopped (read this first in a new chat)
 
-**Paused:** 2026-09-17. **Resume here next session.**
+**Paused:** 2026-09-17 night. **Resume here next session.** Branch: `cursor/premium-ui-redesign-77c6`.
 
 ### What works now
 
-- Kid loop: sketch → Magic (sketch **image edit**) → Your look.
-- **Create Real Design** on Your look opens a printed-style **Tech Pack** screen: design, front/back flats, measurements (170 cm / 84-64-90), materials, pattern pieces, cutting layout, construction, special construction.
-- Backend job `POST /api/v1/ai/tech-pack` returns JSON + blueprint image URLs + **`pdf_url`** (2-page A4 landscape: technical spec + pattern/cutting sheet).
-- Unity **Export PDF** downloads/opens that file. Measurements are a **first production draft**, not final manufacturing specs.
+- Kid loop: sketch → Magic (**uploads the canvas PNG**, `images.edit` with high fidelity) → Your look.
+- Magic was inventing outfits (orange shirt, extra jacket, wrong gender) because leftover color chips + an “orange blouse” example + vision text overrode the pixels. **Fixed:** only painted colors, male/female lock, no jackets/extra layers, **no text-only generate fallback**. User confirmed a white-shirt / blue-jeans / male figure retry looked **much better**.
+- **Create Real Design** tech pack + **2-page PDF** (`pdf_url`, images present, speed OK). Measurements are a **first production draft**, not final manufacturing specs. PDF is **not** the next task.
 
-### Crash notes (fixed this session)
+### Product note (paid Magic)
 
-- Tech pack screen could freeze/crash from `AspectRatioFitter.HeightControlsWidth` inside a layout group, and from `quantity_m.ToObject<float>()` when the model returned a string. Both are guarded now. Do **not** re-open the old looping Cloud chat.
+Planning to charge per Magic generation — accuracy is credibility. Prefer fail/retry edit over inventing a look.
 
 ### Suggested next session
 
-1. Restart API (`pip install -r requirements.txt` if reportlab missing) and Play-test Create Real Design → Export PDF.  
-2. Optional: in-app editors for measurements / fabric / sample size before PDF.  
-3. Pose carousel / fabric tray / share polish.
+1. Restart API + Unity Play so Magic prompt changes stay loaded.  
+2. More Magic fidelity passes if needed (unpainted cream shirts, pose, photoreal vs illustration).  
+3. Optional: in-app editors for measurements / fabric / sample size before PDF.  
+4. Pose carousel / fabric tray / share polish. Do **not** re-open the old looping Cloud chat.
 
 ### Product vision (locked)
 
@@ -54,7 +54,7 @@ FashionRise helps **young creators** (including kids ~7–8+) **draw fashion ide
 
 | Pillar | Outcome | Ties to |
 |--------|---------|--------|
-| **A — Sketch & authoring** | **Kid loop live** + **AI look image on Your look**. Next: image **closer to sketch** (less photoreal), kid toolbar polish, later vector/layers | Prompt 6, Phase 5b |
+| **A — Sketch & authoring** | **Kid loop live** + **AI look image on Your look**. Magic now edits the uploaded sketch (gender + painted colors locked). Next: more fidelity / illustration style, kid toolbar polish, later vector/layers | Prompt 6, Phase 5b |
 | **B — Social & growth / virality** | Gallery/ratings/follows exist; front door Share works. Next: one-tap publish from Magic result, challenges, **AI share video** | Phase 4–5b, Prompt 7 discovery |
 | **C — Maker handoff** | **Create Real Design** tech pack + 2-page PDF. Next: editable measurements before export | Prompt 7 / Phase 6 |
 | **D — Trust & scale** | Hardening, moderation, CI | Phase 7 + Prompt 8 |
@@ -142,9 +142,9 @@ FashionRise/
 
 ## Suggested next steps (aligned with full product)
 
-1. **Kid loop polish** — Play-mode pass; optional kid-simple brush row; show AI result **image** on Your look.  
+1. **Magic accuracy** — more sketch-faithful passes if needed; keep paid-generation quality.  
 2. **Virality** — one-tap publish + share from Magic result; then **AI video** share spike.  
-3. **Talent / Pro** — challenges + discovery (Prompt 7); handoff PDF quality when needed.  
+3. **Talent / Pro** — challenges + discovery (Prompt 7); optional measurement editors before PDF.  
 4. **Engineering** — CI `pytest`; secure token storage on mobile.  
 5. **Prompt 8** before a public 1.0 narrative.
 
@@ -171,6 +171,7 @@ _Update this list as pillars complete._
 
 | Date | Summary |
 |------|---------|
+| 2026-09-17 | **Magic fidelity:** upload sketch pixels, drop leftover chips / orange example / text-only generate; lock male/female. PDF export already OK. **Paused here.** |
 | 2026-09-07 | **Vision reframe:** kid front door + talent/pro depth; Unity Home/Sketch/Magic/Result/Share + splash; `SketchNavContext`; `TryShareImageFile`. |
 | 2026-05-13 | **Session handoff refresh:** dual-layer sketch + `SketchReference` PNGs + `OnShown` bootstrap + `SketchFigurePreferences`; **auth** email lower + password trim + `scripts/set_user_password.py`; Unity **GUID** / **asmdef** fixes. |
 | 2026-05-12 | **Unity iOS:** Photos import for sketch `Imports`. |

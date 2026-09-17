@@ -100,16 +100,12 @@ def _system_prompt(job_type: str) -> str:
         )
     if job_type == "sketch_polish":
         return (
-            "You are a senior fashion design mentor helping kids and teens turn a garment sketch into a "
-            "wow, fashion-forward look. "
+            "You are a senior fashion design mentor helping kids and teens polish the garment they already drew. "
             "Respond ONLY with valid JSON using keys: "
             "summary (one short exciting sentence for the creator), "
-            "polish_bullets (array of 3–5 concise tips), "
-            "image_prompt (one short English paragraph describing EACH garment region visible in the sketch: "
-            "pose, neckline, sleeves, skirt/pants, AND the exact colors of each piece. "
-            "If notes include a color→fabric map, name each mapped color and fabric explicitly, e.g. "
-            "'orange silk blouse with deep V-neck and blue denim jeans'. "
-            "Do not invent a different outfit or merge separate garments)."
+            "polish_bullets (array of 3–5 concise tips). "
+            "Do NOT invent garments, jackets, extra layers, or colors that are not in the sketch. "
+            "Unpainted / white / paper-colored areas stay light. Keep the same figure gender and pose."
         )
     return (
         "You are a fashion stylist AI. Use mood notes and optional sketch image. "
@@ -127,13 +123,20 @@ def _user_text(job: AIJob) -> str:
     fabric = d.get("fabric")
     if isinstance(fabric, str) and fabric.strip():
         parts.append(
-            f"Primary fabric (must appear in image_prompt and the final look): {fabric.strip()}. "
+            f"Primary fabric for painted regions only (do not invent extra garments for it): {fabric.strip()}. "
             "Describe realistic material qualities for this fabric."
+        )
+    figure = _figure_label(job)
+    if figure:
+        parts.append(
+            f"Figure lock: this is a {figure} fashion croquis. Keep that gender, body, and pose."
         )
     pairs = d.get("material_pairs")
     if isinstance(pairs, str) and pairs.strip():
         mapped = []
         for part in pairs.split(";"):
+            if not _pair_matches_painted(part, job):
+                continue
             bits = part.split(":")
             if len(bits) < 2:
                 continue
@@ -146,8 +149,8 @@ def _user_text(job: AIJob) -> str:
                 mapped.append(f"{label} → {f_name} fabric ({_fabric_render_hint(f_name)})")
         if mapped:
             parts.append(
-                "Per-region color→fabric map (STRICT — match these colors in the sketch; do not recolor "
-                "or merge garments):\n- " + "\n- ".join(mapped)
+                "Per-region color→fabric map for colors ACTUALLY painted in the sketch "
+                "(ignore any other studio chips):\n- " + "\n- ".join(mapped)
             )
     regions = _color_regions(job)
     if regions:
@@ -197,16 +200,59 @@ def _color_regions(job: AIJob | None) -> list[tuple[str, str, int]]:
     return out
 
 
+def _figure_label(job: AIJob | None) -> str:
+    if job is None:
+        return ""
+    raw = str((job.input_data or {}).get("figure") or "").strip().lower()
+    if raw in {"male", "man", "men", "boy"}:
+        return "male"
+    if raw in {"female", "woman", "women", "girl"}:
+        return "female"
+    return ""
+
+
+def _hex_rgb(value: str) -> tuple[int, int, int] | None:
+    s = value.strip().lstrip("#")
+    if len(s) != 6:
+        return None
+    try:
+        return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+    except ValueError:
+        return None
+
+
+def _hex_near(a: str, b: str, tol: int = 90) -> bool:
+    ra, rb = _hex_rgb(a), _hex_rgb(b)
+    if ra is None or rb is None:
+        return False
+    return abs(ra[0] - rb[0]) + abs(ra[1] - rb[1]) + abs(ra[2] - rb[2]) <= tol
+
+
+def _pair_matches_painted(part: str, job: AIJob | None) -> bool:
+    """Drop leftover color chips that were tapped but never painted on this sketch."""
+    regions = _color_regions(job)
+    if not regions:
+        return True
+    bits = part.split(":")
+    hex_code = bits[2].strip() if len(bits) >= 3 else ""
+    if not hex_code:
+        return True
+    return any(_hex_near(hex_code, painted) for painted, _, _ in regions)
+
+
 def _color_regions_clause(job: AIJob | None) -> str:
     regions = _color_regions(job)
     if not regions:
-        return ""
+        return (
+            "Keep unpainted / white / paper-colored garment areas light. "
+            "Do not invent a jacket or extra layer. "
+        )
     listed = "; ".join(f"{hex_code} on the {zone} (~{pct}% of the drawing)" for hex_code, zone, pct in regions)
     return (
         f"The sketch was painted with these exact colors: {listed}. "
-        "Keep every one of them on the same body area — a turquoise dress with a black hat and black "
-        "shoes must stay a turquoise dress with a black hat and black shoes. "
+        "Keep every one of them on the same body area. "
         "Never unify the outfit under one of these colors. "
+        "Unpainted or white/cream paper areas stay light — do not invent a new color or a jacket there. "
     )
 
 
@@ -241,16 +287,10 @@ def _fabric_render_hint(fabric: str) -> str:
 
 
 def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None) -> str:
-    prompt = ""
-    if isinstance(structured, dict):
-        prompt = str(structured.get("image_prompt") or "").strip()
-        if not prompt:
-            bullets = structured.get("polish_bullets") or structured.get("cleanup_bullets") or []
-            if isinstance(bullets, list) and bullets:
-                joined = "; ".join(str(b).strip() for b in bullets if str(b).strip())[:600]
-                prompt = f"{summary}. Design details: {joined}"
-    if not prompt:
-        prompt = summary or "Polish this fashion sketch"
+    # Do not paste vision `image_prompt` / polish bullets into the image API.
+    # Those often invent a different outfit (jacket, extra colors) and the model
+    # follows the words more than the uploaded sketch pixels.
+    _ = structured, summary
 
     fabric = _fabric_from_job(job)
     fabric_clause = ""
@@ -259,25 +299,31 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         fabric_clause = pairs_clause
     elif fabric:
         fabric_clause = (
-            f"The designer chose {fabric} — render the garments in {_fabric_render_hint(fabric)}. "
+            f"Painted garments use {fabric} — {_fabric_render_hint(fabric)}. "
+            "Do not add extra garments just to show this fabric. "
+        )
+
+    figure = _figure_label(job)
+    figure_clause = ""
+    if figure:
+        figure_clause = (
+            f"The croquis is {figure}. Keep a clearly {figure} body, face, and proportions. "
+            "Do not change gender. "
         )
 
     return (
-        "Edit THIS uploaded fashion sketch into a chic, high-fashion look. "
-        "Keep the SAME pose, body proportions, neckline, sleeve style, hem length, outfit silhouette, "
-        "AND the SAME colors already painted in the sketch. "
-        "If the sketch has an orange blouse and blue jeans, the result MUST keep an orange blouse and "
-        "blue jeans as SEPARATE garments — never turn them into one blue dress or recolor the blouse. "
-        "Upgrade each garment region with nearly-real fabric for its paired material, elegant drape, "
-        "and soft studio lighting. "
+        "Edit the uploaded fashion sketch. You are a fabric renderer, not a fashion designer. "
+        "Keep this exact pose, silhouette, garment count, neckline, sleeves, hem, and painted colors. "
+        "Do not add jackets, coats, extra layers, or accessories that are not drawn. "
+        "Do not invent a new outfit or a new character. "
+        "Unpainted / white / paper-colored garment areas stay white or very light. "
+        f"{figure_clause}"
         f"{_color_regions_clause(job)}"
         f"{fabric_clause}"
-        f"{prompt} "
-        "Result: a fashionable fashion illustration / editorial croquis on a clean light background, "
-        "full figure visible head-to-toe, no cropped legs. "
-        "Do NOT invent a new character or different clothes. "
-        "Avoid: merging garments, recoloring regions, cartoonish flat fills, fuzzy undefined texture, "
-        "storybook scenes, text, watermark, collage."
+        "Render the existing garments with realistic fabric, elegant drape, and soft studio lighting. "
+        "Full figure visible head-to-toe on a clean light background. "
+        "Avoid: merging garments, recoloring regions, adding a jacket, changing gender, "
+        "cartoonish fills, text, watermark, collage."
     )[:3800]
 
 
@@ -290,6 +336,8 @@ def _material_pairs_clause(job: AIJob | None) -> str:
         return ""
     chunks: list[str] = []
     for part in pairs.split(";"):
+        if not _pair_matches_painted(part, job):
+            continue
         bits = part.split(":")
         if len(bits) < 2:
             continue
@@ -371,7 +419,7 @@ def _try_edit_look_from_sketch(
     """Prefer Images edits so the output stays tied to the child's sketch pixels."""
     sketch = _raw_sketch_bytes(job)
     if sketch is None:
-        logger.warning("OpenAI job %s: no sketch bytes for image edit; will try text-only generate", job.id)
+        logger.warning("OpenAI job %s: no sketch bytes for image edit; refusing text-only generate", job.id)
         return None, ""
 
     sketch_bytes, mime = sketch
@@ -427,38 +475,16 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
 
     prompt = _build_image_prompt(structured, summary, job)
     size = (settings.openai_image_size or "1024x1536").strip()
-    quality = (settings.openai_image_quality or "standard").strip()
 
     raw, used_model = _try_edit_look_from_sketch(client, job, prompt, model, size)
 
-    # Fallback: text-only generate (weaker fidelity — only if edit unavailable)
+    # Never fall back to text-only generate for Magic. That path invents a new look
+    # from words and is not chargeable-quality when the user paid for their sketch.
     if not raw:
-        last_error: Exception | None = None
-        for attempt in _image_gen_attempts(model, size, quality):
-            attempt = dict(attempt)
-            attempt["prompt"] = prompt
-            try:
-                logger.info(
-                    "OpenAI job %s: fallback generate model %s size=%s",
-                    job.id,
-                    attempt["model"],
-                    attempt.get("size"),
-                )
-                result = client.images.generate(**attempt)
-                item = result.data[0]
-                raw = _extract_image_bytes(item)
-                if raw:
-                    used_model = f"{attempt['model']}(generate)"
-                    break
-                logger.warning("OpenAI job %s: %s returned no image bytes", job.id, attempt["model"])
-            except Exception as e:
-                last_error = e
-                logger.warning("OpenAI job %s: image model %s failed: %s", job.id, attempt["model"], e)
-
-        if not raw and last_error is not None:
-            logger.warning("OpenAI job %s: all image generation attempts failed (last: %s)", job.id, last_error)
-
-    if not raw:
+        logger.warning(
+            "OpenAI job %s: sketch edit failed; skipping text-only generate so we do not invent a different look",
+            job.id,
+        )
         return None
 
     key = f"ai/{job.id.hex if hasattr(job.id, 'hex') else str(job.id).replace('-', '')}_{uuid.uuid4().hex[:10]}.png"

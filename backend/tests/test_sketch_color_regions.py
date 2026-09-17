@@ -71,6 +71,8 @@ def test_image_prompt_pins_each_colour_to_its_body_area():
     assert BLACK in prompt
     assert "hat/head+shoes/hem" in prompt
     assert "Never unify the outfit under one of these colors." in prompt
+    assert "elegant column dress" not in prompt
+    assert "orange blouse" not in prompt.lower()
 
 
 def test_image_prompt_unchanged_without_regions():
@@ -79,3 +81,38 @@ def test_image_prompt_unchanged_without_regions():
     prompt = sketch_openai._build_image_prompt({"image_prompt": "elegant column dress"}, "summary", job)
 
     assert "Never unify the outfit under one of these colors." not in prompt
+    assert "Do not invent a jacket" in prompt
+    # Vision text must not override the sketch pixels.
+    assert "elegant column dress" not in prompt
+    assert "orange blouse" not in prompt.lower()
+
+
+def test_unused_color_chip_is_dropped_from_pairs():
+    """Tapping orange then painting only blue jeans must not send orange into Magic."""
+    job = _job(
+        {
+            "color_regions": "#2E6BD1,skirt/lower,62",
+            "material_pairs": "Orange:Silk:#F57A1F;Blue:Denim:#2E6BD1",
+        }
+    )
+
+    text = sketch_openai._user_text(job)
+    prompt = sketch_openai._build_image_prompt({}, "summary", job)
+
+    assert "Orange" not in text
+    assert "Silk" not in text
+    assert "Blue" in text
+    assert "Denim" in text
+    assert "orange" not in prompt.lower()
+    assert "denim" in prompt.lower()
+
+
+def test_male_figure_is_locked_in_the_prompt():
+    job = _job({"figure": "male", "color_regions": "#2E6BD1,skirt/lower,62"})
+
+    text = sketch_openai._user_text(job)
+    prompt = sketch_openai._build_image_prompt({}, "summary", job)
+
+    assert "male fashion croquis" in text
+    assert "clearly male body" in prompt
+    assert "Do not change gender" in prompt

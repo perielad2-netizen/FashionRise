@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using FashionRise.Application;
 using FashionRise.Core.Navigation;
 using FashionRise.Domain;
 using FashionRise.UI;
@@ -246,6 +247,9 @@ namespace FashionRise.Presentation.Screens
                     ColorName = App.CreateDesign.SketchColorName ?? "",
                     MaterialPairs = App.CreateDesign.SketchMaterialPairs ?? "",
                     ColorRegions = App.CreateDesign.SketchColorRegions ?? "",
+                    Figure = SketchFigurePreferences.DefaultTemplate == SketchFigureTemplate.Male
+                        ? "male"
+                        : "female",
                     OnJobStarted = jobId =>
                     {
                         if (!string.IsNullOrWhiteSpace(jobId))
@@ -342,16 +346,17 @@ namespace FashionRise.Presentation.Screens
         string BuildMagicNotes()
         {
             var fabric = App.CreateDesign.SketchFabricName?.Trim() ?? "";
-            if (string.IsNullOrEmpty(fabric))
-                fabric = App.CreateDesign.MaterialId?.Trim() ?? "";
             var color = App.CreateDesign.SketchColorName?.Trim() ?? "";
             var pairs = App.CreateDesign.SketchMaterialPairs?.Trim() ?? "";
             var regions = App.CreateDesign.SketchColorRegions?.Trim() ?? "";
 
+            var figure = SketchFigurePreferences.DefaultTemplate == SketchFigureTemplate.Male ? "male" : "female";
             var sb = new System.Text.StringBuilder();
-            sb.Append("CRITICAL: Preserve every colored garment region from the sketch. ");
-            sb.Append("Example: an orange silk blouse must stay orange silk; blue denim jeans must stay blue denim. ");
-            sb.Append("Never merge a blouse and jeans into one dress. Never recolor one garment with another garment's color. ");
+            sb.Append("CRITICAL: Polish ONLY what is in the uploaded sketch. ");
+            sb.Append("Keep the same garments, colors, pose, and a clearly ").Append(figure).Append(" figure. ");
+            sb.Append("Do not add jackets, coats, extra layers, or accessories that were not drawn. ");
+            sb.Append("Unpainted or white/paper areas stay light — do not invent a new color there. ");
+            sb.Append("Never merge separate garments. Never recolor one garment with another garment's color. ");
 
             if (!string.IsNullOrEmpty(regions))
             {
@@ -400,7 +405,7 @@ namespace FashionRise.Presentation.Screens
                 sb.Append("Studio color for the garment: ").Append(color).Append(". ");
 
             sb.Append(
-                "Make each colored region look fashion-forward and nearly real for its paired fabric — " +
+                "Make each colored region look nearly real for its paired fabric — " +
                 "while staying true to what was drawn.");
             return sb.ToString();
         }

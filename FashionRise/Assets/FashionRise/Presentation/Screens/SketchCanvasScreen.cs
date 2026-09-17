@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using FashionRise.Application;
@@ -960,6 +961,7 @@ namespace FashionRise.Presentation.Screens
 
         string BuildMaterialPairs()
         {
+            var painted = PaintedRegionHexes();
             var parts = new List<string>();
             for (var i = 0; i < _fabricForColor.Length; i++)
             {
@@ -969,27 +971,155 @@ namespace FashionRise.Presentation.Screens
                 // Color:Fabric:#RRGGBB — Magic matches ink by name and approximate RGB
                 var c = InkColors[i];
                 var hex = $"#{Mathf.RoundToInt(c.r * 255):X2}{Mathf.RoundToInt(c.g * 255):X2}{Mathf.RoundToInt(c.b * 255):X2}";
+                // Leftover chips (tapped orange, never painted) used to leak into Magic.
+                if (painted.Count > 0)
+                {
+                    if (!MatchesPaintedHex(hex, painted))
+                        continue;
+                }
+                else if (i != _colorIndex)
+                {
+                    continue;
+                }
+
                 parts.Add(ColorNames[i] + ":" + f + ":" + hex);
             }
 
             return string.Join(";", parts);
         }
 
+        List<string> PaintedRegionHexes()
+        {
+            var regions = _pad != null
+                ? _pad.DescribeColorRegions()
+                : App?.CreateDesign.SketchColorRegions ?? "";
+            var hexes = new List<string>();
+            if (string.IsNullOrWhiteSpace(regions))
+                return hexes;
+            foreach (var part in regions.Split(';'))
+            {
+                var bits = part.Split(',');
+                if (bits.Length < 3)
+                    continue;
+                var hex = bits[0].Trim();
+                if (hex.Length > 0)
+                    hexes.Add(hex);
+            }
+
+            return hexes;
+        }
+
+        static bool MatchesPaintedHex(string chipHex, List<string> painted, int tol = 90)
+        {
+            foreach (var paintedHex in painted)
+            {
+                if (HexManhattan(chipHex, paintedHex) <= tol)
+                    return true;
+            }
+
+            return false;
+        }
+
+        static int HexManhattan(string a, string b)
+        {
+            if (!TryParseHexRgb(a, out var ar, out var ag, out var ab) ||
+                !TryParseHexRgb(b, out var br, out var bg, out var bb))
+                return int.MaxValue;
+            return Mathf.Abs(ar - br) + Mathf.Abs(ag - bg) + Mathf.Abs(ab - bb);
+        }
+
+        static bool TryParseHexRgb(string hex, out int r, out int g, out int b)
+        {
+            r = g = b = 0;
+            if (string.IsNullOrWhiteSpace(hex))
+                return false;
+            var s = hex.Trim();
+            if (s.StartsWith("#"))
+                s = s.Substring(1);
+            if (s.Length != 6)
+                return false;
+            try
+            {
+                r = Convert.ToInt32(s.Substring(0, 2), 16);
+                g = Convert.ToInt32(s.Substring(2, 2), 16);
+                b = Convert.ToInt32(s.Substring(4, 2), 16);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        string NearestPaletteName(string hex)
+        {
+            var best = ColorNames[_colorIndex];
+            var bestDist = int.MaxValue;
+            for (var i = 0; i < InkColors.Length; i++)
+            {
+                var c = InkColors[i];
+                var chip = $"#{Mathf.RoundToInt(c.r * 255):X2}{Mathf.RoundToInt(c.g * 255):X2}{Mathf.RoundToInt(c.b * 255):X2}";
+                var d = HexManhattan(hex, chip);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = ColorNames[i];
+                }
+            }
+
+            return best;
+        }
+
         void PersistMaterialSession()
         {
             if (App == null)
                 return;
-            App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
-            if (_fabricIndex >= 0)
+            // Read the ink itself first: chips only record what was tapped, not what was painted.
+            if (_pad != null)
+                App.CreateDesign.SketchColorRegions = _pad.DescribeColorRegions();
+
+            var painted = PaintedRegionHexes();
+            var pairs = BuildMaterialPairs();
+            App.CreateDesign.SketchMaterialPairs = pairs;
+
+            if (painted.Count == 1)
+                App.CreateDesign.SketchColorName = NearestPaletteName(painted[0]);
+            else if (painted.Count == 0)
+                App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
+            else
+                App.CreateDesign.SketchColorName = "";
+
+            var fabrics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(pairs))
+            {
+                foreach (var part in pairs.Split(';'))
+                {
+                    var bits = part.Split(':');
+                    if (bits.Length >= 2 && !string.IsNullOrWhiteSpace(bits[1]))
+                        fabrics.Add(bits[1].Trim());
+                }
+            }
+
+            if (fabrics.Count == 1)
+            {
+                foreach (var name in fabrics)
+                {
+                    App.CreateDesign.SketchFabricName = name;
+                    App.CreateDesign.MaterialId = name.ToLowerInvariant();
+                    break;
+                }
+            }
+            else if (fabrics.Count > 1 || painted.Count > 0)
+            {
+                // Mixed fabrics, or leftover chips with no fabric on the painted color —
+                // don't send a last-tapped chip as "the" fabric.
+                App.CreateDesign.SketchFabricName = "";
+            }
+            else if (_fabricIndex >= 0)
             {
                 App.CreateDesign.SketchFabricName = Fabrics[_fabricIndex].name;
                 App.CreateDesign.MaterialId = Fabrics[_fabricIndex].name.ToLowerInvariant();
             }
-
-            App.CreateDesign.SketchMaterialPairs = BuildMaterialPairs();
-            // Read the ink itself: chips only record what was tapped, not what was painted.
-            if (_pad != null)
-                App.CreateDesign.SketchColorRegions = _pad.DescribeColorRegions();
         }
 
         void RestoreMaterialPairsFromSession()

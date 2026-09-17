@@ -56,6 +56,8 @@ namespace FashionRise.Infrastructure.Api
                 inputData["color"] = request.ColorName.Trim();
             if (!string.IsNullOrWhiteSpace(request.MaterialPairs))
                 inputData["material_pairs"] = request.MaterialPairs.Trim();
+            if (!string.IsNullOrWhiteSpace(request.Figure))
+                inputData["figure"] = request.Figure.Trim().ToLowerInvariant();
             await EmbedVisionImageAsync(inputData, request.LocalSketchForVision, cancellationToken)
                 .ConfigureAwait(true);
             var job = await _client
