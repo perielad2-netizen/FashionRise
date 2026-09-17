@@ -13,7 +13,7 @@ namespace FashionRise.Application
 
         static readonly string[] PoseLabels =
         {
-            "Stand", "Walk", "Show", "Hip", "Turn", "Arms", "Side", "Back"
+            "Front", "Walk", "Runway", "Hand on hip", "Three-quarter", "Arms out", "Profile", "Back"
         };
 
         public static SketchFigureTemplate DefaultTemplate

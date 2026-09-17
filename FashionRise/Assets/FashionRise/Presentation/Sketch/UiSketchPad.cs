@@ -20,7 +20,9 @@ namespace FashionRise.Presentation.Sketch
         [SerializeField] int textureWidth = 768;
         [SerializeField] int textureHeight = 1024;
         [SerializeField] Color brushColor = new(0.11f, 0.09f, 0.08f, 1f);
-        [SerializeField] [Range(1, 48)] int brushRadius = 4;
+        [SerializeField] [Range(1, 50)] int brushRadius = 4;
+        [SerializeField] [Range(0f, 1f)] float brushSoftness = 0f;
+        [SerializeField] [Range(0.15f, 1f)] float brushOpacity = 1f;
 
         const int MaxUndo = 14;
         static readonly Color32 InkClear = new(0, 0, 0, 0);
@@ -98,9 +100,21 @@ namespace FashionRise.Presentation.Sketch
         }
 
         public void SetBrushRadius(int radius) =>
-            brushRadius = Mathf.Clamp(radius, 1, 48);
+            brushRadius = Mathf.Clamp(radius, 1, 50);
 
         public int BrushRadius => brushRadius;
+
+        /// <summary>0 = hard marker/brush, 1 = soft graphite pencil falloff.</summary>
+        public void SetBrushSoftness(float softness) =>
+            brushSoftness = Mathf.Clamp01(softness);
+
+        public float BrushSoftness => brushSoftness;
+
+        /// <summary>Per-stamp opacity for pencil layering / shading.</summary>
+        public void SetBrushOpacity(float opacity) =>
+            brushOpacity = Mathf.Clamp(opacity, 0.15f, 1f);
+
+        public float BrushOpacity => brushOpacity;
 
         public void SetBrushColor(Color c) => brushColor = c;
 
@@ -310,7 +324,8 @@ namespace FashionRise.Presentation.Sketch
         void LinePixels(Vector2 a, Vector2 b)
         {
             var dist = Vector2.Distance(a, b);
-            var steps = Mathf.Max(1, Mathf.CeilToInt(dist / Mathf.Max(0.5f, brushRadius * 0.35f)));
+            var step = Mathf.Max(0.35f, brushRadius * (brushSoftness > 0.35f ? 0.22f : 0.35f));
+            var steps = Mathf.Max(1, Mathf.CeilToInt(dist / step));
             for (var i = 0; i <= steps; i++)
             {
                 var p = Vector2.Lerp(a, b, i / (float)steps);
@@ -326,34 +341,102 @@ namespace FashionRise.Presentation.Sketch
             var cx = Mathf.Clamp(Mathf.RoundToInt(pixelPos.x), 0, textureWidth - 1);
             var cy = Mathf.Clamp(Mathf.RoundToInt(pixelPos.y), 0, textureHeight - 1);
             var r = brushRadius;
+            var soft = brushSoftness;
+            var opacity = brushOpacity;
+
             if (_eraser)
             {
                 for (var dy = -r; dy <= r; dy++)
                 for (var dx = -r; dx <= r; dx++)
                 {
-                    if (dx * dx + dy * dy > r * r)
+                    var distSq = dx * dx + dy * dy;
+                    if (distSq > r * r)
                         continue;
                     var x = cx + dx;
                     var y = cy + dy;
                     if (x < 0 || x >= textureWidth || y < 0 || y >= textureHeight)
                         continue;
-                    _inkPixels[x + y * textureWidth] = InkClear;
+                    var idx = x + y * textureWidth;
+                    if (soft <= 0.01f)
+                    {
+                        _inkPixels[idx] = InkClear;
+                        continue;
+                    }
+
+                    var dist = Mathf.Sqrt(distSq);
+                    var edge = Mathf.Lerp(r * 0.35f, r, soft);
+                    var fall = 1f - Mathf.SmoothStep(edge * (1f - soft), r + 0.01f, dist);
+                    if (fall <= 0.02f)
+                        continue;
+                    var cur = _inkPixels[idx];
+                    var na = (byte)Mathf.Clamp(Mathf.RoundToInt(cur.a * (1f - fall * opacity)), 0, 255);
+                    if (na < 8)
+                        _inkPixels[idx] = InkClear;
+                    else
+                        _inkPixels[idx] = new Color32(cur.r, cur.g, cur.b, na);
                 }
             }
             else
             {
-                var c32 = (Color32)brushColor;
-                c32.a = 255;
+                var baseC = brushColor;
                 for (var dy = -r; dy <= r; dy++)
                 for (var dx = -r; dx <= r; dx++)
                 {
-                    if (dx * dx + dy * dy > r * r)
+                    var distSq = dx * dx + dy * dy;
+                    if (distSq > r * r)
                         continue;
                     var x = cx + dx;
                     var y = cy + dy;
                     if (x < 0 || x >= textureWidth || y < 0 || y >= textureHeight)
                         continue;
-                    _inkPixels[x + y * textureWidth] = c32;
+                    var idx = x + y * textureWidth;
+
+                    float cover;
+                    if (soft <= 0.01f)
+                        cover = 1f;
+                    else
+                    {
+                        var dist = Mathf.Sqrt(distSq);
+                        var inner = r * (1f - soft * 0.85f);
+                        cover = 1f - Mathf.SmoothStep(inner, r + 0.01f, dist);
+                    }
+
+                    cover *= opacity;
+                    if (cover <= 0.02f)
+                        continue;
+
+                    var dst = _inkPixels[idx];
+                    if (dst.a < 8)
+                    {
+                        _inkPixels[idx] = new Color32(
+                            (byte)Mathf.Clamp(Mathf.RoundToInt(baseC.r * 255f), 0, 255),
+                            (byte)Mathf.Clamp(Mathf.RoundToInt(baseC.g * 255f), 0, 255),
+                            (byte)Mathf.Clamp(Mathf.RoundToInt(baseC.b * 255f), 0, 255),
+                            (byte)Mathf.Clamp(Mathf.RoundToInt(cover * 255f), 0, 255));
+                        continue;
+                    }
+
+                    // Alpha-over blend so pencil strokes layer like graphite
+                    var srcA = cover;
+                    var dstA = dst.a / 255f;
+                    var outA = srcA + dstA * (1f - srcA);
+                    if (outA < 0.01f)
+                    {
+                        _inkPixels[idx] = InkClear;
+                        continue;
+                    }
+
+                    var sr = baseC.r;
+                    var sg = baseC.g;
+                    var sb = baseC.b;
+                    var dr = dst.r / 255f;
+                    var dg = dst.g / 255f;
+                    var db = dst.b / 255f;
+                    _inkPixels[idx] = new Color32(
+                        (byte)Mathf.Clamp(Mathf.RoundToInt((sr * srcA + dr * dstA * (1f - srcA)) / outA * 255f), 0, 255),
+                        (byte)Mathf.Clamp(Mathf.RoundToInt((sg * srcA + dg * dstA * (1f - srcA)) / outA * 255f), 0, 255),
+                        (byte)Mathf.Clamp(Mathf.RoundToInt((sb * srcA + db * dstA * (1f - srcA)) / outA * 255f), 0, 255),
+                        (byte)Mathf.Clamp(Mathf.RoundToInt(outA * 255f), 0, 255));
                 }
             }
         }

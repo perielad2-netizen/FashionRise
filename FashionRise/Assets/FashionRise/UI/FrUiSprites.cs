@@ -9,7 +9,9 @@ namespace FashionRise.UI
         static Sprite? s_roundSoft;
         static Sprite? s_roundPill;
         static Sprite? s_pencil;
+        static Sprite? s_brush;
         static Sprite? s_eraser;
+        static Sprite? s_fill;
         static Sprite? s_undo;
         static Sprite? s_clear;
         static Sprite? s_fade;
@@ -18,13 +20,16 @@ namespace FashionRise.UI
         static Sprite? s_girl;
         static Sprite? s_boy;
         static Sprite? s_sparkle;
-        static Sprite? s_fill;
+        static Sprite? s_hueStrip;
+        static Sprite? s_svSquare;
 
         public static Sprite Circle => s_circle ??= MakeCircle(64);
         public static Sprite RoundSoft => s_roundSoft ??= MakeRoundedRect(64, 64, 18);
         public static Sprite RoundPill => s_roundPill ??= MakeRoundedRect(96, 48, 24);
         public static Sprite IconPencil => s_pencil ??= MakePencilIcon();
+        public static Sprite IconBrush => s_brush ??= MakeBrushIcon();
         public static Sprite IconEraser => s_eraser ??= MakeEraserIcon();
+        public static Sprite IconFill => s_fill ??= MakeFillIcon();
         public static Sprite IconUndo => s_undo ??= MakeUndoIcon();
         public static Sprite IconClear => s_clear ??= MakeClearIcon();
         public static Sprite IconFade => s_fade ??= MakeFadeIcon();
@@ -33,7 +38,8 @@ namespace FashionRise.UI
         public static Sprite IconGirl => s_girl ??= MakePersonIcon(true);
         public static Sprite IconBoy => s_boy ??= MakePersonIcon(false);
         public static Sprite IconSparkle => s_sparkle ??= MakeSparkleIcon();
-        public static Sprite IconFill => s_fill ??= MakeFillIcon();
+        public static Sprite HueStrip => s_hueStrip ??= MakeHueStrip(24, 128);
+        public static Sprite SvSquare => s_svSquare ??= MakeSvSquare(128);
 
         public static Sprite FabricSwatch(Color baseColor, int seed)
         {
@@ -62,6 +68,51 @@ namespace FashionRise.UI
             tex.Apply(false, false);
             return Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f,
                 0, SpriteMeshType.FullRect);
+        }
+
+        public static Texture2D BuildSvTexture(float hue, int size = 96)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = "FrSv"
+            };
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var s = x / (float)(size - 1);
+                var v = y / (float)(size - 1);
+                tex.SetPixel(x, y, Color.HSVToRGB(hue, s, v));
+            }
+
+            tex.Apply(false, false);
+            return tex;
+        }
+
+        static Sprite MakeHueStrip(int w, int h)
+        {
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            for (var y = 0; y < h; y++)
+            {
+                var hue = 1f - y / (float)(h - 1);
+                var c = Color.HSVToRGB(hue, 1f, 1f);
+                for (var x = 0; x < w; x++)
+                    tex.SetPixel(x, y, c);
+            }
+
+            tex.Apply(false, false);
+            return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        static Sprite MakeSvSquare(int n)
+        {
+            // Neutral template; live SV texture is rebuilt when hue changes.
+            return Sprite.Create(BuildSvTexture(0f, n), new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f);
         }
 
         static Sprite MakeCircle(int n)
@@ -159,52 +210,103 @@ namespace FashionRise.UI
             }
         }
 
-        static readonly Color32 Ink = new(42, 28, 48, 255);
-        static readonly Color32 Soft = new(42, 28, 48, 200);
+        static readonly Color32 Ink = new(36, 28, 42, 255);
+        static readonly Color32 Soft = new(36, 28, 42, 180);
+        static readonly Color32 Accent = new(236, 72, 153, 255);
 
         static Sprite MakePencilIcon() =>
             MakeIcon((px, n) =>
             {
-                Stamp(px, n, 18, 18, 44, 44, 4, Ink);
-                Dot(px, n, 16, 16, 3, new Color32(236, 72, 153, 255));
-                Stamp(px, n, 40, 40, 48, 48, 3, Soft);
+                // Classic diagonal pencil
+                Stamp(px, n, 16, 44, 42, 18, 5, Ink);
+                Stamp(px, n, 18, 46, 44, 20, 2, Soft);
+                // Tip
+                Stamp(px, n, 14, 46, 18, 50, 2, Accent);
+                Dot(px, n, 14, 50, 2, Accent);
+                // Ferrule
+                Stamp(px, n, 38, 20, 46, 12, 3, Soft);
+                Dot(px, n, 48, 10, 3, new Color32(255, 200, 120, 255));
+            });
+
+        static Sprite MakeBrushIcon() =>
+            MakeIcon((px, n) =>
+            {
+                // Handle
+                Stamp(px, n, 28, 14, 28, 34, 4, Ink);
+                // Ferrule
+                for (var y = 34; y <= 40; y++)
+                for (var x = 22; x <= 34; x++)
+                    px[x + y * n] = Soft;
+                // Bristles
+                Stamp(px, n, 24, 40, 20, 52, 2, Accent);
+                Stamp(px, n, 28, 40, 28, 54, 2, Accent);
+                Stamp(px, n, 32, 40, 36, 52, 2, Accent);
             });
 
         static Sprite MakeEraserIcon() =>
             MakeIcon((px, n) =>
             {
-                for (var y = 22; y <= 40; y++)
-                for (var x = 18; x <= 44; x++)
+                // Angled eraser block
+                for (var y = 18; y <= 42; y++)
+                for (var x = 16; x <= 46; x++)
                 {
-                    var slant = (x - 18) * 0.35f;
-                    if (y > 24 + slant && y < 38 + slant)
+                    var slant = (x - 16) * 0.4f;
+                    if (y > 22 + slant && y < 36 + slant)
                         px[x + y * n] = new Color32(255, 170, 190, 255);
                 }
 
                 Stamp(px, n, 18, 24, 44, 38, 2, Ink);
-                Stamp(px, n, 18, 38, 44, 24, 2, Ink);
+                Stamp(px, n, 18, 36, 44, 22, 2, Ink);
+                // Metal band
+                Stamp(px, n, 20, 28, 42, 34, 2, Soft);
+            });
+
+        static Sprite MakeFillIcon() =>
+            MakeIcon((px, n) =>
+            {
+                // Bucket body
+                for (var y = 26; y <= 48; y++)
+                for (var x = 18; x <= 40; x++)
+                {
+                    if (x >= 20 && x <= 38 && y >= 28 && y <= 46)
+                        px[x + y * n] = Ink;
+                }
+
+                // Handle
+                Stamp(px, n, 28, 18, 40, 28, 2, Soft);
+                // Spill drop
+                Dot(px, n, 44, 40, 4, Accent);
+                Dot(px, n, 48, 48, 3, new Color32(236, 72, 153, 200));
             });
 
         static Sprite MakeUndoIcon() =>
             MakeIcon((px, n) =>
             {
-                for (var a = 40; a <= 220; a += 8)
+                for (var a = 30; a <= 230; a += 6)
                 {
                     var rad = a * Mathf.Deg2Rad;
-                    var x = 32 + Mathf.RoundToInt(Mathf.Cos(rad) * 14);
-                    var y = 30 + Mathf.RoundToInt(Mathf.Sin(rad) * 14);
+                    var x = 32 + Mathf.RoundToInt(Mathf.Cos(rad) * 15);
+                    var y = 30 + Mathf.RoundToInt(Mathf.Sin(rad) * 15);
                     Dot(px, n, x, y, 2, Ink);
                 }
 
-                Stamp(px, n, 18, 36, 14, 28, 2, Ink);
-                Stamp(px, n, 18, 36, 26, 32, 2, Ink);
+                Stamp(px, n, 16, 38, 12, 28, 2, Ink);
+                Stamp(px, n, 16, 38, 24, 34, 2, Ink);
             });
 
         static Sprite MakeClearIcon() =>
             MakeIcon((px, n) =>
             {
-                Stamp(px, n, 20, 20, 44, 44, 3, Ink);
-                Stamp(px, n, 20, 44, 44, 20, 3, Ink);
+                // Trash can
+                for (var y = 22; y <= 48; y++)
+                for (var x = 20; x <= 44; x++)
+                    if (x == 20 || x == 44 || y == 48 || (y == 22 && x >= 20 && x <= 44))
+                        px[x + y * n] = Ink;
+                Stamp(px, n, 18, 20, 46, 20, 2, Ink);
+                Stamp(px, n, 28, 14, 36, 14, 2, Soft);
+                Stamp(px, n, 26, 28, 26, 42, 1, Soft);
+                Stamp(px, n, 32, 28, 32, 42, 1, Soft);
+                Stamp(px, n, 38, 28, 38, 42, 1, Soft);
             });
 
         static Sprite MakeFadeIcon() =>
@@ -212,77 +314,61 @@ namespace FashionRise.UI
             {
                 for (var i = 0; i < 5; i++)
                 {
-                    var a = (byte)(220 - i * 40);
-                    Dot(px, n, 20 + i * 6, 32, 8 - i, new Color32(42, 28, 48, a));
+                    var a = (byte)(230 - i * 42);
+                    Dot(px, n, 18 + i * 7, 32, 9 - i, new Color32(36, 28, 42, a));
                 }
             });
 
         static Sprite MakePhotoIcon() =>
             MakeIcon((px, n) =>
             {
-                for (var y = 20; y <= 44; y++)
-                for (var x = 16; x <= 48; x++)
-                    if (x == 16 || x == 48 || y == 20 || y == 44)
+                for (var y = 18; y <= 46; y++)
+                for (var x = 14; x <= 50; x++)
+                    if (x == 14 || x == 50 || y == 18 || y == 46)
                         px[x + y * n] = Ink;
-                Dot(px, n, 32, 32, 6, Soft);
-                Dot(px, n, 40, 26, 2, Ink);
+                Dot(px, n, 32, 32, 7, Soft);
+                Dot(px, n, 42, 24, 2, Accent);
             });
 
         static Sprite MakePoseIcon() =>
             MakeIcon((px, n) =>
             {
-                Dot(px, n, 32, 46, 4, Ink);
-                Stamp(px, n, 32, 42, 32, 28, 2, Ink);
-                Stamp(px, n, 32, 36, 22, 30, 2, Ink);
-                Stamp(px, n, 32, 36, 42, 30, 2, Ink);
-                Stamp(px, n, 32, 28, 24, 16, 2, Ink);
-                Stamp(px, n, 32, 28, 40, 16, 2, Ink);
+                Dot(px, n, 32, 48, 4, Ink);
+                Stamp(px, n, 32, 44, 32, 28, 2, Ink);
+                Stamp(px, n, 32, 38, 18, 44, 2, Soft);
+                Stamp(px, n, 32, 38, 46, 32, 2, Soft);
+                Stamp(px, n, 32, 28, 24, 14, 2, Ink);
+                Stamp(px, n, 32, 28, 40, 14, 2, Ink);
             });
 
         static Sprite MakePersonIcon(bool girl) =>
             MakeIcon((px, n) =>
             {
-                Dot(px, n, 32, 44, 5, Ink);
-                Stamp(px, n, 32, 38, 32, 24, 3, Ink);
-                Stamp(px, n, 32, 34, 22, 28, 2, Ink);
-                Stamp(px, n, 32, 34, 42, 28, 2, Ink);
+                Dot(px, n, 32, 46, 5, Ink);
+                Stamp(px, n, 32, 40, 32, 26, 3, Ink);
+                Stamp(px, n, 32, 36, 22, 30, 2, Soft);
+                Stamp(px, n, 32, 36, 42, 30, 2, Soft);
                 if (girl)
                 {
-                    Stamp(px, n, 32, 24, 24, 14, 2, Ink);
-                    Stamp(px, n, 32, 24, 40, 14, 2, Ink);
-                    Stamp(px, n, 24, 14, 40, 14, 2, Soft);
+                    Stamp(px, n, 32, 26, 22, 12, 2, Ink);
+                    Stamp(px, n, 32, 26, 42, 12, 2, Ink);
+                    Stamp(px, n, 22, 12, 42, 12, 2, Soft);
                 }
                 else
                 {
-                    Stamp(px, n, 32, 24, 26, 14, 2, Ink);
-                    Stamp(px, n, 32, 24, 38, 14, 2, Ink);
+                    Stamp(px, n, 32, 26, 26, 12, 2, Ink);
+                    Stamp(px, n, 32, 26, 38, 12, 2, Ink);
                 }
             });
 
         static Sprite MakeSparkleIcon() =>
             MakeIcon((px, n) =>
             {
-                Stamp(px, n, 32, 14, 32, 50, 2, Ink);
-                Stamp(px, n, 14, 32, 50, 32, 2, Ink);
-                Stamp(px, n, 20, 20, 44, 44, 2, Soft);
-                Stamp(px, n, 20, 44, 44, 20, 2, Soft);
-                Dot(px, n, 32, 32, 3, new Color32(236, 72, 153, 255));
-            });
-
-        static Sprite MakeFillIcon() =>
-            MakeIcon((px, n) =>
-            {
-                // Paint bucket silhouette
-                for (var y = 28; y <= 46; y++)
-                for (var x = 22; x <= 42; x++)
-                {
-                    if (y >= 28 + (x - 22) / 4 && y <= 46 - (x - 32) * (x - 32) / 40)
-                        px[x + y * n] = Ink;
-                }
-
-                Stamp(px, n, 30, 20, 38, 28, 2, Soft);
-                Dot(px, n, 40, 18, 3, new Color32(236, 72, 153, 255));
-                Dot(px, n, 44, 22, 2, new Color32(236, 72, 153, 200));
+                Stamp(px, n, 32, 12, 32, 52, 2, Ink);
+                Stamp(px, n, 12, 32, 52, 32, 2, Ink);
+                Stamp(px, n, 18, 18, 46, 46, 2, Soft);
+                Stamp(px, n, 18, 46, 46, 18, 2, Soft);
+                Dot(px, n, 32, 32, 3, Accent);
             });
     }
 }

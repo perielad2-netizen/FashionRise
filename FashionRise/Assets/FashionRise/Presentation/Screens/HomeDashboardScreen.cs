@@ -9,8 +9,7 @@ using UnityEngine.UI;
 namespace FashionRise.Presentation.Screens
 {
     /// <summary>
-    /// Kid front door — visual-first model pick (inspired by fashion games, FashionRise owns the create loop).
-    /// Pro atelier stays under More.
+    /// Front door — pick a fashion figure, then sketch. Magic. Share.
     /// </summary>
     public sealed class HomeDashboardScreen : ScreenBase
     {
@@ -33,9 +32,9 @@ namespace FashionRise.Presentation.Screens
                 FontStyle.Bold, TextAnchor.UpperCenter, useSecondaryTextColor: true);
 
             var row = FrUiFactory.AddHorizontalRow(col, "ModelRow", t.ControlGap);
-            FrUiFactory.AddModelChoiceTile(row, "Girl", "GIRL", SketchDefaultFigureGenerator.FemaleResourcePath, t,
+            FrUiFactory.AddModelChoiceTile(row, "Women", "WOMEN", SketchDefaultFigureGenerator.FemaleResourcePath, t,
                 () => OpenSketch(SketchFigureTemplate.Female));
-            FrUiFactory.AddModelChoiceTile(row, "Boy", "BOY", SketchDefaultFigureGenerator.MaleResourcePath, t,
+            FrUiFactory.AddModelChoiceTile(row, "Men", "MEN", SketchDefaultFigureGenerator.MaleResourcePath, t,
                 () => OpenSketch(SketchFigureTemplate.Male));
 
             FrUiFactory.AddButton(col, "More studio…", t, ToggleMore);
