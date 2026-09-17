@@ -21,6 +21,7 @@ namespace FashionRise.Core
 
         void Awake()
         {
+            FrDiag.Install();
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (FindObjectOfType<FashionRiseAndroidBridge>() == null)
             {
@@ -39,6 +40,8 @@ namespace FashionRise.Core
                 return;
             }
 
+            FashionRiseBootstrapBuilder.EnsureAllScreens(sc.transform);
+
             var app = AppServices.CreateFromConfig(apiConfig);
             Debug.Log($"FashionRise API BaseUrl = '{apiConfig.BaseUrl}' (api={app.IsApiBackend})");
             sc.Initialize(app);
@@ -48,7 +51,7 @@ namespace FashionRise.Core
             if (autosave == null)
                 autosave = gameObject.AddComponent<DesignAutosaveDriver>();
             autosave.Init(app);
-            _ = _nav.NavigateToAsync(ScreenId.Splash);
+            FrDiag.Fire(_nav.NavigateToAsync(ScreenId.Splash), "navigate Splash");
         }
     }
 }

@@ -10,6 +10,8 @@ namespace FashionRise.Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void AfterSceneLoad()
         {
+            // Before the hierarchy exists, so even a screen that fails in Awake is on record.
+            FrDiag.Install();
             FashionRiseBootstrapBuilder.CreateBootstrapIfMissing();
         }
     }

@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     ai_worker_poll_interval_seconds: float = 1.5
     ai_worker_batch_size: int = 12
 
-    # OpenAI (optional — sketch pipeline jobs use vision + JSON when OPENAI_API_KEY is set)
+    # OpenAI (optional — sketch + tech_pack jobs use vision + JSON when OPENAI_API_KEY is set)
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str | None = None
@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     openai_image_model: str = "gpt-image-1"
     openai_image_size: str = "1024x1536"
     openai_image_quality: str = "standard"
+    # Tech pack renders front/back/pattern blueprints in parallel; past this budget the
+    # sheet returns with whatever finished so the client never waits on a stalled image.
+    openai_tech_pack_image_budget_seconds: float = 200.0
 
     max_upload_size_mb: int = 25
     allowed_upload_image_types: str = "image/jpeg,image/png,image/webp"

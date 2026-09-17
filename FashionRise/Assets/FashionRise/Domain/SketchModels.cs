@@ -38,6 +38,13 @@ namespace FashionRise.Domain
         /// <summary>Color→fabric pairs, e.g. <c>Green:Silk;Grey:Denim</c>.</summary>
         public string MaterialPairs { get; set; } = "";
         /// <summary>
+        /// Colours measured from the ink layer with position and area share, e.g.
+        /// <c>#19B89C,bodice/upper+skirt/lower,61;#141414,hat/head+shoes/hem,9</c>.
+        /// </summary>
+        public string ColorRegions { get; set; } = "";
+        /// <summary>Studio croquis gender: <c>male</c> or <c>female</c>.</summary>
+        public string Figure { get; set; } = "";
+        /// <summary>
         /// Invoked as soon as the polish job id is known (before the long wait), so the UI can recover if polling fails.
         /// </summary>
         [NonSerialized]

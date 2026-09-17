@@ -4,6 +4,10 @@ namespace FashionRise.UI
     {
         Secondary,
         Primary,
-        Destructive
+        Destructive,
+        /// <summary>Premium AI CTA — charcoal face + champagne accent sweep.</summary>
+        AiAction,
+        /// <summary>Quiet text / ghost control.</summary>
+        Ghost
     }
 }

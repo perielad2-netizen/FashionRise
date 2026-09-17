@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using FashionRise.Core;
 using FashionRise.Core.Navigation;
 using FashionRise.Domain;
 using FashionRise.UI;
@@ -12,12 +13,16 @@ using UnityEngine.UI;
 
 namespace FashionRise.Presentation.Screens
 {
+    /// <summary>
+    /// Your Look — Share, Magic again, or Create Real Design (tech pack).
+    /// </summary>
     public sealed class ConceptResultScreen : ScreenBase
     {
         Text _body = null!;
         RawImage _preview = null!;
         Texture2D? _ownedPreview;
         RectTransform _previewHost = null!;
+        FrAiLoadingFx? _loading;
 
         public override ScreenId Id => ScreenId.ConceptResult;
 
@@ -25,28 +30,26 @@ namespace FashionRise.Presentation.Screens
         {
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
+            _loading = FrAiLoadingFx.Create(root, t);
 
-            // Slim title strip
             var top = new GameObject("Top", typeof(RectTransform), typeof(VerticalLayoutGroup));
             var topRt = top.GetComponent<RectTransform>();
             topRt.SetParent(root, false);
             topRt.anchorMin = new Vector2(0f, 1f);
             topRt.anchorMax = new Vector2(1f, 1f);
             topRt.pivot = new Vector2(0.5f, 1f);
-            topRt.sizeDelta = new Vector2(0f, 56f);
+            topRt.sizeDelta = new Vector2(0f, 72f);
             var topV = top.GetComponent<VerticalLayoutGroup>();
-            topV.padding = new RectOffset(12, 12, 8, 2);
+            topV.padding = new RectOffset(20, 20, 14, 4);
             topV.spacing = 0f;
             topV.childAlignment = TextAnchor.MiddleCenter;
             topV.childControlWidth = true;
             topV.childForceExpandWidth = true;
-            topV.childControlHeight = true;
-            topV.childForceExpandHeight = false;
-            FrUiFactory.AddLabel(top.transform, "H", "YOUR LOOK", t, Mathf.RoundToInt(t.SubtitleSize + 4f),
-                FontStyle.Bold, TextAnchor.MiddleCenter);
+            FrUiFactory.AddOverline(top.transform, "Ov", "Your collection", t);
+            FrUiFactory.AddEditorialLabel(top.transform, "H", "Your Look", t,
+                Mathf.RoundToInt(t.TitleSize), true, TextAnchor.MiddleCenter);
 
-            // Compact bottom bar — SHARE + Edit + Draw again / Home must all fit on iPad Mini
-            const float bottomH = 168f;
+            const float bottomH = 210f;
             var bottom = new GameObject("Bottom", typeof(RectTransform), typeof(VerticalLayoutGroup));
             var bottomRt = bottom.GetComponent<RectTransform>();
             bottomRt.SetParent(root, false);
@@ -55,8 +58,8 @@ namespace FashionRise.Presentation.Screens
             bottomRt.pivot = new Vector2(0.5f, 0f);
             bottomRt.sizeDelta = new Vector2(0f, bottomH);
             var bottomV = bottom.GetComponent<VerticalLayoutGroup>();
-            bottomV.padding = new RectOffset(14, 14, 4, 10);
-            bottomV.spacing = 6f;
+            bottomV.padding = new RectOffset(18, 18, 6, 14);
+            bottomV.spacing = 8f;
             bottomV.childAlignment = TextAnchor.LowerCenter;
             bottomV.childControlWidth = true;
             bottomV.childForceExpandWidth = true;
@@ -67,18 +70,22 @@ namespace FashionRise.Presentation.Screens
                 FontStyle.Normal, TextAnchor.MiddleCenter, useSecondaryTextColor: true);
             var bodyLe = _body.GetComponent<LayoutElement>() ?? _body.gameObject.AddComponent<LayoutElement>();
             bodyLe.minHeight = 18f;
-            bodyLe.preferredHeight = 20f;
-            bodyLe.flexibleHeight = 0f;
+            bodyLe.preferredHeight = 22f;
 
-            var share = FrUiFactory.AddButton(bottom.transform, "SHARE!", t, ShareLook, FrButtonEmphasis.Primary);
+            var share = FrUiFactory.AddButton(bottom.transform, "Share with friends", t, ShareLook,
+                FrButtonEmphasis.Primary);
             ShrinkAction(share, 48f);
+
+            var real = FrUiFactory.AddButton(bottom.transform, "Create Real Design", t, OpenTechPack,
+                FrButtonEmphasis.AiAction);
+            ShrinkAction(real, 52f);
 
             var row = new GameObject("Actions", typeof(RectTransform), typeof(HorizontalLayoutGroup),
                 typeof(LayoutElement));
             row.transform.SetParent(bottom.transform, false);
             var rowLe = row.GetComponent<LayoutElement>();
-            rowLe.minHeight = 46f;
-            rowLe.preferredHeight = 46f;
+            rowLe.minHeight = 44f;
+            rowLe.preferredHeight = 44f;
             rowLe.flexibleWidth = 1f;
             var rowH = row.GetComponent<HorizontalLayoutGroup>();
             rowH.spacing = 8f;
@@ -88,45 +95,31 @@ namespace FashionRise.Presentation.Screens
             rowH.childControlHeight = true;
             rowH.childForceExpandHeight = true;
 
+            var magicAgain = FrUiFactory.AddButton(row.transform, "Magic again", t, MagicAgain);
+            ShrinkAction(magicAgain, 44f);
             var edit = FrUiFactory.AddButton(row.transform, "Edit sketch", t, EditSketch);
-            ShrinkAction(edit, 46f);
-            var draw = FrUiFactory.AddButton(row.transform, "Draw again", t, DrawAgain);
-            ShrinkAction(draw, 46f);
+            ShrinkAction(edit, 44f);
             var home = FrUiFactory.AddButton(row.transform, "Home", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.HomeDashboard);
-            });
-            ShrinkAction(home, 46f);
+            }, FrButtonEmphasis.Ghost);
+            ShrinkAction(home, 44f);
 
-            // Look stage fills everything between title and bottom bar
             var stage = new GameObject("LookStage", typeof(RectTransform), typeof(Image));
             stage.transform.SetParent(root, false);
             _previewHost = stage.GetComponent<RectTransform>();
             _previewHost.anchorMin = new Vector2(0f, 0f);
             _previewHost.anchorMax = new Vector2(1f, 1f);
-            _previewHost.offsetMin = new Vector2(16f, bottomH + 4f);
-            _previewHost.offsetMax = new Vector2(-16f, -58f);
+            _previewHost.offsetMin = new Vector2(20f, bottomH + 6f);
+            _previewHost.offsetMax = new Vector2(-20f, -78f);
             var stageImg = stage.GetComponent<Image>();
             stageImg.sprite = FrUiSprites.RoundSoft;
             stageImg.type = Image.Type.Sliced;
             stageImg.color = new Color(1f, 1f, 1f, 0.55f);
             var stageShadow = stage.AddComponent<Shadow>();
-            stageShadow.effectColor = new Color(0.2f, 0.08f, 0.14f, 0.16f);
+            stageShadow.effectColor = new Color(0.08f, 0.07f, 0.06f, 0.14f);
             stageShadow.effectDistance = new Vector2(0f, -8f);
-
-            var glow = new GameObject("Glow", typeof(RectTransform), typeof(Image));
-            glow.transform.SetParent(stage.transform, false);
-            var glowRt = glow.GetComponent<RectTransform>();
-            glowRt.anchorMin = new Vector2(0.12f, 0.02f);
-            glowRt.anchorMax = new Vector2(0.88f, 0.98f);
-            glowRt.offsetMin = Vector2.zero;
-            glowRt.offsetMax = Vector2.zero;
-            var glowImg = glow.GetComponent<Image>();
-            glowImg.sprite = FrUiSprites.Circle;
-            glowImg.color = new Color(t.Champagne.r, t.Champagne.g, t.Champagne.b, 0.4f);
-            glowImg.raycastTarget = false;
-            glow.AddComponent<FrUiMotion>().EnablePulse(true);
 
             var previewGo = new GameObject("LookPreview", typeof(RectTransform), typeof(RawImage),
                 typeof(AspectRatioFitter));
@@ -135,8 +128,8 @@ namespace FashionRise.Presentation.Screens
             previewRt.anchorMin = new Vector2(0.5f, 0f);
             previewRt.anchorMax = new Vector2(0.5f, 1f);
             previewRt.pivot = new Vector2(0.5f, 0.5f);
-            previewRt.offsetMin = new Vector2(0f, 6f);
-            previewRt.offsetMax = new Vector2(0f, -6f);
+            previewRt.offsetMin = new Vector2(0f, 10f);
+            previewRt.offsetMax = new Vector2(0f, -10f);
             _preview = previewGo.GetComponent<RawImage>();
             _preview.color = Color.white;
             _preview.raycastTarget = false;
@@ -167,13 +160,21 @@ namespace FashionRise.Presentation.Screens
                     new SketchNavContext { RestoreSketch = true });
         }
 
-        void DrawAgain()
+        void MagicAgain()
         {
             App.CreateDesign.ClearLastLook();
-            App.CreateDesign.LastInkImagePath = "";
-            App.CreateDesign.SketchMaterialPairs = "";
+            App.CreateDesign.ClearTechPack();
             if (App.Navigation != null)
-                _ = App.Navigation.NavigateToAsync(ScreenId.HomeDashboard);
+                _ = App.Navigation.NavigateToAsync(ScreenId.SketchEnhancement,
+                    new SketchNavContext { AutoMagic = true, RestoreSketch = true });
+        }
+
+        void OpenTechPack()
+        {
+            if (App.Navigation == null)
+                return;
+            FrDiag.Step("create real design pressed");
+            FrDiag.Fire(App.Navigation.NavigateToAsync(ScreenId.TechPack), "navigate TechPack");
         }
 
         public override async Task ShowAsync(object? payload = null, CancellationToken cancellationToken = default)
@@ -183,7 +184,7 @@ namespace FashionRise.Presentation.Screens
             SetPreviewVisible(false);
 
             var sb = new StringBuilder();
-            sb.Append("You made this!");
+            sb.Append("Share it · refine with Magic · or build a real tech pack.");
             var summary = App.CreateDesign.LastSketchSummary?.Trim() ?? "";
             if (!string.IsNullOrEmpty(summary))
             {
@@ -194,7 +195,7 @@ namespace FashionRise.Presentation.Screens
                     !firstLine.StartsWith("Source:", StringComparison.OrdinalIgnoreCase) &&
                     !firstLine.StartsWith("Model:", StringComparison.OrdinalIgnoreCase) &&
                     !firstLine.StartsWith("Transform", StringComparison.OrdinalIgnoreCase))
-                    sb.Append(' ').Append(firstLine);
+                    sb.Insert(0, firstLine + "  ");
             }
 
             _body.text = sb.ToString();
@@ -214,12 +215,6 @@ namespace FashionRise.Presentation.Screens
                         imageUrl = fromJob!;
                         App.CreateDesign.LastPolishedImageUrl = imageUrl;
                     }
-
-                    var detail = await App.Ai
-                        .GetJobStructuredDetailTextAsync(App.CreateDesign.LastSketchJobId, cancellationToken)
-                        .ConfigureAwait(true);
-                    if (!string.IsNullOrEmpty(detail))
-                        Debug.Log($"FashionRise look detail:\n{detail}");
                 }
                 catch (Exception ex)
                 {
@@ -231,7 +226,6 @@ namespace FashionRise.Presentation.Screens
             {
                 var loadUrl = RewriteUploadUrlToApiHost(imageUrl);
                 _body.text = "Loading your look…";
-                Debug.Log($"FashionRise ConceptResult loading look: {loadUrl}");
                 try
                 {
                     var err = await LoadPolishedPreviewAsync(loadUrl, cancellationToken).ConfigureAwait(true);
@@ -295,10 +289,7 @@ namespace FashionRise.Presentation.Screens
 
             cancellationToken.ThrowIfCancellationRequested();
             if (req.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogWarning($"FashionRise look image download failed: {req.error} ({url})");
                 return req.error ?? "download failed";
-            }
 
             var tex = DownloadHandlerTexture.GetContent(req);
             if (tex == null)

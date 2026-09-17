@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FashionRise.Presentation.Screens;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -10,6 +11,31 @@ namespace FashionRise.Core
     /// </summary>
     public static class FashionRiseBootstrapBuilder
     {
+        /// <summary>
+        /// Single source of truth for the screen hierarchy. A scene saved before a screen existed
+        /// is repaired at runtime from this list — otherwise navigating to the new screen would
+        /// find nothing and simply hide the whole UI.
+        /// </summary>
+        static readonly System.Type[] ScreenTypes =
+        {
+            typeof(SplashScreen),
+            typeof(WelcomeScreen),
+            typeof(LoginChoiceScreen),
+            typeof(HomeDashboardScreen),
+            typeof(CreateDesignScreen),
+            typeof(MaterialSelectionScreen),
+            typeof(ModelPreviewScreen),
+            typeof(GalleryScreen),
+            typeof(ProfileScreen),
+            typeof(DesignDetailScreen),
+            typeof(SettingsScreen),
+            typeof(SketchCanvasScreen),
+            typeof(ImportSketchScreen),
+            typeof(SketchEnhancementScreen),
+            typeof(ConceptResultScreen),
+            typeof(TechPackScreen)
+        };
+
         public static void EnsureEventSystem()
         {
             if (Object.FindObjectOfType<EventSystem>() != null)
@@ -18,6 +44,64 @@ namespace FashionRise.Core
             var esGo = new GameObject("EventSystem");
             esGo.AddComponent<EventSystem>();
             esGo.AddComponent<StandaloneInputModule>();
+        }
+
+        /// <summary>
+        /// Returns every screen under <paramref name="uiRoot"/>, creating any screen type that is
+        /// missing (stale saved scene, hand-edited hierarchy). Newly created screens start hidden.
+        /// </summary>
+        public static ScreenBase[] EnsureScreens(Transform uiRoot)
+        {
+            var found = uiRoot.GetComponentsInChildren<ScreenBase>(true);
+            var list = new List<ScreenBase>(found.Length + 4);
+            foreach (var s in found)
+                if (s != null)
+                    list.Add(s);
+
+            foreach (var type in ScreenTypes)
+            {
+                var present = false;
+                foreach (var s in list)
+                {
+                    if (s.GetType() != type)
+                        continue;
+                    present = true;
+                    break;
+                }
+
+                if (present)
+                    continue;
+
+                var screen = CreateScreen(uiRoot, type);
+                if (screen == null)
+                    continue;
+                list.Add(screen);
+                Debug.Log($"FashionRise: added missing screen '{type.Name}' to the UI hierarchy. " +
+                          "Save the scene (Ctrl+S) to keep it.");
+                FrDiag.Step($"repaired hierarchy: added {type.Name}");
+            }
+
+            return list.ToArray();
+        }
+
+        static ScreenBase? CreateScreen(Transform uiRoot, System.Type type)
+        {
+            var go = new GameObject(type.Name, typeof(RectTransform));
+            go.transform.SetParent(uiRoot, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var screen = go.AddComponent(type) as ScreenBase;
+            if (screen == null)
+            {
+                Object.Destroy(go);
+                return null;
+            }
+
+            go.SetActive(false);
+            return screen;
         }
 
         /// <summary>
@@ -45,37 +129,53 @@ namespace FashionRise.Core
             // ScreenController before FashionRiseApp: AddComponent runs Awake immediately; Start runs after all children exist.
             canvasGo.AddComponent<ScreenController>();
 
-            ScreenBase AddScreen<T>(string name) where T : ScreenBase
-            {
-                var go = new GameObject(name, typeof(RectTransform));
-                go.transform.SetParent(canvasGo.transform, false);
-                var rt = go.GetComponent<RectTransform>();
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.offsetMin = Vector2.zero;
-                rt.offsetMax = Vector2.zero;
-                return go.AddComponent<T>();
-            }
-
-            AddScreen<SplashScreen>("SplashScreen");
-            AddScreen<WelcomeScreen>("WelcomeScreen");
-            AddScreen<LoginChoiceScreen>("LoginChoiceScreen");
-            AddScreen<HomeDashboardScreen>("HomeDashboardScreen");
-            AddScreen<CreateDesignScreen>("CreateDesignScreen");
-            AddScreen<MaterialSelectionScreen>("MaterialSelectionScreen");
-            AddScreen<ModelPreviewScreen>("ModelPreviewScreen");
-            AddScreen<GalleryScreen>("GalleryScreen");
-            AddScreen<ProfileScreen>("ProfileScreen");
-            AddScreen<DesignDetailScreen>("DesignDetailScreen");
-            AddScreen<SettingsScreen>("SettingsScreen");
-            AddScreen<SketchCanvasScreen>("SketchCanvasScreen");
-            AddScreen<ImportSketchScreen>("ImportSketchScreen");
-            AddScreen<SketchEnhancementScreen>("SketchEnhancementScreen");
-            AddScreen<ConceptResultScreen>("ConceptResultScreen");
+            EnsureScreens(canvasGo.transform);
 
             canvasGo.AddComponent<FashionRiseApp>();
 
             return canvasGo;
+        }
+
+        /// <summary>
+        /// Existing App.unity scenes may predate new screens. Create any missing screen roots
+        /// under the UI canvas so navigation never blanks the app.
+        /// </summary>
+        public static void EnsureAllScreens(Transform canvasRoot)
+        {
+            if (canvasRoot == null)
+                return;
+            EnsureScreen<SplashScreen>(canvasRoot, "SplashScreen");
+            EnsureScreen<WelcomeScreen>(canvasRoot, "WelcomeScreen");
+            EnsureScreen<LoginChoiceScreen>(canvasRoot, "LoginChoiceScreen");
+            EnsureScreen<HomeDashboardScreen>(canvasRoot, "HomeDashboardScreen");
+            EnsureScreen<CreateDesignScreen>(canvasRoot, "CreateDesignScreen");
+            EnsureScreen<MaterialSelectionScreen>(canvasRoot, "MaterialSelectionScreen");
+            EnsureScreen<ModelPreviewScreen>(canvasRoot, "ModelPreviewScreen");
+            EnsureScreen<GalleryScreen>(canvasRoot, "GalleryScreen");
+            EnsureScreen<ProfileScreen>(canvasRoot, "ProfileScreen");
+            EnsureScreen<DesignDetailScreen>(canvasRoot, "DesignDetailScreen");
+            EnsureScreen<SettingsScreen>(canvasRoot, "SettingsScreen");
+            EnsureScreen<SketchCanvasScreen>(canvasRoot, "SketchCanvasScreen");
+            EnsureScreen<ImportSketchScreen>(canvasRoot, "ImportSketchScreen");
+            EnsureScreen<SketchEnhancementScreen>(canvasRoot, "SketchEnhancementScreen");
+            EnsureScreen<ConceptResultScreen>(canvasRoot, "ConceptResultScreen");
+            EnsureScreen<TechPackScreen>(canvasRoot, "TechPackScreen");
+        }
+
+        static void EnsureScreen<T>(Transform canvasRoot, string name) where T : ScreenBase
+        {
+            if (canvasRoot.GetComponentInChildren<T>(true) != null)
+                return;
+            Debug.Log($"FashionRise: adding missing screen {name} to scene at runtime.");
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(canvasRoot, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            go.AddComponent<T>();
+            go.SetActive(false);
         }
 
         /// <summary>

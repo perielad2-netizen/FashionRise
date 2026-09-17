@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using FashionRise.Core;
+using FashionRise.Presentation.Screens;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -16,6 +17,34 @@ namespace FashionRise.EditorTools
             var root = FashionRiseBootstrapBuilder.CreateUiRoot();
             Undo.RegisterCreatedObjectUndo(root, "Create FashionRise Bootstrap UI");
             Selection.activeGameObject = root;
+        }
+
+        /// <summary>
+        /// Adds screens that did not exist when the scene was saved (e.g. the tech pack screen)
+        /// without touching anything already in the hierarchy.
+        /// </summary>
+        [MenuItem("FashionRise/Repair Screens in Scene (add missing)")]
+        static void RepairScreens()
+        {
+            var apps = Object.FindObjectsOfType<FashionRiseApp>(true);
+            if (apps.Length == 0)
+            {
+                EditorUtility.DisplayDialog("FashionRise",
+                    "No FashionRiseApp found in open scenes — nothing to repair.\n\n" +
+                    "Use FashionRise → Create Bootstrap UI (Canvas + Screens) first.", "OK");
+                return;
+            }
+
+            foreach (var app in apps)
+            {
+                var before = app.transform.GetComponentsInChildren<ScreenBase>(true).Length;
+                var after = FashionRiseBootstrapBuilder.EnsureScreens(app.transform).Length;
+                Debug.Log($"FashionRise: '{app.gameObject.name}' screens {before} → {after}. " +
+                          "Save the scene (Ctrl+S).");
+                EditorUtility.SetDirty(app.gameObject);
+                if (!UnityEngine.Application.isPlaying && app.gameObject.scene.IsValid())
+                    EditorSceneManager.MarkSceneDirty(app.gameObject.scene);
+            }
         }
 
         /// <summary>

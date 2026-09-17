@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using FashionRise.Application;
 using FashionRise.Core.Navigation;
 using FashionRise.Domain;
 using FashionRise.UI;
@@ -19,6 +20,7 @@ namespace FashionRise.Presentation.Screens
         Button _magicBtn = null!;
         Button _seeLookBtn = null!;
         Button _retryBtn = null!;
+        FrAiLoadingFx? _loading;
         bool _moreOpen;
         bool _autoMagicArmed;
         bool _busy;
@@ -29,27 +31,28 @@ namespace FashionRise.Presentation.Screens
         {
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
+            _loading = FrAiLoadingFx.Create(root, t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "H", "MAGIC", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
+            FrUiFactory.AddOverline(col, "Ov", "AI atelier", t);
+            FrUiFactory.AddEditorialLabel(col, "H", "Magic", t, Mathf.RoundToInt(t.DisplaySize * 0.85f), true,
                 TextAnchor.UpperCenter);
             _blurb = FrUiFactory.AddLabel(col, "B",
                 "One tap. Your sketch becomes a runway look.", t,
-                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Bold, TextAnchor.UpperCenter,
+                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Normal, TextAnchor.UpperCenter,
                 useSecondaryTextColor: true);
             _status = FrUiFactory.AddLabel(col, "St", "", t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal,
                 TextAnchor.UpperCenter);
 
-            _magicBtn = FrUiFactory.AddButton(col, "MAKE IT MAGICAL!", t, () => { _ = RunPolishAsync(); },
-                FrButtonEmphasis.Primary);
+            _magicBtn = FrUiFactory.AddButton(col, "Make it Magical", t, () => { _ = RunPolishAsync(); },
+                FrButtonEmphasis.AiAction);
             Enlarge(_magicBtn);
 
-            _seeLookBtn = FrUiFactory.AddButton(col, "SEE YOUR LOOK", t, () => { _ = OpenLastResultAsync(); },
+            _seeLookBtn = FrUiFactory.AddButton(col, "See your look", t, () => { _ = OpenLastResultAsync(); },
                 FrButtonEmphasis.Primary);
             Enlarge(_seeLookBtn);
 
-            // Retry stays under More so kids don't re-run Magic by accident.
             _retryBtn = FrUiFactory.AddButton(col, "Try magic again", t, () => { _ = RunPolishAsync(); });
-            FrUiFactory.AddButton(col, "More…", t, ToggleMore);
+            FrUiFactory.AddButton(col, "More…", t, ToggleMore, FrButtonEmphasis.Ghost);
             FrUiFactory.AddButton(col, "Clean lines", t, () => { _ = RunCleanAsync(); });
             FrUiFactory.AddButton(col, "Style ideas", t, () => { _ = RunStyleAsync(); });
             FrUiFactory.AddButton(col, "Edit sketch", t, () =>
@@ -63,7 +66,7 @@ namespace FashionRise.Presentation.Screens
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.GoBackAsync();
-            });
+            }, FrButtonEmphasis.Ghost);
 
             SetMoreVisible(false);
             RefreshHappyPathChrome();
@@ -231,6 +234,8 @@ namespace FashionRise.Presentation.Screens
             _busy = true;
             RefreshHappyPathChrome();
             _status.text = "Working magic… this can take about a minute.";
+            _loading?.Show("Scanning your sketch…");
+            _loading?.SetStatus("Drawing fabric & silhouette…");
             try
             {
                 var r = await App.ConceptPolish.PolishAsync(new ConceptRefinementRequest
@@ -241,10 +246,15 @@ namespace FashionRise.Presentation.Screens
                     FabricName = App.CreateDesign.SketchFabricName ?? "",
                     ColorName = App.CreateDesign.SketchColorName ?? "",
                     MaterialPairs = App.CreateDesign.SketchMaterialPairs ?? "",
+                    ColorRegions = App.CreateDesign.SketchColorRegions ?? "",
+                    Figure = SketchFigurePreferences.DefaultTemplate == SketchFigureTemplate.Male
+                        ? "male"
+                        : "female",
                     OnJobStarted = jobId =>
                     {
                         if (!string.IsNullOrWhiteSpace(jobId))
                             App.CreateDesign.LastSketchJobId = jobId;
+                        _loading?.SetStatus("Refining your runway look…");
                     }
                 }).ConfigureAwait(true);
                 Finish(r.JobId, r.Summary, r.ImageUrl);
@@ -266,6 +276,7 @@ namespace FashionRise.Presentation.Screens
             finally
             {
                 _busy = false;
+                _loading?.Hide();
                 if (App.Navigation == null ||
                     string.IsNullOrWhiteSpace(App.CreateDesign.LastPolishedImageUrl))
                     RefreshHappyPathChrome();
@@ -335,15 +346,34 @@ namespace FashionRise.Presentation.Screens
         string BuildMagicNotes()
         {
             var fabric = App.CreateDesign.SketchFabricName?.Trim() ?? "";
-            if (string.IsNullOrEmpty(fabric))
-                fabric = App.CreateDesign.MaterialId?.Trim() ?? "";
             var color = App.CreateDesign.SketchColorName?.Trim() ?? "";
             var pairs = App.CreateDesign.SketchMaterialPairs?.Trim() ?? "";
+            var regions = App.CreateDesign.SketchColorRegions?.Trim() ?? "";
 
+            var figure = SketchFigurePreferences.DefaultTemplate == SketchFigureTemplate.Male ? "male" : "female";
             var sb = new System.Text.StringBuilder();
-            sb.Append("CRITICAL: Preserve every colored garment region from the sketch. ");
-            sb.Append("Example: an orange silk blouse must stay orange silk; blue denim jeans must stay blue denim. ");
-            sb.Append("Never merge a blouse and jeans into one dress. Never recolor one garment with another garment's color. ");
+            sb.Append("CRITICAL: Polish ONLY what is in the uploaded sketch. ");
+            sb.Append("Keep the same garments, colors, pose, and a clearly ").Append(figure).Append(" figure. ");
+            sb.Append("Do not add jackets, coats, extra layers, or accessories that were not drawn. ");
+            sb.Append("Unpainted or white/paper areas stay light — do not invent a new color there. ");
+            sb.Append("Never merge separate garments. Never recolor one garment with another garment's color. ");
+
+            if (!string.IsNullOrEmpty(regions))
+            {
+                sb.Append("Measured ink colors in the sketch (hex, where on the figure, % of painted area) — ");
+                sb.Append("reproduce EACH of these separately: ");
+                foreach (var part in regions.Split(';'))
+                {
+                    var bits = part.Split(',');
+                    if (bits.Length < 3)
+                        continue;
+                    sb.Append(bits[0].Trim())
+                        .Append(" at ").Append(bits[1].Trim())
+                        .Append(" (").Append(bits[2].Trim()).Append("% of ink). ");
+                }
+
+                sb.Append("Do NOT apply one of these colors to the whole outfit. ");
+            }
 
             if (!string.IsNullOrEmpty(pairs))
             {
@@ -369,13 +399,26 @@ namespace FashionRise.Presentation.Screens
                 sb.Append(FabricLookHint(fabric)).Append(' ');
             }
 
-            if (!string.IsNullOrEmpty(color))
-                sb.Append("Last selected studio color: ").Append(color).Append(". ");
+            // Only mention a single palette colour when the sketch really is one colour;
+            // otherwise it reads as "make everything this colour".
+            if (!string.IsNullOrEmpty(color) && CountRegions(regions) <= 1)
+                sb.Append("Studio color for the garment: ").Append(color).Append(". ");
 
             sb.Append(
-                "Make each colored region look fashion-forward and nearly real for its paired fabric — " +
+                "Make each colored region look nearly real for its paired fabric — " +
                 "while staying true to what was drawn.");
             return sb.ToString();
+        }
+
+        static int CountRegions(string regions)
+        {
+            if (string.IsNullOrWhiteSpace(regions))
+                return 0;
+            var n = 0;
+            foreach (var part in regions.Split(';'))
+                if (part.Split(',').Length >= 3)
+                    n++;
+            return n;
         }
 
         static string FabricLookHint(string fabric)

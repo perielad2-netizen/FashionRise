@@ -60,6 +60,19 @@ def style_suggest(
     return _sketch_enqueue(db, user, "style_suggest", body)
 
 
+@router.post("/tech-pack", response_model=AIJobRead, status_code=status.HTTP_201_CREATED)
+@limiter.limit("40/minute")
+def tech_pack(
+    request: Request,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+    body: SketchPipelineBody | None = Body(None),
+) -> AIJobRead:
+    """Enqueue a Create Real Design / tech pack job (mirrors sketch polish input_data)."""
+    _ = request.url
+    return _sketch_enqueue(db, user, "tech_pack", body)
+
+
 @router.post("/jobs", response_model=AIJobRead, status_code=status.HTTP_201_CREATED)
 @limiter.limit("40/minute")
 def create_job(

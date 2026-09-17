@@ -12,7 +12,7 @@ namespace FashionRise.Infrastructure.Api
 {
     /// <summary>Maps V2 sketch/style routes to AI job responses. [AI_READY]</summary>
     public sealed class SketchPipelineApiService : ISketchProcessingService, IConceptPolishService,
-        IStyleSuggestionService, IImageRefinementService
+        IStyleSuggestionService, IImageRefinementService, ITechPackService
     {
         readonly ApiClient _client;
 
@@ -47,10 +47,17 @@ namespace FashionRise.Infrastructure.Api
             // Optional studio chips — backend folds these into the image edit prompt.
             if (!string.IsNullOrWhiteSpace(request.FabricName))
                 inputData["fabric"] = request.FabricName.Trim();
-            if (!string.IsNullOrWhiteSpace(request.ColorName))
+            var regions = request.ColorRegions?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(regions))
+                inputData["color_regions"] = regions;
+            // A single palette colour reads as "paint everything this colour", so only send it
+            // when the sketch really is one colour.
+            if (!string.IsNullOrWhiteSpace(request.ColorName) && CountColorRegions(regions) <= 1)
                 inputData["color"] = request.ColorName.Trim();
             if (!string.IsNullOrWhiteSpace(request.MaterialPairs))
                 inputData["material_pairs"] = request.MaterialPairs.Trim();
+            if (!string.IsNullOrWhiteSpace(request.Figure))
+                inputData["figure"] = request.Figure.Trim().ToLowerInvariant();
             await EmbedVisionImageAsync(inputData, request.LocalSketchForVision, cancellationToken)
                 .ConfigureAwait(true);
             var job = await _client
@@ -183,6 +190,17 @@ namespace FashionRise.Infrastructure.Api
             return false;
         }
 
+        static int CountColorRegions(string regions)
+        {
+            if (string.IsNullOrWhiteSpace(regions))
+                return 0;
+            var n = 0;
+            foreach (var part in regions.Split(';'))
+                if (part.Split(',').Length >= 3)
+                    n++;
+            return n;
+        }
+
         static Guid? TryGuid(string? id) =>
             string.IsNullOrEmpty(id) || !Guid.TryParse(id, out var g) ? null : g;
 
@@ -263,6 +281,67 @@ namespace FashionRise.Infrastructure.Api
                 Status = j.Status,
                 Summary = MessageFrom(j),
                 ImageUrl = imageUrl
+            };
+        }
+
+
+        public async Task<TechPackResult> GenerateAsync(TechPackRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var inputData = new Dictionary<string, object>
+            {
+                ["notes"] = request.Notes ?? "",
+                ["local_path_placeholder"] = request.LocalSketchForVision ?? ""
+            };
+            if (!string.IsNullOrWhiteSpace(request.FabricName))
+                inputData["fabric"] = request.FabricName.Trim();
+            if (!string.IsNullOrWhiteSpace(request.ColorName))
+                inputData["color"] = request.ColorName.Trim();
+            if (!string.IsNullOrWhiteSpace(request.MaterialPairs))
+                inputData["material_pairs"] = request.MaterialPairs.Trim();
+            if (!string.IsNullOrWhiteSpace(request.PolishedImageUrl))
+                inputData["polished_image_url"] = request.PolishedImageUrl.Trim();
+            await EmbedVisionImageAsync(inputData, request.LocalSketchForVision, cancellationToken)
+                .ConfigureAwait(true);
+            // Prefer polished look for vision when local sketch missing but URL is public
+            if (!inputData.ContainsKey("image_base64") && !inputData.ContainsKey("image_url") &&
+                !string.IsNullOrWhiteSpace(request.PolishedImageUrl))
+                await EmbedVisionImageAsync(inputData, request.PolishedImageUrl, cancellationToken)
+                    .ConfigureAwait(true);
+
+            var job = await _client
+                .PostJsonAsync<AIJobReadDto>("/ai/tech-pack",
+                    new { design_id = TryGuid(request.DesignId), input_data = inputData }, cancellationToken, true)
+                .ConfigureAwait(true);
+            try { request.OnJobStarted?.Invoke(job.Id.ToString()); }
+            catch (Exception callbackEx)
+            {
+                UnityEngine.Debug.LogWarning($"FashionRise TechPack OnJobStarted failed: {callbackEx.Message}");
+            }
+
+            var final = await WaitForJobCompletionAsync(_client, job.Id, cancellationToken).ConfigureAwait(true);
+            return ToTechPack(final);
+        }
+
+        static TechPackResult ToTechPack(AIJobReadDto j)
+        {
+            var rd = j.ResultData;
+            var front = AIJobApiService.ExtractImageUrl(rd) ?? "";
+            var back = rd?.Value<string>("back_image_url") ?? "";
+            var pattern = rd?.Value<string>("pattern_image_url") ?? "";
+            var pdf = rd?.Value<string>("pdf_url") ?? "";
+            var disclaimer = rd?.Value<string>("disclaimer") ?? "";
+            return new TechPackResult
+            {
+                JobId = j.Id.ToString(),
+                Status = j.Status,
+                Summary = MessageFrom(j),
+                Disclaimer = disclaimer,
+                FrontImageUrl = front,
+                BackImageUrl = back,
+                PatternImageUrl = pattern,
+                PdfUrl = pdf,
+                RawJson = rd != null ? rd.ToString(Newtonsoft.Json.Formatting.Indented) : "{}"
             };
         }
 

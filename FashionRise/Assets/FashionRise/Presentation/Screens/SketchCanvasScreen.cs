@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using FashionRise.Application;
@@ -118,18 +119,16 @@ namespace FashionRise.Presentation.Screens
             backLe.preferredWidth = 48f;
             backLe.minHeight = 48f;
 
-            var hintWrap = new GameObject("HintWrap", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            // Hint is a quiet caption, not a filled pill — chrome stays out of the canvas' way.
+            var hintWrap = new GameObject("HintWrap", typeof(RectTransform), typeof(LayoutElement));
             hintWrap.transform.SetParent(top.transform, false);
-            var hintImg = hintWrap.GetComponent<Image>();
-            hintImg.sprite = FrUiSprites.RoundPill;
-            hintImg.type = Image.Type.Sliced;
-            hintImg.color = new Color(1f, 1f, 1f, 0.78f);
             var hintLe = hintWrap.GetComponent<LayoutElement>();
             hintLe.flexibleWidth = 1f;
             hintLe.minHeight = 44f;
             hintLe.preferredHeight = 44f;
             _hint = FrUiFactory.AddLabel(hintWrap.transform, "Hint", "Draw your look", t,
-                Mathf.RoundToInt(t.BodySize), FontStyle.Bold, TextAnchor.MiddleCenter);
+                Mathf.RoundToInt(t.CaptionSize), FontStyle.Normal, TextAnchor.MiddleCenter,
+                useSecondaryTextColor: true);
             var hTxt = _hint.GetComponent<LayoutElement>();
             if (hTxt != null)
             {
@@ -159,16 +158,19 @@ namespace FashionRise.Presentation.Screens
             var face = go.GetComponent<Image>();
             face.sprite = FrUiSprites.RoundPill;
             face.type = Image.Type.Sliced;
-            face.color = t.Accent;
+            face.color = t.ButtonAiFace;
             var shadow = go.AddComponent<Shadow>();
-            shadow.effectColor = new Color(0.55f, 0.12f, 0.28f, 0.28f);
+            shadow.effectColor = new Color(0.08f, 0.07f, 0.06f, 0.22f);
             shadow.effectDistance = new Vector2(0f, -5f);
+            var outline = go.AddComponent<Outline>();
+            outline.effectColor = new Color(t.Champagne.r, t.Champagne.g, t.Champagne.b, 0.5f);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
 
             var icon = new GameObject("Spark", typeof(Image));
             icon.transform.SetParent(go.transform, false);
             var iconImg = icon.GetComponent<Image>();
             iconImg.sprite = FrUiSprites.IconSparkle;
-            iconImg.color = Color.white;
+            iconImg.color = t.Champagne;
             iconImg.raycastTarget = false;
             var irt = icon.GetComponent<RectTransform>();
             irt.anchorMin = new Vector2(0f, 0.5f);
@@ -180,12 +182,12 @@ namespace FashionRise.Presentation.Screens
             var txtGo = new GameObject("Text", typeof(Text));
             txtGo.transform.SetParent(go.transform, false);
             var txt = txtGo.GetComponent<Text>();
-            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            txt.text = "MAGIC!";
-            txt.fontSize = 20;
-            txt.fontStyle = FontStyle.Bold;
+            txt.font = FrUiFonts.UiMedium;
+            txt.text = "Magic";
+            txt.fontSize = 18;
+            txt.fontStyle = FontStyle.Normal;
             txt.alignment = TextAnchor.MiddleCenter;
-            txt.color = Color.white;
+            txt.color = t.Champagne;
             txt.raycastTarget = false;
             var trt = txtGo.GetComponent<RectTransform>();
             trt.anchorMin = Vector2.zero;
@@ -614,10 +616,13 @@ namespace FashionRise.Presentation.Screens
             var face = shell.GetComponent<Image>();
             face.sprite = FrUiSprites.RoundSoft;
             face.type = Image.Type.Sliced;
-            face.color = new Color(1f, 1f, 1f, 0.82f);
+            face.color = new Color(1f, 1f, 1f, 0.94f);
             var shadow = shell.AddComponent<Shadow>();
-            shadow.effectColor = new Color(0.2f, 0.08f, 0.14f, 0.18f);
-            shadow.effectDistance = new Vector2(left ? 5f : -5f, -6f);
+            shadow.effectColor = new Color(0.08f, 0.07f, 0.06f, 0.14f);
+            shadow.effectDistance = new Vector2(left ? 4f : -4f, -5f);
+            var railEdge = shell.AddComponent<Outline>();
+            railEdge.effectColor = t.Hairline;
+            railEdge.effectDistance = new Vector2(1f, -1f);
 
             var scrollGo = new GameObject("Scroll", typeof(RectTransform), typeof(ScrollRect), typeof(RectMask2D));
             scrollGo.transform.SetParent(shell.transform, false);
@@ -655,13 +660,18 @@ namespace FashionRise.Presentation.Screens
             return content.transform;
         }
 
+        /// <summary>Hairline divider — pro drawing apps separate tool groups with rules, not words.</summary>
         static void AddSectionLabel(Transform parent, string text, FashionRiseTheme t)
         {
-            var label = FrUiFactory.AddLabel(parent, text, text, t, 11, FontStyle.Bold,
-                TextAnchor.MiddleCenter, useSecondaryTextColor: true);
-            var le = label.GetComponent<LayoutElement>() ?? label.gameObject.AddComponent<LayoutElement>();
-            le.minHeight = 14f;
-            le.preferredHeight = 16f;
+            var go = new GameObject("Divider_" + text, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var img = go.GetComponent<Image>();
+            img.color = t.Hairline;
+            img.raycastTarget = false;
+            var le = go.GetComponent<LayoutElement>();
+            le.minHeight = 1f;
+            le.preferredHeight = 1f;
+            le.flexibleWidth = 1f;
         }
 
         Button MakeIconTool(Transform parent, string name, Sprite icon, FashionRiseTheme t, UnityAction onClick,
@@ -670,29 +680,28 @@ namespace FashionRise.Presentation.Screens
             var go = new GameObject(name + "_Tool", typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
             var face = go.GetComponent<Image>();
-            face.sprite = FrUiSprites.Circle;
-            face.color = t.ButtonFace;
+            face.sprite = FrUiSprites.RoundSoft;
+            face.type = Image.Type.Sliced;
+            face.color = new Color(1f, 1f, 1f, 0f);
             var le = go.GetComponent<LayoutElement>();
             le.minHeight = size;
             le.preferredHeight = size;
             le.minWidth = size;
             le.preferredWidth = size;
             le.flexibleWidth = 0f;
-            var shadow = go.AddComponent<Shadow>();
-            shadow.effectColor = new Color(0.2f, 0.1f, 0.15f, 0.16f);
-            shadow.effectDistance = new Vector2(0f, -3f);
 
             var iconGo = new GameObject("Icon", typeof(Image));
             iconGo.transform.SetParent(go.transform, false);
             var iconImg = iconGo.GetComponent<Image>();
             iconImg.sprite = icon;
-            iconImg.color = t.MidnightNavy;
+            // Art-supply icons carry their own colour; flat glyphs get inked.
+            iconImg.color = Color.white;
             iconImg.raycastTarget = false;
             iconImg.preserveAspect = true;
             var irt = iconGo.GetComponent<RectTransform>();
             irt.anchorMin = new Vector2(0.5f, 0.5f);
             irt.anchorMax = new Vector2(0.5f, 0.5f);
-            irt.sizeDelta = new Vector2(size * 0.55f, size * 0.55f);
+            irt.sizeDelta = new Vector2(size * 0.86f, size * 0.86f);
 
             var btn = go.GetComponent<Button>();
             btn.targetGraphic = face;
@@ -907,22 +916,23 @@ namespace FashionRise.Presentation.Screens
 
         void HighlightTool()
         {
+            // Selected tool gets a soft tray behind the art supply + a nudge forward, like pro drawing rails.
             void Style(Image? face, bool on)
             {
                 if (face == null)
                     return;
-                face.color = on ? _theme.Accent : _theme.ButtonFace;
-                var icon = face.transform.Find("Icon")?.GetComponent<Image>();
-                if (icon != null)
-                    icon.color = on ? Color.white : _theme.MidnightNavy;
+                face.color = on
+                    ? new Color(_theme.Champagne.r, _theme.Champagne.g, _theme.Champagne.b, 0.32f)
+                    : new Color(1f, 1f, 1f, 0f);
+                var motion = face.GetComponent<FrUiMotion>();
+                if (motion != null)
+                    motion.SetSelected(on);
             }
 
             Style(_pencilFace, _tool == DrawTool.Pencil);
             Style(_brushFace, _tool == DrawTool.Brush);
             Style(_eraserFace, _tool == DrawTool.Eraser);
             Style(_fillFace, _tool == DrawTool.Fill);
-            if (_tool == DrawTool.Eraser && _eraserFace != null)
-                _eraserFace.color = new Color(1f, 0.82f, 0.88f, 1f);
         }
 
         void RefreshPairHint()
@@ -951,6 +961,7 @@ namespace FashionRise.Presentation.Screens
 
         string BuildMaterialPairs()
         {
+            var painted = PaintedRegionHexes();
             var parts = new List<string>();
             for (var i = 0; i < _fabricForColor.Length; i++)
             {
@@ -960,24 +971,155 @@ namespace FashionRise.Presentation.Screens
                 // Color:Fabric:#RRGGBB — Magic matches ink by name and approximate RGB
                 var c = InkColors[i];
                 var hex = $"#{Mathf.RoundToInt(c.r * 255):X2}{Mathf.RoundToInt(c.g * 255):X2}{Mathf.RoundToInt(c.b * 255):X2}";
+                // Leftover chips (tapped orange, never painted) used to leak into Magic.
+                if (painted.Count > 0)
+                {
+                    if (!MatchesPaintedHex(hex, painted))
+                        continue;
+                }
+                else if (i != _colorIndex)
+                {
+                    continue;
+                }
+
                 parts.Add(ColorNames[i] + ":" + f + ":" + hex);
             }
 
             return string.Join(";", parts);
         }
 
+        List<string> PaintedRegionHexes()
+        {
+            var regions = _pad != null
+                ? _pad.DescribeColorRegions()
+                : App?.CreateDesign.SketchColorRegions ?? "";
+            var hexes = new List<string>();
+            if (string.IsNullOrWhiteSpace(regions))
+                return hexes;
+            foreach (var part in regions.Split(';'))
+            {
+                var bits = part.Split(',');
+                if (bits.Length < 3)
+                    continue;
+                var hex = bits[0].Trim();
+                if (hex.Length > 0)
+                    hexes.Add(hex);
+            }
+
+            return hexes;
+        }
+
+        static bool MatchesPaintedHex(string chipHex, List<string> painted, int tol = 90)
+        {
+            foreach (var paintedHex in painted)
+            {
+                if (HexManhattan(chipHex, paintedHex) <= tol)
+                    return true;
+            }
+
+            return false;
+        }
+
+        static int HexManhattan(string a, string b)
+        {
+            if (!TryParseHexRgb(a, out var ar, out var ag, out var ab) ||
+                !TryParseHexRgb(b, out var br, out var bg, out var bb))
+                return int.MaxValue;
+            return Mathf.Abs(ar - br) + Mathf.Abs(ag - bg) + Mathf.Abs(ab - bb);
+        }
+
+        static bool TryParseHexRgb(string hex, out int r, out int g, out int b)
+        {
+            r = g = b = 0;
+            if (string.IsNullOrWhiteSpace(hex))
+                return false;
+            var s = hex.Trim();
+            if (s.StartsWith("#"))
+                s = s.Substring(1);
+            if (s.Length != 6)
+                return false;
+            try
+            {
+                r = Convert.ToInt32(s.Substring(0, 2), 16);
+                g = Convert.ToInt32(s.Substring(2, 2), 16);
+                b = Convert.ToInt32(s.Substring(4, 2), 16);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        string NearestPaletteName(string hex)
+        {
+            var best = ColorNames[_colorIndex];
+            var bestDist = int.MaxValue;
+            for (var i = 0; i < InkColors.Length; i++)
+            {
+                var c = InkColors[i];
+                var chip = $"#{Mathf.RoundToInt(c.r * 255):X2}{Mathf.RoundToInt(c.g * 255):X2}{Mathf.RoundToInt(c.b * 255):X2}";
+                var d = HexManhattan(hex, chip);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = ColorNames[i];
+                }
+            }
+
+            return best;
+        }
+
         void PersistMaterialSession()
         {
             if (App == null)
                 return;
-            App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
-            if (_fabricIndex >= 0)
+            // Read the ink itself first: chips only record what was tapped, not what was painted.
+            if (_pad != null)
+                App.CreateDesign.SketchColorRegions = _pad.DescribeColorRegions();
+
+            var painted = PaintedRegionHexes();
+            var pairs = BuildMaterialPairs();
+            App.CreateDesign.SketchMaterialPairs = pairs;
+
+            if (painted.Count == 1)
+                App.CreateDesign.SketchColorName = NearestPaletteName(painted[0]);
+            else if (painted.Count == 0)
+                App.CreateDesign.SketchColorName = ColorNames[_colorIndex];
+            else
+                App.CreateDesign.SketchColorName = "";
+
+            var fabrics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(pairs))
+            {
+                foreach (var part in pairs.Split(';'))
+                {
+                    var bits = part.Split(':');
+                    if (bits.Length >= 2 && !string.IsNullOrWhiteSpace(bits[1]))
+                        fabrics.Add(bits[1].Trim());
+                }
+            }
+
+            if (fabrics.Count == 1)
+            {
+                foreach (var name in fabrics)
+                {
+                    App.CreateDesign.SketchFabricName = name;
+                    App.CreateDesign.MaterialId = name.ToLowerInvariant();
+                    break;
+                }
+            }
+            else if (fabrics.Count > 1 || painted.Count > 0)
+            {
+                // Mixed fabrics, or leftover chips with no fabric on the painted color —
+                // don't send a last-tapped chip as "the" fabric.
+                App.CreateDesign.SketchFabricName = "";
+            }
+            else if (_fabricIndex >= 0)
             {
                 App.CreateDesign.SketchFabricName = Fabrics[_fabricIndex].name;
                 App.CreateDesign.MaterialId = Fabrics[_fabricIndex].name.ToLowerInvariant();
             }
-
-            App.CreateDesign.SketchMaterialPairs = BuildMaterialPairs();
         }
 
         void RestoreMaterialPairsFromSession()

@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Threading.Tasks;
 using FashionRise.Core.Navigation;
 using FashionRise.UI;
 using UnityEngine;
@@ -17,9 +16,10 @@ namespace FashionRise.Presentation.Screens
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
             var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.MiddleCenter);
-            FrUiFactory.AddBrandLogoRow(col, t, 340f, 128f);
-            FrUiFactory.AddLabel(col, "Tag", "CHOOSE EXACTLY WHAT YOU WANT", t,
-                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Bold, TextAnchor.MiddleCenter);
+            FrUiFactory.AddOverline(col, "Ov", "FashionRise", t);
+            FrUiFactory.AddBrandLogoRow(col, t, 360f, 132f);
+            FrUiFactory.AddEditorialLabel(col, "Tag", "Choose exactly what you want.", t,
+                Mathf.RoundToInt(t.TitleSize), true, TextAnchor.MiddleCenter);
         }
 
         protected override void OnShown(object? payload)
@@ -32,7 +32,7 @@ namespace FashionRise.Presentation.Screens
 
         IEnumerator Advance()
         {
-            yield return new WaitForSeconds(1.15f);
+            yield return new WaitForSeconds(1.25f);
             var task = App.Auth.TryRestorePersistedSessionAsync();
             while (!task.IsCompleted)
                 yield return null;

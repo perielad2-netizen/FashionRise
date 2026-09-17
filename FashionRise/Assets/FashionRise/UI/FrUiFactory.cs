@@ -11,7 +11,6 @@ namespace FashionRise.UI
     {
         const string BrandLogoResourcePath = "Branding/fashion_rise_logo";
 
-        static Font? s_defaultUiFont;
         static Sprite? s_whiteSprite;
         static Texture2D? s_vGradTex;
         static Sprite? s_vGradSprite;
@@ -20,10 +19,7 @@ namespace FashionRise.UI
         static Texture2D? s_softBlobTex;
         static Sprite? s_softBlobSprite;
 
-        static Font DefaultUiFont =>
-            s_defaultUiFont != null
-                ? s_defaultUiFont
-                : (s_defaultUiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")!);
+        static Font DefaultUiFont => FrUiFonts.Ui;
 
         static Sprite WhiteSprite
         {
@@ -37,7 +33,7 @@ namespace FashionRise.UI
             }
         }
 
-        /// <summary>Full-bleed soft runway atmosphere (blush → sky), not a flat fill.</summary>
+        /// <summary>Full-bleed ivory atelier atmosphere — soft parchment wash, champagne light.</summary>
         public static RectTransform CreateStretchPanel(Transform parent, string name, FashionRiseTheme theme)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Image));
@@ -53,11 +49,70 @@ namespace FashionRise.UI
             baseImg.color = Color.white;
             baseImg.raycastTarget = true;
 
-            // Soft light blobs for studio bokeh (no hard cards).
-            AddAtmosphereBlob(rt, theme.Champagne, new Vector2(0.12f, 0.78f), 0.55f, 0.22f);
-            AddAtmosphereBlob(rt, theme.AccentHot, new Vector2(0.88f, 0.72f), 0.48f, 0.14f);
-            AddAtmosphereBlob(rt, theme.BackgroundSky, new Vector2(0.5f, 0.08f), 0.9f, 0.18f);
+            AddAtmosphereBlob(rt, theme.Champagne, new Vector2(0.14f, 0.82f), 0.5f, 0.14f);
+            AddAtmosphereBlob(rt, theme.AccentMuted, new Vector2(0.9f, 0.22f), 0.42f, 0.1f);
+            AddAtmosphereBlob(rt, theme.Background, new Vector2(0.5f, 0.05f), 0.95f, 0.2f);
+            FrScreenReveal.Attach(go);
             return rt;
+        }
+
+        /// <summary>Editorial display title (Cormorant) or UI label (DM Sans).</summary>
+        public static Text AddEditorialLabel(Transform parent, string name, string text, FashionRiseTheme theme,
+            int fontSize, bool editorial, TextAnchor anchor = TextAnchor.UpperLeft,
+            bool useSecondaryTextColor = false)
+        {
+            var go = new GameObject(name, typeof(Text));
+            go.transform.SetParent(parent, false);
+            var t = go.GetComponent<Text>();
+            t.font = editorial ? FrUiFonts.DisplayBold : FrUiFonts.Ui;
+            t.text = text;
+            t.fontSize = fontSize;
+            t.fontStyle = FontStyle.Normal;
+            t.color = useSecondaryTextColor ? theme.SecondaryText : theme.PrimaryText;
+            t.alignment = anchor;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            var le = go.AddComponent<LayoutElement>();
+            le.minHeight = fontSize + (editorial ? 22f : 14f);
+            le.preferredHeight = fontSize + (editorial ? 32f : 22f);
+            le.flexibleWidth = 1f;
+            return t;
+        }
+
+        public static Text AddOverline(Transform parent, string name, string text, FashionRiseTheme theme)
+        {
+            var t = AddEditorialLabel(parent, name, text.ToUpperInvariant(), theme,
+                Mathf.RoundToInt(theme.OverlineSize), false, TextAnchor.MiddleCenter, true);
+            t.font = FrUiFonts.UiMedium;
+            var le = t.GetComponent<LayoutElement>();
+            le.minHeight = 18f;
+            le.preferredHeight = 20f;
+            return t;
+        }
+
+        /// <summary>Floating ivory panel with hairline edge — for toolbars / sheets.</summary>
+        public static RectTransform AddFloatingPanel(Transform parent, string name, FashionRiseTheme theme,
+            float minHeight = 0f)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var img = go.GetComponent<Image>();
+            img.sprite = FrUiSprites.RoundSoft;
+            img.type = Image.Type.Sliced;
+            img.color = theme.Panel;
+            AddSoftShadow(go, -6f, 0.1f);
+            var outline = go.AddComponent<Outline>();
+            outline.effectColor = theme.Hairline;
+            outline.effectDistance = new Vector2(1f, -1f);
+            var le = go.GetComponent<LayoutElement>();
+            if (minHeight > 0f)
+            {
+                le.minHeight = minHeight;
+                le.preferredHeight = minHeight;
+            }
+
+            le.flexibleWidth = 1f;
+            return go.GetComponent<RectTransform>();
         }
 
         static void AddAtmosphereBlob(RectTransform parent, Color color, Vector2 anchor, float size, float alpha)
@@ -85,17 +140,19 @@ namespace FashionRise.UI
             var go = new GameObject(name, typeof(Text));
             go.transform.SetParent(parent, false);
             var t = go.GetComponent<Text>();
-            t.font = DefaultUiFont;
+            var editorial = fontSize >= theme.TitleSize - 1f;
+            t.font = FrUiFonts.ForStyle(editorial, style);
             t.text = text;
             t.fontSize = fontSize;
-            t.fontStyle = style;
+            // Weight lives in the font file; keep Normal to avoid faux-bold on custom faces.
+            t.fontStyle = FontStyle.Normal;
             t.color = useSecondaryTextColor ? theme.SecondaryText : theme.PrimaryText;
             t.alignment = anchor;
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
             t.verticalOverflow = VerticalWrapMode.Overflow;
             var le = go.AddComponent<LayoutElement>();
-            le.minHeight = fontSize + 18f;
-            le.preferredHeight = fontSize + 28f;
+            le.minHeight = fontSize + (editorial ? 20f : 14f);
+            le.preferredHeight = fontSize + (editorial ? 28f : 22f);
             le.flexibleWidth = 1f;
             return t;
         }
@@ -138,30 +195,30 @@ namespace FashionRise.UI
             motion.EnablePulse(true);
         }
 
-        /// <summary>
-        /// Visual-first Girl/Boy choice tile (inspired by dress-up pickers — FashionRise uses croquis, not shop items).
-        /// </summary>
+        /// <summary>Visual-first Women/Men choice — croquis stage, label under image (never overlaid).</summary>
         public static Button AddModelChoiceTile(Transform parent, string name, string label, string resourcePath,
-            FashionRiseTheme theme, UnityAction onClick)
+            FashionRiseTheme theme, UnityAction onClick, bool tall = false)
         {
             var go = new GameObject(name + "_Tile", typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
             var face = go.GetComponent<Image>();
-            face.sprite = WhiteSprite;
+            face.sprite = FrUiSprites.RoundSoft;
+            face.type = Image.Type.Sliced;
             face.color = theme.Card;
-            AddSoftShadow(go, -6f, 0.14f);
+            AddSoftShadow(go, -8f, 0.12f);
             var outline = go.AddComponent<Outline>();
-            outline.effectColor = new Color(theme.Accent.r, theme.Accent.g, theme.Accent.b, 0.35f);
-            outline.effectDistance = new Vector2(2f, -2f);
+            outline.effectColor = theme.Hairline;
+            outline.effectDistance = new Vector2(1f, -1f);
 
             var le = go.GetComponent<LayoutElement>();
-            le.minHeight = 210f;
-            le.preferredHeight = 240f;
+            le.minHeight = tall ? 420f : 210f;
+            le.preferredHeight = tall ? 560f : 240f;
             le.flexibleWidth = 1f;
+            le.flexibleHeight = tall ? 1f : 0f;
 
             var v = go.AddComponent<VerticalLayoutGroup>();
-            v.padding = new RectOffset(10, 10, 12, 12);
-            v.spacing = 8f;
+            v.padding = new RectOffset(14, 14, 16, 16);
+            v.spacing = 10f;
             v.childAlignment = TextAnchor.UpperCenter;
             v.childControlWidth = true;
             v.childForceExpandWidth = true;
@@ -197,8 +254,8 @@ namespace FashionRise.UI
             }
 
             var previewLe = previewGo.GetComponent<LayoutElement>();
-            previewLe.minHeight = 150f;
-            previewLe.preferredHeight = 170f;
+            previewLe.minHeight = tall ? 340f : 150f;
+            previewLe.preferredHeight = tall ? 460f : 170f;
             previewLe.flexibleHeight = 1f;
             var fitter = previewGo.GetComponent<AspectRatioFitter>();
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
@@ -209,19 +266,24 @@ namespace FashionRise.UI
             else
                 fitter.aspectRatio = 0.7f;
 
-            var caption = AddLabel(go.transform, "Cap", label, theme, Mathf.RoundToInt(theme.SubtitleSize),
-                FontStyle.Bold, TextAnchor.MiddleCenter);
-            caption.color = theme.MidnightNavy;
+            var caption = AddEditorialLabel(go.transform, "Cap", label, theme,
+                Mathf.RoundToInt(theme.SubtitleSize + 2f), true, TextAnchor.MiddleCenter);
+            caption.font = FrUiFonts.DisplayMedium;
+            caption.color = theme.Charcoal;
+            var capLe = caption.GetComponent<LayoutElement>();
+            capLe.minHeight = 28f;
+            capLe.preferredHeight = 32f;
+            capLe.flexibleHeight = 0f;
 
             var btn = go.GetComponent<Button>();
             btn.targetGraphic = face;
             btn.transition = Selectable.Transition.ColorTint;
             var colors = btn.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1f, 0.97f, 0.98f, 1f);
-            colors.pressedColor = new Color(0.94f, 0.9f, 0.92f, 1f);
+            colors.highlightedColor = new Color(1f, 0.99f, 0.97f, 1f);
+            colors.pressedColor = new Color(0.94f, 0.92f, 0.9f, 1f);
             colors.selectedColor = Color.white;
-            colors.fadeDuration = 0.08f;
+            colors.fadeDuration = 0.12f;
             btn.colors = colors;
             btn.onClick.AddListener(onClick);
 
@@ -238,15 +300,25 @@ namespace FashionRise.UI
             var img = go.GetComponent<Image>();
             var txtColor = theme.ButtonText;
             Color face;
+            var isAi = emphasis == FrButtonEmphasis.AiAction;
+            var isPrimary = emphasis == FrButtonEmphasis.Primary || isAi;
             switch (emphasis)
             {
                 case FrButtonEmphasis.Primary:
                     face = theme.Accent;
                     txtColor = theme.ButtonPrimaryText;
                     break;
+                case FrButtonEmphasis.AiAction:
+                    face = theme.ButtonAiFace;
+                    txtColor = theme.Champagne;
+                    break;
                 case FrButtonEmphasis.Destructive:
                     face = theme.ButtonFace;
                     txtColor = theme.Danger;
+                    break;
+                case FrButtonEmphasis.Ghost:
+                    face = new Color(1f, 1f, 1f, 0.01f);
+                    txtColor = theme.SecondaryText;
                     break;
                 default:
                     face = theme.ButtonFace;
@@ -254,16 +326,17 @@ namespace FashionRise.UI
                     break;
             }
 
-            img.sprite = WhiteSprite;
+            img.sprite = FrUiSprites.RoundSoft;
+            img.type = Image.Type.Sliced;
             img.color = face;
-            AddSoftShadow(go, emphasis == FrButtonEmphasis.Primary ? -5f : -3f,
-                emphasis == FrButtonEmphasis.Primary ? 0.16f : 0.1f);
+            if (emphasis != FrButtonEmphasis.Ghost)
+                AddSoftShadow(go, isPrimary ? -5f : -3f, isPrimary ? 0.14f : 0.08f);
 
             if (emphasis == FrButtonEmphasis.Secondary)
             {
                 var outline = go.AddComponent<Outline>();
-                outline.effectColor = new Color(theme.AccentMuted.r, theme.AccentMuted.g, theme.AccentMuted.b, 0.5f);
-                outline.effectDistance = new Vector2(1.5f, -1.5f);
+                outline.effectColor = theme.Hairline;
+                outline.effectDistance = new Vector2(1f, -1f);
             }
             else if (emphasis == FrButtonEmphasis.Destructive)
             {
@@ -271,67 +344,344 @@ namespace FashionRise.UI
                 outline.effectColor = new Color(theme.Danger.r, theme.Danger.g, theme.Danger.b, 0.35f);
                 outline.effectDistance = new Vector2(1f, -1f);
             }
+            else if (isAi)
+            {
+                var outline = go.AddComponent<Outline>();
+                outline.effectColor = new Color(theme.Champagne.r, theme.Champagne.g, theme.Champagne.b, 0.45f);
+                outline.effectDistance = new Vector2(1.5f, -1.5f);
+            }
 
             var btn = go.GetComponent<Button>();
             btn.transition = Selectable.Transition.ColorTint;
             var colors = btn.colors;
             colors.colorMultiplier = 1f;
-            colors.fadeDuration = 0.08f;
+            colors.fadeDuration = 0.12f;
             colors.normalColor = Color.white;
             colors.selectedColor = Color.white;
-            colors.disabledColor = new Color(0.75f, 0.75f, 0.75f, 0.5f);
-            if (emphasis == FrButtonEmphasis.Primary)
+            colors.disabledColor = new Color(0.75f, 0.75f, 0.75f, 0.45f);
+            colors.highlightedColor = new Color(1f, 0.99f, 0.97f, 1f);
+            colors.pressedColor = new Color(0.92f, 0.9f, 0.88f, 1f);
+            if (isAi)
             {
-                colors.highlightedColor = new Color(1f, 0.96f, 0.98f, 1f);
-                colors.pressedColor = new Color(0.88f, 0.82f, 0.86f, 1f);
-            }
-            else if (emphasis == FrButtonEmphasis.Destructive)
-            {
-                colors.highlightedColor = new Color(0.98f, 0.94f, 0.94f, 1f);
-                colors.pressedColor = new Color(0.92f, 0.86f, 0.86f, 1f);
-            }
-            else
-            {
-                colors.highlightedColor = new Color(0.99f, 0.99f, 0.99f, 1f);
-                colors.pressedColor = new Color(0.92f, 0.9f, 0.9f, 1f);
+                colors.highlightedColor = new Color(1.08f, 1.05f, 1f, 1f);
+                colors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
             }
 
             btn.colors = colors;
             btn.onClick.AddListener(onClick);
             var le = go.AddComponent<LayoutElement>();
-            var h = emphasis == FrButtonEmphasis.Primary
-                ? (DeviceLayoutPolicy.IsTabletLike() ? 72f : 64f)
-                : (DeviceLayoutPolicy.IsTabletLike() ? 58f : 52f);
+            var h = isPrimary
+                ? (DeviceLayoutPolicy.IsTabletLike() ? 64f : 56f)
+                : (DeviceLayoutPolicy.IsTabletLike() ? 52f : 46f);
+            if (emphasis == FrButtonEmphasis.Ghost)
+                h = DeviceLayoutPolicy.IsTabletLike() ? 40f : 36f;
             le.minHeight = h;
             le.preferredHeight = h;
             le.flexibleWidth = 1f;
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, h);
 
+            // Soft highlight sweep for AI / primary
+            if (isPrimary)
+            {
+                var sweep = new GameObject("Sweep", typeof(RectTransform), typeof(Image));
+                sweep.transform.SetParent(go.transform, false);
+                var srt = sweep.GetComponent<RectTransform>();
+                srt.anchorMin = new Vector2(0f, 0f);
+                srt.anchorMax = new Vector2(0.35f, 1f);
+                srt.offsetMin = Vector2.zero;
+                srt.offsetMax = Vector2.zero;
+                var simg = sweep.GetComponent<Image>();
+                simg.sprite = WhiteSprite;
+                simg.color = new Color(1f, 1f, 1f, isAi ? 0.08f : 0.12f);
+                simg.raycastTarget = false;
+                var sweepMotion = sweep.AddComponent<FrUiMotion>();
+                sweepMotion.EnableFloat(true, 0f);
+            }
+
             var txtGo = new GameObject("Text", typeof(Text));
             txtGo.transform.SetParent(go.transform, false);
             var txt = txtGo.GetComponent<Text>();
-            txt.font = DefaultUiFont;
+            txt.font = isPrimary ? FrUiFonts.UiMedium : FrUiFonts.Ui;
             txt.text = label;
-            txt.fontSize = Mathf.RoundToInt(emphasis == FrButtonEmphasis.Primary
-                ? theme.SubtitleSize
-                : theme.BodySize);
-            txt.fontStyle = emphasis == FrButtonEmphasis.Primary ? FontStyle.Bold : FontStyle.Normal;
+            txt.fontSize = Mathf.RoundToInt(isPrimary ? theme.SubtitleSize : theme.BodySize);
+            txt.fontStyle = FontStyle.Normal;
             txt.color = txtColor;
             txt.alignment = TextAnchor.MiddleCenter;
             var trt = txtGo.GetComponent<RectTransform>();
             trt.anchorMin = Vector2.zero;
             trt.anchorMax = Vector2.one;
-            trt.offsetMin = new Vector2(16f, 0f);
-            trt.offsetMax = new Vector2(-16f, 0f);
+            trt.offsetMin = new Vector2(18f, 0f);
+            trt.offsetMax = new Vector2(-18f, 0f);
 
-            if (emphasis == FrButtonEmphasis.Primary)
-            {
-                var motion = go.AddComponent<FrUiMotion>();
+            var motion = go.AddComponent<FrUiMotion>();
+            if (isAi)
                 motion.EnablePulse(true);
-                WirePressMotion(btn, motion);
+            WirePressMotion(btn, motion);
+
+            return btn;
+        }
+
+        // ---------- Tech pack spec sheet primitives ----------
+
+        /// <summary>
+        /// Boxed spec block with a ruled caps header, like a printed tech pack table.
+        /// Height comes from the vertical layout group only — a ContentSizeFitter here would be a
+        /// child of a layout group, which is the classic uGUI layout-loop trap.
+        /// </summary>
+        public static RectTransform AddSpecCard(Transform parent, string title, FashionRiseTheme theme)
+        {
+            var card = new GameObject("Spec_" + title, typeof(RectTransform), typeof(Image),
+                typeof(VerticalLayoutGroup), typeof(LayoutElement));
+            card.transform.SetParent(parent, false);
+            var img = card.GetComponent<Image>();
+            img.color = new Color(1f, 1f, 1f, 0.96f);
+            var edge = card.AddComponent<Outline>();
+            edge.effectColor = new Color(theme.PrimaryText.r, theme.PrimaryText.g, theme.PrimaryText.b, 0.35f);
+            edge.effectDistance = new Vector2(1f, -1f);
+
+            var v = card.GetComponent<VerticalLayoutGroup>();
+            v.padding = new RectOffset(0, 0, 0, 0);
+            v.spacing = 0f;
+            v.childControlWidth = true;
+            v.childForceExpandWidth = true;
+            v.childControlHeight = true;
+            v.childForceExpandHeight = false;
+            var le = card.GetComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+            le.flexibleHeight = 0f;
+
+            if (!string.IsNullOrEmpty(title))
+                AddSpecBandRow(card.transform, title, theme);
+
+            return card.GetComponent<RectTransform>();
+        }
+
+        /// <summary>Centered caps band used for table titles and grouped sections.</summary>
+        public static void AddSpecBandRow(Transform parent, string text, FashionRiseTheme theme)
+        {
+            var band = new GameObject("Band", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            band.transform.SetParent(parent, false);
+            band.GetComponent<Image>().color = new Color(theme.BackgroundDeep.r, theme.BackgroundDeep.g,
+                theme.BackgroundDeep.b, 0.85f);
+            var le = band.GetComponent<LayoutElement>();
+            le.minHeight = 30f;
+            le.preferredHeight = 30f;
+            le.flexibleWidth = 1f;
+
+            var label = new GameObject("T", typeof(Text));
+            label.transform.SetParent(band.transform, false);
+            var txt = label.GetComponent<Text>();
+            txt.font = FrUiFonts.UiMedium;
+            txt.text = Space(text.ToUpperInvariant());
+            txt.fontSize = Mathf.RoundToInt(theme.CaptionSize);
+            txt.color = theme.PrimaryText;
+            txt.alignment = TextAnchor.MiddleCenter;
+            var rt = label.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(10f, 0f);
+            rt.offsetMax = new Vector2(-10f, 0f);
+        }
+
+        /// <summary>
+        /// Label / value table row with a hairline rule under it. Row and cell heights are set
+        /// explicitly from <paramref name="availableWidth"/> so uGUI never has to ask a wrapped
+        /// Text for its preferred height while it is still measuring the sheet.
+        /// </summary>
+        public static void AddSpecRow(Transform parent, string label, string value, FashionRiseTheme theme,
+            float availableWidth)
+        {
+            var row = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup),
+                typeof(LayoutElement));
+            row.transform.SetParent(parent, false);
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(12, 12, 6, 6);
+            h.spacing = 8f;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = true;
+            h.childControlHeight = true;
+            h.childForceExpandHeight = false;
+
+            var font = theme.CaptionSize + 1f;
+            var labelH = EstimateTextHeight(label, font, availableWidth * 0.58f);
+            var valueH = EstimateTextHeight(value, font, availableWidth * 0.36f);
+            var rowH = Mathf.Max(30f, Mathf.Max(labelH, valueH));
+
+            var le = row.GetComponent<LayoutElement>();
+            le.minHeight = rowH;
+            le.preferredHeight = rowH;
+            le.flexibleHeight = 0f;
+            le.flexibleWidth = 1f;
+
+            var l = SpecCell(row.transform, label, theme, TextAnchor.MiddleLeft, false, labelH);
+            l.GetComponent<LayoutElement>().flexibleWidth = 1.6f;
+            var r = SpecCell(row.transform, value, theme, TextAnchor.MiddleRight, true, valueH);
+            r.GetComponent<LayoutElement>().flexibleWidth = 1f;
+
+            AddHairline(parent, theme);
+        }
+
+        /// <summary>Three-column row for Item / Specification / Quantity style tables.</summary>
+        public static void AddSpecRow3(Transform parent, string a, string b, string c, FashionRiseTheme theme,
+            float availableWidth, bool header = false)
+        {
+            var row = new GameObject(header ? "HeadRow" : "Row3", typeof(RectTransform),
+                typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            row.transform.SetParent(parent, false);
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(12, 12, 6, 6);
+            h.spacing = 8f;
+            h.childAlignment = TextAnchor.UpperLeft;
+            h.childControlWidth = true;
+            h.childControlHeight = true;
+            h.childForceExpandHeight = false;
+
+            var font = theme.CaptionSize + 1f;
+            var wa = availableWidth * 0.28f;
+            var wb = availableWidth * 0.5f;
+            var wc = availableWidth * 0.16f;
+            var ha = EstimateTextHeight(a, font, wa);
+            var hb = EstimateTextHeight(b, font, wb);
+            var hc = EstimateTextHeight(c, font, wc);
+            var rowH = Mathf.Max(header ? 28f : 34f, Mathf.Max(ha, Mathf.Max(hb, hc)));
+
+            var le = row.GetComponent<LayoutElement>();
+            le.minHeight = rowH;
+            le.preferredHeight = rowH;
+            le.flexibleHeight = 0f;
+            le.flexibleWidth = 1f;
+
+            var ca = SpecCell(row.transform, a, theme, TextAnchor.UpperLeft, header, ha);
+            ca.GetComponent<LayoutElement>().flexibleWidth = 1.1f;
+            var cb = SpecCell(row.transform, b, theme, TextAnchor.UpperLeft, header, hb);
+            cb.GetComponent<LayoutElement>().flexibleWidth = 1.9f;
+            var cc = SpecCell(row.transform, c, theme, TextAnchor.UpperRight, header, hc);
+            cc.GetComponent<LayoutElement>().flexibleWidth = 0.7f;
+
+            AddHairline(parent, theme);
+        }
+
+        /// <summary>Wrapped body copy inside a spec card (notes, construction steps).</summary>
+        public static Text AddSpecParagraph(Transform parent, string text, FashionRiseTheme theme,
+            float availableWidth)
+        {
+            var go = new GameObject("Para", typeof(Text), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var t = go.GetComponent<Text>();
+            t.font = FrUiFonts.Ui;
+            t.text = text;
+            t.fontSize = Mathf.RoundToInt(theme.CaptionSize + 1f);
+            t.color = theme.PrimaryText;
+            t.alignment = TextAnchor.UpperLeft;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            t.lineSpacing = 1.25f;
+            var h = EstimateTextHeight(text, theme.CaptionSize + 1f, availableWidth - 26f) + 8f;
+            var le = go.GetComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+            le.minHeight = h;
+            le.preferredHeight = h;
+            le.flexibleHeight = 0f;
+            return t;
+        }
+
+        /// <summary>Line count × line height for a wrapped legacy Text at a known width.</summary>
+        static float EstimateTextHeight(string? text, float fontSize, float width)
+        {
+            var s = text ?? "";
+            var lineHeight = fontSize * 1.45f + 4f;
+            var charsPerLine = Mathf.Max(8f, Mathf.Floor(Mathf.Max(60f, width) / Mathf.Max(4f, fontSize * 0.54f)));
+            var lines = 0;
+            foreach (var segment in s.Split('\n'))
+                lines += Mathf.Max(1, Mathf.CeilToInt(segment.Length / charsPerLine));
+            return Mathf.Max(lineHeight, lines * lineHeight) + 10f;
+        }
+
+        static GameObject SpecCell(Transform parent, string text, FashionRiseTheme theme, TextAnchor anchor,
+            bool strong, float height)
+        {
+            var go = new GameObject("Cell", typeof(Text), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var t = go.GetComponent<Text>();
+            t.font = strong ? FrUiFonts.UiMedium : FrUiFonts.Ui;
+            t.text = text;
+            t.fontSize = Mathf.RoundToInt(theme.CaptionSize + 1f);
+            t.color = theme.PrimaryText;
+            t.alignment = anchor;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            var le = go.GetComponent<LayoutElement>();
+            le.minHeight = Mathf.Max(20f, height);
+            le.preferredHeight = Mathf.Max(20f, height);
+            le.flexibleHeight = 0f;
+            return go;
+        }
+
+        public static void AddHairline(Transform parent, FashionRiseTheme theme)
+        {
+            var go = new GameObject("Rule", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var img = go.GetComponent<Image>();
+            img.color = new Color(theme.PrimaryText.r, theme.PrimaryText.g, theme.PrimaryText.b, 0.18f);
+            img.raycastTarget = false;
+            var le = go.GetComponent<LayoutElement>();
+            le.minHeight = 1f;
+            le.preferredHeight = 1f;
+            le.flexibleWidth = 1f;
+        }
+
+        /// <summary>Letter-spaced caps — Unity's legacy Text has no tracking, so we fake it.</summary>
+        public static string Space(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return s;
+            var sb = new System.Text.StringBuilder(s.Length * 2);
+            for (var i = 0; i < s.Length; i++)
+            {
+                sb.Append(s[i]);
+                if (i < s.Length - 1 && s[i] != ' ')
+                    sb.Append(' ');
             }
 
+            return sb.ToString();
+        }
+
+        /// <summary>Compact circular tool button with icon sprite.</summary>
+        public static Button AddIconButton(Transform parent, string name, Sprite icon, FashionRiseTheme theme,
+            UnityAction onClick, float size = 48f)
+        {
+            var go = new GameObject(name + "_IconBtn", typeof(Image), typeof(Button), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var face = go.GetComponent<Image>();
+            face.sprite = FrUiSprites.Circle;
+            face.color = theme.Card;
+            AddSoftShadow(go, -3f, 0.1f);
+            var le = go.GetComponent<LayoutElement>();
+            le.minWidth = size;
+            le.preferredWidth = size;
+            le.minHeight = size;
+            le.preferredHeight = size;
+            le.flexibleWidth = 0f;
+
+            var iconGo = new GameObject("Icon", typeof(Image));
+            iconGo.transform.SetParent(go.transform, false);
+            var iconImg = iconGo.GetComponent<Image>();
+            iconImg.sprite = icon;
+            iconImg.preserveAspect = true;
+            iconImg.raycastTarget = false;
+            iconImg.color = theme.PrimaryText;
+            var irt = iconGo.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0.22f, 0.22f);
+            irt.anchorMax = new Vector2(0.78f, 0.78f);
+            irt.offsetMin = Vector2.zero;
+            irt.offsetMax = Vector2.zero;
+
+            var btn = go.GetComponent<Button>();
+            btn.targetGraphic = face;
+            btn.onClick.AddListener(onClick);
+            var motion = go.AddComponent<FrUiMotion>();
+            WirePressMotion(btn, motion);
             return btn;
         }
 
@@ -386,13 +736,18 @@ namespace FashionRise.UI
 
             Add(EventTriggerType.PointerDown, _ => motion.SetPressed(true));
             Add(EventTriggerType.PointerUp, _ => motion.SetPressed(false));
-            Add(EventTriggerType.PointerExit, _ => motion.SetPressed(false));
+            Add(EventTriggerType.PointerEnter, _ => motion.SetHovered(true));
+            Add(EventTriggerType.PointerExit, _ =>
+            {
+                motion.SetPressed(false);
+                motion.SetHovered(false);
+            });
         }
 
         static void AddSoftShadow(GameObject go, float offsetY, float alpha)
         {
             var s = go.AddComponent<Shadow>();
-            s.effectColor = new Color(0.25f, 0.12f, 0.18f, alpha);
+            s.effectColor = new Color(0.08f, 0.07f, 0.06f, alpha);
             s.effectDistance = new Vector2(0f, offsetY);
             s.useGraphicAlpha = true;
         }
@@ -440,7 +795,7 @@ namespace FashionRise.UI
             var textGo = new GameObject("Text", typeof(Text));
             textGo.transform.SetParent(go.transform, false);
             var text = textGo.GetComponent<Text>();
-            text.font = DefaultUiFont;
+            text.font = FrUiFonts.Ui;
             text.text = "";
             text.fontSize = fontSize;
             text.color = theme.PrimaryText;
@@ -454,7 +809,7 @@ namespace FashionRise.UI
             var phGo = new GameObject("Placeholder", typeof(Text));
             phGo.transform.SetParent(go.transform, false);
             var ph = phGo.GetComponent<Text>();
-            ph.font = DefaultUiFont;
+            ph.font = FrUiFonts.Ui;
             ph.text = placeholder;
             ph.fontSize = fontSize;
             ph.color = new Color(theme.SecondaryText.r, theme.SecondaryText.g, theme.SecondaryText.b, 0.55f);
@@ -519,7 +874,7 @@ namespace FashionRise.UI
             var labelGo = new GameObject("Label", typeof(Text));
             labelGo.transform.SetParent(go.transform, false);
             var txt = labelGo.GetComponent<Text>();
-            txt.font = DefaultUiFont;
+            txt.font = FrUiFonts.Ui;
             txt.text = label;
             txt.fontSize = Mathf.RoundToInt(theme.BodySize);
             txt.color = theme.PrimaryText;

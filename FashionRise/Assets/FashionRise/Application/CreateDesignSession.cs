@@ -35,6 +35,12 @@ namespace FashionRise.Application
         /// Magic uses these so a silk blouse and denim jeans stay distinct.
         /// </summary>
         public string SketchMaterialPairs { get; set; } = "";
+        /// <summary>
+        /// Colours actually painted on the ink layer with their place on the figure and area share,
+        /// e.g. <c>#19B89C,bodice/upper+skirt/lower,61;#141414,hat/head+shoes/hem,9</c>.
+        /// Ground truth for Magic — beats "last colour chip tapped".
+        /// </summary>
+        public string SketchColorRegions { get; set; } = "";
         /// <summary>Ink-only PNG path so Edit sketch can restore strokes.</summary>
         public string LastInkImagePath { get; set; } = "";
         public string LastSketchJobId { get; set; } = "";
@@ -43,6 +49,14 @@ namespace FashionRise.Application
         public string LastPolishedImageUrl { get; set; } = "";
         /// <summary>Local cache of the polished image for Share (downloaded from <see cref="LastPolishedImageUrl"/>).</summary>
         public string LastPolishedImageLocalPath { get; set; } = "";
+        /// <summary>Last Create Real Design / tech pack job id.</summary>
+        public string LastTechPackJobId { get; set; } = "";
+        /// <summary>Raw JSON from the last tech pack result for the Tech Pack screen.</summary>
+        public string LastTechPackJson { get; set; } = "";
+        public string LastTechPackFrontImageUrl { get; set; } = "";
+        public string LastTechPackBackImageUrl { get; set; } = "";
+        public string LastTechPackPatternImageUrl { get; set; } = "";
+        public string LastTechPackPdfUrl { get; set; } = "";
         /// <summary>After a successful API save, reuse this id so the next save updates the same row.</summary>
         public string PersistedDesignId { get; set; } = "";
 
@@ -53,6 +67,16 @@ namespace FashionRise.Application
             LastSketchSummary = "";
             LastPolishedImageUrl = "";
             LastPolishedImageLocalPath = "";
+        }
+
+        public void ClearTechPack()
+        {
+            LastTechPackJobId = "";
+            LastTechPackJson = "";
+            LastTechPackFrontImageUrl = "";
+            LastTechPackBackImageUrl = "";
+            LastTechPackPatternImageUrl = "";
+            LastTechPackPdfUrl = "";
         }
 
         public void Reset()
@@ -77,8 +101,10 @@ namespace FashionRise.Application
             SketchFabricName = "";
             SketchColorName = "";
             SketchMaterialPairs = "";
+            SketchColorRegions = "";
             LastInkImagePath = "";
             ClearLastLook();
+            ClearTechPack();
             PersistedDesignId = "";
         }
 

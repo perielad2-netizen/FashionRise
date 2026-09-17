@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SketchPipelineBody(BaseModel):
-    """Payload for V2 sketch/style pipeline endpoints (placeholder worker)."""
+    """Payload for V2 sketch/style/tech-pack pipeline endpoints."""
 
     design_id: uuid.UUID | None = None
     input_data: dict[str, Any] = Field(default_factory=dict)

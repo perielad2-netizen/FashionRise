@@ -517,6 +517,145 @@ namespace FashionRise.Presentation.Sketch
             return false;
         }
 
+        /// <summary>
+        /// Reads the ink layer and reports which colours were actually painted, where on the
+        /// figure, and how much area each covers — e.g. <c>#19B89C,bodice+skirt,61;#141414,hat+shoes,9</c>.
+        /// Magic uses this instead of "last chip tapped", so a turquoise dress with a black hat
+        /// cannot be flattened into one black garment.
+        /// </summary>
+        public string DescribeColorRegions(int maxColors = 6, int alphaThreshold = 40)
+        {
+            // Manhattan RGB distance for merging; loose enough to absorb anti-aliased stroke
+            // edges, tight enough to keep turquoise and black apart.
+            const int mergeDistance = 168;
+            const int minPercent = 3;
+
+            var buckets = new List<InkCluster>();
+            var painted = 0;
+
+            for (var y = 0; y < textureHeight; y++)
+            for (var x = 0; x < textureWidth; x++)
+            {
+                var c = _inkPixels[x + y * textureWidth];
+                if (c.a <= alphaThreshold)
+                    continue;
+                painted++;
+                var zone = ZoneOf(y);
+
+                InkCluster? nearest = null;
+                var nearestDistance = int.MaxValue;
+                foreach (var bucket in buckets)
+                {
+                    var d = bucket.DistanceTo(c);
+                    if (d >= nearestDistance)
+                        continue;
+                    nearestDistance = d;
+                    nearest = bucket;
+                }
+
+                if (nearest != null && nearestDistance <= mergeDistance)
+                    nearest.Add(c, zone);
+                else
+                    buckets.Add(new InkCluster(c, zone));
+            }
+
+            if (painted == 0 || buckets.Count == 0)
+                return "";
+
+            buckets.Sort((a, b) => b.Count.CompareTo(a.Count));
+            var sb = new System.Text.StringBuilder();
+            var emitted = 0;
+            foreach (var bucket in buckets)
+            {
+                if (emitted >= maxColors)
+                    break;
+                var pct = Mathf.RoundToInt(bucket.Count * 100f / painted);
+                if (pct < minPercent)
+                    continue;
+                if (emitted > 0)
+                    sb.Append(';');
+                sb.Append(bucket.Hex()).Append(',').Append(bucket.Zones()).Append(',').Append(pct);
+                emitted++;
+            }
+
+            return sb.ToString();
+        }
+
+        static readonly string[] ZoneNames = { "shoes/hem", "skirt/lower", "waist/mid", "bodice/upper", "hat/head" };
+
+        int ZoneOf(int y)
+        {
+            var f = textureHeight <= 1 ? 0f : y / (float)(textureHeight - 1);
+            if (f >= 0.82f)
+                return 4;
+            if (f >= 0.60f)
+                return 3;
+            if (f >= 0.38f)
+                return 2;
+            if (f >= 0.13f)
+                return 1;
+            return 0;
+        }
+
+        sealed class InkCluster
+        {
+            public Color32 Sample;
+            public int Count;
+            long _r;
+            long _g;
+            long _b;
+            readonly int[] _zoneCounts = new int[5];
+
+            public InkCluster(Color32 c, int zone)
+            {
+                Sample = c;
+                Add(c, zone);
+            }
+
+            public void Add(Color32 c, int zone)
+            {
+                Count++;
+                _r += c.r;
+                _g += c.g;
+                _b += c.b;
+                if (zone >= 0 && zone < _zoneCounts.Length)
+                    _zoneCounts[zone]++;
+            }
+
+            /// <summary>Manhattan RGB distance from this cluster's running average.</summary>
+            public int DistanceTo(Color32 c)
+            {
+                var n = Mathf.Max(1, Count);
+                var ar = (int)(_r / n);
+                var ag = (int)(_g / n);
+                var ab = (int)(_b / n);
+                return Mathf.Abs(ar - c.r) + Mathf.Abs(ag - c.g) + Mathf.Abs(ab - c.b);
+            }
+
+            public string Hex()
+            {
+                var r = (int)(_r / Mathf.Max(1, Count));
+                var g = (int)(_g / Mathf.Max(1, Count));
+                var b = (int)(_b / Mathf.Max(1, Count));
+                return $"#{r:X2}{g:X2}{b:X2}";
+            }
+
+            /// <summary>Zones holding at least an eighth of this colour's pixels, top-down.</summary>
+            public string Zones()
+            {
+                var parts = new List<string>();
+                for (var i = _zoneCounts.Length - 1; i >= 0; i--)
+                {
+                    if (_zoneCounts[i] * 8 >= Count)
+                        parts.Add(ZoneNames[i]);
+                }
+
+                if (parts.Count == 0)
+                    parts.Add("garment");
+                return string.Join("+", parts);
+            }
+        }
+
         /// <summary>Writes flattened PNG (reference + ink) under persistentDataPath/Sketches.</summary>
         public string SavePngToPersistentData(string fileNamePrefix = "sketch")
         {
