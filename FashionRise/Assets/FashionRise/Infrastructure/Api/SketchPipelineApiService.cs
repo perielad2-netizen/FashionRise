@@ -327,6 +327,7 @@ namespace FashionRise.Infrastructure.Api
             var front = AIJobApiService.ExtractImageUrl(rd) ?? "";
             var back = rd?.Value<string>("back_image_url") ?? "";
             var pattern = rd?.Value<string>("pattern_image_url") ?? "";
+            var pdf = rd?.Value<string>("pdf_url") ?? "";
             var disclaimer = rd?.Value<string>("disclaimer") ?? "";
             return new TechPackResult
             {
@@ -337,6 +338,7 @@ namespace FashionRise.Infrastructure.Api
                 FrontImageUrl = front,
                 BackImageUrl = back,
                 PatternImageUrl = pattern,
+                PdfUrl = pdf,
                 RawJson = rd != null ? rd.ToString(Newtonsoft.Json.Formatting.Indented) : "{}"
             };
         }

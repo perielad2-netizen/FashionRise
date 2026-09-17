@@ -3,28 +3,32 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-09-15 — kid glam UI Layer 1 (studio chrome + model choice tiles)
+**Last updated:** 2026-09-17 — Create Real Design tech pack + 2-page PDF export
 
-**Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Active work branch: **`cursor/kid-glam-ui-77c6`**. Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
+**Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
 ---
 
 ## Session pause — where we stopped (read this first in a new chat)
 
-**Paused:** 2026-09-15. **Resume here next session.**
+**Paused:** 2026-09-17. **Resume here next session.**
 
 ### What works now
 
-- Magic look image in-app + one-shot Magic UX (prior).
-- **Kid glam Layer 1 UI:** blush→sky studio atmosphere, FashionRise logo hero, Girl/Boy croquis tiles, stage frames on sketch/look, bold CTAs + pulse/press motion.
-- Branch: `cursor/kid-glam-ui-77c6` (based on windows sync + Magic fixes).
+- Kid loop: sketch → Magic (sketch **image edit**) → Your look.
+- **Create Real Design** on Your look opens a printed-style **Tech Pack** screen: design, front/back flats, measurements (170 cm / 84-64-90), materials, pattern pieces, cutting layout, construction, special construction.
+- Backend job `POST /api/v1/ai/tech-pack` returns JSON + blueprint image URLs + **`pdf_url`** (2-page A4 landscape: technical spec + pattern/cutting sheet).
+- Unity **Export PDF** downloads/opens that file. Measurements are a **first production draft**, not final manufacturing specs.
+
+### Crash notes (fixed this session)
+
+- Tech pack screen could freeze/crash from `AspectRatioFitter.HeightControlsWidth` inside a layout group, and from `quantity_m.ToObject<float>()` when the model returned a string. Both are guarded now. Do **not** re-open the old looping Cloud chat.
 
 ### Suggested next session
 
-1. Play-test glam UI on Simulator after pull.  
-2. Pose carousel + lighter sketch toolbar.  
-3. Color / fabric tray (Layer 2).  
-4. Share polish / gallery runway.
+1. Restart API (`pip install -r requirements.txt` if reportlab missing) and Play-test Create Real Design → Export PDF.  
+2. Optional: in-app editors for measurements / fabric / sample size before PDF.  
+3. Pose carousel / fabric tray / share polish.
 
 ### Product vision (locked)
 
@@ -52,7 +56,7 @@ FashionRise helps **young creators** (including kids ~7–8+) **draw fashion ide
 |--------|---------|--------|
 | **A — Sketch & authoring** | **Kid loop live** + **AI look image on Your look**. Next: image **closer to sketch** (less photoreal), kid toolbar polish, later vector/layers | Prompt 6, Phase 5b |
 | **B — Social & growth / virality** | Gallery/ratings/follows exist; front door Share works. Next: one-tap publish from Magic result, challenges, **AI share video** | Phase 4–5b, Prompt 7 discovery |
-| **C — Maker handoff** | Spec/PDF placeholder shipped for **pro** path. Next when talent needs it | Prompt 7 / Phase 6 |
+| **C — Maker handoff** | **Create Real Design** tech pack + 2-page PDF. Next: editable measurements before export | Prompt 7 / Phase 6 |
 | **D — Trust & scale** | Hardening, moderation, CI | Phase 7 + Prompt 8 |
 
 Work **front door first**; keep Pro behind More… until the viral loop feels great.

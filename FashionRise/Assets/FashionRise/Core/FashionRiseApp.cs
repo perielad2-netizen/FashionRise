@@ -40,6 +40,8 @@ namespace FashionRise.Core
                 return;
             }
 
+            FashionRiseBootstrapBuilder.EnsureAllScreens(sc.transform);
+
             var app = AppServices.CreateFromConfig(apiConfig);
             Debug.Log($"FashionRise API BaseUrl = '{apiConfig.BaseUrl}' (api={app.IsApiBackend})");
             sc.Initialize(app);

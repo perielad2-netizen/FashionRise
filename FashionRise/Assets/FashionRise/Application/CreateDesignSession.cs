@@ -56,6 +56,7 @@ namespace FashionRise.Application
         public string LastTechPackFrontImageUrl { get; set; } = "";
         public string LastTechPackBackImageUrl { get; set; } = "";
         public string LastTechPackPatternImageUrl { get; set; } = "";
+        public string LastTechPackPdfUrl { get; set; } = "";
         /// <summary>After a successful API save, reuse this id so the next save updates the same row.</summary>
         public string PersistedDesignId { get; set; } = "";
 
@@ -75,6 +76,7 @@ namespace FashionRise.Application
             LastTechPackFrontImageUrl = "";
             LastTechPackBackImageUrl = "";
             LastTechPackPatternImageUrl = "";
+            LastTechPackPdfUrl = "";
         }
 
         public void Reset()

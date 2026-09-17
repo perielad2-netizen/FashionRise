@@ -14,7 +14,7 @@ from openai import OpenAI
 
 from app.core.config import get_settings
 from app.models.ai_job import AIJob
-from app.storage.local import LocalStorageBackend
+from app.storage.local import LocalStorageBackend, is_loopback_url
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,21 @@ def is_configured() -> bool:
     return bool(key)
 
 
+def _mime_from_url(url: str) -> str:
+    low = url.lower()
+    if low.endswith(".jpg") or low.endswith(".jpeg"):
+        return "image/jpeg"
+    if low.endswith(".webp"):
+        return "image/webp"
+    return "image/png"
+
+
 def _fetch_image(url: str) -> tuple[bytes, str]:
+    local = LocalStorageBackend().read_public_url(url)
+    if local:
+        return local, _mime_from_url(url)
+    if is_loopback_url(url):
+        raise FileNotFoundError(f"loopback image not on disk: {url}")
     timeout = float(get_settings().openai_http_timeout_seconds)
     with httpx.Client(timeout=timeout) as client:
         r = client.get(url, follow_redirects=True)

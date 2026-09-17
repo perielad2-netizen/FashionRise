@@ -65,6 +65,7 @@
     <Compile Include="Assets\FashionRise\Domain\SketchFigureTemplate.cs" />
     <Compile Include="Assets\FashionRise\Services\IMaterialCatalogService.cs" />
     <Compile Include="Assets\FashionRise\UI\NativeShareSheet.cs" />
+    <Compile Include="Assets\FashionRise\UI\FrScreenReveal.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Platform\PcImportsFolderOpener.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockColorPaletteService.cs" />
     <Compile Include="Assets\FashionRise\Domain\GallerySort.cs" />
@@ -74,6 +75,7 @@
     <Compile Include="Assets\FashionRise\Data\TemplateCatalogSeed.cs" />
     <Compile Include="Assets\FashionRise\Domain\SketchNavContext.cs" />
     <Compile Include="Assets\FashionRise\Data\PaletteCatalogSeed.cs" />
+    <Compile Include="Assets\FashionRise\Domain\TechPackModels.cs" />
     <Compile Include="Assets\FashionRise\Presentation\Screens\WelcomeScreen.cs" />
     <Compile Include="Assets\FashionRise\Data\MaterialCatalogSeed.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\ShareLinkService.cs" />
@@ -105,6 +107,7 @@
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockAuthService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockMaterialCatalogService.cs" />
     <Compile Include="Assets\FashionRise\Presentation\Preview\GarmentPreviewApplier.cs" />
+    <Compile Include="Assets\FashionRise\Core\FrDiag.cs" />
     <Compile Include="Assets\FashionRise\Presentation\Screens\ScreenController.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\TokenAwareSketchPipelineService.cs" />
     <Compile Include="Assets\FashionRise\Services\IColorPaletteService.cs" />
@@ -115,6 +118,7 @@
     <Compile Include="Assets\FashionRise\Presentation\Navigation\NavigationService.cs" />
     <Compile Include="Assets\FashionRise\Presentation\Screens\SplashScreen.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\ApiJson.cs" />
+    <Compile Include="Assets\FashionRise\UI\FrAiLoadingFx.cs" />
     <Compile Include="Assets\FashionRise\Services\IDesignHandoffService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockSketchPipelineService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockFollowService.cs" />
@@ -124,6 +128,8 @@
     <Compile Include="Assets\FashionRise\Presentation\DesignAutosaveDriver.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\ApiException.cs" />
     <Compile Include="Assets\FashionRise\Application\LoginRememberPreferences.cs" />
+    <Compile Include="Assets\FashionRise\UI\FrUiMotion.cs" />
+    <Compile Include="Assets\FashionRise\Services\ITechPackService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\ApiConfig.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\UserProfileApiService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\RatingApiService.cs" />
@@ -141,6 +147,7 @@
     <Compile Include="Assets\FashionRise\Presentation\Preview\ModelPreviewController.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\PublishingExportService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockShareLinkService.cs" />
+    <Compile Include="Assets\FashionRise\Presentation\Screens\TechPackScreen.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\ApiResponse.cs" />
     <Compile Include="Assets\FashionRise\Presentation\Navigation\ScreenTransitionService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\DesignApiService.cs" />
@@ -159,6 +166,7 @@
     <Compile Include="Assets\FashionRise\Infrastructure\Api\MaterialApiService.cs" />
     <Compile Include="Assets\FashionRise\Services\ISketchProcessingService.cs" />
     <Compile Include="Assets\FashionRise\Domain\MaterialDefinition.cs" />
+    <Compile Include="Assets\FashionRise\UI\FrUiSprites.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockGarmentTemplateService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Api\UploadApiService.cs" />
     <Compile Include="Assets\FashionRise\Domain\RatingSummary.cs" />
@@ -174,6 +182,7 @@
     <Compile Include="Assets\FashionRise\Application\ExportRequest.cs" />
     <Compile Include="Assets\FashionRise\Config\DeviceLayoutPolicy.cs" />
     <Compile Include="Assets\FashionRise\Presentation\Screens\SketchCanvasScreen.cs" />
+    <Compile Include="Assets\FashionRise\UI\FrUiFonts.cs" />
     <Compile Include="Assets\FashionRise\Presentation\Screens\ScreenBase.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockDesignSaveService.cs" />
     <Compile Include="Assets\FashionRise\Infrastructure\Mocks\MockUserProfileService.cs" />

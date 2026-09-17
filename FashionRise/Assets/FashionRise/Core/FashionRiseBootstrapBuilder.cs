@@ -137,6 +137,48 @@ namespace FashionRise.Core
         }
 
         /// <summary>
+        /// Existing App.unity scenes may predate new screens. Create any missing screen roots
+        /// under the UI canvas so navigation never blanks the app.
+        /// </summary>
+        public static void EnsureAllScreens(Transform canvasRoot)
+        {
+            if (canvasRoot == null)
+                return;
+            EnsureScreen<SplashScreen>(canvasRoot, "SplashScreen");
+            EnsureScreen<WelcomeScreen>(canvasRoot, "WelcomeScreen");
+            EnsureScreen<LoginChoiceScreen>(canvasRoot, "LoginChoiceScreen");
+            EnsureScreen<HomeDashboardScreen>(canvasRoot, "HomeDashboardScreen");
+            EnsureScreen<CreateDesignScreen>(canvasRoot, "CreateDesignScreen");
+            EnsureScreen<MaterialSelectionScreen>(canvasRoot, "MaterialSelectionScreen");
+            EnsureScreen<ModelPreviewScreen>(canvasRoot, "ModelPreviewScreen");
+            EnsureScreen<GalleryScreen>(canvasRoot, "GalleryScreen");
+            EnsureScreen<ProfileScreen>(canvasRoot, "ProfileScreen");
+            EnsureScreen<DesignDetailScreen>(canvasRoot, "DesignDetailScreen");
+            EnsureScreen<SettingsScreen>(canvasRoot, "SettingsScreen");
+            EnsureScreen<SketchCanvasScreen>(canvasRoot, "SketchCanvasScreen");
+            EnsureScreen<ImportSketchScreen>(canvasRoot, "ImportSketchScreen");
+            EnsureScreen<SketchEnhancementScreen>(canvasRoot, "SketchEnhancementScreen");
+            EnsureScreen<ConceptResultScreen>(canvasRoot, "ConceptResultScreen");
+            EnsureScreen<TechPackScreen>(canvasRoot, "TechPackScreen");
+        }
+
+        static void EnsureScreen<T>(Transform canvasRoot, string name) where T : ScreenBase
+        {
+            if (canvasRoot.GetComponentInChildren<T>(true) != null)
+                return;
+            Debug.Log($"FashionRise: adding missing screen {name} to scene at runtime.");
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(canvasRoot, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            go.AddComponent<T>();
+            go.SetActive(false);
+        }
+
+        /// <summary>
         /// If the loaded scene has no <see cref="FashionRiseApp"/>, creates the full UI hierarchy.
         /// </summary>
         public static void CreateBootstrapIfMissing()

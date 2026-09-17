@@ -37,8 +37,10 @@ namespace FashionRise.Presentation.Screens
         RectTransform _sheet = null!;
         RawImage? _front;
         RawImage? _back;
+        RawImage? _pattern;
         Texture2D? _ownedFront;
         Texture2D? _ownedBack;
+        Texture2D? _ownedPattern;
         FrAiLoadingFx? _loading;
         CancellationTokenSource? _cts;
         readonly CancellationTokenSource _life = new();
@@ -138,7 +140,7 @@ namespace FashionRise.Presentation.Screens
             rowH.childControlWidth = true;
             rowH.childControlHeight = true;
 
-            FrUiFactory.AddButton(row.transform, "Export spec", _t, ExportSpec, FrButtonEmphasis.Primary);
+            FrUiFactory.AddButton(row.transform, "Export PDF", _t, ExportSpec, FrButtonEmphasis.Primary);
             FrUiFactory.AddButton(row.transform, "Regenerate", _t, Regenerate);
             FrUiFactory.AddButton(row.transform, "Back", _t, GoBack, FrButtonEmphasis.Ghost);
         }
@@ -183,6 +185,7 @@ namespace FashionRise.Presentation.Screens
 
         public override Task ShowAsync(object? payload = null, CancellationToken cancellationToken = default)
         {
+            Debug.Log("FashionRise TechPack: ShowAsync");
             gameObject.SetActive(true);
             if (!_chromeReady)
                 return Task.CompletedTask;
@@ -282,6 +285,7 @@ namespace FashionRise.Presentation.Screens
                 App.CreateDesign.LastTechPackFrontImageUrl = result.FrontImageUrl;
                 App.CreateDesign.LastTechPackBackImageUrl = result.BackImageUrl;
                 App.CreateDesign.LastTechPackPatternImageUrl = result.PatternImageUrl;
+                App.CreateDesign.LastTechPackPdfUrl = result.PdfUrl;
                 FrDiag.Step($"techpack: job {result.JobId} {result.Status}, json {result.RawJson?.Length ?? 0} chars");
 
                 if (string.Equals(result.Status, "failed", StringComparison.OrdinalIgnoreCase))
@@ -381,6 +385,7 @@ namespace FashionRise.Presentation.Screens
             _rendering = false;
             _front = null;
             _back = null;
+            _pattern = null;
             if (_sheet == null)
                 return;
             for (var i = _sheet.childCount - 1; i >= 0; i--)
@@ -449,7 +454,8 @@ namespace FashionRise.Presentation.Screens
                 ("materials", () => BuildMaterialsCard(root!)),
                 ("pattern", () => BuildPatternCard(root!)),
                 ("cutting", () => BuildCuttingCard(root!)),
-                ("construction", () => BuildConstructionCard(root!))
+                ("construction", () => BuildConstructionCard(root!)),
+                ("special", () => BuildSpecialCard(root!))
             };
 
             foreach (var step in steps)
@@ -663,6 +669,27 @@ namespace FashionRise.Presentation.Screens
         void BuildPatternCard(JObject root)
         {
             var card = FrUiFactory.AddSpecCard(_sheet, "Pattern pieces", _t);
+            if (!string.IsNullOrWhiteSpace(App.CreateDesign.LastTechPackPatternImageUrl))
+            {
+                var host = new GameObject("PatternArt", typeof(RectTransform), typeof(HorizontalLayoutGroup),
+                    typeof(LayoutElement));
+                host.transform.SetParent(card, false);
+                var hostLe = host.GetComponent<LayoutElement>();
+                hostLe.minHeight = 260f;
+                hostLe.preferredHeight = 300f;
+                hostLe.flexibleWidth = 1f;
+                var hostH = host.GetComponent<HorizontalLayoutGroup>();
+                hostH.padding = new RectOffset(10, 10, 10, 10);
+                hostH.childForceExpandWidth = true;
+                hostH.childControlWidth = true;
+                hostH.childControlHeight = true;
+                _pattern = MakeFlatPane(host.transform, "Pattern draft");
+            }
+            else
+            {
+                _pattern = null;
+            }
+
             AddRow3(card, "Piece", "Grain / notches", "Size", true);
             if (root["pattern_pieces"] is not JArray pieces || pieces.Count == 0)
             {
@@ -748,6 +775,28 @@ namespace FashionRise.Presentation.Screens
 
             var i = 1;
             foreach (var s in steps)
+            {
+                if (i > MaxRowsPerTable)
+                    break;
+                var text = Scalar(s).Trim();
+                if (string.IsNullOrEmpty(text))
+                    continue;
+                FrUiFactory.AddSpecParagraph(card, i + ".  " + Clamp(text, MaxParagraphChars), _t, ContentWidth);
+                FrUiFactory.AddHairline(card, _t);
+                i++;
+            }
+        }
+
+        void BuildSpecialCard(JObject root)
+        {
+            if (root["special_instructions"] is not JArray special || special.Count == 0)
+                return;
+            var card = FrUiFactory.AddSpecCard(_sheet, "Special construction", _t);
+            FrUiFactory.AddSpecParagraph(card,
+                "Unusual shapes (puff sleeves, pods, sculptural volume) — first-draft notes for a pattern maker.",
+                _t, ContentWidth);
+            var i = 1;
+            foreach (var s in special)
             {
                 if (i > MaxRowsPerTable)
                     break;
@@ -864,6 +913,13 @@ namespace FashionRise.Presentation.Screens
 
         void ExportSpec()
         {
+            var pdfUrl = App.CreateDesign.LastTechPackPdfUrl?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(pdfUrl))
+            {
+                _ = OpenPdfAsync(pdfUrl);
+                return;
+            }
+
             var json = App.CreateDesign.LastTechPackJson;
             if (string.IsNullOrWhiteSpace(json))
                 return;
@@ -885,6 +941,36 @@ namespace FashionRise.Presentation.Screens
             }
         }
 
+        async Task OpenPdfAsync(string url)
+        {
+            try
+            {
+                var loadUrl = RewriteToApiHost(url);
+                using var req = UnityWebRequest.Get(loadUrl);
+                var op = req.SendWebRequest();
+                while (!op.isDone)
+                    await Task.Delay(32).ConfigureAwait(true);
+                if (req.result != UnityWebRequest.Result.Success || req.downloadHandler.data == null ||
+                    req.downloadHandler.data.Length < 8)
+                {
+                    UnityEngine.Application.OpenURL(loadUrl);
+                    return;
+                }
+
+                var dir = Path.Combine(UnityEngine.Application.persistentDataPath, "TechPacks");
+                Directory.CreateDirectory(dir);
+                var path = Path.Combine(dir, $"techpack_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf");
+                File.WriteAllBytes(path, req.downloadHandler.data);
+                UnityEngine.Application.OpenURL("file:///" + path.Replace("\\", "/"));
+                Debug.Log($"FashionRise tech pack PDF saved {path}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"FashionRise PDF export failed: {ex.Message}");
+                UnityEngine.Application.OpenURL(RewriteToApiHost(url));
+            }
+        }
+
         async Task LoadFlatsAsync(CancellationToken ct)
         {
             var front = await LoadFlatAsync(_front, _ownedFront, App.CreateDesign.LastTechPackFrontImageUrl, ct)
@@ -895,6 +981,13 @@ namespace FashionRise.Presentation.Screens
                 .ConfigureAwait(true);
             if (back != null)
                 _ownedBack = back;
+            if (_pattern != null)
+            {
+                var pattern = await LoadFlatAsync(_pattern, _ownedPattern, App.CreateDesign.LastTechPackPatternImageUrl, ct)
+                    .ConfigureAwait(true);
+                if (pattern != null)
+                    _ownedPattern = pattern;
+            }
         }
 
         async Task<Texture2D?> LoadFlatAsync(RawImage? target, Texture2D? previous, string url, CancellationToken ct)
@@ -1003,6 +1096,8 @@ namespace FashionRise.Presentation.Screens
                 Destroy(_ownedFront);
             if (_ownedBack != null)
                 Destroy(_ownedBack);
+            if (_ownedPattern != null)
+                Destroy(_ownedPattern);
         }
     }
 }

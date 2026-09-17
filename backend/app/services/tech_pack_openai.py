@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -16,7 +17,7 @@ from openai import OpenAI
 
 from app.core.config import get_settings
 from app.models.ai_job import AIJob
-from app.storage.local import LocalStorageBackend
+from app.storage.local import LocalStorageBackend, is_loopback_url
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,11 @@ TECH_PACK_JOB_TYPES = frozenset({"tech_pack", "sketch_tech_pack"})
 DISCLAIMER = "Draft measurements — not final manufacturing specs."
 
 SECTIONS = ["design", "measurements", "pattern", "cutting", "materials", "construction"]
+
+_source_lock = threading.Lock()
+_blueprint_lock = threading.Lock()
+_SOURCE_CACHE: dict[str, tuple[bytes, str]] = {}
+_BLUEPRINT_CACHE: dict[str, dict[str, bytes]] = {}
 
 _SYSTEM_PROMPT = (
     "You are a technical fashion designer producing a first-draft tech pack for students. "
@@ -59,7 +65,47 @@ def is_configured() -> bool:
     return bool(key)
 
 
+def _mime_from_url(url: str) -> str:
+    low = url.lower()
+    if low.endswith(".jpg") or low.endswith(".jpeg"):
+        return "image/jpeg"
+    if low.endswith(".webp"):
+        return "image/webp"
+    return "image/png"
+
+
+def _job_cache_key(job: AIJob) -> str:
+    return str(getattr(job, "id", "") or "")
+
+
+def _forget_job_assets(job: AIJob) -> None:
+    cid = _job_cache_key(job)
+    with _source_lock:
+        _SOURCE_CACHE.pop(cid, None)
+    with _blueprint_lock:
+        _BLUEPRINT_CACHE.pop(cid, None)
+
+
+def _remember_blueprint(job: AIJob, label: str, raw: bytes) -> None:
+    cid = _job_cache_key(job)
+    if not cid or not raw:
+        return
+    with _blueprint_lock:
+        _BLUEPRINT_CACHE.setdefault(cid, {})[label] = raw
+
+
+def _pop_blueprint_images(job: AIJob) -> dict[str, bytes]:
+    cid = _job_cache_key(job)
+    with _blueprint_lock:
+        return dict(_BLUEPRINT_CACHE.pop(cid, {}))
+
+
 def _fetch_image(url: str) -> tuple[bytes, str]:
+    local = LocalStorageBackend().read_public_url(url)
+    if local:
+        return local, _mime_from_url(url)
+    if is_loopback_url(url):
+        raise FileNotFoundError(f"loopback image not on disk: {url}")
     timeout = float(get_settings().openai_http_timeout_seconds)
     with httpx.Client(timeout=timeout) as client:
         r = client.get(url, follow_redirects=True)
@@ -83,21 +129,33 @@ def _decode_inline_base64(data: str) -> tuple[bytes, str]:
 
 def _source_image_bytes(job: AIJob) -> tuple[bytes, str] | None:
     """Prefer polished look URL, then sketch image_url / image_base64 (mirrors polish input_data)."""
+    cid = _job_cache_key(job)
+    if cid:
+        with _source_lock:
+            cached = _SOURCE_CACHE.get(cid)
+        if cached:
+            return cached
     d = job.input_data or {}
+    found: tuple[bytes, str] | None = None
     for key in ("polished_image_url", "image_url"):
         url = d.get(key)
         if isinstance(url, str) and url.strip().startswith(("http://", "https://")):
             try:
-                return _fetch_image(url.strip())
+                found = _fetch_image(url.strip())
+                break
             except Exception as e:
                 logger.warning("Tech pack job %s: could not fetch %s: %s", job.id, key, e)
-    b64raw = d.get("image_base64")
-    if isinstance(b64raw, str) and b64raw.strip():
-        try:
-            return _decode_inline_base64(b64raw)
-        except Exception as e:
-            logger.warning("Tech pack job %s: bad image_base64: %s", job.id, e)
-    return None
+    if found is None:
+        b64raw = d.get("image_base64")
+        if isinstance(b64raw, str) and b64raw.strip():
+            try:
+                found = _decode_inline_base64(b64raw)
+            except Exception as e:
+                logger.warning("Tech pack job %s: bad image_base64: %s", job.id, e)
+    if found and cid:
+        with _source_lock:
+            _SOURCE_CACHE[cid] = found
+    return found
 
 
 def _image_part(job: AIJob) -> dict[str, Any] | None:
@@ -304,6 +362,7 @@ def stub_tech_pack(job: AIJob | None = None) -> dict[str, Any]:
         "image_url": None,
         "back_image_url": None,
         "pattern_image_url": None,
+        "pdf_url": None,
         "sections": list(SECTIONS),
         "input_echo": d if job else {},
     }
@@ -326,8 +385,6 @@ def _normalize_result(structured: dict[str, Any], *, pipeline: str, model: str |
     pieces = structured.get("pattern_pieces") if isinstance(structured.get("pattern_pieces"), list) else []
     steps = structured.get("construction_steps") if isinstance(structured.get("construction_steps"), list) else []
     special = structured.get("special_instructions") if isinstance(structured.get("special_instructions"), list) else []
-    if special:
-        steps = list(steps) + [f"Special: {s}" for s in special if str(s).strip()]
     cutting = structured.get("cutting_layout") if isinstance(structured.get("cutting_layout"), dict) else {}
     summary = str(structured.get("summary") or "").strip() or "Tech pack draft generated from look/sketch."
 
@@ -345,10 +402,12 @@ def _normalize_result(structured: dict[str, Any], *, pipeline: str, model: str |
         "materials": materials,
         "pattern_pieces": pieces,
         "construction_steps": steps,
+        "special_instructions": special,
         "cutting_layout": cutting,
         "image_url": None,
         "back_image_url": None,
         "pattern_image_url": None,
+        "pdf_url": None,
         "sections": list(SECTIONS),
         "front_flat_prompt": str(structured.get("front_flat_prompt") or "").strip() or None,
         "back_flat_prompt": str(structured.get("back_flat_prompt") or "").strip() or None,
@@ -457,8 +516,8 @@ def _generate_and_store_blueprint(client: OpenAI, job: AIJob, prompt: str, label
         return None
 
     full_prompt = (
-        "Technical fashion blueprint / tech-pack flat. Clean black line art on pure white background. "
-        "No photo realism, no model figure, no shadows, no text watermarks, no collage. "
+        "Professional fashion technical drawing on cream paper. Clean ink line art, light beige wash only. "
+        "No photorealism, no photography, no 3D render, no watermark, no collage. "
         f"{prompt.strip()}"
     )[:3800]
 
@@ -486,6 +545,7 @@ def _generate_and_store_blueprint(client: OpenAI, job: AIJob, prompt: str, label
     if not raw:
         return None
     url = _store_png(job, raw, label)
+    _remember_blueprint(job, label, raw)
     logger.info("Tech pack job %s: stored %s blueprint → %s", job.id, label, url)
     return url
 
@@ -495,16 +555,17 @@ def _default_flat_prompts(garment: dict[str, Any]) -> tuple[str, str, str]:
     neck = str(garment.get("neckline") or "clean neckline")
     sleeves = str(garment.get("sleeves") or "set-in sleeves")
     front = (
-        f"Front technical flat of a {gtype}, {neck}, {sleeves}, symmetrical, "
-        "fashion tech-pack style line drawing, centered, full garment visible."
+        f"FRONT VIEW fashion illustration croquis of a {gtype}, {neck}, {sleeves}, "
+        "head-to-hem, beige wash on cream paper, callout leader lines, no text labels overlapping the figure."
     )
     back = (
-        f"Back technical flat of the same {gtype}, show center-back seam and zipper placement, "
-        "fashion tech-pack style line drawing, centered, full garment visible."
+        f"BACK VIEW of the same {gtype} croquis, show zipper and seams, matching beige wash, "
+        "fashion technical specification style, head-to-hem."
     )
     pattern = (
-        f"Pattern piece overview for a {gtype}: labeled front, back, sleeve, facing pieces "
-        "with grainline arrows, fold lines, and notches, arranged neatly on a blank page."
+        f"FASHION PATTERN DRAFTING sheet for a {gtype}: labeled pattern pieces (front, back, sleeve, facings, "
+        "any sculptural panels) with grainline arrows, fold notches, dashed seam allowance, arranged on a faint grid, "
+        "cream paper, black ink, no photograph of a person."
     )
     return front, back, pattern
 
@@ -570,6 +631,28 @@ def _complete_with_openai(job: AIJob) -> dict[str, Any]:
     return result
 
 
+def _attach_pdf(job: AIJob, result: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from app.services.tech_pack_pdf import store_tech_pack_pdf
+
+        result["pdf_url"] = store_tech_pack_pdf(job, result, images=_pop_blueprint_images(job))
+    except Exception as e:
+        logger.warning("Tech pack job %s: PDF export failed: %s", job.id, e)
+        result["pdf_url"] = None
+    return result
+
+
+def complete_tech_pack_job(job: AIJob) -> dict[str, Any]:
+    if job.job_type not in TECH_PACK_JOB_TYPES:
+        raise ValueError(f"unsupported job_type {job.job_type!r}")
+    try:
+        if not is_configured():
+            return _attach_pdf(job, stub_tech_pack(job))
+        return _attach_pdf(job, _complete_with_openai(job))
+    finally:
+        _forget_job_assets(job)
+
+
 def _generate_blueprints(
     client: OpenAI, job: AIJob, jobs: list[tuple[str, str]]
 ) -> dict[str, str | None]:
@@ -603,11 +686,3 @@ def _generate_blueprints(
             for f in futures:
                 f.cancel()
     return out
-
-
-def complete_tech_pack_job(job: AIJob) -> dict[str, Any]:
-    if job.job_type not in TECH_PACK_JOB_TYPES:
-        raise ValueError(f"unsupported job_type {job.job_type!r}")
-    if not is_configured():
-        return stub_tech_pack(job)
-    return _complete_with_openai(job)

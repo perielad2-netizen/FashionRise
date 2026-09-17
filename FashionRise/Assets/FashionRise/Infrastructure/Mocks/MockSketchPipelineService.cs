@@ -85,6 +85,11 @@ namespace FashionRise.Infrastructure.Mocks
     ""Attach balloon pod panels at knee/calf level; support edges with horsehair braid."",
     ""Hem the skirt and finish the back walking slit; final press.""
   ],
+  ""special_instructions"": [
+    ""Support balloon pods with organza/tulle and horsehair at the edge so they hold volume without collapsing."",
+    ""Steam puff sleeves over a ham; do not flatten the gather at the cap."",
+    ""Stay the deep V with fusible tape before setting the zipper.""
+  ],
   ""cutting_layout"": {
     ""fabric_width_cm"": 150,
     ""notes"": ""Lay shell single layer for pods to control bias; fold for CF and CB pieces marked on fold. Align grainlines to selvage."",

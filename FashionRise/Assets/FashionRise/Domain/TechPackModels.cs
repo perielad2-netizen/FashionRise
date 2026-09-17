@@ -23,6 +23,7 @@ namespace FashionRise.Domain
         public string FrontImageUrl { get; set; } = "";
         public string BackImageUrl { get; set; } = "";
         public string PatternImageUrl { get; set; } = "";
+        public string PdfUrl { get; set; } = "";
         /// <summary>Raw JSON string of result_data for the Tech Pack screen.</summary>
         public string RawJson { get; set; } = "";
     }
