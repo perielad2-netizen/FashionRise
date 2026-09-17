@@ -245,6 +245,7 @@ namespace FashionRise.Presentation.Screens
                     FabricName = App.CreateDesign.SketchFabricName ?? "",
                     ColorName = App.CreateDesign.SketchColorName ?? "",
                     MaterialPairs = App.CreateDesign.SketchMaterialPairs ?? "",
+                    ColorRegions = App.CreateDesign.SketchColorRegions ?? "",
                     OnJobStarted = jobId =>
                     {
                         if (!string.IsNullOrWhiteSpace(jobId))
@@ -345,11 +346,29 @@ namespace FashionRise.Presentation.Screens
                 fabric = App.CreateDesign.MaterialId?.Trim() ?? "";
             var color = App.CreateDesign.SketchColorName?.Trim() ?? "";
             var pairs = App.CreateDesign.SketchMaterialPairs?.Trim() ?? "";
+            var regions = App.CreateDesign.SketchColorRegions?.Trim() ?? "";
 
             var sb = new System.Text.StringBuilder();
             sb.Append("CRITICAL: Preserve every colored garment region from the sketch. ");
             sb.Append("Example: an orange silk blouse must stay orange silk; blue denim jeans must stay blue denim. ");
             sb.Append("Never merge a blouse and jeans into one dress. Never recolor one garment with another garment's color. ");
+
+            if (!string.IsNullOrEmpty(regions))
+            {
+                sb.Append("Measured ink colors in the sketch (hex, where on the figure, % of painted area) — ");
+                sb.Append("reproduce EACH of these separately: ");
+                foreach (var part in regions.Split(';'))
+                {
+                    var bits = part.Split(',');
+                    if (bits.Length < 3)
+                        continue;
+                    sb.Append(bits[0].Trim())
+                        .Append(" at ").Append(bits[1].Trim())
+                        .Append(" (").Append(bits[2].Trim()).Append("% of ink). ");
+                }
+
+                sb.Append("Do NOT apply one of these colors to the whole outfit. ");
+            }
 
             if (!string.IsNullOrEmpty(pairs))
             {
@@ -375,13 +394,26 @@ namespace FashionRise.Presentation.Screens
                 sb.Append(FabricLookHint(fabric)).Append(' ');
             }
 
-            if (!string.IsNullOrEmpty(color))
-                sb.Append("Last selected studio color: ").Append(color).Append(". ");
+            // Only mention a single palette colour when the sketch really is one colour;
+            // otherwise it reads as "make everything this colour".
+            if (!string.IsNullOrEmpty(color) && CountRegions(regions) <= 1)
+                sb.Append("Studio color for the garment: ").Append(color).Append(". ");
 
             sb.Append(
                 "Make each colored region look fashion-forward and nearly real for its paired fabric — " +
                 "while staying true to what was drawn.");
             return sb.ToString();
+        }
+
+        static int CountRegions(string regions)
+        {
+            if (string.IsNullOrWhiteSpace(regions))
+                return 0;
+            var n = 0;
+            foreach (var part in regions.Split(';'))
+                if (part.Split(',').Length >= 3)
+                    n++;
+            return n;
         }
 
         static string FabricLookHint(string fabric)

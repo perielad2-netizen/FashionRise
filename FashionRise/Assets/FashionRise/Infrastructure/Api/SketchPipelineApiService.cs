@@ -47,7 +47,12 @@ namespace FashionRise.Infrastructure.Api
             // Optional studio chips — backend folds these into the image edit prompt.
             if (!string.IsNullOrWhiteSpace(request.FabricName))
                 inputData["fabric"] = request.FabricName.Trim();
-            if (!string.IsNullOrWhiteSpace(request.ColorName))
+            var regions = request.ColorRegions?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(regions))
+                inputData["color_regions"] = regions;
+            // A single palette colour reads as "paint everything this colour", so only send it
+            // when the sketch really is one colour.
+            if (!string.IsNullOrWhiteSpace(request.ColorName) && CountColorRegions(regions) <= 1)
                 inputData["color"] = request.ColorName.Trim();
             if (!string.IsNullOrWhiteSpace(request.MaterialPairs))
                 inputData["material_pairs"] = request.MaterialPairs.Trim();
@@ -181,6 +186,17 @@ namespace FashionRise.Infrastructure.Api
             }
 
             return false;
+        }
+
+        static int CountColorRegions(string regions)
+        {
+            if (string.IsNullOrWhiteSpace(regions))
+                return 0;
+            var n = 0;
+            foreach (var part in regions.Split(';'))
+                if (part.Split(',').Length >= 3)
+                    n++;
+            return n;
         }
 
         static Guid? TryGuid(string? id) =>

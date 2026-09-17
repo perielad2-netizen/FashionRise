@@ -987,6 +987,9 @@ namespace FashionRise.Presentation.Screens
             }
 
             App.CreateDesign.SketchMaterialPairs = BuildMaterialPairs();
+            // Read the ink itself: chips only record what was tapped, not what was painted.
+            if (_pad != null)
+                App.CreateDesign.SketchColorRegions = _pad.DescribeColorRegions();
         }
 
         void RestoreMaterialPairsFromSession()

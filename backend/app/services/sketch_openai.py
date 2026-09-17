@@ -135,8 +135,18 @@ def _user_text(job: AIJob) -> str:
                 "Per-region color→fabric map (STRICT — match these colors in the sketch; do not recolor "
                 "or merge garments):\n- " + "\n- ".join(mapped)
             )
+    regions = _color_regions(job)
+    if regions:
+        listed = "\n- ".join(
+            f"{hex_code} at {zone} ({pct}% of painted area)" for hex_code, zone, pct in regions
+        )
+        parts.append(
+            "Measured ink colors in the sketch (STRICT — reproduce each one separately, in the same "
+            "place on the figure; never apply a single one of them to the whole outfit):\n- " + listed
+        )
     color = d.get("color")
-    if isinstance(color, str) and color.strip():
+    # With several measured colors a single palette name reads as "recolor everything".
+    if isinstance(color, str) and color.strip() and len(regions) <= 1:
         parts.append(f"Color direction from the studio palette: {color.strip()}.")
     mood = d.get("mood_notes")
     if isinstance(mood, str) and mood.strip():
@@ -148,6 +158,42 @@ def _user_text(job: AIJob) -> str:
             f"Token: {lp[:180]!r}"
         )
     return "\n\n".join(parts) if parts else "Infer from the attached sketch image only."
+
+
+def _color_regions(job: AIJob | None) -> list[tuple[str, str, int]]:
+    """Parse Unity's measured ink colors: ``#RRGGBB,zone(+zone),pct`` joined by ``;``."""
+    if job is None:
+        return []
+    raw = (job.input_data or {}).get("color_regions")
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    out: list[tuple[str, str, int]] = []
+    for chunk in raw.split(";"):
+        bits = chunk.split(",")
+        if len(bits) < 3:
+            continue
+        hex_code, zone, pct_raw = bits[0].strip(), bits[1].strip(), bits[2].strip()
+        if not hex_code or not zone:
+            continue
+        try:
+            pct = int(float(pct_raw))
+        except ValueError:
+            continue
+        out.append((hex_code, zone, pct))
+    return out
+
+
+def _color_regions_clause(job: AIJob | None) -> str:
+    regions = _color_regions(job)
+    if not regions:
+        return ""
+    listed = "; ".join(f"{hex_code} on the {zone} (~{pct}% of the drawing)" for hex_code, zone, pct in regions)
+    return (
+        f"The sketch was painted with these exact colors: {listed}. "
+        "Keep every one of them on the same body area — a turquoise dress with a black hat and black "
+        "shoes must stay a turquoise dress with a black hat and black shoes. "
+        "Never unify the outfit under one of these colors. "
+    )
 
 
 def _fabric_from_job(job: AIJob | None) -> str:
@@ -210,6 +256,7 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         "blue jeans as SEPARATE garments — never turn them into one blue dress or recolor the blouse. "
         "Upgrade each garment region with nearly-real fabric for its paired material, elegant drape, "
         "and soft studio lighting. "
+        f"{_color_regions_clause(job)}"
         f"{fabric_clause}"
         f"{prompt} "
         "Result: a fashionable fashion illustration / editorial croquis on a clean light background, "

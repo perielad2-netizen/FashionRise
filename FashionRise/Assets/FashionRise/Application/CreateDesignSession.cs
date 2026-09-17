@@ -35,6 +35,12 @@ namespace FashionRise.Application
         /// Magic uses these so a silk blouse and denim jeans stay distinct.
         /// </summary>
         public string SketchMaterialPairs { get; set; } = "";
+        /// <summary>
+        /// Colours actually painted on the ink layer with their place on the figure and area share,
+        /// e.g. <c>#19B89C,bodice/upper+skirt/lower,61;#141414,hat/head+shoes/hem,9</c>.
+        /// Ground truth for Magic — beats "last colour chip tapped".
+        /// </summary>
+        public string SketchColorRegions { get; set; } = "";
         /// <summary>Ink-only PNG path so Edit sketch can restore strokes.</summary>
         public string LastInkImagePath { get; set; } = "";
         public string LastSketchJobId { get; set; } = "";
@@ -93,6 +99,7 @@ namespace FashionRise.Application
             SketchFabricName = "";
             SketchColorName = "";
             SketchMaterialPairs = "";
+            SketchColorRegions = "";
             LastInkImagePath = "";
             ClearLastLook();
             ClearTechPack();
