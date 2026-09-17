@@ -8,11 +8,13 @@ using UnityEngine.UI;
 
 namespace FashionRise.Presentation.Screens
 {
-    /// <summary>Front door — pick a fashion figure, then sketch. Magic. Tech pack.</summary>
+    /// <summary>
+    /// Premium atelier home — brand + two full-height model stages. Secondary studio links stay quiet.
+    /// </summary>
     public sealed class HomeDashboardScreen : ScreenBase
     {
-        Text _moreHint = null!;
         bool _moreOpen;
+        RectTransform _morePanel = null!;
 
         public override ScreenId Id => ScreenId.HomeDashboard;
 
@@ -20,47 +22,119 @@ namespace FashionRise.Presentation.Screens
         {
             var t = ThemeOrDefault;
             var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
-            var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
 
-            FrUiFactory.AddOverline(col, "Ov", "Fashion atelier", t);
-            FrUiFactory.AddBrandLogoRow(col, t, 280f, 96f);
-            FrUiFactory.AddEditorialLabel(col, "H", "Choose your model", t,
-                Mathf.RoundToInt(t.DisplaySize * 0.72f), true, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "B", "Sketch. Magic. Create Real Design.", t,
-                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Normal, TextAnchor.UpperCenter,
-                useSecondaryTextColor: true);
+            // Top brand bar
+            var top = new GameObject("Top", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            var topRt = top.GetComponent<RectTransform>();
+            topRt.SetParent(root, false);
+            topRt.anchorMin = new Vector2(0f, 1f);
+            topRt.anchorMax = new Vector2(1f, 1f);
+            topRt.pivot = new Vector2(0.5f, 1f);
+            topRt.sizeDelta = new Vector2(0f, 118f);
+            var topV = top.GetComponent<VerticalLayoutGroup>();
+            topV.padding = new RectOffset(28, 28, 18, 4);
+            topV.spacing = 2f;
+            topV.childAlignment = TextAnchor.UpperCenter;
+            topV.childControlWidth = true;
+            topV.childForceExpandWidth = true;
+            topV.childControlHeight = true;
+            topV.childForceExpandHeight = false;
+            FrUiFactory.AddOverline(top.transform, "Ov", "FashionRise atelier", t);
+            FrUiFactory.AddBrandLogoRow(top.transform, t, 220f, 56f);
 
-            var row = FrUiFactory.AddHorizontalRow(col, "ModelRow", t.ControlGap);
-            FrUiFactory.AddModelChoiceTile(row, "Women", "WOMEN", SketchDefaultFigureGenerator.FemaleResourcePath, t,
-                () => OpenSketch(SketchFigureTemplate.Female));
-            FrUiFactory.AddModelChoiceTile(row, "Men", "MEN", SketchDefaultFigureGenerator.MaleResourcePath, t,
-                () => OpenSketch(SketchFigureTemplate.Male));
+            // Bottom quiet actions — not a button farm in the hero
+            const float bottomH = 88f;
+            var bottom = new GameObject("Bottom", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            var bottomRt = bottom.GetComponent<RectTransform>();
+            bottomRt.SetParent(root, false);
+            bottomRt.anchorMin = new Vector2(0f, 0f);
+            bottomRt.anchorMax = new Vector2(1f, 0f);
+            bottomRt.pivot = new Vector2(0.5f, 0f);
+            bottomRt.sizeDelta = new Vector2(0f, bottomH);
+            var bottomV = bottom.GetComponent<VerticalLayoutGroup>();
+            bottomV.padding = new RectOffset(24, 24, 4, 16);
+            bottomV.spacing = 4f;
+            bottomV.childAlignment = TextAnchor.LowerCenter;
+            bottomV.childControlWidth = true;
+            bottomV.childForceExpandWidth = true;
 
-            FrUiFactory.AddButton(col, "More studio…", t, ToggleMore, FrButtonEmphasis.Ghost);
-            _moreHint = FrUiFactory.AddLabel(col, "MorePanel", "", t, Mathf.RoundToInt(t.CaptionSize),
-                FontStyle.Normal, TextAnchor.UpperCenter, useSecondaryTextColor: true);
+            FrUiFactory.AddButton(bottom.transform, "Studio menu", t, ToggleMore, FrButtonEmphasis.Ghost);
 
-            FrUiFactory.AddButton(col, "Gallery", t, () =>
+            _morePanel = new GameObject("MorePanel", typeof(RectTransform), typeof(HorizontalLayoutGroup),
+                typeof(LayoutElement)).GetComponent<RectTransform>();
+            _morePanel.SetParent(bottom.transform, false);
+            var moreLe = _morePanel.GetComponent<LayoutElement>();
+            moreLe.minHeight = 40f;
+            moreLe.preferredHeight = 40f;
+            var moreH = _morePanel.GetComponent<HorizontalLayoutGroup>();
+            moreH.spacing = 8f;
+            moreH.childForceExpandWidth = true;
+            moreH.childControlWidth = true;
+            moreH.childControlHeight = true;
+            FrUiFactory.AddButton(_morePanel, "Gallery", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.Gallery,
                         new GalleryNavContext { CommunitySort = GallerySort.Newest });
-            });
-            FrUiFactory.AddButton(col, "Atelier (pro create)", t, () =>
+            }, FrButtonEmphasis.Ghost);
+            FrUiFactory.AddButton(_morePanel, "Atelier", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.CreateDesign);
-            });
-            FrUiFactory.AddButton(col, "Profile", t, () =>
+            }, FrButtonEmphasis.Ghost);
+            FrUiFactory.AddButton(_morePanel, "Profile", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.Profile);
-            });
-            FrUiFactory.AddButton(col, "Settings", t, () =>
+            }, FrButtonEmphasis.Ghost);
+            FrUiFactory.AddButton(_morePanel, "Settings", t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.Settings);
-            });
+            }, FrButtonEmphasis.Ghost);
+
+            // Hero stage — two tall model columns fill the viewport
+            var hero = new GameObject("Hero", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            var heroRt = hero.GetComponent<RectTransform>();
+            heroRt.SetParent(root, false);
+            heroRt.anchorMin = Vector2.zero;
+            heroRt.anchorMax = Vector2.one;
+            heroRt.offsetMin = new Vector2(20f, bottomH + 4f);
+            heroRt.offsetMax = new Vector2(-20f, -122f);
+            var heroV = hero.GetComponent<VerticalLayoutGroup>();
+            heroV.spacing = 14f;
+            heroV.childAlignment = TextAnchor.UpperCenter;
+            heroV.childControlWidth = true;
+            heroV.childForceExpandWidth = true;
+            heroV.childControlHeight = true;
+            heroV.childForceExpandHeight = false;
+
+            FrUiFactory.AddEditorialLabel(hero.transform, "H", "Choose your model", t,
+                Mathf.RoundToInt(t.TitleSize), true, TextAnchor.MiddleCenter);
+            FrUiFactory.AddLabel(hero.transform, "B", "Tap a figure to open the sketch studio.", t,
+                Mathf.RoundToInt(t.SubtitleSize), FontStyle.Normal, TextAnchor.MiddleCenter, true);
+
+            var row = new GameObject("ModelRow", typeof(RectTransform), typeof(HorizontalLayoutGroup),
+                typeof(LayoutElement));
+            row.transform.SetParent(hero.transform, false);
+            var rowLe = row.GetComponent<LayoutElement>();
+            rowLe.flexibleHeight = 1f;
+            rowLe.minHeight = 420f;
+            rowLe.preferredHeight = 560f;
+            var rowH = row.GetComponent<HorizontalLayoutGroup>();
+            rowH.spacing = 16f;
+            rowH.childAlignment = TextAnchor.MiddleCenter;
+            rowH.childControlWidth = true;
+            rowH.childForceExpandWidth = true;
+            rowH.childControlHeight = true;
+            rowH.childForceExpandHeight = true;
+
+            FrUiFactory.AddModelChoiceTile(row.transform, "Women", "Women",
+                SketchDefaultFigureGenerator.FemaleResourcePath, t,
+                () => OpenSketch(SketchFigureTemplate.Female), tall: true);
+            FrUiFactory.AddModelChoiceTile(row.transform, "Men", "Men",
+                SketchDefaultFigureGenerator.MaleResourcePath, t,
+                () => OpenSketch(SketchFigureTemplate.Male), tall: true);
 
             SetMoreVisible(false);
         }
@@ -83,20 +157,8 @@ namespace FashionRise.Presentation.Screens
 
         void SetMoreVisible(bool visible)
         {
-            _moreHint.text = visible
-                ? "Gallery · Atelier · Profile · Settings"
-                : "";
-            SetBtn("Gallery", visible);
-            SetBtn("Atelier (pro create)", visible);
-            SetBtn("Profile", visible);
-            SetBtn("Settings", visible);
-        }
-
-        void SetBtn(string label, bool on)
-        {
-            var tr = transform.Find($"Root/Col/{label}_Btn");
-            if (tr != null)
-                tr.gameObject.SetActive(on);
+            if (_morePanel != null)
+                _morePanel.gameObject.SetActive(visible);
         }
     }
 }

@@ -195,11 +195,9 @@ namespace FashionRise.UI
             motion.EnablePulse(true);
         }
 
-        /// <summary>
-        /// Visual-first Girl/Boy choice tile (inspired by dress-up pickers — FashionRise uses croquis, not shop items).
-        /// </summary>
+        /// <summary>Visual-first Women/Men choice — croquis stage, label under image (never overlaid).</summary>
         public static Button AddModelChoiceTile(Transform parent, string name, string label, string resourcePath,
-            FashionRiseTheme theme, UnityAction onClick)
+            FashionRiseTheme theme, UnityAction onClick, bool tall = false)
         {
             var go = new GameObject(name + "_Tile", typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
@@ -207,19 +205,20 @@ namespace FashionRise.UI
             face.sprite = FrUiSprites.RoundSoft;
             face.type = Image.Type.Sliced;
             face.color = theme.Card;
-            AddSoftShadow(go, -6f, 0.12f);
+            AddSoftShadow(go, -8f, 0.12f);
             var outline = go.AddComponent<Outline>();
             outline.effectColor = theme.Hairline;
             outline.effectDistance = new Vector2(1f, -1f);
 
             var le = go.GetComponent<LayoutElement>();
-            le.minHeight = 210f;
-            le.preferredHeight = 240f;
+            le.minHeight = tall ? 420f : 210f;
+            le.preferredHeight = tall ? 560f : 240f;
             le.flexibleWidth = 1f;
+            le.flexibleHeight = tall ? 1f : 0f;
 
             var v = go.AddComponent<VerticalLayoutGroup>();
-            v.padding = new RectOffset(10, 10, 12, 12);
-            v.spacing = 8f;
+            v.padding = new RectOffset(14, 14, 16, 16);
+            v.spacing = 10f;
             v.childAlignment = TextAnchor.UpperCenter;
             v.childControlWidth = true;
             v.childForceExpandWidth = true;
@@ -255,8 +254,8 @@ namespace FashionRise.UI
             }
 
             var previewLe = previewGo.GetComponent<LayoutElement>();
-            previewLe.minHeight = 150f;
-            previewLe.preferredHeight = 170f;
+            previewLe.minHeight = tall ? 340f : 150f;
+            previewLe.preferredHeight = tall ? 460f : 170f;
             previewLe.flexibleHeight = 1f;
             var fitter = previewGo.GetComponent<AspectRatioFitter>();
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
@@ -267,19 +266,24 @@ namespace FashionRise.UI
             else
                 fitter.aspectRatio = 0.7f;
 
-            var caption = AddLabel(go.transform, "Cap", label, theme, Mathf.RoundToInt(theme.SubtitleSize),
-                FontStyle.Bold, TextAnchor.MiddleCenter);
-            caption.color = theme.MidnightNavy;
+            var caption = AddEditorialLabel(go.transform, "Cap", label, theme,
+                Mathf.RoundToInt(theme.SubtitleSize + 2f), true, TextAnchor.MiddleCenter);
+            caption.font = FrUiFonts.DisplayMedium;
+            caption.color = theme.Charcoal;
+            var capLe = caption.GetComponent<LayoutElement>();
+            capLe.minHeight = 28f;
+            capLe.preferredHeight = 32f;
+            capLe.flexibleHeight = 0f;
 
             var btn = go.GetComponent<Button>();
             btn.targetGraphic = face;
             btn.transition = Selectable.Transition.ColorTint;
             var colors = btn.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1f, 0.97f, 0.98f, 1f);
-            colors.pressedColor = new Color(0.94f, 0.9f, 0.92f, 1f);
+            colors.highlightedColor = new Color(1f, 0.99f, 0.97f, 1f);
+            colors.pressedColor = new Color(0.94f, 0.92f, 0.9f, 1f);
             colors.selectedColor = Color.white;
-            colors.fadeDuration = 0.08f;
+            colors.fadeDuration = 0.12f;
             btn.colors = colors;
             btn.onClick.AddListener(onClick);
 
