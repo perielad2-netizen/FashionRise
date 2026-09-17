@@ -25,6 +25,10 @@ namespace FashionRise.UI
         static Sprite? s_girl;
         static Sprite? s_boy;
         static Sprite? s_sparkle;
+        static Sprite? s_gallery;
+        static Sprite? s_atelier;
+        static Sprite? s_profile;
+        static Sprite? s_settings;
         static Sprite? s_hueStrip;
         static Sprite? s_svSquare;
 
@@ -43,6 +47,10 @@ namespace FashionRise.UI
         public static Sprite IconGirl => s_girl ??= LoadIcon("women", () => MakePersonIcon(true));
         public static Sprite IconBoy => s_boy ??= LoadIcon("men", () => MakePersonIcon(false));
         public static Sprite IconSparkle => s_sparkle ??= LoadIcon("magic", MakeSparkleIcon);
+        public static Sprite IconGallery => s_gallery ??= LoadIcon("gallery", MakePhotoIcon);
+        public static Sprite IconAtelier => s_atelier ??= LoadIcon("atelier", MakeBrushIcon);
+        public static Sprite IconProfile => s_profile ??= LoadIcon("profile", () => MakePersonIcon(true));
+        public static Sprite IconSettings => s_settings ??= LoadIcon("settings", MakeFadeIcon);
         public static Sprite HueStrip => s_hueStrip ??= MakeHueStrip(24, 128);
         public static Sprite SvSquare => s_svSquare ??= MakeSvSquare(128);
 

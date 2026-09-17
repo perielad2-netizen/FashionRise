@@ -13,7 +13,6 @@ namespace FashionRise.Presentation.Screens
     /// </summary>
     public sealed class HomeDashboardScreen : ScreenBase
     {
-        bool _moreOpen;
         RectTransform _morePanel = null!;
 
         public override ScreenId Id => ScreenId.HomeDashboard;
@@ -58,40 +57,45 @@ namespace FashionRise.Presentation.Screens
             bottomV.childControlWidth = true;
             bottomV.childForceExpandWidth = true;
 
-            FrUiFactory.AddButton(bottom.transform, "Studio menu", t, ToggleMore, FrButtonEmphasis.Ghost);
-
-            _morePanel = new GameObject("MorePanel", typeof(RectTransform), typeof(HorizontalLayoutGroup),
+            // Icon tab bar — no stacked text buttons.
+            _morePanel = new GameObject("NavBar", typeof(RectTransform), typeof(HorizontalLayoutGroup),
                 typeof(LayoutElement)).GetComponent<RectTransform>();
             _morePanel.SetParent(bottom.transform, false);
             var moreLe = _morePanel.GetComponent<LayoutElement>();
-            moreLe.minHeight = 40f;
-            moreLe.preferredHeight = 40f;
+            moreLe.minHeight = 56f;
+            moreLe.preferredHeight = 56f;
             var moreH = _morePanel.GetComponent<HorizontalLayoutGroup>();
-            moreH.spacing = 8f;
-            moreH.childForceExpandWidth = true;
+            moreH.spacing = 26f;
+            moreH.childAlignment = TextAnchor.MiddleCenter;
+            moreH.childForceExpandWidth = false;
             moreH.childControlWidth = true;
             moreH.childControlHeight = true;
-            FrUiFactory.AddButton(_morePanel, "Gallery", t, () =>
+
+            FrUiFactory.AddIconButton(_morePanel, "Gallery", FrUiSprites.IconGallery, t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.Gallery,
                         new GalleryNavContext { CommunitySort = GallerySort.Newest });
-            }, FrButtonEmphasis.Ghost);
-            FrUiFactory.AddButton(_morePanel, "Atelier", t, () =>
+            }, 50f);
+            FrUiFactory.AddIconButton(_morePanel, "Atelier", FrUiSprites.IconAtelier, t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.CreateDesign);
-            }, FrButtonEmphasis.Ghost);
-            FrUiFactory.AddButton(_morePanel, "Profile", t, () =>
+            }, 50f);
+            FrUiFactory.AddIconButton(_morePanel, "Profile", FrUiSprites.IconProfile, t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.Profile);
-            }, FrButtonEmphasis.Ghost);
-            FrUiFactory.AddButton(_morePanel, "Settings", t, () =>
+            }, 50f);
+            FrUiFactory.AddIconButton(_morePanel, "Settings", FrUiSprites.IconSettings, t, () =>
             {
                 if (App.Navigation != null)
                     _ = App.Navigation.NavigateToAsync(ScreenId.Settings);
-            }, FrButtonEmphasis.Ghost);
+            }, 50f);
+
+            foreach (var img in _morePanel.GetComponentsInChildren<Image>())
+                if (img.sprite == FrUiSprites.Circle)
+                    img.color = new Color(1f, 1f, 1f, 0f);
 
             // Hero stage — two tall model columns fill the viewport
             var hero = new GameObject("Hero", typeof(RectTransform), typeof(VerticalLayoutGroup));
@@ -135,11 +139,7 @@ namespace FashionRise.Presentation.Screens
             FrUiFactory.AddModelChoiceTile(row.transform, "Men", "Men",
                 SketchDefaultFigureGenerator.MaleResourcePath, t,
                 () => OpenSketch(SketchFigureTemplate.Male), tall: true);
-
-            SetMoreVisible(false);
         }
-
-        protected override void OnShown(object? payload) => SetMoreVisible(_moreOpen);
 
         void OpenSketch(SketchFigureTemplate figure)
         {
@@ -147,18 +147,6 @@ namespace FashionRise.Presentation.Screens
             if (App.Navigation == null)
                 return;
             _ = App.Navigation.NavigateToAsync(ScreenId.SketchCanvas, new SketchNavContext { Figure = figure });
-        }
-
-        void ToggleMore()
-        {
-            _moreOpen = !_moreOpen;
-            SetMoreVisible(_moreOpen);
-        }
-
-        void SetMoreVisible(bool visible)
-        {
-            if (_morePanel != null)
-                _morePanel.gameObject.SetActive(visible);
         }
     }
 }

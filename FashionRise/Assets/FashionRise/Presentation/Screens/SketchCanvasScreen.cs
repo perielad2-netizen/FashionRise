@@ -118,18 +118,16 @@ namespace FashionRise.Presentation.Screens
             backLe.preferredWidth = 48f;
             backLe.minHeight = 48f;
 
-            var hintWrap = new GameObject("HintWrap", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            // Hint is a quiet caption, not a filled pill — chrome stays out of the canvas' way.
+            var hintWrap = new GameObject("HintWrap", typeof(RectTransform), typeof(LayoutElement));
             hintWrap.transform.SetParent(top.transform, false);
-            var hintImg = hintWrap.GetComponent<Image>();
-            hintImg.sprite = FrUiSprites.RoundPill;
-            hintImg.type = Image.Type.Sliced;
-            hintImg.color = new Color(1f, 1f, 1f, 0.78f);
             var hintLe = hintWrap.GetComponent<LayoutElement>();
             hintLe.flexibleWidth = 1f;
             hintLe.minHeight = 44f;
             hintLe.preferredHeight = 44f;
             _hint = FrUiFactory.AddLabel(hintWrap.transform, "Hint", "Draw your look", t,
-                Mathf.RoundToInt(t.BodySize), FontStyle.Bold, TextAnchor.MiddleCenter);
+                Mathf.RoundToInt(t.CaptionSize), FontStyle.Normal, TextAnchor.MiddleCenter,
+                useSecondaryTextColor: true);
             var hTxt = _hint.GetComponent<LayoutElement>();
             if (hTxt != null)
             {
@@ -617,10 +615,13 @@ namespace FashionRise.Presentation.Screens
             var face = shell.GetComponent<Image>();
             face.sprite = FrUiSprites.RoundSoft;
             face.type = Image.Type.Sliced;
-            face.color = new Color(1f, 1f, 1f, 0.82f);
+            face.color = new Color(1f, 1f, 1f, 0.94f);
             var shadow = shell.AddComponent<Shadow>();
-            shadow.effectColor = new Color(0.2f, 0.08f, 0.14f, 0.18f);
-            shadow.effectDistance = new Vector2(left ? 5f : -5f, -6f);
+            shadow.effectColor = new Color(0.08f, 0.07f, 0.06f, 0.14f);
+            shadow.effectDistance = new Vector2(left ? 4f : -4f, -5f);
+            var railEdge = shell.AddComponent<Outline>();
+            railEdge.effectColor = t.Hairline;
+            railEdge.effectDistance = new Vector2(1f, -1f);
 
             var scrollGo = new GameObject("Scroll", typeof(RectTransform), typeof(ScrollRect), typeof(RectMask2D));
             scrollGo.transform.SetParent(shell.transform, false);
@@ -658,13 +659,18 @@ namespace FashionRise.Presentation.Screens
             return content.transform;
         }
 
+        /// <summary>Hairline divider — pro drawing apps separate tool groups with rules, not words.</summary>
         static void AddSectionLabel(Transform parent, string text, FashionRiseTheme t)
         {
-            var label = FrUiFactory.AddLabel(parent, text, text, t, 11, FontStyle.Bold,
-                TextAnchor.MiddleCenter, useSecondaryTextColor: true);
-            var le = label.GetComponent<LayoutElement>() ?? label.gameObject.AddComponent<LayoutElement>();
-            le.minHeight = 14f;
-            le.preferredHeight = 16f;
+            var go = new GameObject("Divider_" + text, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var img = go.GetComponent<Image>();
+            img.color = t.Hairline;
+            img.raycastTarget = false;
+            var le = go.GetComponent<LayoutElement>();
+            le.minHeight = 1f;
+            le.preferredHeight = 1f;
+            le.flexibleWidth = 1f;
         }
 
         Button MakeIconTool(Transform parent, string name, Sprite icon, FashionRiseTheme t, UnityAction onClick,
@@ -673,29 +679,28 @@ namespace FashionRise.Presentation.Screens
             var go = new GameObject(name + "_Tool", typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
             var face = go.GetComponent<Image>();
-            face.sprite = FrUiSprites.Circle;
-            face.color = t.ButtonFace;
+            face.sprite = FrUiSprites.RoundSoft;
+            face.type = Image.Type.Sliced;
+            face.color = new Color(1f, 1f, 1f, 0f);
             var le = go.GetComponent<LayoutElement>();
             le.minHeight = size;
             le.preferredHeight = size;
             le.minWidth = size;
             le.preferredWidth = size;
             le.flexibleWidth = 0f;
-            var shadow = go.AddComponent<Shadow>();
-            shadow.effectColor = new Color(0.2f, 0.1f, 0.15f, 0.16f);
-            shadow.effectDistance = new Vector2(0f, -3f);
 
             var iconGo = new GameObject("Icon", typeof(Image));
             iconGo.transform.SetParent(go.transform, false);
             var iconImg = iconGo.GetComponent<Image>();
             iconImg.sprite = icon;
-            iconImg.color = t.MidnightNavy;
+            // Art-supply icons carry their own colour; flat glyphs get inked.
+            iconImg.color = Color.white;
             iconImg.raycastTarget = false;
             iconImg.preserveAspect = true;
             var irt = iconGo.GetComponent<RectTransform>();
             irt.anchorMin = new Vector2(0.5f, 0.5f);
             irt.anchorMax = new Vector2(0.5f, 0.5f);
-            irt.sizeDelta = new Vector2(size * 0.55f, size * 0.55f);
+            irt.sizeDelta = new Vector2(size * 0.86f, size * 0.86f);
 
             var btn = go.GetComponent<Button>();
             btn.targetGraphic = face;
@@ -910,22 +915,23 @@ namespace FashionRise.Presentation.Screens
 
         void HighlightTool()
         {
+            // Selected tool gets a soft tray behind the art supply + a nudge forward, like pro drawing rails.
             void Style(Image? face, bool on)
             {
                 if (face == null)
                     return;
-                face.color = on ? _theme.Accent : _theme.ButtonFace;
-                var icon = face.transform.Find("Icon")?.GetComponent<Image>();
-                if (icon != null)
-                    icon.color = on ? Color.white : _theme.MidnightNavy;
+                face.color = on
+                    ? new Color(_theme.Champagne.r, _theme.Champagne.g, _theme.Champagne.b, 0.32f)
+                    : new Color(1f, 1f, 1f, 0f);
+                var motion = face.GetComponent<FrUiMotion>();
+                if (motion != null)
+                    motion.SetSelected(on);
             }
 
             Style(_pencilFace, _tool == DrawTool.Pencil);
             Style(_brushFace, _tool == DrawTool.Brush);
             Style(_eraserFace, _tool == DrawTool.Eraser);
             Style(_fillFace, _tool == DrawTool.Fill);
-            if (_tool == DrawTool.Eraser && _eraserFace != null)
-                _eraserFace.color = new Color(1f, 0.82f, 0.88f, 1f);
         }
 
         void RefreshPairHint()
