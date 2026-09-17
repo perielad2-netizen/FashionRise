@@ -68,3 +68,71 @@ def test_complete_tech_pack_job_uses_stub_without_openai(monkeypatch):
     assert result["pipeline"] == "tech_pack"
     assert result["disclaimer"] == tech_pack_openai.DISCLAIMER
     assert result["measurements"]["body"]["height_cm"] == 170
+
+
+def test_blueprints_render_in_parallel(monkeypatch):
+    """Three sequential image calls can outlive the client poll window, so they must overlap."""
+    import time
+
+    started: list[float] = []
+
+    def slow_blueprint(_client, _job, _prompt, label):
+        started.append(time.monotonic())
+        time.sleep(0.4)
+        return f"https://example.test/{label}.png"
+
+    monkeypatch.setattr(tech_pack_openai, "_generate_and_store_blueprint", slow_blueprint)
+    job = SimpleNamespace(id=uuid4(), job_type="tech_pack", input_data={})
+
+    t0 = time.monotonic()
+    out = tech_pack_openai._generate_blueprints(
+        None, job, [("front", "f"), ("back", "b"), ("pattern", "p")]
+    )
+    elapsed = time.monotonic() - t0
+
+    assert out["front"] and out["back"] and out["pattern"]
+    assert len(started) == 3
+    # Sequential would be >=1.2s; parallel stays close to a single call.
+    assert elapsed < 0.9, f"blueprints appear sequential ({elapsed:.2f}s)"
+
+
+def test_blueprint_failure_does_not_fail_the_sheet(monkeypatch):
+    def flaky(_client, _job, _prompt, label):
+        if label == "back":
+            raise RuntimeError("image model unavailable")
+        return f"https://example.test/{label}.png"
+
+    monkeypatch.setattr(tech_pack_openai, "_generate_and_store_blueprint", flaky)
+    job = SimpleNamespace(id=uuid4(), job_type="tech_pack", input_data={})
+
+    out = tech_pack_openai._generate_blueprints(
+        None, job, [("front", "f"), ("back", "b"), ("pattern", "p")]
+    )
+
+    assert out["front"] is not None
+    assert out["back"] is None
+    assert out["pattern"] is not None
+
+
+def test_blueprint_budget_returns_partial(monkeypatch):
+    import time
+
+    def slow(_client, _job, _prompt, label):
+        time.sleep(5 if label == "pattern" else 0.1)
+        return f"https://example.test/{label}.png"
+
+    monkeypatch.setattr(tech_pack_openai, "_generate_and_store_blueprint", slow)
+    monkeypatch.setattr(
+        tech_pack_openai,
+        "get_settings",
+        lambda: SimpleNamespace(openai_tech_pack_image_budget_seconds=0.6),
+    )
+    job = SimpleNamespace(id=uuid4(), job_type="tech_pack", input_data={})
+
+    out = tech_pack_openai._generate_blueprints(
+        None, job, [("front", "f"), ("back", "b"), ("pattern", "p")]
+    )
+
+    assert out["front"] is not None
+    assert out["back"] is not None
+    assert out["pattern"] is None

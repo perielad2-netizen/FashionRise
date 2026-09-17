@@ -422,6 +422,196 @@ namespace FashionRise.UI
             return btn;
         }
 
+        // ---------- Tech pack spec sheet primitives ----------
+
+        /// <summary>Boxed spec block with a ruled caps header, like a printed tech pack table.</summary>
+        public static RectTransform AddSpecCard(Transform parent, string title, FashionRiseTheme theme)
+        {
+            var card = new GameObject("Spec_" + title, typeof(RectTransform), typeof(Image),
+                typeof(VerticalLayoutGroup), typeof(LayoutElement), typeof(ContentSizeFitter));
+            card.transform.SetParent(parent, false);
+            var img = card.GetComponent<Image>();
+            img.color = new Color(1f, 1f, 1f, 0.96f);
+            var edge = card.AddComponent<Outline>();
+            edge.effectColor = new Color(theme.PrimaryText.r, theme.PrimaryText.g, theme.PrimaryText.b, 0.35f);
+            edge.effectDistance = new Vector2(1f, -1f);
+
+            var v = card.GetComponent<VerticalLayoutGroup>();
+            v.padding = new RectOffset(0, 0, 0, 0);
+            v.spacing = 0f;
+            v.childControlWidth = true;
+            v.childForceExpandWidth = true;
+            v.childControlHeight = true;
+            v.childForceExpandHeight = false;
+            card.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var le = card.GetComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+
+            if (!string.IsNullOrEmpty(title))
+                AddSpecBandRow(card.transform, title, theme);
+
+            return card.GetComponent<RectTransform>();
+        }
+
+        /// <summary>Centered caps band used for table titles and grouped sections.</summary>
+        public static void AddSpecBandRow(Transform parent, string text, FashionRiseTheme theme)
+        {
+            var band = new GameObject("Band", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            band.transform.SetParent(parent, false);
+            band.GetComponent<Image>().color = new Color(theme.BackgroundDeep.r, theme.BackgroundDeep.g,
+                theme.BackgroundDeep.b, 0.85f);
+            var le = band.GetComponent<LayoutElement>();
+            le.minHeight = 30f;
+            le.preferredHeight = 30f;
+            le.flexibleWidth = 1f;
+
+            var label = new GameObject("T", typeof(Text));
+            label.transform.SetParent(band.transform, false);
+            var txt = label.GetComponent<Text>();
+            txt.font = FrUiFonts.UiMedium;
+            txt.text = Space(text.ToUpperInvariant());
+            txt.fontSize = Mathf.RoundToInt(theme.CaptionSize);
+            txt.color = theme.PrimaryText;
+            txt.alignment = TextAnchor.MiddleCenter;
+            var rt = label.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(10f, 0f);
+            rt.offsetMax = new Vector2(-10f, 0f);
+        }
+
+        /// <summary>Label / value table row with a hairline rule under it.</summary>
+        public static void AddSpecRow(Transform parent, string label, string value, FashionRiseTheme theme)
+        {
+            var row = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup),
+                typeof(LayoutElement));
+            row.transform.SetParent(parent, false);
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(12, 12, 6, 6);
+            h.spacing = 8f;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = true;
+            h.childControlHeight = true;
+            h.childForceExpandHeight = false;
+            var le = row.GetComponent<LayoutElement>();
+            le.minHeight = 30f;
+            le.flexibleWidth = 1f;
+
+            var l = SpecCell(row.transform, label, theme, TextAnchor.MiddleLeft, false);
+            l.GetComponent<LayoutElement>().flexibleWidth = 1.6f;
+            var r = SpecCell(row.transform, value, theme, TextAnchor.MiddleRight, true);
+            r.GetComponent<LayoutElement>().flexibleWidth = 1f;
+
+            AddHairline(parent, theme);
+        }
+
+        /// <summary>Three-column row for Item / Specification / Quantity style tables.</summary>
+        public static void AddSpecRow3(Transform parent, string a, string b, string c, FashionRiseTheme theme,
+            bool header = false)
+        {
+            var row = new GameObject(header ? "HeadRow" : "Row3", typeof(RectTransform),
+                typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            row.transform.SetParent(parent, false);
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(12, 12, 6, 6);
+            h.spacing = 8f;
+            h.childAlignment = TextAnchor.UpperLeft;
+            h.childControlWidth = true;
+            h.childControlHeight = true;
+            h.childForceExpandHeight = false;
+            var le = row.GetComponent<LayoutElement>();
+            le.minHeight = header ? 28f : 34f;
+            le.flexibleWidth = 1f;
+
+            var ca = SpecCell(row.transform, a, theme, TextAnchor.UpperLeft, header);
+            ca.GetComponent<LayoutElement>().flexibleWidth = 1.1f;
+            var cb = SpecCell(row.transform, b, theme, TextAnchor.UpperLeft, header);
+            cb.GetComponent<LayoutElement>().flexibleWidth = 1.9f;
+            var cc = SpecCell(row.transform, c, theme, TextAnchor.UpperRight, header);
+            cc.GetComponent<LayoutElement>().flexibleWidth = 0.7f;
+
+            AddHairline(parent, theme);
+        }
+
+        /// <summary>Wrapped body copy inside a spec card (notes, construction steps).</summary>
+        public static Text AddSpecParagraph(Transform parent, string text, FashionRiseTheme theme)
+        {
+            var go = new GameObject("Para", typeof(Text), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var t = go.GetComponent<Text>();
+            t.font = FrUiFonts.Ui;
+            t.text = text;
+            t.fontSize = Mathf.RoundToInt(theme.CaptionSize + 1f);
+            t.color = theme.PrimaryText;
+            t.alignment = TextAnchor.UpperLeft;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            t.lineSpacing = 1.25f;
+            var le = go.GetComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+            le.minHeight = 24f;
+            le.preferredHeight = EstimateTextHeight(text, theme.CaptionSize + 1f);
+            return t;
+        }
+
+        static float EstimateTextHeight(string text, float fontSize)
+        {
+            var lines = 1;
+            foreach (var ch in text)
+                if (ch == '\n')
+                    lines++;
+            // rough wrap allowance for long paragraphs
+            lines += text.Length / 46;
+            return Mathf.Max(24f, lines * (fontSize + 8f) + 12f);
+        }
+
+        static GameObject SpecCell(Transform parent, string text, FashionRiseTheme theme, TextAnchor anchor,
+            bool strong)
+        {
+            var go = new GameObject("Cell", typeof(Text), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var t = go.GetComponent<Text>();
+            t.font = strong ? FrUiFonts.UiMedium : FrUiFonts.Ui;
+            t.text = text;
+            t.fontSize = Mathf.RoundToInt(theme.CaptionSize + 1f);
+            t.color = theme.PrimaryText;
+            t.alignment = anchor;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            var le = go.GetComponent<LayoutElement>();
+            le.minHeight = 20f;
+            return go;
+        }
+
+        public static void AddHairline(Transform parent, FashionRiseTheme theme)
+        {
+            var go = new GameObject("Rule", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            var img = go.GetComponent<Image>();
+            img.color = new Color(theme.PrimaryText.r, theme.PrimaryText.g, theme.PrimaryText.b, 0.18f);
+            img.raycastTarget = false;
+            var le = go.GetComponent<LayoutElement>();
+            le.minHeight = 1f;
+            le.preferredHeight = 1f;
+            le.flexibleWidth = 1f;
+        }
+
+        /// <summary>Letter-spaced caps — Unity's legacy Text has no tracking, so we fake it.</summary>
+        public static string Space(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return s;
+            var sb = new System.Text.StringBuilder(s.Length * 2);
+            for (var i = 0; i < s.Length; i++)
+            {
+                sb.Append(s[i]);
+                if (i < s.Length - 1 && s[i] != ' ')
+                    sb.Append(' ');
+            }
+
+            return sb.ToString();
+        }
+
         /// <summary>Compact circular tool button with icon sprite.</summary>
         public static Button AddIconButton(Transform parent, string name, Sprite icon, FashionRiseTheme theme,
             UnityAction onClick, float size = 48f)

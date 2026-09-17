@@ -6,6 +6,8 @@ import base64
 import json
 import logging
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from io import BytesIO
 from typing import Any
 
@@ -556,10 +558,51 @@ def _complete_with_openai(job: AIJob) -> dict[str, Any]:
         back_p = back_p or db
         pattern_p = pattern_p or dp
 
-    result["image_url"] = _generate_and_store_blueprint(client, job, front_p, "front")
-    result["back_image_url"] = _generate_and_store_blueprint(client, job, back_p, "back")
-    result["pattern_image_url"] = _generate_and_store_blueprint(client, job, pattern_p, "pattern")
+    # Blueprints run in parallel: three sequential image calls can outlive the client poll window.
+    blueprints = _generate_blueprints(
+        client,
+        job,
+        [("front", front_p), ("back", back_p), ("pattern", pattern_p)],
+    )
+    result["image_url"] = blueprints.get("front")
+    result["back_image_url"] = blueprints.get("back")
+    result["pattern_image_url"] = blueprints.get("pattern")
     return result
+
+
+def _generate_blueprints(
+    client: OpenAI, job: AIJob, jobs: list[tuple[str, str]]
+) -> dict[str, str | None]:
+    """Render blueprint flats concurrently; a failed or slow label yields None, never a failed job."""
+    out: dict[str, str | None] = {label: None for label, _ in jobs}
+    pending = [(label, prompt) for label, prompt in jobs if (prompt or "").strip()]
+    if not pending:
+        return out
+
+    budget = float(get_settings().openai_tech_pack_image_budget_seconds)
+    with ThreadPoolExecutor(max_workers=len(pending)) as pool:
+        futures = {
+            pool.submit(_generate_and_store_blueprint, client, job, prompt, label): label
+            for label, prompt in pending
+        }
+        try:
+            for future in as_completed(futures, timeout=budget):
+                label = futures[future]
+                try:
+                    out[label] = future.result()
+                except Exception as e:
+                    logger.warning("Tech pack job %s: %s blueprint failed: %s", job.id, label, e)
+        except FuturesTimeoutError:
+            unfinished = [futures[f] for f in futures if not f.done()]
+            logger.warning(
+                "Tech pack job %s: blueprint budget %.0fs exceeded; returning without %s",
+                job.id,
+                budget,
+                ", ".join(unfinished) or "none",
+            )
+            for f in futures:
+                f.cancel()
+    return out
 
 
 def complete_tech_pack_job(job: AIJob) -> dict[str, Any]:
