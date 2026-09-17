@@ -91,9 +91,11 @@ def _system_prompt(job_type: str) -> str:
             "Respond ONLY with valid JSON using keys: "
             "summary (one short exciting sentence for the creator), "
             "polish_bullets (array of 3–5 concise tips), "
-            "image_prompt (one short English paragraph describing the SAME outfit visible in the sketch: "
-            "pose, neckline, sleeves, skirt/pants length, colors, and how the chosen fabric should look "
-            "in a chic near-realistic fashion illustration. Do not invent a different outfit)."
+            "image_prompt (one short English paragraph describing EACH garment region visible in the sketch: "
+            "pose, neckline, sleeves, skirt/pants, AND the exact colors of each piece. "
+            "If notes include a color→fabric map, name each mapped color and fabric explicitly, e.g. "
+            "'orange silk blouse with deep V-neck and blue denim jeans'. "
+            "Do not invent a different outfit or merge separate garments)."
         )
     return (
         "You are a fashion stylist AI. Use mood notes and optional sketch image. "
@@ -118,16 +120,20 @@ def _user_text(job: AIJob) -> str:
     if isinstance(pairs, str) and pairs.strip():
         mapped = []
         for part in pairs.split(";"):
-            bits = part.split(":", 1)
-            if len(bits) != 2:
+            bits = part.split(":")
+            if len(bits) < 2:
                 continue
             c_name, f_name = bits[0].strip(), bits[1].strip()
+            hex_code = bits[2].strip() if len(bits) >= 3 else ""
             if c_name and f_name:
-                mapped.append(f"{c_name} ink → {f_name} fabric ({_fabric_render_hint(f_name)})")
+                label = f"{c_name}"
+                if hex_code:
+                    label += f" ink≈{hex_code}"
+                mapped.append(f"{label} → {f_name} fabric ({_fabric_render_hint(f_name)})")
         if mapped:
             parts.append(
-                "Per-region color→fabric map (match these colors in the sketch; do not recolor):\n- "
-                + "\n- ".join(mapped)
+                "Per-region color→fabric map (STRICT — match these colors in the sketch; do not recolor "
+                "or merge garments):\n- " + "\n- ".join(mapped)
             )
     color = d.get("color")
     if isinstance(color, str) and color.strip():
@@ -199,15 +205,18 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
     return (
         "Edit THIS uploaded fashion sketch into a chic, high-fashion look. "
         "Keep the SAME pose, body proportions, neckline, sleeve style, hem length, outfit silhouette, "
-        "AND the SAME colors already painted in the sketch (e.g. a green blouse must stay green; "
-        "a gray skirt must stay gray — never merge them into one recolored dress). "
-        "Upgrade each garment region with nearly-real fabric, elegant drape, and soft studio lighting. "
+        "AND the SAME colors already painted in the sketch. "
+        "If the sketch has an orange blouse and blue jeans, the result MUST keep an orange blouse and "
+        "blue jeans as SEPARATE garments — never turn them into one blue dress or recolor the blouse. "
+        "Upgrade each garment region with nearly-real fabric for its paired material, elegant drape, "
+        "and soft studio lighting. "
         f"{fabric_clause}"
         f"{prompt} "
         "Result: a fashionable fashion illustration / editorial croquis on a clean light background, "
-        "full figure visible, no cropped legs. "
+        "full figure visible head-to-toe, no cropped legs. "
         "Do NOT invent a new character or different clothes. "
-        "Avoid: cartoonish flat fills, fuzzy undefined texture, storybook scenes, text, watermark, collage."
+        "Avoid: merging garments, recoloring regions, cartoonish flat fills, fuzzy undefined texture, "
+        "storybook scenes, text, watermark, collage."
     )[:3800]
 
 
@@ -220,15 +229,19 @@ def _material_pairs_clause(job: AIJob | None) -> str:
         return ""
     chunks: list[str] = []
     for part in pairs.split(";"):
-        bits = part.split(":", 1)
-        if len(bits) != 2:
+        bits = part.split(":")
+        if len(bits) < 2:
             continue
         c_name, f_name = bits[0].strip(), bits[1].strip()
+        hex_code = bits[2].strip() if len(bits) >= 3 else ""
         if not c_name or not f_name:
             continue
+        color_bit = f"{c_name} ink"
+        if hex_code:
+            color_bit += f" (approx {hex_code})"
         chunks.append(
-            f"Wherever the sketch shows {c_name} ink, render that garment region in "
-            f"{_fabric_render_hint(f_name)} while keeping the {c_name} color family."
+            f"Wherever the sketch shows {color_bit}, keep that color family and render that garment "
+            f"region in {_fabric_render_hint(f_name)}."
         )
     if not chunks:
         return ""

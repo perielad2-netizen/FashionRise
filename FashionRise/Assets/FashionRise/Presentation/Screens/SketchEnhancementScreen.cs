@@ -341,22 +341,26 @@ namespace FashionRise.Presentation.Screens
             var pairs = App.CreateDesign.SketchMaterialPairs?.Trim() ?? "";
 
             var sb = new System.Text.StringBuilder();
-            sb.Append("Polish this kid fashion sketch into a chic, shareable look. ");
-            sb.Append("Keep the SAME garment shapes AND the SAME colors visible in the sketch. ");
-            sb.Append("Do not recolor a green blouse into gray or merge separate garments into one dress. ");
+            sb.Append("CRITICAL: Preserve every colored garment region from the sketch. ");
+            sb.Append("Example: an orange silk blouse must stay orange silk; blue denim jeans must stay blue denim. ");
+            sb.Append("Never merge a blouse and jeans into one dress. Never recolor one garment with another garment's color. ");
 
             if (!string.IsNullOrEmpty(pairs))
             {
-                sb.Append("Color-to-fabric map (apply per region by matching sketch ink colors): ");
+                sb.Append("Color→fabric map (match sketch ink by color name / hex): ");
                 foreach (var part in pairs.Split(';'))
                 {
                     var bits = part.Split(':');
-                    if (bits.Length != 2)
+                    if (bits.Length < 2)
                         continue;
                     var cName = bits[0].Trim();
                     var fName = bits[1].Trim();
-                    sb.Append(cName).Append(" areas use ").Append(fName)
-                        .Append(" (").Append(FabricLookHint(fName)).Append("). ");
+                    var hex = bits.Length >= 3 ? bits[2].Trim() : "";
+                    sb.Append(cName);
+                    if (!string.IsNullOrEmpty(hex))
+                        sb.Append(" (").Append(hex).Append(')');
+                    sb.Append(" ink regions = ").Append(fName)
+                        .Append(" fabric (").Append(FabricLookHint(fName)).Append("). ");
                 }
             }
             else if (!string.IsNullOrEmpty(fabric))

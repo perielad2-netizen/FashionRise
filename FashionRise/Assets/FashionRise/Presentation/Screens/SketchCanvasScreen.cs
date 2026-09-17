@@ -47,8 +47,8 @@ namespace FashionRise.Presentation.Screens
         {
             new(0.10f, 0.08f, 0.08f),
             new(0.86f, 0.18f, 0.36f),
-            new(0.12f, 0.30f, 0.68f),
-            new(0.96f, 0.58f, 0.18f),
+            new(0.18f, 0.42f, 0.82f), // Blue — jeans / cool accents
+            new(0.96f, 0.48f, 0.12f), // Orange — blouse / warm accents
             new(0.18f, 0.62f, 0.32f),
             new(0.78f, 0.40f, 0.72f),
             new(0.97f, 0.94f, 0.90f),
@@ -57,7 +57,7 @@ namespace FashionRise.Presentation.Screens
 
         static readonly string[] ColorNames =
         {
-            "Ink", "Rose", "Navy", "Gold", "Green", "Orchid", "Cream", "Grey"
+            "Ink", "Rose", "Blue", "Orange", "Green", "Orchid", "Cream", "Grey"
         };
 
         static readonly (string name, Color color, int radius)[] Fabrics =
@@ -795,7 +795,21 @@ namespace FashionRise.Presentation.Screens
             var pairs = BuildMaterialPairs();
             _pairHint.text = string.IsNullOrEmpty(pairs)
                 ? "Tap color, then fabric"
-                : pairs.Replace(';', '\n');
+                : FormatPairsForHint(pairs);
+        }
+
+        static string FormatPairsForHint(string pairs)
+        {
+            var lines = new List<string>();
+            foreach (var part in pairs.Split(';'))
+            {
+                var bits = part.Split(':');
+                if (bits.Length < 2)
+                    continue;
+                lines.Add(bits[0].Trim() + " → " + bits[1].Trim());
+            }
+
+            return lines.Count == 0 ? "Tap color, then fabric" : string.Join("\n", lines);
         }
 
         string BuildMaterialPairs()
@@ -806,7 +820,10 @@ namespace FashionRise.Presentation.Screens
                 var f = _fabricForColor[i];
                 if (string.IsNullOrEmpty(f))
                     continue;
-                parts.Add(ColorNames[i] + ":" + f);
+                // Color:Fabric:#RRGGBB — Magic matches ink by name and approximate RGB
+                var c = InkColors[i];
+                var hex = $"#{Mathf.RoundToInt(c.r * 255):X2}{Mathf.RoundToInt(c.g * 255):X2}{Mathf.RoundToInt(c.b * 255):X2}";
+                parts.Add(ColorNames[i] + ":" + f + ":" + hex);
             }
 
             return string.Join(";", parts);
@@ -834,10 +851,15 @@ namespace FashionRise.Presentation.Screens
             foreach (var part in raw.Split(';'))
             {
                 var bits = part.Split(':');
-                if (bits.Length != 2)
+                if (bits.Length < 2)
                     continue;
                 var colorName = bits[0].Trim();
                 var fabricName = bits[1].Trim();
+                // Migrate old Gold/Navy names from previous sessions
+                if (string.Equals(colorName, "Gold", System.StringComparison.OrdinalIgnoreCase))
+                    colorName = "Orange";
+                if (string.Equals(colorName, "Navy", System.StringComparison.OrdinalIgnoreCase))
+                    colorName = "Blue";
                 var ci = System.Array.FindIndex(ColorNames,
                     n => string.Equals(n, colorName, System.StringComparison.OrdinalIgnoreCase));
                 if (ci < 0)
