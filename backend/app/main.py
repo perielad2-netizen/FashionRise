@@ -65,6 +65,14 @@ def _warn_if_missing_core_tables() -> None:
     )
 
 
+def _worker_tick_blocking(batch_size: int) -> int:
+    db = SessionLocal()
+    try:
+        return run_worker_tick(db, limit=batch_size)
+    finally:
+        db.close()
+
+
 async def _ai_worker_loop(stop: asyncio.Event, poll_interval: float, batch_size: int) -> None:
     global _ai_worker_skip_until_restart
     while not stop.is_set():
@@ -73,9 +81,10 @@ async def _ai_worker_loop(stop: asyncio.Event, poll_interval: float, batch_size:
             break
         if _ai_worker_skip_until_restart:
             continue
-        db = SessionLocal()
         try:
-            n = run_worker_tick(db, limit=batch_size)
+            # In a worker thread: an OpenAI image job can run for minutes, and blocking the
+            # event loop would stall job polling, autosave and every other request with it.
+            n = await asyncio.to_thread(_worker_tick_blocking, batch_size)
             if n:
                 _log.debug("AI worker completed %s job(s)", n)
         except (ProgrammingError, OperationalError) as e:
@@ -87,8 +96,6 @@ async def _ai_worker_loop(stop: asyncio.Event, poll_interval: float, batch_size:
             )
         except Exception:
             _log.exception("AI worker tick failed")
-        finally:
-            db.close()
 
 
 @asynccontextmanager
