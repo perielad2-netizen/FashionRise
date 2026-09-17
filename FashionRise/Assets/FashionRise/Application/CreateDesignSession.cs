@@ -26,10 +26,34 @@ namespace FashionRise.Application
         public string SketchReference { get; set; } = "";
         /// <summary>Absolute path to an image to load as trace reference on the sketch canvas; cleared after load.</summary>
         public string PendingReferenceImagePath { get; set; } = "";
+        /// <summary>Fabric chip chosen on the sketch studio (e.g. Silk) — sent into Magic notes.</summary>
+        public string SketchFabricName { get; set; } = "";
+        /// <summary>Last ink/color name chosen on the sketch studio (e.g. Rose).</summary>
+        public string SketchColorName { get; set; } = "";
+        /// <summary>
+        /// Color→fabric pairs from the studio, e.g. <c>Green:Silk;Grey:Denim</c>.
+        /// Magic uses these so a silk blouse and denim jeans stay distinct.
+        /// </summary>
+        public string SketchMaterialPairs { get; set; } = "";
+        /// <summary>Ink-only PNG path so Edit sketch can restore strokes.</summary>
+        public string LastInkImagePath { get; set; } = "";
         public string LastSketchJobId { get; set; } = "";
         public string LastSketchSummary { get; set; } = "";
+        /// <summary>Public HTTP URL of the last Magic polish look image (if any).</summary>
+        public string LastPolishedImageUrl { get; set; } = "";
+        /// <summary>Local cache of the polished image for Share (downloaded from <see cref="LastPolishedImageUrl"/>).</summary>
+        public string LastPolishedImageLocalPath { get; set; } = "";
         /// <summary>After a successful API save, reuse this id so the next save updates the same row.</summary>
         public string PersistedDesignId { get; set; } = "";
+
+        /// <summary>Clears the last Magic look so the kid loop can start a fresh polish.</summary>
+        public void ClearLastLook()
+        {
+            LastSketchJobId = "";
+            LastSketchSummary = "";
+            LastPolishedImageUrl = "";
+            LastPolishedImageLocalPath = "";
+        }
 
         public void Reset()
         {
@@ -50,8 +74,11 @@ namespace FashionRise.Application
             AccentNotes = "";
             SketchReference = "";
             PendingReferenceImagePath = "";
-            LastSketchJobId = "";
-            LastSketchSummary = "";
+            SketchFabricName = "";
+            SketchColorName = "";
+            SketchMaterialPairs = "";
+            LastInkImagePath = "";
+            ClearLastLook();
             PersistedDesignId = "";
         }
 

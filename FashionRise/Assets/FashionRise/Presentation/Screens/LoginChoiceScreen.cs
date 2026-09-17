@@ -1,3 +1,4 @@
+using FashionRise.Application;
 using FashionRise.Core.Navigation;
 using FashionRise.UI;
 using UnityEngine;
@@ -12,6 +13,7 @@ namespace FashionRise.Presentation.Screens
         InputField? _email;
         InputField? _password;
         InputField? _username;
+        Toggle? _rememberMe;
         bool _apiFieldsBuilt;
         Button? _mockSignInButton;
 
@@ -58,14 +60,21 @@ namespace FashionRise.Presentation.Screens
 
             var t = ThemeOrDefault;
             _status.text =
-                "API sign-in / register:\n" +
-                "• Email must look like name@domain.com\n" +
-                "• Username: 2+ characters\n" +
-                "• Password: 8+ characters";
+                $"API: {App.ApiBaseUrl}\n" +
+                "Sign in with email + password.\n" +
+                "Register needs username too (2+ chars, password 8+).";
             _email = FrUiFactory.AddInputField(_layoutCol, "Email", "email", t, Mathf.RoundToInt(t.BodySize));
             _password = FrUiFactory.AddInputField(_layoutCol, "Password", "password", t, Mathf.RoundToInt(t.BodySize));
+            _rememberMe = FrUiFactory.AddCheckbox(_layoutCol, "RememberMe", "Remember me on this device", t,
+                LoginRememberPreferences.IsEnabled);
             _username = FrUiFactory.AddInputField(_layoutCol, "Username (register)", "username", t,
                 Mathf.RoundToInt(t.BodySize));
+
+            if (LoginRememberPreferences.IsEnabled)
+            {
+                _email.text = LoginRememberPreferences.SavedEmail;
+                _password.text = LoginRememberPreferences.SavedPassword;
+            }
 
             FrUiFactory.AddButton(_layoutCol, "Sign in (API)", t, async () => { await ApiSignInAsync().ConfigureAwait(true); },
                 FrButtonEmphasis.Primary);
@@ -91,9 +100,14 @@ namespace FashionRise.Presentation.Screens
                 return;
             }
 
-            var r = await App.Auth.SignInAsync(email, _password.text.Trim()).ConfigureAwait(true);
+            var password = _password.text.Trim();
+            var r = await App.Auth.SignInAsync(email, password).ConfigureAwait(true);
             ShowResult(r.Message);
-            if (r.Success && App.Navigation != null)
+            if (!r.Success)
+                return;
+
+            PersistRememberChoice(email, password);
+            if (App.Navigation != null)
                 await App.Navigation.NavigateToAsync(ScreenId.HomeDashboard).ConfigureAwait(true);
         }
 
@@ -114,8 +128,20 @@ namespace FashionRise.Presentation.Screens
             var r = await App.Auth.RegisterAsync(email, username, password, displayName: username)
                 .ConfigureAwait(true);
             ShowResult(r.Message);
-            if (r.Success && App.Navigation != null)
+            if (!r.Success)
+                return;
+
+            PersistRememberChoice(email, password);
+            if (App.Navigation != null)
                 await App.Navigation.NavigateToAsync(ScreenId.HomeDashboard).ConfigureAwait(true);
+        }
+
+        void PersistRememberChoice(string email, string password)
+        {
+            if (_rememberMe != null && _rememberMe.isOn)
+                LoginRememberPreferences.Save(email, password);
+            else
+                LoginRememberPreferences.Clear();
         }
 
         static bool TryValidateRegister(string email, string username, string password, out string error)

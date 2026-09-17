@@ -13,6 +13,7 @@ namespace FashionRise.Core
     public sealed class AppServices
     {
         public bool IsApiBackend { get; }
+        public string ApiBaseUrl { get; }
         public IAuthService Auth { get; }
         public IUserProfileService UserProfile { get; }
         public IDesignSaveService DesignSave { get; }
@@ -52,9 +53,11 @@ namespace FashionRise.Core
             IStyleSuggestionService styleSuggest,
             IImageRefinementService imageRefine,
             IShareLinkService shareLinks,
-            CreateDesignSession createDesign)
+            CreateDesignSession createDesign,
+            string apiBaseUrl = "")
         {
             IsApiBackend = isApiBackend;
+            ApiBaseUrl = apiBaseUrl ?? "";
             Auth = auth;
             UserProfile = userProfile;
             DesignSave = designSave;
@@ -149,7 +152,8 @@ namespace FashionRise.Core
                 sketch,
                 sketch,
                 shareLinks,
-                new CreateDesignSession());
+                new CreateDesignSession(),
+                config.BaseUrl ?? "");
         }
 
         /// <summary>Build from inspector flags on <see cref="ApiConfig"/>.</summary>
@@ -159,7 +163,7 @@ namespace FashionRise.Core
             {
                 if (string.IsNullOrWhiteSpace(config.BaseUrl))
                     Debug.LogError(
-                        "FashionRise: ApiConfig.BaseUrl is empty. Set it on FashionRiseApp (e.g. http://127.0.0.1:8000/api/v1) or use menu FashionRise → Use Local API.");
+                        "FashionRise: ApiConfig.BaseUrl is empty. Set it on FashionRiseApp (e.g. http://127.0.0.1:8001/api/v1) or use menu FashionRise → Use Local API.");
                 return CreateForApi(config);
             }
 

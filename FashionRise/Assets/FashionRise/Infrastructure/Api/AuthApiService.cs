@@ -55,11 +55,18 @@ namespace FashionRise.Infrastructure.Api
             }
             catch (ApiException ex)
             {
-                return new AuthResult { Success = false, UserId = "", Message = ex.Message };
+                var where = string.IsNullOrEmpty(_client.BaseUrl) ? "" : $"\n→ {_client.BaseUrl}/auth/login";
+                return new AuthResult
+                {
+                    Success = false,
+                    UserId = "",
+                    Message = $"HTTP {ex.StatusCode}: {ex.Message}{where}"
+                };
             }
             catch (Exception ex)
             {
-                return new AuthResult { Success = false, UserId = "", Message = ex.Message };
+                var where = string.IsNullOrEmpty(_client.BaseUrl) ? "" : $"\n→ {_client.BaseUrl}/auth/login";
+                return new AuthResult { Success = false, UserId = "", Message = ex.Message + where };
             }
         }
 
@@ -79,11 +86,18 @@ namespace FashionRise.Infrastructure.Api
             }
             catch (ApiException ex)
             {
-                return new AuthResult { Success = false, UserId = "", Message = ex.Message };
+                var where = string.IsNullOrEmpty(_client.BaseUrl) ? "" : $"\n→ {_client.BaseUrl}/auth/register";
+                return new AuthResult
+                {
+                    Success = false,
+                    UserId = "",
+                    Message = $"HTTP {ex.StatusCode}: {ex.Message}{where}"
+                };
             }
             catch (Exception ex)
             {
-                return new AuthResult { Success = false, UserId = "", Message = ex.Message };
+                var where = string.IsNullOrEmpty(_client.BaseUrl) ? "" : $"\n→ {_client.BaseUrl}/auth/register";
+                return new AuthResult { Success = false, UserId = "", Message = ex.Message + where };
             }
         }
 
