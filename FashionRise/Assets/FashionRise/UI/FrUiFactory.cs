@@ -424,11 +424,15 @@ namespace FashionRise.UI
 
         // ---------- Tech pack spec sheet primitives ----------
 
-        /// <summary>Boxed spec block with a ruled caps header, like a printed tech pack table.</summary>
+        /// <summary>
+        /// Boxed spec block with a ruled caps header, like a printed tech pack table.
+        /// Height comes from the vertical layout group only — a ContentSizeFitter here would be a
+        /// child of a layout group, which is the classic uGUI layout-loop trap.
+        /// </summary>
         public static RectTransform AddSpecCard(Transform parent, string title, FashionRiseTheme theme)
         {
             var card = new GameObject("Spec_" + title, typeof(RectTransform), typeof(Image),
-                typeof(VerticalLayoutGroup), typeof(LayoutElement), typeof(ContentSizeFitter));
+                typeof(VerticalLayoutGroup), typeof(LayoutElement));
             card.transform.SetParent(parent, false);
             var img = card.GetComponent<Image>();
             img.color = new Color(1f, 1f, 1f, 0.96f);
@@ -443,9 +447,9 @@ namespace FashionRise.UI
             v.childForceExpandWidth = true;
             v.childControlHeight = true;
             v.childForceExpandHeight = false;
-            card.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var le = card.GetComponent<LayoutElement>();
             le.flexibleWidth = 1f;
+            le.flexibleHeight = 0f;
 
             if (!string.IsNullOrEmpty(title))
                 AddSpecBandRow(card.transform, title, theme);
@@ -480,8 +484,13 @@ namespace FashionRise.UI
             rt.offsetMax = new Vector2(-10f, 0f);
         }
 
-        /// <summary>Label / value table row with a hairline rule under it.</summary>
-        public static void AddSpecRow(Transform parent, string label, string value, FashionRiseTheme theme)
+        /// <summary>
+        /// Label / value table row with a hairline rule under it. Row and cell heights are set
+        /// explicitly from <paramref name="availableWidth"/> so uGUI never has to ask a wrapped
+        /// Text for its preferred height while it is still measuring the sheet.
+        /// </summary>
+        public static void AddSpecRow(Transform parent, string label, string value, FashionRiseTheme theme,
+            float availableWidth)
         {
             var row = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup),
                 typeof(LayoutElement));
@@ -493,13 +502,21 @@ namespace FashionRise.UI
             h.childControlWidth = true;
             h.childControlHeight = true;
             h.childForceExpandHeight = false;
+
+            var font = theme.CaptionSize + 1f;
+            var labelH = EstimateTextHeight(label, font, availableWidth * 0.58f);
+            var valueH = EstimateTextHeight(value, font, availableWidth * 0.36f);
+            var rowH = Mathf.Max(30f, Mathf.Max(labelH, valueH));
+
             var le = row.GetComponent<LayoutElement>();
-            le.minHeight = 30f;
+            le.minHeight = rowH;
+            le.preferredHeight = rowH;
+            le.flexibleHeight = 0f;
             le.flexibleWidth = 1f;
 
-            var l = SpecCell(row.transform, label, theme, TextAnchor.MiddleLeft, false);
+            var l = SpecCell(row.transform, label, theme, TextAnchor.MiddleLeft, false, labelH);
             l.GetComponent<LayoutElement>().flexibleWidth = 1.6f;
-            var r = SpecCell(row.transform, value, theme, TextAnchor.MiddleRight, true);
+            var r = SpecCell(row.transform, value, theme, TextAnchor.MiddleRight, true, valueH);
             r.GetComponent<LayoutElement>().flexibleWidth = 1f;
 
             AddHairline(parent, theme);
@@ -507,7 +524,7 @@ namespace FashionRise.UI
 
         /// <summary>Three-column row for Item / Specification / Quantity style tables.</summary>
         public static void AddSpecRow3(Transform parent, string a, string b, string c, FashionRiseTheme theme,
-            bool header = false)
+            float availableWidth, bool header = false)
         {
             var row = new GameObject(header ? "HeadRow" : "Row3", typeof(RectTransform),
                 typeof(HorizontalLayoutGroup), typeof(LayoutElement));
@@ -519,22 +536,35 @@ namespace FashionRise.UI
             h.childControlWidth = true;
             h.childControlHeight = true;
             h.childForceExpandHeight = false;
+
+            var font = theme.CaptionSize + 1f;
+            var wa = availableWidth * 0.28f;
+            var wb = availableWidth * 0.5f;
+            var wc = availableWidth * 0.16f;
+            var ha = EstimateTextHeight(a, font, wa);
+            var hb = EstimateTextHeight(b, font, wb);
+            var hc = EstimateTextHeight(c, font, wc);
+            var rowH = Mathf.Max(header ? 28f : 34f, Mathf.Max(ha, Mathf.Max(hb, hc)));
+
             var le = row.GetComponent<LayoutElement>();
-            le.minHeight = header ? 28f : 34f;
+            le.minHeight = rowH;
+            le.preferredHeight = rowH;
+            le.flexibleHeight = 0f;
             le.flexibleWidth = 1f;
 
-            var ca = SpecCell(row.transform, a, theme, TextAnchor.UpperLeft, header);
+            var ca = SpecCell(row.transform, a, theme, TextAnchor.UpperLeft, header, ha);
             ca.GetComponent<LayoutElement>().flexibleWidth = 1.1f;
-            var cb = SpecCell(row.transform, b, theme, TextAnchor.UpperLeft, header);
+            var cb = SpecCell(row.transform, b, theme, TextAnchor.UpperLeft, header, hb);
             cb.GetComponent<LayoutElement>().flexibleWidth = 1.9f;
-            var cc = SpecCell(row.transform, c, theme, TextAnchor.UpperRight, header);
+            var cc = SpecCell(row.transform, c, theme, TextAnchor.UpperRight, header, hc);
             cc.GetComponent<LayoutElement>().flexibleWidth = 0.7f;
 
             AddHairline(parent, theme);
         }
 
         /// <summary>Wrapped body copy inside a spec card (notes, construction steps).</summary>
-        public static Text AddSpecParagraph(Transform parent, string text, FashionRiseTheme theme)
+        public static Text AddSpecParagraph(Transform parent, string text, FashionRiseTheme theme,
+            float availableWidth)
         {
             var go = new GameObject("Para", typeof(Text), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
@@ -547,26 +577,29 @@ namespace FashionRise.UI
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
             t.verticalOverflow = VerticalWrapMode.Overflow;
             t.lineSpacing = 1.25f;
+            var h = EstimateTextHeight(text, theme.CaptionSize + 1f, availableWidth - 26f) + 8f;
             var le = go.GetComponent<LayoutElement>();
             le.flexibleWidth = 1f;
-            le.minHeight = 24f;
-            le.preferredHeight = EstimateTextHeight(text, theme.CaptionSize + 1f);
+            le.minHeight = h;
+            le.preferredHeight = h;
+            le.flexibleHeight = 0f;
             return t;
         }
 
-        static float EstimateTextHeight(string text, float fontSize)
+        /// <summary>Line count × line height for a wrapped legacy Text at a known width.</summary>
+        static float EstimateTextHeight(string? text, float fontSize, float width)
         {
-            var lines = 1;
-            foreach (var ch in text)
-                if (ch == '\n')
-                    lines++;
-            // rough wrap allowance for long paragraphs
-            lines += text.Length / 46;
-            return Mathf.Max(24f, lines * (fontSize + 8f) + 12f);
+            var s = text ?? "";
+            var lineHeight = fontSize * 1.45f + 4f;
+            var charsPerLine = Mathf.Max(8f, Mathf.Floor(Mathf.Max(60f, width) / Mathf.Max(4f, fontSize * 0.54f)));
+            var lines = 0;
+            foreach (var segment in s.Split('\n'))
+                lines += Mathf.Max(1, Mathf.CeilToInt(segment.Length / charsPerLine));
+            return Mathf.Max(lineHeight, lines * lineHeight) + 10f;
         }
 
         static GameObject SpecCell(Transform parent, string text, FashionRiseTheme theme, TextAnchor anchor,
-            bool strong)
+            bool strong, float height)
         {
             var go = new GameObject("Cell", typeof(Text), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
@@ -579,7 +612,9 @@ namespace FashionRise.UI
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
             t.verticalOverflow = VerticalWrapMode.Overflow;
             var le = go.GetComponent<LayoutElement>();
-            le.minHeight = 20f;
+            le.minHeight = Mathf.Max(20f, height);
+            le.preferredHeight = Mathf.Max(20f, height);
+            le.flexibleHeight = 0f;
             return go;
         }
 

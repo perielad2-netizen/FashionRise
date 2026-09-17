@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -6,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using FashionRise.Content;
+using FashionRise.Core;
 using FashionRise.Core.Navigation;
 using FashionRise.UI;
 using Newtonsoft.Json.Linq;
@@ -19,31 +21,54 @@ namespace FashionRise.Presentation.Screens
     /// Create Real Design output — a printed-style FASHION TECHNICAL SPECIFICATION sheet:
     /// header block, front/back flats, sample size base, materials &amp; notions, pattern
     /// pieces, cutting layout and construction order. Measurements are a first draft.
+    /// The sheet is built one card per frame so a long spec never stalls a frame, and every
+    /// step leaves a breadcrumb in <see cref="FrDiag"/>.
     /// </summary>
     public sealed class TechPackScreen : ScreenBase
     {
+        // Hard caps: a runaway model response must not build an unbounded UI mesh.
+        const int MaxRowsPerTable = 40;
+        const int MaxCellChars = 260;
+        const int MaxParagraphChars = 1400;
+
         FashionRiseTheme _t = null!;
         Text _styleLine = null!;
         Text _garmentLine = null!;
         RectTransform _sheet = null!;
-        RawImage _front = null!;
-        RawImage _back = null!;
+        RawImage? _front;
+        RawImage? _back;
         Texture2D? _ownedFront;
         Texture2D? _ownedBack;
         FrAiLoadingFx? _loading;
-        bool _built;
+        CancellationTokenSource? _cts;
+        readonly CancellationTokenSource _life = new();
+        Coroutine? _render;
+        Coroutine? _copy;
+        bool _busy;
+        bool _rendering;
+        bool _renderPending;
+        bool _chromeReady;
 
         public override ScreenId Id => ScreenId.TechPack;
 
         void Awake()
         {
-            _t = ThemeOrDefault;
-            var root = FrUiFactory.CreateStretchPanel(transform, "Root", _t);
-            _loading = FrAiLoadingFx.Create(root, _t);
+            try
+            {
+                _t = ThemeOrDefault;
+                var root = FrUiFactory.CreateStretchPanel(transform, "Root", _t);
+                _loading = FrAiLoadingFx.Create(root, _t);
 
-            BuildHeader(root);
-            BuildBottomBar(root);
-            BuildSheetScroll(root);
+                BuildHeader(root);
+                BuildBottomBar(root);
+                BuildSheetScroll(root);
+                _chromeReady = true;
+            }
+            catch (Exception ex)
+            {
+                FrDiag.Fail("techpack build chrome", ex);
+                Debug.LogError($"FashionRise TechPackScreen could not build its UI: {ex}");
+            }
         }
 
         void BuildHeader(RectTransform root)
@@ -69,7 +94,7 @@ namespace FashionRise.Presentation.Screens
                 Mathf.RoundToInt(_t.SubtitleSize), FontStyle.Normal, TextAnchor.MiddleCenter);
             title.font = FrUiFonts.UiMedium;
             FrUiFactory.AddHairline(top.transform, _t);
-            _styleLine = FrUiFactory.AddLabel(top.transform, "Style", "STYLE NO.  FW-001", _t,
+            _styleLine = FrUiFactory.AddLabel(top.transform, "Style", "STYLE NO.  FR-001", _t,
                 Mathf.RoundToInt(_t.CaptionSize), FontStyle.Normal, TextAnchor.MiddleCenter, true);
             _garmentLine = FrUiFactory.AddLabel(top.transform, "Garment", "", _t,
                 Mathf.RoundToInt(_t.CaptionSize), FontStyle.Normal, TextAnchor.MiddleCenter, true);
@@ -114,12 +139,8 @@ namespace FashionRise.Presentation.Screens
             rowH.childControlHeight = true;
 
             FrUiFactory.AddButton(row.transform, "Export spec", _t, ExportSpec, FrButtonEmphasis.Primary);
-            FrUiFactory.AddButton(row.transform, "Regenerate", _t, () => { _ = RegenerateAsync(); });
-            FrUiFactory.AddButton(row.transform, "Back", _t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.NavigateToAsync(ScreenId.ConceptResult);
-            }, FrButtonEmphasis.Ghost);
+            FrUiFactory.AddButton(row.transform, "Regenerate", _t, Regenerate);
+            FrUiFactory.AddButton(row.transform, "Back", _t, GoBack, FrButtonEmphasis.Ghost);
         }
 
         void BuildSheetScroll(RectTransform root)
@@ -158,42 +179,92 @@ namespace FashionRise.Presentation.Screens
             scroll.scrollSensitivity = 34f;
         }
 
-        public override async Task ShowAsync(object? payload = null, CancellationToken cancellationToken = default)
+        // ---------- lifecycle ----------
+
+        public override Task ShowAsync(object? payload = null, CancellationToken cancellationToken = default)
         {
             gameObject.SetActive(true);
-            if (string.IsNullOrWhiteSpace(App.CreateDesign.LastTechPackJson))
+            if (!_chromeReady)
+                return Task.CompletedTask;
+
+            if (!string.IsNullOrWhiteSpace(App.CreateDesign.LastTechPackJson))
             {
-                await GenerateAsync(cancellationToken).ConfigureAwait(true);
-                return;
+                FrDiag.Step("techpack: reuse cached spec");
+                RequestRender();
+                return Task.CompletedTask;
             }
 
-            RenderSheet();
-            await LoadFlatsAsync(cancellationToken).ConfigureAwait(true);
+            // Never await generation from navigation: the flow stays responsive and a slow or
+            // failing job can't hold the screen transition open.
+            FrDiag.Fire(GenerateAsync(), "techpack generate");
+            return Task.CompletedTask;
         }
 
-        async Task RegenerateAsync()
+        public override Task HideAsync(CancellationToken cancellationToken = default)
         {
+            CancelWork();
+            gameObject.SetActive(false);
+            return Task.CompletedTask;
+        }
+
+        void GoBack()
+        {
+            CancelWork();
+            if (App.Navigation != null)
+                FrDiag.Fire(App.Navigation.NavigateToAsync(ScreenId.ConceptResult), "navigate ConceptResult");
+        }
+
+        void Regenerate()
+        {
+            if (_busy)
+                return;
             App.CreateDesign.ClearTechPack();
-            await GenerateAsync(CancellationToken.None).ConfigureAwait(true);
+            FrDiag.Fire(GenerateAsync(), "techpack regenerate");
         }
 
-        async Task GenerateAsync(CancellationToken cancellationToken)
+        void CancelWork()
         {
-            _loading?.Show("Reading your look…");
             try
             {
-                var sketch = App.CreateDesign.LastInkImagePath;
-                if (string.IsNullOrEmpty(sketch))
-                {
-                    var raw = App.CreateDesign.SketchReference?.Trim() ?? "";
-                    sketch = raw.StartsWith("file:", StringComparison.OrdinalIgnoreCase) ? raw.Substring(5) : raw;
-                }
+                _cts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                /* already gone */
+            }
 
+            StopLoadingCopy();
+            _loading?.Hide();
+        }
+
+        void OnDisable()
+        {
+            StopLoadingCopy();
+            if (_rendering)
+                _renderPending = true; // Unity kills coroutines on disable; finish the sheet on return
+        }
+
+        // ---------- generation ----------
+
+        async Task GenerateAsync()
+        {
+            if (_busy)
+                return;
+            _busy = true;
+            ClearSheet();
+            ShowLoading("Reading your look…");
+            FrDiag.Step("techpack: generate start");
+
+            var cts = new CancellationTokenSource(TimeSpan.FromMinutes(7));
+            _cts?.Dispose();
+            _cts = cts;
+            try
+            {
                 var result = await App.TechPack.GenerateAsync(new Domain.TechPackRequest
                 {
                     DesignId = App.CreateDesign.PersistedDesignId,
                     Notes = App.CreateDesign.LastSketchSummary,
-                    LocalSketchForVision = sketch,
+                    LocalSketchForVision = ResolveVisionImagePath(),
                     PolishedImageUrl = App.CreateDesign.LastPolishedImageUrl,
                     FabricName = App.CreateDesign.SketchFabricName,
                     ColorName = App.CreateDesign.SketchColorName,
@@ -201,79 +272,221 @@ namespace FashionRise.Presentation.Screens
                     OnJobStarted = id =>
                     {
                         App.CreateDesign.LastTechPackJobId = id;
-                        _loading?.SetStatus("Drafting pattern pieces & measurements…");
+                        FrDiag.Step($"techpack: job {id} queued");
+                        SetLoadingStatus("Drafting pattern pieces & measurements…");
                     }
-                }, cancellationToken).ConfigureAwait(true);
+                }, cts.Token).ConfigureAwait(true);
 
                 App.CreateDesign.LastTechPackJobId = result.JobId;
                 App.CreateDesign.LastTechPackJson = result.RawJson;
                 App.CreateDesign.LastTechPackFrontImageUrl = result.FrontImageUrl;
                 App.CreateDesign.LastTechPackBackImageUrl = result.BackImageUrl;
                 App.CreateDesign.LastTechPackPatternImageUrl = result.PatternImageUrl;
+                FrDiag.Step($"techpack: job {result.JobId} {result.Status}, json {result.RawJson?.Length ?? 0} chars");
 
-                RenderSheet();
-                await LoadFlatsAsync(cancellationToken).ConfigureAwait(true);
+                if (string.Equals(result.Status, "failed", StringComparison.OrdinalIgnoreCase))
+                {
+                    ShowError(string.IsNullOrWhiteSpace(result.Summary) ? "The studio job failed." : result.Summary);
+                    return;
+                }
+
+                RequestRender();
+            }
+            catch (OperationCanceledException)
+            {
+                FrDiag.Step("techpack: generation cancelled");
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"FashionRise tech pack failed: {ex}");
-                ClearSheet();
-                var card = FrUiFactory.AddSpecCard(_sheet, "Could not build tech pack", _t);
-                FrUiFactory.AddSpecParagraph(card, ex.Message, _t);
-                FrUiFactory.AddSpecParagraph(card,
-                    "Check that the API is running on :8001 and you are signed in, then tap Regenerate.", _t);
+                FrDiag.Fail("techpack generate", ex);
+                ShowError(ex.Message);
             }
             finally
             {
+                _busy = false;
+                StopLoadingCopy();
                 _loading?.Hide();
             }
         }
 
-        void ClearSheet()
+        /// <summary>
+        /// Prefer the finished Magic look (real colours, fabric, shading) over the transparent
+        /// ink layer — the tech pack should describe what the designer actually approved.
+        /// </summary>
+        string ResolveVisionImagePath()
         {
-            for (var i = _sheet.childCount - 1; i >= 0; i--)
-                Destroy(_sheet.GetChild(i).gameObject);
-            _built = false;
+            var look = App.CreateDesign.LastPolishedImageLocalPath?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(look) && File.Exists(look))
+                return look;
+
+            var ink = App.CreateDesign.LastInkImagePath?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(ink) && File.Exists(ink))
+                return ink;
+
+            var raw = App.CreateDesign.SketchReference?.Trim() ?? "";
+            return raw.StartsWith("file:", StringComparison.OrdinalIgnoreCase) ? raw.Substring(5) : raw;
         }
 
-        void RenderSheet()
+        // ---------- loading state ----------
+
+        void ShowLoading(string status)
         {
+            if (_loading == null)
+                return;
+            _loading.Show(status);
+            StopLoadingCopy();
+            if (isActiveAndEnabled)
+                _copy = StartCoroutine(LoadingCopyRoutine());
+        }
+
+        void SetLoadingStatus(string status) => _loading?.SetStatus(status);
+
+        void StopLoadingCopy()
+        {
+            if (_copy == null)
+                return;
+            StopCoroutine(_copy);
+            _copy = null;
+        }
+
+        IEnumerator LoadingCopyRoutine()
+        {
+            var lines = new[]
+            {
+                "Measuring the sample body — 170 cm, 84 / 64 / 90…",
+                "Drafting pattern pieces and seam allowances…",
+                "Drawing the technical flats…",
+                "Nesting the cutting layout on 150 cm fabric…",
+                "Writing the construction order…"
+            };
+            var i = 0;
+            while (true)
+            {
+                yield return new WaitForSecondsRealtime(4.5f);
+                SetLoadingStatus(lines[i % lines.Length]);
+                i++;
+            }
+        }
+
+        // ---------- sheet rendering ----------
+
+        void ClearSheet()
+        {
+            if (_render != null)
+            {
+                StopCoroutine(_render);
+                _render = null;
+            }
+
+            _rendering = false;
+            _front = null;
+            _back = null;
+            if (_sheet == null)
+                return;
+            for (var i = _sheet.childCount - 1; i >= 0; i--)
+                Destroy(_sheet.GetChild(i).gameObject);
+        }
+
+        void RequestRender()
+        {
+            if (!_chromeReady)
+                return;
+            if (!isActiveAndEnabled)
+            {
+                _renderPending = true;
+                return;
+            }
+
+            _renderPending = false;
             ClearSheet();
+            _render = StartCoroutine(RenderRoutine());
+        }
+
+        void OnEnable()
+        {
+            if (_renderPending)
+                RequestRender();
+        }
+
+        IEnumerator RenderRoutine()
+        {
+            _rendering = true;
             var json = App.CreateDesign.LastTechPackJson;
             if (string.IsNullOrWhiteSpace(json))
-                return;
+            {
+                _rendering = false;
+                yield break;
+            }
 
-            JObject root;
+            JObject? root = null;
             try
             {
                 root = JObject.Parse(json);
             }
             catch (Exception ex)
             {
-                var card = FrUiFactory.AddSpecCard(_sheet, "Raw result", _t);
-                FrUiFactory.AddSpecParagraph(card, ex.Message + "\n\n" + json, _t);
-                return;
+                FrDiag.Fail("techpack parse", ex);
+            }
+
+            if (root == null)
+            {
+                var raw = FrUiFactory.AddSpecCard(_sheet, "Raw result", _t);
+                FrUiFactory.AddSpecParagraph(raw, Clamp(json, MaxParagraphChars), _t, ContentWidth);
+                _rendering = false;
+                yield break;
             }
 
             var garment = root["garment"] as JObject;
             var garmentType = Str(garment?["type"], "Garment");
-            _garmentLine.text = "GARMENT   " + garmentType.ToUpperInvariant();
-            _styleLine.text = "STYLE NO.  FR-" + ShortCode(App.CreateDesign.LastTechPackJobId);
+            SafeSet(_garmentLine, "GARMENT   " + garmentType.ToUpperInvariant());
+            SafeSet(_styleLine, "STYLE NO.  FR-" + ShortCode(App.CreateDesign.LastTechPackJobId));
 
-            BuildDesignCard(root, garment, garmentType);
-            BuildFlatsCard();
-            BuildMeasurementsCard(root);
-            BuildMaterialsCard(root);
-            BuildPatternCard(root);
-            BuildCuttingCard(root);
-            BuildConstructionCard(root);
-            _built = true;
+            var steps = new List<(string Name, Action Build)>
+            {
+                ("design", () => BuildDesignCard(root!, garment, garmentType)),
+                ("flats", BuildFlatsCard),
+                ("measurements", () => BuildMeasurementsCard(root!)),
+                ("materials", () => BuildMaterialsCard(root!)),
+                ("pattern", () => BuildPatternCard(root!)),
+                ("cutting", () => BuildCuttingCard(root!)),
+                ("construction", () => BuildConstructionCard(root!))
+            };
+
+            foreach (var step in steps)
+            {
+                try
+                {
+                    step.Build();
+                }
+                catch (Exception ex)
+                {
+                    FrDiag.Fail("techpack render " + step.Name, ex);
+                }
+
+                yield return null; // one card per frame keeps the sheet smooth on any device
+            }
+
+            _rendering = false;
+            _render = null;
+            FrDiag.Step("techpack: sheet rendered");
+            FrDiag.Fire(LoadFlatsAsync(_life.Token), "techpack load flats");
+        }
+
+        float ContentWidth
+        {
+            get
+            {
+                var w = _sheet != null ? _sheet.rect.width : 0f;
+                if (w < 40f && transform is RectTransform self)
+                    w = self.rect.width - 28f;
+                return Mathf.Clamp(w, 320f, 2200f);
+            }
         }
 
         void BuildDesignCard(JObject root, JObject? garment, string garmentType)
         {
             var card = FrUiFactory.AddSpecCard(_sheet, "Design", _t);
-            FrUiFactory.AddSpecRow(card, "Garment", garmentType, _t);
+            AddRow(card, "Garment", garmentType);
             if (garment != null)
             {
                 AddIfPresent(card, "Silhouette", garment["silhouette"]);
@@ -284,10 +497,10 @@ namespace FashionRise.Presentation.Screens
 
             var fabric = App.CreateDesign.SketchFabricName;
             if (!string.IsNullOrWhiteSpace(fabric))
-                FrUiFactory.AddSpecRow(card, "Studio fabric", fabric, _t);
+                AddRow(card, "Studio fabric", fabric);
             var color = App.CreateDesign.SketchColorName;
             if (!string.IsNullOrWhiteSpace(color))
-                FrUiFactory.AddSpecRow(card, "Studio colour", color, _t);
+                AddRow(card, "Studio colour", color);
 
             var description = Str(garment?["construction_description"], "");
             if (string.IsNullOrEmpty(description))
@@ -295,7 +508,7 @@ namespace FashionRise.Presentation.Screens
             if (!string.IsNullOrEmpty(description))
             {
                 FrUiFactory.AddSpecBandRow(card, "Description", _t);
-                FrUiFactory.AddSpecParagraph(card, description, _t);
+                FrUiFactory.AddSpecParagraph(card, Clamp(description, MaxParagraphChars), _t, ContentWidth);
             }
         }
 
@@ -306,8 +519,9 @@ namespace FashionRise.Presentation.Screens
                 typeof(LayoutElement));
             row.transform.SetParent(card, false);
             var le = row.GetComponent<LayoutElement>();
-            le.minHeight = 300f;
-            le.preferredHeight = 340f;
+            le.minHeight = 320f;
+            le.preferredHeight = 320f;
+            le.flexibleHeight = 0f;
             var h = row.GetComponent<HorizontalLayoutGroup>();
             h.padding = new RectOffset(10, 10, 10, 10);
             h.spacing = 10f;
@@ -320,6 +534,11 @@ namespace FashionRise.Presentation.Screens
             _back = MakeFlatPane(row.transform, "Back view");
         }
 
+        /// <summary>
+        /// Fixed-size flat pane. The image is centred with plain anchors and resized once the
+        /// texture arrives — no AspectRatioFitter inside the layout chain, so nothing can drive
+        /// a rebuild loop while the sheet is being measured.
+        /// </summary>
         RawImage MakeFlatPane(Transform parent, string caption)
         {
             var pane = new GameObject(caption, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
@@ -345,20 +564,18 @@ namespace FashionRise.Presentation.Screens
             capRt.sizeDelta = new Vector2(0f, 20f);
             capRt.anchoredPosition = new Vector2(0f, -6f);
 
-            var imgGo = new GameObject("Img", typeof(RectTransform), typeof(RawImage), typeof(AspectRatioFitter));
+            var imgGo = new GameObject("Img", typeof(RectTransform), typeof(RawImage));
             var rt = imgGo.GetComponent<RectTransform>();
             rt.SetParent(pane.transform, false);
             rt.anchorMin = new Vector2(0.5f, 0f);
             rt.anchorMax = new Vector2(0.5f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.offsetMin = new Vector2(0f, 8f);
-            rt.offsetMax = new Vector2(0f, -26f);
+            rt.offsetMin = new Vector2(-90f, 10f);
+            rt.offsetMax = new Vector2(90f, -28f);
             var raw = imgGo.GetComponent<RawImage>();
-            raw.texture = Texture2D.whiteTexture;
+            raw.texture = null;
             raw.color = Color.white;
-            var fit = imgGo.GetComponent<AspectRatioFitter>();
-            fit.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
-            fit.aspectRatio = 0.7f;
+            raw.raycastTarget = false;
 
             var placeholder = new GameObject("Pending", typeof(Text));
             placeholder.transform.SetParent(pane.transform, false);
@@ -380,7 +597,7 @@ namespace FashionRise.Presentation.Screens
         {
             var card = FrUiFactory.AddSpecCard(_sheet, "Sample size base", _t);
             var m = root["measurements"] as JObject;
-            FrUiFactory.AddSpecRow(card, "Sample size", Str(m?["sample_size"], "EU 36 / US 4"), _t);
+            AddRow(card, "Sample size", Str(m?["sample_size"], "EU 36 / US 4"));
 
             FrUiFactory.AddSpecBandRow(card, "Body measurements", _t);
             AddMeasurementRows(card, m?["body"] as JObject);
@@ -393,31 +610,40 @@ namespace FashionRise.Presentation.Screens
         {
             if (obj == null)
             {
-                FrUiFactory.AddSpecParagraph(card, "Not provided.", _t);
+                FrUiFactory.AddSpecParagraph(card, "Not provided.", _t, ContentWidth);
                 return;
             }
 
+            var n = 0;
             foreach (var p in obj.Properties())
             {
-                var value = p.Value?.ToString() ?? "";
+                if (n++ >= MaxRowsPerTable)
+                    break;
+                var value = Scalar(p.Value);
                 if (string.IsNullOrWhiteSpace(value))
                     continue;
-                FrUiFactory.AddSpecRow(card, PrettyKey(p.Name), FormatCm(p.Name, value), _t);
+                AddRow(card, PrettyKey(p.Name), FormatCm(p.Name, value));
             }
+
+            if (n == 0)
+                FrUiFactory.AddSpecParagraph(card, "Not provided.", _t, ContentWidth);
         }
 
         void BuildMaterialsCard(JObject root)
         {
             var card = FrUiFactory.AddSpecCard(_sheet, "Materials & notions", _t);
-            FrUiFactory.AddSpecRow3(card, "Item", "Specification", "Qty", _t, header: true);
+            AddRow3(card, "Item", "Specification", "Qty", true);
             if (root["materials"] is not JArray materials || materials.Count == 0)
             {
-                FrUiFactory.AddSpecParagraph(card, "No materials returned.", _t);
+                FrUiFactory.AddSpecParagraph(card, "No materials returned.", _t, ContentWidth);
                 return;
             }
 
+            var n = 0;
             foreach (var mat in materials)
             {
+                if (n++ >= MaxRowsPerTable)
+                    break;
                 var name = Str(mat["name"], "Item");
                 var role = Str(mat["role"], "");
                 if (!string.IsNullOrEmpty(role))
@@ -426,28 +652,31 @@ namespace FashionRise.Presentation.Screens
                 var notes = Str(mat["notes"], "");
                 if (!string.IsNullOrEmpty(notes))
                     spec = string.IsNullOrEmpty(spec) ? notes : spec + "\n" + notes;
-                var qty = mat["quantity_m"];
-                var qtyText = qty == null || qty.Type == JTokenType.Null
+                var qty = Number(mat["quantity_m"]);
+                var qtyText = qty == null
                     ? "1 pc"
-                    : qty.ToObject<float>().ToString("0.##", CultureInfo.InvariantCulture) + " m";
-                FrUiFactory.AddSpecRow3(card, name, spec, qtyText, _t);
+                    : qty.Value.ToString("0.##", CultureInfo.InvariantCulture) + " m";
+                AddRow3(card, name, spec, qtyText);
             }
         }
 
         void BuildPatternCard(JObject root)
         {
             var card = FrUiFactory.AddSpecCard(_sheet, "Pattern pieces", _t);
-            FrUiFactory.AddSpecRow3(card, "Piece", "Grain / notches", "Size", _t, header: true);
+            AddRow3(card, "Piece", "Grain / notches", "Size", true);
             if (root["pattern_pieces"] is not JArray pieces || pieces.Count == 0)
             {
-                FrUiFactory.AddSpecParagraph(card, "No pattern pieces returned.", _t);
+                FrUiFactory.AddSpecParagraph(card, "No pattern pieces returned.", _t, ContentWidth);
                 return;
             }
 
+            var n = 0;
             foreach (var p in pieces)
             {
+                if (n++ >= MaxRowsPerTable)
+                    break;
                 var name = Str(p["name"], "Piece");
-                var qty = p["qty"]?.ToString();
+                var qty = Scalar(p["qty"]);
                 if (!string.IsNullOrEmpty(qty))
                     name += "\ncut " + qty;
 
@@ -455,50 +684,57 @@ namespace FashionRise.Presentation.Screens
                 var grain = Str(p["grainline"], "");
                 if (!string.IsNullOrEmpty(grain))
                     detail.Append("Grain: ").Append(grain);
-                if (p["on_fold"]?.Type == JTokenType.Boolean && p["on_fold"]!.ToObject<bool>())
+                if (p["on_fold"] != null && p["on_fold"]!.Type == JTokenType.Boolean &&
+                    p["on_fold"]!.ToObject<bool>())
                     detail.Append(detail.Length > 0 ? " · " : "").Append("place on fold");
                 if (p["notches"] is JArray notches && notches.Count > 0)
                 {
                     var list = new List<string>();
-                    foreach (var n in notches)
-                        list.Add(n.ToString());
-                    detail.Append(detail.Length > 0 ? "\n" : "").Append("Notches: ").Append(string.Join(", ", list));
+                    foreach (var notch in notches)
+                    {
+                        var text = Scalar(notch);
+                        if (!string.IsNullOrEmpty(text))
+                            list.Add(text);
+                    }
+
+                    if (list.Count > 0)
+                        detail.Append(detail.Length > 0 ? "\n" : "")
+                            .Append("Notches: ")
+                            .Append(string.Join(", ", list));
                 }
 
-                var sa = p["seam_allowance_cm"];
-                if (sa != null && sa.Type != JTokenType.Null)
+                var sa = Number(p["seam_allowance_cm"]);
+                if (sa != null)
                     detail.Append(detail.Length > 0 ? "\n" : "")
                         .Append("SA ")
-                        .Append(sa.ToObject<float>().ToString("0.#", CultureInfo.InvariantCulture))
+                        .Append(sa.Value.ToString("0.#", CultureInfo.InvariantCulture))
                         .Append(" cm");
 
                 var w = FirstNumber(p, "approx_w_cm", "width_cm");
                 var hgt = FirstNumber(p, "approx_h_cm", "height_cm");
                 var size = w != null && hgt != null
-                    ? $"{w.Value:0.#} × {hgt.Value:0.#} cm"
+                    ? $"{w.Value.ToString("0.#", CultureInfo.InvariantCulture)} × " +
+                      $"{hgt.Value.ToString("0.#", CultureInfo.InvariantCulture)} cm"
                     : "—";
 
-                FrUiFactory.AddSpecRow3(card, name, detail.ToString(), size, _t);
+                AddRow3(card, name, detail.ToString(), size);
             }
         }
 
         void BuildCuttingCard(JObject root)
         {
-            var cutting = root["cutting_layout"] as JObject;
-            if (cutting == null)
+            if (root["cutting_layout"] is not JObject cutting)
                 return;
             var card = FrUiFactory.AddSpecCard(_sheet, "Cutting layout", _t);
-            var width = cutting["fabric_width_cm"];
-            FrUiFactory.AddSpecRow(card, "Fabric width",
-                width == null || width.Type == JTokenType.Null
-                    ? "150 cm"
-                    : width.ToObject<float>().ToString("0.#", CultureInfo.InvariantCulture) + " cm", _t);
+            var width = Number(cutting["fabric_width_cm"]);
+            AddRow(card, "Fabric width",
+                (width?.ToString("0.#", CultureInfo.InvariantCulture) ?? "150") + " cm");
             var notes = Str(cutting["notes"], "");
             if (!string.IsNullOrEmpty(notes))
-                FrUiFactory.AddSpecParagraph(card, notes, _t);
+                FrUiFactory.AddSpecParagraph(card, Clamp(notes, MaxParagraphChars), _t, ContentWidth);
             var tip = Str(cutting["efficiency_tip"], "");
             if (!string.IsNullOrEmpty(tip))
-                FrUiFactory.AddSpecParagraph(card, "Tip: " + tip, _t);
+                FrUiFactory.AddSpecParagraph(card, "Tip: " + Clamp(tip, MaxParagraphChars), _t, ContentWidth);
         }
 
         void BuildConstructionCard(JObject root)
@@ -506,35 +742,90 @@ namespace FashionRise.Presentation.Screens
             var card = FrUiFactory.AddSpecCard(_sheet, "Construction order", _t);
             if (root["construction_steps"] is not JArray steps || steps.Count == 0)
             {
-                FrUiFactory.AddSpecParagraph(card, "No construction steps returned.", _t);
+                FrUiFactory.AddSpecParagraph(card, "No construction steps returned.", _t, ContentWidth);
                 return;
             }
 
             var i = 1;
             foreach (var s in steps)
             {
-                var text = s.ToString().Trim();
+                if (i > MaxRowsPerTable)
+                    break;
+                var text = Scalar(s).Trim();
                 if (string.IsNullOrEmpty(text))
                     continue;
-                FrUiFactory.AddSpecRow(card, i + ".  " + text, "", _t);
+                FrUiFactory.AddSpecParagraph(card, i + ".  " + Clamp(text, MaxParagraphChars), _t, ContentWidth);
+                FrUiFactory.AddHairline(card, _t);
                 i++;
             }
         }
+
+        void ShowError(string message)
+        {
+            ClearSheet();
+            if (_sheet == null)
+                return;
+            var card = FrUiFactory.AddSpecCard(_sheet, "Could not build the tech pack", _t);
+            FrUiFactory.AddSpecParagraph(card, Clamp(message, MaxParagraphChars), _t, ContentWidth);
+            FrUiFactory.AddSpecParagraph(card,
+                "Check that the studio API is running and you are signed in, then tap Regenerate. " +
+                "A full log of this run is in fashionrise-diag.log.", _t, ContentWidth);
+        }
+
+        // ---------- row helpers ----------
+
+        void AddRow(Transform card, string label, string value) =>
+            FrUiFactory.AddSpecRow(card, Clamp(label, MaxCellChars), Clamp(value, MaxCellChars), _t, ContentWidth);
+
+        void AddRow3(Transform card, string a, string b, string c, bool header = false) =>
+            FrUiFactory.AddSpecRow3(card, Clamp(a, MaxCellChars), Clamp(b, MaxCellChars), Clamp(c, MaxCellChars),
+                _t, ContentWidth, header);
 
         void AddIfPresent(Transform card, string label, JToken? token)
         {
             var value = Str(token, "");
             if (!string.IsNullOrEmpty(value))
-                FrUiFactory.AddSpecRow(card, label, value, _t);
+                AddRow(card, label, value);
+        }
+
+        static void SafeSet(Text? target, string text)
+        {
+            if (target != null)
+                target.text = text;
+        }
+
+        static string Clamp(string? text, int max)
+        {
+            var s = text ?? "";
+            return s.Length <= max ? s : s.Substring(0, max - 1) + "…";
+        }
+
+        /// <summary>Scalar text for a token; objects/arrays never leak into a table cell.</summary>
+        static string Scalar(JToken? token)
+        {
+            if (token == null)
+                return "";
+            return token.Type switch
+            {
+                JTokenType.Null => "",
+                JTokenType.Object => "",
+                JTokenType.Array => "",
+                _ => token.ToString()
+            };
+        }
+
+        static float? Number(JToken? token)
+        {
+            var s = Scalar(token);
+            return float.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : null;
         }
 
         static float? FirstNumber(JToken parent, params string[] keys)
         {
             foreach (var k in keys)
             {
-                var t = parent[k];
-                if (t != null && t.Type != JTokenType.Null &&
-                    float.TryParse(t.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v))
+                var v = Number(parent[k]);
+                if (v != null)
                     return v;
             }
 
@@ -543,9 +834,7 @@ namespace FashionRise.Presentation.Screens
 
         static string Str(JToken? token, string fallback)
         {
-            if (token == null || token.Type == JTokenType.Null)
-                return fallback;
-            var s = token.ToString().Trim();
+            var s = Scalar(token).Trim();
             return string.IsNullOrEmpty(s) ? fallback : s;
         }
 
@@ -571,6 +860,8 @@ namespace FashionRise.Presentation.Screens
             return clean.Length <= 4 ? clean.ToUpperInvariant() : clean.Substring(0, 4).ToUpperInvariant();
         }
 
+        // ---------- export + flats ----------
+
         void ExportSpec()
         {
             var json = App.CreateDesign.LastTechPackJson;
@@ -585,19 +876,17 @@ namespace FashionRise.Presentation.Screens
                 File.WriteAllText(path, json);
                 if (!NativeShareSheet.TryShareText("FashionRise tech pack: " + path, "FashionRise tech pack"))
                     ShareClipboard.Copy(json);
-                Debug.Log($"FashionRise tech pack exported to {path}");
+                FrDiag.Step($"techpack: exported {path}");
             }
             catch (Exception ex)
             {
                 ShareClipboard.Copy(json);
-                Debug.LogWarning($"FashionRise tech pack export fell back to clipboard: {ex.Message}");
+                FrDiag.Fail("techpack export", ex);
             }
         }
 
         async Task LoadFlatsAsync(CancellationToken ct)
         {
-            if (!_built)
-                return;
             var front = await LoadFlatAsync(_front, _ownedFront, App.CreateDesign.LastTechPackFrontImageUrl, ct)
                 .ConfigureAwait(true);
             if (front != null)
@@ -608,9 +897,9 @@ namespace FashionRise.Presentation.Screens
                 _ownedBack = back;
         }
 
-        async Task<Texture2D?> LoadFlatAsync(RawImage target, Texture2D? previous, string url, CancellationToken ct)
+        async Task<Texture2D?> LoadFlatAsync(RawImage? target, Texture2D? previous, string url, CancellationToken ct)
         {
-            if (target == null || string.IsNullOrWhiteSpace(url))
+            if (string.IsNullOrWhiteSpace(url))
                 return null;
             try
             {
@@ -619,25 +908,65 @@ namespace FashionRise.Presentation.Screens
                 while (!op.isDone)
                     await Task.Delay(32, ct).ConfigureAwait(true);
                 if (req.result != UnityWebRequest.Result.Success)
+                {
+                    FrDiag.Trace($"techpack flat {url} failed: {req.error}");
                     return null;
+                }
+
                 var tex = DownloadHandlerTexture.GetContent(req);
                 if (tex == null)
                     return null;
+                if (target == null)
+                {
+                    Destroy(tex);
+                    return null;
+                }
+
                 if (previous != null)
                     Destroy(previous);
                 target.texture = tex;
-                var fit = target.GetComponent<AspectRatioFitter>();
-                if (fit != null && tex.height > 0)
-                    fit.aspectRatio = tex.width / (float)tex.height;
-                var pending = target.transform.parent.Find("Pending");
+                FitFlat(target, tex);
+                var pending = target.transform.parent != null
+                    ? target.transform.parent.Find("Pending")
+                    : null;
                 if (pending != null)
                     pending.gameObject.SetActive(false);
                 return tex;
             }
-            catch
+            catch (OperationCanceledException)
             {
                 return null;
             }
+            catch (Exception ex)
+            {
+                FrDiag.Fail("techpack flat load", ex);
+                return null;
+            }
+        }
+
+        /// <summary>Centres the flat at the pane height without touching the layout system.</summary>
+        static void FitFlat(RawImage target, Texture2D tex)
+        {
+            var rt = target.rectTransform;
+            var pane = rt.parent as RectTransform;
+            if (pane == null || tex.height <= 0)
+                return;
+            var paneH = Mathf.Max(80f, pane.rect.height - 38f);
+            var paneW = Mathf.Max(80f, pane.rect.width - 16f);
+            var aspect = tex.width / (float)tex.height;
+            var h = paneH;
+            var w = h * aspect;
+            if (w > paneW)
+            {
+                w = paneW;
+                h = w / Mathf.Max(0.05f, aspect);
+            }
+
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(w, h);
+            rt.anchoredPosition = new Vector2(0f, -6f);
         }
 
         string RewriteToApiHost(string url)
@@ -666,6 +995,10 @@ namespace FashionRise.Presentation.Screens
 
         void OnDestroy()
         {
+            CancelWork();
+            _life.Cancel();
+            _life.Dispose();
+            _cts?.Dispose();
             if (_ownedFront != null)
                 Destroy(_ownedFront);
             if (_ownedBack != null)

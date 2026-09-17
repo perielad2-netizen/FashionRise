@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using FashionRise.Core;
 using FashionRise.Core.Navigation;
 using FashionRise.Domain;
 using FashionRise.UI;
@@ -170,8 +171,10 @@ namespace FashionRise.Presentation.Screens
 
         void OpenTechPack()
         {
-            if (App.Navigation != null)
-                _ = App.Navigation.NavigateToAsync(ScreenId.TechPack);
+            if (App.Navigation == null)
+                return;
+            FrDiag.Step("create real design pressed");
+            FrDiag.Fire(App.Navigation.NavigateToAsync(ScreenId.TechPack), "navigate TechPack");
         }
 
         public override async Task ShowAsync(object? payload = null, CancellationToken cancellationToken = default)
