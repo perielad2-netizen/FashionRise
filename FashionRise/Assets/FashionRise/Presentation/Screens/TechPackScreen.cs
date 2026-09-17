@@ -367,16 +367,21 @@ namespace FashionRise.Presentation.Screens
 
         async Task LoadFlatImagesAsync(CancellationToken cancellationToken)
         {
-            await LoadOneAsync(_front, ref _ownedFront, App.CreateDesign.LastTechPackFrontImageUrl, cancellationToken)
-                .ConfigureAwait(true);
-            await LoadOneAsync(_back, ref _ownedBack, App.CreateDesign.LastTechPackBackImageUrl, cancellationToken)
-                .ConfigureAwait(true);
+            var front = await LoadOneAsync(_front, _ownedFront, App.CreateDesign.LastTechPackFrontImageUrl,
+                cancellationToken).ConfigureAwait(true);
+            if (front != null)
+                _ownedFront = front;
+
+            var back = await LoadOneAsync(_back, _ownedBack, App.CreateDesign.LastTechPackBackImageUrl,
+                cancellationToken).ConfigureAwait(true);
+            if (back != null)
+                _ownedBack = back;
         }
 
-        async Task LoadOneAsync(RawImage target, ref Texture2D? owned, string url, CancellationToken ct)
+        async Task<Texture2D?> LoadOneAsync(RawImage target, Texture2D? previous, string url, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(url) || target == null)
-                return;
+                return null;
             try
             {
                 using var req = UnityWebRequestTexture.GetTexture(url);
@@ -384,18 +389,18 @@ namespace FashionRise.Presentation.Screens
                 while (!op.isDone)
                     await Task.Delay(32, ct).ConfigureAwait(true);
                 if (req.result != UnityWebRequest.Result.Success)
-                    return;
+                    return null;
                 var tex = DownloadHandlerTexture.GetContent(req);
                 if (tex == null)
-                    return;
-                if (owned != null)
-                    Destroy(owned);
-                owned = tex;
+                    return null;
+                if (previous != null)
+                    Destroy(previous);
                 target.texture = tex;
+                return tex;
             }
             catch
             {
-                /* optional visuals */
+                return null;
             }
         }
 
