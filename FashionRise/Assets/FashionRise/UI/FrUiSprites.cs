@@ -2,9 +2,14 @@ using UnityEngine;
 
 namespace FashionRise.UI
 {
-    /// <summary>Runtime-generated soft UI sprites (rounded chips, circles, tool icons).</summary>
+    /// <summary>
+    /// Soft UI sprites: prefers <c>Resources/UI/Icons/*.png</c> when present,
+    /// otherwise procedural fallbacks (rounded chips, circles, tool icons).
+    /// </summary>
     public static class FrUiSprites
     {
+        const string IconResourceRoot = "UI/Icons/";
+
         static Sprite? s_circle;
         static Sprite? s_roundSoft;
         static Sprite? s_roundPill;
@@ -26,20 +31,38 @@ namespace FashionRise.UI
         public static Sprite Circle => s_circle ??= MakeCircle(64);
         public static Sprite RoundSoft => s_roundSoft ??= MakeRoundedRect(64, 64, 18);
         public static Sprite RoundPill => s_roundPill ??= MakeRoundedRect(96, 48, 24);
-        public static Sprite IconPencil => s_pencil ??= MakePencilIcon();
-        public static Sprite IconBrush => s_brush ??= MakeBrushIcon();
-        public static Sprite IconEraser => s_eraser ??= MakeEraserIcon();
-        public static Sprite IconFill => s_fill ??= MakeFillIcon();
-        public static Sprite IconUndo => s_undo ??= MakeUndoIcon();
-        public static Sprite IconClear => s_clear ??= MakeClearIcon();
-        public static Sprite IconFade => s_fade ??= MakeFadeIcon();
-        public static Sprite IconPhoto => s_photo ??= MakePhotoIcon();
-        public static Sprite IconPose => s_pose ??= MakePoseIcon();
-        public static Sprite IconGirl => s_girl ??= MakePersonIcon(true);
-        public static Sprite IconBoy => s_boy ??= MakePersonIcon(false);
-        public static Sprite IconSparkle => s_sparkle ??= MakeSparkleIcon();
+        public static Sprite IconPencil => s_pencil ??= LoadIcon("pencil", MakePencilIcon);
+        public static Sprite IconBrush => s_brush ??= LoadIcon("brush", MakeBrushIcon);
+        public static Sprite IconEraser => s_eraser ??= LoadIcon("eraser", MakeEraserIcon);
+        public static Sprite IconFill => s_fill ??= LoadIcon("fill", MakeFillIcon);
+        public static Sprite IconUndo => s_undo ??= LoadIcon("undo", MakeUndoIcon);
+        public static Sprite IconClear => s_clear ??= LoadIcon("clear", MakeClearIcon);
+        public static Sprite IconFade => s_fade ??= LoadIcon("fade", MakeFadeIcon);
+        public static Sprite IconPhoto => s_photo ??= LoadIcon("photo", MakePhotoIcon);
+        public static Sprite IconPose => s_pose ??= LoadIcon("pose", MakePoseIcon);
+        public static Sprite IconGirl => s_girl ??= LoadIcon("women", () => MakePersonIcon(true));
+        public static Sprite IconBoy => s_boy ??= LoadIcon("men", () => MakePersonIcon(false));
+        public static Sprite IconSparkle => s_sparkle ??= LoadIcon("magic", MakeSparkleIcon);
         public static Sprite HueStrip => s_hueStrip ??= MakeHueStrip(24, 128);
         public static Sprite SvSquare => s_svSquare ??= MakeSvSquare(128);
+
+        /// <summary>Load a Sprite from Resources, or build a Sprite from a Texture2D, else procedural.</summary>
+        static Sprite LoadIcon(string resourceName, System.Func<Sprite> fallback)
+        {
+            var path = IconResourceRoot + resourceName;
+            var sprite = Resources.Load<Sprite>(path);
+            if (sprite != null)
+                return sprite;
+
+            var tex = Resources.Load<Texture2D>(path);
+            if (tex != null)
+            {
+                return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f,
+                    0, SpriteMeshType.FullRect);
+            }
+
+            return fallback();
+        }
 
         public static Sprite FabricSwatch(Color baseColor, int seed)
         {

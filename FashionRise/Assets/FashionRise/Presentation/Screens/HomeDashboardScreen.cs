@@ -28,7 +28,7 @@ namespace FashionRise.Presentation.Screens
             FrUiFactory.AddBrandLogoRow(col, t, 300f, 108f);
             FrUiFactory.AddLabel(col, "H", "CHOOSE YOUR MODEL", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
                 TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "B", "Then draw. Magic. Share.", t, Mathf.RoundToInt(t.SubtitleSize),
+            FrUiFactory.AddLabel(col, "B", "Sketch. Magic. Share.", t, Mathf.RoundToInt(t.SubtitleSize),
                 FontStyle.Bold, TextAnchor.UpperCenter, useSecondaryTextColor: true);
 
             var row = FrUiFactory.AddHorizontalRow(col, "ModelRow", t.ControlGap);
