@@ -72,16 +72,17 @@ UpgradeLog.htm
 # Optional: uncomment if you prefer not to track VS Code workspace settings
 # .vscode/
 
-# --- Unity (math-game project at the repo root) ---
-/[Ll]ibrary/
-/[Tt]emp/
-/[Oo]bj/
-/[Bb]uild/
-/[Bb]uilds/
-/[Ll]ogs/
-/[Uu]ser[Ss]ettings/
-/[Mm]emoryCaptures/
-/[Rr]ecordings/
-/sysinfo.txt
-/*.csproj
-/*.sln
+# --- Unity (math game: open mathGame/, not the repo root) ---
+mathGame/[Ll]ibrary/
+mathGame/[Tt]emp/
+mathGame/[Oo]bj/
+mathGame/[Bb]uild/
+mathGame/[Bb]uilds/
+mathGame/[Ll]ogs/
+mathGame/[Uu]ser[Ss]ettings/
+mathGame/MemoryCaptures/
+mathGame/Recordings/
+mathGame/sysinfo.txt
+mathGame/*.csproj
+mathGame/*.sln
+mathGame/*.sln.DotSettings.user
