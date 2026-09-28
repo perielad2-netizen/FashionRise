@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6e0c1d29a874e5f8c3b7a01d4e96c55, type: 3}
+  m_Name: Quest_01_Raccoon
+  m_EditorClassIdentifier: 
+  id: quest-1
+  title: Raccoon's Challenge
+  description: Complete the math challenge so the raccoon can clear the path.
+  giverName: Raccoon
+  challenge: {fileID: 11400000, guid: 77aa3003003003003003003003000004, type: 2}
+  rewardText: Correct! The path ahead is open.
+  nextQuestId: quest-2

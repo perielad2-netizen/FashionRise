@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c1a0e44b2d64f0a9c3e5b71d8a64f10, type: 3}
+  m_Name: RaccoonIntro
+  m_EditorClassIdentifier: 
+  speakerName: Raccoon
+  lines:
+  - Hey! I need your help.
+  - The path ahead is blocked.
+  - Complete this challenge and I can help you continue.

@@ -9,7 +9,6 @@ namespace MathGame.Player
         [SerializeField, Min(0.1f)] float acceleration = 48f;
 
         Rigidbody2D _body;
-        SpriteRenderer _sprite;
         Animator _animator;
         Vector2 _facing = Vector2.down;
         bool _wasHorizontal;
@@ -21,12 +20,25 @@ namespace MathGame.Player
         static readonly int SpeedHash = Animator.StringToHash("Speed");
         static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
 
+        int _movementLocks;
+
         public Vector2 Facing => _facing;
+        public bool MovementLocked => _movementLocks > 0;
+
+        public void PushMovementLock()
+        {
+            _movementLocks++;
+        }
+
+        public void PopMovementLock()
+        {
+            if (_movementLocks > 0)
+                _movementLocks--;
+        }
 
         void Awake()
         {
             _body = GetComponent<Rigidbody2D>();
-            _sprite = GetComponent<SpriteRenderer>();
             _animator = GetComponent<Animator>();
             _body.gravityScale = 0f;
             _body.freezeRotation = true;
@@ -35,18 +47,23 @@ namespace MathGame.Player
         void Update()
         {
             UpdateAnimator();
-            UpdateFacingVisual();
         }
 
         void FixedUpdate()
         {
+            if (MovementLocked)
+            {
+                _body.linearVelocity = Vector2.zero;
+                return;
+            }
+
             Vector2 input = ReadCardinalInput();
             if (input.sqrMagnitude > 0f)
                 _facing = input;
 
             Vector2 targetVelocity = input * moveSpeed;
-            _body.velocity = Vector2.MoveTowards(
-                _body.velocity,
+            _body.linearVelocity = Vector2.MoveTowards(
+                _body.linearVelocity,
                 targetVelocity,
                 acceleration * Time.fixedDeltaTime);
         }
@@ -100,20 +117,13 @@ namespace MathGame.Player
             if (_animator == null || _animator.runtimeAnimatorController == null)
                 return;
 
-            Vector2 velocity = _body.velocity;
-            bool moving = velocity.sqrMagnitude > 0.05f;
+            Vector2 velocity = _body.linearVelocity;
+            bool moving = !MovementLocked && velocity.sqrMagnitude > 0.05f;
             _animator.SetFloat(MoveXHash, _facing.x);
             _animator.SetFloat(MoveYHash, _facing.y);
             _animator.SetFloat(SpeedHash, velocity.magnitude);
             _animator.SetBool(IsMovingHash, moving);
         }
 
-        void UpdateFacingVisual()
-        {
-            if (_sprite == null || Mathf.Abs(_facing.x) < 0.01f)
-                return;
-
-            _sprite.flipX = _facing.x < 0f;
-        }
     }
 }

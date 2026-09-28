@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MathGame.Player;
 using MathGame.UI;
 using UnityEngine;
 
@@ -14,9 +15,21 @@ namespace MathGame.Interaction
         IInteractable _current;
         string _feedback;
         float _feedbackUntil;
+        PlayerController _player;
+
+        void Awake()
+        {
+            _player = GetComponent<PlayerController>();
+        }
 
         void Update()
         {
+            if (_player != null && _player.MovementLocked)
+            {
+                prompt?.Hide();
+                return;
+            }
+
             _current = FindClosest();
             bool showingFeedback = Time.time < _feedbackUntil && !string.IsNullOrEmpty(_feedback);
 
