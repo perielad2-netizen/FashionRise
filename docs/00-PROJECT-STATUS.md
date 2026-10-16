@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. GPT-6 Luna synthetic live compatibility **VALIDATED — 3/3**. Production deploy **NOT PERFORMED**. Unity compile **NOT RUN** — deferred.)
+**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. GPT-6 Luna **VALIDATED — 3/3**. Production deploy **NOT PERFORMED**. Unity compile **NOT RUN** — deferred.)
 
-**Magic Look PR #1 (merged 2026-10-17):** poll fail-fast (`AiJobPollPolicy`) is on `main`. **UNITY COMPILE NOT RUN** / **Play Mode NOT RUN**.
+**Magic Look PR #1 (merged 2026-10-17):** poll fail-fast (`AiJobPollPolicy`) is on `main` (`614424c2`). Isolated Postgres API tests previously **7 passed**. **UNITY COMPILE NOT RUN** / **Play Mode NOT RUN**.
 
 **GPT-6 Luna close-out (2026-10-16, operator live report + PM review):**
 
@@ -14,6 +14,7 @@
 | Chat Completions live compatibility | **VALIDATED — 3/3** synthetic scenarios (`sketch_clean`, `sketch_polish`, `style_suggest`) |
 | Production deployment | **NOT PERFORMED** |
 | Magic Look dependency | **PR #1 MERGED** (`433b1b99`) |
+| PostgreSQL integration tests | **VALIDATED** earlier on isolated disposable Postgres (not an app DB) |
 | Unity compile / Play Mode | **NOT RUN** — deferred, not a merge blocker |
 | Next | Do **not** repeat the paid live harness. Do **not** deploy from this merge alone. |
 
