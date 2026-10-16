@@ -3,7 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-09-14 (Magic look in-app: resilient poll + job-id early store + See last result + Your look RawImage; kid UI redesign still pending — see `docs/01-KID-UX-VISION.md`)
+**Last updated:** 2026-10-16 (Magic Look poll fail-fast **FIXED** on PR #1. Isolated classification tests **PASS**. Unity / C# compile **NOT VALIDATED**. PR #1 remains **DRAFT**. Do not merge #1 or #6.)
+
+**Magic Look PR #1 poll fail-fast (2026-10-16):**
+
+| Gate | Status |
+|------|--------|
+| Defect | `WaitForJobCompletionAsync` swallowed **401 / 403 / 404** (and other non-retryable 4xx) for ~5 minutes |
+| Fix | `AiJobPollPolicy` fail-fast on 401/403/404 and other 4xx except **408**; **429** still fail-fast; **408 / 5xx** and transport timeouts retry; user cancel propagates; `PolishAsync` recovery skipped for fail-fast HTTP and cancel |
+| Offline tests | `backend/tests/test_magic_look_poll_policy.py` — classification + C# source contract |
+| Unity / C# compile | **NOT VALIDATED** (no Unity Editor, no `dotnet` in this environment) |
+| Merge recommendation | **CONDITIONAL GO** for Ready for Review after human scan of the poll files; **do not merge** until that review |
+| Stacked PR #6 | Remains based on this branch. Do **not** rebase or retarget #6 from this change. |
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
@@ -22,10 +33,11 @@
 
 **Suggested order for the *next* session:**
 
-1. **Pillar A — next slice:** **Vector / per-stroke** ink model (or richer raster: soft brush, layers beyond ref+ink) — dual-layer + import + default models are **done**; see `06-implementation-phases.md`. Optional: **export** beyond flattened PNG if product needs layered files.  
-2. **Pillar C:** Real **`spec_sheet_pdf`** layout (or second export kind); zip / multi-file handoff when ready.  
-3. **Pillar B:** Reputation **v2** explainability; gallery/sketch **UX polish** (toolbar scroll on small phones, toasts).  
-4. **Pillar D:** **CI** + `pytest`; Prompt 8 when targeting a release candidate.
+1. **Magic Look PR #1:** human-review the poll fail-fast patch (`AiJobPollPolicy.cs`, `SketchPipelineApiService.cs`), then consider Ready for Review. Do **not** merge #1 or #6 yet. Unity compile is still **NOT VALIDATED** here.  
+2. **Pillar A — next slice:** **Vector / per-stroke** ink model (or richer raster: soft brush, layers beyond ref+ink) — dual-layer + import + default models are **done**; see `06-implementation-phases.md`. Optional: **export** beyond flattened PNG if product needs layered files.  
+3. **Pillar C:** Real **`spec_sheet_pdf`** layout (or second export kind); zip / multi-file handoff when ready.  
+4. **Pillar B:** Reputation **v2** explainability; gallery/sketch **UX polish** (toolbar scroll on small phones, toasts).  
+5. **Pillar D:** **CI** + `pytest`; Prompt 8 when targeting a release candidate.
 
 **Parking lot (unchanged intent):** full AI worker split at scale, WebGL polish, `POST /auth/logout`, admin moderation UI, audit logs.
 

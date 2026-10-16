@@ -64,9 +64,14 @@ namespace FashionRise.Infrastructure.Api
                     .ConfigureAwait(true);
                 return ToConcept(final);
             }
+            catch (Exception ex) when (!AiJobPollPolicy.ShouldAttemptPolishRecovery(ex,
+                       cancellationToken.IsCancellationRequested))
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                // Job often finishes on the server even when a poll blip aborts the client wait.
+                // Job often finishes on the server even when a transient poll blip aborts the client wait.
                 UnityEngine.Debug.LogWarning(
                     $"FashionRise polish wait interrupted for job {job.Id}: {ex.Message}. Trying recovery GET…");
                 for (var recoveryAttempt = 0; recoveryAttempt < 5; recoveryAttempt++)
@@ -84,6 +89,11 @@ namespace FashionRise.Infrastructure.Api
                         // Still running — keep waiting a bit more via the normal wait loop once.
                         if (recoveryAttempt == 4)
                             break;
+                    }
+                    catch (Exception recoveryEx) when (!AiJobPollPolicy.ShouldAttemptPolishRecovery(recoveryEx,
+                               cancellationToken.IsCancellationRequested))
+                    {
+                        throw;
                     }
                     catch (Exception recoveryEx)
                     {
@@ -198,15 +208,23 @@ namespace FashionRise.Infrastructure.Api
                         string.Equals(j.Status, "failed", StringComparison.OrdinalIgnoreCase))
                         return j;
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch (ApiException ex) when (ex.IsRateLimited)
                 {
                     throw new ApiException(ex.StatusCode,
                         "Rate limited while polling the AI job. Wait briefly and retry, or avoid many parallel sketch runs from the same network.",
                         ex.ResponseBody, ex);
                 }
+                catch (ApiException ex) when (AiJobPollPolicy.IsFailFastHttpStatus(ex.StatusCode))
+                {
+                    throw;
+                }
                 catch (ApiException)
                 {
-                    // Transient HTTP blips during long image jobs — keep polling.
+                    // HTTP 408 / 5xx (and other retryable API errors) during long image jobs — keep polling.
                 }
                 catch (System.Net.Http.HttpRequestException)
                 {
