@@ -63,6 +63,65 @@ def _valid_payloads() -> dict[str, dict[str, Any]]:
     }
 
 
+def _weak_payloads() -> dict[str, dict[str, Any]]:
+    return {
+        "sketch_clean": {
+            "summary": "Make it nicer.",
+            "cleanup_bullets": ["Make it better.", "Improve it.", "Great job overall."],
+        },
+        "sketch_polish": {
+            "summary": "Nice drawing.",
+            "polish_bullets": ["Make it better.", "Improve it.", "Awesome finish."],
+            "image_prompt": "a dress on paper",
+        },
+        "style_suggest": {
+            "summary": "Nice looks.",
+            "suggestions": [
+                {"title": f"Look {i}", "description": "Make it better."} for i in range(1, 6)
+            ],
+        },
+    }
+
+
+def _job_type_from_kwargs(kwargs: dict[str, Any]) -> str:
+    blob = json.dumps(kwargs["messages"]).lower()
+    if "portfolio" in blob:
+        return "sketch_polish"
+    if "coastal" in blob:
+        return "style_suggest"
+    return "sketch_clean"
+
+
+def _completion(
+    payload: dict[str, Any] | str,
+    *,
+    model: str | None = "gpt-6-luna",
+    finish_reason: str = "stop",
+    prompt_tokens: int | None = 200,
+    completion_tokens: int | None = 80,
+    usage: bool = True,
+    refusal: str | None = None,
+):
+    content = payload if isinstance(payload, str) else json.dumps(payload)
+    usage_obj = None
+    if usage:
+        usage_obj = SimpleNamespace(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=(prompt_tokens or 0) + (completion_tokens or 0),
+            completion_tokens_details=SimpleNamespace(reasoning_tokens=0),
+        )
+    return SimpleNamespace(
+        model=model,
+        usage=usage_obj,
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content, refusal=refusal), finish_reason=finish_reason)],
+    )
+
+
+def _live_env() -> dict[str, str]:
+    return {"OPENAI_API_KEY": "sk-test-not-a-real-key"}
+
+
 def test_dry_run_makes_zero_network_calls(ev, monkeypatch):
     def boom(*a, **k):
         raise AssertionError("OpenAI client must not be constructed in dry-run")
@@ -70,27 +129,59 @@ def test_dry_run_makes_zero_network_calls(ev, monkeypatch):
     monkeypatch.setattr(ev, "open_chat_only_client", boom)
     report = ev.run_eval(execute=False, acknowledge=False, skip_git=True)
     assert report["mode"] == "dry-run"
+    assert report["outcome"] == "DRY_RUN"
     assert report["live_requests_made"] == 0
     assert report["safety"]["planned_chat_completions"] == 3
     assert report["safety"]["planned_image_edits"] == 0
     assert report["safety"]["planned_image_generations"] == 0
     assert report["safety"]["estimated_total_usd"] <= ev.BUDGET_USD
     assert report["safety"]["not_a_billing_guarantee"] is True
+    assert "not an absolute billing guarantee" in report["safety"]["billing_disclaimer"]
+    assert report["safety"]["official_base_url"] == "https://api.openai.com/v1"
     assert report["safety"]["vision_attached"] == [True, True, False]
-    assert report["planned_requests"][0]["model"] == "gpt-6-luna"
-    assert report["planned_requests"][0]["reasoning_effort"] == "none"
-    assert report["planned_requests"][0]["max_completion_tokens"] == 1400
-    assert report["planned_requests"][0]["vision_attached"] is True
-    assert report["planned_requests"][2]["vision_attached"] is False
+    assert all(r["status"] == "NOT RUN" for r in report["results"])
+    assert report["human_quality_review_required"] is True
     blob = json.dumps(report)
     assert "sk-" not in blob
     assert "base64," not in blob
 
 
-def test_execute_without_ack_is_refused(ev):
+def test_execute_without_ack_is_refused(ev, monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(ev, "open_chat_only_client", lambda *a, **k: opened.append("client"))
     with pytest.raises(ev.EvalGuardError, match="acknowledge-paid-test"):
-        ev.run_eval(execute=True, acknowledge=False, skip_git=True)
+        ev.run_eval(execute=True, acknowledge=False, skip_git=True, environ=_live_env())
+    assert opened == []
     assert ev.main(["--execute"]) == 2
+
+
+def test_missing_api_key_makes_zero_network_calls(ev, monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(ev, "open_chat_only_client", lambda *a, **k: opened.append("client"))
+    with pytest.raises(ev.EvalGuardError, match="OPENAI_API_KEY"):
+        ev.run_eval(execute=True, acknowledge=True, skip_git=True, environ={})
+    assert opened == []
+
+
+def test_unexpected_base_url_makes_zero_network_calls(ev):
+    calls: list[str] = []
+
+    def create(**kwargs):
+        calls.append("create")
+        raise AssertionError("must not call the provider")
+
+    with pytest.raises(ev.EvalGuardError, match="official"):
+        ev.run_eval(
+            execute=True,
+            acknowledge=True,
+            skip_git=True,
+            chat_create=create,
+            environ={
+                "OPENAI_API_KEY": "sk-test-not-a-real-key",
+                "OPENAI_BASE_URL": "https://example.openai.azure.com/openai/v1",
+            },
+        )
+    assert calls == []
 
 
 def test_image_guard_blocks_edit_and_generate(ev):
@@ -125,25 +216,134 @@ def test_mocked_live_path_never_calls_images(ev):
     calls: list[str] = []
 
     def create(**kwargs):
-        calls.append(kwargs["messages"][0]["content"][:40])
+        calls.append(_job_type_from_kwargs(kwargs))
         assert kwargs["model"] == "gpt-6-luna"
         assert kwargs["reasoning_effort"] == "none"
-        job_type = "sketch_clean"
-        if "portfolio" in json.dumps(kwargs["messages"]).lower():
-            job_type = "sketch_polish"
-        elif "coastal" in json.dumps(kwargs["messages"]).lower():
-            job_type = "style_suggest"
-        content = json.dumps(payloads[job_type])
-        usage = SimpleNamespace(
-            prompt_tokens=200,
-            completion_tokens=80,
-            total_tokens=280,
-            completion_tokens_details=SimpleNamespace(reasoning_tokens=0),
-        )
-        return SimpleNamespace(
-            model="gpt-6-luna",
-            usage=usage,
-            choices=[SimpleNamespace(message=SimpleNamespace(content=content, refusal=None), finish_reason="stop")],
+        return _completion(payloads[_job_type_from_kwargs(kwargs)])
+
+    report = ev.run_eval(
+        execute=True,
+        acknowledge=True,
+        skip_git=True,
+        chat_create=create,
+        environ=_live_env(),
+    )
+    assert report["live_requests_made"] == 3
+    assert report["outcome"] == "PASS"
+    assert report["api_compatibility"] == "PASS"
+    assert report["json_contract"] == "PASS"
+    assert report["automated_quality"] == "PASS"
+    assert report["human_quality_review_required"] is True
+    assert report["live_image_calls"] == 0
+    assert len(calls) == 3
+    blob = json.dumps(report)
+    assert "sk-test-not-a-real-key" not in blob
+
+
+def test_returned_model_mismatch_stops_after_one_call(ev):
+    calls: list[str] = []
+
+    def create(**kwargs):
+        calls.append("create")
+        return _completion(_valid_payloads()["sketch_clean"], model="gpt-4o-mini")
+
+    report = ev.run_eval(
+        execute=True,
+        acknowledge=True,
+        skip_git=True,
+        chat_create=create,
+        environ=_live_env(),
+    )
+    assert calls == ["create"]
+    assert report["live_requests_made"] == 1
+    assert report["outcome"] == "FAIL"
+    assert report["results"][0]["status"] == "FAIL"
+    assert report["results"][1]["status"] == "NOT RUN"
+    assert report["results"][2]["status"] == "NOT RUN"
+    assert "gpt-6-luna" in report["stopped_reason"]
+
+
+def test_missing_usage_stops_after_one_call(ev):
+    calls: list[str] = []
+
+    def create(**kwargs):
+        calls.append("create")
+        return _completion(_valid_payloads()["sketch_clean"], usage=False)
+
+    report = ev.run_eval(
+        execute=True,
+        acknowledge=True,
+        skip_git=True,
+        chat_create=create,
+        environ=_live_env(),
+    )
+    assert calls == ["create"]
+    assert report["live_requests_made"] == 1
+    assert report["outcome"] == "FAIL"
+    assert report["results"][1]["status"] == "NOT RUN"
+    assert "usage" in report["stopped_reason"]
+
+
+def test_invalid_json_stops_after_one_call(ev):
+    calls: list[str] = []
+
+    def create(**kwargs):
+        calls.append("create")
+        return _completion("not-json")
+
+    report = ev.run_eval(
+        execute=True,
+        acknowledge=True,
+        skip_git=True,
+        chat_create=create,
+        environ=_live_env(),
+    )
+    assert calls == ["create"]
+    assert report["live_requests_made"] == 1
+    assert report["outcome"] == "FAIL"
+    assert report["results"][0]["json_contract"] == "FAIL"
+    assert report["results"][1]["status"] == "NOT RUN"
+    assert report["pass"] is False
+    assert "invalid JSON" in report["stopped_reason"]
+
+
+def test_provider_exception_is_sanitized_and_not_retried(ev):
+    class FakeRateLimit(Exception):
+        status_code = 429
+
+    calls: list[str] = []
+
+    def create(**kwargs):
+        calls.append("create")
+        raise FakeRateLimit("sk-secret leaked body with image bytes")
+
+    report = ev.run_eval(
+        execute=True,
+        acknowledge=True,
+        skip_git=True,
+        chat_create=create,
+        environ=_live_env(),
+    )
+    assert calls == ["create"]
+    assert report["live_requests_made"] == 1
+    assert report["outcome"] == "FAIL"
+    assert report["failure"]["class"] == "rate_limit"
+    blob = json.dumps(report)
+    assert "sk-secret" not in blob
+    assert "image bytes" not in blob
+    assert report["results"][1]["status"] == "NOT RUN"
+    assert report["pass"] is False
+
+
+def test_budget_exhaustion_stops_before_next_request(ev):
+    calls: list[str] = []
+
+    def create(**kwargs):
+        calls.append(_job_type_from_kwargs(kwargs))
+        return _completion(
+            _valid_payloads()["sketch_clean"],
+            prompt_tokens=490_000,
+            completion_tokens=1400,
         )
 
     report = ev.run_eval(
@@ -151,32 +351,63 @@ def test_mocked_live_path_never_calls_images(ev):
         acknowledge=True,
         skip_git=True,
         chat_create=create,
-        environ={"OPENAI_API_KEY": "sk-test-not-a-real-key"},
+        environ=_live_env(),
+    )
+    assert calls == ["sketch_clean"]
+    assert report["live_requests_made"] == 1
+    assert report["outcome"] == "FAIL"
+    assert report["results"][0]["status"] == "PASS"
+    assert report["results"][1]["status"] == "NOT RUN"
+    assert "exceed" in report["stopped_reason"]
+    assert report["estimated_spend_usd"] > 0
+
+
+def test_quality_warnings_are_conditional(ev):
+    weak = _weak_payloads()
+
+    def create(**kwargs):
+        return _completion(weak[_job_type_from_kwargs(kwargs)])
+
+    report = ev.run_eval(
+        execute=True,
+        acknowledge=True,
+        skip_git=True,
+        chat_create=create,
+        environ=_live_env(),
     )
     assert report["live_requests_made"] == 3
-    assert report["pass"] is True
-    assert all(r["pass"] for r in report["results"])
-    assert len(calls) == 3
-    blob = json.dumps(report)
-    assert "sk-test-not-a-real-key" not in blob
+    assert report["json_contract"] == "PASS"
+    assert report["api_compatibility"] == "PASS"
+    assert report["automated_quality"] == "CONDITIONAL"
+    assert report["outcome"] == "CONDITIONAL"
+    assert report["pass"] is False
+    assert report["human_quality_review_required"] is True
+    assert any(r["status"] == "CONDITIONAL" for r in report["results"])
 
 
-def test_mocked_live_stops_on_invalid_json(ev):
+def test_unreviewed_integration_changes_block_live(ev, monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(
+        ev,
+        "verify_integration_baseline",
+        lambda: (_ for _ in ()).throw(ev.EvalGuardError("reviewed integration files differ from baseline")),
+    )
+    monkeypatch.setattr(ev, "open_chat_only_client", lambda *a, **k: opened.append("client"))
+
     def create(**kwargs):
-        return SimpleNamespace(
-            model="gpt-6-luna",
-            usage=None,
-            choices=[SimpleNamespace(message=SimpleNamespace(content="not-json", refusal=None), finish_reason="stop")],
-        )
+        opened.append("create")
+        raise AssertionError("must not call the provider")
 
-    with pytest.raises(sketch_openai.SketchCompletionError, match="invalid JSON"):
+    with pytest.raises(ev.EvalGuardError, match="reviewed integration files"):
         ev.run_eval(
             execute=True,
             acknowledge=True,
             skip_git=True,
+            skip_integration_check=False,
             chat_create=create,
-            environ={"OPENAI_API_KEY": "sk-test-not-a-real-key"},
+            environ=_live_env(),
         )
+    assert opened == []
 
 
 def test_cli_default_is_dry_run(ev, capsys):

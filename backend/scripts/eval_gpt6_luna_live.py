@@ -33,17 +33,27 @@ if str(ROOT) not in sys.path:
 from app.services import sketch_openai  # noqa: E402
 
 EVAL_BRANCH = "cursor/openai-gpt6-luna-77c6"
-REVIEWED_HEAD = "3b0abb1ff62cd1c9fc1b3ef1d2b41d39057e8332"
+REVIEWED_HEAD = "bbcae8a397f831436374cb9bf567582d9f3f3a14"
 EVAL_MODEL = "gpt-6-luna"
 EVAL_REASONING_EFFORT = "none"
 EVAL_MAX_COMPLETION_TOKENS = 1400
 EVAL_IMAGE_MODEL = "off"
+OFFICIAL_BASE_URL = "https://api.openai.com/v1"
 MAX_LIVE_REQUESTS = 3
 BUDGET_USD = 0.05
 LUNA_INPUT_USD_PER_M = 0.10
 LUNA_OUTPUT_USD_PER_M = 0.50
 SKETCH_WIDTH = 160
 SKETCH_HEIGHT = 240
+# Conservative extras for preflight only. Not a billing guarantee.
+REQUEST_OVERHEAD_TOKENS = 250
+VISION_SAFETY_MULTIPLIER = 3
+INTEGRATION_FILES = (
+    "backend/app/services/sketch_openai.py",
+    "backend/app/core/config.py",
+    "backend/requirements.txt",
+    "backend/app/services/ai_worker.py",
+)
 
 # Terms the synthetic A-line dress sketch is expected to evoke.
 _SKETCH_TERMS = (
@@ -280,9 +290,9 @@ def _text_tokens(text: str) -> int:
 
 
 def _image_tokens(width: int, height: int) -> int:
-    # High-detail tile formula (85 + 170 * tiles) with 2× safety. Not a bill.
+    # High-detail tile formula (85 + 170 * tiles) with extra safety. Not a bill.
     tiles = max(1, math.ceil(width / 512) * math.ceil(height / 512))
-    return (85 + 170 * tiles) * 2
+    return (85 + 170 * tiles) * VISION_SAFETY_MULTIPLIER
 
 
 def _message_text(messages: list[dict[str, Any]]) -> str:
@@ -310,12 +320,15 @@ def _has_vision(messages: list[dict[str, Any]]) -> bool:
 
 def estimate_request_cost_usd(kwargs: dict[str, Any], *, has_image: bool) -> dict[str, Any]:
     text = _message_text(kwargs["messages"])
-    in_tokens = _text_tokens(text)
-    if has_image:
-        in_tokens += _image_tokens(SKETCH_WIDTH, SKETCH_HEIGHT)
+    text_tokens = _text_tokens(text)
+    vision_tokens = _image_tokens(SKETCH_WIDTH, SKETCH_HEIGHT) if has_image else 0
+    in_tokens = text_tokens + vision_tokens + REQUEST_OVERHEAD_TOKENS
     out_tokens = int(kwargs["max_completion_tokens"])
     usd = (in_tokens * LUNA_INPUT_USD_PER_M + out_tokens * LUNA_OUTPUT_USD_PER_M) / 1_000_000
     return {
+        "estimated_text_tokens": text_tokens,
+        "estimated_vision_tokens": vision_tokens,
+        "request_overhead_tokens": REQUEST_OVERHEAD_TOKENS,
         "estimated_input_tokens": in_tokens,
         "budgeted_output_tokens": out_tokens,
         "estimated_usd": round(usd, 6),
@@ -365,9 +378,96 @@ def verify_repo_state() -> dict[str, Any]:
         _git("merge-base", "--is-ancestor", REVIEWED_HEAD, "HEAD")
     except subprocess.CalledProcessError as exc:
         raise EvalGuardError(
-            f"refusing to run: reviewed migration SHA {REVIEWED_HEAD} is not an ancestor of {head}"
+            f"refusing to run: reviewed baseline {REVIEWED_HEAD} is not an ancestor of {head}"
         ) from exc
-    return {"branch": branch, "head": head, "reviewed_ancestor": REVIEWED_HEAD}
+    return {"branch": branch, "head": head, "reviewed_baseline": REVIEWED_HEAD}
+
+
+def verify_integration_baseline() -> dict[str, Any]:
+    """Production integration files must match the reviewed baseline exactly."""
+    dirty = _git("status", "--porcelain", "--", *INTEGRATION_FILES)
+    if dirty.strip():
+        raise EvalGuardError(
+            "uncommitted changes to reviewed integration files; fresh PM review required"
+        )
+    changed = _git("diff", "--name-only", REVIEWED_HEAD, "HEAD", "--", *INTEGRATION_FILES)
+    if changed.strip():
+        raise EvalGuardError(
+            "reviewed integration files differ from baseline; fresh PM review required"
+        )
+    return {
+        "reviewed_baseline": REVIEWED_HEAD,
+        "integration_files_unchanged": True,
+        "integration_files": list(INTEGRATION_FILES),
+    }
+
+
+def _normalize_base_url(url: Any) -> str:
+    return str(url or "").strip().rstrip("/")
+
+
+def verify_official_endpoint(environ: dict[str, str] | None = None, client: Any | None = None) -> str:
+    env = environ if environ is not None else os.environ
+    override = (env.get("OPENAI_BASE_URL") or "").strip()
+    if override and _normalize_base_url(override) != OFFICIAL_BASE_URL:
+        raise EvalGuardError(
+            "OPENAI_BASE_URL override is not the official https://api.openai.com/v1 endpoint"
+        )
+    if client is not None:
+        effective = _normalize_base_url(getattr(client, "base_url", ""))
+        if effective != OFFICIAL_BASE_URL:
+            raise EvalGuardError("client base_url is not https://api.openai.com/v1")
+        return effective
+    return OFFICIAL_BASE_URL
+
+
+def _is_expected_model(name: Any) -> bool:
+    if not isinstance(name, str) or not name.strip():
+        return False
+    n = name.strip().lower()
+    return n == EVAL_MODEL or n.startswith(EVAL_MODEL + "-")
+
+
+def classify_provider_error(exc: BaseException) -> dict[str, Any]:
+    """Map a provider/harness error to a sanitized class. No raw bodies or secrets."""
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    name = type(exc).__name__
+    lowered = name.lower()
+    if isinstance(exc, sketch_openai.SketchCompletionError):
+        kind = "invalid_completion"
+        message = str(exc)
+    elif isinstance(exc, EvalGuardError):
+        kind = "eval_guard"
+        message = str(exc)
+    elif isinstance(exc, sketch_openai.SketchConfigError):
+        kind = "eval_guard"
+        message = str(exc)
+    elif name in {"AuthenticationError", "PermissionDeniedError"} or status in {401, 403}:
+        kind = "authentication"
+        message = "provider authentication failed"
+    elif name == "RateLimitError" or status == 429:
+        kind = "rate_limit"
+        message = "provider rate-limited the request"
+    elif "timeout" in lowered or name in {"APITimeoutError", "TimeoutError"}:
+        kind = "timeout"
+        message = "provider request timed out"
+    elif name in {"APIConnectionError", "ConnectError", "HTTPStatusError"} or "connect" in lowered:
+        kind = "network"
+        message = "provider network error"
+    elif name in {"BadRequestError", "UnprocessableEntityError"} or status in {400, 422}:
+        kind = "invalid_request"
+        message = "provider rejected the request"
+    else:
+        kind = "unexpected"
+        message = "provider request failed"
+    return {
+        "class": kind,
+        "exception_type": name,
+        "http_status": status if isinstance(status, int) else None,
+        "sanitized_message": message,
+    }
 
 
 def build_scenario_request(scenario: Scenario) -> dict[str, Any]:
@@ -435,12 +535,22 @@ def validate_contract(job_type: str, structured: Any) -> list[str]:
 def quality_notes(job_type: str, structured: dict[str, Any]) -> dict[str, Any]:
     blob = json.dumps(structured).lower()
     fashion_hits = sorted({term for term in _FASHION_TERMS if term in blob})
-    generic = ("nice", "better", "improve", "make it", "good job", "awesome")
+    generic = ("nice", "better", "improve", "make it", "good job", "awesome", "great job")
     generic_hits = [g for g in generic if g in blob]
+    warnings: list[str] = []
+    if len(fashion_hits) < 2:
+        warnings.append("weak professional vocabulary")
+    if generic_hits:
+        warnings.append("generic advice")
+    if job_type in {"sketch_clean", "sketch_polish"} and not any(term in blob for term in _SKETCH_TERMS):
+        warnings.append("poor sketch relevance")
     return {
         "fashion_term_hits": fashion_hits,
         "generic_filler_hits": generic_hits,
         "has_professional_vocabulary": len(fashion_hits) >= 2,
+        "warnings": warnings,
+        "automated_quality": "CONDITIONAL" if warnings else "PASS",
+        "human_quality_review_required": True,
         "json_object": True,
         "note": "A valid JSON object alone is not a passing quality result.",
     }
@@ -484,6 +594,11 @@ def preflight(scenarios: list[Scenario], requests: list[dict[str, Any]], *, repo
         "estimated_total_usd": total,
         "budget_usd": BUDGET_USD,
         "not_a_billing_guarantee": True,
+        "billing_disclaimer": (
+            "Client-side token/USD figures are conservative estimates only and "
+            "are not an absolute billing guarantee."
+        ),
+        "official_base_url": OFFICIAL_BASE_URL,
         "images_guard": "client.images.edit/generate raise EvalGuardError",
     }
 
@@ -502,11 +617,16 @@ def _usage_dict(completion: Any) -> dict[str, Any]:
     }
 
 
-def _actual_cost_usd(usage: dict[str, Any]) -> float | None:
+def require_usage(usage: dict[str, Any]) -> tuple[int, int]:
     inp = usage.get("input_tokens")
     out = usage.get("output_tokens")
-    if not isinstance(inp, int) or not isinstance(out, int):
-        return None
+    if not isinstance(inp, int) or inp < 0 or not isinstance(out, int) or out < 0:
+        raise EvalGuardError("usage prompt_tokens/completion_tokens missing or invalid")
+    return inp, out
+
+
+def _actual_cost_usd(usage: dict[str, Any]) -> float:
+    inp, out = require_usage(usage)
     return round((inp * LUNA_INPUT_USD_PER_M + out * LUNA_OUTPUT_USD_PER_M) / 1_000_000, 6)
 
 
@@ -529,40 +649,57 @@ def run_live_scenario(
     started = time.monotonic()
     completion = create(**kwargs)
     latency_ms = int((time.monotonic() - started) * 1000)
-    structured, summary, finish_reason, truncated = sketch_openai._parse_chat_completion(completion)
-    contract_errors = validate_contract(scenario.job_type, structured)
     usage = _usage_dict(completion)
+    cost = _actual_cost_usd(usage)
     returned_model = getattr(completion, "model", None)
-    result = {
+    if not _is_expected_model(returned_model):
+        raise EvalGuardError("returned model is missing or not gpt-6-luna")
+
+    structured, summary, finish_reason, truncated = sketch_openai._parse_chat_completion(completion)
+    if finish_reason != "stop":
+        raise EvalGuardError(f"{scenario.name} finish_reason={finish_reason!r}")
+    contract_errors = validate_contract(scenario.job_type, structured)
+    if contract_errors:
+        raise EvalGuardError(f"{scenario.name} contract failed: {contract_errors}")
+    quality = quality_notes(scenario.job_type, structured)
+    verdict = "CONDITIONAL" if quality["warnings"] else "PASS"
+    return {
         "scenario": scenario.name,
         "job_type": scenario.job_type,
+        "status": verdict,
         "requested_model": kwargs["model"],
         "returned_model": returned_model,
         "finish_reason": finish_reason,
         "truncated": truncated,
-        "json_parsed": isinstance(structured, dict),
+        "json_parsed": True,
         "summary": summary,
-        "contract_errors": contract_errors,
-        "quality": quality_notes(scenario.job_type, structured) if isinstance(structured, dict) else {},
+        "contract_errors": [],
+        "quality": quality,
+        "api_compatibility": "PASS",
+        "json_contract": "PASS",
+        "automated_quality": quality["automated_quality"],
+        "human_quality_review_required": True,
         "usage": usage,
-        "estimated_usd_from_usage": _actual_cost_usd(usage),
+        "estimated_usd_from_usage": cost,
         "latency_ms": latency_ms,
-        "pass": not contract_errors and finish_reason == "stop" and not truncated,
+        "pass": verdict == "PASS",
     }
-    if contract_errors:
-        raise EvalGuardError(f"{scenario.name} contract failed: {contract_errors}")
-    if finish_reason != "stop":
-        raise EvalGuardError(f"{scenario.name} finish_reason={finish_reason!r}")
-    return result
 
 
-def open_chat_only_client(api_key: str) -> Any:
+def open_chat_only_client(api_key: str, *, environ: dict[str, str] | None = None) -> Any:
     from openai import OpenAI
 
-    client = OpenAI(api_key=api_key, max_retries=0, timeout=180.0)
+    verify_official_endpoint(environ)
+    client = OpenAI(
+        api_key=api_key,
+        max_retries=0,
+        timeout=180.0,
+        base_url=OFFICIAL_BASE_URL,
+    )
     retries = getattr(client, "max_retries", None)
     if retries != 0:
         raise EvalGuardError(f"max_retries is {retries!r}, expected 0")
+    verify_official_endpoint(environ, client)
     client.images = _ForbiddenImages()
     return client
 
@@ -575,11 +712,62 @@ def env_api_key(environ: dict[str, str] | None = None) -> str:
     return key
 
 
+def _blank_result(scenario: Scenario, *, status: str = "NOT RUN") -> dict[str, Any]:
+    return {
+        "scenario": scenario.name,
+        "job_type": scenario.job_type,
+        "status": status,
+        "api_compatibility": "NOT RUN",
+        "json_contract": "NOT RUN",
+        "automated_quality": "NOT RUN",
+        "human_quality_review_required": True,
+    }
+
+
+def _finalize_outcome(report: dict[str, Any]) -> None:
+    statuses = [r.get("status") for r in report["results"]]
+    if report.get("mode") != "live":
+        report["outcome"] = "DRY_RUN"
+        report["pass"] = False
+    elif any(s == "FAIL" for s in statuses) or any(s == "NOT RUN" for s in statuses):
+        report["outcome"] = "FAIL"
+        report["pass"] = False
+    elif all(s == "PASS" for s in statuses):
+        report["outcome"] = "PASS"
+        report["pass"] = True
+    elif all(s in {"PASS", "CONDITIONAL"} for s in statuses):
+        report["outcome"] = "CONDITIONAL"
+        report["pass"] = False
+    else:
+        report["outcome"] = "FAIL"
+        report["pass"] = False
+    report["api_compatibility"] = (
+        "PASS" if all(r.get("api_compatibility") == "PASS" for r in report["results"]) else
+        "FAIL" if any(r.get("api_compatibility") == "FAIL" for r in report["results"]) else "NOT RUN"
+    )
+    report["json_contract"] = (
+        "PASS" if all(r.get("json_contract") == "PASS" for r in report["results"]) else
+        "FAIL" if any(r.get("json_contract") == "FAIL" for r in report["results"]) else "NOT RUN"
+    )
+    qualities = [r.get("automated_quality") for r in report["results"]]
+    if "FAIL" in qualities:
+        report["automated_quality"] = "FAIL"
+    elif "CONDITIONAL" in qualities:
+        report["automated_quality"] = "CONDITIONAL"
+    elif qualities and all(q == "PASS" for q in qualities):
+        report["automated_quality"] = "PASS"
+    else:
+        report["automated_quality"] = "NOT RUN"
+    report["human_quality_review_required"] = True
+    report["not_a_billing_guarantee"] = True
+
+
 def run_eval(
     *,
     execute: bool = False,
     acknowledge: bool = False,
     skip_git: bool = False,
+    skip_integration_check: bool | None = None,
     chat_create: Callable[..., Any] | None = None,
     environ: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -587,10 +775,21 @@ def run_eval(
         validate_live_flags(True, False)
     if acknowledge and not execute:
         execute = False
+    if skip_integration_check is None:
+        skip_integration_check = skip_git
 
+    env = environ if environ is not None else os.environ
     scenarios = synthetic_scenarios()
     requests = [build_scenario_request(s) for s in scenarios]
-    repo = None if skip_git else verify_repo_state()
+    repo = None
+    if not skip_git:
+        repo = verify_repo_state()
+    if execute and not skip_integration_check:
+        baseline = verify_integration_baseline()
+        if repo is None:
+            repo = {}
+        repo.update(baseline)
+
     safety = preflight(scenarios, requests, repo=repo)
     report: dict[str, Any] = {
         "mode": "live" if execute else "dry-run",
@@ -602,67 +801,100 @@ def run_eval(
             "sketch_polish": ["summary", "polish_bullets (3-5 nonempty)", "image_prompt relevant to sketch"],
             "style_suggest": ["summary", "suggestions (exactly 5 title+description)"],
         },
-        "results": [],
+        "results": [_blank_result(s) for s in scenarios],
         "live_requests_made": 0,
         "live_image_calls": 0,
+        "estimated_spend_usd": 0.0,
         "stopped_reason": None,
+        "failure": None,
+        "outcome": "DRY_RUN",
+        "pass": False,
+        "api_compatibility": "NOT RUN",
+        "json_contract": "NOT RUN",
+        "automated_quality": "NOT RUN",
+        "human_quality_review_required": True,
+        "not_a_billing_guarantee": True,
     }
 
     if not execute:
         report["stopped_reason"] = "dry-run default — no network calls"
+        report["outcome"] = "DRY_RUN"
         return report
 
-    key = env_api_key(environ)
+    verify_official_endpoint(env)
+    key = env_api_key(env)
     create = chat_create
-    client = None
     if create is None:
-        client = open_chat_only_client(key)
+        client = open_chat_only_client(key, environ=env)
         create = client.chat.completions.create
 
     spent = 0.0
-    try:
-        for i, (scenario, kwargs) in enumerate(zip(scenarios, requests)):
-            remaining_worst = safety["per_request_estimates"][i]["estimated_usd"]
-            if spent + remaining_worst > BUDGET_USD:
-                raise EvalGuardError(
-                    f"next request would exceed ${BUDGET_USD} estimate ceiling "
-                    f"(spent_est={spent}, next={remaining_worst})"
-                )
+    for i, (scenario, kwargs) in enumerate(zip(scenarios, requests)):
+        remaining_worst = safety["per_request_estimates"][i]["estimated_usd"]
+        if spent + remaining_worst > BUDGET_USD:
+            report["stopped_reason"] = (
+                f"next request would exceed ${BUDGET_USD} estimate ceiling "
+                f"(spent_est={spent}, next={remaining_worst})"
+            )
+            report["failure"] = {
+                "class": "eval_guard",
+                "sanitized_message": report["stopped_reason"],
+            }
+            report["estimated_spend_usd"] = round(spent, 6)
+            _finalize_outcome(report)
+            return report
 
-            def _counted_create(**kw: Any) -> Any:
-                report["live_requests_made"] += 1
-                return create(**kw)
+        def _counted_create(**kw: Any) -> Any:
+            report["live_requests_made"] += 1
+            return create(**kw)
 
+        try:
             row = run_live_scenario(scenario, kwargs, create=_counted_create)
-            report["results"].append(row)
-            if row.get("estimated_usd_from_usage") is not None:
-                spent += row["estimated_usd_from_usage"]
-            else:
-                spent += remaining_worst
-    except Exception as exc:
-        report["stopped_reason"] = f"{type(exc).__name__}: {exc}"
-        report["pass"] = False
-        raise
-    finally:
-        report["estimated_spend_usd"] = round(spent, 6)
-        report["not_a_billing_guarantee"] = True
+        except Exception as exc:
+            classified = classify_provider_error(exc)
+            msg = classified["sanitized_message"]
+            json_fail = classified["class"] == "invalid_completion" or "contract" in msg or "invalid JSON" in msg
+            report["results"][i] = {
+                **_blank_result(scenario, status="FAIL"),
+                "api_compatibility": "FAIL",
+                "json_contract": "FAIL" if json_fail else "NOT RUN",
+                "automated_quality": "FAIL",
+                "failure": classified,
+            }
+            report["stopped_reason"] = classified["sanitized_message"]
+            report["failure"] = classified
+            report["estimated_spend_usd"] = round(spent, 6)
+            _finalize_outcome(report)
+            return report
 
-    report["pass"] = all(r.get("pass") for r in report["results"]) and report["live_requests_made"] == 3
+        report["results"][i] = row
+        spent += float(row["estimated_usd_from_usage"])
+        report["estimated_spend_usd"] = round(spent, 6)
+
+    _finalize_outcome(report)
     return report
 
 
 def _print_report(report: dict[str, Any]) -> None:
     print("FashionRise — gpt-6-luna bounded eval")
     print(f"  mode: {report['mode']}")
+    print(f"  outcome: {report.get('outcome')}")
     print(f"  live_authorization: {report['live_authorization']}")
+    print(f"  api_compatibility: {report.get('api_compatibility')}")
+    print(f"  json_contract: {report.get('json_contract')}")
+    print(f"  automated_quality: {report.get('automated_quality')}")
+    print(f"  human_quality_review_required: {report.get('human_quality_review_required')}")
     safety = report["safety"]
     repo = safety.get("repo") or {}
     if repo:
         print(f"  branch: {repo.get('branch')}")
         print(f"  head: {repo.get('head')}")
-        print(f"  reviewed_ancestor: {repo.get('reviewed_ancestor')}")
+        print(f"  reviewed_baseline: {repo.get('reviewed_baseline')}")
+        if "integration_files_unchanged" in repo:
+            print(f"  integration_files_unchanged: {repo.get('integration_files_unchanged')}")
     print(f"  model: {safety['model']}  effort: {safety['reasoning_effort']}  max_tokens: {safety['max_completion_tokens']}")
     print(f"  image_model: {safety['image_model']}  max_retries: {safety['max_retries']}")
+    print(f"  official_base_url: {safety.get('official_base_url')}")
     print(f"  planned chat completions: {safety['planned_chat_completions']}")
     print(f"  planned image edit/generate: {safety['planned_image_edits']}/{safety['planned_image_generations']}")
     print(f"  vision attached: {safety['vision_attached']}")
@@ -673,11 +905,14 @@ def _print_report(report: dict[str, Any]) -> None:
     print("  expected JSON contracts:")
     print(json.dumps(report["expected_json_contracts"], indent=2))
     print(f"  live_requests_made: {report['live_requests_made']}")
+    print(f"  estimated_spend_usd: {report.get('estimated_spend_usd', 0)}  (NOT a billing guarantee)")
     if report.get("results"):
         print("  results:")
         print(json.dumps(report["results"], indent=2, default=str))
     if report.get("stopped_reason"):
         print(f"  stopped: {report['stopped_reason']}")
+    if report.get("failure"):
+        print(f"  failure: {json.dumps(report['failure'])}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -701,14 +936,25 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         report = run_eval(execute=args.execute, acknowledge=args.acknowledge_paid_test)
-    except (EvalGuardError, sketch_openai.SketchCompletionError, sketch_openai.SketchConfigError) as exc:
+    except EvalGuardError as exc:
         print(f"EVAL GUARD: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        classified = classify_provider_error(exc)
+        print(
+            f"EVAL GUARD: {classified['sanitized_message']} ({classified['class']})",
+            file=sys.stderr,
+        )
         return 2
     if args.json:
         print(json.dumps(report, indent=2, default=str))
     else:
         _print_report(report)
-    return 0 if report.get("mode") == "dry-run" or report.get("pass") else 1
+    if report.get("mode") == "dry-run":
+        return 0
+    if report.get("outcome") in {"PASS", "CONDITIONAL"}:
+        return 0
+    return 1
 
 
 if __name__ == "__main__":
