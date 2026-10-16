@@ -51,8 +51,8 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
     openai_timeout_seconds: float = 180.0
     openai_http_timeout_seconds: float = 60.0
-    # Chat Completions reasoning_effort for GPT-6 / GPT-5. "none" keeps sketch jobs
-    # latency-sensitive and is required for Chat Completions function calling on Luna.
+    # Chat Completions reasoning_effort. Default "none" is for gpt-6-luna only.
+    # gpt-6-astra / gpt-6.1-sol reject "none"; gpt-4o* omits the field (rollback).
     openai_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] = "none"
     # Visible JSON budget. With reasoning_effort=none this is not shared with hidden
     # reasoning tokens. 1400 covers summary + bullets + optional image_prompt.

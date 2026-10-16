@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -46,13 +47,23 @@ class _CapturingClient:
         self.result = result
         self.error = error
         self.kwargs: dict = {}
+        self.image_calls: list[str] = []
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+        self.images = SimpleNamespace(edit=self._image_edit, generate=self._image_generate)
 
     def create(self, **kwargs):
         self.kwargs = kwargs
         if self.error is not None:
             raise self.error
         return self.result
+
+    def _image_edit(self, **kwargs):
+        self.image_calls.append("edit")
+        raise AssertionError("images.edit must not run for an incomplete or invalid completion")
+
+    def _image_generate(self, **kwargs):
+        self.image_calls.append("generate")
+        raise AssertionError("images.generate must not run for an incomplete or invalid completion")
 
 
 @pytest.fixture
@@ -92,37 +103,109 @@ def test_environment_override_still_selects_the_model(monkeypatch):
         get_settings.cache_clear()
 
 
-def test_reasoning_effort_only_for_gpt6_family():
+def test_reasoning_families_are_model_specific():
+    assert sketch_openai.reasoning_family("gpt-6-luna") == "including_none"
+    assert sketch_openai.reasoning_family("gpt-6-luna-2026-09-01") == "including_none"
+    assert sketch_openai.reasoning_family("gpt-6-sol") == "including_none"
+    assert sketch_openai.reasoning_family("gpt-6-astra") == "no_none"
+    assert sketch_openai.reasoning_family("gpt-6-astra-2026-09-01") == "no_none"
+    assert sketch_openai.reasoning_family("gpt-6.1-sol") == "no_none"
+    assert sketch_openai.reasoning_family("gpt-6.1-sol-2026-09-15") == "no_none"
+    assert sketch_openai.reasoning_family("gpt-4o-mini") == "omit"
+    assert sketch_openai.reasoning_family("gpt-4o-mini-2024-07-18") == "omit"
+    assert sketch_openai.reasoning_family("gpt-5.6-sol") == "unknown"
     assert sketch_openai.uses_chat_reasoning_effort("gpt-6-luna") is True
-    assert sketch_openai.uses_chat_reasoning_effort("gpt-6-luna-2026-09-01") is True
+    assert sketch_openai.uses_chat_reasoning_effort("gpt-6-astra") is True
     assert sketch_openai.uses_chat_reasoning_effort("gpt-4o-mini") is False
-    assert sketch_openai.uses_chat_reasoning_effort("gpt-4o-mini-2024-07-18") is False
 
 
-def test_chat_kwargs_include_json_object_and_none_effort():
-    kwargs = sketch_openai.chat_completion_kwargs(
+def test_luna_none_is_sent_and_gpt4o_omits():
+    luna = sketch_openai.chat_completion_kwargs(
         model="gpt-6-luna",
         messages=[{"role": "user", "content": "x"}],
         max_completion_tokens=1400,
         reasoning_effort="none",
     )
-    assert kwargs["model"] == "gpt-6-luna"
-    assert kwargs["response_format"] == {"type": "json_object"}
-    assert kwargs["max_completion_tokens"] == 1400
-    assert kwargs["reasoning_effort"] == "none"
-    assert "temperature" not in kwargs
-    assert "top_p" not in kwargs
+    assert luna["reasoning_effort"] == "none"
+    assert luna["response_format"] == {"type": "json_object"}
+    assert "temperature" not in luna
 
-
-def test_chat_kwargs_omit_reasoning_effort_for_gpt4o_override():
-    kwargs = sketch_openai.chat_completion_kwargs(
+    rollback = sketch_openai.chat_completion_kwargs(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": "x"}],
         max_completion_tokens=1400,
         reasoning_effort="none",
     )
-    assert "reasoning_effort" not in kwargs
-    assert kwargs["response_format"]["type"] == "json_object"
+    assert "reasoning_effort" not in rollback
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["gpt-6-astra", "gpt-6-astra-2026-09-01", "gpt-6.1-sol", "gpt-6.1-sol-2026-09-15"],
+)
+def test_models_that_reject_none_fail_closed(model):
+    with pytest.raises(sketch_openai.SketchConfigError, match="none is not supported"):
+        sketch_openai.chat_completion_kwargs(
+            model=model,
+            messages=[{"role": "user", "content": "x"}],
+            max_completion_tokens=1400,
+            reasoning_effort="none",
+        )
+
+
+@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol"])
+def test_astra_and_61_sol_accept_low(model):
+    kwargs = sketch_openai.chat_completion_kwargs(
+        model=model,
+        messages=[{"role": "user", "content": "x"}],
+        max_completion_tokens=1400,
+        reasoning_effort="low",
+    )
+    assert kwargs["reasoning_effort"] == "low"
+
+
+def test_astra_default_none_never_opens_a_client(monkeypatch):
+    s = _settings(openai_model="gpt-6-astra", openai_reasoning_effort="none")
+    monkeypatch.setattr(sketch_openai, "get_settings", lambda: s)
+    opened: list[str] = []
+
+    def boom(**kw):
+        opened.append("client")
+        raise AssertionError("OpenAI client must not be constructed for an invalid combo")
+
+    monkeypatch.setattr(sketch_openai, "OpenAI", boom)
+    with pytest.raises(sketch_openai.SketchConfigError, match="none is not supported"):
+        sketch_openai.complete_sketch_job(_job("sketch_clean"))
+    assert opened == []
+
+
+@pytest.mark.parametrize("model", ["gpt-5.6-sol", "gpt-5-mini", "gpt-5", "gpt-6", "gpt-6-pro"])
+def test_unknown_model_does_not_send_reasoning_effort(model):
+    with pytest.raises(sketch_openai.SketchConfigError, match="known Chat Completions reasoning table"):
+        sketch_openai.chat_completion_kwargs(
+            model=model,
+            messages=[{"role": "user", "content": "x"}],
+            max_completion_tokens=1400,
+            reasoning_effort="none",
+        )
+
+
+def test_sdk_floor_and_create_accepts_reasoning_effort():
+    import inspect
+    from pathlib import Path
+
+    import openai
+    from openai.resources.chat.completions import Completions
+
+    parts = tuple(int(p) for p in openai.__version__.split(".")[:3])
+    assert parts >= (1, 109, 1)
+    params = inspect.signature(Completions.create).parameters
+    for name in ("model", "messages", "response_format", "max_completion_tokens", "reasoning_effort"):
+        assert name in params
+    req = Path(__file__).resolve().parents[1] / "requirements.txt"
+    text = req.read_text(encoding="utf-8")
+    assert "openai>=1.109.1,<2.0.0" in text
+    assert "openai>=1.40.0" not in text
 
 
 @pytest.mark.parametrize(
@@ -223,23 +306,125 @@ def test_failed_model_request_propagates(monkeypatch, settings):
 
 
 def test_empty_and_refused_completions_fail_safely():
-    with pytest.raises(RuntimeError, match="empty"):
+    with pytest.raises(sketch_openai.SketchCompletionError, match="empty"):
         sketch_openai._parse_chat_completion(_completion(""))
-    with pytest.raises(RuntimeError, match="refused"):
+    with pytest.raises(sketch_openai.SketchCompletionError, match="refused"):
         sketch_openai._parse_chat_completion(_completion("{}", refusal="I can't help with that"))
-    with pytest.raises(RuntimeError, match="no choices"):
+    with pytest.raises(sketch_openai.SketchCompletionError, match="no choices"):
         sketch_openai._parse_chat_completion(SimpleNamespace(choices=[]))
 
 
-def test_truncated_json_keeps_parse_error_fallback():
-    structured, summary, finish, truncated = sketch_openai._parse_chat_completion(
-        _completion('{"summary": "cut off"', finish_reason="length")
+def test_truncated_and_invalid_json_fail_the_job():
+    with pytest.raises(sketch_openai.SketchCompletionError, match="truncated"):
+        sketch_openai._parse_chat_completion(
+            _completion('{"summary": "cut off"', finish_reason="length")
+        )
+    with pytest.raises(sketch_openai.SketchCompletionError, match="invalid JSON"):
+        sketch_openai._parse_chat_completion(_completion('{"summary": '))
+    with pytest.raises(sketch_openai.SketchCompletionError, match="not an object"):
+        sketch_openai._parse_chat_completion(_completion('["not", "an", "object"]'))
+
+
+def test_truncated_polish_never_calls_image_generation(monkeypatch, settings):
+    client = _CapturingClient(_completion('{"summary":"cut","polish_bullets":["x"]', finish_reason="length"))
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
+
+    with pytest.raises(sketch_openai.SketchCompletionError, match="truncated"):
+        sketch_openai.complete_sketch_job(_job("sketch_polish", notes="dress"))
+    assert client.image_calls == []
+
+
+def test_invalid_json_polish_never_calls_image_generation(monkeypatch, settings):
+    client = _CapturingClient(_completion("not-json"))
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
+
+    with pytest.raises(sketch_openai.SketchCompletionError, match="invalid JSON"):
+        sketch_openai.complete_sketch_job(_job("sketch_polish"))
+    assert client.image_calls == []
+
+
+def test_refused_polish_never_calls_image_generation(monkeypatch, settings):
+    client = _CapturingClient(_completion("{}", refusal="no"))
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
+
+    with pytest.raises(sketch_openai.SketchCompletionError, match="refused"):
+        sketch_openai.complete_sketch_job(_job("sketch_polish"))
+    assert client.image_calls == []
+
+
+def test_empty_polish_never_calls_image_generation(monkeypatch, settings):
+    client = _CapturingClient(_completion(""))
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
+
+    with pytest.raises(sketch_openai.SketchCompletionError, match="empty"):
+        sketch_openai.complete_sketch_job(_job("sketch_polish"))
+    assert client.image_calls == []
+
+
+def test_length_finish_reason_fails_even_if_json_parses(monkeypatch, settings):
+    payload = {
+        "summary": "looks complete",
+        "polish_bullets": ["color wash"],
+        "image_prompt": "A-line dress",
+    }
+    client = _CapturingClient(_completion(json.dumps(payload), finish_reason="length"))
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
+
+    with pytest.raises(sketch_openai.SketchCompletionError, match="truncated"):
+        sketch_openai.complete_sketch_job(_job("sketch_polish"))
+    assert client.image_calls == []
+
+
+def test_successful_polish_uses_image_prompt(monkeypatch, settings):
+    payload = {
+        "summary": "Bright dress",
+        "polish_bullets": ["color wash"],
+        "image_prompt": "A-line dress, short sleeves",
+    }
+    client = _CapturingClient(_completion(json.dumps(payload)))
+    seen: list[tuple[Any, str]] = []
+
+    def fake_image(_client, _job, structured, summary):
+        seen.append((structured, summary))
+        return "http://127.0.0.1:8001/static/uploads/ai/look.png"
+
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
+    monkeypatch.setattr(sketch_openai, "_generate_and_store_look_image", fake_image)
+
+    result = sketch_openai.complete_sketch_job(_job("sketch_polish"))
+    assert result["image_url"].endswith("look.png")
+    assert result["structured"]["image_prompt"] == payload["image_prompt"]
+    assert seen == [(payload, "Bright dress")]
+
+
+def test_worker_marks_failed_when_completion_is_truncated(monkeypatch, settings):
+    job = SimpleNamespace(
+        id=uuid4(),
+        job_type="sketch_polish",
+        input_data={},
+        result_data=None,
+        error_message=None,
+        status="queued",
     )
-    assert truncated is True
-    assert finish == "length"
-    assert structured["parse_error"] is True
-    assert structured["truncated"] is True
-    assert summary.startswith('{"summary"')
+    client = _CapturingClient(_completion('{"summary":"', finish_reason="length"))
+    monkeypatch.setattr(sketch_openai, "is_configured", lambda: True)
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
+    monkeypatch.setattr(sketch_openai, "get_settings", lambda: settings)
+
+    class _Db:
+        def scalar(self, _stmt):
+            return job if job.status == "queued" else None
+
+        def commit(self):
+            pass
+
+    processed = ai_worker.run_worker_tick(_Db(), limit=1)
+    assert processed == 1
+    assert job.status == "failed"
+    assert "truncated" in (job.error_message or "")
+    assert job.result_data is None
+    assert client.image_calls == []
+    assert "sk-test" not in (job.error_message or "")
 
 
 def test_no_api_key_uses_stub_and_completes(monkeypatch):

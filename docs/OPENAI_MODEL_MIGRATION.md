@@ -1,7 +1,9 @@
 # OpenAI model migration — gpt-4o-mini → gpt-6-luna
 
 **Repository:** [perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise)  
-**Status:** code + mocked tests only. **Not production-validated.** Do not treat this as a live API sign-off.
+**Status:** code + mocked tests only. **Not production-validated.** Do not treat this as a live API sign-off.  
+**PR:** [#6](https://github.com/perielad2-netizen/FashionRise/pull/6) (draft) against `cursor/magic-look-image-display-77c6`.  
+**Depends on:** unmerged Magic Look [PR #1](https://github.com/perielad2-netizen/FashionRise/pull/1). Retargeting onto `main` must be a separate review after #1 merges.
 
 ## Why
 
@@ -26,7 +28,8 @@ Override remains `OPENAI_MODEL`. Production hosts that pin the old name in `.env
 ## Files updated
 
 - `backend/app/core/config.py` — default `openai_model`, plus `openai_reasoning_effort` and `openai_max_completion_tokens`
-- `backend/app/services/sketch_openai.py` — Chat Completions kwargs, `reasoning_effort` only for GPT-6/5, safer empty/refusal handling
+- `backend/requirements.txt` — `openai>=1.109.1,<2.0.0` (verified floor)
+- `backend/app/services/sketch_openai.py` — per-family reasoning table, incomplete completions fail before image gen
 - `backend/scripts/check_sketch_ai.py` — print model/effort; **no API key suffix**
 - `backend/tests/test_openai_model_migration.py` — mocked contract tests
 - `backend/.env.example`, `deploy/env.production.example`
@@ -43,14 +46,14 @@ FashionRise already uses **Chat Completions**, not the Responses API. Official L
 | Endpoint | Keep `client.chat.completions.create`. No Responses rewrite. |
 | JSON | Keep `response_format={"type": "json_object"}`. Schema-strict `json_schema` would be a contract change (`image_prompt` on polish). |
 | Vision | Keep `image_url` / `image_base64` inlined as `data:` image parts. |
-| Reasoning | Send Chat Completions `reasoning_effort` (not Responses `reasoning.effort`). Default **`none`** — sketch jobs are latency-sensitive; Luna supports `none`; function calling is unused. |
+| Reasoning | Per-family table (not a GPT-5/6 prefix). **Luna default remains `none`.** `gpt-4o*` omits the field. `gpt-6-astra` / `gpt-6.1-sol` + `none` raise `SketchConfigError` (no HTTP request). Unknown models fail closed. |
 | Sampling | Do not send `temperature` / `top_p` (unsupported when effort is not `none`; unused today). |
 | Older override | If `OPENAI_MODEL` is still `gpt-4o-*`, omit `reasoning_effort` so a rollback env keeps working. |
-| Token budget | Keep **1400** `max_completion_tokens` (this branch; `main` still has 1200). With `effort=none` the budget is visible JSON only. Incomplete JSON still uses the previous `parse_error` fallback and now records `truncated`. |
-| Refusals / empty | Fail the job (worker `failed`) instead of storing an empty summary. |
-| Image pipeline | `OPENAI_IMAGE_MODEL=gpt-image-1` untouched — Luna does **not** support `/v1/images/edits`. |
+| Token budget | Keep **1400** `max_completion_tokens`. With `effort=none` that budget is visible JSON only. |
+| Incomplete / invalid | `finish_reason=length`, refusals, empty content, and non-object / invalid JSON raise `SketchCompletionError`. The worker stores `failed` + a short sanitized `error_message`. **No look image is generated.** |
+| Image pipeline | `OPENAI_IMAGE_MODEL=gpt-image-1` untouched — Luna does **not** support `/v1/images/edits`. Only a complete JSON object may call `images.edit` / `images.generate`. |
 | Stub | Empty `OPENAI_API_KEY` still completes jobs with the local stub. |
-| SDK | Still `openai>=1.40.0,<2.0.0`. `reasoning_effort` is passed as a Chat Completions keyword. |
+| SDK | **`openai>=1.109.1,<2.0.0`**. `reasoning_effort` first appeared in 1.58.0; this repo validated the keyword on **1.109.1**. That version’s typed alias is `minimal\|low\|medium\|high`; Luna’s documented `none` is still sent as the Chat Completions string. |
 
 ## Pricing / cost (documented list prices, not measured)
 
@@ -69,9 +72,17 @@ Latency should stay in the same class as mini **if** `reasoning_effort=none`. A 
 
 ```text
 cd backend && pytest tests/test_openai_model_migration.py -q
+# 35 passed (mocked; openai 1.109.1 installed)
+
+cd backend && pytest tests -q
+# 35 passed, 7 ERROR at setup (PostgreSQL connection refused)
 ```
 
-Covered: default model, env override, request params, vision `image_base64` / `image_url`, JSON keys (`summary`, `cleanup_bullets`, `polish_bullets`, `suggestions`), failed requests, worker stub, worker failure, no secret in logs.
+Covered (mocked): default model, env override, Luna `none`, gpt-4o-mini omit, Astra / GPT-6.1 Sol reject `none` and accept `low`, unknown models (`gpt-5*`, bare `gpt-6`) fail closed, SDK floor + `Completions.create` signature (`reasoning_effort`, `response_format`, `max_completion_tokens`), vision `image_base64` / `image_url`, JSON keys (`summary`, `cleanup_bullets`, `polish_bullets`, `suggestions`), successful `image_prompt`, truncated/empty/invalid/refused polish never call `images.edit` / `images.generate` (including `finish_reason=length` even when JSON parses), worker stub, worker failure, no secret in logs.
+
+**Lint / types:** `python3 -m compileall -q app tests scripts` succeeded. No `ruff` or `mypy` is configured in this repo.
+
+**NOT RUN (do not treat as passed):** PostgreSQL integration tests — `test_api_surface`, `test_user_flow_api` (3), `test_design_handoff` (2), `test_health`. This environment has no Postgres; they ERROR at fixture setup (`connection refused`).
 
 **Not covered:** live OpenAI calls, production quality vs `gpt-4o-mini`, Azure-compatible proxies, real image-edit quality.
 
@@ -93,6 +104,12 @@ Do **not** apply these from this change set. After review:
 
 ## Remaining blockers
 
-- No authorized live / paid OpenAI call was made.
+- No authorized live / paid OpenAI call was made. **Live validation is still required** before production `OPENAI_MODEL` is changed.
 - Existing host `.env` files that pin `OPENAI_MODEL=gpt-4o-mini` will keep the deprecated model until someone updates them.
 - Quality of Luna JSON vs mini is unmeasured.
+- PR #6 cannot land on `main` until Magic Look PR #1 is merged (or a separately reviewed retarget).
+- Postgres-backed API tests were **NOT RUN** in the hardening environment.
+
+## Exact next action
+
+Authorize a **separate live eval** of `sketch_clean`, `sketch_polish`, and `style_suggest` on `gpt-6-luna` with `reasoning_effort=none`. Do not merge, deploy, or edit production `.env` until that eval passes.

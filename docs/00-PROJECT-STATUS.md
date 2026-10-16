@@ -3,9 +3,13 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
+<<<<<<< HEAD
 **Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. GPT-6 Luna migration rebasing onto that tip. Unity compile **NOT RUN** — deferred, not a merge blocker. See `docs/OPENAI_MODEL_MIGRATION.md`.)
 
 **Magic Look PR #1 (merged 2026-10-17):** poll fail-fast (`AiJobPollPolicy`) and Magic Look display path are on `main`. **UNITY COMPILE NOT RUN** / **Play Mode NOT RUN** on the cloud runner (no 2022.3.62f1 Editor). Operator Play Mode remains a later development task.
+=======
+**Last updated:** 2026-10-16 (OpenAI sketch default `gpt-6-luna`; SDK floor 1.109.1; per-family reasoning; incomplete JSON cannot start look-image gen. Draft PR #6 depends on Magic Look PR #1. Not production-validated.)
+>>>>>>> 3b0abb1f (Harden gpt-6-luna Chat Completions migration before merge)
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
