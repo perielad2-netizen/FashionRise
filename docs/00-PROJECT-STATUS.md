@@ -3,9 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. GPT-6 Luna eval harness includes bounded `review_output`. Unity compile **NOT RUN** — deferred. See `docs/OPENAI_MODEL_MIGRATION.md`.)
+**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. GPT-6 Luna synthetic live compatibility **VALIDATED — 3/3**. Production deploy **NOT PERFORMED**. Unity compile **NOT RUN** — deferred.)
 
 **Magic Look PR #1 (merged 2026-10-17):** poll fail-fast (`AiJobPollPolicy`) is on `main`. **UNITY COMPILE NOT RUN** / **Play Mode NOT RUN**.
+
+**GPT-6 Luna close-out (2026-10-16, operator live report + PM review):**
+
+| Gate | Status |
+|------|--------|
+| Chat Completions live compatibility | **VALIDATED — 3/3** synthetic scenarios (`sketch_clean`, `sketch_polish`, `style_suggest`) |
+| Production deployment | **NOT PERFORMED** |
+| Magic Look dependency | **PR #1 MERGED** (`433b1b99`) |
+| Unity compile / Play Mode | **NOT RUN** — deferred, not a merge blocker |
+| Next | Do **not** repeat the paid live harness. Do **not** deploy from this merge alone. |
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
@@ -24,7 +34,7 @@
 
 **Suggested order for the *next* session:**
 
-1. **Operator Unity 2022.3.62f1** compile + mock Play Mode when convenient (deferred). Do **not** deploy or change production `.env` from this branch alone. See `docs/OPENAI_MODEL_MIGRATION.md`. 
+1. **Operator Unity 2022.3.62f1** compile + mock Play Mode when convenient (deferred). Do **not** deploy or repeat the paid Luna harness. See `docs/OPENAI_MODEL_MIGRATION.md`. 
 2. **Pillar A — next slice:** **Vector / per-stroke** ink model (or richer raster: soft brush, layers beyond ref+ink) — dual-layer + import + default models are **done**; see `06-implementation-phases.md`. Optional: **export** beyond flattened PNG if product needs layered files.  
 3. **Pillar C:** Real **`spec_sheet_pdf`** layout (or second export kind); zip / multi-file handoff when ready.  
 4. **Pillar B:** Reputation **v2** explainability; gallery/sketch **UX polish** (toolbar scroll on small phones, toasts).  

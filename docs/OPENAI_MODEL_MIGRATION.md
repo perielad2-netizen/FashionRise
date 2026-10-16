@@ -1,8 +1,8 @@
 # OpenAI model migration — gpt-4o-mini → gpt-6-luna
 
 **Repository:** [perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise)  
-**Status:** code-review approved migration + **hardened dry-run live harness**. **Not production-validated.** No paid OpenAI call has been authorized or executed.  
-**PR:** [#6](https://github.com/perielad2-netizen/FashionRise/pull/6) (draft) against `cursor/magic-look-image-display-77c6`.  
+**Status:** GPT-6 Luna Chat Completions **synthetic live compatibility VALIDATED** (3/3). **Production deployment NOT PERFORMED.**  
+**PR:** [#6](https://github.com/perielad2-netizen/FashionRise/pull/6) against `cursor/magic-look-image-display-77c6`.  
 **Depends on:** unmerged Magic Look [PR #1](https://github.com/perielad2-netizen/FashionRise/pull/1). Retargeting onto `main` must be a separate review after #1 merges.  
 **Reviewed production baseline:** `bbcae8a397f831436374cb9bf567582d9f3f3a14` — live preflight fails if `sketch_openai.py`, `config.py`, `requirements.txt`, or `ai_worker.py` change.
 
@@ -90,7 +90,7 @@ Covered (mocked): default model, env override, Luna `none`, gpt-4o-mini omit, As
 
 **NOT RUN (do not treat as passed):** PostgreSQL integration tests — `test_api_surface`, `test_user_flow_api` (3), `test_design_handoff` (2), `test_health`. This environment has no Postgres; they ERROR at fixture setup (`connection refused`).
 
-**Not covered:** live OpenAI calls (harness ready; spend not authorized), production quality vs `gpt-4o-mini`, Azure-compatible proxies, real image-edit quality.
+**Not covered:** production traffic / customer assets, independent isolation of vision vs written notes, image-edit quality, Azure-compatible proxies, PostgreSQL-backed API tests.
 
 ## Production configuration (manual)
 
@@ -136,14 +136,11 @@ Each **contract-validated** live scenario now includes a bounded `review_output`
 
 Failed or unvalidated responses do **not** persist raw model content. If usage tokens are missing, `estimated_spend_usd` is **unknown** (not `$0`).
 
-**Default is dry-run (zero network).** This document is **not** authorization to spend. Client-side USD figures are **not an absolute billing guarantee**.
+**Default remains dry-run.** Do **not** repeat the live test. Client-side USD figures are **not an absolute billing guarantee**.
 
 ```text
 # Dry-run (safe; default)
 cd backend && python3 scripts/eval_gpt6_luna_live.py
-
-# Live — only if an operator separately authorizes spend
-cd backend && python3 scripts/eval_gpt6_luna_live.py --execute --acknowledge-paid-test
 ```
 
 ### Dry-run result (2026-10-16, after harness safety amendment)
@@ -172,26 +169,117 @@ Per-request conservative estimates:
 
 ### Scenario contract (eval-only; stricter than the production parser)
 
-| Scenario | Required keys | Live quality |
-|----------|---------------|--------------|
-| `sketch_clean` | `summary`; `cleanup_bullets` 3–7 nonempty | **NOT RUN** |
-| `sketch_polish` | `summary`; `polish_bullets` 3–5 nonempty; `image_prompt` relevant to the A-line dress | **NOT RUN** |
-| `style_suggest` | `summary`; exactly 5 `suggestions` with nonempty title+description | **NOT RUN** |
+| Scenario | Required keys | Synthetic live quality |
+|----------|---------------|------------------------|
+| `sketch_clean` | `summary`; `cleanup_bullets` 3–7 nonempty | **PASS / ACCEPTED** (2026-10-16) |
+| `sketch_polish` | `summary`; `polish_bullets` 3–5 nonempty; `image_prompt` relevant to the A-line dress | **PASS / ACCEPTED** (2026-10-16) |
+| `style_suggest` | `summary`; exactly 5 `suggestions` with nonempty title+description | **PASS / ACCEPTED** (2026-10-16) |
+
+## Operator-supplied live execution report (2026-10-16)
+
+**Source:** operator-run `--execute --acknowledge-paid-test` on the approved synthetic harness.  
+**Review:** PM reviewed the harness report and initial human-quality check.  
+**This agent did not execute the live test and must not repeat it.**  
+Recorded measurements below are copied from that operator report. No additional model text was invented.
+
+| Field | Result |
+|-------|--------|
+| Model | `gpt-6-luna` |
+| Reasoning effort | `none` |
+| Chat Completions | **3** |
+| Image edit / generate | **0 / 0** |
+| Vision inputs | **2** (`sketch_clean`, `sketch_polish`) |
+| Overall outcome | **PASS** |
+| API compatibility | **PASS** |
+| JSON contract | **PASS** |
+| Automated quality | **PASS** |
+| Initial human review | **ACCEPTED** |
+| Input tokens | **472** |
+| Output tokens | **555** |
+| Reasoning tokens | **0** |
+| Observed estimated cost | **$0.000325** (not a billing guarantee) |
+| Preflight cost estimate | $0.002382 |
+| Spending ceiling | $0.05 |
+
+### 1. `sketch_clean` — PASS / ACCEPTED
+
+| | |
+|--|--|
+| Input / output tokens | 163 / 173 |
+| Latency | 4858 ms |
+| Estimated cost | $0.000103 |
+
+Summary (operator report):
+
+> The sketch reads as a simple A-line day dress; refining the outline and figure proportions will make the design easier to read.
+
+Six recommendations addressed (operator/PM summary, not reconstructed verbatim JSON):
+
+- Smooth balanced boat neckline
+- Clean shoulder, sleeve, side and hem lines
+- Symmetric A-line flare and level hem
+- Consistent short sleeves
+- Figure/head-to-hem proportions
+- Construction guides and final contours
+
+### 2. `sketch_polish` — PASS / ACCEPTED
+
+| | |
+|--|--|
+| Input / output tokens | 192 / 150 |
+| Latency | 2702 ms |
+| Estimated cost | $0.000094 |
+
+Summary (operator report):
+
+> Your clean A-line silhouette is a great start— let's make the sketch portfolio-ready!
+
+Five recommendations addressed (operator/PM summary):
+
+- Preserve boat neck, short sleeves and knee hem
+- Smooth balanced garment outline
+- Refine waist seam and A-line silhouette
+- Improve line-weight variation
+- Remove construction marks and center sketch
+
+Image prompt (operator report):
+
+> Front-facing figure with a simple oval head and short horizontal brim hat, boat neckline, short sleeves, fitted waist seam, A-line dress shape, straight knee-length hem, and simple legs.
+
+### 3. `style_suggest` — PASS / ACCEPTED
+
+| | |
+|--|--|
+| Input / output tokens | 117 / 232 |
+| Latency | 3985 ms |
+| Estimated cost | $0.000128 |
+
+Suggestion titles (operator report):
+
+- Seaside Blue A-Line
+- Coral Breeze
+- Sandy Stripe
+- Mint Garden
+- Lavender Coast
+
+Human note: age-appropriate and consistent with the brief. Most variations emphasize colors and accessories, not silhouette changes. **Not a migration blocker.**
+
+### Remaining limitations (still true after this live run)
+
+- Validates **synthetic** harness requests, not production jobs or customer assets.
+- Vision input was accepted; independent visual understanding was **not** conclusively isolated from the written notes.
+- Image generation / edit was **not** evaluated (0 calls, as required).
+- PostgreSQL-backed integration tests remain **NOT RUN**.
+- Magic Look **PR #1** remains unmerged. PR #6 cannot land on `main` until that is resolved or a separately reviewed retarget is done.
+- No deployment and no production `.env` change.
 
 ## Remaining blockers
 
-- **Live / paid OpenAI eval was not run.** Spend was not authorized.
-- Human quality review is still required after any live run, including automated PASS.
-- Existing host `.env` files that pin `OPENAI_MODEL=gpt-4o-mini` keep the deprecated model until updated.
-- PR #6 cannot land on `main` until Magic Look PR #1 is merged (or a separately reviewed retarget).
-- Postgres-backed API tests were **NOT RUN**.
+- Production deployment **NOT PERFORMED**. Host `.env` files that still pin `OPENAI_MODEL=gpt-4o-mini` keep the deprecated model until updated.
+- Magic Look **PR #1** is still unmerged. PR #6 stays based on `cursor/magic-look-image-display-77c6`.
+- PostgreSQL-backed API tests are **NOT VALIDATED**.
+- Do not repeat the paid live harness run.
 
 ## Exact next action
 
-An operator who **separately authorizes spend** should export `OPENAI_API_KEY` (process environment only; no `OPENAI_BASE_URL` override) and run:
-
-```text
-cd backend && python3 scripts/eval_gpt6_luna_live.py --execute --acknowledge-paid-test
-```
-
-Do not merge, deploy, rebase/retarget PR #6, or edit production `.env` until that live eval passes quality review. Do not treat this document as spend authorization.
+**Next release gate:** resolve Magic Look PR #1 (or a separately reviewed retarget of #6 onto `main`) **and** run the PostgreSQL integration tests. Do not deploy or edit production `.env` as part of this documentation update. Do not repeat the live OpenAI test.
