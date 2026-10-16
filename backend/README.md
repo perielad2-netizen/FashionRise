@@ -88,6 +88,14 @@ Single batch (e.g. cron smoke): `python -m app.ai_worker --once`. Poll interval 
 
 Sketch jobs use **Chat Completions** (`OPENAI_MODEL`, default **`gpt-6-luna`**) when `OPENAI_API_KEY` is set; otherwise the worker stores a stub result. Look-image edit stays on **`OPENAI_IMAGE_MODEL`** (`gpt-image-1`). See `docs/OPENAI_MODEL_MIGRATION.md`.
 
+Bounded model-compat eval (default **dry-run**, zero network):
+
+```bash
+python scripts/eval_gpt6_luna_live.py
+# live spend requires an explicit operator ack — not implied by docs or review:
+# python scripts/eval_gpt6_luna_live.py --execute --acknowledge-paid-test
+```
+
 ### Catalog seed
 
 In **`ENVIRONMENT=development`**, startup runs an **idempotent** seed for materials, garment templates, and color palettes (skipped when `TESTING=true` or non-development).

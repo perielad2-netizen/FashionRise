@@ -1,7 +1,7 @@
 # OpenAI model migration — gpt-4o-mini → gpt-6-luna
 
 **Repository:** [perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise)  
-**Status:** code + mocked tests only. **Not production-validated.** Do not treat this as a live API sign-off.  
+**Status:** code + mocked tests + **dry-run live harness**. **Not production-validated.** No paid OpenAI call has been authorized or executed.  
 **PR:** [#6](https://github.com/perielad2-netizen/FashionRise/pull/6) (draft) against `cursor/magic-look-image-display-77c6`.  
 **Depends on:** unmerged Magic Look [PR #1](https://github.com/perielad2-netizen/FashionRise/pull/1). Retargeting onto `main` must be a separate review after #1 merges.
 
@@ -32,6 +32,8 @@ Override remains `OPENAI_MODEL`. Production hosts that pin the old name in `.env
 - `backend/app/services/sketch_openai.py` — per-family reasoning table, incomplete completions fail before image gen
 - `backend/scripts/check_sketch_ai.py` — print model/effort; **no API key suffix**
 - `backend/tests/test_openai_model_migration.py` — mocked contract tests
+- `backend/scripts/eval_gpt6_luna_live.py` — bounded dry-run-first live harness
+- `backend/tests/test_gpt6_luna_live_eval.py` — offline harness tests
 - `backend/.env.example`, `deploy/env.production.example`
 - this document; `docs/00-PROJECT-STATUS.md`
 
@@ -71,20 +73,23 @@ Latency should stay in the same class as mini **if** `reasoning_effort=none`. A 
 ## Verification (mocked)
 
 ```text
-cd backend && pytest tests/test_openai_model_migration.py -q
-# 35 passed (mocked; openai 1.109.1 installed)
+cd backend && pytest tests/test_openai_model_migration.py tests/test_gpt6_luna_live_eval.py -q
+# 44 passed (mocked; openai 1.109.1 installed)
 
 cd backend && pytest tests -q
-# 35 passed, 7 ERROR at setup (PostgreSQL connection refused)
+# 44 passed, 7 ERROR at setup (PostgreSQL connection refused)
+
+cd backend && python3 scripts/eval_gpt6_luna_live.py
+# dry-run; 0 network calls
 ```
 
-Covered (mocked): default model, env override, Luna `none`, gpt-4o-mini omit, Astra / GPT-6.1 Sol reject `none` and accept `low`, unknown models (`gpt-5*`, bare `gpt-6`) fail closed, SDK floor + `Completions.create` signature (`reasoning_effort`, `response_format`, `max_completion_tokens`), vision `image_base64` / `image_url`, JSON keys (`summary`, `cleanup_bullets`, `polish_bullets`, `suggestions`), successful `image_prompt`, truncated/empty/invalid/refused polish never call `images.edit` / `images.generate` (including `finish_reason=length` even when JSON parses), worker stub, worker failure, no secret in logs.
+Covered (mocked): default model, env override, Luna `none`, gpt-4o-mini omit, Astra / GPT-6.1 Sol reject `none` and accept `low`, unknown models (`gpt-5*`, bare `gpt-6`) fail closed, SDK floor + `Completions.create` signature (`reasoning_effort`, `response_format`, `max_completion_tokens`), vision `image_base64` / `image_url`, JSON keys (`summary`, `cleanup_bullets`, `polish_bullets`, `suggestions`), successful `image_prompt`, truncated/empty/invalid/refused polish never call `images.edit` / `images.generate` (including `finish_reason=length` even when JSON parses), worker stub, worker failure, no secret in logs, dry-run harness, image-endpoint guard, `--execute` without ack refused.
 
 **Lint / types:** `python3 -m compileall -q app tests scripts` succeeded. No `ruff` or `mypy` is configured in this repo.
 
 **NOT RUN (do not treat as passed):** PostgreSQL integration tests — `test_api_surface`, `test_user_flow_api` (3), `test_design_handoff` (2), `test_health`. This environment has no Postgres; they ERROR at fixture setup (`connection refused`).
 
-**Not covered:** live OpenAI calls, production quality vs `gpt-4o-mini`, Azure-compatible proxies, real image-edit quality.
+**Not covered:** live OpenAI calls (harness ready; spend not authorized), production quality vs `gpt-4o-mini`, Azure-compatible proxies, real image-edit quality.
 
 ## Production configuration (manual)
 
@@ -102,14 +107,75 @@ Do **not** apply these from this change set. After review:
 2. Restart the worker. `reasoning_effort` is omitted automatically for `gpt-4o-*`.
 3. After **14 January 2027**, `gpt-4o-mini` will not accept new requests — rollback only works until shutdown.
 
+## Bounded live evaluation (dry-run completed)
+
+Harness: `backend/scripts/eval_gpt6_luna_live.py`
+
+The script reuses `sketch_openai.build_sketch_chat_request` (production system prompts + vision inlining + `chat_completion_kwargs`) and `sketch_openai._parse_chat_completion`. It never calls `complete_sketch_job`, so polish cannot reach look-image generation. `OPENAI_IMAGE_MODEL` is treated as `off`. `client.images.edit` / `client.images.generate` raise `EvalGuardError`. SDK `max_retries=0`. No database, email, production assets, or customer images. Synthetic 160×240 PNG croquis are generated in-process and attached only as `image_base64` for `sketch_clean` and `sketch_polish`.
+
+**Default is dry-run (zero network).** This document and the PR review prompt are **not** authorization to spend.
+
+```text
+# Dry-run (safe; default)
+cd backend && python3 scripts/eval_gpt6_luna_live.py
+
+# Live — only if an operator separately authorizes spend
+cd backend && python3 scripts/eval_gpt6_luna_live.py --execute --acknowledge-paid-test
+```
+
+`--execute` without `--acknowledge-paid-test` exits 2 and makes no request. Live mode reads `OPENAI_API_KEY` from the **process environment only** (not `backend/.env`) and never prints the key.
+
+### Dry-run result (2026-10-16)
+
+| Check | Result |
+|-------|--------|
+| Branch | `cursor/openai-gpt6-luna-77c6` |
+| Reviewed ancestor | `3b0abb1ff62cd1c9fc1b3ef1d2b41d39057e8332` |
+| Model / effort / tokens | `gpt-6-luna` / `none` / `1400` |
+| Planned Chat Completions | **3** |
+| Planned `images.edit` / `images.generate` | **0 / 0** |
+| Vision attached | clean=yes, polish=yes, style=no |
+| Estimated total USD | **$0.002256** (worst-case 1400 output tokens × 3; **not a billing guarantee**) |
+| Budget ceiling | $0.05 |
+| Live requests made | **0** |
+| `OPENAI_API_KEY` in this environment | unset |
+
+Per-request client-side estimates (input overestimate + 1400 budgeted output tokens):
+
+| Scenario | Est. input tokens | Budgeted output | Est. USD |
+|----------|-------------------|-----------------|----------|
+| `sketch_clean` (vision) | 672 | 1400 | $0.000767 |
+| `sketch_polish` (vision) | 729 | 1400 | $0.000773 |
+| `style_suggest` (text) | 159 | 1400 | $0.000716 |
+
+### Scenario contract (eval-only; stricter than the production parser)
+
+| Scenario | Required keys | Live quality |
+|----------|---------------|--------------|
+| `sketch_clean` | `summary`; `cleanup_bullets` 3–7 nonempty | **NOT RUN** |
+| `sketch_polish` | `summary`; `polish_bullets` 3–5 nonempty; `image_prompt` relevant to the A-line dress | **NOT RUN** |
+| `style_suggest` | `summary`; exactly 5 `suggestions` with nonempty title+description | **NOT RUN** |
+
+Production `_parse_chat_completion` still accepts any JSON object and then the worker stores it. The harness does **not** change that business behavior. No output-contract defect was found in dry-run that requires a production code change.
+
+### Quality review
+
+Not performed. A valid JSON object alone would not be a passing live result. Live scoring (relevance, fashion terminology, actionable advice, vision understanding, latency, tokens) waits for a separately authorized `--execute --acknowledge-paid-test` run.
+
 ## Remaining blockers
 
-- No authorized live / paid OpenAI call was made. **Live validation is still required** before production `OPENAI_MODEL` is changed.
+- **Live / paid OpenAI eval was not run.** The harness is ready; spend was not authorized.
 - Existing host `.env` files that pin `OPENAI_MODEL=gpt-4o-mini` will keep the deprecated model until someone updates them.
 - Quality of Luna JSON vs mini is unmeasured.
 - PR #6 cannot land on `main` until Magic Look PR #1 is merged (or a separately reviewed retarget).
-- Postgres-backed API tests were **NOT RUN** in the hardening environment.
+- Postgres-backed API tests were **NOT RUN**.
 
 ## Exact next action
 
-Authorize a **separate live eval** of `sketch_clean`, `sketch_polish`, and `style_suggest` on `gpt-6-luna` with `reasoning_effort=none`. Do not merge, deploy, or edit production `.env` until that eval passes.
+An operator who **separately authorizes spend** should export `OPENAI_API_KEY` in the process environment and run:
+
+```text
+cd backend && python3 scripts/eval_gpt6_luna_live.py --execute --acknowledge-paid-test
+```
+
+Do not merge, deploy, rebase/retarget PR #6, or edit production `.env` until that live eval passes quality review. Do not treat this document as spend authorization.

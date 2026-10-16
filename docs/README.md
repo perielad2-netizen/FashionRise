@@ -54,5 +54,6 @@ This folder is the **single source of truth** for FashionRise architecture and p
 | 2026-05-11 | — | **Session pause:** `00` handoff (pause block + next steps); `06` Guided/Pro, reputation v1, handoff slice, CI note; `05-api` profiles + designs handoff/revisions; `03-backend` + `backend/README` migration recovery; `04` profile API note; `02` + `unity-backend-integration` alignment |
 | 2026-10-16 | — | OpenAI sketch model default `gpt-4o-mini` → `gpt-6-luna` (`OPENAI_MODEL_MIGRATION.md`) |
 | 2026-10-16 | — | PR #6 hardening: SDK floor `1.109.1`, per-family reasoning, incomplete JSON cannot start look-image gen |
+| 2026-10-16 | — | Bounded gpt-6-luna live-eval harness (`eval_gpt6_luna_live.py`); dry-run only, 0 paid calls |
 
 _Add a row for each meaningful doc update._

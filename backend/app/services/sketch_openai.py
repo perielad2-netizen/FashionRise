@@ -368,6 +368,35 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     return url
 
 
+def build_sketch_chat_request(
+    job: AIJob,
+    *,
+    model: str,
+    reasoning_effort: str | None,
+    max_completion_tokens: int,
+) -> dict[str, Any]:
+    """Assemble the production Chat Completions payload for a sketch job.
+
+    Shared by the worker and the isolated live-eval harness so request shape
+    cannot drift. Does not open a client or call image endpoints.
+    """
+    if job.job_type not in SKETCH_JOB_TYPES:
+        raise ValueError(f"unsupported job_type {job.job_type!r}")
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": _user_text(job)}]
+    img = _image_part(job)
+    if img:
+        user_content.append(img)
+    return chat_completion_kwargs(
+        model=model,
+        messages=[
+            {"role": "system", "content": _system_prompt(job.job_type)},
+            {"role": "user", "content": user_content},
+        ],
+        max_completion_tokens=int(max_completion_tokens),
+        reasoning_effort=reasoning_effort,
+    )
+
+
 def complete_sketch_job(job: AIJob) -> dict[str, Any]:
     if job.job_type not in SKETCH_JOB_TYPES:
         raise ValueError(f"unsupported job_type {job.job_type!r}")
@@ -377,19 +406,11 @@ def complete_sketch_job(job: AIJob) -> dict[str, Any]:
         raise RuntimeError("OPENAI_API_KEY is not set")
 
     model = settings.openai_model.strip()
-    user_content: list[dict[str, Any]] = [{"type": "text", "text": _user_text(job)}]
-    img = _image_part(job)
-    if img:
-        user_content.append(img)
-
-    create_kwargs = chat_completion_kwargs(
+    create_kwargs = build_sketch_chat_request(
+        job,
         model=model,
-        messages=[
-            {"role": "system", "content": _system_prompt(job.job_type)},
-            {"role": "user", "content": user_content},
-        ],
-        max_completion_tokens=int(settings.openai_max_completion_tokens),
         reasoning_effort=settings.openai_reasoning_effort,
+        max_completion_tokens=int(settings.openai_max_completion_tokens),
     )
 
     client_kwargs: dict[str, Any] = {"api_key": key, "timeout": float(settings.openai_timeout_seconds)}
