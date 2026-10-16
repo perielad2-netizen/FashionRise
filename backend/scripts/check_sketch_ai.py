@@ -42,10 +42,10 @@ def main() -> int:
     print("FashionRise - sketch AI worker")
     print(f"  Working directory: {os.getcwd()}")
     print(f"  OPENAI_API_KEY set: {bool(key)}")
-    if key:
-        tail = key[-4:] if len(key) >= 4 else key
-        print(f"  Key ends with: ...{tail}")
     print(f"  OPENAI_MODEL: {s.openai_model!r}")
+    print(f"  OPENAI_REASONING_EFFORT: {s.openai_reasoning_effort!r}")
+    print(f"  OPENAI_MAX_COMPLETION_TOKENS: {s.openai_max_completion_tokens}")
+    print(f"  OPENAI_IMAGE_MODEL: {s.openai_image_model!r}")
     print(f"  sketch_openai.is_configured(): {ok}")
     if ok:
         print("  => sketch_clean / sketch_polish / style_suggest will use OpenAI when jobs are processed.")

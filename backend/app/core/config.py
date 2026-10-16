@@ -44,11 +44,19 @@ class Settings(BaseSettings):
     ai_worker_batch_size: int = 12
 
     # OpenAI (optional — sketch pipeline jobs use vision + JSON when OPENAI_API_KEY is set)
+    # Default chat model is gpt-6-luna (official replacement for deprecated gpt-4o-mini).
+    # Override with OPENAI_MODEL. Image edit/generate stays on OPENAI_IMAGE_MODEL.
     openai_api_key: str | None = None
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "gpt-6-luna"
     openai_base_url: str | None = None
     openai_timeout_seconds: float = 180.0
     openai_http_timeout_seconds: float = 60.0
+    # Chat Completions reasoning_effort for GPT-6 / GPT-5. "none" keeps sketch jobs
+    # latency-sensitive and is required for Chat Completions function calling on Luna.
+    openai_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] = "none"
+    # Visible JSON budget. With reasoning_effort=none this is not shared with hidden
+    # reasoning tokens. 1400 covers summary + bullets + optional image_prompt.
+    openai_max_completion_tokens: int = 1400
     # sketch_polish look image (images.edit). Set OPENAI_IMAGE_MODEL=off to disable.
     openai_image_model: str = "gpt-image-1"
     openai_image_size: str = "1024x1536"

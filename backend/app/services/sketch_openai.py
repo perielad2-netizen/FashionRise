@@ -20,9 +20,40 @@ logger = logging.getLogger(__name__)
 
 SKETCH_JOB_TYPES = frozenset({"sketch_clean", "sketch_polish", "style_suggest"})
 
+# Chat Completions JSON mode. gpt-6-luna also supports json_schema; we keep json_object
+# so Unity continues to read summary / cleanup_bullets / polish_bullets / suggestions
+# (and polish's extra image_prompt) without a schema change.
+JSON_OBJECT_RESPONSE_FORMAT = {"type": "json_object"}
+
 
 def is_configured() -> bool:
     return bool((get_settings().openai_api_key or "").strip())
+
+
+def uses_chat_reasoning_effort(model: str) -> bool:
+    """GPT-6 / GPT-5 Chat Completions accept reasoning_effort. gpt-4o* does not."""
+    name = (model or "").strip().lower()
+    return name.startswith("gpt-6") or name.startswith("gpt-5")
+
+
+def chat_completion_kwargs(
+    *,
+    model: str,
+    messages: list[dict[str, Any]],
+    max_completion_tokens: int,
+    reasoning_effort: str | None = None,
+) -> dict[str, Any]:
+    """Build Chat Completions args. Omit unsupported reasoning params for older models."""
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "response_format": JSON_OBJECT_RESPONSE_FORMAT,
+        "messages": messages,
+        "max_completion_tokens": max_completion_tokens,
+    }
+    if reasoning_effort and uses_chat_reasoning_effort(model):
+        # Official Chat Completions field (not Responses API reasoning.effort).
+        kwargs["reasoning_effort"] = reasoning_effort
+    return kwargs
 
 
 def _fetch_image(url: str) -> tuple[bytes, str]:
@@ -290,26 +321,17 @@ def complete_sketch_job(job: AIJob) -> dict[str, Any]:
     if img:
         user_content.append(img)
 
-    completion = client.chat.completions.create(
+    create_kwargs = chat_completion_kwargs(
         model=model,
-        response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": _system_prompt(job.job_type)},
             {"role": "user", "content": user_content},
         ],
-        max_completion_tokens=1400,
+        max_completion_tokens=int(settings.openai_max_completion_tokens),
+        reasoning_effort=settings.openai_reasoning_effort,
     )
-
-    raw = (completion.choices[0].message.content or "").strip()
-    try:
-        structured: Any = json.loads(raw)
-    except json.JSONDecodeError:
-        structured = {"summary": raw[:800], "parse_error": True}
-
-    if isinstance(structured, dict):
-        summary = str(structured.get("summary") or "").strip() or raw[:500]
-    else:
-        summary = raw[:500]
+    completion = client.chat.completions.create(**create_kwargs)
+    structured, summary, finish_reason, truncated = _parse_chat_completion(completion)
 
     image_url: str | None = None
     if job.job_type == "sketch_polish":
@@ -322,4 +344,44 @@ def complete_sketch_job(job: AIJob) -> dict[str, Any]:
         "summary": summary,
         "structured": structured,
         "image_url": image_url,
+        "finish_reason": finish_reason,
+        "truncated": truncated,
     }
+
+
+def _parse_chat_completion(completion: Any) -> tuple[Any, str, str | None, bool]:
+    """Turn a Chat Completions result into the Unity-facing structured payload.
+
+    Empty and refused completions fail the job (worker marks failed). Incomplete JSON
+    still uses the previous parse_error fallback so a truncated draft is visible.
+    """
+    if not getattr(completion, "choices", None):
+        raise RuntimeError("model returned no choices")
+
+    choice = completion.choices[0]
+    message = getattr(choice, "message", None)
+    finish_reason = getattr(choice, "finish_reason", None)
+    truncated = finish_reason == "length"
+
+    refusal = getattr(message, "refusal", None) if message is not None else None
+    if isinstance(refusal, str) and refusal.strip():
+        raise RuntimeError("model refused the request")
+
+    raw = ""
+    if message is not None:
+        raw = (getattr(message, "content", None) or "").strip()
+    if not raw:
+        raise RuntimeError("model returned an empty completion")
+
+    try:
+        structured: Any = json.loads(raw)
+    except json.JSONDecodeError:
+        structured = {"summary": raw[:800], "parse_error": True}
+        if truncated:
+            structured["truncated"] = True
+
+    if isinstance(structured, dict):
+        summary = str(structured.get("summary") or "").strip() or raw[:500]
+    else:
+        summary = raw[:500]
+    return structured, summary, finish_reason, truncated

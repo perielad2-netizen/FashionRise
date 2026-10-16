@@ -15,7 +15,7 @@ _Check these off as slices ship. Same codebase: **Pro** depth, **Guided** mode f
 - [x] Dual raster layers (reference + ink): default **female/male** underlay from **`Resources/SketchReference/female_model`** / **`male_model`** (PNG), procedural fallback if missing; **Custom** via Import → Trace; **Blank paper**; **Dim/Bright ref**; pro ink row. Export flattened PNG.
 - [ ] Vector / per-stroke model; export beyond local PNG (**Android** gallery + **iOS** Photos + PC folder opener **done**)
 - [x] Revision snapshot **API** (`POST` / `GET` `/designs/{id}/revisions`, `GET` `/designs/{id}/revisions/{n}`) — owner only; **Unity** timed autosave + save draft + revision append
-- [x] AI jobs: **in-process worker** + optional **`python -m app.ai_worker`**; sketch pipeline uses **OpenAI vision** when configured (`OPENAI_API_KEY`, etc.), else **stub** completion — see `backend/scripts/check_sketch_ai.py`
+- [x] AI jobs: **in-process worker** + optional **`python -m app.ai_worker`**; sketch pipeline uses **OpenAI vision** when configured (`OPENAI_API_KEY`, default Chat Completions model **`gpt-6-luna`**), else **stub** completion — see `backend/scripts/check_sketch_ai.py` and `docs/OPENAI_MODEL_MIGRATION.md`
 - [x] Guided vs Pro UI toggle — **`AuthoringModePreferences`** (PlayerPrefs) + **Settings** “Toggle Guided / Pro mode”; **Home** shows current mode; **Create design** hides pro-only controls (V2 garment toggles, model preview, revision history block, handoff/PDF tools, PC Handoffs folder) in **Guided** mode
 
 ### Pillar B — Share & social proof
