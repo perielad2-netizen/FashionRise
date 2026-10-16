@@ -48,6 +48,15 @@ SKETCH_HEIGHT = 240
 # Conservative extras for preflight only. Not a billing guarantee.
 REQUEST_OVERHEAD_TOKENS = 250
 VISION_SAFETY_MULTIPLIER = 3
+# Human-review excerpts. Only contract-validated fields; keep the report small.
+REVIEW_SUMMARY_CHARS = 400
+REVIEW_BULLET_CHARS = 240
+REVIEW_PROMPT_CHARS = 500
+REVIEW_TITLE_CHARS = 80
+REVIEW_DESC_CHARS = 280
+REVIEW_CLEANUP_MAX = 7
+REVIEW_POLISH_MAX = 5
+REVIEW_SUGGESTIONS_MAX = 5
 INTEGRATION_FILES = (
     "backend/app/services/sketch_openai.py",
     "backend/app/core/config.py",
@@ -532,6 +541,50 @@ def validate_contract(job_type: str, structured: Any) -> list[str]:
     return errors
 
 
+def _bound_text(value: Any, limit: int) -> str:
+    """Unicode-safe clip. Never used for secrets or image payloads."""
+    text = str(value)
+    if len(text) <= limit:
+        return text
+    return text[:limit]
+
+
+def review_output(job_type: str, structured: dict[str, Any]) -> dict[str, Any]:
+    """Bounded, expected-field excerpt for human review. Call only after contract validation."""
+    summary = _bound_text(structured.get("summary") or "", REVIEW_SUMMARY_CHARS)
+    if job_type == "sketch_clean":
+        bullets = structured.get("cleanup_bullets") or []
+        return {
+            "summary": summary,
+            "cleanup_bullets": [
+                _bound_text(b, REVIEW_BULLET_CHARS) for b in list(bullets)[:REVIEW_CLEANUP_MAX]
+            ],
+        }
+    if job_type == "sketch_polish":
+        bullets = structured.get("polish_bullets") or []
+        return {
+            "summary": summary,
+            "polish_bullets": [
+                _bound_text(b, REVIEW_BULLET_CHARS) for b in list(bullets)[:REVIEW_POLISH_MAX]
+            ],
+            "image_prompt": _bound_text(structured.get("image_prompt") or "", REVIEW_PROMPT_CHARS),
+        }
+    if job_type == "style_suggest":
+        suggestions = structured.get("suggestions") or []
+        return {
+            "summary": summary,
+            "suggestions": [
+                {
+                    "title": _bound_text(item.get("title") or "", REVIEW_TITLE_CHARS),
+                    "description": _bound_text(item.get("description") or "", REVIEW_DESC_CHARS),
+                }
+                for item in list(suggestions)[:REVIEW_SUGGESTIONS_MAX]
+                if isinstance(item, dict)
+            ],
+        }
+    return {"summary": summary}
+
+
 def quality_notes(job_type: str, structured: dict[str, Any]) -> dict[str, Any]:
     blob = json.dumps(structured).lower()
     fashion_hits = sorted({term for term in _FASHION_TERMS if term in blob})
@@ -679,6 +732,7 @@ def run_live_scenario(
         "json_contract": "PASS",
         "automated_quality": quality["automated_quality"],
         "human_quality_review_required": True,
+        "review_output": review_output(scenario.job_type, structured),
         "usage": usage,
         "estimated_usd_from_usage": cost,
         "latency_ms": latency_ms,
@@ -804,7 +858,7 @@ def run_eval(
         "results": [_blank_result(s) for s in scenarios],
         "live_requests_made": 0,
         "live_image_calls": 0,
-        "estimated_spend_usd": 0.0,
+        "estimated_spend_usd": 0.0 if not execute else None,
         "stopped_reason": None,
         "failure": None,
         "outcome": "DRY_RUN",
@@ -863,7 +917,8 @@ def run_eval(
             }
             report["stopped_reason"] = classified["sanitized_message"]
             report["failure"] = classified
-            report["estimated_spend_usd"] = round(spent, 6)
+            # Usage may be unavailable after a failed call — do not report $0 as known spend.
+            report["estimated_spend_usd"] = round(spent, 6) if spent > 0 else None
             _finalize_outcome(report)
             return report
 
@@ -905,10 +960,16 @@ def _print_report(report: dict[str, Any]) -> None:
     print("  expected JSON contracts:")
     print(json.dumps(report["expected_json_contracts"], indent=2))
     print(f"  live_requests_made: {report['live_requests_made']}")
-    print(f"  estimated_spend_usd: {report.get('estimated_spend_usd', 0)}  (NOT a billing guarantee)")
+    spend = report.get("estimated_spend_usd")
+    spend_display = "unknown" if spend is None else spend
+    print(f"  estimated_spend_usd: {spend_display}  (NOT a billing guarantee)")
     if report.get("results"):
         print("  results:")
-        print(json.dumps(report["results"], indent=2, default=str))
+        print(json.dumps(report["results"], indent=2, default=str, ensure_ascii=False))
+        reviews = [r.get("review_output") for r in report["results"] if r.get("review_output")]
+        if reviews:
+            print("  review_output:")
+            print(json.dumps(reviews, indent=2, default=str, ensure_ascii=False))
     if report.get("stopped_reason"):
         print(f"  stopped: {report['stopped_reason']}")
     if report.get("failure"):
@@ -947,7 +1008,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     if args.json:
-        print(json.dumps(report, indent=2, default=str))
+        print(json.dumps(report, indent=2, default=str, ensure_ascii=False))
     else:
         _print_report(report)
     if report.get("mode") == "dry-run":

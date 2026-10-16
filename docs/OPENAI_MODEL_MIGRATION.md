@@ -75,16 +75,16 @@ Latency should stay in the same class as mini **if** `reasoning_effort=none`. A 
 
 ```text
 cd backend && pytest tests/test_openai_model_migration.py tests/test_gpt6_luna_live_eval.py -q
-# 52 passed (mocked; openai 1.109.1 installed)
+# 55 passed (mocked; openai 1.109.1 installed)
 
 cd backend && pytest tests -q
-# 52 passed, 7 ERROR at setup (PostgreSQL connection refused)
+# 55 passed, 7 ERROR at setup (PostgreSQL connection refused)
 
 cd backend && python3 scripts/eval_gpt6_luna_live.py
 # dry-run; 0 network calls
 ```
 
-Covered (mocked): default model, env override, Luna `none`, gpt-4o-mini omit, Astra / GPT-6.1 Sol reject `none` and accept `low`, unknown models (`gpt-5*`, bare `gpt-6`) fail closed, SDK floor + `Completions.create` signature (`reasoning_effort`, `response_format`, `max_completion_tokens`), vision `image_base64` / `image_url`, JSON keys (`summary`, `cleanup_bullets`, `polish_bullets`, `suggestions`), successful `image_prompt`, truncated/empty/invalid/refused polish never call `images.edit` / `images.generate` (including `finish_reason=length` even when JSON parses), worker stub, worker failure, no secret in logs, dry-run harness, missing ack/key, unexpected `OPENAI_BASE_URL`, returned-model mismatch, missing usage, invalid JSON, sanitized provider errors, budget stop, CONDITIONAL quality, unreviewed integration baseline block.
+Covered (mocked): default model, env override, Luna `none`, gpt-4o-mini omit, Astra / GPT-6.1 Sol reject `none` and accept `low`, unknown models (`gpt-5*`, bare `gpt-6`) fail closed, SDK floor + `Completions.create` signature (`reasoning_effort`, `response_format`, `max_completion_tokens`), vision `image_base64` / `image_url`, JSON keys (`summary`, `cleanup_bullets`, `polish_bullets`, `suggestions`), successful `image_prompt`, truncated/empty/invalid/refused polish never call `images.edit` / `images.generate` (including `finish_reason=length` even when JSON parses), worker stub, worker failure, no secret in logs, dry-run harness, missing ack/key, unexpected `OPENAI_BASE_URL`, returned-model mismatch, missing usage, invalid JSON, sanitized provider errors, budget stop, CONDITIONAL quality, unreviewed integration baseline block, bounded `review_output` on success, unknown spend when usage is missing.
 
 **Lint / types:** `python3 -m compileall -q app tests scripts` succeeded. No `ruff` or `mypy` is configured in this repo.
 
@@ -125,6 +125,16 @@ Live preflight also requires:
 - remaining scenarios are marked **NOT RUN**; the run outcome is **FAIL** (never a silent PASS)
 
 Outcomes distinguish **API compatibility**, **JSON contract**, **automated quality** (`PASS` / `CONDITIONAL` / `FAIL`), and **human review still required**. Weak vocabulary, generic advice, or poor sketch relevance yields **CONDITIONAL**, not an unconditional PASS. Production JSON contracts are unchanged.
+
+Each **contract-validated** live scenario now includes a bounded `review_output` for human review (Unicode preserved; extra keys dropped; text and list sizes clipped):
+
+| Scenario | `review_output` fields |
+|----------|------------------------|
+| `sketch_clean` | `summary`, `cleanup_bullets` |
+| `sketch_polish` | `summary`, `polish_bullets`, `image_prompt` |
+| `style_suggest` | `summary`, `suggestions` (`title`, `description`) |
+
+Failed or unvalidated responses do **not** persist raw model content. If usage tokens are missing, `estimated_spend_usd` is **unknown** (not `$0`).
 
 **Default is dry-run (zero network).** This document is **not** authorization to spend. Client-side USD figures are **not an absolute billing guarantee**.
 

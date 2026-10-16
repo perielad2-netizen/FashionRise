@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. GPT-6 Luna + hardened dry-run eval harness rebasing onto that tip. Unity compile **NOT RUN** — deferred. See `docs/OPENAI_MODEL_MIGRATION.md`.)
+**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. GPT-6 Luna eval harness includes bounded `review_output`. Unity compile **NOT RUN** — deferred. See `docs/OPENAI_MODEL_MIGRATION.md`.)
 
 **Magic Look PR #1 (merged 2026-10-17):** poll fail-fast (`AiJobPollPolicy`) is on `main`. **UNITY COMPILE NOT RUN** / **Play Mode NOT RUN**.
 

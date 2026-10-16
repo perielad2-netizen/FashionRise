@@ -282,6 +282,8 @@ def test_missing_usage_stops_after_one_call(ev):
     assert report["outcome"] == "FAIL"
     assert report["results"][1]["status"] == "NOT RUN"
     assert "usage" in report["stopped_reason"]
+    assert report["estimated_spend_usd"] is None
+    assert report["results"][0].get("review_output") is None
 
 
 def test_invalid_json_stops_after_one_call(ev):
@@ -474,3 +476,89 @@ def test_production_complete_job_still_uses_shared_builder(monkeypatch):
     result = sketch_openai.complete_sketch_job(SimpleNamespace(id=1, job_type="sketch_clean", input_data={"notes": "x"}))
     assert captured and captured[0]["model"] == "gpt-6-luna"
     assert result["summary"] == "ok"
+
+
+def test_review_output_present_for_all_three_successes(ev):
+    payloads = _valid_payloads()
+    payloads["sketch_clean"]["summary"] = "Nettoie la silhouette A-line et égalise l’ourlet."
+    calls: list[str] = []
+
+    def create(**kwargs):
+        calls.append(_job_type_from_kwargs(kwargs))
+        return _completion(payloads[_job_type_from_kwargs(kwargs)])
+
+    report = ev.run_eval(
+        execute=True,
+        acknowledge=True,
+        skip_git=True,
+        chat_create=create,
+        environ=_live_env(),
+    )
+    assert calls == ["sketch_clean", "sketch_polish", "style_suggest"]
+    assert report["live_requests_made"] == 3
+    assert report["live_image_calls"] == 0
+    clean, polish, style = (r["review_output"] for r in report["results"])
+    assert set(clean) == {"summary", "cleanup_bullets"}
+    assert clean["summary"] == payloads["sketch_clean"]["summary"]
+    assert "ourlet" in clean["summary"]
+    assert clean["cleanup_bullets"] == payloads["sketch_clean"]["cleanup_bullets"]
+    assert set(polish) == {"summary", "polish_bullets", "image_prompt"}
+    assert polish["image_prompt"] == payloads["sketch_polish"]["image_prompt"]
+    assert set(style) == {"summary", "suggestions"}
+    assert len(style["suggestions"]) == 5
+    assert all(set(s) == {"title", "description"} for s in style["suggestions"])
+    blob = json.dumps(report, ensure_ascii=False)
+    assert "sk-test-not-a-real-key" not in blob
+    assert "base64," not in blob
+    assert "data:image" not in blob
+
+
+def test_review_output_is_length_bounded(ev):
+    huge = "α" * 5000
+    out = ev.review_output(
+        "sketch_clean",
+        {"summary": huge, "cleanup_bullets": [huge] * 12},
+    )
+    assert out["summary"] == "α" * ev.REVIEW_SUMMARY_CHARS
+    assert len(out["cleanup_bullets"]) == ev.REVIEW_CLEANUP_MAX
+    assert all(item == "α" * ev.REVIEW_BULLET_CHARS for item in out["cleanup_bullets"])
+    polish = ev.review_output(
+        "sketch_polish",
+        {"summary": huge, "polish_bullets": [huge] * 9, "image_prompt": huge},
+    )
+    assert polish["image_prompt"] == "α" * ev.REVIEW_PROMPT_CHARS
+    assert len(polish["polish_bullets"]) == ev.REVIEW_POLISH_MAX
+    style = ev.review_output(
+        "style_suggest",
+        {"summary": huge, "suggestions": [{"title": huge, "description": huge, "extra": "drop"}] * 9},
+    )
+    assert len(style["suggestions"]) == ev.REVIEW_SUGGESTIONS_MAX
+    assert all(set(s) == {"title", "description"} for s in style["suggestions"])
+    assert all(len(s["title"]) == ev.REVIEW_TITLE_CHARS for s in style["suggestions"])
+
+
+def test_failure_report_omits_raw_provider_content_and_review_output(ev):
+    class FakeAuth(Exception):
+        status_code = 401
+
+    def create(**kwargs):
+        raise FakeAuth('{"error":"sk-secret","image":"data:image/png;base64,AAAA"}')
+
+    report = ev.run_eval(
+        execute=True,
+        acknowledge=True,
+        skip_git=True,
+        chat_create=create,
+        environ=_live_env(),
+    )
+    assert report["live_requests_made"] == 1
+    assert report["live_image_calls"] == 0
+    assert report["estimated_spend_usd"] is None
+    failed = report["results"][0]
+    assert failed.get("review_output") is None
+    assert "summary" not in failed
+    blob = json.dumps(report)
+    assert "sk-secret" not in blob
+    assert "base64" not in blob
+    assert "AAAA" not in blob
+    assert report["failure"]["class"] == "authentication"
