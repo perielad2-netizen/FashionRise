@@ -3,20 +3,42 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** `433b1b99`. GPT-6 Luna **PR #6 MERGED** `a5b3c167`. Luna live **VALIDATED — 3/3**. Production deploy **NOT PERFORMED**. Unity compile **NOT RUN** — deferred.)
+**Last updated:** 2026-10-17 (Visual Reboot **VR1** — Creator Studio shell on `cursor/visual-reboot-studio-shell`. Baseline `origin/main` **`2fc4c1fa`**. Production deploy **NOT PERFORMED**. Paid OpenAI for VR1 **NONE**. Persistent AI/backend **UNCHANGED**.)
 
-**Development integration (2026-10-17):**
+**Phase:** FashionRise Visual Reboot VR1 — Creator Studio Shell + Premium Design System
+
+**Baseline:** `main` / `origin/main` **`2fc4c1fa`** (PR #7 docs merge; contains Magic Look PR #1 `433b1b99` + GPT-6 Luna PR #6 `a5b3c167`).
+
+**VR1 branch commit:** recorded in the Changelog after the implementation commit lands (see latest `cursor/visual-reboot-studio-shell` HEAD).
+
+**Development integration (corrected 2026-10-17):**
 
 | Item | Status |
 |------|--------|
 | PR #1 Magic Look | **MERGED** — `433b1b99` (poll fail-fast `614424c2`) |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` (rebased onto #1; default `gpt-6-luna`) |
-| Final `main` | `a5b3c167` (contains both PRs) |
-| Unity compile / Play Mode | **NOT RUN** — deferred, not a merge blocker |
+| PR #7 status docs | **MERGED** — `2fc4c1fa` |
+| Current `main` / `origin/main` | **`2fc4c1fa`** (not `a5b3c167`) |
+| Visual Reboot VR1 | **DRAFT PR** — Studio shell + design system only; not merged |
 | Production deploy | **NOT PERFORMED** |
-| Paid OpenAI this session | **None** |
+| Paid OpenAI for VR1 | **NONE** |
+| Persistent AI/backend behavior | **UNCHANGED** |
 
-**Magic Look PR #1 (merged 2026-10-17):** poll fail-fast (`AiJobPollPolicy`) is on `main` (`614424c2`). Isolated Postgres API tests previously **7 passed**. **UNITY COMPILE NOT RUN** / **Play Mode NOT RUN**.
+**Unity evidence (operator, 2026-10-17, Unity `2022.3.62f1`) — corrects stale “Unity compile NOT RUN”:**
+
+| Gate | Status |
+|------|--------|
+| Windows batch compile/load | **PASS**, process exit **0** |
+| EditMode XML | **0 tests**, 0 failures, 0 errors |
+| PlayMode XML | **0 tests**, 0 failures, 0 errors |
+| Meaning | Compilation/load evidence — **not** automated behavioral coverage |
+| Manual Play Mode baseline (2026-10-17) | **PASS** |
+
+These XML files must **not** be reported as “Unity tests passed.” Correct phrasing: Unity batch Editor load/compile completed successfully; automated test coverage remains 0.
+
+**Manually verified on that baseline (do not re-spend OpenAI for VR1):** local auth, model selection, sketching, Magic, GPT-6 Luna Chat Completions, gpt-image-1 edit, Magic result display, Create Real Design, front/back/pattern assets, tech-pack PDF.
+
+**Magic Look PR #1 (merged 2026-10-17):** poll fail-fast (`AiJobPollPolicy`) is on `main` (`614424c2`). Isolated Postgres API tests previously **7 passed**.
 
 **GPT-6 Luna close-out (2026-10-16, operator live report + PM review):**
 
@@ -26,8 +48,9 @@
 | Production deployment | **NOT PERFORMED** |
 | Magic Look dependency | **PR #1 MERGED** (`433b1b99`) |
 | PostgreSQL integration tests | **VALIDATED** earlier on isolated disposable Postgres (not an app DB) |
-| Unity compile / Play Mode | **NOT RUN** — deferred, not a merge blocker |
-| Next | Do **not** repeat the paid live harness. Do **not** deploy from this merge alone. |
+| Unity 2022.3.62f1 Windows batch compile/load | **PASS**, exit 0 (operator). Automated tests remain **0**. |
+| Manual Play Mode baseline 2026-10-17 | **PASS** |
+| Next | Do **not** repeat the paid live harness. Do **not** deploy from VR1. After operator visual review, **VR2 — Professional Sketch Tools**. |
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
@@ -40,16 +63,17 @@
 **Recently shipped (high level):**
 
 - **Backend:** Same as prior milestone (reputation v1 on profiles, handoff `export_kind`, rate limits, `.env` absolute path, pytest flows). **Auth tweaks:** `auth_service` stores **lowercased** email, login matches **case-insensitively**; **password strip** on register/login to avoid stray whitespace; dev helper **`python scripts/set_user_password.py email "password"`** (see `backend/README.md` → Dev utilities). **`401` login** vs **`409` register** = invalid credentials vs duplicate email/username (not the same root cause).
-- **Unity — sketch (Pillar A):** **Dual-layer** `UiSketchPad`: reference buffer + ink buffer, composite export PNG. **Default models:** `Resources/SketchReference/female_model.png` & `male_model.png` (Resources.Load), **`SketchDefaultFigureGenerator`** procedural fallback if missing. **`SketchCanvasScreen`:** Female / Male / Custom / Blank paper, **Dim/Bright ref**, brush sizes + colors + Draw/Erase; **pad bootstrap in `OnShown`** (not `Awake`) so `App` is injected before `CreateDesign` / pending trace path — fixes startup **NRE**. **`SketchFigurePreferences`** (PlayerPrefs) + **`SketchFigureTemplate`** enum. **`LoginChoiceScreen`:** password **Trim()** on API sign-in.
+- **Unity — sketch (Pillar A):** **Dual-layer** `UiSketchPad` unchanged (reference + ink, composite PNG export). **Default models:** `Resources/SketchReference/female_model.png` & `male_model.png`. **VR1 Creator Studio:** `SketchCanvasScreen` is now a navy/cream shell (`FrStudioShell` + top bar, model cards, tool rail, inspector, Magic CTA) composed from `FashionRise/UI/Studio/*`. Existing Female/Male/Custom/Blank, Dim ref, brush sizes, colors, Draw/Erase, Undo, Clear, and **Magic → save PNG + `NavigateTo(SketchEnhancement)`** are preserved. Pad bootstrap remains in **`OnShown`**. Home and other screens stay on legacy `FrUiFactory` + `UnityEngine.UI.Text`.
+- **VR1 known limitations:** Cloud agent has **no Unity Editor**, so VR1 Play Mode was **not** human-validated here. No TMP font assets are committed; typography uses TMP when `TMP_Settings.defaultFontAsset` or a Resources font exists, otherwise **UI.Text fallback**. `UiSketchPad` still has **no flood-fill engine** (pre-VR1 color = brush swatches only). Narrow/portrait reflows side rails into a top model strip + bottom dock — operator should resize Game view. Programmatic icons, not a purchased icon set. Canvas uses `AspectRatioFitter` 768:1024 to protect draw coordinates.
 - **Unity — platform:** **iOS Photos** → `Imports` (`FashionRiseGalleryPickBridge.mm`, `IOSGalleryPick`, shared `FashionRiseAndroidBridge` UnitySendMessage). **Guided/Pro**, share sheet, gallery/social, design detail nullable `RawImage.texture` clear (`null!`).
 - **Tooling / meta:** Fixed **invalid 32-char Unity GUIDs** on new `.meta` files (was breaking `SketchFigureTemplate` compile). **`FashionRise.asmdef`** duplicate `precompiledReferences` key removed.
 
 **Suggested order for the *next* session:**
 
-1. **Operator Unity 2022.3.62f1** compile + mock Play Mode when convenient (deferred). Do **not** deploy or repeat the paid Luna harness. See `docs/OPENAI_MODEL_MIGRATION.md`. 
-2. **Pillar A — next slice:** **Vector / per-stroke** ink model (or richer raster: soft brush, layers beyond ref+ink) — dual-layer + import + default models are **done**; see `06-implementation-phases.md`. Optional: **export** beyond flattened PNG if product needs layered files.  
-3. **Pillar C:** Real **`spec_sheet_pdf`** layout (or second export kind); zip / multi-file handoff when ready.  
-4. **Pillar B:** Reputation **v2** explainability; gallery/sketch **UX polish** (toolbar scroll on small phones, toasts).  
+1. **Operator visual review of VR1** on Unity **2022.3.62f1** (App scene → Play → login → Creator Studio). Use the VR1 manual checklist. Do **not** run Magic solely for this visual PR. Do **not** merge or deploy until that review.
+2. After approval: **Visual Reboot VR2 — Professional Sketch Tools** (Pencil/Marker/Brush/Fill/Gradient, layers foundation). Do **not** start VR2 from this draft.
+3. **Pillar C:** Real **`spec_sheet_pdf`** layout (or second export kind); zip / multi-file handoff when ready.
+4. **Pillar B:** Reputation **v2** explainability; gallery/sketch **UX polish** on remaining legacy screens.
 5. **Pillar D:** **CI** + `pytest`; Prompt 8 when targeting a release candidate.
 
 **Parking lot (unchanged intent):** full AI worker split at scale, WebGL polish, `POST /auth/logout`, admin moderation UI, audit logs.
@@ -72,7 +96,7 @@ FashionRise is a **professional fashion sketch and design app** — credible for
 
 | Pillar | Outcome | Ties to |
 |--------|---------|--------|
-| **A — Sketch & authoring** | **In progress:** dual-layer pad + default **PNG croquis** + Import (Android / **iOS Photos** / PC) + trace + **revisions API** + autosave + **Guided/Pro**; **next:** vector/per-stroke or extra layers, export beyond flat PNG, AI worker polish | Prompt 6 completion, Phase 5b |
+| **A — Sketch & authoring** | **In progress:** dual-layer pad + default **PNG croquis** + Import + **VR1 Creator Studio shell** (draft); **next after VR1 approval:** VR2 professional tools, then vector/layers/export beyond flat PNG | Prompt 6 completion, Phase 5b, Visual Reboot |
 | **B — Social & growth** | **In progress:** feeds, follows, per-creator gallery, ratings 1–10, comments, share/native share; **reputation v1** (computed score + tier on profile API + Unity Profile). Next: UX polish, notifications, reputation explainability | Phase 4–5b |
 | **C — Maker handoff** | **First slice shipped:** `GET …/handoff` + `export_kind` (`manifest_v1`, `spec_sheet_v1`, `spec_sheet_pdf` placeholder + file URL + export row). Next: real PDF/spec packages, richer BOM/measurements | Prompt 7 / Phase 6 |
 | **D — Trust & scale** | Hardening, moderation tools, analytics, CI, optional compliance | Phase 7 + Prompt 8 |
@@ -162,11 +186,12 @@ FashionRise/
 
 ## Suggested next steps (aligned with full product)
 
-1. **Pillar A — authoring depth:** **Layers/vectors** (or structured stroke model) on `UiSketchPad` / `SketchCanvasScreen`; export beyond local PNG where product needs it. (**iOS** Photos → Imports picker shipped; **Android** + **PC** unchanged.)  
-2. **Pillar C — handoff quality:** Evolve **`spec_sheet_pdf`** from placeholder bytes to a real layout; add measurement/BOM fields to manifest + Unity “save package” flow when ready.  
-3. **Pillar B — polish:** Toasts / less error-as-body-text; optional **notifications**; **reputation explainability** (small JSON breakdown on profile or docs for creators).  
-4. **Engineering:** **CI** running `pytest`; secure token storage on mobile; refresh-on-401 hardening.  
-5. **Prompt 8:** Formal **quality review** before a public “1.0” narrative.
+1. **Visual Reboot VR1 (this draft):** operator Play Mode visual checklist on the Studio shell. Then **VR2** professional sketch tools. Do not merge old UI PRs #2/#3/#4.
+2. **Pillar A — authoring depth:** **Layers/vectors** (or structured stroke model) on `UiSketchPad` after VR2 foundations; export beyond local PNG where product needs it. (**iOS** Photos → Imports picker shipped; **Android** + **PC** unchanged.)
+3. **Pillar C — handoff quality:** Evolve **`spec_sheet_pdf`** from placeholder bytes to a real layout; add measurement/BOM fields to manifest + Unity “save package” flow when ready.
+4. **Pillar B — polish:** Toasts / less error-as-body-text; optional **notifications**; **reputation explainability** (small JSON breakdown on profile or docs for creators).
+5. **Engineering:** **CI** running `pytest`; secure token storage on mobile; refresh-on-401 hardening.
+6. **Prompt 8:** Formal **quality review** before a public “1.0” narrative.
 
 _Update this list as pillars complete._
 
@@ -190,6 +215,7 @@ _Update this list as pillars complete._
 
 | Date | Summary |
 |------|---------|
+| 2026-10-17 | **Visual Reboot VR1 (draft):** Creator Studio shell + premium design system on `cursor/visual-reboot-studio-shell` from `origin/main` **`2fc4c1fa`**. New `FashionRise/UI/Studio` components; `SketchCanvasScreen` rebuilt around unchanged `UiSketchPad` + existing Magic path (`ContinueToEnhancement` → `SketchEnhancement`). Theme tokens + `DeviceLayoutPolicy` wide/narrow. TMP foundation with UI.Text fallback. **No** backend/AI/contract changes. **No** VR2 tools. **No** fill/pencil/gradient/layers/fabric engines. Unity CLI **not available** in the cloud agent; operator 2022.3.62f1 Windows batch compile/load **PASS** exit 0 on baseline; EditMode/PlayMode XML **0 tests**. Paid OpenAI **NONE**. Production deploy **NOT PERFORMED**. |
 | 2026-05-12 | **Unity iOS:** `IOSGalleryPick` + `FashionRiseGalleryPickBridge.mm` (PHPicker iOS 14+, UIImagePicker 12–13); `Plugins/iOS/Info.plist` `NSPhotoLibraryUsageDescription`; Import screen **Pick from Photos**; `FashionRiseApp` creates `FashionRiseAndroidBridge` on iOS for `UnitySendMessage`. Docs: **`06`**, **`00`**, **`README_Unity`**. |
 | 2026-05-11 | **Session pause doc sweep:** `00` handoff block (where we stopped / next picks); pillars + executive table refreshed; startup DB notes (`backend/.env` absolute, migration recovery). Related: **`06`**, **`05-api`**, **`02-unity-client`**, **`03-backend`**, **`04-database`**, **`unity-backend-integration.md`**, **`backend/README`**, **`README_Unity`**, **`docs/README`**, root **`README`**. |
 | 2026-05-11 | **Backend ops & migrations:** Alembic **`001`/`002`/`003` downgrades** use **`if_exists`** on drops (recover stamped-without-tables DBs). **`app/core/config.py`** loads **`backend/.env`** by path. Lifespan: seed + schema warning + AI worker single-warning stop on missing tables. |
