@@ -3,14 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. PR #6 **rebased onto that main** and retargeted to `main`. GPT-6 Luna **VALIDATED — 3/3**. Production deploy **NOT PERFORMED**. Unity compile **NOT RUN** — deferred.)
+**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** `433b1b99`. GPT-6 Luna **PR #6 MERGED** `a5b3c167`. Luna live **VALIDATED — 3/3**. Production deploy **NOT PERFORMED**. Unity compile **NOT RUN** — deferred.)
 
 **Development integration (2026-10-17):**
 
 | Item | Status |
 |------|--------|
-| PR #1 Magic Look | **MERGED** — merge commit `433b1b99` (poll fail-fast `614424c2`) |
-| PR #6 GPT-6 Luna | Rebased onto `433b1b99`, retargeted to `main` (migration-only commits; Unity poll files unchanged) |
+| PR #1 Magic Look | **MERGED** — `433b1b99` (poll fail-fast `614424c2`) |
+| PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` (rebased onto #1; default `gpt-6-luna`) |
+| Final `main` | `a5b3c167` (contains both PRs) |
 | Unity compile / Play Mode | **NOT RUN** — deferred, not a merge blocker |
 | Production deploy | **NOT PERFORMED** |
 | Paid OpenAI this session | **None** |
