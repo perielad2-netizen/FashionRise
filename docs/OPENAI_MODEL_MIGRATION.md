@@ -4,7 +4,7 @@
 **Status:** GPT-6 Luna Chat Completions **synthetic live compatibility VALIDATED** (3/3). **Production deployment NOT PERFORMED.**  
 **PR:** [#6](https://github.com/perielad2-netizen/FashionRise/pull/6) against `cursor/magic-look-image-display-77c6`.  
 **Depends on:** unmerged Magic Look [PR #1](https://github.com/perielad2-netizen/FashionRise/pull/1). Retargeting onto `main` must be a separate review after #1 merges.  
-**Reviewed production baseline:** `bbcae8a397f831436374cb9bf567582d9f3f3a14` — live preflight fails if `sketch_openai.py`, `config.py`, `requirements.txt`, or `ai_worker.py` change.
+**Reviewed production baseline:** `f80fc1de6c309318c7ca894842b1b93d3925b9a7` — live preflight fails if `sketch_openai.py`, `config.py`, `requirements.txt`, or `ai_worker.py` change.
 
 ## Why
 
@@ -116,7 +116,7 @@ The script reuses production `build_sketch_chat_request` and `_parse_chat_comple
 
 Live preflight also requires:
 - branch `cursor/openai-gpt6-luna-77c6`
-- reviewed baseline `bbcae8a397f831436374cb9bf567582d9f3f3a14` is an ancestor
+- reviewed baseline `f80fc1de6c309318c7ca894842b1b93d3925b9a7` is an ancestor
 - `sketch_openai.py`, `config.py`, `requirements.txt`, and `ai_worker.py` identical to that baseline (committed and uncommitted)
 - returned model is `gpt-6-luna` (or a `gpt-6-luna-*` snapshot)
 - each response includes valid `prompt_tokens` and `completion_tokens`
@@ -148,7 +148,7 @@ cd backend && python3 scripts/eval_gpt6_luna_live.py
 | Check | Result |
 |-------|--------|
 | Branch | `cursor/openai-gpt6-luna-77c6` |
-| Reviewed production baseline | `bbcae8a397f831436374cb9bf567582d9f3f3a14` (files unchanged) |
+| Reviewed production baseline | `f80fc1de6c309318c7ca894842b1b93d3925b9a7` (files unchanged) |
 | Model / effort / tokens | `gpt-6-luna` / `none` / `1400` |
 | Endpoint | `https://api.openai.com/v1` |
 | Planned Chat Completions | **3** |

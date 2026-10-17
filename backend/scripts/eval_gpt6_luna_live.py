@@ -33,7 +33,7 @@ if str(ROOT) not in sys.path:
 from app.services import sketch_openai  # noqa: E402
 
 EVAL_BRANCH = "cursor/openai-gpt6-luna-77c6"
-REVIEWED_HEAD = "bbcae8a397f831436374cb9bf567582d9f3f3a14"
+REVIEWED_HEAD = "f80fc1de6c309318c7ca894842b1b93d3925b9a7"
 EVAL_MODEL = "gpt-6-luna"
 EVAL_REASONING_EFFORT = "none"
 EVAL_MAX_COMPLETION_TOKENS = 1400
