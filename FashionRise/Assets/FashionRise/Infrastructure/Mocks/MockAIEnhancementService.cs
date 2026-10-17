@@ -28,5 +28,9 @@ namespace FashionRise.Infrastructure.Mocks
         public Task<string?> GetJobStructuredDetailTextAsync(string jobId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<string?>(null);
+
+        public Task<string?> GetJobImageUrlAsync(string jobId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
     }
 }

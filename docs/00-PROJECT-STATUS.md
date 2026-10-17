@@ -3,7 +3,42 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-05-13 (session handoff — sketch pad v2, auth hardening, iOS import, Unity fixes)
+**Last updated:** 2026-10-17 (Magic Look Unity validation gate: **UNITY COMPILE NOT RUN**, **Play Mode NOT RUN**. Poll fail-fast code remains on PR #1 `614424c2`. PR #1 stays **DRAFT**. Do not merge #1 or #6.)
+
+**Magic Look Unity validation gate (2026-10-17):**
+
+| Gate | Status |
+|------|--------|
+| Commit verified | `614424c2` on `cursor/magic-look-image-display-77c6` (clean tree; matches GitHub PR #1 head) |
+| Required Editor | Project `FashionRise/ProjectSettings/ProjectVersion.txt` = **2022.3.62f1** `(4af31df58517)` |
+| Editor on this runner | **None** — no Unity Hub, no `unity-editor`, no `dotnet`, no install paths under `/opt`, `/usr`, or `$HOME` |
+| C# compile | **UNITY COMPILE NOT RUN** (Python tests are not a C# compile) |
+| Play Mode | **NOT RUN** — no Editor; no isolated mock HTTP poll harness |
+| `.meta` GUID | `7e4c91b0a2d64f1e9c8b35f046a17d2e` unique in the Unity tree; not imported by an Editor here |
+| `FashionRise.asmdef` | Unchanged (`Newtonsoft.Json.dll`, `nullable: true`); policy class is same assembly |
+| New defects | **None found** in source review; compile/runtime still unproven |
+| Ready for Review | **NO-GO** until a 2022.3.62f1 machine reports a clean compile |
+| Merge | **NO-GO** |
+| Stacked PR #6 | Not rebased or retargeted |
+
+**Manual Unity validation (operator machine, do not auto-install/upgrade Editor):**
+
+1. Checkout `cursor/magic-look-image-display-77c6` at `614424c2`. Open `FashionRise/` in **2022.3.62f1** only.
+2. Open `Assets/App.unity`. Wait for import/compile. Console must have **zero** CS errors on `AiJobPollPolicy.cs` / `SketchPipelineApiService.cs`.
+3. Play Mode **mock** (`useMockServices`): Magic once; second tap shows busy; **See last result** stays visible; Your look opens.
+4. Play Mode **API** against a **local disposable stub** (not production DB, no OpenAI): 401/403/404/429 fail promptly; 408/5xx/timeout retry; cancel stops; completed job recovers; one POST only.
+5. Hub has previously flagged **2022.3.62f1** (CVE-2025-59489, fix 62f2). Do not auto-upgrade as part of this gate; record the version that actually compiled.
+
+**Magic Look PR #1 poll fail-fast (2026-10-16):**
+
+| Gate | Status |
+|------|--------|
+| Defect | `WaitForJobCompletionAsync` swallowed **401 / 403 / 404** (and other non-retryable 4xx) for ~5 minutes |
+| Fix | `AiJobPollPolicy` fail-fast on 401/403/404 and other 4xx except **408**; **429** still fail-fast; **408 / 5xx** and transport timeouts retry; user cancel propagates; `PolishAsync` recovery skipped for fail-fast HTTP and cancel |
+| Offline tests | `backend/tests/test_magic_look_poll_policy.py` — classification + C# source contract (not a C# compile) |
+| Unity / C# compile | **UNITY COMPILE NOT RUN** (2026-10-17 gate; no Editor on the cloud runner) |
+| Merge recommendation | **NO-GO** until Unity 2022.3.62f1 compile is recorded |
+| Stacked PR #6 | Remains based on this branch. Do **not** rebase or retarget #6 from this change. |
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
@@ -22,10 +57,11 @@
 
 **Suggested order for the *next* session:**
 
-1. **Pillar A — next slice:** **Vector / per-stroke** ink model (or richer raster: soft brush, layers beyond ref+ink) — dual-layer + import + default models are **done**; see `06-implementation-phases.md`. Optional: **export** beyond flattened PNG if product needs layered files.  
-2. **Pillar C:** Real **`spec_sheet_pdf`** layout (or second export kind); zip / multi-file handoff when ready.  
-3. **Pillar B:** Reputation **v2** explainability; gallery/sketch **UX polish** (toolbar scroll on small phones, toasts).  
-4. **Pillar D:** **CI** + `pytest`; Prompt 8 when targeting a release candidate.
+1. **Magic Look PR #1:** run the manual Unity 2022.3.62f1 compile + mock Play Mode steps above. **UNITY COMPILE NOT RUN** on the cloud runner. Keep draft. Do **not** merge #1 or #6.  
+2. **Pillar A — next slice:** **Vector / per-stroke** ink model (or richer raster: soft brush, layers beyond ref+ink) — dual-layer + import + default models are **done**; see `06-implementation-phases.md`. Optional: **export** beyond flattened PNG if product needs layered files.  
+3. **Pillar C:** Real **`spec_sheet_pdf`** layout (or second export kind); zip / multi-file handoff when ready.  
+4. **Pillar B:** Reputation **v2** explainability; gallery/sketch **UX polish** (toolbar scroll on small phones, toasts).  
+5. **Pillar D:** **CI** + `pytest`; Prompt 8 when targeting a release candidate.
 
 **Parking lot (unchanged intent):** full AI worker split at scale, WebGL polish, `POST /auth/logout`, admin moderation UI, audit logs.
 

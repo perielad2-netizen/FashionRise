@@ -15,5 +15,8 @@ namespace FashionRise.Services
 
         /// <summary>Multi-line detail from job <c>result_data</c> (OpenAI bullets, source line). Null if unavailable.</summary>
         Task<string?> GetJobStructuredDetailTextAsync(string jobId, CancellationToken cancellationToken = default);
+
+        /// <summary>Public look URL from job <c>result_data.image_url</c>, if present.</summary>
+        Task<string?> GetJobImageUrlAsync(string jobId, CancellationToken cancellationToken = default);
     }
 }

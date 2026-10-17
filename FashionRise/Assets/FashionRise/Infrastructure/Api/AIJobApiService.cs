@@ -40,5 +40,24 @@ namespace FashionRise.Infrastructure.Api
                 .ConfigureAwait(true);
             return AiJobResultFormatter.FormatJobBody(job.Status, job.ResultData, job.ErrorMessage);
         }
+
+        public async Task<string?> GetJobImageUrlAsync(string jobId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Guid.TryParse(jobId, out var jid))
+                return null;
+            var job = await _client.GetJsonAsync<AIJobReadDto>($"/ai/jobs/{jid}", cancellationToken, true)
+                .ConfigureAwait(true);
+            return ExtractImageUrl(job.ResultData);
+        }
+
+        internal static string? ExtractImageUrl(Newtonsoft.Json.Linq.JObject? resultData)
+        {
+            if (resultData == null || resultData.Count == 0)
+                return null;
+            var url = resultData.Value<string>("image_url")?.Trim()
+                      ?? resultData.Value<string>("imageUrl")?.Trim();
+            return string.IsNullOrEmpty(url) ? null : url;
+        }
     }
 }
