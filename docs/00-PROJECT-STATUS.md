@@ -9,7 +9,7 @@
 
 **Baseline:** `main` / `origin/main` **`2fc4c1fa`** (PR #7 docs merge; contains Magic Look PR #1 `433b1b99` + GPT-6 Luna PR #6 `a5b3c167`).
 
-**VR1 branch commit:** recorded in the Changelog after the implementation commit lands (see latest `cursor/visual-reboot-studio-shell` HEAD).
+**VR1 implementation commit:** `9bfa88bb1733149ad0cadf3a991544a11f3b8d14` (`9bfa88bb`).
 
 **Development integration (corrected 2026-10-17):**
 
@@ -215,7 +215,7 @@ _Update this list as pillars complete._
 
 | Date | Summary |
 |------|---------|
-| 2026-10-17 | **Visual Reboot VR1 (draft):** Creator Studio shell + premium design system on `cursor/visual-reboot-studio-shell` from `origin/main` **`2fc4c1fa`**. New `FashionRise/UI/Studio` components; `SketchCanvasScreen` rebuilt around unchanged `UiSketchPad` + existing Magic path (`ContinueToEnhancement` → `SketchEnhancement`). Theme tokens + `DeviceLayoutPolicy` wide/narrow. TMP foundation with UI.Text fallback. **No** backend/AI/contract changes. **No** VR2 tools. **No** fill/pencil/gradient/layers/fabric engines. Unity CLI **not available** in the cloud agent; operator 2022.3.62f1 Windows batch compile/load **PASS** exit 0 on baseline; EditMode/PlayMode XML **0 tests**. Paid OpenAI **NONE**. Production deploy **NOT PERFORMED**. |
+| 2026-10-17 | **Visual Reboot VR1 (draft):** Creator Studio shell + premium design system on `cursor/visual-reboot-studio-shell` (`9bfa88bb`) from `origin/main` **`2fc4c1fa`**. New `FashionRise/UI/Studio` components; `SketchCanvasScreen` rebuilt around unchanged `UiSketchPad` + existing Magic path (`ContinueToEnhancement` → `SketchEnhancement`). Theme tokens + `DeviceLayoutPolicy` wide/narrow. TMP foundation with UI.Text fallback. **No** backend/AI/contract changes. **No** VR2 tools. **No** fill/pencil/gradient/layers/fabric engines. Unity CLI **not available** in the cloud agent; operator 2022.3.62f1 Windows batch compile/load **PASS** exit 0 on baseline; EditMode/PlayMode XML **0 tests**. Paid OpenAI **NONE**. Production deploy **NOT PERFORMED**. |
 | 2026-05-12 | **Unity iOS:** `IOSGalleryPick` + `FashionRiseGalleryPickBridge.mm` (PHPicker iOS 14+, UIImagePicker 12–13); `Plugins/iOS/Info.plist` `NSPhotoLibraryUsageDescription`; Import screen **Pick from Photos**; `FashionRiseApp` creates `FashionRiseAndroidBridge` on iOS for `UnitySendMessage`. Docs: **`06`**, **`00`**, **`README_Unity`**. |
 | 2026-05-11 | **Session pause doc sweep:** `00` handoff block (where we stopped / next picks); pillars + executive table refreshed; startup DB notes (`backend/.env` absolute, migration recovery). Related: **`06`**, **`05-api`**, **`02-unity-client`**, **`03-backend`**, **`04-database`**, **`unity-backend-integration.md`**, **`backend/README`**, **`README_Unity`**, **`docs/README`**, root **`README`**. |
 | 2026-05-11 | **Backend ops & migrations:** Alembic **`001`/`002`/`003` downgrades** use **`if_exists`** on drops (recover stamped-without-tables DBs). **`app/core/config.py`** loads **`backend/.env`** by path. Lifespan: seed + schema warning + AI worker single-warning stop on missing tables. |
