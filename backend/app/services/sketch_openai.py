@@ -20,9 +20,107 @@ logger = logging.getLogger(__name__)
 
 SKETCH_JOB_TYPES = frozenset({"sketch_clean", "sketch_polish", "style_suggest"})
 
+# Chat Completions JSON mode. gpt-6-luna also supports json_schema; we keep json_object
+# so Unity continues to read summary / cleanup_bullets / polish_bullets / suggestions
+# (and polish's extra image_prompt) without a schema change.
+JSON_OBJECT_RESPONSE_FORMAT = {"type": "json_object"}
+
+# Longest-prefix table from official GPT-6 docs. Unknown families fail closed.
+# gpt-4o / gpt-4.1 omit reasoning_effort (rollback). Luna/Sol accept "none".
+# Astra and GPT-6.1 Sol reject "none" (HTTP 400).
+_MODEL_REASONING: tuple[tuple[str, str], ...] = (
+    ("gpt-6.1-sol", "no_none"),
+    ("gpt-6-luna", "including_none"),
+    ("gpt-6-astra", "no_none"),
+    ("gpt-6-sol", "including_none"),
+    ("gpt-4o", "omit"),
+    ("gpt-4.1", "omit"),
+    ("gpt-4-", "omit"),
+)
+_EFFORTS_WITH_NONE = frozenset({"none", "low", "medium", "high", "xhigh", "max"})
+_EFFORTS_WITHOUT_NONE = frozenset({"low", "medium", "high", "xhigh", "max"})
+
+
+class SketchConfigError(ValueError):
+    """Sanitized OPENAI_MODEL / OPENAI_REASONING_EFFORT mismatch. No secrets or payloads."""
+
+
+class SketchCompletionError(RuntimeError):
+    """Sanitized completion failure. Worker marks the job failed. No payloads."""
+
 
 def is_configured() -> bool:
     return bool((get_settings().openai_api_key or "").strip())
+
+
+def reasoning_family(model: str) -> str:
+    """Return omit | including_none | no_none | unknown for a model id / snapshot."""
+    name = (model or "").strip().lower()
+    if not name:
+        return "unknown"
+    for prefix, family in _MODEL_REASONING:
+        if name == prefix or name.startswith(prefix + "-"):
+            return family
+    return "unknown"
+
+
+def resolve_reasoning_effort(model: str, effort: str | None) -> str | None:
+    """Effort string to send, or None to omit the field. Raises SketchConfigError."""
+    family = reasoning_family(model)
+    wanted = (effort or "").strip().lower() or None
+
+    if family == "omit":
+        return None
+
+    if family == "unknown":
+        raise SketchConfigError(
+            "OPENAI_MODEL is not in the known Chat Completions reasoning table; "
+            "use gpt-6-luna (or gpt-4o-mini to omit reasoning_effort)"
+        )
+
+    if not wanted:
+        raise SketchConfigError("OPENAI_REASONING_EFFORT is empty")
+
+    if family == "including_none":
+        if wanted not in _EFFORTS_WITH_NONE:
+            raise SketchConfigError("OPENAI_REASONING_EFFORT is not supported for this model")
+        return wanted
+
+    # no_none: Astra, GPT-6.1 Sol — official docs: none is HTTP 400
+    if wanted == "none" or wanted == "minimal":
+        raise SketchConfigError(
+            "OPENAI_REASONING_EFFORT=none is not supported for this OPENAI_MODEL "
+            "(use low, medium, high, xhigh, or max)"
+        )
+    if wanted not in _EFFORTS_WITHOUT_NONE:
+        raise SketchConfigError("OPENAI_REASONING_EFFORT is not supported for this model")
+    return wanted
+
+
+def uses_chat_reasoning_effort(model: str) -> bool:
+    """True when this model id may include a Chat Completions reasoning_effort field."""
+    return reasoning_family(model) in {"including_none", "no_none"}
+
+
+def chat_completion_kwargs(
+    *,
+    model: str,
+    messages: list[dict[str, Any]],
+    max_completion_tokens: int,
+    reasoning_effort: str | None = None,
+) -> dict[str, Any]:
+    """Build Chat Completions args. Omit or reject reasoning per model family."""
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "response_format": JSON_OBJECT_RESPONSE_FORMAT,
+        "messages": messages,
+        "max_completion_tokens": max_completion_tokens,
+    }
+    resolved = resolve_reasoning_effort(model, reasoning_effort)
+    if resolved is not None:
+        # Official Chat Completions field (not Responses API reasoning.effort).
+        kwargs["reasoning_effort"] = resolved
+    return kwargs
 
 
 def _fetch_image(url: str) -> tuple[bytes, str]:
@@ -270,6 +368,35 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     return url
 
 
+def build_sketch_chat_request(
+    job: AIJob,
+    *,
+    model: str,
+    reasoning_effort: str | None,
+    max_completion_tokens: int,
+) -> dict[str, Any]:
+    """Assemble the production Chat Completions payload for a sketch job.
+
+    Shared by the worker and the isolated live-eval harness so request shape
+    cannot drift. Does not open a client or call image endpoints.
+    """
+    if job.job_type not in SKETCH_JOB_TYPES:
+        raise ValueError(f"unsupported job_type {job.job_type!r}")
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": _user_text(job)}]
+    img = _image_part(job)
+    if img:
+        user_content.append(img)
+    return chat_completion_kwargs(
+        model=model,
+        messages=[
+            {"role": "system", "content": _system_prompt(job.job_type)},
+            {"role": "user", "content": user_content},
+        ],
+        max_completion_tokens=int(max_completion_tokens),
+        reasoning_effort=reasoning_effort,
+    )
+
+
 def complete_sketch_job(job: AIJob) -> dict[str, Any]:
     if job.job_type not in SKETCH_JOB_TYPES:
         raise ValueError(f"unsupported job_type {job.job_type!r}")
@@ -278,41 +405,25 @@ def complete_sketch_job(job: AIJob) -> dict[str, Any]:
     if not key:
         raise RuntimeError("OPENAI_API_KEY is not set")
 
-    kwargs: dict[str, Any] = {"api_key": key, "timeout": float(settings.openai_timeout_seconds)}
-    bu = (settings.openai_base_url or "").strip()
-    if bu:
-        kwargs["base_url"] = bu
-
-    client = OpenAI(**kwargs)
     model = settings.openai_model.strip()
-    user_content: list[dict[str, Any]] = [{"type": "text", "text": _user_text(job)}]
-    img = _image_part(job)
-    if img:
-        user_content.append(img)
-
-    completion = client.chat.completions.create(
+    create_kwargs = build_sketch_chat_request(
+        job,
         model=model,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": _system_prompt(job.job_type)},
-            {"role": "user", "content": user_content},
-        ],
-        max_completion_tokens=1400,
+        reasoning_effort=settings.openai_reasoning_effort,
+        max_completion_tokens=int(settings.openai_max_completion_tokens),
     )
 
-    raw = (completion.choices[0].message.content or "").strip()
-    try:
-        structured: Any = json.loads(raw)
-    except json.JSONDecodeError:
-        structured = {"summary": raw[:800], "parse_error": True}
-
-    if isinstance(structured, dict):
-        summary = str(structured.get("summary") or "").strip() or raw[:500]
-    else:
-        summary = raw[:500]
+    client_kwargs: dict[str, Any] = {"api_key": key, "timeout": float(settings.openai_timeout_seconds)}
+    bu = (settings.openai_base_url or "").strip()
+    if bu:
+        client_kwargs["base_url"] = bu
+    client = OpenAI(**client_kwargs)
+    completion = client.chat.completions.create(**create_kwargs)
+    structured, summary, finish_reason, truncated = _parse_chat_completion(completion)
 
     image_url: str | None = None
     if job.job_type == "sketch_polish":
+        # Only a complete, valid JSON object may drive images.edit / images.generate.
         image_url = _generate_and_store_look_image(client, job, structured, summary)
 
     return {
@@ -322,4 +433,45 @@ def complete_sketch_job(job: AIJob) -> dict[str, Any]:
         "summary": summary,
         "structured": structured,
         "image_url": image_url,
+        "finish_reason": finish_reason,
+        "truncated": truncated,
     }
+
+
+def _parse_chat_completion(completion: Any) -> tuple[Any, str, str | None, bool]:
+    """Turn a finished Chat Completions result into the Unity-facing payload.
+
+    Incomplete, refused, empty, or non-JSON completions raise SketchCompletionError
+    so the worker marks failed and sketch_polish never starts a paid image call.
+    Exception text is a short status token — no raw model output.
+    """
+    if not getattr(completion, "choices", None):
+        raise SketchCompletionError("model returned no choices")
+
+    choice = completion.choices[0]
+    message = getattr(choice, "message", None)
+    finish_reason = getattr(choice, "finish_reason", None)
+
+    refusal = getattr(message, "refusal", None) if message is not None else None
+    if isinstance(refusal, str) and refusal.strip():
+        raise SketchCompletionError("model refused the request")
+
+    raw = ""
+    if message is not None:
+        raw = (getattr(message, "content", None) or "").strip()
+    if not raw:
+        raise SketchCompletionError("model returned an empty completion")
+
+    if finish_reason == "length":
+        raise SketchCompletionError("model completion was truncated")
+
+    try:
+        structured: Any = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SketchCompletionError("model returned invalid JSON") from exc
+
+    if not isinstance(structured, dict):
+        raise SketchCompletionError("model JSON was not an object")
+
+    summary = str(structured.get("summary") or "").strip() or raw[:500]
+    return structured, summary, finish_reason, False

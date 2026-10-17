@@ -21,6 +21,7 @@ This folder is the **single source of truth** for FashionRise architecture and p
 | [04 — Database](./04-database.md) | PostgreSQL tables, fields, constraints |
 | [05 — API](./05-api.md) | REST endpoints, versioning |
 | [06 — Implementation phases](./06-implementation-phases.md) | Phase plan, status checklist |
+| [OpenAI model migration](./OPENAI_MODEL_MIGRATION.md) | gpt-4o-mini → gpt-6-luna (Chat Completions) |
 | [Unity — architecture notes](./unity-architecture-notes.md) | Client layers, rules, extension points |
 | [Unity — screen flow](./unity-screen-flow.md) | Navigation diagram + payloads |
 | [Unity — services](./unity-services.md) | Interface ↔ mock ↔ API map |
@@ -51,5 +52,9 @@ This folder is the **single source of truth** for FashionRise architecture and p
 | 2026-05-11 | — | `GalleryNavContext.CommunitySort`, home **Following feed** + publish/home gallery explicit newest; `03` rate_limit note; `unity-screen-flow` Back semantics |
 | 2026-05-12 | — | **iOS Photos import** for sketch `Imports`; `06` Pillar A import line; `00` handoff + changelog; `README_Unity` platforms + platform folder |
 | 2026-05-11 | — | **Session pause:** `00` handoff (pause block + next steps); `06` Guided/Pro, reputation v1, handoff slice, CI note; `05-api` profiles + designs handoff/revisions; `03-backend` + `backend/README` migration recovery; `04` profile API note; `02` + `unity-backend-integration` alignment |
+| 2026-10-16 | — | OpenAI sketch model default `gpt-4o-mini` → `gpt-6-luna` (`OPENAI_MODEL_MIGRATION.md`) |
+| 2026-10-16 | — | PR #6 hardening: SDK floor `1.109.1`, per-family reasoning, incomplete JSON cannot start look-image gen |
+| 2026-10-16 | — | Bounded gpt-6-luna live-eval harness (`eval_gpt6_luna_live.py`); dry-run only, 0 paid calls |
+| 2026-10-16 | — | Eval harness safety: returned-model check, official endpoint, spend accounting, sanitized failures, CONDITIONAL quality |
 
 _Add a row for each meaningful doc update._

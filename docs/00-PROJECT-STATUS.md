@@ -3,42 +3,30 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.  
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Touch **`docs/06-implementation-phases.md`** when phase checkboxes move.
 
-**Last updated:** 2026-10-17 (Magic Look Unity validation gate: **UNITY COMPILE NOT RUN**, **Play Mode NOT RUN**. Poll fail-fast code remains on PR #1 `614424c2`. PR #1 stays **DRAFT**. Do not merge #1 or #6.)
+**Last updated:** 2026-10-17 (Magic Look **PR #1 MERGED** to `main` `433b1b99`. PR #6 **rebased onto that main** and retargeted to `main`. GPT-6 Luna **VALIDATED — 3/3**. Production deploy **NOT PERFORMED**. Unity compile **NOT RUN** — deferred.)
 
-**Magic Look Unity validation gate (2026-10-17):**
+**Development integration (2026-10-17):**
+
+| Item | Status |
+|------|--------|
+| PR #1 Magic Look | **MERGED** — merge commit `433b1b99` (poll fail-fast `614424c2`) |
+| PR #6 GPT-6 Luna | Rebased onto `433b1b99`, retargeted to `main` (migration-only commits; Unity poll files unchanged) |
+| Unity compile / Play Mode | **NOT RUN** — deferred, not a merge blocker |
+| Production deploy | **NOT PERFORMED** |
+| Paid OpenAI this session | **None** |
+
+**Magic Look PR #1 (merged 2026-10-17):** poll fail-fast (`AiJobPollPolicy`) is on `main` (`614424c2`). Isolated Postgres API tests previously **7 passed**. **UNITY COMPILE NOT RUN** / **Play Mode NOT RUN**.
+
+**GPT-6 Luna close-out (2026-10-16, operator live report + PM review):**
 
 | Gate | Status |
 |------|--------|
-| Commit verified | `614424c2` on `cursor/magic-look-image-display-77c6` (clean tree; matches GitHub PR #1 head) |
-| Required Editor | Project `FashionRise/ProjectSettings/ProjectVersion.txt` = **2022.3.62f1** `(4af31df58517)` |
-| Editor on this runner | **None** — no Unity Hub, no `unity-editor`, no `dotnet`, no install paths under `/opt`, `/usr`, or `$HOME` |
-| C# compile | **UNITY COMPILE NOT RUN** (Python tests are not a C# compile) |
-| Play Mode | **NOT RUN** — no Editor; no isolated mock HTTP poll harness |
-| `.meta` GUID | `7e4c91b0a2d64f1e9c8b35f046a17d2e` unique in the Unity tree; not imported by an Editor here |
-| `FashionRise.asmdef` | Unchanged (`Newtonsoft.Json.dll`, `nullable: true`); policy class is same assembly |
-| New defects | **None found** in source review; compile/runtime still unproven |
-| Ready for Review | **NO-GO** until a 2022.3.62f1 machine reports a clean compile |
-| Merge | **NO-GO** |
-| Stacked PR #6 | Not rebased or retargeted |
-
-**Manual Unity validation (operator machine, do not auto-install/upgrade Editor):**
-
-1. Checkout `cursor/magic-look-image-display-77c6` at `614424c2`. Open `FashionRise/` in **2022.3.62f1** only.
-2. Open `Assets/App.unity`. Wait for import/compile. Console must have **zero** CS errors on `AiJobPollPolicy.cs` / `SketchPipelineApiService.cs`.
-3. Play Mode **mock** (`useMockServices`): Magic once; second tap shows busy; **See last result** stays visible; Your look opens.
-4. Play Mode **API** against a **local disposable stub** (not production DB, no OpenAI): 401/403/404/429 fail promptly; 408/5xx/timeout retry; cancel stops; completed job recovers; one POST only.
-5. Hub has previously flagged **2022.3.62f1** (CVE-2025-59489, fix 62f2). Do not auto-upgrade as part of this gate; record the version that actually compiled.
-
-**Magic Look PR #1 poll fail-fast (2026-10-16):**
-
-| Gate | Status |
-|------|--------|
-| Defect | `WaitForJobCompletionAsync` swallowed **401 / 403 / 404** (and other non-retryable 4xx) for ~5 minutes |
-| Fix | `AiJobPollPolicy` fail-fast on 401/403/404 and other 4xx except **408**; **429** still fail-fast; **408 / 5xx** and transport timeouts retry; user cancel propagates; `PolishAsync` recovery skipped for fail-fast HTTP and cancel |
-| Offline tests | `backend/tests/test_magic_look_poll_policy.py` — classification + C# source contract (not a C# compile) |
-| Unity / C# compile | **UNITY COMPILE NOT RUN** (2026-10-17 gate; no Editor on the cloud runner) |
-| Merge recommendation | **NO-GO** until Unity 2022.3.62f1 compile is recorded |
-| Stacked PR #6 | Remains based on this branch. Do **not** rebase or retarget #6 from this change. |
+| Chat Completions live compatibility | **VALIDATED — 3/3** synthetic scenarios (`sketch_clean`, `sketch_polish`, `style_suggest`) |
+| Production deployment | **NOT PERFORMED** |
+| Magic Look dependency | **PR #1 MERGED** (`433b1b99`) |
+| PostgreSQL integration tests | **VALIDATED** earlier on isolated disposable Postgres (not an app DB) |
+| Unity compile / Play Mode | **NOT RUN** — deferred, not a merge blocker |
+| Next | Do **not** repeat the paid live harness. Do **not** deploy from this merge alone. |
 
 **Source repo:** [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (default branch **`main`**). Root **`.gitignore`** excludes `backend/.env`, Unity `Library/` / `Logs/` / `UserSettings/`, etc.
 
@@ -57,7 +45,7 @@
 
 **Suggested order for the *next* session:**
 
-1. **Magic Look PR #1:** run the manual Unity 2022.3.62f1 compile + mock Play Mode steps above. **UNITY COMPILE NOT RUN** on the cloud runner. Keep draft. Do **not** merge #1 or #6.  
+1. **Operator Unity 2022.3.62f1** compile + mock Play Mode when convenient (deferred). Do **not** deploy or repeat the paid Luna harness. See `docs/OPENAI_MODEL_MIGRATION.md`. 
 2. **Pillar A — next slice:** **Vector / per-stroke** ink model (or richer raster: soft brush, layers beyond ref+ink) — dual-layer + import + default models are **done**; see `06-implementation-phases.md`. Optional: **export** beyond flattened PNG if product needs layered files.  
 3. **Pillar C:** Real **`spec_sheet_pdf`** layout (or second export kind); zip / multi-file handoff when ready.  
 4. **Pillar B:** Reputation **v2** explainability; gallery/sketch **UX polish** (toolbar scroll on small phones, toasts).  
