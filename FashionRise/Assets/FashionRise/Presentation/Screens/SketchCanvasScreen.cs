@@ -51,6 +51,7 @@ namespace FashionRise.Presentation.Screens
             new(0.42f, 0.40f, 0.38f)
         };
 
+        FrStudioOrientationStack _models = null!;
         bool _refDimmed;
         bool _padBootstrapped;
         bool _wide = true;
@@ -86,35 +87,29 @@ namespace FashionRise.Presentation.Screens
 
         void BuildModelColumn(Transform parent)
         {
-            var col = new GameObject("Models", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            var rt = col.GetComponent<RectTransform>();
-            rt.SetParent(parent, false);
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(12f, 12f);
-            rt.offsetMax = new Vector2(-12f, -12f);
-            var v = col.GetComponent<VerticalLayoutGroup>();
-            v.spacing = _theme.SpaceSm;
-            v.childAlignment = TextAnchor.UpperCenter;
-            v.childControlWidth = true;
-            v.childControlHeight = true;
-            v.childForceExpandWidth = true;
-            v.childForceExpandHeight = false;
+            _models = FrStudioOrientationStack.Create(parent, "Models", _theme.SpaceSm, _theme.SpaceXs,
+                TextAnchor.UpperCenter, TextAnchor.MiddleCenter, new RectOffset(4, 4, 6, 6));
+            _models.Root.offsetMin = new Vector2(12f, 12f);
+            _models.Root.offsetMax = new Vector2(-12f, -12f);
 
             var headHost = new GameObject("Head", typeof(RectTransform), typeof(LayoutElement));
-            headHost.transform.SetParent(col.transform, false);
             headHost.GetComponent<LayoutElement>().minHeight = 22f;
             FrStudioTypography.AddLabel(headHost.transform, "H", "Models", _theme, FrStudioTypeStyle.Metadata,
                 muted: true, TextAnchor.MiddleLeft);
 
             var femaleTex = Resources.Load<Texture2D>("SketchReference/female_model");
             var maleTex = Resources.Load<Texture2D>("SketchReference/male_model");
-            _femaleCard = FrStudioCard.Build(col.transform, _theme, "Female", () => ApplyModel(ModelChoice.Female),
+            _femaleCard = FrStudioCard.Build(_models.Content, _theme, "Female", () => ApplyModel(ModelChoice.Female),
                 femaleTex);
-            _maleCard = FrStudioCard.Build(col.transform, _theme, "Male", () => ApplyModel(ModelChoice.Male),
+            _maleCard = FrStudioCard.Build(_models.Content, _theme, "Male", () => ApplyModel(ModelChoice.Male),
                 maleTex);
-            _customCard = FrStudioCard.Build(col.transform, _theme, "Custom photo", ImportSketch);
-            _blankCard = FrStudioCard.Build(col.transform, _theme, "Blank paper", () => ApplyModel(ModelChoice.Blank));
+            _customCard = FrStudioCard.Build(_models.Content, _theme, "Custom photo", ImportSketch);
+            _blankCard = FrStudioCard.Build(_models.Content, _theme, "Blank paper", () => ApplyModel(ModelChoice.Blank));
+            _models.Add(headHost.transform);
+            _models.Add(_femaleCard.transform);
+            _models.Add(_maleCard.transform);
+            _models.Add(_customCard.transform);
+            _models.Add(_blankCard.transform);
             SelectModelCard(ModelChoice.Female);
         }
 
@@ -195,37 +190,7 @@ namespace FashionRise.Presentation.Screens
         void ApplyChromeOrientation(bool compact)
         {
             _rail.SetHorizontal(compact);
-            var models = _layout.LeftPanel.Find("Models");
-            if (models == null)
-                return;
-
-            var v = models.GetComponent<VerticalLayoutGroup>();
-            var h = models.GetComponent<HorizontalLayoutGroup>();
-            if (compact)
-            {
-                if (v != null)
-                    v.enabled = false;
-                if (h == null)
-                {
-                    h = models.gameObject.AddComponent<HorizontalLayoutGroup>();
-                    h.spacing = _theme.SpaceXs;
-                    h.childAlignment = TextAnchor.MiddleCenter;
-                    h.childControlWidth = true;
-                    h.childControlHeight = true;
-                    h.childForceExpandWidth = true;
-                    h.childForceExpandHeight = false;
-                    h.padding = new RectOffset(4, 4, 6, 6);
-                }
-
-                h.enabled = true;
-            }
-            else
-            {
-                if (h != null)
-                    h.enabled = false;
-                if (v != null)
-                    v.enabled = true;
-            }
+            _models.SetHorizontal(compact);
         }
 
         void ApplyModel(ModelChoice choice)

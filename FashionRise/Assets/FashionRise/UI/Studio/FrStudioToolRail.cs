@@ -12,11 +12,13 @@ namespace FashionRise.UI.Studio
         public FrStudioIconButton Erase { get; }
         public FrStudioIconButton Undo { get; }
         public FrStudioIconButton Clear { get; }
+        readonly FrStudioOrientationStack _stack;
 
-        FrStudioToolRail(RectTransform root, FrStudioIconButton draw, FrStudioIconButton erase,
-            FrStudioIconButton undo, FrStudioIconButton clear)
+        FrStudioToolRail(RectTransform root, FrStudioOrientationStack stack, FrStudioIconButton draw,
+            FrStudioIconButton erase, FrStudioIconButton undo, FrStudioIconButton clear)
         {
             Root = root;
+            _stack = stack;
             Draw = draw;
             Erase = erase;
             Undo = undo;
@@ -34,29 +36,24 @@ namespace FashionRise.UI.Studio
             img.color = theme.ShellPanel;
             img.raycastTarget = true;
 
-            var col = new GameObject("Col", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            var colRt = col.GetComponent<RectTransform>();
-            colRt.SetParent(rt, false);
-            colRt.anchorMin = Vector2.zero;
-            colRt.anchorMax = Vector2.one;
-            colRt.offsetMin = new Vector2(8f, 12f);
-            colRt.offsetMax = new Vector2(-8f, -12f);
-            var v = col.GetComponent<VerticalLayoutGroup>();
-            v.spacing = theme.SpaceSm;
-            v.childAlignment = TextAnchor.UpperCenter;
-            v.childControlWidth = true;
-            v.childControlHeight = true;
-            v.childForceExpandWidth = true;
-            v.childForceExpandHeight = false;
+            var stack = FrStudioOrientationStack.Create(rt, "Tools", theme.SpaceSm, 8f, TextAnchor.UpperCenter,
+                TextAnchor.MiddleCenter, new RectOffset(8, 8, 6, 6));
+            stack.Root.offsetMin = new Vector2(8f, 12f);
+            stack.Root.offsetMax = new Vector2(-8f, -12f);
 
-            var draw = FrStudioIconButton.Build(col.transform, theme, FrStudioIconKind.Draw, "Draw", onDraw);
-            var erase = FrStudioIconButton.Build(col.transform, theme, FrStudioIconKind.Erase, "Erase", onErase);
-            FrStudioDivider.Horizontal(col.transform, theme);
-            var undo = FrStudioIconButton.Build(col.transform, theme, FrStudioIconKind.Undo, "Undo", onUndo);
-            var clear = FrStudioIconButton.Build(col.transform, theme, FrStudioIconKind.Clear, "Clear", onClear);
+            var draw = FrStudioIconButton.Build(stack.Content, theme, FrStudioIconKind.Draw, "Draw", onDraw);
+            var erase = FrStudioIconButton.Build(stack.Content, theme, FrStudioIconKind.Erase, "Erase", onErase);
+            var divider = FrStudioDivider.Horizontal(stack.Content, theme);
+            var undo = FrStudioIconButton.Build(stack.Content, theme, FrStudioIconKind.Undo, "Undo", onUndo);
+            var clear = FrStudioIconButton.Build(stack.Content, theme, FrStudioIconKind.Clear, "Clear", onClear);
+            stack.Add(draw.transform);
+            stack.Add(erase.transform);
+            stack.Add(divider);
+            stack.Add(undo.transform);
+            stack.Add(clear.transform);
 
             draw.Selected = true;
-            return new FrStudioToolRail(rt, draw, erase, undo, clear);
+            return new FrStudioToolRail(rt, stack, draw, erase, undo, clear);
         }
 
         public void SetDrawSelected(bool drawSelected)
@@ -65,50 +62,7 @@ namespace FashionRise.UI.Studio
             Erase.Selected = !drawSelected;
         }
 
-        public void SetHorizontal(bool horizontal)
-        {
-            var col = Root.Find("Col");
-            if (col == null)
-                return;
-
-            var v = col.GetComponent<VerticalLayoutGroup>();
-            var h = col.GetComponent<HorizontalLayoutGroup>();
-            if (horizontal)
-            {
-                if (v != null)
-                    v.enabled = false;
-                if (h == null)
-                {
-                    h = col.gameObject.AddComponent<HorizontalLayoutGroup>();
-                    h.spacing = 8f;
-                    h.childAlignment = TextAnchor.MiddleCenter;
-                    h.childControlWidth = true;
-                    h.childControlHeight = true;
-                    h.childForceExpandWidth = true;
-                    h.childForceExpandHeight = false;
-                    h.padding = new RectOffset(8, 8, 6, 6);
-                }
-
-                h.enabled = true;
-            }
-            else
-            {
-                if (h != null)
-                    h.enabled = false;
-                if (v == null)
-                {
-                    v = col.gameObject.AddComponent<VerticalLayoutGroup>();
-                    v.spacing = 10f;
-                    v.childAlignment = TextAnchor.UpperCenter;
-                    v.childControlWidth = true;
-                    v.childControlHeight = true;
-                    v.childForceExpandWidth = true;
-                    v.childForceExpandHeight = false;
-                }
-
-                v.enabled = true;
-            }
-        }
+        public void SetHorizontal(bool horizontal) => _stack.SetHorizontal(horizontal);
 
         static void Stretch(RectTransform rt)
         {
