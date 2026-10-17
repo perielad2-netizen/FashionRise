@@ -27,7 +27,9 @@ namespace FashionRise.UI.Studio
 
     /// <summary>
     /// TMP-first Studio type. Assign <see cref="ConfiguredFont"/> or drop a TMP font under
-    /// Resources/Fonts. Falls back to Unity UI Text when no TMP font is available.
+    /// Resources. Falls back to Unity UI Text when no usable TMP font asset exists.
+    /// Does not read <c>TMP_Settings.defaultFontAsset</c>: that getter throws when TMP Settings
+    /// is absent (TMP 3.0.7 returns <c>instance.m_defaultFontAsset</c> with a null instance).
     /// </summary>
     public static class FrStudioTypography
     {
@@ -166,9 +168,7 @@ namespace FashionRise.UI.Studio
             if (ConfiguredFont is TMP_FontAsset assigned && assigned != null)
                 return assigned;
 
-            if (TMP_Settings.defaultFontAsset != null)
-                return TMP_Settings.defaultFontAsset;
-
+            // Resources.Load returns null when the asset is absent. It does not touch TMP Settings.
             return Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF")
                    ?? Resources.Load<TMP_FontAsset>("LiberationSans SDF")
                    ?? Resources.Load<TMP_FontAsset>("Fonts/StudioSans");
