@@ -1,5 +1,4 @@
 import { useRef, type ReactNode } from 'react'
-import { ImagePlus, FileText } from 'lucide-react'
 import styles from './ModelPanel.module.css'
 
 export type ModelChoice = 'female' | 'male' | 'custom' | 'blank'
@@ -44,10 +43,10 @@ export function ModelPanel({ selected, customPreviewUrl, onSelect, onCustomFile 
           selected={selected === 'female'}
           onClick={() => onSelect('female')}
         >
-          <img src="/models/female_model.png" alt="" className={styles.croquis} />
+          <img src="/assets/ui/models/fr_model_female.png" alt="" className={styles.croquis} />
         </ModelCard>
         <ModelCard label="Male" selected={selected === 'male'} onClick={() => onSelect('male')}>
-          <img src="/models/male_model.png" alt="" className={styles.croquis} />
+          <img src="/assets/ui/models/fr_model_male.png" alt="" className={styles.croquis} />
         </ModelCard>
         <ModelCard
           label="Custom"
@@ -57,15 +56,11 @@ export function ModelPanel({ selected, customPreviewUrl, onSelect, onCustomFile 
           {customPreviewUrl ? (
             <img src={customPreviewUrl} alt="" className={styles.croquis} />
           ) : (
-            <span className={styles.iconMark}>
-              <ImagePlus size={28} strokeWidth={1.5} />
-            </span>
+            <img src="/assets/ui/models/fr_model_custom.png" alt="" className={styles.croquis} />
           )}
         </ModelCard>
         <ModelCard label="Blank" selected={selected === 'blank'} onClick={() => onSelect('blank')}>
-          <span className={styles.iconMark}>
-            <FileText size={28} strokeWidth={1.5} />
-          </span>
+          <img src="/assets/ui/models/fr_model_blank.png" alt="" className={styles.croquis} />
         </ModelCard>
       </div>
 

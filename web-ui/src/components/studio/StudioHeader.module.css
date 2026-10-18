@@ -126,6 +126,15 @@
   border-radius: 50%;
   background: rgba(212, 175, 155, 0.18);
   color: var(--rose-gold);
+  overflow: hidden;
+}
+
+.avatarIcon,
+.magicIcon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .userName {

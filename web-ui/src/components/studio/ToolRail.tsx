@@ -1,4 +1,3 @@
-import { Pencil, Eraser, Undo2, Redo2, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { ToolKind } from '@/lib/strokes'
 import styles from './ToolRail.module.css'
@@ -34,13 +33,13 @@ export function ToolRail({
         label="Draw"
         active={tool === 'draw'}
         onClick={() => onTool('draw')}
-        icon={<Pencil size={18} strokeWidth={1.75} />}
+        icon={<Glyph name="fr_icon_draw" />}
       />
       <ToolButton
         label="Erase"
         active={tool === 'erase'}
         onClick={() => onTool('erase')}
-        icon={<Eraser size={18} strokeWidth={1.75} />}
+        icon={<Glyph name="fr_icon_erase" />}
       />
       <div className={styles.sep} aria-hidden />
       <ToolButton
@@ -48,23 +47,27 @@ export function ToolRail({
         active={false}
         onClick={onUndo}
         disabled={!canUndo}
-        icon={<Undo2 size={18} strokeWidth={1.75} />}
+        icon={<Glyph name="fr_icon_undo" />}
       />
       <ToolButton
         label="Redo"
         active={false}
         onClick={onRedo}
         disabled={!canRedo}
-        icon={<Redo2 size={18} strokeWidth={1.75} />}
+        icon={<Glyph name="fr_icon_redo" />}
       />
       <ToolButton
         label="Clear"
         active={false}
         onClick={onClear}
-        icon={<Trash2 size={18} strokeWidth={1.75} />}
+        icon={<Glyph name="fr_icon_clear" />}
       />
     </div>
   )
+}
+
+function Glyph({ name }: { name: string }) {
+  return <img src={`/assets/ui/icons/${name}.png`} alt="" className={styles.glyph} draggable={false} />
 }
 
 function ToolButton({

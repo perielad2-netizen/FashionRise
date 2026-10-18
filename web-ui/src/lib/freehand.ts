@@ -24,18 +24,37 @@ export function appendPoint(points: number[], point: PointInput): number[] {
   return [...points, point.x, point.y, point.pressure ?? 0.5]
 }
 
+function pressureSpread(points: number[]): number {
+  let min = 1
+  let max = 0
+  let count = 0
+  for (let i = 2; i < points.length; i += 3) {
+    const p = points[i] ?? 0.5
+    min = Math.min(min, p)
+    max = Math.max(max, p)
+    count += 1
+  }
+  if (count === 0) return 0
+  return max - min
+}
+
 export function strokeToSvgPath(stroke: Stroke): string {
   const input = toFreehandInput(stroke.points)
   if (input.length === 0) return ''
 
+  const erase = stroke.tool === 'erase'
+  // Flat mouse pressure gets velocity simulation; a real pen already varies pressure.
+  const simulatePressure = !erase && pressureSpread(stroke.points) < 0.08
+
   const outline = getStroke(input, {
-    size: stroke.size,
-    thinning: stroke.tool === 'erase' ? 0.4 : 0.55,
-    smoothing: 0.55,
-    streamline: 0.45,
-    easing: (t) => t,
-    start: { taper: 0, cap: true },
-    end: { taper: stroke.size * 0.35, cap: true },
+    size: erase ? Math.max(stroke.size * 2.4, 10) : stroke.size,
+    thinning: erase ? 0.15 : 0.72,
+    smoothing: erase ? 0.4 : 0.68,
+    streamline: erase ? 0.35 : 0.58,
+    simulatePressure,
+    easing: (t) => (erase ? t : Math.sin((t * Math.PI) / 2)),
+    start: { taper: erase ? 0 : Math.max(6, stroke.size * 2.2), cap: true },
+    end: { taper: erase ? 0 : Math.max(10, stroke.size * 3.2), cap: true },
   })
 
   return getSvgPathFromStroke(outline)

@@ -1,4 +1,3 @@
-import { Eye, EyeOff, Sparkles } from 'lucide-react'
 import { BRUSH_SIZES, INK_SWATCHES, type BrushSizeId } from '@/lib/strokes'
 import styles from './StudioInspector.module.css'
 
@@ -77,7 +76,13 @@ export function StudioInspector({
           className={dimmed ? styles.dimActive : styles.dim}
           onClick={onToggleDim}
         >
-          {dimmed ? <EyeOff size={16} /> : <Eye size={16} />}
+          <img
+            src="/assets/ui/icons/fr_icon_reference.png"
+            alt=""
+            width={20}
+            height={20}
+            draggable={false}
+          />
           Dim reference
         </button>
       </section>
@@ -100,7 +105,7 @@ export function StudioInspector({
           </div>
         ) : null}
         <button type="button" className={styles.magic} onClick={onMagic}>
-          <Sparkles size={18} />
+          <img src="/assets/ui/icons/fr_icon_magic.png" alt="" width={22} height={22} draggable={false} />
           Magic
         </button>
       </div>

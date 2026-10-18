@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-18 — **WEB-1** React/PWA Creator Studio on `cursor/web-ui-reboot` (draft PR #9). Pre-operator hardening: real login validation, ink-only export eraser, unified Pointer Events, custom-reference MIME checks. Active frontend is `web-ui/`. Unity is **LEGACY**. Backend/AI **UNCHANGED**. Paid OpenAI **NONE**. WEB-1 **NOT MERGED**. Next = operator Windows browser/PWA visual + interaction review.
+**Last updated:** 2026-10-18 — **WEB-1** draft PR #9. Windows operator review: login + Studio load succeeded; visual direction is significantly better than Unity. Release-blocking pointer-up drawing bug found and fixed in this amendment, with pencil tuning and FashionRise card/tool artwork. WEB-1 remains **DRAFT / NOT MERGED**. Backend/AI **UNCHANGED**. Paid OpenAI **NONE**. Next = operator retest of drawing interaction and the visual asset pass.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
@@ -66,6 +66,17 @@
 - Custom reference validates MIME (`image/jpeg|png|webp`) before object URL
 - No backend / Unity / AI / paid-call changes
 
+**Operator Windows review + drawing/asset amendment:**
+
+- Login and Studio load succeeded in the real browser
+- Visual direction approved as significantly better than the Unity Studio
+- Critical bug: a click could leave drawing armed so later mouse moves continued the stroke
+- Fix: pointer lifecycle requires the primary button (or an active pointer) and ends on pointerup, pointercancel, window release, and mouse `buttons` without bit 1
+- Pencil sizes/freehand retuned for a finer sketch line; pen pressure is stored when the device reports it
+- Selector cards use FashionRise model artwork; the canvas still uses `public/models/female_model.png` and `male_model.png`
+- WEB-1 remains draft/unmerged. No backend/AI changes
+- Next action: operator retest of drawing (click/release/move, hold-draw-release, release outside canvas) and the visual asset pass
+
 **Do not:**
 
 - Continue Unity UI / merge PR #8 as product
@@ -77,7 +88,7 @@
 
 ## Suggested next steps
 
-1. **Operator Windows review of WEB-1** — install/run `web-ui`, backend on `:8001`, login → studio; tablet landscape primary (1024×768). Compare to FashionRise style references.
+1. **Operator retest of WEB-1 drawing + assets** — click then move with the button up must not draw; hold-drag-release must stop immediately; check pencil weight and model-card artwork. Then WEB-2 only after that review.
 2. After approval: **WEB-2** — connect Magic to existing backend sketch pipeline (still no Unity work).
 3. Broader shell nav (Home / Design Book / Discover) only after the creation workflow is excellent.
 4. Optional later: Tauri packaging of the same web app for native Windows — **not** in WEB-1.
@@ -138,6 +149,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-18 | **WEB-1 drawing + asset pass (PR #9):** operator confirmed login/Studio and preferred the web look over Unity; pointer-up bug fixed; pencil retuned; FashionRise card/tool glyphs added. Still draft. Next = operator drawing retest. |
 | 2026-10-18 | **WEB-1 pre-operator hardening (PR #9):** real login validation; export eraser ink-only; Pointer Events-only canvas; custom MIME validation. Draft/not merged. No backend/Unity/AI/paid calls. Next = operator Windows browser/PWA review. |
 | 2026-10-18 | **WEB-1 web/PWA pivot:** Active client = `web-ui/` (Login → Studio). Unity marked LEGACY; PR #8 superseded for product path. Backend preserved. No paid AI. |
 | 2026-10-18 | Prior Unity VR1 visual/asset notes remain historical under draft PR #8; not the active delivery path. |

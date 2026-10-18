@@ -77,9 +77,9 @@
   --touch-min: 44px;
   --header-h: 64px;
   --panel-models-w: 220px;
-  --panel-tools-w: 64px;
+  --panel-tools-w: 72px;
   --panel-studio-w: 268px;
-  --tool-size: 44px;
+  --tool-size: 52px;
 
   /* Motion */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);

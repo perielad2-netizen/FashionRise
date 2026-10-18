@@ -12,11 +12,12 @@ export type Stroke = {
 
 export type BrushSizeId = 'thin' | 'medium' | 'thick' | 'bold'
 
+/** Design-space sizes on the 768×1024 canvas. Thin/medium stay pencil-fine. */
 export const BRUSH_SIZES: Record<BrushSizeId, number> = {
-  thin: 2,
-  medium: 5,
-  thick: 10,
-  bold: 18,
+  thin: 1.75,
+  medium: 3.5,
+  thick: 7,
+  bold: 13,
 }
 
 export const INK_SWATCHES = [

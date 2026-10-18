@@ -1,10 +1,10 @@
 .rail,
 .railHorizontal {
   display: flex;
-  gap: 8px;
-  padding: 10px;
-  background: rgba(17, 24, 39, 0.92);
-  border: 1px solid var(--border-subtle);
+  gap: 10px;
+  padding: 12px 10px;
+  background: linear-gradient(180deg, #141c2c 0%, #0d1422 100%);
+  border: 1px solid rgba(212, 175, 155, 0.38);
   box-shadow: var(--shadow-soft);
 }
 
@@ -27,10 +27,10 @@
 }
 
 .sep {
-  width: 100%;
+  width: 70%;
   height: 1px;
-  background: var(--border-subtle);
-  margin: 2px 0;
+  background: rgba(212, 175, 155, 0.45);
+  margin: 4px 0;
 }
 
 .railHorizontal .sep {
@@ -68,7 +68,14 @@
 
 .btnActive {
   color: white;
-  background: linear-gradient(145deg, rgba(236, 72, 153, 0.95), rgba(219, 39, 119, 0.9));
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: var(--shadow-glow-pink);
+  background: rgba(236, 72, 153, 0.16);
+  border-color: var(--pink);
+  box-shadow: 0 0 0 1px rgba(236, 72, 153, 0.45), 0 0 16px rgba(236, 72, 153, 0.28);
+}
+
+.glyph {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  pointer-events: none;
 }
