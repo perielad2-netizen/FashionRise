@@ -1,5 +1,10 @@
 # FashionRise — Unity client architecture
 
+> **LEGACY / ARCHIVED REFERENCE (2026-10-18)**
+> Active product frontend is **`web-ui/`** (React/TypeScript PWA).
+> Do **not** continue Unity UI work for product delivery.
+> See [`00-PROJECT-STATUS.md`](./00-PROJECT-STATUS.md).
+
 ## Root folder layout
 
 All project code and content under **`Assets/FashionRise/`**:

@@ -1,0 +1,20 @@
+.host {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-sm);
+  background:
+    radial-gradient(ellipse at center, rgba(255, 255, 255, 0.03), transparent 60%),
+    var(--navy-950);
+}
+
+.frame {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-canvas);
+  border: 1px solid rgba(212, 175, 155, 0.55);
+  background: var(--cream);
+  touch-action: none;
+}

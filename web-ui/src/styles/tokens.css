@@ -1,0 +1,93 @@
+:root {
+  /* Core palette — FashionRise WEB-1 */
+  --navy-950: #090f1f;
+  --navy-900: #111827;
+  --navy-800: #182235;
+  --navy-700: #243044;
+
+  --pink: #ec4899;
+  --pink-soft: #f27fb0;
+  --pink-deep: #db2777;
+  --blush: #f7c8d0;
+  --rose-gold: #d4af9b;
+  --rose-gold-soft: #e5c4b2;
+
+  --cream: #f8f4f0;
+  --warm-white: #fffaf5;
+  --soft-gray: #e5e7eb;
+
+  --text-primary: #f8f4f0;
+  --text-muted: #9ca3af;
+  --text-dark: #1c1c1e;
+  --text-secondary: #6b7280;
+
+  --danger: #f87171;
+  --success: #34d399;
+
+  /* Surfaces */
+  --shell-bg: var(--navy-950);
+  --panel-bg: var(--navy-900);
+  --panel-elevated: var(--navy-800);
+  --canvas-bg: var(--cream);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --overlay: rgba(9, 15, 31, 0.72);
+
+  /* Borders */
+  --border-subtle: rgba(212, 175, 155, 0.22);
+  --border-strong: rgba(212, 175, 155, 0.45);
+  --border-pink: rgba(236, 72, 153, 0.85);
+  --hairline: 1px solid var(--border-subtle);
+
+  /* Spacing */
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-panel: 0 12px 40px rgba(0, 0, 0, 0.38);
+  --shadow-glow-pink: 0 0 0 1px rgba(236, 72, 153, 0.35),
+    0 8px 28px rgba(236, 72, 153, 0.28);
+  --shadow-canvas: 0 18px 48px rgba(0, 0, 0, 0.45);
+
+  /* Typography */
+  --font-serif: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --font-sans: "DM Sans", "Segoe UI", system-ui, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-display: 34px;
+  --letter-wide: 0.18em;
+  --letter-brand: 0.12em;
+
+  /* Touch / chrome metrics */
+  --touch-min: 44px;
+  --header-h: 64px;
+  --panel-models-w: 220px;
+  --panel-tools-w: 64px;
+  --panel-studio-w: 268px;
+  --tool-size: 44px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 140ms;
+  --duration-med: 220ms;
+
+  /* Logical canvas */
+  --design-w: 768;
+  --design-h: 1024;
+  color-scheme: dark;
+}

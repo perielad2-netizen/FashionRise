@@ -1,5 +1,7 @@
 # FashionRise Unity — architecture notes (V1)
 
+> **LEGACY / ARCHIVED REFERENCE (2026-10-18)** — Active client is `web-ui/`.
+
 ## Layers
 
 | Layer | Role |

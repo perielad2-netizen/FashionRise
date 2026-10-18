@@ -1,20 +1,60 @@
 # FashionRise
 
-Fashion sketch & design app: **Unity** client (Windows + Android) + **FastAPI** backend + **PostgreSQL**.
+FashionRise is a **tablet-first fashion creation PWA** with a **React / TypeScript** frontend and a **FastAPI / PostgreSQL** backend.
 
 | | |
 |--|--|
-| **Handoff / what to do next** | [`docs/00-PROJECT-STATUS.md`](docs/00-PROJECT-STATUS.md) — start with *When you open Cursor next* |
+| **Handoff / what to do next** | [`docs/00-PROJECT-STATUS.md`](docs/00-PROJECT-STATUS.md) |
 | **Doc index** | [`docs/README.md`](docs/README.md) |
-| **Unity** | Open the project in [`FashionRise/`](FashionRise/) — details in [`FashionRise/Assets/FashionRise/README_Unity.md`](FashionRise/Assets/FashionRise/README_Unity.md) |
-| **Backend** | [`backend/README.md`](backend/README.md) |
+| **Active frontend** | [`web-ui/`](web-ui/) — Vite + React + PWA Creator Studio |
+| **Backend** | [`backend/`](backend/) — FastAPI + PostgreSQL |
+| **Legacy client** | [`FashionRise/`](FashionRise/) — Unity project retained as historical reference only |
 | **Remote** | [github.com/perielad2-netizen/FashionRise](https://github.com/perielad2-netizen/FashionRise) (`main`) |
 
+## Quick start
+
+### Backend
+
 ```bash
-git clone https://github.com/perielad2-netizen/FashionRise.git
-cd FashionRise/backend && cp .env.example .env   # then edit .env
+cd backend
+cp .env.example .env   # edit secrets / DB URL
+# create venv, install requirements, alembic upgrade head
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-Do not commit `backend/.env` or Unity `Library/`.
+See [`backend/README.md`](backend/README.md).
 
-**Changelog (root):** 2026-05-12 — **iOS** sketch import: Photos → `Imports` (see `FashionRise/Assets/Plugins/iOS/FashionRiseGalleryPickBridge.mm`, `IOSGalleryPick.cs`, `docs/00-PROJECT-STATUS.md`). 2026-05-11 — documentation session pause: see **`docs/00-PROJECT-STATUS.md`** (*Session pause — where we stopped*) for the next-session checklist; migration recovery notes in **`backend/README.md`**.
+### Frontend (active)
+
+```bash
+cd web-ui
+cp .env.example .env   # VITE_API_BASE_URL=http://127.0.0.1:8001/api/v1
+npm install
+npm run dev
+```
+
+Open the Vite URL → **Login** → **Creator Studio** (`/studio`).
+
+### Product flow (WEB-1)
+
+```text
+APP START → LOGIN → CREATOR STUDIO
+```
+
+No Atelier / Home / Gallery dashboard gate after auth.
+
+## Repository map
+
+```text
+FashionRise/
+├── backend/                 # FastAPI + PostgreSQL (active)
+├── web-ui/                  # React/TS PWA (active client)
+├── FashionRise/             # LEGACY Unity client (do not extend for product UI)
+├── deploy/                  # Production ops scripts
+├── docs/                    # Living documentation
+└── README.md
+```
+
+Do not commit `backend/.env`, `web-ui/.env`, or Unity `Library/`.
+
+**Active development note (2026-10-18):** Frontend work moved from Unity to `web-ui/`. Unity draft PR #8 is superseded for active client work and must not be merged as the product path. Unity sources remain in-tree until the operator approves the web Studio.
