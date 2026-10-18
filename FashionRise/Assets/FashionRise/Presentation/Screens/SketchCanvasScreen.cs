@@ -93,9 +93,11 @@ namespace FashionRise.Presentation.Screens
             _models.Root.offsetMax = new Vector2(-12f, -12f);
 
             var headHost = new GameObject("Head", typeof(RectTransform), typeof(LayoutElement));
-            headHost.GetComponent<LayoutElement>().minHeight = 22f;
-            FrStudioTypography.AddLabel(headHost.transform, "H", "Models", _theme, FrStudioTypeStyle.Metadata,
-                muted: true, TextAnchor.MiddleLeft);
+            headHost.GetComponent<LayoutElement>().minHeight = 24f;
+            var modelsHeading = FrStudioTypography.AddLabel(headHost.transform, "H", "MODELS", _theme,
+                FrStudioTypeStyle.Metadata, muted: true, TextAnchor.MiddleLeft);
+            FrStudioTypography.SetColor(modelsHeading,
+                new Color(_theme.AccentMuted.r, _theme.AccentMuted.g, _theme.AccentMuted.b, 0.95f));
 
             var femaleTex = Resources.Load<Texture2D>("SketchReference/female_model");
             var maleTex = Resources.Load<Texture2D>("SketchReference/male_model");
@@ -103,8 +105,10 @@ namespace FashionRise.Presentation.Screens
                 femaleTex);
             _maleCard = FrStudioCard.Build(_models.Content, _theme, "Male", () => ApplyModel(ModelChoice.Male),
                 maleTex);
-            _customCard = FrStudioCard.Build(_models.Content, _theme, "Custom photo", ImportSketch);
-            _blankCard = FrStudioCard.Build(_models.Content, _theme, "Blank paper", () => ApplyModel(ModelChoice.Blank));
+            _customCard = FrStudioCard.Build(_models.Content, _theme, "Custom photo", ImportSketch,
+                placeholderIcon: FrStudioIconKind.Import);
+            _blankCard = FrStudioCard.Build(_models.Content, _theme, "Blank paper",
+                () => ApplyModel(ModelChoice.Blank), placeholderIcon: FrStudioIconKind.Blank);
             _models.Add(headHost.transform);
             _models.Add(_femaleCard.transform);
             _models.Add(_maleCard.transform);
@@ -115,31 +119,35 @@ namespace FashionRise.Presentation.Screens
 
         void BuildCanvas(Transform parent)
         {
-            var well = new GameObject("CanvasWell", typeof(RectTransform), typeof(Image));
-            var wellRt = well.GetComponent<RectTransform>();
-            wellRt.SetParent(parent, false);
-            wellRt.anchorMin = Vector2.zero;
-            wellRt.anchorMax = Vector2.one;
-            wellRt.offsetMin = new Vector2(18f, 18f);
-            wellRt.offsetMax = new Vector2(-18f, -18f);
-            var wellImg = well.GetComponent<Image>();
-            wellImg.sprite = FrStudioSprites.Rounded(64, Mathf.RoundToInt(_theme.CornerRadiusLarge), Color.white);
-            wellImg.type = Image.Type.Sliced;
-            wellImg.color = _theme.CanvasWell;
-            wellImg.raycastTarget = false;
-            well.AddComponent<RectMask2D>();
-            var shade = well.AddComponent<Shadow>();
-            shade.effectColor = _theme.Shadow;
-            shade.effectDistance = new Vector2(0f, -6f);
+            var inset = FashionRise.Config.DeviceLayoutPolicy.StudioCanvasInset;
+            var frame = new GameObject("CanvasFrame", typeof(RectTransform), typeof(Image));
+            var frameRt = frame.GetComponent<RectTransform>();
+            frameRt.SetParent(parent, false);
+            frameRt.anchorMin = Vector2.zero;
+            frameRt.anchorMax = Vector2.one;
+            frameRt.offsetMin = new Vector2(inset, inset);
+            frameRt.offsetMax = new Vector2(-inset, -inset);
+            var frameImg = frame.GetComponent<Image>();
+            frameImg.sprite = FrStudioSprites.Rounded(80, Mathf.RoundToInt(_theme.CornerRadiusLarge), Color.white);
+            frameImg.type = Image.Type.Sliced;
+            frameImg.color = _theme.CanvasWell;
+            frameImg.raycastTarget = false;
+            var frameOutline = frame.AddComponent<Outline>();
+            frameOutline.effectColor = _theme.LightBorder;
+            frameOutline.effectDistance = new Vector2(1.5f, -1.5f);
+            var frameShade = frame.AddComponent<Shadow>();
+            frameShade.effectColor = new Color(0f, 0f, 0f, 0.28f);
+            frameShade.effectDistance = new Vector2(0f, -10f);
+            frame.AddComponent<RectMask2D>();
 
             var padGo = new GameObject("SketchPad", typeof(RectTransform), typeof(RawImage), typeof(UiSketchPad),
                 typeof(AspectRatioFitter));
-            padGo.transform.SetParent(well.transform, false);
+            padGo.transform.SetParent(frame.transform, false);
             var padRt = padGo.GetComponent<RectTransform>();
             padRt.anchorMin = Vector2.zero;
             padRt.anchorMax = Vector2.one;
-            padRt.offsetMin = new Vector2(16f, 16f);
-            padRt.offsetMax = new Vector2(-16f, -16f);
+            padRt.offsetMin = new Vector2(22f, 22f);
+            padRt.offsetMax = new Vector2(-22f, -22f);
             var fitter = padGo.GetComponent<AspectRatioFitter>();
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             fitter.aspectRatio = 768f / 1024f;
@@ -152,14 +160,14 @@ namespace FashionRise.Presentation.Screens
         void BuildInspectorBody()
         {
             var brush = FrStudioSection.Build(_inspector.ScrollBody, _theme, "Brush");
-            var brushRow = NewChipRow(brush.Body);
+            var brushRow = NewChipRow(brush.Body, 52f);
             _thin = FrStudioIconButton.Chip(brushRow, _theme, "Thin", () => SetRadius(2));
             _med = FrStudioIconButton.Chip(brushRow, _theme, "Med", () => SetRadius(5));
             _thick = FrStudioIconButton.Chip(brushRow, _theme, "Thick", () => SetRadius(10));
             _bold = FrStudioIconButton.Chip(brushRow, _theme, "Bold", () => SetRadius(18));
 
             var color = FrStudioSection.Build(_inspector.ScrollBody, _theme, "Color");
-            var colorRow = NewChipRow(color.Body);
+            var colorRow = NewChipRow(color.Body, 64f);
             for (var i = 0; i < _inks.Length; i++)
             {
                 var index = i;
@@ -171,14 +179,14 @@ namespace FashionRise.Presentation.Screens
             _inspector.SetStatus("Draw on the croquis, then Magic.");
         }
 
-        static Transform NewChipRow(Transform parent)
+        static Transform NewChipRow(Transform parent, float minHeight)
         {
             var go = new GameObject("ChipRow", typeof(RectTransform), typeof(HorizontalLayoutGroup),
                 typeof(LayoutElement));
             go.transform.SetParent(parent, false);
-            go.GetComponent<LayoutElement>().minHeight = 48f;
+            go.GetComponent<LayoutElement>().minHeight = minHeight;
             var h = go.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = 8f;
+            h.spacing = 10f;
             h.childAlignment = TextAnchor.MiddleCenter;
             h.childControlWidth = true;
             h.childControlHeight = true;

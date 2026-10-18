@@ -13,7 +13,8 @@ namespace FashionRise.UI.Studio
         Import,
         Profile,
         Dim,
-        Magic
+        Magic,
+        Blank
     }
 
     /// <summary>Deliberate programmatic sprites — no emoji, no downloaded icon packs.</summary>
@@ -139,6 +140,10 @@ namespace FashionRise.UI.Studio
                     StrokeLine(px, size, 18, 6, 18, 30, 2, ink);
                     StrokeLine(px, size, 8, 14, 28, 22, 2, ink);
                     StrokeLine(px, size, 28, 14, 8, 22, 2, ink);
+                    break;
+                case FrStudioIconKind.Blank:
+                    FillRound(px, size, 8, 7, 28, 29, 3, ink);
+                    FillRect(px, size, 11, 10, 25, 26, new Color32(0, 0, 0, 0));
                     break;
             }
 

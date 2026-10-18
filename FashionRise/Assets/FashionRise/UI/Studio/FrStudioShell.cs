@@ -37,9 +37,10 @@ namespace FashionRise.UI.Studio
             goldRt.anchorMin = new Vector2(0f, 1f);
             goldRt.anchorMax = new Vector2(1f, 1f);
             goldRt.pivot = new Vector2(0.5f, 1f);
-            goldRt.sizeDelta = new Vector2(0f, 3f);
+            goldRt.sizeDelta = new Vector2(0f, 4f);
             goldRt.anchoredPosition = Vector2.zero;
-            gold.GetComponent<Image>().color = theme.AccentMuted;
+            gold.GetComponent<Image>().color = new Color(theme.AccentMuted.r, theme.AccentMuted.g,
+                theme.AccentMuted.b, 0.9f);
             gold.GetComponent<Image>().raycastTarget = false;
 
             var topH = DeviceLayoutPolicy.StudioTopBarHeight;

@@ -64,7 +64,10 @@ namespace FashionRise.UI.Studio
                 tmp.fontStyle = bold ? FontStyles.Bold : FontStyles.Normal;
                 tmp.color = color;
                 tmp.alignment = ToTmpAlignment(anchor);
-                tmp.enableWordWrapping = style != FrStudioTypeStyle.Button;
+                // Captions/buttons must never wrap letter-by-letter in narrow rails.
+                var allowWrap = style is FrStudioTypeStyle.Body or FrStudioTypeStyle.PageTitle
+                    or FrStudioTypeStyle.Display;
+                tmp.enableWordWrapping = allowWrap;
                 tmp.overflowMode = TextOverflowModes.Overflow;
                 tmp.raycastTarget = false;
                 tmp.richText = false;
@@ -82,11 +85,23 @@ namespace FashionRise.UI.Studio
             label.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
             label.color = color;
             label.alignment = anchor;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var allowWrapLegacy = style is FrStudioTypeStyle.Body or FrStudioTypeStyle.PageTitle
+                or FrStudioTypeStyle.Display;
+            label.horizontalOverflow = allowWrapLegacy ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
             label.verticalOverflow = VerticalWrapMode.Overflow;
             label.raycastTarget = false;
             Stretch(legacyGo.GetComponent<RectTransform>());
             return label;
+        }
+
+        public static void SetVisible(Graphic? graphic, bool visible)
+        {
+            if (graphic == null)
+                return;
+            graphic.gameObject.SetActive(visible);
+            var host = graphic.transform.parent;
+            if (host != null && (host.name == "CapHost" || host.name == "LabelHost" || host.name == "TitleHost"))
+                host.gameObject.SetActive(visible);
         }
 
         public static void SetText(Graphic graphic, string text)
@@ -129,12 +144,12 @@ namespace FashionRise.UI.Studio
             var tablet = DeviceLayoutPolicy.IsTabletLike();
             return style switch
             {
-                FrStudioTypeStyle.Display => tablet ? theme.DisplaySize : theme.DisplaySize - 4f,
-                FrStudioTypeStyle.PageTitle => tablet ? theme.PageTitleSize : theme.PageTitleSize - 2f,
+                FrStudioTypeStyle.Display => tablet ? theme.DisplaySize : Mathf.Max(28f, theme.DisplaySize - 4f),
+                FrStudioTypeStyle.PageTitle => tablet ? theme.PageTitleSize : Mathf.Max(22f, theme.PageTitleSize - 2f),
                 FrStudioTypeStyle.SectionHeading => tablet ? theme.SectionHeadingSize : 15f,
                 FrStudioTypeStyle.Body => tablet ? theme.BodySize : 16f,
                 FrStudioTypeStyle.Button => tablet ? theme.ButtonLabelSize : 15f,
-                FrStudioTypeStyle.Caption => Mathf.Max(14f, theme.CaptionSize),
+                FrStudioTypeStyle.Caption => Mathf.Max(13f, theme.CaptionSize),
                 FrStudioTypeStyle.Metadata => Mathf.Max(13f, theme.MetadataSize),
                 _ => theme.BodySize
             };

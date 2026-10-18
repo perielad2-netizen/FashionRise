@@ -28,16 +28,16 @@ namespace FashionRise.UI.Studio
         }
 
         public static FrStudioCard Build(Transform parent, FashionRiseTheme theme, string title, UnityAction onClick,
-            Texture2D? portrait = null, bool light = false)
+            Texture2D? portrait = null, FrStudioIconKind? placeholderIcon = null)
         {
             var go = new GameObject(title + "_Card", typeof(RectTransform), typeof(Image), typeof(Button),
                 typeof(FrStudioCard));
             go.transform.SetParent(parent, false);
             var card = go.GetComponent<FrStudioCard>();
             card._theme = theme;
-            card._idleFace = light ? theme.CanvasCard : theme.ShellElevated;
+            card._idleFace = theme.ShellElevated;
             card._face = go.GetComponent<Image>();
-            card._face.sprite = FrStudioSprites.Rounded(64, Mathf.RoundToInt(theme.CornerRadiusMedium), Color.white);
+            card._face.sprite = FrStudioSprites.Rounded(72, Mathf.RoundToInt(theme.CornerRadiusMedium), Color.white);
             card._face.type = Image.Type.Sliced;
             card._face.color = card._idleFace;
 
@@ -45,7 +45,7 @@ namespace FashionRise.UI.Studio
             btn.transition = Selectable.Transition.ColorTint;
             var colors = btn.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1f, 1f, 1f, 0.94f);
+            colors.highlightedColor = new Color(1f, 1f, 1f, 0.95f);
             colors.pressedColor = new Color(0.86f, 0.86f, 0.88f, 1f);
             colors.selectedColor = Color.white;
             colors.disabledColor = theme.Disabled;
@@ -55,8 +55,10 @@ namespace FashionRise.UI.Studio
             card.Button = btn;
 
             var le = go.AddComponent<LayoutElement>();
-            le.minHeight = Mathf.Max(DeviceLayoutPolicy.StudioMinTouch + 36f, 88f);
+            le.minHeight = DeviceLayoutPolicy.IsWideLayout() ? 148f : 118f;
+            le.preferredHeight = le.minHeight;
             le.flexibleWidth = 1f;
+            le.flexibleHeight = DeviceLayoutPolicy.IsWideLayout() ? 1f : 0f;
 
             var ringGo = new GameObject("Ring", typeof(RectTransform), typeof(Image));
             ringGo.transform.SetParent(go.transform, false);
@@ -66,66 +68,74 @@ namespace FashionRise.UI.Studio
             ringRt.offsetMin = Vector2.zero;
             ringRt.offsetMax = Vector2.zero;
             card._ring = ringGo.GetComponent<Image>();
-            card._ring.sprite = FrStudioSprites.Rounded(64, Mathf.RoundToInt(theme.CornerRadiusMedium), Color.white);
+            card._ring.sprite = FrStudioSprites.Rounded(72, Mathf.RoundToInt(theme.CornerRadiusMedium), Color.white);
             card._ring.type = Image.Type.Sliced;
             card._ring.raycastTarget = false;
 
             var shadow = go.AddComponent<Shadow>();
-            shadow.effectColor = theme.Shadow;
-            shadow.effectDistance = new Vector2(0f, -3f);
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.28f);
+            shadow.effectDistance = new Vector2(0f, -4f);
 
-            var row = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            row.transform.SetParent(go.transform, false);
-            var rowRt = row.GetComponent<RectTransform>();
-            rowRt.anchorMin = Vector2.zero;
-            rowRt.anchorMax = Vector2.one;
-            rowRt.offsetMin = new Vector2(theme.SpaceSm, theme.SpaceSm);
-            rowRt.offsetMax = new Vector2(-theme.SpaceSm, -theme.SpaceSm);
-            var h = row.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = theme.SpaceSm;
-            h.childAlignment = TextAnchor.MiddleLeft;
-            h.childControlWidth = true;
-            h.childControlHeight = true;
-            h.childForceExpandWidth = false;
-            h.childForceExpandHeight = false;
-            h.padding = new RectOffset(4, 8, 4, 4);
+            var col = new GameObject("Col", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            col.transform.SetParent(go.transform, false);
+            var colRt = col.GetComponent<RectTransform>();
+            colRt.anchorMin = Vector2.zero;
+            colRt.anchorMax = Vector2.one;
+            colRt.offsetMin = new Vector2(10f, 10f);
+            colRt.offsetMax = new Vector2(-10f, -10f);
+            var v = col.GetComponent<VerticalLayoutGroup>();
+            v.spacing = 8f;
+            v.childAlignment = TextAnchor.UpperCenter;
+            v.childControlWidth = true;
+            v.childControlHeight = true;
+            v.childForceExpandWidth = true;
+            v.childForceExpandHeight = false;
+
+            var preview = new GameObject("Preview", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            preview.transform.SetParent(col.transform, false);
+            var previewFace = preview.GetComponent<Image>();
+            previewFace.sprite = FrStudioSprites.Rounded(64, 12, Color.white);
+            previewFace.type = Image.Type.Sliced;
+            previewFace.color = new Color(theme.ShellBackground.r, theme.ShellBackground.g, theme.ShellBackground.b, 0.85f);
+            previewFace.raycastTarget = false;
+            var previewLe = preview.GetComponent<LayoutElement>();
+            previewLe.minHeight = DeviceLayoutPolicy.IsWideLayout() ? 96f : 72f;
+            previewLe.preferredHeight = previewLe.minHeight;
+            previewLe.flexibleWidth = 1f;
 
             if (portrait != null)
             {
-                var thumb = new GameObject("Portrait", typeof(RawImage), typeof(LayoutElement));
-                thumb.transform.SetParent(row.transform, false);
+                var thumb = new GameObject("Portrait", typeof(RawImage));
+                thumb.transform.SetParent(preview.transform, false);
                 var raw = thumb.GetComponent<RawImage>();
                 raw.texture = portrait;
                 raw.raycastTarget = false;
-                var tle = thumb.GetComponent<LayoutElement>();
-                tle.preferredWidth = 56f;
-                tle.preferredHeight = 72f;
-                tle.minWidth = 48f;
-                tle.minHeight = 64f;
+                var trt = thumb.GetComponent<RectTransform>();
+                trt.anchorMin = Vector2.zero;
+                trt.anchorMax = Vector2.one;
+                trt.offsetMin = new Vector2(8f, 6f);
+                trt.offsetMax = new Vector2(-8f, -6f);
             }
             else
             {
-                var mark = new GameObject("Mark", typeof(Image), typeof(LayoutElement));
-                mark.transform.SetParent(row.transform, false);
+                var iconKind = placeholderIcon ?? FrStudioIconKind.Import;
+                var mark = new GameObject("Mark", typeof(Image));
+                mark.transform.SetParent(preview.transform, false);
                 var img = mark.GetComponent<Image>();
-                img.sprite = FrStudioSprites.Rounded(48, 10, Color.white);
-                img.type = Image.Type.Sliced;
-                img.color = light ? theme.CanvasWell : new Color(theme.AccentMuted.r, theme.AccentMuted.g,
-                    theme.AccentMuted.b, 0.35f);
+                img.sprite = FrStudioSprites.Icon(iconKind, theme.AccentMuted);
+                img.preserveAspect = true;
                 img.raycastTarget = false;
-                var mle = mark.GetComponent<LayoutElement>();
-                mle.preferredWidth = 44f;
-                mle.preferredHeight = 56f;
+                var mrt = mark.GetComponent<RectTransform>();
+                mrt.anchorMin = new Vector2(0.5f, 0.5f);
+                mrt.anchorMax = new Vector2(0.5f, 0.5f);
+                mrt.sizeDelta = new Vector2(36f, 36f);
             }
 
             var titleHost = new GameObject("TitleHost", typeof(RectTransform), typeof(LayoutElement));
-            titleHost.transform.SetParent(row.transform, false);
-            var titleLe = titleHost.GetComponent<LayoutElement>();
-            titleLe.flexibleWidth = 1f;
-            titleLe.minHeight = 28f;
+            titleHost.transform.SetParent(col.transform, false);
+            titleHost.GetComponent<LayoutElement>().minHeight = 22f;
             card._title = FrStudioTypography.AddLabel(titleHost.transform, "Title", title, theme,
-                FrStudioTypeStyle.SectionHeading, muted: false, TextAnchor.MiddleLeft,
-                light ? FrStudioTypeTone.OnLight : FrStudioTypeTone.OnDark);
+                FrStudioTypeStyle.SectionHeading, muted: false, TextAnchor.MiddleCenter, FrStudioTypeTone.OnDark);
 
             card.Refresh();
             return card;
@@ -136,9 +146,13 @@ namespace FashionRise.UI.Studio
             if (_face == null || _theme == null)
                 return;
             _face.color = _selected
-                ? Color.Lerp(_idleFace, _theme.Selected, 0.18f)
+                ? Color.Lerp(_idleFace, _theme.Selected, 0.12f)
                 : _idleFace;
-            _ring.color = _selected ? _theme.Selected : new Color(0f, 0f, 0f, 0f);
+            // Rose border only — never flood the whole card with solid pink.
+            _ring.color = _selected ? _theme.Selected : new Color(_theme.SubtleBorder.r, _theme.SubtleBorder.g,
+                _theme.SubtleBorder.b, 0.35f);
+            if (_title != null)
+                FrStudioTypography.SetColor(_title, _selected ? _theme.ShellText : _theme.ShellMutedText);
         }
     }
 }

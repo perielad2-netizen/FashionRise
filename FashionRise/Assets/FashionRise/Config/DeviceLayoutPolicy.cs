@@ -33,20 +33,22 @@ namespace FashionRise.Config
 
         public static float BodyFontSize => IsTabletLike() ? 22f : 18f;
 
-        public static float StudioTopBarHeight => IsTabletLike() ? 76f : 68f;
+        public static float StudioTopBarHeight => IsTabletLike() ? 92f : 80f;
 
-        public static float StudioLeftRailWidth => IsTabletLike() ? 228f : 196f;
+        public static float StudioLeftRailWidth => IsTabletLike() ? 248f : 208f;
 
-        public static float StudioToolRailWidth => 76f;
+        public static float StudioToolRailWidth => IsTabletLike() ? 84f : 76f;
 
-        public static float StudioInspectorWidth => IsTabletLike() ? 292f : 248f;
+        public static float StudioInspectorWidth => IsTabletLike() ? 304f : 260f;
 
-        public static float StudioNarrowStripHeight => 128f;
+        public static float StudioNarrowStripHeight => 140f;
 
-        public static float StudioNarrowDockHeight => IsTabletLike() ? 228f : 216f;
+        public static float StudioNarrowDockHeight => IsTabletLike() ? 248f : 232f;
 
         public static float StudioMinTouch => 48f;
 
-        public static float StudioBodyPad => IsTabletLike() ? 18f : 12f;
+        public static float StudioBodyPad => IsTabletLike() ? 22f : 14f;
+
+        public static float StudioCanvasInset => IsTabletLike() ? 28f : 18f;
     }
 }

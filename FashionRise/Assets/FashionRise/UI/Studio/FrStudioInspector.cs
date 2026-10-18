@@ -29,6 +29,8 @@ namespace FashionRise.UI.Studio
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
             var img = go.GetComponent<Image>();
+            img.sprite = FrStudioSprites.Rounded(72, 20, Color.white);
+            img.type = Image.Type.Sliced;
             img.color = theme.CanvasSurface;
             img.raycastTarget = true;
 
@@ -37,10 +39,10 @@ namespace FashionRise.UI.Studio
             vRt.SetParent(rt, false);
             vRt.anchorMin = Vector2.zero;
             vRt.anchorMax = Vector2.one;
-            vRt.offsetMin = new Vector2(theme.SpaceSm, theme.SpaceSm);
-            vRt.offsetMax = new Vector2(-theme.SpaceSm, -theme.SpaceSm);
+            vRt.offsetMin = new Vector2(theme.SpaceMd, theme.SpaceMd);
+            vRt.offsetMax = new Vector2(-theme.SpaceMd, -theme.SpaceMd);
             var v = vGo.GetComponent<VerticalLayoutGroup>();
-            v.spacing = theme.SpaceSm;
+            v.spacing = theme.SpaceMd;
             v.childAlignment = TextAnchor.UpperCenter;
             v.childControlWidth = true;
             v.childControlHeight = true;
@@ -49,9 +51,17 @@ namespace FashionRise.UI.Studio
 
             var titleHost = new GameObject("InspTitle", typeof(RectTransform), typeof(LayoutElement));
             titleHost.transform.SetParent(vGo.transform, false);
-            titleHost.GetComponent<LayoutElement>().minHeight = 28f;
+            titleHost.GetComponent<LayoutElement>().minHeight = 32f;
             FrStudioTypography.AddLabel(titleHost.transform, "T", "Studio", theme,
                 FrStudioTypeStyle.PageTitle, muted: false, TextAnchor.MiddleLeft, FrStudioTypeTone.OnLight);
+
+            var hairline = new GameObject("TitleRule", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            hairline.transform.SetParent(vGo.transform, false);
+            hairline.GetComponent<LayoutElement>().minHeight = 2f;
+            hairline.GetComponent<LayoutElement>().preferredHeight = 2f;
+            hairline.GetComponent<Image>().color = new Color(theme.AccentMuted.r, theme.AccentMuted.g,
+                theme.AccentMuted.b, 0.45f);
+            hairline.GetComponent<Image>().raycastTarget = false;
 
             var scrollGo = new GameObject("Scroll", typeof(RectTransform), typeof(ScrollRect), typeof(Image),
                 typeof(RectMask2D), typeof(LayoutElement));
@@ -60,7 +70,7 @@ namespace FashionRise.UI.Studio
             scrollGo.GetComponent<Image>().raycastTarget = true;
             var scrollLe = scrollGo.GetComponent<LayoutElement>();
             scrollLe.flexibleHeight = 1f;
-            scrollLe.minHeight = 80f;
+            scrollLe.minHeight = 100f;
             var scroll = scrollGo.GetComponent<ScrollRect>();
             scroll.horizontal = false;
             scroll.movementType = ScrollRect.MovementType.Clamped;
@@ -75,7 +85,7 @@ namespace FashionRise.UI.Studio
             contentRt.pivot = new Vector2(0.5f, 1f);
             contentRt.sizeDelta = new Vector2(0f, 0f);
             var cv = content.GetComponent<VerticalLayoutGroup>();
-            cv.spacing = theme.SpaceSm;
+            cv.spacing = theme.SpaceMd;
             cv.childAlignment = TextAnchor.UpperCenter;
             cv.childControlWidth = true;
             cv.childControlHeight = true;
@@ -87,14 +97,14 @@ namespace FashionRise.UI.Studio
 
             var statusHost = new GameObject("StatusHost", typeof(RectTransform), typeof(LayoutElement));
             statusHost.transform.SetParent(vGo.transform, false);
-            statusHost.GetComponent<LayoutElement>().minHeight = 36f;
+            statusHost.GetComponent<LayoutElement>().minHeight = 40f;
             var status = FrStudioTypography.AddLabel(statusHost.transform, "Status", " ", theme,
                 FrStudioTypeStyle.Caption, muted: true, TextAnchor.UpperLeft, FrStudioTypeTone.OnLight);
 
             var footer = new GameObject("Footer", typeof(RectTransform), typeof(VerticalLayoutGroup),
                 typeof(LayoutElement));
             footer.transform.SetParent(vGo.transform, false);
-            footer.GetComponent<LayoutElement>().minHeight = 68f;
+            footer.GetComponent<LayoutElement>().minHeight = 78f;
             var fv = footer.GetComponent<VerticalLayoutGroup>();
             fv.spacing = 0f;
             fv.childAlignment = TextAnchor.LowerCenter;

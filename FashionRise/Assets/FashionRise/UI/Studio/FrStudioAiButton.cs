@@ -40,19 +40,23 @@ namespace FashionRise.UI.Studio
             var widget = go.GetComponent<FrStudioAiButton>();
             widget._theme = theme;
             widget._face = go.GetComponent<Image>();
-            widget._face.sprite = FrStudioSprites.Rounded(64, 22, Color.white);
+            widget._face.sprite = FrStudioSprites.Rounded(72, 24, Color.white);
             widget._face.type = Image.Type.Sliced;
             widget._face.color = theme.AiAccent;
 
             var shadow = go.AddComponent<Shadow>();
-            shadow.effectColor = new Color(theme.AiAccent.r, theme.AiAccent.g, theme.AiAccent.b, 0.35f);
-            shadow.effectDistance = new Vector2(0f, -4f);
+            shadow.effectColor = new Color(theme.AiAccent.r, theme.AiAccent.g, theme.AiAccent.b, 0.48f);
+            shadow.effectDistance = new Vector2(0f, -6f);
+
+            var glow = go.AddComponent<Outline>();
+            glow.effectColor = new Color(theme.AiAccent.r, theme.AiAccent.g, theme.AiAccent.b, 0.35f);
+            glow.effectDistance = new Vector2(2f, -2f);
 
             widget._button = go.GetComponent<Button>();
             widget._button.transition = Selectable.Transition.ColorTint;
             var colors = widget._button.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1f, 1f, 1f, 0.94f);
+            colors.highlightedColor = new Color(1f, 1f, 1f, 0.96f);
             colors.pressedColor = new Color(0.78f, 0.78f, 0.8f, 1f);
             colors.disabledColor = theme.Disabled;
             colors.fadeDuration = 0.08f;
@@ -60,7 +64,7 @@ namespace FashionRise.UI.Studio
             widget._button.onClick.AddListener(onClick);
 
             var le = go.AddComponent<LayoutElement>();
-            le.minHeight = Mathf.Max(theme.MinTouchTarget + 12f, DeviceLayoutPolicy.IsTabletLike() ? 64f : 58f);
+            le.minHeight = Mathf.Max(theme.MinTouchTarget + 20f, DeviceLayoutPolicy.IsTabletLike() ? 72f : 64f);
             le.preferredHeight = le.minHeight;
             le.flexibleWidth = 1f;
 
@@ -69,10 +73,10 @@ namespace FashionRise.UI.Studio
             var rowRt = row.GetComponent<RectTransform>();
             rowRt.anchorMin = Vector2.zero;
             rowRt.anchorMax = Vector2.one;
-            rowRt.offsetMin = new Vector2(16f, 0f);
-            rowRt.offsetMax = new Vector2(-16f, 0f);
+            rowRt.offsetMin = new Vector2(18f, 0f);
+            rowRt.offsetMax = new Vector2(-18f, 0f);
             var h = row.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = 10f;
+            h.spacing = 12f;
             h.childAlignment = TextAnchor.MiddleCenter;
             h.childControlWidth = true;
             h.childControlHeight = true;
@@ -86,12 +90,12 @@ namespace FashionRise.UI.Studio
             img.preserveAspect = true;
             img.raycastTarget = false;
             var ile = icon.GetComponent<LayoutElement>();
-            ile.preferredWidth = 22f;
-            ile.preferredHeight = 22f;
+            ile.preferredWidth = 24f;
+            ile.preferredHeight = 24f;
 
             var labelHost = new GameObject("LabelHost", typeof(RectTransform), typeof(LayoutElement));
             labelHost.transform.SetParent(row.transform, false);
-            labelHost.GetComponent<LayoutElement>().preferredWidth = 96f;
+            labelHost.GetComponent<LayoutElement>().preferredWidth = 110f;
             widget._label = FrStudioTypography.AddLabel(labelHost.transform, "L", label, theme,
                 FrStudioTypeStyle.Button, muted: false, TextAnchor.MiddleCenter);
             FrStudioTypography.SetColor(widget._label, theme.ButtonPrimaryText);
