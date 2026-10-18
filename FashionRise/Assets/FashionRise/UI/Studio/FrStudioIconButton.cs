@@ -10,7 +10,7 @@ namespace FashionRise.UI.Studio
     {
         Image _face = null!;
         Image? _ring;
-        Image _icon = null!;
+        Image? _icon;
         Graphic? _caption;
         LayoutElement? _captionHost;
         FashionRiseTheme _theme = null!;
@@ -18,8 +18,9 @@ namespace FashionRise.UI.Studio
         bool _light;
         bool _swatch;
         bool _modeTool;
+        bool _assetTile;
         bool _captionsVisible = true;
-        Color _iconIdle;
+        Color _iconIdle = Color.white;
 
         public Button Button { get; private set; } = null!;
 
@@ -44,8 +45,21 @@ namespace FashionRise.UI.Studio
             widget._light = light;
             widget._modeTool = modeTool;
             widget._face = go.GetComponent<Image>();
-            widget._face.sprite = FrStudioSprites.Rounded(64, Mathf.RoundToInt(theme.CornerRadiusMedium), Color.white);
-            widget._face.type = Image.Type.Sliced;
+
+            var tile = FrStudioAssets.Icon(kind);
+            widget._assetTile = tile != null;
+            if (tile != null)
+            {
+                widget._face.sprite = tile;
+                widget._face.type = Image.Type.Simple;
+                widget._face.preserveAspect = true;
+                widget._face.color = Color.white;
+            }
+            else
+            {
+                widget._face.sprite = FrStudioSprites.Rounded(64, Mathf.RoundToInt(theme.CornerRadiusMedium), Color.white);
+                widget._face.type = Image.Type.Sliced;
+            }
 
             var btn = go.GetComponent<Button>();
             btn.transition = Selectable.Transition.ColorTint;
@@ -64,8 +78,8 @@ namespace FashionRise.UI.Studio
             var le = go.AddComponent<LayoutElement>();
             le.minWidth = touch;
             le.minHeight = touch;
-            le.preferredWidth = touch + 4f;
-            le.preferredHeight = touch + 4f;
+            le.preferredWidth = touch + (tile != null ? 8f : 4f);
+            le.preferredHeight = touch + (tile != null ? 8f : 4f);
             le.flexibleWidth = 0f;
 
             var ringGo = new GameObject("Ring", typeof(RectTransform), typeof(Image));
@@ -73,47 +87,66 @@ namespace FashionRise.UI.Studio
             var ringRt = ringGo.GetComponent<RectTransform>();
             ringRt.anchorMin = Vector2.zero;
             ringRt.anchorMax = Vector2.one;
-            ringRt.offsetMin = Vector2.zero;
-            ringRt.offsetMax = Vector2.zero;
+            ringRt.offsetMin = new Vector2(-3f, -3f);
+            ringRt.offsetMax = new Vector2(3f, 3f);
             widget._ring = ringGo.GetComponent<Image>();
-            widget._ring.sprite = FrStudioSprites.Rounded(64, Mathf.RoundToInt(theme.CornerRadiusMedium), Color.white);
+            widget._ring.sprite = FrStudioSprites.Rounded(72, Mathf.RoundToInt(theme.CornerRadiusMedium + 2f), Color.white);
             widget._ring.type = Image.Type.Sliced;
             widget._ring.raycastTarget = false;
 
-            var col = new GameObject("Stack", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            col.transform.SetParent(go.transform, false);
-            var colRt = col.GetComponent<RectTransform>();
-            colRt.anchorMin = Vector2.zero;
-            colRt.anchorMax = Vector2.one;
-            colRt.offsetMin = new Vector2(6f, 6f);
-            colRt.offsetMax = new Vector2(-6f, -6f);
-            var v = col.GetComponent<VerticalLayoutGroup>();
-            v.spacing = 2f;
-            v.childAlignment = TextAnchor.MiddleCenter;
-            v.childControlWidth = true;
-            v.childControlHeight = true;
-            v.childForceExpandWidth = false;
-            v.childForceExpandHeight = false;
-
-            var iconGo = new GameObject("Icon", typeof(Image), typeof(LayoutElement));
-            iconGo.transform.SetParent(col.transform, false);
-            widget._icon = iconGo.GetComponent<Image>();
-            widget._iconIdle = light ? theme.MidnightNavy : theme.ShellText;
-            widget._icon.sprite = FrStudioSprites.Icon(kind, Color.white);
-            widget._icon.color = widget._iconIdle;
-            widget._icon.preserveAspect = true;
-            widget._icon.raycastTarget = false;
-            var ile = iconGo.GetComponent<LayoutElement>();
-            ile.preferredWidth = theme.IconSize + 4f;
-            ile.preferredHeight = theme.IconSize + 4f;
-
-            if (!string.IsNullOrEmpty(caption))
+            if (tile == null)
             {
+                var col = new GameObject("Stack", typeof(RectTransform), typeof(VerticalLayoutGroup));
+                col.transform.SetParent(go.transform, false);
+                var colRt = col.GetComponent<RectTransform>();
+                colRt.anchorMin = Vector2.zero;
+                colRt.anchorMax = Vector2.one;
+                colRt.offsetMin = new Vector2(6f, 6f);
+                colRt.offsetMax = new Vector2(-6f, -6f);
+                var v = col.GetComponent<VerticalLayoutGroup>();
+                v.spacing = 2f;
+                v.childAlignment = TextAnchor.MiddleCenter;
+                v.childControlWidth = true;
+                v.childControlHeight = true;
+                v.childForceExpandWidth = false;
+                v.childForceExpandHeight = false;
+
+                var iconGo = new GameObject("Icon", typeof(Image), typeof(LayoutElement));
+                iconGo.transform.SetParent(col.transform, false);
+                widget._icon = iconGo.GetComponent<Image>();
+                widget._iconIdle = light ? theme.MidnightNavy : theme.ShellText;
+                widget._icon.sprite = FrStudioSprites.Icon(kind, Color.white);
+                widget._icon.color = widget._iconIdle;
+                widget._icon.preserveAspect = true;
+                widget._icon.raycastTarget = false;
+                var ile = iconGo.GetComponent<LayoutElement>();
+                ile.preferredWidth = theme.IconSize + 4f;
+                ile.preferredHeight = theme.IconSize + 4f;
+
+                if (!string.IsNullOrEmpty(caption))
+                {
+                    var capHost = new GameObject("CapHost", typeof(RectTransform), typeof(LayoutElement));
+                    capHost.transform.SetParent(col.transform, false);
+                    widget._captionHost = capHost.GetComponent<LayoutElement>();
+                    widget._captionHost.minHeight = 14f;
+                    widget._caption = FrStudioTypography.AddLabel(capHost.transform, "Cap", caption, theme,
+                        FrStudioTypeStyle.Caption, muted: true, TextAnchor.MiddleCenter,
+                        light ? FrStudioTypeTone.OnLight : FrStudioTypeTone.OnDark);
+                }
+            }
+            else if (!string.IsNullOrEmpty(caption))
+            {
+                // Asset tiles already contain the glyph — captions optional for portrait strip only.
                 var capHost = new GameObject("CapHost", typeof(RectTransform), typeof(LayoutElement));
-                capHost.transform.SetParent(col.transform, false);
+                capHost.transform.SetParent(go.transform, false);
+                var crt = capHost.GetComponent<RectTransform>();
+                crt.anchorMin = new Vector2(0f, 0f);
+                crt.anchorMax = new Vector2(1f, 0f);
+                crt.pivot = new Vector2(0.5f, 1f);
+                crt.sizeDelta = new Vector2(0f, 16f);
+                crt.anchoredPosition = new Vector2(0f, -2f);
                 widget._captionHost = capHost.GetComponent<LayoutElement>();
                 widget._captionHost.minHeight = 14f;
-                widget._captionHost.preferredHeight = 14f;
                 widget._caption = FrStudioTypography.AddLabel(capHost.transform, "Cap", caption, theme,
                     FrStudioTypeStyle.Caption, muted: true, TextAnchor.MiddleCenter,
                     light ? FrStudioTypeTone.OnLight : FrStudioTypeTone.OnDark);
@@ -153,10 +186,23 @@ namespace FashionRise.UI.Studio
             widget.Button = btn;
 
             var le = go.AddComponent<LayoutElement>();
-            le.minHeight = Mathf.Max(theme.MinTouchTarget, 46f);
+            le.minHeight = Mathf.Max(theme.MinTouchTarget, 48f);
             le.minWidth = 64f;
             le.preferredWidth = 0f;
             le.flexibleWidth = 1f;
+
+            // Selection ring matches style-board brush chips (hot-pink outline).
+            var ringGo = new GameObject("Ring", typeof(RectTransform), typeof(Image));
+            ringGo.transform.SetParent(go.transform, false);
+            var ringRt = ringGo.GetComponent<RectTransform>();
+            ringRt.anchorMin = Vector2.zero;
+            ringRt.anchorMax = Vector2.one;
+            ringRt.offsetMin = new Vector2(-2f, -2f);
+            ringRt.offsetMax = new Vector2(2f, 2f);
+            widget._ring = ringGo.GetComponent<Image>();
+            widget._ring.sprite = FrStudioSprites.Rounded(72, 20, Color.white);
+            widget._ring.type = Image.Type.Sliced;
+            widget._ring.raycastTarget = false;
 
             var host = new GameObject("LabelHost", typeof(RectTransform));
             host.transform.SetParent(go.transform, false);
@@ -222,7 +268,7 @@ namespace FashionRise.UI.Studio
                 FrStudioTypography.SetVisible(_caption, visible);
 
             var le = GetComponent<LayoutElement>();
-            if (le != null)
+            if (le != null && !_assetTile)
             {
                 var touch = Mathf.Max(_theme.MinTouchTarget, DeviceLayoutPolicy.StudioMinTouch);
                 le.minHeight = visible && _caption != null ? touch + 16f : touch;
@@ -242,12 +288,22 @@ namespace FashionRise.UI.Studio
                 return;
             }
 
+            if (_assetTile)
+            {
+                _face.color = Color.white;
+                if (_ring != null)
+                    _ring.color = _selected ? _theme.Selected : new Color(0f, 0f, 0f, 0f);
+                if (_caption != null)
+                    FrStudioTypography.SetColor(_caption, _selected ? _theme.ShellText : _theme.ShellMutedText);
+                return;
+            }
+
             if (_light)
             {
-                _face.color = _selected ? Color.Lerp(_theme.CanvasCard, _theme.Selected, 0.16f) : _theme.CanvasCard;
+                _face.color = _selected ? Color.Lerp(_theme.CanvasCard, _theme.Selected, 0.12f) : _theme.CanvasCard;
                 if (_caption != null)
                     FrStudioTypography.SetColor(_caption, _selected ? _theme.MidnightNavy : _theme.ButtonText);
-                if (_icon != null && !_swatch)
+                if (_icon != null)
                     _icon.color = _selected ? _theme.Selected : _iconIdle;
                 if (_ring != null)
                     _ring.color = _selected ? _theme.Selected : new Color(0f, 0f, 0f, 0f);
@@ -256,7 +312,7 @@ namespace FashionRise.UI.Studio
 
             if (_modeTool && _selected)
             {
-                _face.color = Color.Lerp(_theme.ShellElevated, _theme.Selected, 0.22f);
+                _face.color = Color.Lerp(_theme.ShellElevated, _theme.Selected, 0.18f);
                 if (_ring != null)
                     _ring.color = _theme.Selected;
                 if (_icon != null)
@@ -272,8 +328,7 @@ namespace FashionRise.UI.Studio
                 if (_icon != null)
                     _icon.color = _iconIdle;
                 if (_caption != null)
-                    FrStudioTypography.SetColor(_caption,
-                        _captionsVisible ? _theme.ShellMutedText : _theme.ShellMutedText);
+                    FrStudioTypography.SetColor(_caption, _theme.ShellMutedText);
             }
         }
     }

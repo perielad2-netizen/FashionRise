@@ -122,8 +122,15 @@ namespace FashionRise.UI.Studio
             img.color = color;
             img.raycastTarget = true;
             var shadow = go.AddComponent<Shadow>();
-            shadow.effectColor = new Color(0f, 0f, 0f, deepShadow ? 0.34f : 0.2f);
-            shadow.effectDistance = new Vector2(0f, deepShadow ? -8f : -3f);
+            shadow.effectColor = new Color(0f, 0f, 0f, deepShadow ? 0.36f : 0.2f);
+            shadow.effectDistance = new Vector2(0f, deepShadow ? -10f : -3f);
+            if (deepShadow)
+            {
+                var rim = go.AddComponent<Outline>();
+                rim.effectColor = new Color(0.83f, 0.65f, 0.59f, 0.55f);
+                rim.effectDistance = new Vector2(1.5f, -1.5f);
+            }
+
             return go.GetComponent<RectTransform>();
         }
 

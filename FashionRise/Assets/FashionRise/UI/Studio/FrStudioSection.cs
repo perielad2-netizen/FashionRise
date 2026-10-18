@@ -31,12 +31,16 @@ namespace FashionRise.UI.Studio
             outline.effectColor = light ? theme.LightBorder : theme.SubtleBorder;
             outline.effectDistance = new Vector2(1f, -1f);
 
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, light ? 0.12f : 0.22f);
+            shadow.effectDistance = new Vector2(0f, -3f);
+
             var le = go.GetComponent<LayoutElement>();
             le.flexibleWidth = 1f;
-            le.minHeight = 84f;
+            le.minHeight = 88f;
 
             var v = go.GetComponent<VerticalLayoutGroup>();
-            v.padding = new RectOffset(16, 16, 14, 16);
+            v.padding = new RectOffset(18, 18, 16, 18);
             v.spacing = theme.SpaceSm;
             v.childAlignment = TextAnchor.UpperLeft;
             v.childControlWidth = true;

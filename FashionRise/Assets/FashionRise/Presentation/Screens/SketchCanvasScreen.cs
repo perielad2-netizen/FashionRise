@@ -99,16 +99,16 @@ namespace FashionRise.Presentation.Screens
             FrStudioTypography.SetColor(modelsHeading,
                 new Color(_theme.AccentMuted.r, _theme.AccentMuted.g, _theme.AccentMuted.b, 0.95f));
 
-            var femaleTex = Resources.Load<Texture2D>("SketchReference/female_model");
-            var maleTex = Resources.Load<Texture2D>("SketchReference/male_model");
+            // Card artwork from FashionRise model-selector sheet (runtime chrome handles selection).
+            // Sketch pad underlay still uses SketchReference/* via UiSketchPad — unchanged.
             _femaleCard = FrStudioCard.Build(_models.Content, _theme, "Female", () => ApplyModel(ModelChoice.Female),
-                femaleTex);
+                FrStudioAssets.ModelFemale);
             _maleCard = FrStudioCard.Build(_models.Content, _theme, "Male", () => ApplyModel(ModelChoice.Male),
-                maleTex);
+                FrStudioAssets.ModelMale);
             _customCard = FrStudioCard.Build(_models.Content, _theme, "Custom photo", ImportSketch,
-                placeholderIcon: FrStudioIconKind.Import);
+                FrStudioAssets.ModelCustom);
             _blankCard = FrStudioCard.Build(_models.Content, _theme, "Blank paper",
-                () => ApplyModel(ModelChoice.Blank), placeholderIcon: FrStudioIconKind.Blank);
+                () => ApplyModel(ModelChoice.Blank), FrStudioAssets.ModelBlank);
             _models.Add(headHost.transform);
             _models.Add(_femaleCard.transform);
             _models.Add(_maleCard.transform);
@@ -133,11 +133,11 @@ namespace FashionRise.Presentation.Screens
             frameImg.color = _theme.CanvasWell;
             frameImg.raycastTarget = false;
             var frameOutline = frame.AddComponent<Outline>();
-            frameOutline.effectColor = _theme.LightBorder;
-            frameOutline.effectDistance = new Vector2(1.5f, -1.5f);
+            frameOutline.effectColor = new Color(_theme.AccentMuted.r, _theme.AccentMuted.g, _theme.AccentMuted.b, 0.85f);
+            frameOutline.effectDistance = new Vector2(2f, -2f);
             var frameShade = frame.AddComponent<Shadow>();
-            frameShade.effectColor = new Color(0f, 0f, 0f, 0.28f);
-            frameShade.effectDistance = new Vector2(0f, -10f);
+            frameShade.effectColor = new Color(0f, 0f, 0f, 0.3f);
+            frameShade.effectDistance = new Vector2(0f, -12f);
             frame.AddComponent<RectMask2D>();
 
             var padGo = new GameObject("SketchPad", typeof(RectTransform), typeof(RawImage), typeof(UiSketchPad),

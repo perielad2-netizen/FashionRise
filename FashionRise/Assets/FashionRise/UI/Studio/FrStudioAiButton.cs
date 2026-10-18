@@ -64,7 +64,7 @@ namespace FashionRise.UI.Studio
             widget._button.onClick.AddListener(onClick);
 
             var le = go.AddComponent<LayoutElement>();
-            le.minHeight = Mathf.Max(theme.MinTouchTarget + 20f, DeviceLayoutPolicy.IsTabletLike() ? 72f : 64f);
+            le.minHeight = Mathf.Max(theme.MinTouchTarget + 24f, DeviceLayoutPolicy.IsTabletLike() ? 78f : 68f);
             le.preferredHeight = le.minHeight;
             le.flexibleWidth = 1f;
 
@@ -86,12 +86,15 @@ namespace FashionRise.UI.Studio
             var icon = new GameObject("Icon", typeof(Image), typeof(LayoutElement));
             icon.transform.SetParent(row.transform, false);
             var img = icon.GetComponent<Image>();
+            // Style-board Magic CTA is hot-pink with a light sparkle — prefer white glyph over
+            // the navy icon-sheet tile so the pink surface stays the hero.
             img.sprite = FrStudioSprites.Icon(FrStudioIconKind.Magic, Color.white);
+            img.color = Color.white;
             img.preserveAspect = true;
             img.raycastTarget = false;
             var ile = icon.GetComponent<LayoutElement>();
-            ile.preferredWidth = 24f;
-            ile.preferredHeight = 24f;
+            ile.preferredWidth = 28f;
+            ile.preferredHeight = 28f;
 
             var labelHost = new GameObject("LabelHost", typeof(RectTransform), typeof(LayoutElement));
             labelHost.transform.SetParent(row.transform, false);

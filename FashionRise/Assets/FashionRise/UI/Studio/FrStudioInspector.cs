@@ -33,6 +33,12 @@ namespace FashionRise.UI.Studio
             img.type = Image.Type.Sliced;
             img.color = theme.CanvasSurface;
             img.raycastTarget = true;
+            var panelShade = go.AddComponent<Shadow>();
+            panelShade.effectColor = new Color(0f, 0f, 0f, 0.16f);
+            panelShade.effectDistance = new Vector2(0f, -4f);
+            var panelRim = go.AddComponent<Outline>();
+            panelRim.effectColor = new Color(theme.AccentMuted.r, theme.AccentMuted.g, theme.AccentMuted.b, 0.35f);
+            panelRim.effectDistance = new Vector2(1f, -1f);
 
             var vGo = new GameObject("Stack", typeof(RectTransform), typeof(VerticalLayoutGroup));
             var vRt = vGo.GetComponent<RectTransform>();

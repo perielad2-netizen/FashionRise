@@ -51,10 +51,10 @@ namespace FashionRise.UI.Studio
             rowRt.SetParent(rt, false);
             rowRt.anchorMin = Vector2.zero;
             rowRt.anchorMax = Vector2.one;
-            rowRt.offsetMin = new Vector2(theme.SpaceMd, 10f);
-            rowRt.offsetMax = new Vector2(-theme.SpaceMd, -10f);
+            rowRt.offsetMin = new Vector2(theme.SpaceMd, 8f);
+            rowRt.offsetMax = new Vector2(-theme.SpaceMd, -8f);
             var h = row.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = theme.SpaceMd;
+            h.spacing = theme.SpaceSm;
             h.childAlignment = TextAnchor.MiddleLeft;
             h.childControlWidth = true;
             h.childControlHeight = true;
@@ -68,10 +68,10 @@ namespace FashionRise.UI.Studio
             var brandHost = new GameObject("Brand", typeof(RectTransform), typeof(VerticalLayoutGroup),
                 typeof(LayoutElement));
             brandHost.transform.SetParent(row.transform, false);
-            brandHost.GetComponent<LayoutElement>().preferredWidth = DeviceLayoutPolicy.IsTabletLike() ? 280f : 210f;
+            brandHost.GetComponent<LayoutElement>().preferredWidth = DeviceLayoutPolicy.IsTabletLike() ? 320f : 240f;
             brandHost.GetComponent<LayoutElement>().flexibleWidth = 0f;
             var bv = brandHost.GetComponent<VerticalLayoutGroup>();
-            bv.spacing = 2f;
+            bv.spacing = 1f;
             bv.childAlignment = TextAnchor.MiddleLeft;
             bv.childControlHeight = true;
             bv.childControlWidth = true;
@@ -79,15 +79,15 @@ namespace FashionRise.UI.Studio
 
             var wordHost = new GameObject("Word", typeof(RectTransform), typeof(LayoutElement));
             wordHost.transform.SetParent(brandHost.transform, false);
-            wordHost.GetComponent<LayoutElement>().minHeight = 30f;
-            wordHost.GetComponent<LayoutElement>().preferredHeight = 30f;
+            wordHost.GetComponent<LayoutElement>().minHeight = 34f;
+            wordHost.GetComponent<LayoutElement>().preferredHeight = 34f;
             FrStudioTypography.AddLabel(wordHost.transform, "Wordmark", "FashionRise", theme,
                 FrStudioTypeStyle.Display, muted: false, TextAnchor.MiddleLeft);
 
             var ctxHost = new GameObject("Ctx", typeof(RectTransform), typeof(LayoutElement));
             ctxHost.transform.SetParent(brandHost.transform, false);
             ctxHost.GetComponent<LayoutElement>().minHeight = 18f;
-            var context = FrStudioTypography.AddLabel(ctxHost.transform, "Context", "Creator Studio", theme,
+            var context = FrStudioTypography.AddLabel(ctxHost.transform, "Context", "CREATOR STUDIO", theme,
                 FrStudioTypeStyle.Metadata, muted: true, TextAnchor.MiddleLeft);
 
             var spacer = new GameObject("Flex", typeof(RectTransform), typeof(LayoutElement));
@@ -121,7 +121,7 @@ namespace FashionRise.UI.Studio
             var go = new GameObject("Logo", typeof(RectTransform), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
             var le = go.GetComponent<LayoutElement>();
-            var size = DeviceLayoutPolicy.IsTabletLike() ? 58f : 50f;
+            var size = DeviceLayoutPolicy.IsTabletLike() ? 68f : 58f;
             le.preferredWidth = size;
             le.preferredHeight = size;
             le.minWidth = size;
