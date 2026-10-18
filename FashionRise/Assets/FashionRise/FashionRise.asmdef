@@ -1,7 +1,10 @@
 {
     "name": "FashionRise",
     "rootNamespace": "FashionRise",
-    "references": [],
+    "references": [
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
+    ],
     "precompiledReferences": [
         "Newtonsoft.Json.dll"
     ],
@@ -11,7 +14,13 @@
     "overrideReferences": false,
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.textmeshpro",
+            "expression": "3.0.0",
+            "define": "FASHIONRISE_TMP"
+        }
+    ],
     "noEngineReferences": false,
     "nullable": true
 }

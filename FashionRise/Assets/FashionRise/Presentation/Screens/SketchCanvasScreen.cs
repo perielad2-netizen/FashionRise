@@ -4,160 +4,261 @@ using FashionRise.Content;
 using FashionRise.Core.Navigation;
 using FashionRise.Domain;
 using FashionRise.Presentation.Sketch;
-using FashionRise.UI;
+using FashionRise.UI.Studio;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace FashionRise.Presentation.Screens
 {
-    /// <summary>Pillar A — dual-layer sketch: croquis/photo underlay + pro ink tools.</summary>
+    /// <summary>
+    /// VR1 Creator Studio shell around the existing dual-layer <see cref="UiSketchPad"/>.
+    /// Magic still saves the composite PNG and navigates to SketchEnhancement.
+    /// </summary>
     public sealed class SketchCanvasScreen : ScreenBase
     {
         public override ScreenId Id => ScreenId.SketchCanvas;
 
+        enum ModelChoice
+        {
+            Female,
+            Male,
+            Custom,
+            Blank
+        }
+
         UiSketchPad _pad = null!;
-        Text _hint = null!;
-        Button _eraseBtn = null!;
-        Button _dimRefBtn = null!;
-        bool _refDimmed;
         FashionRiseTheme _theme = null!;
+        FrStudioResponsiveLayout _layout = null!;
+        FrStudioTopBar _topBar = null!;
+        FrStudioToolRail _rail = null!;
+        FrStudioInspector _inspector = null!;
+        FrStudioAiButton _magic = null!;
+        FrStudioCard _femaleCard = null!;
+        FrStudioCard _maleCard = null!;
+        FrStudioCard _customCard = null!;
+        FrStudioCard _blankCard = null!;
+        FrStudioIconButton _thin = null!;
+        FrStudioIconButton _med = null!;
+        FrStudioIconButton _thick = null!;
+        FrStudioIconButton _bold = null!;
+        FrStudioIconButton _dim = null!;
+        readonly FrStudioIconButton[] _swatches = new FrStudioIconButton[4];
+        readonly Color[] _inks =
+        {
+            new(0.11f, 0.09f, 0.08f),
+            new(0.14f, 0.22f, 0.52f),
+            new(0.62f, 0.12f, 0.18f),
+            new(0.42f, 0.40f, 0.38f)
+        };
+
+        FrStudioOrientationStack _models = null!;
+        bool _refDimmed;
         bool _padBootstrapped;
+        bool _wide = true;
+        ModelChoice _model = ModelChoice.Female;
 
         void Awake()
         {
-            var t = ThemeOrDefault;
-            _theme = t;
-            var root = FrUiFactory.CreateStretchPanel(transform, "Root", t);
-            var col = FrUiFactory.AddVerticalLayout(root, "Col", t.SectionGap, TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "H", "Sketch canvas", t, Mathf.RoundToInt(t.TitleSize), FontStyle.Bold,
-                TextAnchor.UpperCenter);
-            FrUiFactory.AddLabel(col, "B",
-                "Reference below (croquis or your photo). Draw on the layer above — colors, brush size, eraser. Continue saves the combined PNG.",
-                t, Mathf.RoundToInt(t.BodySize), FontStyle.Normal, TextAnchor.UpperCenter, useSecondaryTextColor: true);
+            _theme = ThemeOrDefault;
+            var shell = FrStudioShell.Build(transform, _theme);
+            _topBar = FrStudioTopBar.Build(shell.TopSlot, _theme, GoBack, ImportSketch, OpenProfile);
+            _layout = FrStudioResponsiveLayout.Build(shell.BodySlot, _theme);
+            BuildModelColumn(_layout.LeftPanel);
+            _rail = FrStudioToolRail.Build(_layout.ToolRail, _theme, () => SetInk(_pad.BrushColor, false),
+                () => SetInk(default, true), UndoStroke, ClearDrawing);
+            BuildCanvas(_layout.CanvasHost);
+            _inspector = FrStudioInspector.Build(_layout.Inspector, _theme);
+            BuildInspectorBody();
+            _magic = FrStudioAiButton.Build(_inspector.Footer, _theme, ContinueToEnhancement);
+            _wide = _layout.IsWide;
+            ApplyChromeOrientation(!_wide);
+            SelectBrushChip(5);
+            SelectInk(0, apply: false);
+        }
 
-            var padGo = new GameObject("SketchPad", typeof(RectTransform), typeof(RawImage), typeof(UiSketchPad));
-            padGo.transform.SetParent(col, false);
-            var padLe = padGo.AddComponent<LayoutElement>();
-            padLe.minHeight = 240f;
-            padLe.preferredHeight = 400f;
-            padLe.flexibleHeight = 1f;
+        void Update()
+        {
+            _layout.RefreshIfNeeded();
+            if (_wide == _layout.IsWide)
+                return;
+            _wide = _layout.IsWide;
+            ApplyChromeOrientation(!_wide);
+        }
+
+        void BuildModelColumn(Transform parent)
+        {
+            _models = FrStudioOrientationStack.Create(parent, "Models", _theme.SpaceSm, _theme.SpaceXs,
+                TextAnchor.UpperCenter, TextAnchor.MiddleCenter, new RectOffset(4, 4, 6, 6));
+            _models.Root.offsetMin = new Vector2(12f, 12f);
+            _models.Root.offsetMax = new Vector2(-12f, -12f);
+
+            var headHost = new GameObject("Head", typeof(RectTransform), typeof(LayoutElement));
+            headHost.GetComponent<LayoutElement>().minHeight = 24f;
+            var modelsHeading = FrStudioTypography.AddLabel(headHost.transform, "H", "MODELS", _theme,
+                FrStudioTypeStyle.Metadata, muted: true, TextAnchor.MiddleLeft);
+            FrStudioTypography.SetColor(modelsHeading,
+                new Color(_theme.AccentMuted.r, _theme.AccentMuted.g, _theme.AccentMuted.b, 0.95f));
+
+            // Card artwork from FashionRise model-selector sheet (runtime chrome handles selection).
+            // Sketch pad underlay still uses SketchReference/* via UiSketchPad — unchanged.
+            _femaleCard = FrStudioCard.Build(_models.Content, _theme, "Female", () => ApplyModel(ModelChoice.Female),
+                FrStudioAssets.ModelFemale);
+            _maleCard = FrStudioCard.Build(_models.Content, _theme, "Male", () => ApplyModel(ModelChoice.Male),
+                FrStudioAssets.ModelMale);
+            _customCard = FrStudioCard.Build(_models.Content, _theme, "Custom photo", ImportSketch,
+                FrStudioAssets.ModelCustom);
+            _blankCard = FrStudioCard.Build(_models.Content, _theme, "Blank paper",
+                () => ApplyModel(ModelChoice.Blank), FrStudioAssets.ModelBlank);
+            _models.Add(headHost.transform);
+            _models.Add(_femaleCard.transform);
+            _models.Add(_maleCard.transform);
+            _models.Add(_customCard.transform);
+            _models.Add(_blankCard.transform);
+            SelectModelCard(ModelChoice.Female);
+        }
+
+        void BuildCanvas(Transform parent)
+        {
+            var inset = FashionRise.Config.DeviceLayoutPolicy.StudioCanvasInset;
+            var frame = new GameObject("CanvasFrame", typeof(RectTransform), typeof(Image));
+            var frameRt = frame.GetComponent<RectTransform>();
+            frameRt.SetParent(parent, false);
+            frameRt.anchorMin = Vector2.zero;
+            frameRt.anchorMax = Vector2.one;
+            frameRt.offsetMin = new Vector2(inset, inset);
+            frameRt.offsetMax = new Vector2(-inset, -inset);
+            var frameImg = frame.GetComponent<Image>();
+            frameImg.sprite = FrStudioSprites.Rounded(80, Mathf.RoundToInt(_theme.CornerRadiusLarge), Color.white);
+            frameImg.type = Image.Type.Sliced;
+            frameImg.color = _theme.CanvasWell;
+            frameImg.raycastTarget = false;
+            var frameOutline = frame.AddComponent<Outline>();
+            frameOutline.effectColor = new Color(_theme.AccentMuted.r, _theme.AccentMuted.g, _theme.AccentMuted.b, 0.85f);
+            frameOutline.effectDistance = new Vector2(2f, -2f);
+            var frameShade = frame.AddComponent<Shadow>();
+            frameShade.effectColor = new Color(0f, 0f, 0f, 0.3f);
+            frameShade.effectDistance = new Vector2(0f, -12f);
+            frame.AddComponent<RectMask2D>();
+
+            var padGo = new GameObject("SketchPad", typeof(RectTransform), typeof(RawImage), typeof(UiSketchPad),
+                typeof(AspectRatioFitter));
+            padGo.transform.SetParent(frame.transform, false);
             var padRt = padGo.GetComponent<RectTransform>();
-            padRt.sizeDelta = new Vector2(0f, 400f);
+            padRt.anchorMin = Vector2.zero;
+            padRt.anchorMax = Vector2.one;
+            padRt.offsetMin = new Vector2(22f, 22f);
+            padRt.offsetMax = new Vector2(-22f, -22f);
+            var fitter = padGo.GetComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            fitter.aspectRatio = 768f / 1024f;
             _pad = padGo.GetComponent<UiSketchPad>();
             var rim = padGo.GetComponent<RawImage>();
             rim.raycastTarget = true;
             rim.color = Color.white;
-
-            _hint = FrUiFactory.AddLabel(col, "Hint", " ", t, Mathf.RoundToInt(t.BodySize * 0.9f), FontStyle.Italic,
-                TextAnchor.UpperCenter);
-
-            AddFigureRow(col, t);
-            AddToolRow(col, t);
-
-            FrUiFactory.AddButton(col, "Undo", t, () =>
-            {
-                if (!_pad.UndoStroke())
-                    _hint.text = "Nothing to undo.";
-                else
-                    _hint.text = " ";
-            });
-            FrUiFactory.AddButton(col, "Clear drawing", t, () =>
-            {
-                _pad.ClearAll();
-                _hint.text = "Drawing cleared; reference unchanged.";
-            });
-            FrUiFactory.AddButton(col, "Continue to enhancement", t, ContinueToEnhancement, FrButtonEmphasis.Primary);
-            FrUiFactory.AddButton(col, "Import sketch", t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.NavigateToAsync(ScreenId.ImportSketch);
-            });
-            FrUiFactory.AddButton(col, "Back", t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.GoBackAsync();
-            });
         }
 
-        void AddFigureRow(Transform col, FashionRiseTheme t)
+        void BuildInspectorBody()
         {
-            var row = NewToolbarRow(col);
-            AddTightButton(row, "Female", t, () =>
+            var brush = FrStudioSection.Build(_inspector.ScrollBody, _theme, "Brush");
+            var brushRow = NewChipRow(brush.Body, 52f);
+            _thin = FrStudioIconButton.Chip(brushRow, _theme, "Thin", () => SetRadius(2));
+            _med = FrStudioIconButton.Chip(brushRow, _theme, "Med", () => SetRadius(5));
+            _thick = FrStudioIconButton.Chip(brushRow, _theme, "Thick", () => SetRadius(10));
+            _bold = FrStudioIconButton.Chip(brushRow, _theme, "Bold", () => SetRadius(18));
+
+            var color = FrStudioSection.Build(_inspector.ScrollBody, _theme, "Color");
+            var colorRow = NewChipRow(color.Body, 64f);
+            for (var i = 0; i < _inks.Length; i++)
             {
-                SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Female;
-                _pad.ApplyDefaultFigure(SketchFigureTemplate.Female);
-                _hint.text = "Female model — draw on top.";
-            });
-            AddTightButton(row, "Male", t, () =>
-            {
-                SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Male;
-                _pad.ApplyDefaultFigure(SketchFigureTemplate.Male);
-                _hint.text = "Male model — draw on top.";
-            });
-            AddTightButton(row, "Custom…", t, () =>
-            {
-                if (App.Navigation != null)
-                    _ = App.Navigation.NavigateToAsync(ScreenId.ImportSketch);
-            });
-            AddTightButton(row, "Blank paper", t, () =>
-            {
-                _pad.ClearReferenceToBlank();
-                _hint.text = "White reference — draw freely.";
-            });
-            _dimRefBtn = AddTightButton(row, "Dim ref", t, ToggleReferenceDim);
+                var index = i;
+                _swatches[i] = FrStudioIconButton.Swatch(colorRow, _theme, _inks[i], () => SelectInk(index, apply: true));
+            }
+
+            var reference = FrStudioSection.Build(_inspector.ScrollBody, _theme, "Reference");
+            _dim = FrStudioIconButton.Chip(reference.Body, _theme, "Dim reference", ToggleReferenceDim);
+            _inspector.SetStatus("Draw on the croquis, then Magic.");
         }
 
-        void AddToolRow(Transform col, FashionRiseTheme t)
+        static Transform NewChipRow(Transform parent, float minHeight)
         {
-            var row = NewToolbarRow(col);
-            AddTightButton(row, "Thin", t, () => SetRadius(2));
-            AddTightButton(row, "Med", t, () => SetRadius(5));
-            AddTightButton(row, "Thick", t, () => SetRadius(10));
-            AddTightButton(row, "Bold", t, () => SetRadius(18));
-            AddTightButton(row, "Black", t, () => SetInk(new Color(0.11f, 0.09f, 0.08f), false));
-            AddTightButton(row, "Blue", t, () => SetInk(new Color(0.14f, 0.22f, 0.52f), false));
-            AddTightButton(row, "Red", t, () => SetInk(new Color(0.62f, 0.12f, 0.18f), false));
-            AddTightButton(row, "Grey", t, () => SetInk(new Color(0.42f, 0.40f, 0.38f), false));
-            AddTightButton(row, "Draw", t, () => SetInk(_pad.BrushColor, false));
-            _eraseBtn = AddTightButton(row, "Erase", t, () => SetInk(default, true));
-        }
-
-        static Transform NewToolbarRow(Transform col)
-        {
-            var go = new GameObject("ToolbarRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            go.transform.SetParent(col, false);
-            var le = go.AddComponent<LayoutElement>();
-            le.minHeight = 50f;
-            le.preferredHeight = 50f;
-            le.flexibleWidth = 1f;
+            var go = new GameObject("ChipRow", typeof(RectTransform), typeof(HorizontalLayoutGroup),
+                typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            go.GetComponent<LayoutElement>().minHeight = minHeight;
             var h = go.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = 6f;
+            h.spacing = 10f;
             h.childAlignment = TextAnchor.MiddleCenter;
-            h.childControlHeight = true;
-            h.childForceExpandHeight = false;
             h.childControlWidth = true;
-            h.childForceExpandWidth = false;
-            h.padding = new RectOffset(0, 0, 0, 0);
+            h.childControlHeight = true;
+            h.childForceExpandWidth = true;
+            h.childForceExpandHeight = false;
             return go.transform;
         }
 
-        Button AddTightButton(Transform row, string label, FashionRiseTheme t, UnityAction onClick)
+        void ApplyChromeOrientation(bool compact)
         {
-            var b = FrUiFactory.AddButton(row, label, t, onClick);
-            var le = b.GetComponent<LayoutElement>();
-            le.flexibleWidth = 0f;
-            le.minWidth = 72f;
-            le.preferredWidth = 0f;
-            return b;
+            _rail.SetHorizontal(compact);
+            _models.SetHorizontal(compact);
+        }
+
+        void ApplyModel(ModelChoice choice)
+        {
+            _model = choice;
+            switch (choice)
+            {
+                case ModelChoice.Female:
+                    SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Female;
+                    _pad.ApplyDefaultFigure(SketchFigureTemplate.Female);
+                    SetStatus("Female model — draw on top.");
+                    break;
+                case ModelChoice.Male:
+                    SketchFigurePreferences.DefaultTemplate = SketchFigureTemplate.Male;
+                    _pad.ApplyDefaultFigure(SketchFigureTemplate.Male);
+                    SetStatus("Male model — draw on top.");
+                    break;
+                case ModelChoice.Blank:
+                    _pad.ClearReferenceToBlank();
+                    SetStatus("White reference — draw freely.");
+                    break;
+            }
+
+            SelectModelCard(choice);
+        }
+
+        void SelectModelCard(ModelChoice choice)
+        {
+            _femaleCard.Selected = choice == ModelChoice.Female;
+            _maleCard.Selected = choice == ModelChoice.Male;
+            _customCard.Selected = choice == ModelChoice.Custom;
+            _blankCard.Selected = choice == ModelChoice.Blank;
         }
 
         void SetRadius(int r)
         {
             _pad.SetBrushRadius(r);
             _pad.EraserActive = false;
-            RefreshEraseButtonStyle();
-            _hint.text = $"Brush size {r}px.";
+            _rail.SetDrawSelected(true);
+            SelectBrushChip(r);
+            SetStatus($"Brush size {r}px.");
+        }
+
+        void SelectBrushChip(int r)
+        {
+            _thin.Selected = r == 2;
+            _med.Selected = r == 5;
+            _thick.Selected = r == 10;
+            _bold.Selected = r == 18;
+        }
+
+        void SelectInk(int index, bool apply)
+        {
+            if (apply)
+                SetInk(_inks[index], false);
+            for (var i = 0; i < _swatches.Length; i++)
+            {
+                if (_swatches[i] != null)
+                    _swatches[i].Selected = i == index;
+            }
         }
 
         void SetInk(Color c, bool eraser)
@@ -165,16 +266,8 @@ namespace FashionRise.Presentation.Screens
             if (!eraser)
                 _pad.SetBrushColor(c);
             _pad.EraserActive = eraser;
-            RefreshEraseButtonStyle();
-            _hint.text = eraser ? "Eraser — remove ink only." : "Brush.";
-        }
-
-        void RefreshEraseButtonStyle()
-        {
-            var img = _eraseBtn != null ? _eraseBtn.GetComponent<Image>() : null;
-            if (img == null)
-                return;
-            img.color = _pad.EraserActive ? new Color(0.95f, 0.82f, 0.78f, 1f) : _theme.ButtonFace;
+            _rail.SetDrawSelected(!eraser);
+            SetStatus(eraser ? "Eraser — remove ink only." : "Brush.");
         }
 
         void ToggleReferenceDim()
@@ -182,10 +275,42 @@ namespace FashionRise.Presentation.Screens
             _refDimmed = !_refDimmed;
             _pad.ReferenceStrength = _refDimmed ? 0.4f : 1f;
             _pad.RefreshComposite();
-            var txt = _dimRefBtn.GetComponentInChildren<Text>();
-            if (txt != null)
-                txt.text = _refDimmed ? "Bright ref" : "Dim ref";
-            _hint.text = _refDimmed ? "Reference dimmed for easier tracing." : "Reference at full strength.";
+            _dim.Selected = _refDimmed;
+            SetStatus(_refDimmed ? "Reference dimmed for easier tracing." : "Reference at full strength.");
+        }
+
+        void UndoStroke()
+        {
+            if (!_pad.UndoStroke())
+                SetStatus("Nothing to undo.");
+            else
+                SetStatus(" ");
+        }
+
+        void ClearDrawing()
+        {
+            _pad.ClearAll();
+            SetStatus("Drawing cleared; reference unchanged.");
+        }
+
+        void GoBack()
+        {
+            if (App.Navigation != null)
+                _ = App.Navigation.GoBackAsync();
+        }
+
+        void ImportSketch()
+        {
+            _model = ModelChoice.Custom;
+            SelectModelCard(ModelChoice.Custom);
+            if (App.Navigation != null)
+                _ = App.Navigation.NavigateToAsync(ScreenId.ImportSketch);
+        }
+
+        void OpenProfile()
+        {
+            if (App.Navigation != null)
+                _ = App.Navigation.NavigateToAsync(ScreenId.Profile);
         }
 
         void BootstrapPadReference()
@@ -198,26 +323,44 @@ namespace FashionRise.Presentation.Screens
             {
                 App.CreateDesign.PendingReferenceImagePath = "";
                 if (_pad.TryLoadUnderlayFromFile(pending, out var err))
-                    _hint.text = "Custom reference loaded — draw on top.";
+                {
+                    _model = ModelChoice.Custom;
+                    SelectModelCard(ModelChoice.Custom);
+                    SetStatus("Custom reference loaded — draw on top.");
+                }
                 else
                 {
-                    _hint.text = string.IsNullOrEmpty(err) ? "Could not load reference; using default model." : err;
-                    _pad.ApplyDefaultFigure(SketchFigurePreferences.DefaultTemplate);
+                    SetStatus(string.IsNullOrEmpty(err) ? "Could not load reference; using default model." : err);
+                    ApplyPreferredFigure();
                 }
             }
             else
             {
-                _pad.ApplyDefaultFigure(SketchFigurePreferences.DefaultTemplate);
-                _hint.text = "Default model — switch Male/Female, Dim ref, or Custom photo.";
+                ApplyPreferredFigure();
+                SetStatus("Default model — switch Female/Male, dim the reference, or import a photo.");
             }
 
-            RefreshEraseButtonStyle();
+            _rail.SetDrawSelected(!_pad.EraserActive);
+            _topBar.RefreshAutosave();
+        }
+
+        void ApplyPreferredFigure()
+        {
+            var preferred = SketchFigurePreferences.DefaultTemplate;
+            _model = preferred == SketchFigureTemplate.Male ? ModelChoice.Male : ModelChoice.Female;
+            _pad.ApplyDefaultFigure(preferred);
+            SelectModelCard(_model);
         }
 
         protected override void OnShown(object? payload)
         {
             if (App == null)
                 return;
+
+            _topBar.RefreshAutosave();
+            _layout.Apply(force: true);
+            _wide = _layout.IsWide;
+            ApplyChromeOrientation(!_wide);
 
             if (!_padBootstrapped)
             {
@@ -233,29 +376,35 @@ namespace FashionRise.Presentation.Screens
             App.CreateDesign.PendingReferenceImagePath = "";
             if (!File.Exists(pending))
             {
-                _hint.text = "Reference file is missing.";
+                SetStatus("Reference file is missing.");
                 return;
             }
 
             if (_pad.TryLoadUnderlayFromFile(pending, out var err))
-                _hint.text = "Reference loaded — draw on top.";
+            {
+                _model = ModelChoice.Custom;
+                SelectModelCard(ModelChoice.Custom);
+                SetStatus("Reference loaded — draw on top.");
+            }
             else
-                _hint.text = string.IsNullOrEmpty(err) ? "Could not load reference." : err;
+                SetStatus(string.IsNullOrEmpty(err) ? "Could not load reference." : err);
         }
 
         void ContinueToEnhancement()
         {
             if (!_pad.HasInk())
             {
-                _hint.text = "Draw on the canvas first (ink on croquis, photo, or blank paper).";
+                SetStatus("Draw on the canvas first (ink on croquis, photo, or blank paper).");
                 return;
             }
 
             var path = _pad.SavePngToPersistentData("canvas");
             App.CreateDesign.SketchReference = "file:" + path.Replace('\\', '/');
-            _hint.text = " ";
+            SetStatus(" ");
             if (App.Navigation != null)
                 _ = App.Navigation.NavigateToAsync(ScreenId.SketchEnhancement);
         }
+
+        void SetStatus(string text) => _inspector.SetStatus(text);
     }
 }
