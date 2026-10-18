@@ -6,6 +6,7 @@ import { StudioHeader } from '@/components/studio/StudioHeader'
 import { StudioInspector } from '@/components/studio/StudioInspector'
 import { ToolRail } from '@/components/studio/ToolRail'
 import { StrokeHistory } from '@/lib/history'
+import { validateReferenceImageFile } from '@/lib/referenceFile'
 import {
   BRUSH_SIZES,
   INK_SWATCHES,
@@ -31,6 +32,7 @@ export function StudioPage() {
   const [customUrl, setCustomUrl] = useState<string | null>(null)
   const [dimmed, setDimmed] = useState(false)
   const [magicNotice, setMagicNotice] = useState<string | null>(null)
+  const [studioNotice, setStudioNotice] = useState<string | null>(null)
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const [isNarrow, setIsNarrow] = useState(false)
@@ -101,10 +103,16 @@ export function StudioPage() {
 
   const onCustomFile = useCallback(
     (file: File) => {
+      const validated = validateReferenceImageFile(file)
+      if (!validated.ok) {
+        setStudioNotice(validated.message)
+        return
+      }
       if (customUrl) URL.revokeObjectURL(customUrl)
       const url = URL.createObjectURL(file)
       setCustomUrl(url)
       setModel('custom')
+      setStudioNotice(null)
     },
     [customUrl],
   )
@@ -175,11 +183,13 @@ export function StudioPage() {
           sizeId={sizeId}
           color={color}
           dimmed={dimmed}
+          studioNotice={studioNotice}
           magicNotice={magicNotice}
           onSize={setSizeId}
           onColor={setColor}
           onToggleDim={() => setDimmed((v) => !v)}
           onMagic={onMagic}
+          onDismissStudioNotice={() => setStudioNotice(null)}
           onDismissMagic={() => setMagicNotice(null)}
         />
       </div>

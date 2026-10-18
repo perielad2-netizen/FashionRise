@@ -10,32 +10,29 @@ export type ExportOptions = {
   height?: number
 }
 
+export type Canvas2DLike = {
+  fillStyle: string | CanvasGradient | CanvasPattern
+  globalAlpha: number
+  globalCompositeOperation: GlobalCompositeOperation | string
+  fillRect(x: number, y: number, w: number, h: number): void
+  fill(path: Path2D): void
+  drawImage(
+    image: CanvasImageSource,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+  ): void
+  save(): void
+  restore(): void
+}
+
 /**
- * Render reference + ink into a PNG blob for future Magic/export (WEB-2).
- * Does not call any network APIs.
+ * Paint ink strokes onto an ink-only context.
+ * Eraser uses destination-out against ink pixels only — never against reference/base.
  */
-export async function exportCompositePng(options: ExportOptions): Promise<Blob> {
-  const width = options.width ?? DESIGN_WIDTH
-  const height = options.height ?? DESIGN_HEIGHT
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas 2D unavailable')
-
-  ctx.fillStyle = options.background ?? '#F8F4F0'
-  ctx.fillRect(0, 0, width, height)
-
-  if (options.referenceUrl) {
-    const img = await loadImage(options.referenceUrl)
-    ctx.save()
-    ctx.globalAlpha = options.referenceOpacity ?? 1
-    const fit = fitContain(img.width, img.height, width, height)
-    ctx.drawImage(img, fit.x, fit.y, fit.w, fit.h)
-    ctx.restore()
-  }
-
-  for (const stroke of options.strokes) {
+export function paintInkStrokes(ctx: Canvas2DLike, strokes: Stroke[]): void {
+  for (const stroke of strokes) {
     const path = strokeToSvgPath(stroke)
     if (!path) continue
     const p = new Path2D(path)
@@ -51,9 +48,53 @@ export async function exportCompositePng(options: ExportOptions): Promise<Blob> 
     ctx.fill(p)
     ctx.restore()
   }
+}
+
+/**
+ * Render reference + ink into a PNG blob for future Magic/export (WEB-2).
+ *
+ * Architecture:
+ *   BASE canvas  = background + reference
+ *   INK canvas   = strokes (eraser destination-out on ink only)
+ *   FINAL        = base, then ink composited on top
+ *
+ * Does not call any network APIs.
+ */
+export async function exportCompositePng(options: ExportOptions): Promise<Blob> {
+  const width = options.width ?? DESIGN_WIDTH
+  const height = options.height ?? DESIGN_HEIGHT
+
+  const base = document.createElement('canvas')
+  base.width = width
+  base.height = height
+  const baseCtx = base.getContext('2d')
+  if (!baseCtx) throw new Error('Canvas 2D unavailable')
+
+  baseCtx.fillStyle = options.background ?? '#F8F4F0'
+  baseCtx.fillRect(0, 0, width, height)
+
+  if (options.referenceUrl) {
+    const img = await loadImage(options.referenceUrl)
+    baseCtx.save()
+    baseCtx.globalAlpha = options.referenceOpacity ?? 1
+    const fit = fitContain(img.width, img.height, width, height)
+    baseCtx.drawImage(img, fit.x, fit.y, fit.w, fit.h)
+    baseCtx.restore()
+  }
+
+  const ink = document.createElement('canvas')
+  ink.width = width
+  ink.height = height
+  const inkCtx = ink.getContext('2d')
+  if (!inkCtx) throw new Error('Canvas 2D unavailable')
+
+  paintInkStrokes(inkCtx, options.strokes)
+
+  // Final composite: ink over intact base (reference never erased).
+  baseCtx.drawImage(ink, 0, 0)
 
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
+    base.toBlob((blob) => {
       if (!blob) reject(new Error('PNG export failed'))
       else resolve(blob)
     }, 'image/png')

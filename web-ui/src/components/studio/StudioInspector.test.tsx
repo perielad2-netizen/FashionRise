@@ -10,11 +10,13 @@ describe('StudioInspector', () => {
         sizeId="medium"
         color="#1C1C1E"
         dimmed={false}
+        studioNotice={null}
         magicNotice={null}
         onSize={vi.fn()}
         onColor={vi.fn()}
         onToggleDim={onToggleDim}
         onMagic={vi.fn()}
+        onDismissStudioNotice={vi.fn()}
         onDismissMagic={vi.fn()}
       />,
     )

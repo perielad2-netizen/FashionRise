@@ -6,11 +6,13 @@ type Props = {
   sizeId: BrushSizeId
   color: string
   dimmed: boolean
+  studioNotice: string | null
   magicNotice: string | null
   onSize: (id: BrushSizeId) => void
   onColor: (color: string) => void
   onToggleDim: () => void
   onMagic: () => void
+  onDismissStudioNotice: () => void
   onDismissMagic: () => void
 }
 
@@ -18,11 +20,13 @@ export function StudioInspector({
   sizeId,
   color,
   dimmed,
+  studioNotice,
   magicNotice,
   onSize,
   onColor,
   onToggleDim,
   onMagic,
+  onDismissStudioNotice,
   onDismissMagic,
 }: Props) {
   return (
@@ -79,6 +83,14 @@ export function StudioInspector({
       </section>
 
       <div className={styles.footer}>
+        {studioNotice ? (
+          <div className={styles.notice} role="alert">
+            <p>{studioNotice}</p>
+            <button type="button" onClick={onDismissStudioNotice}>
+              Got it
+            </button>
+          </div>
+        ) : null}
         {magicNotice ? (
           <div className={styles.notice} role="status">
             <p>{magicNotice}</p>

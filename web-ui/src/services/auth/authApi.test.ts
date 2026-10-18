@@ -15,14 +15,6 @@ describe('tokenStore', () => {
   })
 })
 
-describe('auth validation helpers', () => {
-  it('rejects empty email/password at UI level', () => {
-    const email = ''
-    const password = ''
-    expect(Boolean(email.trim() && password)).toBe(false)
-  })
-})
-
 describe('restoreSession behavior (mocked)', () => {
   beforeEach(() => {
     tokenStore.clear()

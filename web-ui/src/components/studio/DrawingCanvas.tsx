@@ -21,6 +21,11 @@ type Props = {
   onStrokeComplete: (stroke: Stroke) => void
 }
 
+/**
+ * Pointer Events only (mouse + touch + pen).
+ * Do not also register mouse/touch families — browsers fire compatibility events that
+ * would duplicate gestures.
+ */
 export function DrawingCanvas({
   strokes,
   activeTool,
@@ -35,6 +40,7 @@ export function DrawingCanvas({
   const [draft, setDraft] = useState<Stroke | null>(null)
   const [refImage, setRefImage] = useState<HTMLImageElement | null>(null)
   const drawing = useRef(false)
+  const activePointerId = useRef<number | null>(null)
 
   useEffect(() => {
     const host = hostRef.current
@@ -97,23 +103,32 @@ export function DrawingCanvas({
       return {
         x: pos.x / scale,
         y: pos.y / scale,
-        pressure: readPressure(stage),
+        pressure: 0.5,
       }
     },
     [scale],
   )
 
   const begin = useCallback(
-    (e: Konva.KonvaEventObject<PointerEvent | TouchEvent | MouseEvent>) => {
+    (e: Konva.KonvaEventObject<PointerEvent>) => {
+      const evt = e.evt
+      if (activePointerId.current !== null && activePointerId.current !== evt.pointerId) {
+        return
+      }
       const stage = e.target.getStage()
       if (!stage) return
-      // Ensure touch events populate pointer position before reading.
-      if ('touches' in e.evt || 'pointerId' in e.evt) {
-        stage.setPointersPositions(e.evt)
-      }
+      stage.setPointersPositions(evt)
       const point = toDesign(stage)
       if (!point) return
       drawing.current = true
+      activePointerId.current = evt.pointerId
+      try {
+        ;(e.target.getStage()?.container() as HTMLElement | undefined)?.setPointerCapture?.(
+          evt.pointerId,
+        )
+      } catch {
+        /* capture optional */
+      }
       setDraft({
         id: createStrokeId(),
         tool: activeTool,
@@ -127,13 +142,14 @@ export function DrawingCanvas({
   )
 
   const move = useCallback(
-    (e: Konva.KonvaEventObject<PointerEvent | TouchEvent | MouseEvent>) => {
+    (e: Konva.KonvaEventObject<PointerEvent>) => {
       if (!drawing.current) return
+      if (activePointerId.current !== null && e.evt.pointerId !== activePointerId.current) {
+        return
+      }
       const stage = e.target.getStage()
       if (!stage) return
-      if ('touches' in e.evt || 'pointerId' in e.evt) {
-        stage.setPointersPositions(e.evt)
-      }
+      stage.setPointersPositions(e.evt)
       const point = toDesign(stage)
       if (!point) return
       setDraft((prev) => (prev ? { ...prev, points: appendPoint(prev.points, point) } : prev))
@@ -141,16 +157,27 @@ export function DrawingCanvas({
     [toDesign],
   )
 
-  const end = useCallback(() => {
-    if (!drawing.current) return
-    drawing.current = false
-    setDraft((prev) => {
-      if (prev && prev.points.length >= 3) {
-        onStrokeComplete(prev)
+  const end = useCallback(
+    (e?: Konva.KonvaEventObject<PointerEvent>) => {
+      if (!drawing.current) return
+      if (
+        e &&
+        activePointerId.current !== null &&
+        e.evt.pointerId !== activePointerId.current
+      ) {
+        return
       }
-      return null
-    })
-  }, [onStrokeComplete])
+      drawing.current = false
+      activePointerId.current = null
+      setDraft((prev) => {
+        if (prev && prev.points.length >= 3) {
+          onStrokeComplete(prev)
+        }
+        return null
+      })
+    },
+    [onStrokeComplete],
+  )
 
   const all = draft ? [...strokes, draft] : strokes
 
@@ -162,16 +189,10 @@ export function DrawingCanvas({
           height={size.h}
           scaleX={scale}
           scaleY={scale}
-          onMouseDown={begin}
-          onMousemove={move}
-          onMouseup={end}
-          onMouseLeave={end}
-          onTouchStart={begin}
-          onTouchMove={move}
-          onTouchEnd={end}
           onPointerDown={begin}
           onPointerMove={move}
           onPointerUp={end}
+          onPointerCancel={end}
         >
           <Layer listening={false}>
             <Rect x={0} y={0} width={DESIGN_WIDTH} height={DESIGN_HEIGHT} fill="#F8F4F0" />
@@ -208,11 +229,4 @@ export function DrawingCanvas({
       </div>
     </div>
   )
-}
-
-function readPressure(stage: Konva.Stage): number {
-  const evt = stage.getPointerPosition()
-  void evt
-  // Konva does not expose pressure directly on all events; default mid pressure.
-  return 0.5
 }

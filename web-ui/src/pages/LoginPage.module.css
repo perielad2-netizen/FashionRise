@@ -110,6 +110,15 @@
   box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.18);
 }
 
+.field input[aria-invalid='true'] {
+  border-color: rgba(248, 113, 113, 0.75);
+}
+
+.fieldError {
+  font-size: var(--font-size-xs);
+  color: #fecaca;
+}
+
 .passwordRow {
   position: relative;
   display: flex;

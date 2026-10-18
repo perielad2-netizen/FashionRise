@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-18 — **WEB-1** React/PWA Creator Studio on `cursor/web-ui-reboot`. Active frontend is `web-ui/`. Unity client is **LEGACY / ARCHIVED REFERENCE ONLY**. Unity draft PR #8 is **superseded for active client development** (left open until PM closes). Backend/AI **UNCHANGED**. Paid OpenAI for WEB-1 **NONE**. Production deploy **NOT PERFORMED**.
+**Last updated:** 2026-10-18 — **WEB-1** React/PWA Creator Studio on `cursor/web-ui-reboot` (draft PR #9). Pre-operator hardening: real login validation, ink-only export eraser, unified Pointer Events, custom-reference MIME checks. Active frontend is `web-ui/`. Unity is **LEGACY**. Backend/AI **UNCHANGED**. Paid OpenAI **NONE**. WEB-1 **NOT MERGED**. Next = operator Windows browser/PWA visual + interaction review.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
@@ -57,6 +57,14 @@
 - Export utility foundation (PNG blob; not customer-facing yet)
 - Magic button shows “coming in the next milestone” (no AI call)
 - Docs reset: Unity marked legacy; web is active client
+
+**Pre-operator hardening (PM review of PR #9):**
+
+- Real `validateLogin` + LoginPage field errors; invalid submit does **not** call API/`login()`
+- `exportCompositePng` uses base (bg+reference) + ink layer; eraser is ink-only
+- DrawingCanvas uses **Pointer Events only** (no mouse/touch duplicate paths)
+- Custom reference validates MIME (`image/jpeg|png|webp`) before object URL
+- No backend / Unity / AI / paid-call changes
 
 **Do not:**
 
@@ -130,6 +138,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-18 | **WEB-1 pre-operator hardening (PR #9):** real login validation; export eraser ink-only; Pointer Events-only canvas; custom MIME validation. Draft/not merged. No backend/Unity/AI/paid calls. Next = operator Windows browser/PWA review. |
 | 2026-10-18 | **WEB-1 web/PWA pivot:** Active client = `web-ui/` (Login → Studio). Unity marked LEGACY; PR #8 superseded for product path. Backend preserved. No paid AI. |
 | 2026-10-18 | Prior Unity VR1 visual/asset notes remain historical under draft PR #8; not the active delivery path. |
 | 2026-10-17 | Unity VR1 TMP / LayoutGroup / visual-fidelity amendments (historical). |

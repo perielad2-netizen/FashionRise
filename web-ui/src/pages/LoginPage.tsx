@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
+import { validateLogin, type LoginFieldErrors } from '@/lib/validateLogin'
 import { ApiError } from '@/services/api/client'
 import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './LoginPage.module.css'
@@ -11,7 +12,8 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({})
+  const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   if (bootstrapping) return null
@@ -20,16 +22,24 @@ export function LoginPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (busy) return
-    setError(null)
+
+    setFormError(null)
+    const validated = validateLogin(email, password)
+    if (!validated.ok) {
+      setFieldErrors(validated.errors)
+      return
+    }
+
+    setFieldErrors({})
     setBusy(true)
     try {
-      await login({ email, password })
+      await login({ email: validated.email, password: validated.password })
       navigate('/studio', { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setFormError(err.message)
       } else {
-        setError('Unable to sign in. Please try again.')
+        setFormError('Unable to sign in. Please try again.')
       }
     } finally {
       setBusy(false)
@@ -67,11 +77,20 @@ export function LoginPage() {
               name="email"
               autoComplete="email"
               inputMode="email"
-              required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }))
+              }}
               disabled={busy}
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
             />
+            {fieldErrors.email ? (
+              <span id="login-email-error" className={styles.fieldError} role="alert">
+                {fieldErrors.email}
+              </span>
+            ) : null}
           </label>
 
           <label className={styles.field}>
@@ -81,10 +100,15 @@ export function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 name="password"
                 autoComplete="current-password"
-                required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  if (fieldErrors.password)
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }))
+                }}
                 disabled={busy}
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
               />
               <button
                 type="button"
@@ -96,11 +120,16 @@ export function LoginPage() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+            {fieldErrors.password ? (
+              <span id="login-password-error" className={styles.fieldError} role="alert">
+                {fieldErrors.password}
+              </span>
+            ) : null}
           </label>
 
-          {error ? (
+          {formError ? (
             <p className={styles.error} role="alert">
-              {error}
+              {formError}
             </p>
           ) : null}
 
