@@ -1,6 +1,8 @@
 # WEB-V2.2 — visual and functional QA
 
 **Branch:** `cursor/web-v22-premium-ui-77c6`  
+**Draft PR:** https://github.com/perielad2-netizen/FashionRise/pull/11  
+**Implementation commit:** `ac06db12921bff8d60d1c031fae557d88a7b828a`  
 **Base:** `main` at `6df327ba9c40c2e28faaa04a9a97f97a2b092dd0` (the protected production commit)  
 **Not deployed.** Production `https://fashionrise.app` is unchanged.
 

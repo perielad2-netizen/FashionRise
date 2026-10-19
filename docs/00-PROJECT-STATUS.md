@@ -9,7 +9,7 @@
 
 **Production:** `main` **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** on `https://fashionrise.app` (operator confirmed login, sketching, and Saved)
 
-**WEB-V2.2 branch:** `cursor/web-v22-premium-ui-77c6` (draft PR; the branch tip is this milestone)
+**WEB-V2.2 branch:** `cursor/web-v22-premium-ui-77c6` — draft PR [#11](https://github.com/perielad2-netizen/FashionRise/pull/11) — implementation `ac06db12921bff8d60d1c031fae557d88a7b828a`
 
 ---
 
