@@ -2,7 +2,8 @@
 
 **Branch:** `cursor/web-v22-premium-ui-77c6`  
 **Draft PR:** https://github.com/perielad2-netizen/FashionRise/pull/11  
-**Implementation commit:** `ac06db12921bff8d60d1c031fae557d88a7b828a`  
+**Polish commit:** `ac06db12921bff8d60d1c031fae557d88a7b828a`  
+**Notice fix:** one workspace-level beta notice, included in this draft and still awaiting PM review.  
 **Base:** `main` at `6df327ba9c40c2e28faaa04a9a97f97a2b092dd0` (the protected production commit)  
 **Not deployed.** Production `https://fashionrise.app` is unchanged.
 
@@ -45,6 +46,7 @@ This pass is a local browser check at device pixel ratio 1 and `visualViewport.s
 | Header wordmark | Wide tracked pink capitals | Compact cream “Fashion” and pink “Rise” beside the real monogram |
 | Narrow tool rail | Undo/redo clipped off a 390px screen | Rail scrolls; header undo/redo stay visible |
 | App icons | Opaque navy tiles without the monogram | Opaque navy tiles with the approved mark |
+| Magic, Back, and header Settings notices | Rendered inside Settings, which is hidden at 1024px and below | One dismissible notice under the workspace title; Settings stays closed |
 
 ### Intentionally disabled
 
@@ -78,6 +80,12 @@ Local Vite at `http://127.0.0.1:5180`, signed in against a local stub. Canvas st
 | 768 × 1024 | Models, brush, materials, and settings are dock overlays. Default view keeps the paper clear. |
 | 390 × 844 | Same overlay model. Tool rail scrolls to the later tools. Canvas remains on screen. |
 | 1440 × 900 at CSS zoom 1.5 | `visualViewport.scale` stayed 1 (this is not browser zoom). The paper compresses because the panels and brush reserve space. Treated as zoom pressure, not the 100% layout defect. |
+
+## Notice visibility
+
+Magic, Back, header Settings, and studio messages render as one dismissible status under the workspace title. They are not inside `SettingsInspector`, which is hidden at 1024px and below until its dock opens. A new action replaces the previous notice. Dismiss clears it. The bar stays in the header stack, above the dock, so it does not cover the paper or the brush controls.
+
+Component regression in `StudioPage.test.tsx` clicks Magic, header Settings, and Back at 390, 768, and 1440. Each notice is visible, outside the settings inspector, and dismisses. Opening the Settings dock is not required.
 
 ## Evidence limits
 

@@ -3,13 +3,13 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-V2.2** premium UI polish is implemented on `cursor/web-v22-premium-ui-77c6` and is **not deployed**. Protected production remains `https://fashionrise.app` at `6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`. Next = PM review of the WEB-V2.2 draft PR. Do not merge or deploy this milestone.
+**Last updated:** 2026-10-19 — **WEB-V2.2** notice fix: Magic, Back, and header Settings messages show in the workspace on every width, including when Settings is docked away. Still **not deployed**. Protected production remains `https://fashionrise.app` at `6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`. Next = PM review of draft PR #11. Do not merge or deploy.
 
 **Phase:** FashionRise Web — protected family beta live; WEB-V2.2 is local/PR only
 
 **Production:** `main` **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** on `https://fashionrise.app` (operator confirmed login, sketching, and Saved)
 
-**WEB-V2.2 branch:** `cursor/web-v22-premium-ui-77c6` — draft PR [#11](https://github.com/perielad2-netizen/FashionRise/pull/11) — implementation `ac06db12921bff8d60d1c031fae557d88a7b828a`
+**WEB-V2.2 branch:** `cursor/web-v22-premium-ui-77c6` — draft PR [#11](https://github.com/perielad2-netizen/FashionRise/pull/11) — polish `ac06db12921bff8d60d1c031fae557d88a7b828a`, then the notice-visibility commit on the same branch
 
 ---
 
@@ -130,6 +130,7 @@
 - Library cards are derived from the existing artwork. Female edge matte removed. Originals kept.
 - Beta tools that already worked stay wired. Unfinished controls are labeled Soon or Unavailable.
 - Shortcuts B, E, and undo/redo now match the Settings list.
+- Beta limitation notices render once under the workspace title, including at 1024px and below, and dismiss without opening Settings.
 - Persistence, Magic API, uploads, registration, and infra were not changed.
 - Report: `docs/WEB-V2.2-VISUAL-QA.md`
 
@@ -190,7 +191,7 @@ FashionRise/
 
 | Gate | Result |
 |------|--------|
-| `npm test` | Pass — 67 tests, 23 files |
+| `npm test` | Pass — includes notice visibility at 390, 768, and 1440 |
 | `npm run build` | Pass |
 | `npm run lint` | Pass with the same three pre-existing oxlint warnings |
 | OpenAI / paid AI | **None** |
@@ -203,7 +204,8 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
-| 2026-10-19 | **WEB-V2.2 UI polish (draft, not deployed):** brand crops, library-card cleanup, honest Soon states, wired shortcuts, responsive spacing. Production stays `6df327ba` on fashionrise.app. Next = PM review. No merge, no deploy, no Magic. |
+| 2026-10-19 | **WEB-V2.2 notice visibility:** Magic, Back, and header Settings messages render once under the workspace title at every width, including when Settings is hidden. Draft PR #11. Not deployed. |
+| 2026-10-19 | **WEB-V2.2 UI polish (draft, not deployed):** brand crops, library-card cleanup, honest Soon states, wired shortcuts, responsive spacing. Production stays `6df327ba` on fashionrise.app. |
 | 2026-10-19 | **Protected production:** operator confirmed login, sketching, and Saved on fashionrise.app at `6df327ba`. |
 | 2026-10-19 | **WEB-V2.1C queued-autosave guard (PR #9, merged):** conflict check runs inside the queued save, before any API call. |
 | 2026-10-19 | **WEB-V2.1C conflict resolution (PR #9):** Keep-device rebase + OCC; Use-cloud durable IDB replace; autosave paused during conflict; mismatched reconcile is not Saved. Still draft. Next = PM review → protected tablet beta. |

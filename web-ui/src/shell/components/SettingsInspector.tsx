@@ -8,17 +8,11 @@ type Props = {
   opacity: number
   dimmed: boolean
   toolLabel: string
-  magicNotice: string | null
-  studioNotice: string | null
-  comingSoon: string | null
   onSize: (id: BrushSizeId) => void
   onBrushSize: (px: number) => void
   onOpacity: (value: number) => void
   onToggleDim: () => void
   onMagic: () => void
-  onDismissMagic: () => void
-  onDismissStudioNotice: () => void
-  onDismissComingSoon: () => void
 }
 
 export function SettingsInspector({
@@ -27,17 +21,11 @@ export function SettingsInspector({
   opacity,
   dimmed,
   toolLabel,
-  magicNotice,
-  studioNotice,
-  comingSoon,
   onSize,
   onBrushSize,
   onOpacity,
   onToggleDim,
   onMagic,
-  onDismissMagic,
-  onDismissStudioNotice,
-  onDismissComingSoon,
 }: Props) {
   return (
     <aside className={styles.panel} aria-label="Settings inspector">
@@ -152,31 +140,6 @@ export function SettingsInspector({
           </div>
         </div>
       </section>
-
-      {studioNotice ? (
-        <div className={styles.toast} role="alert">
-          <p>{studioNotice}</p>
-          <button type="button" onClick={onDismissStudioNotice}>
-            Got it
-          </button>
-        </div>
-      ) : null}
-      {magicNotice ? (
-        <div className={styles.toast} role="status">
-          <p>{magicNotice}</p>
-          <button type="button" onClick={onDismissMagic}>
-            Got it
-          </button>
-        </div>
-      ) : null}
-      {comingSoon ? (
-        <div className={styles.toast} role="status">
-          <p>{comingSoon}</p>
-          <button type="button" onClick={onDismissComingSoon}>
-            Got it
-          </button>
-        </div>
-      ) : null}
 
       <button
         type="button"

@@ -197,24 +197,4 @@
   opacity: 0.45;
 }
 
-.toast {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 12px;
-  color: var(--fr-text);
-}
-
-.toast button {
-  min-height: 30px;
-  border: 0;
-  border-radius: 8px;
-  background: rgba(214, 51, 132, 0.22);
-  color: white;
-  cursor: pointer;
-}
-
 /* Hidden via CreatorWorkspace settingsSlot at ≤1024; restored when dock opens. */

@@ -92,6 +92,12 @@ export function useStudioEditor() {
   const [magicNotice, setMagicNotice] = useState<string | null>(null)
   const [studioNotice, setStudioNotice] = useState<string | null>(null)
   const [comingSoon, setComingSoon] = useState<string | null>(null)
+
+  const publishStudioNotice = useCallback((message: string) => {
+    setMagicNotice(null)
+    setComingSoon(null)
+    setStudioNotice(message)
+  }, [])
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('restoring')
@@ -311,7 +317,7 @@ export function useStudioEditor() {
         applyDocument(restored.document, restored.designId)
         setSaveStatus(restored.designId ? 'saved' : 'idle')
       }
-      if (restored.notice) setStudioNotice(restored.notice)
+      if (restored.notice) publishStudioNotice(restored.notice)
 
       bootedRef.current = true
       setReady(true)
@@ -443,7 +449,7 @@ export function useStudioEditor() {
     async (file: File) => {
       const validated = validateReferenceImageFile(file)
       if (!validated.ok) {
-        setStudioNotice(validated.message)
+        publishStudioNotice(validated.message)
         return
       }
 
@@ -453,7 +459,7 @@ export function useStudioEditor() {
       // Persistent uploads disabled for private beta — /static/uploads is not owner-private.
       setCustomUrl(null)
       setCustomKey(null)
-      setStudioNotice(CUSTOM_REF_BETA_NOTICE)
+      publishStudioNotice(CUSTOM_REF_BETA_NOTICE)
 
       if (strokes.length > 0) {
         setModelSwitchPrompt({ next: 'custom' })
@@ -466,10 +472,12 @@ export function useStudioEditor() {
         })
       }
     },
-    [blobUrl, commitFromEditor, strokes.length],
+    [blobUrl, commitFromEditor, publishStudioNotice, strokes.length],
   )
 
   const onMagic = useCallback(() => {
+    setStudioNotice(null)
+    setComingSoon(null)
     setMagicNotice(MAGIC_NOTICE)
   }, [])
 
@@ -499,6 +507,8 @@ export function useStudioEditor() {
   }, [])
 
   const showComingSoon = useCallback((label: string) => {
+    setMagicNotice(null)
+    setStudioNotice(null)
     setComingSoon(`${label} — coming later`)
   }, [])
 

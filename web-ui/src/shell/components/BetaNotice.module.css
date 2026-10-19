@@ -1,0 +1,39 @@
+.notice {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 12px 0;
+  padding: 8px 10px 8px 12px;
+  border-radius: 12px;
+  background: #1a2438;
+  border: 1px solid rgba(244, 114, 182, 0.45);
+  color: var(--fr-text);
+  font-size: 13px;
+  line-height: 1.35;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(214, 51, 132, 0.22);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notice button:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}

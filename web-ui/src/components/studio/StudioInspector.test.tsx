@@ -12,17 +12,11 @@ describe('SettingsInspector', () => {
         opacity={1}
         dimmed={false}
         toolLabel="Pencil"
-        studioNotice={null}
-        magicNotice={null}
-        comingSoon={null}
         onSize={vi.fn()}
         onBrushSize={vi.fn()}
         onOpacity={vi.fn()}
         onToggleDim={onToggleDim}
         onMagic={vi.fn()}
-        onDismissStudioNotice={vi.fn()}
-        onDismissMagic={vi.fn()}
-        onDismissComingSoon={vi.fn()}
       />,
     )
 
