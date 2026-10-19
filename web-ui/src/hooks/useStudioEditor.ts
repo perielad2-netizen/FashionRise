@@ -139,6 +139,11 @@ export function useStudioEditor() {
     cloudDirtyRef.current = false
 
     const run = async () => {
+      // A save queued behind an in-flight request must not run after that
+      // request opens a conflict. Check at execution time, before any API call.
+      if (conflictOpenRef.current) {
+        return
+      }
       setSaveStatus((prev) => (prev === 'pending' ? 'pending' : 'saving'))
       setSaveError(null)
       const result = await persistStudioDraft({

@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-V2.1C** conflict-resolution final gate on draft PR #9. Keep-this-device rebases above the seen server revision; Use-cloud durably replaces IndexedDB even at a lower revision; autosave suspended during conflict; mismatched create/reconcile is not Saved. Next = PM review, then protected family-beta tablet testing. No merge / deploy / Magic.
+**Last updated:** 2026-10-19 — **WEB-V2.1C** queued-autosave guard on draft PR #9. A cloud save already waiting on the chain now checks for an open conflict before any API call, so a delayed conflict response cannot be followed by a queued overwrite. Next = PM review, then protected family-beta tablet testing. No merge / deploy / Magic.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
@@ -106,7 +106,7 @@
 - Keep this device rebases onto a revision above the current server snapshot and saves with optimistic concurrency
 - Another concurrent server update reopens the choice; no silent overwrite
 - Use cloud draft replaces IndexedDB even when the cloud revision is lower; Saved only after that write succeeds
-- Automatic cloud writes suspended while a conflict is open
+- Automatic cloud writes suspended while a conflict is open, including saves already queued behind the request that opened it
 - Create/reconcile cannot report Saved when acknowledged content differs from the local document
 - Next: PM review, then protected family-beta tablet testing on fashionrise.app
 - Deploy still **not** performed in this PR
@@ -194,6 +194,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-19 | **WEB-V2.1C queued-autosave guard (PR #9):** conflict check runs inside the queued save, before any API call. Delayed 409 or lost-create conflict cannot be followed by a queued overwrite. Still draft. Next = PM review → protected tablet beta. |
 | 2026-10-19 | **WEB-V2.1C conflict resolution (PR #9):** Keep-device rebase + OCC; Use-cloud durable IDB replace; autosave paused during conflict; mismatched reconcile is not Saved. Still draft. Next = PM review → protected tablet beta. |
 | 2026-10-19 | **WEB-V2.1A data-loss prevention (PR #9):** authoritative snapshot saves; IndexedDB-on-edit + honest status; `expected_revision`/409 concurrency; create reconcile; custom uploads disabled (not private). Live Postgres tests. Still draft. Next = PM review. |
 | 2026-10-19 | **WEB-V2.1 private-beta persistence (PR #9):** designs API draft autosave + IndexedDB recovery/conflicts; custom upload; model-switch confirm; brush overlay; Magic still off. Still draft. Next = PM review + live tablet acceptance. |
