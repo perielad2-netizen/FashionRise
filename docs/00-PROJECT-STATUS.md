@@ -3,11 +3,11 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-V2.1C** queued-autosave guard on draft PR #9. A cloud save already waiting on the chain now checks for an open conflict before any API call, so a delayed conflict response cannot be followed by a queued overwrite. Next = PM review, then protected family-beta tablet testing. No merge / deploy / Magic.
+**Last updated:** 2026-10-19 — **INFRA-2 preflight.** PR #9 merged to `main` at `6df327ba9c40c2e28faaa04a9a97f97a2b092dd0` (approved app commit `5e70dc76`). Family-beta runbook is `docs/DEPLOYMENT-FASHIONRISE-BETA.md`. **No VPS change, no 403 lift, no Magic, no public registration.** Next = PM review of the read-only audit checklist.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
-**Baseline:** `main` / `origin/main` **`2fc4c1faa57e1e862ba9698cce6b8a7dd59bfb51`**
+**Baseline:** `main` / `origin/main` **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** (merge of PR #9; approved app commit `5e70dc76d851219b1b1d881169bc0af761c9b62c`)
 
 **WEB-1 branch:** `cursor/web-ui-reboot`
 
@@ -124,19 +124,20 @@
 
 **Do not:**
 
-- Continue Unity UI / merge PR #8 as product
-- Merge PR #9 or deploy fashionrise.app in this milestone
-- Activate Magic / public registration / social publishing
+- Continue Unity UI / merge PR #8 as the product path
+- Change the VPS, Nginx, DNS, or Cloudflare from this preflight
+- Lift the origin 403 before the read-only audit and a separate approval
+- Activate Magic, public registration, upload persistence, or public API docs
 
 ---
 
 ## Suggested next steps
 
-1. **PM review of WEB-V2.1C** (conflict-resolution final gate).
-2. Protected family-beta tablet testing on fashionrise.app after PM approval.
-3. Private-beta invite / access gating; custom-reference uploads stay disabled until owner-private retrieval exists.
-4. Later: fashionrise.app deploy (Cloudflare DNS + isolated VPS) — not in this PR.
-5. Later: Magic/backend connection after beta readiness.
+1. **PM review of INFRA-2** (`docs/DEPLOYMENT-FASHIONRISE-BETA.md`).
+2. Operator runs the read-only VPS audit in that runbook and returns redacted facts only.
+3. After approval: same-origin web build (`VITE_API_BASE_URL=/api/v1`), family loopback accounts, then a controlled checkout of `6df327ba`.
+4. Separate approval before replacing the origin 403.
+5. Live `/login` and `/studio` tablet acceptance. Magic stays off.
 
 ---
 
@@ -194,6 +195,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-19 | **INFRA-2 preflight:** PR #9 merged to `main` `6df327ba`. Added `docs/DEPLOYMENT-FASHIONRISE-BETA.md` (architecture, isolation, denials, rollback, read-only audit). No VPS change. |
 | 2026-10-19 | **WEB-V2.1C queued-autosave guard (PR #9):** conflict check runs inside the queued save, before any API call. Delayed 409 or lost-create conflict cannot be followed by a queued overwrite. Still draft. Next = PM review → protected tablet beta. |
 | 2026-10-19 | **WEB-V2.1C conflict resolution (PR #9):** Keep-device rebase + OCC; Use-cloud durable IDB replace; autosave paused during conflict; mismatched reconcile is not Saved. Still draft. Next = PM review → protected tablet beta. |
 | 2026-10-19 | **WEB-V2.1A data-loss prevention (PR #9):** authoritative snapshot saves; IndexedDB-on-edit + honest status; `expected_revision`/409 concurrency; create reconcile; custom uploads disabled (not private). Live Postgres tests. Still draft. Next = PM review. |
