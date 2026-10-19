@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ForbiddenError, NotFoundError
+from app.core.errors import ConflictError, ForbiddenError, NotFoundError
 from app.models.color_palette import ColorPalette
 from app.models.design_revision import DesignRevision
 from app.models.garment_design import GarmentDesign
@@ -14,10 +14,12 @@ from app.models.garment_template import GarmentTemplate
 from app.models.material_definition import MaterialDefinition
 from app.models.user import User
 from app.models.user_profile import UserProfile
-from app.schemas.design import DesignCreate, DesignUpdate
+from app.schemas.design import DesignCreate, DesignRead, DesignUpdate
 from app.schemas.export import ExportCreate
 from app.services import export_service
 from app.storage.local import LocalStorageBackend
+
+STUDIO_DRAFT_KIND = "studio_working_draft"
 
 
 def _assert_owner(design: GarmentDesign, user: User) -> None:
@@ -25,7 +27,75 @@ def _assert_owner(design: GarmentDesign, user: User) -> None:
         raise ForbiddenError("Not allowed to modify this design")
 
 
+def _studio_client_revision(design: GarmentDesign) -> int:
+    meta = design.metadata_ or {}
+    data = design.design_data or {}
+    for source in (meta, data):
+        raw = source.get("clientRevision")
+        if isinstance(raw, int) and raw >= 0:
+            return raw
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
+    return 0
+
+
+def _is_studio_working_draft(design: GarmentDesign) -> bool:
+    meta = design.metadata_ or {}
+    data = design.design_data or {}
+    return meta.get("draftKind") == STUDIO_DRAFT_KIND or data.get("schema") == "fashionrise.studio.draft.v1"
+
+
+def find_studio_working_draft(db: Session, user: User) -> GarmentDesign | None:
+    """Return the newest owner-scoped Studio working draft, if any."""
+    rows = list(
+        db.scalars(
+            select(GarmentDesign)
+            .where(GarmentDesign.user_id == user.id, GarmentDesign.visibility == "private")
+            .order_by(GarmentDesign.updated_at.desc())
+        ).all()
+    )
+    for row in rows:
+        if _is_studio_working_draft(row):
+            return row
+    return None
+
+
 def create_design(db: Session, user: User, data: DesignCreate) -> GarmentDesign:
+    # Reconcile Studio working drafts so a lost POST response cannot spawn duplicates.
+    meta = data.metadata or {}
+    design_data = data.design_data or {}
+    is_studio = meta.get("draftKind") == STUDIO_DRAFT_KIND or design_data.get("schema") == "fashionrise.studio.draft.v1"
+    if is_studio and data.visibility == "private":
+        existing = find_studio_working_draft(db, user)
+        if existing:
+            incoming_rev = 0
+            for source in (meta, design_data):
+                raw = source.get("clientRevision")
+                if isinstance(raw, int) and raw >= 0:
+                    incoming_rev = raw
+                    break
+                if isinstance(raw, str) and raw.isdigit():
+                    incoming_rev = int(raw)
+                    break
+            current_rev = _studio_client_revision(existing)
+            # Never clobber a newer concurrent save with a stale create retry.
+            if incoming_rev < current_rev:
+                return existing
+            existing.title = data.title
+            existing.description = data.description
+            existing.garment_category = data.garment_category
+            existing.template_id = data.template_id
+            existing.material_id = data.material_id
+            existing.color_palette_id = data.color_palette_id
+            existing.design_data = data.design_data
+            existing.metadata_ = data.metadata
+            existing.visibility = data.visibility
+            existing.status = data.status
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
+            return existing
+
     d = GarmentDesign(
         user_id=user.id,
         title=data.title,
@@ -67,10 +137,27 @@ def get_design(db: Session, design_id: uuid.UUID, user: User | None) -> GarmentD
 
 
 def update_design(db: Session, design_id: uuid.UUID, user: User, data: DesignUpdate) -> GarmentDesign:
-    d = db.get(GarmentDesign, design_id)
+    # Row lock prevents two concurrent Studio writers from both passing a stale
+    # revision check against the same snapshot.
+    d = db.execute(
+        select(GarmentDesign).where(GarmentDesign.id == design_id).with_for_update()
+    ).scalar_one_or_none()
     if not d:
         raise NotFoundError("Design not found")
     _assert_owner(d, user)
+
+    if data.expected_revision is not None:
+        current_revision = _studio_client_revision(d)
+        if current_revision != data.expected_revision:
+            raise ConflictError(
+                "Draft was updated elsewhere. Resolve the conflict before saving again.",
+                payload={
+                    "expected_revision": data.expected_revision,
+                    "current_revision": current_revision,
+                    "design": DesignRead.model_validate(d).model_dump(mode="json", by_alias=True),
+                },
+            )
+
     if data.title is not None:
         d.title = data.title
     if data.description is not None:

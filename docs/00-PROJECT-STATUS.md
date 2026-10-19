@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-V2.1** private-beta draft persistence on draft PR #9. WEB-V2 visual composition approved. `/studio` now autosaves owner-scoped private drafts via existing `/api/v1/designs` (+ IndexedDB recovery, conflict dialog, Saving/Saved/Save failed status). Custom references upload when API available. Model switches require Keep/Clear. Narrow Brush panel is an overlay. Magic still disabled. Remaining beta blockers: invite/private-access gating + live tablet acceptance against staging. Deploy target **fashionrise.app** (Cloudflare) — **no DNS/deploy**. Next = PM review. No merge / deploy.
+**Last updated:** 2026-10-19 — **WEB-V2.1A** data-loss prevention on draft PR #9. Visuals still approved. Fixes: authoritative snapshot saves (no stale React flush), durable IndexedDB recovery + honest status, backend `expected_revision`/HTTP 409 concurrency, Studio create reconcile (no duplicate drafts), custom-reference uploads disabled (not owner-private via `/static/uploads`). Magic still disabled. Remaining beta blockers: invite gating + live tablet acceptance. Deploy target **fashionrise.app** — **no DNS/deploy**. Next = PM review. No merge / deploy.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
@@ -90,16 +90,21 @@
 - Approved shell on `/studio`; visual composition **approved**
 - Report: `docs/WEB-V2-VISUAL-QA.md`
 
-**WEB-V2.1 — private-beta draft persistence (this amendment):**
+**WEB-V2.1 — private-beta draft persistence:**
 
 - Debounced autosave to private `/api/v1/designs` working draft (`fashionrise.studio.draft.v1`)
-- IndexedDB recovery + explicit conflict dialog; no silent overwrite of newer work
-- Status: Restoring / Saving / Saved / Save failed / Saved on this device
-- Custom reference upload via `/api/v1/uploads/image` when reachable; broken URLs warned, not silently restored
-- Model switch confirmation (Keep strokes / Clear strokes / Cancel)
-- Narrow **Brush panel** overlay (scrim + Done) — does not push canvas layout
-- Magic still notice-only — **no OpenAI / paid calls**
+- IndexedDB recovery + explicit conflict dialog
+- Model switch confirmation; Brush panel overlay; Magic notice-only
 - Docs: `docs/WEB-V2.1-PRIVATE-BETA.md`
+
+**WEB-V2.1A — data-loss prevention (this amendment):**
+
+- Authoritative `authoritativeDocRef` saves — never flush from uncommitted React state after restore
+- Local recovery write on every committed edit; “Saved on this device” only after IndexedDB OK; never “Saved” while newer pending
+- Backend optimistic concurrency: `expected_revision` + row lock + HTTP 409 payload; both copies retained until operator chooses
+- Studio `POST /designs` reconciles existing working draft (lost-response safe; no duplicates)
+- Persistent custom-reference uploads **disabled** for beta (URLs not owner-private)
+- Live FastAPI + isolated Postgres regression tests for 409 + reconcile
 - Remaining: private-beta access gating; operator tablet acceptance on live API
 - Deploy target: **fashionrise.app** via Cloudflare + isolated VPS — **not enabled in this PR**
 
@@ -113,9 +118,9 @@
 
 ## Suggested next steps
 
-1. **PM review of WEB-V2.1** (persistence + tablet overlay + model-switch safety).
-2. Operator manual tablet acceptance against live API/Postgres staging.
-3. Private-beta invite / access gating.
+1. **PM review of WEB-V2.1A** (data-loss prevention + live API evidence; visuals already approved).
+2. Operator manual tablet acceptance against live API/Postgres staging (two-tab conflict, refresh-after-draw).
+3. Private-beta invite / access gating; decide custom-reference privacy vs keep disabled.
 4. Later: fashionrise.app deploy (Cloudflare DNS + isolated VPS) — not in this PR.
 5. Later: Magic/backend connection after beta readiness.
 
@@ -175,6 +180,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-19 | **WEB-V2.1A data-loss prevention (PR #9):** authoritative snapshot saves; IndexedDB-on-edit + honest status; `expected_revision`/409 concurrency; create reconcile; custom uploads disabled (not private). Live Postgres tests. Still draft. Next = PM review. |
 | 2026-10-19 | **WEB-V2.1 private-beta persistence (PR #9):** designs API draft autosave + IndexedDB recovery/conflicts; custom upload; model-switch confirm; brush overlay; Magic still off. Still draft. Next = PM review + live tablet acceptance. |
 | 2026-10-19 | **WEB-V2 functional Studio integration (PR #9):** approved shell promoted to `/studio` with real drawing/tools/models; design-lab retained DEV-only; Magic disabled. Visual composition later approved for WEB-V2.1. |
 | 2026-10-19 | **WEB-V1 design-lab reconstruction (PR #9):** DEV-only `/_design/studio` full mockup visual prototype; production `/studio` preserved. Features in lab are not production. Visual direction later approved for WEB-V2. |

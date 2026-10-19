@@ -1,4 +1,4 @@
-import { apiRequest } from '@/services/api/client'
+import { ApiError, apiRequest } from '@/services/api/client'
 import {
   STUDIO_DRAFT_KIND,
   STUDIO_DRAFT_SCHEMA,
@@ -21,6 +21,22 @@ export type DesignRead = {
   updated_at: string
 }
 
+export type DraftConflictPayload = {
+  expectedRevision: number
+  currentRevision: number
+  design: DesignRead
+}
+
+/** Strip session-only custom reference fields before cloud write (private beta). */
+export function documentForCloud(document: StudioDraftDocument): StudioDraftDocument {
+  if (!document.customReferenceUrl && !document.customReferenceKey) return document
+  return {
+    ...document,
+    customReferenceUrl: null,
+    customReferenceKey: null,
+  }
+}
+
 export async function listMyDesigns(signal?: AbortSignal): Promise<DesignRead[]> {
   return apiRequest<DesignRead[]>('/designs/my', { signal })
 }
@@ -33,6 +49,7 @@ export async function createStudioDraft(
   document: StudioDraftDocument,
   signal?: AbortSignal,
 ): Promise<DesignRead> {
+  const cloudDoc = documentForCloud(document)
   return apiRequest<DesignRead>('/designs', {
     method: 'POST',
     signal,
@@ -43,8 +60,8 @@ export async function createStudioDraft(
       template_id: null,
       material_id: null,
       color_palette_id: null,
-      design_data: document,
-      metadata: studioDraftMetadata(document),
+      design_data: cloudDoc,
+      metadata: studioDraftMetadata(cloudDoc),
       visibility: 'private',
       status: 'draft',
     },
@@ -54,17 +71,22 @@ export async function createStudioDraft(
 export async function updateStudioDraft(
   designId: string,
   document: StudioDraftDocument,
-  signal?: AbortSignal,
+  options?: { expectedRevision?: number | null; signal?: AbortSignal },
 ): Promise<DesignRead> {
+  const cloudDoc = documentForCloud(document)
+  const body: Record<string, unknown> = {
+    design_data: cloudDoc,
+    metadata: studioDraftMetadata(cloudDoc),
+    visibility: 'private',
+    status: 'draft',
+  }
+  if (options?.expectedRevision != null) {
+    body.expected_revision = options.expectedRevision
+  }
   return apiRequest<DesignRead>(`/designs/${designId}`, {
     method: 'PUT',
-    signal,
-    body: {
-      design_data: document,
-      metadata: studioDraftMetadata(document),
-      visibility: 'private',
-      status: 'draft',
-    },
+    signal: options?.signal,
+    body,
   })
 }
 
@@ -95,4 +117,25 @@ export function pickLatestStudioDraft(designs: DesignRead[]): DesignRead | null 
     if (aRev !== bRev) return bRev - aRev
     return String(b.updated_at).localeCompare(String(a.updated_at))
   })[0]!
+}
+
+export function parseDraftConflict(error: unknown): DraftConflictPayload | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null
+  const body = error.body
+  if (!body || typeof body !== 'object') return null
+  const detail = (body as { detail?: unknown }).detail
+  if (!detail || typeof detail !== 'object') return null
+  const payload = (detail as { payload?: unknown }).payload
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as {
+    expected_revision?: unknown
+    current_revision?: unknown
+    design?: unknown
+  }
+  if (!p.design || typeof p.design !== 'object') return null
+  return {
+    expectedRevision: typeof p.expected_revision === 'number' ? p.expected_revision : -1,
+    currentRevision: typeof p.current_revision === 'number' ? p.current_revision : -1,
+    design: p.design as DesignRead,
+  }
 }

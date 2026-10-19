@@ -24,18 +24,19 @@ export type StudioDraftDocument = {
   customReferenceKey: string | null
   brush: StudioBrushState
   dimmed: boolean
-  /** Monotonic client revision for conflict detection across devices/tabs. */
+  /** Monotonic document revision used as optimistic concurrency token. */
   clientRevision: number
   updatedAt: string
 }
 
-export type StudioDraftEnvelope = {
-  designId: string | null
-  document: StudioDraftDocument
-  source: 'server' | 'local'
-}
-
-export type SaveStatus = 'idle' | 'restoring' | 'saving' | 'saved' | 'error' | 'local-only'
+export type SaveStatus =
+  | 'idle'
+  | 'restoring'
+  | 'pending'
+  | 'saving'
+  | 'saved'
+  | 'error'
+  | 'local-only'
 
 const MODEL_CHOICES: ModelChoice[] = ['female', 'male', 'custom', 'blank']
 const SIZE_IDS = Object.keys(BRUSH_SIZES) as BrushSizeId[]
@@ -148,30 +149,18 @@ export function draftContentFingerprint(doc: StudioDraftDocument): string {
   })
 }
 
-export type ConflictChoice = 'keep-local' | 'use-server'
-
 /**
- * Decide which draft wins when both local IndexedDB and server copies exist.
- * Never silently discard a newer local revision.
+ * When local and server copies differ, always require an explicit operator choice.
+ * Never auto-overwrite another device merely because a local revision is higher.
  */
 export function resolveDraftConflict(
   local: StudioDraftDocument,
   server: StudioDraftDocument,
-): { winner: 'local' | 'server' | 'equal'; needsUserChoice: boolean } {
-  if (local.clientRevision === server.clientRevision) {
-    if (draftContentFingerprint(local) === draftContentFingerprint(server)) {
-      return { winner: 'equal', needsUserChoice: false }
-    }
-    // Same revision number but different content — ask the user.
-    return { winner: 'local', needsUserChoice: true }
+): { equal: boolean; needsUserChoice: boolean } {
+  if (draftContentFingerprint(local) === draftContentFingerprint(server)) {
+    return { equal: true, needsUserChoice: false }
   }
-  if (local.clientRevision > server.clientRevision) {
-    return { winner: 'local', needsUserChoice: false }
-  }
-  if (server.clientRevision > local.clientRevision) {
-    return { winner: 'server', needsUserChoice: false }
-  }
-  return { winner: 'local', needsUserChoice: true }
+  return { equal: false, needsUserChoice: true }
 }
 
 export function studioDraftMetadata(doc: StudioDraftDocument) {
@@ -181,4 +170,33 @@ export function studioDraftMetadata(doc: StudioDraftDocument) {
     clientRevision: doc.clientRevision,
     updatedAt: doc.updatedAt,
   }
+}
+
+/**
+ * Build the next authoritative document from a known previous snapshot.
+ * Callers must pass the committed snapshot — never reconstruct from stale React state.
+ */
+export function documentFromEditorState(input: {
+  prev: StudioDraftDocument
+  strokes: StudioDraftDocument['strokes']
+  model: StudioDraftDocument['model']
+  customReferenceUrl: string | null
+  customReferenceKey: string | null
+  sizeId: StudioDraftDocument['brush']['sizeId']
+  opacity: number
+  color: string
+  dimmed: boolean
+}): StudioDraftDocument {
+  return bumpDraftDocument(input.prev, {
+    strokes: input.strokes,
+    model: input.model,
+    customReferenceUrl: input.customReferenceUrl,
+    customReferenceKey: input.customReferenceKey,
+    brush: {
+      sizeId: input.sizeId,
+      opacity: input.opacity,
+      color: input.color,
+    },
+    dimmed: input.dimmed,
+  })
 }

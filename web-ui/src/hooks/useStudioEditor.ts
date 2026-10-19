@@ -5,15 +5,16 @@ import type { ModelChoice } from '@/shell/modelTypes'
 import {
   createEmptyDraftDocument,
   draftContentFingerprint,
+  documentFromEditorState,
   type SaveStatus,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
 import {
-  documentFromEditorState,
+  persistLocalRecovery,
   persistStudioDraft,
   restoreStudioDraft,
 } from '@/lib/draftPersistence'
-import { writeLocalDraft } from '@/lib/localDraftStore'
+import { documentForCloud } from '@/services/designsApi'
 import { StrokeHistory } from '@/lib/history'
 import { validateReferenceImageFile } from '@/lib/referenceFile'
 import {
@@ -24,13 +25,13 @@ import {
   type ToolKind,
 } from '@/lib/strokes'
 import { useAuth } from '@/services/auth/AuthProvider'
-import { uploadReferenceImage } from '@/services/uploadsApi'
-import { ApiError } from '@/services/api/client'
 
 const FEMALE_URL = UI_ASSETS.canvas.female
 const MALE_URL = UI_ASSETS.canvas.male
 const MAGIC_NOTICE = 'AI enhancement will be available in a later milestone.'
 const AUTOSAVE_MS = 1600
+const CUSTOM_REF_BETA_NOTICE =
+  'Custom reference images stay on this device for the session only in private beta. They are not uploaded to the server (uploads are not owner-private yet).'
 
 export function nearestBrushSizeId(px: number): BrushSizeId {
   const entries = Object.entries(BRUSH_SIZES) as [BrushSizeId, number][]
@@ -60,13 +61,17 @@ export function useStudioEditor() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const history = useRef(new StrokeHistory())
-  const draftBaseRef = useRef<StudioDraftDocument>(createEmptyDraftDocument())
+  /** Last committed document snapshot — never rebuild saves from uncommitted React state. */
+  const authoritativeDocRef = useRef<StudioDraftDocument>(createEmptyDraftDocument())
   const designIdRef = useRef<string | null>(null)
-  const fingerprintRef = useRef<string | null>(null)
+  const syncedRevisionRef = useRef<number | null>(null)
+  const syncedFingerprintRef = useRef<string | null>(null)
+  const localPersistedFpRef = useRef<string | null>(null)
   const saveTimerRef = useRef<number | null>(null)
   const saveChainRef = useRef<Promise<void>>(Promise.resolve())
-  const dirtyRef = useRef(false)
+  const cloudDirtyRef = useRef(false)
   const bootedRef = useRef(false)
+  const skipNextAutosaveRef = useRef(true)
 
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [tool, setTool] = useState<ToolKind>('draw')
@@ -101,9 +106,8 @@ export function useStudioEditor() {
   }, [])
 
   const applyDocument = useCallback((doc: StudioDraftDocument, designId: string | null) => {
-    draftBaseRef.current = doc
+    authoritativeDocRef.current = doc
     designIdRef.current = designId
-    fingerprintRef.current = draftContentFingerprint(doc)
     history.current = new StrokeHistory()
     setStrokes(doc.strokes)
     setModelState(doc.model)
@@ -121,69 +125,139 @@ export function useStudioEditor() {
     })
   }, [])
 
-  const buildDocument = useCallback((): StudioDraftDocument => {
-    return documentFromEditorState({
-      prev: draftBaseRef.current,
-      strokes,
-      model,
-      customReferenceUrl: customUrl,
-      customReferenceKey: customKey,
-      sizeId,
-      opacity,
-      color,
-      dimmed,
-    })
-  }, [strokes, model, customUrl, customKey, sizeId, opacity, color, dimmed])
-
-  const flushSave = useCallback(async () => {
+  const flushCloudSave = useCallback(async () => {
     if (!user?.id || !bootedRef.current) return
-    const doc = buildDocument()
-    draftBaseRef.current = doc
-    dirtyRef.current = false
+    const doc = authoritativeDocRef.current
+    const fingerprint = draftContentFingerprint(documentForCloud(doc))
+    cloudDirtyRef.current = false
 
     const run = async () => {
-      setSaveStatus('saving')
+      setSaveStatus((prev) => (prev === 'pending' ? 'pending' : 'saving'))
       setSaveError(null)
-      try {
-        await writeLocalDraft({
-          userId: user.id,
-          designId: designIdRef.current,
-          document: doc,
-          savedAt: new Date().toISOString(),
-        })
-        const result = await persistStudioDraft({
-          userId: user.id,
-          designId: designIdRef.current,
-          document: doc,
-          lastFingerprint: fingerprintRef.current,
-        })
+      const result = await persistStudioDraft({
+        userId: user.id,
+        designId: designIdRef.current,
+        document: doc,
+        fingerprint,
+        lastSyncedFingerprint: syncedFingerprintRef.current,
+        expectedRevision: syncedRevisionRef.current,
+        skipLocalWrite: localPersistedFpRef.current === draftContentFingerprint(doc),
+      })
+
+      // A newer edit may have landed while this request was in flight.
+      const stillCurrent =
+        draftContentFingerprint(authoritativeDocRef.current) === draftContentFingerprint(doc)
+
+      if (result.ok) {
         designIdRef.current = result.designId
-        fingerprintRef.current = result.fingerprint
-        draftBaseRef.current = result.document
-        setSaveStatus('saved')
-      } catch (err) {
-        const message =
-          err instanceof ApiError
-            ? err.message
-            : 'Save failed. Your latest edits are kept on this device.'
-        setSaveError(message)
-        setSaveStatus(designIdRef.current ? 'error' : 'local-only')
+        syncedRevisionRef.current = result.syncedRevision
+        syncedFingerprintRef.current = result.fingerprint
+        if (stillCurrent && !cloudDirtyRef.current) {
+          setSaveStatus('saved')
+          setSaveError(null)
+        } else if (localPersistedFpRef.current === draftContentFingerprint(authoritativeDocRef.current)) {
+          setSaveStatus('local-only')
+        } else {
+          setSaveStatus('pending')
+        }
+        return
+      }
+
+      if (result.conflict) {
+        setDraftConflict(result.conflict)
+        setSaveError(result.error)
+        setSaveStatus(result.localPersisted ? 'local-only' : 'error')
+        return
+      }
+
+      setSaveError(result.error)
+      if (result.localPersisted && stillCurrent) {
+        setSaveStatus('local-only')
+      } else if (!stillCurrent) {
+        setSaveStatus('pending')
+      } else {
+        setSaveStatus('error')
       }
     }
 
     saveChainRef.current = saveChainRef.current.then(run, run)
     await saveChainRef.current
-  }, [buildDocument, user?.id])
+  }, [user?.id])
 
-  const scheduleSave = useCallback(() => {
+  const scheduleCloudSave = useCallback(() => {
     if (!bootedRef.current || !user?.id) return
-    dirtyRef.current = true
+    cloudDirtyRef.current = true
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-    setSaveStatus((prev) => (prev === 'saving' || prev === 'restoring' ? prev : 'idle'))
     saveTimerRef.current = window.setTimeout(() => {
-      void flushSave()
+      void flushCloudSave()
     }, AUTOSAVE_MS)
-  }, [flushSave, user?.id])
+  }, [flushCloudSave, user?.id])
+
+  /**
+   * Commit an authoritative document snapshot: update the ref first, mirror to React,
+   * durable local write, then debounce the API save from the ref only.
+   */
+  const commitDocument = useCallback(
+    async (doc: StudioDraftDocument, options?: { syncCloudImmediately?: boolean }) => {
+      authoritativeDocRef.current = doc
+      if (!user?.id || !bootedRef.current) return
+
+      setSaveStatus('pending')
+      setSaveError(null)
+      const local = await persistLocalRecovery({
+        userId: user.id,
+        designId: designIdRef.current,
+        document: doc,
+        syncedRevision: syncedRevisionRef.current,
+      })
+      if (!local.ok) {
+        setSaveError(local.error)
+        setSaveStatus('error')
+      } else {
+        localPersistedFpRef.current = draftContentFingerprint(doc)
+        setSaveStatus('local-only')
+      }
+
+      if (options?.syncCloudImmediately) {
+        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+        await flushCloudSave()
+      } else {
+        scheduleCloudSave()
+      }
+    },
+    [flushCloudSave, scheduleCloudSave, user?.id],
+  )
+
+  const commitFromEditor = useCallback(
+    (patch: {
+      strokes?: Stroke[]
+      model?: ModelChoice
+      customReferenceUrl?: string | null
+      customReferenceKey?: string | null
+      sizeId?: BrushSizeId
+      opacity?: number
+      color?: string
+      dimmed?: boolean
+    }) => {
+      const prev = authoritativeDocRef.current
+      const next = documentFromEditorState({
+        prev,
+        strokes: patch.strokes ?? prev.strokes,
+        model: patch.model ?? prev.model,
+        customReferenceUrl:
+          patch.customReferenceUrl !== undefined ? patch.customReferenceUrl : prev.customReferenceUrl,
+        customReferenceKey:
+          patch.customReferenceKey !== undefined ? patch.customReferenceKey : prev.customReferenceKey,
+        sizeId: patch.sizeId ?? prev.brush.sizeId,
+        opacity: patch.opacity ?? prev.brush.opacity,
+        color: patch.color ?? prev.brush.color,
+        dimmed: patch.dimmed ?? prev.dimmed,
+      })
+      void commitDocument(next)
+      return next
+    },
+    [commitDocument],
+  )
 
   useEffect(() => {
     if (!user?.id) return
@@ -192,20 +266,39 @@ export function useStudioEditor() {
       setSaveStatus('restoring')
       const restored = await restoreStudioDraft(user.id)
       if (cancelled) return
+
+      // Authoritative ref BEFORE React state — any immediate flush uses this snapshot.
+      authoritativeDocRef.current = restored.conflict
+        ? restored.conflict.local
+        : restored.document
+      designIdRef.current = restored.designId
+      syncedRevisionRef.current = restored.syncedRevision
+      if (restored.syncedRevision != null && !restored.conflict) {
+        syncedFingerprintRef.current = draftContentFingerprint(
+          documentForCloud(restored.document),
+        )
+      }
+
       if (restored.conflict) {
         setDraftConflict(restored.conflict)
         applyDocument(restored.conflict.local, restored.conflict.designId)
+        setSaveStatus('local-only')
       } else {
         applyDocument(restored.document, restored.designId)
+        setSaveStatus(restored.designId ? 'saved' : 'idle')
       }
       if (restored.notice) setStudioNotice(restored.notice)
+
       bootedRef.current = true
       setReady(true)
-      setSaveStatus(restored.designId ? 'saved' : 'idle')
-      if (restored.conflict === null && restored.designId === null && restored.document.strokes.length > 0) {
-        void flushSave()
-      } else if (restored.conflict === null && restored.notice?.includes('Syncing')) {
-        void flushSave()
+
+      const needsSync =
+        restored.conflict === null &&
+        (restored.designId === null
+          ? restored.document.strokes.length > 0
+          : restored.notice?.includes('Syncing') === true)
+      if (needsSync) {
+        void flushCloudSave()
       }
     })()
     return () => {
@@ -215,15 +308,28 @@ export function useStudioEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
 
-  const skipNextAutosaveRef = useRef(true)
+  // Mirror React brush/model edits into the authoritative snapshot after the boot skip.
   useEffect(() => {
     if (!ready) return
     if (skipNextAutosaveRef.current) {
       skipNextAutosaveRef.current = false
       return
     }
-    scheduleSave()
-  }, [strokes, model, customUrl, customKey, sizeId, opacity, color, dimmed, ready, scheduleSave])
+    const prev = authoritativeDocRef.current
+    const next = documentFromEditorState({
+      prev,
+      strokes,
+      model,
+      customReferenceUrl: customUrl,
+      customReferenceKey: customKey,
+      sizeId,
+      opacity,
+      color,
+      dimmed,
+    })
+    if (draftContentFingerprint(prev) === draftContentFingerprint(next)) return
+    void commitDocument(next)
+  }, [strokes, model, customUrl, customKey, sizeId, opacity, color, dimmed, ready, commitDocument])
 
   useEffect(() => {
     return () => {
@@ -248,36 +354,16 @@ export function useStudioEditor() {
 
   const referenceOpacity = dimmed ? 0.4 : 1
 
-  useEffect(() => {
-    if (model !== 'custom') return
-    const url = blobUrl ?? customUrl
-    if (!url || url.startsWith('blob:')) return
-    let cancelled = false
-    const img = new window.Image()
-    img.onload = () => {
-      if (!cancelled) setStudioNotice((prev) =>
-        prev?.includes('could not be loaded') ? null : prev,
-      )
-    }
-    img.onerror = () => {
-      if (cancelled) return
-      setStudioNotice(
-        'Custom reference image could not be loaded. Your strokes are safe; choose another reference or re-upload.',
-      )
-    }
-    img.src = url
-    return () => {
-      cancelled = true
-    }
-  }, [model, customUrl, blobUrl])
-
   const onStrokeComplete = useCallback(
     (stroke: Stroke) => {
       history.current.push(strokes)
-      setStrokes((prev) => [...prev, stroke])
+      const nextStrokes = [...strokes, stroke]
+      setStrokes(nextStrokes)
       syncHistoryFlags()
+      // Effect will commit; also commit immediately for stroke durability before debounce.
+      commitFromEditor({ strokes: nextStrokes })
     },
-    [strokes, syncHistoryFlags],
+    [commitFromEditor, strokes, syncHistoryFlags],
   )
 
   const undo = useCallback(() => {
@@ -301,15 +387,21 @@ export function useStudioEditor() {
     syncHistoryFlags()
   }, [strokes, syncHistoryFlags])
 
-  const commitModelChange = useCallback((next: ModelChoice, clearStrokes: boolean) => {
-    if (clearStrokes && strokes.length > 0) {
-      history.current.push(strokes)
-      setStrokes([])
-      syncHistoryFlags()
-    }
-    setModelState(next)
-    setModelSwitchPrompt(null)
-  }, [strokes, syncHistoryFlags])
+  const commitModelChange = useCallback(
+    (next: ModelChoice, clearStrokes: boolean) => {
+      if (clearStrokes && strokes.length > 0) {
+        history.current.push(strokes)
+        setStrokes([])
+        syncHistoryFlags()
+        setModelState(next)
+        commitFromEditor({ model: next, strokes: [] })
+      } else {
+        setModelState(next)
+      }
+      setModelSwitchPrompt(null)
+    },
+    [commitFromEditor, strokes, syncHistoryFlags],
+  )
 
   const requestModelChange = useCallback(
     (next: ModelChoice) => {
@@ -331,40 +423,26 @@ export function useStudioEditor() {
         return
       }
 
-      const applyLocalPreview = () => {
-        if (blobUrl) URL.revokeObjectURL(blobUrl)
-        const url = URL.createObjectURL(file)
-        setBlobUrl(url)
-      }
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+      const url = URL.createObjectURL(file)
+      setBlobUrl(url)
+      // Persistent uploads disabled for private beta — /static/uploads is not owner-private.
+      setCustomUrl(null)
+      setCustomKey(null)
+      setStudioNotice(CUSTOM_REF_BETA_NOTICE)
 
-      const switchToCustom = () => {
-        if (strokes.length > 0) {
-          setModelSwitchPrompt({ next: 'custom' })
-        } else {
-          setModelState('custom')
-        }
-      }
-
-      applyLocalPreview()
-      setStudioNotice('Uploading custom reference…')
-      try {
-        const uploaded = await uploadReferenceImage(file)
-        setCustomUrl(uploaded.url)
-        setCustomKey(uploaded.stored_key)
-        setStudioNotice('Custom reference uploaded to your private library.')
-        switchToCustom()
-      } catch (err) {
-        setCustomUrl(null)
-        setCustomKey(null)
-        const message =
-          err instanceof ApiError
-            ? `${err.message} Preview is local-only until upload succeeds.`
-            : 'Upload failed. Preview is local-only for this session.'
-        setStudioNotice(message)
-        switchToCustom()
+      if (strokes.length > 0) {
+        setModelSwitchPrompt({ next: 'custom' })
+      } else {
+        setModelState('custom')
+        commitFromEditor({
+          model: 'custom',
+          customReferenceUrl: null,
+          customReferenceKey: null,
+        })
       }
     },
-    [blobUrl, strokes.length],
+    [blobUrl, commitFromEditor, strokes.length],
   )
 
   const onMagic = useCallback(() => {
@@ -373,10 +451,12 @@ export function useStudioEditor() {
 
   const onLogout = useCallback(() => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-    if (dirtyRef.current) void flushSave()
+    if (cloudDirtyRef.current || saveStatus === 'pending' || saveStatus === 'local-only') {
+      void flushCloudSave()
+    }
     logout()
     navigate('/login', { replace: true })
-  }, [flushSave, logout, navigate])
+  }, [flushCloudSave, logout, navigate, saveStatus])
 
   const setBrushSizePx = useCallback((px: number) => {
     setSizeId(nearestBrushSizeId(px))
@@ -400,22 +480,45 @@ export function useStudioEditor() {
 
   const resolveConflictKeepLocal = useCallback(() => {
     if (!draftConflict) return
-    applyDocument(draftConflict.local, draftConflict.designId)
+    const local = draftConflict.local
+    const designId = draftConflict.designId
+    // Explicit operator choice: overwrite cloud using the server's current revision as the token.
+    syncedRevisionRef.current = draftConflict.server.clientRevision
+    syncedFingerprintRef.current = null
+    authoritativeDocRef.current = local
+    designIdRef.current = designId
+    applyDocument(local, designId)
     setDraftConflict(null)
-    void flushSave()
-  }, [applyDocument, draftConflict, flushSave])
+    void commitDocument(local, { syncCloudImmediately: true })
+  }, [applyDocument, commitDocument, draftConflict])
 
   const resolveConflictUseServer = useCallback(() => {
     if (!draftConflict) return
-    applyDocument(draftConflict.server, draftConflict.designId)
+    const server = draftConflict.server
+    const designId = draftConflict.designId
+    authoritativeDocRef.current = server
+    designIdRef.current = designId
+    syncedRevisionRef.current = server.clientRevision
+    syncedFingerprintRef.current = draftContentFingerprint(documentForCloud(server))
+    applyDocument(server, designId)
     setDraftConflict(null)
     setSaveStatus('saved')
-  }, [applyDocument, draftConflict])
+    if (user?.id) {
+      void persistLocalRecovery({
+        userId: user.id,
+        designId,
+        document: server,
+        syncedRevision: server.clientRevision,
+      })
+    }
+  }, [applyDocument, draftConflict, user?.id])
 
   const saveStatusLabel = useMemo(() => {
     switch (saveStatus) {
       case 'restoring':
         return 'Restoring draft…'
+      case 'pending':
+        return 'Saving on this device…'
       case 'saving':
         return 'Saving…'
       case 'saved':
@@ -424,8 +527,10 @@ export function useStudioEditor() {
         return 'Save failed'
       case 'local-only':
         return 'Saved on this device'
+      case 'idle':
+        return 'Ready'
       default:
-        return dirtyRef.current ? 'Unsaved changes' : 'Ready'
+        return 'Ready'
     }
   }, [saveStatus])
 
@@ -471,7 +576,7 @@ export function useStudioEditor() {
     saveStatus,
     saveStatusLabel,
     saveError,
-    retrySave: flushSave,
+    retrySave: flushCloudSave,
     modelSwitchPrompt,
     confirmModelKeepStrokes: () =>
       modelSwitchPrompt ? commitModelChange(modelSwitchPrompt.next, false) : undefined,

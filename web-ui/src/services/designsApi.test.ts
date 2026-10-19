@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyDraftDocument, STUDIO_DRAFT_KIND } from '@/lib/draftDocument'
-import { extractStudioDraft, pickLatestStudioDraft, type DesignRead } from '@/services/designsApi'
+import { bumpDraftDocument, createEmptyDraftDocument, STUDIO_DRAFT_KIND } from '@/lib/draftDocument'
+import { ApiError } from '@/services/api/client'
+import {
+  documentForCloud,
+  extractStudioDraft,
+  parseDraftConflict,
+  pickLatestStudioDraft,
+  type DesignRead,
+} from '@/services/designsApi'
 
 function design(partial: Partial<DesignRead> & { id: string }): DesignRead {
   return {
@@ -44,5 +51,40 @@ describe('designsApi helpers', () => {
     const picked = pickLatestStudioDraft(rows)
     expect(picked?.id).toBe('d2')
     expect(extractStudioDraft(picked!)?.clientRevision).toBe(5)
+  })
+
+  it('strips custom reference fields before cloud write', () => {
+    const doc = bumpDraftDocument(createEmptyDraftDocument(), {
+      model: 'custom',
+      customReferenceUrl: '/static/uploads/x.png',
+      customReferenceKey: 'uploads/x.png',
+    })
+    const cloud = documentForCloud(doc)
+    expect(cloud.customReferenceUrl).toBeNull()
+    expect(cloud.customReferenceKey).toBeNull()
+    expect(cloud.model).toBe('custom')
+  })
+
+  it('parses 409 conflict payloads for operator resolution', () => {
+    const row = design({
+      id: 'd9',
+      design_data: createEmptyDraftDocument() as unknown as Record<string, unknown>,
+      metadata: { draftKind: STUDIO_DRAFT_KIND },
+    })
+    const err = new ApiError('conflict', 409, {
+      detail: {
+        code: 'conflict',
+        message: 'Draft was updated elsewhere.',
+        payload: {
+          expected_revision: 2,
+          current_revision: 4,
+          design: row,
+        },
+      },
+    })
+    const parsed = parseDraftConflict(err)
+    expect(parsed?.expectedRevision).toBe(2)
+    expect(parsed?.currentRevision).toBe(4)
+    expect(parsed?.design.id).toBe('d9')
   })
 })

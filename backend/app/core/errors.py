@@ -21,8 +21,9 @@ class ForbiddenError(AppError):
 
 
 class ConflictError(AppError):
-    def __init__(self, message: str):
+    def __init__(self, message: str, payload: dict | None = None):
         super().__init__("conflict", message, status.HTTP_409_CONFLICT)
+        self.payload = payload
 
 
 class UnauthorizedError(AppError):
@@ -33,9 +34,13 @@ class UnauthorizedError(AppError):
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
+        detail: dict = {"code": exc.code, "message": exc.message}
+        payload = getattr(exc, "payload", None)
+        if payload is not None:
+            detail["payload"] = payload
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": {"code": exc.code, "message": exc.message}},
+            content={"detail": detail},
         )
 
     @app.exception_handler(Exception)

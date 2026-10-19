@@ -222,8 +222,8 @@ export function CreatorWorkspace({ editor }: Props) {
           ]}
         >
           <p>
-            This device and your private cloud draft both have changes with the same revision
-            marker. Choose which copy to keep. The other will not be applied silently.
+            This device and your private cloud draft both have changes. Both copies are kept until
+            you choose. Nothing is overwritten automatically.
           </p>
         </ConfirmDialog>
       ) : null}

@@ -29,6 +29,9 @@ class DesignUpdate(BaseModel):
     metadata: dict[str, Any] | None = None
     visibility: str | None = None
     status: str | None = None
+    # Optional optimistic concurrency token for Studio working drafts.
+    # When set, update fails with HTTP 409 if the stored clientRevision differs.
+    expected_revision: int | None = Field(default=None, ge=0)
 
 
 class DesignRevisionCreate(BaseModel):

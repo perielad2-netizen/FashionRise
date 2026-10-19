@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   bumpDraftDocument,
   createEmptyDraftDocument,
+  documentFromEditorState,
   parseStudioDraftDocument,
   resolveDraftConflict,
   STUDIO_DRAFT_SCHEMA,
@@ -44,16 +45,16 @@ describe('draftDocument', () => {
     expect(parsed?.clientRevision).toBe(3)
   })
 
-  it('never silently prefers an older local revision over a newer server draft', () => {
+  it('never auto-picks a winner when local and server content differ', () => {
     const local = createEmptyDraftDocument()
     const server = bumpDraftDocument(local, { model: 'blank' })
     expect(resolveDraftConflict(local, server)).toEqual({
-      winner: 'server',
-      needsUserChoice: false,
+      equal: false,
+      needsUserChoice: true,
     })
     expect(resolveDraftConflict(server, local)).toEqual({
-      winner: 'local',
-      needsUserChoice: false,
+      equal: false,
+      needsUserChoice: true,
     })
   })
 
@@ -61,5 +62,39 @@ describe('draftDocument', () => {
     const a = createEmptyDraftDocument()
     const b = { ...a, model: 'male' as const }
     expect(resolveDraftConflict(a, b).needsUserChoice).toBe(true)
+  })
+
+  it('treats identical content as equal regardless of revision labels', () => {
+    const a = createEmptyDraftDocument()
+    const b = { ...a, clientRevision: 99 }
+    expect(resolveDraftConflict(a, b)).toEqual({ equal: true, needsUserChoice: false })
+  })
+
+  it('builds the next document from an authoritative previous snapshot', () => {
+    const prev = createEmptyDraftDocument()
+    const next = documentFromEditorState({
+      prev,
+      strokes: [
+        {
+          id: 's1',
+          tool: 'draw',
+          points: [0, 0, 1],
+          color: '#1C1C1E',
+          size: 2,
+          opacity: 1,
+        },
+      ],
+      model: 'male',
+      customReferenceUrl: null,
+      customReferenceKey: null,
+      sizeId: 'bold',
+      opacity: 0.5,
+      color: '#FF0000',
+      dimmed: true,
+    })
+    expect(next.clientRevision).toBe(prev.clientRevision + 1)
+    expect(next.strokes).toHaveLength(1)
+    expect(next.model).toBe('male')
+    expect(next.brush.sizeId).toBe('bold')
   })
 })

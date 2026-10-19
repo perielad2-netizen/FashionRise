@@ -9,7 +9,13 @@ export type LocalDraftRecord = {
   designId: string | null
   document: StudioDraftDocument
   savedAt: string
+  /** Last known server revision successfully acknowledged. */
+  syncedRevision: number | null
 }
+
+export type LocalWriteResult =
+  | { ok: true }
+  | { ok: false; error: string }
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -44,7 +50,7 @@ export async function readLocalDraft(userId: string): Promise<LocalDraftRecord |
   }
 }
 
-export async function writeLocalDraft(record: LocalDraftRecord): Promise<void> {
+export async function writeLocalDraft(record: LocalDraftRecord): Promise<LocalWriteResult> {
   try {
     const db = await openDb()
     await new Promise<void>((resolve, reject) => {
@@ -54,10 +60,18 @@ export async function writeLocalDraft(record: LocalDraftRecord): Promise<void> {
         db.close()
         resolve()
       }
-      tx.onerror = () => reject(tx.error)
+      tx.onerror = () => reject(tx.error ?? new Error('IndexedDB write failed'))
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB write aborted'))
     })
-  } catch {
-    /* local cache is best-effort */
+    return { ok: true }
+  } catch (err) {
+    const message =
+      err instanceof DOMException && err.name === 'QuotaExceededError'
+        ? 'Local storage quota exceeded'
+        : err instanceof Error
+          ? err.message
+          : 'IndexedDB write failed'
+    return { ok: false, error: message }
   }
 }
 
