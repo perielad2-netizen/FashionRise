@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { matchStudioShortcut } from '@/lib/studioShortcuts'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingBrushPanel } from '@/shell/components/FloatingBrushPanel'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
 import { ModelLibraryPanel } from '@/shell/components/ModelLibraryPanel'
+import { BetaNotice } from '@/shell/components/BetaNotice'
 import { SettingsInspector } from '@/shell/components/SettingsInspector'
 import { WorkspaceHeader } from '@/shell/components/WorkspaceHeader'
 import type { StudioEditor } from '@/hooks/useStudioEditor'
@@ -37,9 +39,32 @@ export function CreatorWorkspace({ editor }: Props) {
     }
   }, [])
 
+  const { setTool, undo, redo } = editor
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const action = matchStudioShortcut(event)
+      if (!action) return
+      event.preventDefault()
+      if (action === 'draw') setTool('draw')
+      else if (action === 'erase') setTool('erase')
+      else if (action === 'undo') undo()
+      else redo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setTool, undo, redo])
+
   const toolLabel = editor.tool === 'erase' ? 'Eraser' : 'Pencil'
-  const showFloatingBrush = !narrow
-  const brushOverlay = dock === 'brush' && (narrow || tablet)
+  const showFloatingBrush = !tablet
+  const brushOverlay = dock === 'brush' && tablet
+  const betaNotice = editor.magicNotice
+    ? { message: editor.magicNotice, dismiss: () => editor.setMagicNotice(null) }
+    : editor.comingSoon
+      ? { message: editor.comingSoon, dismiss: () => editor.setComingSoon(null) }
+      : editor.studioNotice
+        ? { message: editor.studioNotice, dismiss: () => editor.setStudioNotice(null) }
+        : null
 
   return (
     <section className={styles.workspace} aria-label="Creator workspace">
@@ -56,6 +81,10 @@ export function CreatorWorkspace({ editor }: Props) {
         saveError={editor.saveError}
         onRetrySave={editor.retrySave}
       />
+
+      {betaNotice ? (
+        <BetaNotice message={betaNotice.message} onDismiss={betaNotice.dismiss} />
+      ) : null}
 
       <div className={styles.mobileDock} aria-label="Studio panels">
         <button
@@ -137,17 +166,11 @@ export function CreatorWorkspace({ editor }: Props) {
             opacity={editor.opacity}
             dimmed={editor.dimmed}
             toolLabel={toolLabel}
-            magicNotice={editor.magicNotice}
-            studioNotice={editor.studioNotice}
-            comingSoon={editor.comingSoon}
             onSize={editor.setSizeId}
             onBrushSize={editor.setBrushSizePx}
             onOpacity={editor.setBrushOpacity}
             onToggleDim={() => editor.setDimmed((v) => !v)}
             onMagic={editor.onMagic}
-            onDismissMagic={() => editor.setMagicNotice(null)}
-            onDismissStudioNotice={() => editor.setStudioNotice(null)}
-            onDismissComingSoon={() => editor.setComingSoon(null)}
           />
         </div>
       </div>

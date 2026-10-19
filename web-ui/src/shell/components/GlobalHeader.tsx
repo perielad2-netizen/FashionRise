@@ -18,7 +18,9 @@ export function GlobalHeader({ leading, username, onLogout, onComingSoon }: Prop
       <div className={styles.brand}>
         {leading}
         <img src={UI_ASSETS.brand.mark} alt="" className={styles.mark} draggable={false} />
-        <p className={styles.wordmark}>FashionRise</p>
+        <p className={styles.wordmark}>
+          Fashion<span>Rise</span>
+        </p>
       </div>
       <p className={styles.tagline} aria-hidden>
         Dream <span className={styles.plus}>+</span> Sketch{' '}
@@ -59,8 +61,9 @@ export function GlobalHeader({ leading, username, onLogout, onComingSoon }: Prop
         </div>
         <button
           type="button"
-          className={styles.settingsBtn}
-          aria-label="Settings"
+          className={`${styles.settingsBtn} ${styles.unavailable}`}
+          aria-label="Settings, coming later"
+          title="Settings are coming later"
           onClick={() => onComingSoon?.('Settings')}
         >
           <Settings size={16} />

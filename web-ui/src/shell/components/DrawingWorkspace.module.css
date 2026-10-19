@@ -1,18 +1,28 @@
-.wrap {
+.wrap,
+.wrapWithBrush {
   position: relative;
   min-width: 0;
   min-height: 0;
   height: 100%;
-  display: grid;
-  place-items: center;
-  padding: 8px 4px 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 4px;
+}
+
+.wrapWithBrush .canvasFrame {
+  max-height: calc(100% - 156px);
 }
 
 .canvasFrame {
   position: relative;
-  width: min(100%, 460px);
+  width: min(100%, 420px);
   aspect-ratio: 768 / 1024;
   max-height: 100%;
+  min-height: 0;
+  flex: 0 1 auto;
   border-radius: 20px;
   background:
     radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.55), transparent 40%),
@@ -59,7 +69,8 @@
   border: 0;
   background: transparent;
   color: inherit;
-  cursor: default;
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 @media (max-width: 1200px) {

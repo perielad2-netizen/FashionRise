@@ -1,14 +1,13 @@
 .panel {
-  position: absolute;
-  left: 12px;
-  bottom: 18px;
-  width: 210px;
+  position: relative;
+  flex: 0 0 auto;
+  width: min(240px, 100%);
   padding: 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.96);
   color: #111827;
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
-  z-index: 3;
+  z-index: 4;
 }
 
 .sheet {

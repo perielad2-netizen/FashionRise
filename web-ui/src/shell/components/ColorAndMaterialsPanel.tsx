@@ -46,16 +46,10 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
         <div className={styles.head}>
           <h3>Colors</h3>
         </div>
-        <div
-          className={styles.picker}
-          aria-hidden
-          style={{
-            background: `linear-gradient(180deg, transparent, #000), linear-gradient(90deg, #fff, ${color})`,
-          }}
-        >
-          <span className={styles.pickerDot} />
+        <div className={styles.currentInk}>
+          <span className={styles.currentSwatch} style={{ background: color }} />
+          <span>Current ink</span>
         </div>
-        <div className={styles.hue} aria-hidden />
         <div className={styles.swatches}>
           {INK_SWATCHES.map((s) => (
             <button
@@ -91,7 +85,9 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
 
       <section className={styles.card}>
         <div className={styles.head}>
-          <h3>Fabrics &amp; Textures</h3>
+          <h3>
+            Fabrics <span className={styles.soon}>Soon</span>
+          </h3>
         </div>
         <div className={styles.fabrics}>
           {FABRICS.map((bg) => (
@@ -111,7 +107,9 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
 
       <section className={styles.card}>
         <div className={styles.head}>
-          <h3>Gradients</h3>
+          <h3>
+            Gradients <span className={styles.soon}>Soon</span>
+          </h3>
         </div>
         <div className={styles.gradients}>
           {GRADIENTS.map((bg) => (
@@ -131,11 +129,14 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
 
       <section className={styles.card}>
         <div className={styles.head}>
-          <h3>Layers</h3>
+          <h3>
+            Layers <span className={styles.soon}>Soon</span>
+          </h3>
           <button type="button" className={styles.iconBtn} disabled aria-label="Add layer unavailable">
             <Plus size={14} />
           </button>
         </div>
+        <p className={styles.note}>Layer editing is coming later. Sketch ink is the live layer.</p>
         <div className={styles.layers}>
           {LAYERS.map((layer) => (
             <div key={layer.id} className={layer.active ? styles.layerActive : styles.layer}>

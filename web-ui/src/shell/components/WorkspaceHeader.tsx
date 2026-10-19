@@ -56,8 +56,9 @@ export function WorkspaceHeader({
       <div className={styles.left}>
         <button
           type="button"
-          className={styles.iconBtn}
-          aria-label="Back"
+          className={`${styles.iconBtn} ${styles.unavailable}`}
+          aria-label="Home, coming later"
+          title="Home is coming later"
           onClick={() => onComingSoon?.('Home')}
         >
           <ArrowLeft size={18} />
@@ -96,9 +97,15 @@ export function WorkspaceHeader({
         >
           <Redo2 size={17} />
         </button>
-        <button type="button" className={styles.magic} onClick={onMagic}>
+        <button
+          type="button"
+          className={styles.magicSoon}
+          onClick={onMagic}
+          title="Magic is not available in this beta"
+        >
           <Sparkles size={15} />
           Magic
+          <span className={styles.soon}>Soon</span>
         </button>
         <div className={styles.moreWrap} ref={menuRef}>
           <button

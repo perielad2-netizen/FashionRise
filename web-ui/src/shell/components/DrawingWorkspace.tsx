@@ -32,7 +32,7 @@ export function DrawingWorkspace({
   showFloatingBrush,
 }: Props) {
   return (
-    <div className={styles.wrap}>
+    <div className={showFloatingBrush ? styles.wrapWithBrush : styles.wrap}>
       <div className={styles.canvasFrame}>
         <DrawingCanvas
           strokes={strokes}
