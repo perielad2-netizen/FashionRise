@@ -9,7 +9,7 @@
 
 **Production:** `main` **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** on `https://fashionrise.app` (operator confirmed login, sketching, and Saved)
 
-**WEB-V2.2 branch:** `cursor/web-v22-premium-ui-77c6` — draft PR [#11](https://github.com/perielad2-netizen/FashionRise/pull/11) — polish `ac06db12921bff8d60d1c031fae557d88a7b828a`, then the notice-visibility commit on the same branch
+**WEB-V2.2 branch:** `cursor/web-v22-premium-ui-77c6` — draft PR [#11](https://github.com/perielad2-netizen/FashionRise/pull/11) — polish `ac06db12921bff8d60d1c031fae557d88a7b828a`, notice visibility `e547ab3cada6d47e1d90710a8b38de1b32d17dce`
 
 ---
 
@@ -204,7 +204,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
-| 2026-10-19 | **WEB-V2.2 notice visibility:** Magic, Back, and header Settings messages render once under the workspace title at every width, including when Settings is hidden. Draft PR #11. Not deployed. |
+| 2026-10-19 | **WEB-V2.2 notice visibility (`e547ab3c`):** Magic, Back, and header Settings messages render once under the workspace title at every width, including when Settings is hidden. Draft PR #11. Not deployed. |
 | 2026-10-19 | **WEB-V2.2 UI polish (draft, not deployed):** brand crops, library-card cleanup, honest Soon states, wired shortcuts, responsive spacing. Production stays `6df327ba` on fashionrise.app. |
 | 2026-10-19 | **Protected production:** operator confirmed login, sketching, and Saved on fashionrise.app at `6df327ba`. |
 | 2026-10-19 | **WEB-V2.1C queued-autosave guard (PR #9, merged):** conflict check runs inside the queued save, before any API call. |
