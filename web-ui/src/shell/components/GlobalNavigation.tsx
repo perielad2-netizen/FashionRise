@@ -41,7 +41,7 @@ export function GlobalNavigation({ onComingSoon }: Props) {
       </div>
       <div className={styles.brandPanel} aria-hidden>
         <img
-          src="/assets/ui/design-lab/models/croquis-female-05.png"
+          src={UI_ASSETS.canvas.female}
           alt=""
           className={styles.brandPhoto}
           draggable={false}

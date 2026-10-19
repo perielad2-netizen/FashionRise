@@ -52,20 +52,13 @@ export function SettingsInspector({
 
       <section className={styles.section}>
         <h3>Canvas</h3>
-        <label className={styles.field}>
-          Size
-          <div className={styles.select} aria-disabled title="Fixed drawing space 768×1024">
-            <span>768 × 1024</span>
-            <span>▾</span>
-          </div>
-        </label>
+        <div className={styles.row}>
+          <span>Size</span>
+          <strong>768 × 1024</strong>
+        </div>
         <div className={styles.row}>
           <span>Background</span>
-          <span
-            className={styles.inputLike}
-            style={{ width: 36, minHeight: 28, padding: 0, background: '#f8f3ee' }}
-            title="Cream paper"
-          />
+          <strong>Cream paper</strong>
         </div>
         <div className={styles.row}>
           <span>Dim reference</span>
@@ -185,9 +178,15 @@ export function SettingsInspector({
         </div>
       ) : null}
 
-      <button type="button" className={styles.generate} onClick={onMagic}>
+      <button
+        type="button"
+        className={styles.generateSoon}
+        onClick={onMagic}
+        title="AI generation is not available in this beta"
+      >
         <Sparkles size={16} />
         Generate with AI
+        <span className={styles.soon}>Soon</span>
       </button>
     </aside>
   )

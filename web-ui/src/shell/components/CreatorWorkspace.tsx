@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { matchStudioShortcut } from '@/lib/studioShortcuts'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
@@ -37,9 +38,25 @@ export function CreatorWorkspace({ editor }: Props) {
     }
   }, [])
 
+  const { setTool, undo, redo } = editor
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const action = matchStudioShortcut(event)
+      if (!action) return
+      event.preventDefault()
+      if (action === 'draw') setTool('draw')
+      else if (action === 'erase') setTool('erase')
+      else if (action === 'undo') undo()
+      else redo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setTool, undo, redo])
+
   const toolLabel = editor.tool === 'erase' ? 'Eraser' : 'Pencil'
-  const showFloatingBrush = !narrow
-  const brushOverlay = dock === 'brush' && (narrow || tablet)
+  const showFloatingBrush = !tablet
+  const brushOverlay = dock === 'brush' && tablet
 
   return (
     <section className={styles.workspace} aria-label="Creator workspace">

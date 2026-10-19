@@ -52,19 +52,13 @@ export function LoginPage() {
       <div className={styles.glow} aria-hidden />
       <div className={styles.card}>
         <div className={styles.brand}>
-          <img
-            src={UI_ASSETS.brand.logo}
-            alt="FashionRise"
-            className={styles.logo}
-            width={72}
-            height={72}
-            draggable={false}
-          />
-          <div>
-            <h1 className={styles.wordmark}>
-              Fashion<span>Rise</span>
-            </h1>
-            <p className={styles.tag}>AI FASHION EDITING STUDIO</p>
+          <div className={styles.logoPlate}>
+            <img
+              src={UI_ASSETS.brand.login}
+              alt="FashionRise"
+              className={styles.logo}
+              draggable={false}
+            />
           </div>
         </div>
 

@@ -86,7 +86,9 @@ describe('StudioPage WEB-V2 shell', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('FashionRise')).toBeInTheDocument()
+    expect(
+      screen.getByText((_, node) => node?.tagName === 'P' && node.textContent === 'FashionRise'),
+    ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /new design/i })).toBeInTheDocument()
     expect(await screen.findByText(/ready|saved|restoring/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/creator workspace/i)).toBeInTheDocument()

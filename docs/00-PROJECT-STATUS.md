@@ -3,13 +3,13 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-V2.1C** queued-autosave guard on draft PR #9. A cloud save already waiting on the chain now checks for an open conflict before any API call, so a delayed conflict response cannot be followed by a queued overwrite. Next = PM review, then protected family-beta tablet testing. No merge / deploy / Magic.
+**Last updated:** 2026-10-19 — **WEB-V2.2** premium UI polish is implemented on `cursor/web-v22-premium-ui-77c6` and is **not deployed**. Protected production remains `https://fashionrise.app` at `6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`. Next = PM review of the WEB-V2.2 draft PR. Do not merge or deploy this milestone.
 
-**Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
+**Phase:** FashionRise Web — protected family beta live; WEB-V2.2 is local/PR only
 
-**Baseline:** `main` / `origin/main` **`2fc4c1faa57e1e862ba9698cce6b8a7dd59bfb51`**
+**Production:** `main` **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** on `https://fashionrise.app` (operator confirmed login, sketching, and Saved)
 
-**WEB-1 branch:** `cursor/web-ui-reboot`
+**WEB-V2.2 branch:** `cursor/web-v22-premium-ui-77c6` (draft PR; the branch tip is this milestone)
 
 ---
 
@@ -34,11 +34,13 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| Current `main` | **`2fc4c1fa`** |
+| Current `main` / production pin | **`6df327ba`** — merge of PR #9 |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
-| **WEB-1 web/PWA** | **DRAFT PR** on `cursor/web-ui-reboot` — **NOT MERGED** |
-| Production deploy | **NOT PERFORMED** |
-| Paid OpenAI for WEB-1 | **NONE** |
+| **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9. That commit is the protected production app. |
+| **WEB-V2.2** | Draft PR on `cursor/web-v22-premium-ui-77c6`. **Not merged. Not deployed.** |
+| INFRA-2 docs | Separate draft PR #10. Not part of this branch. |
+| Production deploy of WEB-V2.2 | **NOT PERFORMED** |
+| Paid OpenAI | **NONE** |
 | Persistent AI/backend behavior | **UNCHANGED** |
 
 ---
@@ -122,21 +124,29 @@
 - Remaining: private-beta access gating; **operator live tablet acceptance**
 - Deploy target: **fashionrise.app** via Cloudflare + isolated VPS — **not enabled in this PR**
 
+**WEB-V2.2 — premium UI, brand assets, beta honesty (this branch, not deployed):**
+
+- Login uses the approved emblem and wordmark on a cream plate. Header uses the approved monogram plus a readable cream/pink wordmark.
+- Library cards are derived from the existing artwork. Female edge matte removed. Originals kept.
+- Beta tools that already worked stay wired. Unfinished controls are labeled Soon or Unavailable.
+- Shortcuts B, E, and undo/redo now match the Settings list.
+- Persistence, Magic API, uploads, registration, and infra were not changed.
+- Report: `docs/WEB-V2.2-VISUAL-QA.md`
+
 **Do not:**
 
 - Continue Unity UI / merge PR #8 as product
-- Merge PR #9 or deploy fashionrise.app in this milestone
-- Activate Magic / public registration / social publishing
+- Merge or deploy WEB-V2.2 before PM approval
+- Activate Magic / public registration / persistent uploads
 
 ---
 
 ## Suggested next steps
 
-1. **PM review of WEB-V2.1C** (conflict-resolution final gate).
-2. Protected family-beta tablet testing on fashionrise.app after PM approval.
-3. Private-beta invite / access gating; custom-reference uploads stay disabled until owner-private retrieval exists.
-4. Later: fashionrise.app deploy (Cloudflare DNS + isolated VPS) — not in this PR.
-5. Later: Magic/backend connection after beta readiness.
+1. **PM review of the WEB-V2.2 draft PR.** Do not merge or deploy it in this step.
+2. After approval, real-device acceptance on a tablet and in the production browser at 100% zoom.
+3. Custom-reference uploads stay disabled until owner-private retrieval exists.
+4. Later: Magic/backend connection after beta readiness.
 
 ---
 
@@ -172,21 +182,20 @@ FashionRise/
 3. Do **not** resume Unity Creator Studio UI work.
 4. Backend: venv + `alembic upgrade head` + uvicorn on the port matching `VITE_API_BASE_URL`.
 5. Frontend: `cd web-ui && npm run dev`.
-6. Pick work from **Suggested next steps** (operator review → WEB-2).
+6. Pick work from **Suggested next steps**. WEB-V2.2 is waiting on PM review and is not deployed.
 
 ---
 
-## WEB-1 verification (this branch)
+## WEB-V2.2 verification (this branch)
 
 | Gate | Result |
 |------|--------|
-| `npm test` | Pass (Vitest) |
+| `npm test` | Pass — 67 tests, 23 files |
 | `npm run build` | Pass |
-| `npm run lint` | Pass (oxlint warnings only) |
-| `git diff --check` | Clean expected |
+| `npm run lint` | Pass with the same three pre-existing oxlint warnings |
 | OpenAI / paid AI | **None** |
-| Unity tree modified | **No** (untouched on this branch) |
-| Backend/AI changed | **No** |
+| Backend / persistence / infra | **Unchanged** |
+| Browser | Local headless Chrome at 100% zoom. Not production. Not a physical tablet. |
 
 ---
 
@@ -194,7 +203,9 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
-| 2026-10-19 | **WEB-V2.1C queued-autosave guard (PR #9):** conflict check runs inside the queued save, before any API call. Delayed 409 or lost-create conflict cannot be followed by a queued overwrite. Still draft. Next = PM review → protected tablet beta. |
+| 2026-10-19 | **WEB-V2.2 UI polish (draft, not deployed):** brand crops, library-card cleanup, honest Soon states, wired shortcuts, responsive spacing. Production stays `6df327ba` on fashionrise.app. Next = PM review. No merge, no deploy, no Magic. |
+| 2026-10-19 | **Protected production:** operator confirmed login, sketching, and Saved on fashionrise.app at `6df327ba`. |
+| 2026-10-19 | **WEB-V2.1C queued-autosave guard (PR #9, merged):** conflict check runs inside the queued save, before any API call. |
 | 2026-10-19 | **WEB-V2.1C conflict resolution (PR #9):** Keep-device rebase + OCC; Use-cloud durable IDB replace; autosave paused during conflict; mismatched reconcile is not Saved. Still draft. Next = PM review → protected tablet beta. |
 | 2026-10-19 | **WEB-V2.1A data-loss prevention (PR #9):** authoritative snapshot saves; IndexedDB-on-edit + honest status; `expected_revision`/409 concurrency; create reconcile; custom uploads disabled (not private). Live Postgres tests. Still draft. Next = PM review. |
 | 2026-10-19 | **WEB-V2.1 private-beta persistence (PR #9):** designs API draft autosave + IndexedDB recovery/conflicts; custom upload; model-switch confirm; brush overlay; Magic still off. Still draft. Next = PM review + live tablet acceptance. |

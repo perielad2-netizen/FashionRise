@@ -30,6 +30,34 @@
   color: #e7b9cf;
 }
 
+.currentInk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--fr-muted);
+  font-size: 11px;
+}
+
+.currentSwatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 0 1px rgba(214, 51, 132, 0.45);
+}
+
+.soon {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fr-muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .swatches {
   display: flex;
   gap: 8px;
@@ -169,6 +197,11 @@
   background: transparent;
   color: inherit;
   cursor: default;
+}
+
+.iconBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .note {

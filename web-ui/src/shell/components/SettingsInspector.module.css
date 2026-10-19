@@ -137,21 +137,30 @@
   font-weight: 600;
 }
 
-.generate {
+.generateSoon {
   margin-top: auto;
-  min-height: 48px;
-  border: 0;
+  min-height: 44px;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--fr-pink), #f472b6 60%, #c084fc);
-  color: white;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  border: 1px dashed rgba(244, 114, 182, 0.5);
+  background: rgba(214, 51, 132, 0.08);
+  color: #f9a8d4;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: var(--fr-glow);
   cursor: pointer;
+}
+
+.soon {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fr-muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .sizes {

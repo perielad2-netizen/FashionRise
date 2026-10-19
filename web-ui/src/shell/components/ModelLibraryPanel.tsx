@@ -74,7 +74,6 @@ export function ModelLibraryPanel({
   onSelect,
   onCustomFile,
 }: Props) {
-  const [tab, setTab] = useState<'models' | 'gallery'>('models')
   const [filter, setFilter] = useState<Filter>('all')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -86,20 +85,18 @@ export function ModelLibraryPanel({
   return (
     <aside className={styles.panel} aria-label="Model library">
       <div className={styles.tabs}>
-        <button
-          type="button"
-          className={tab === 'models' ? styles.tabActive : styles.tab}
-          onClick={() => setTab('models')}
-        >
+        <button type="button" className={styles.tabActive} aria-current="page">
           Models
         </button>
         <button
           type="button"
-          className={tab === 'gallery' ? styles.tabActive : styles.tab}
-          onClick={() => setTab('gallery')}
-          title="Coming later"
+          className={styles.tab}
+          disabled
+          aria-disabled
+          title="My Gallery is coming later"
         >
           My Gallery
+          <span className={styles.soon}>Soon</span>
         </button>
       </div>
 
@@ -116,9 +113,6 @@ export function ModelLibraryPanel({
         ))}
       </div>
 
-      {tab === 'gallery' ? (
-        <p className={styles.note}>My Gallery is coming later.</p>
-      ) : (
         <div className={styles.grid}>
           {cards.map((card) => {
             const isSelected = card.choice === selected
@@ -153,7 +147,6 @@ export function ModelLibraryPanel({
             )
           })}
         </div>
-      )}
 
       <input
         ref={inputRef}

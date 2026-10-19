@@ -12,12 +12,15 @@ const publicRoot = resolve(process.cwd(), 'public')
 describe('UI_ASSETS registry', () => {
   it('exposes the required production keys', () => {
     expect(UI_ASSETS.brand.logo).toBe('/branding/fashion_rise_logo.png')
+    expect(UI_ASSETS.brand.login).toBe('/branding/fashion_rise_login.png')
+    expect(UI_ASSETS.brand.emblem).toBe('/branding/fashion_rise_emblem.png')
+    expect(UI_ASSETS.brand.mark).toBe('/branding/fashion_rise_mark.png')
     expect(UI_ASSETS.header.profile).toMatch(/fr_icon_profile\.png$/)
     expect(UI_ASSETS.header.magic).toMatch(/fr_icon_magic\.png$/)
-    expect(UI_ASSETS.model.female).toMatch(/fr_model_female\.png$/)
-    expect(UI_ASSETS.model.male).toMatch(/fr_model_male\.png$/)
-    expect(UI_ASSETS.model.custom).toMatch(/fr_model_custom\.png$/)
-    expect(UI_ASSETS.model.blank).toMatch(/fr_model_blank\.png$/)
+    expect(UI_ASSETS.model.female).toBe('/assets/ui/models/fr_model_female_card.png')
+    expect(UI_ASSETS.model.male).toBe('/assets/ui/models/fr_model_male_card.png')
+    expect(UI_ASSETS.model.custom).toBe('/assets/ui/models/fr_model_custom_card.png')
+    expect(UI_ASSETS.model.blank).toBe('/assets/ui/models/fr_model_blank_card.png')
     expect(UI_ASSETS.tool.draw).toMatch(/fr_icon_draw\.png$/)
     expect(UI_ASSETS.tool.erase).toMatch(/fr_icon_erase\.png$/)
     expect(UI_ASSETS.tool.undo).toMatch(/fr_icon_undo\.png$/)
@@ -40,6 +43,8 @@ describe('UI_ASSETS registry', () => {
     expect(new Set(objects).size).toBe(objects.length)
     expect(objects).toEqual(
       expect.arrayContaining([
+        'Login.BrandLockup',
+        'GlobalHeader.Mark',
         'StudioHeader.BrandLogo',
         'StudioHeader.Profile',
         'StudioHeader.Magic',
@@ -67,5 +72,8 @@ describe('UI_ASSETS registry', () => {
       expect(existsSync(disk), `missing ${path}`).toBe(true)
     }
     expect(existsSync(resolve(publicRoot, 'models/male_model.png'))).toBe(true)
+    expect(existsSync(resolve(publicRoot, UI_ASSETS.model.femaleSource.slice(1)))).toBe(true)
+    expect(existsSync(resolve(publicRoot, UI_ASSETS.model.maleSource.slice(1)))).toBe(true)
+    expect(existsSync(resolve(publicRoot, UI_ASSETS.brand.logo.slice(1)))).toBe(true)
   })
 })

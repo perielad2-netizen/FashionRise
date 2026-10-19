@@ -27,13 +27,16 @@
 .wordmark {
   margin: 0;
   font-family: var(--fr-serif);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #f7a8c8;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #f8f3ee;
   white-space: nowrap;
-  text-shadow: 0 0 24px rgba(214, 51, 132, 0.35);
+  line-height: 1;
+}
+
+.wordmark span {
+  color: #f472b6;
 }
 
 .tagline {
@@ -92,6 +95,13 @@
   cursor: pointer;
 }
 
+.unavailable {
+  opacity: 0.55;
+  color: var(--fr-muted);
+  border-style: dashed;
+  cursor: pointer;
+}
+
 .studioBtn {
   cursor: pointer;
 }
@@ -146,8 +156,7 @@
   }
 
   .wordmark {
-    font-size: 16px;
-    letter-spacing: 0.1em;
+    font-size: 17px;
   }
 }
 
