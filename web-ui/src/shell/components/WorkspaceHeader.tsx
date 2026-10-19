@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, MoreHorizontal, Redo2, Sparkles, Undo2 } from 'lucide-react'
+import type { SaveStatus } from '@/lib/draftDocument'
 import styles from './WorkspaceHeader.module.css'
 
 type Props = {
@@ -10,6 +11,10 @@ type Props = {
   onClear: () => void
   onMagic: () => void
   onComingSoon?: (label: string) => void
+  saveStatus: SaveStatus
+  saveStatusLabel: string
+  saveError: string | null
+  onRetrySave?: () => void
 }
 
 export function WorkspaceHeader({
@@ -20,6 +25,10 @@ export function WorkspaceHeader({
   onClear,
   onMagic,
   onComingSoon,
+  saveStatus,
+  saveStatusLabel,
+  saveError,
+  onRetrySave,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -32,6 +41,15 @@ export function WorkspaceHeader({
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [menuOpen])
+
+  const statusClass =
+    saveStatus === 'error'
+      ? styles.statusError
+      : saveStatus === 'saving' || saveStatus === 'restoring'
+        ? styles.statusBusy
+        : saveStatus === 'saved' || saveStatus === 'local-only'
+          ? styles.statusSaved
+          : styles.sessionStatus
 
   return (
     <div className={styles.header}>
@@ -47,8 +65,18 @@ export function WorkspaceHeader({
         <h1 className={styles.title}>New Design</h1>
       </div>
       <div className={styles.right}>
-        <span className={styles.sessionStatus} title="Drawings stay in this browser tab until save is available">
-          Unsaved session
+        <span
+          className={statusClass}
+          title={saveError ?? 'Private draft for your account'}
+          role="status"
+          aria-live="polite"
+        >
+          {saveStatusLabel}
+          {saveStatus === 'error' && onRetrySave ? (
+            <button type="button" className={styles.retry} onClick={onRetrySave}>
+              Retry
+            </button>
+          ) : null}
         </span>
         <button
           type="button"
@@ -95,6 +123,19 @@ export function WorkspaceHeader({
               >
                 Clear canvas
               </button>
+              {onRetrySave ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onRetrySave()
+                  }}
+                >
+                  Save now
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>

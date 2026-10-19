@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingBrushPanel } from '@/shell/components/FloatingBrushPanel'
@@ -38,6 +39,7 @@ export function CreatorWorkspace({ editor }: Props) {
 
   const toolLabel = editor.tool === 'erase' ? 'Eraser' : 'Pencil'
   const showFloatingBrush = !narrow
+  const brushOverlay = dock === 'brush' && (narrow || tablet)
 
   return (
     <section className={styles.workspace} aria-label="Creator workspace">
@@ -49,6 +51,10 @@ export function CreatorWorkspace({ editor }: Props) {
         onClear={editor.clear}
         onMagic={editor.onMagic}
         onComingSoon={editor.showComingSoon}
+        saveStatus={editor.saveStatus}
+        saveStatusLabel={editor.saveStatusLabel}
+        saveError={editor.saveError}
+        onRetrySave={editor.retrySave}
       />
 
       <div className={styles.mobileDock} aria-label="Studio panels">
@@ -81,20 +87,6 @@ export function CreatorWorkspace({ editor }: Props) {
           Settings
         </button>
       </div>
-
-      {dock === 'brush' && (narrow || tablet) ? (
-        <div className={styles.brushSheet} role="dialog" aria-label="Brush settings sheet">
-          <FloatingBrushPanel
-            tool={editor.tool}
-            brushSize={editor.brushSize}
-            opacity={editor.opacity}
-            onBrushSize={editor.setBrushSizePx}
-            onOpacity={editor.setBrushOpacity}
-            hiddenOnNarrow={false}
-            variant="sheet"
-          />
-        </div>
-      ) : null}
 
       <div className={styles.body}>
         <div className={`${styles.modelsSlot} ${dock === 'models' ? styles.slotOpen : ''}`}>
@@ -159,6 +151,82 @@ export function CreatorWorkspace({ editor }: Props) {
           />
         </div>
       </div>
+
+      {brushOverlay ? (
+        <div className={styles.brushOverlay}>
+          <button
+            type="button"
+            className={styles.brushScrim}
+            aria-label="Close brush panel"
+            onClick={() => setDock(null)}
+          />
+          <div className={styles.brushSheet} role="dialog" aria-label="Brush settings sheet">
+            <div className={styles.brushSheetHead}>
+              <strong>Brush</strong>
+              <button type="button" className={styles.brushClose} onClick={() => setDock(null)}>
+                Done
+              </button>
+            </div>
+            <FloatingBrushPanel
+              tool={editor.tool}
+              brushSize={editor.brushSize}
+              opacity={editor.opacity}
+              onBrushSize={editor.setBrushSizePx}
+              onOpacity={editor.setBrushOpacity}
+              hiddenOnNarrow={false}
+              variant="sheet"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {editor.modelSwitchPrompt ? (
+        <ConfirmDialog
+          title="Change reference model?"
+          actions={[
+            { label: 'Cancel', onClick: editor.cancelModelSwitch, variant: 'ghost' },
+            {
+              label: 'Keep strokes',
+              onClick: () => editor.confirmModelKeepStrokes(),
+              variant: 'primary',
+            },
+            {
+              label: 'Clear strokes',
+              onClick: () => editor.confirmModelClearStrokes(),
+              variant: 'danger',
+            },
+          ]}
+        >
+          <p>
+            Your current sketch will stay on the canvas if you keep strokes. Clearing removes ink
+            before switching to{' '}
+            <strong>{editor.modelSwitchPrompt.next}</strong>.
+          </p>
+        </ConfirmDialog>
+      ) : null}
+
+      {editor.draftConflict ? (
+        <ConfirmDialog
+          title="Draft recovery conflict"
+          actions={[
+            {
+              label: 'Use cloud draft',
+              onClick: editor.resolveConflictUseServer,
+              variant: 'ghost',
+            },
+            {
+              label: 'Keep this device',
+              onClick: editor.resolveConflictKeepLocal,
+              variant: 'primary',
+            },
+          ]}
+        >
+          <p>
+            This device and your private cloud draft both have changes with the same revision
+            marker. Choose which copy to keep. The other will not be applied silently.
+          </p>
+        </ConfirmDialog>
+      ) : null}
     </section>
   )
 }
