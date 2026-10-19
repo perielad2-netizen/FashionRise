@@ -72,6 +72,7 @@ export function useStudioEditor() {
   const cloudDirtyRef = useRef(false)
   const bootedRef = useRef(false)
   const skipNextAutosaveRef = useRef(true)
+  const scheduleCloudSaveRef = useRef<() => void>(() => {})
 
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [tool, setTool] = useState<ToolKind>('draw')
@@ -150,15 +151,22 @@ export function useStudioEditor() {
 
       if (result.ok) {
         designIdRef.current = result.designId
+        // Record what the server acknowledged for this request's document (even if stale).
         syncedRevisionRef.current = result.syncedRevision
         syncedFingerprintRef.current = result.fingerprint
         if (stillCurrent && !cloudDirtyRef.current) {
           setSaveStatus('saved')
           setSaveError(null)
-        } else if (localPersistedFpRef.current === draftContentFingerprint(authoritativeDocRef.current)) {
-          setSaveStatus('local-only')
         } else {
-          setSaveStatus('pending')
+          // Newer local edits remain; keep honest status and schedule their cloud save.
+          if (localPersistedFpRef.current === draftContentFingerprint(authoritativeDocRef.current)) {
+            setSaveStatus('local-only')
+          } else {
+            setSaveStatus('pending')
+          }
+          if (!stillCurrent || cloudDirtyRef.current) {
+            scheduleCloudSaveRef.current()
+          }
         }
         return
       }
@@ -192,6 +200,8 @@ export function useStudioEditor() {
       void flushCloudSave()
     }, AUTOSAVE_MS)
   }, [flushCloudSave, user?.id])
+
+  scheduleCloudSaveRef.current = scheduleCloudSave
 
   /**
    * Commit an authoritative document snapshot: update the ref first, mirror to React,

@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-V2.1A** data-loss prevention on draft PR #9. Visuals still approved. Fixes: authoritative snapshot saves (no stale React flush), durable IndexedDB recovery + honest status, backend `expected_revision`/HTTP 409 concurrency, Studio create reconcile (no duplicate drafts), custom-reference uploads disabled (not owner-private via `/static/uploads`). Magic still disabled. Remaining beta blockers: invite gating + live tablet acceptance. Deploy target **fashionrise.app** — **no DNS/deploy**. Next = PM review. No merge / deploy.
+**Last updated:** 2026-10-19 — **WEB-V2.1B** final persistence hardening on draft PR #9. Monotonic IndexedDB writes, atomic Studio create (advisory lock), required `expected_revision` for Studio PUTs, honest syncedRevision on fingerprint no-op, no blind reconcile after non-409 failures. Visuals approved; Magic off. Next = PM review then **live tablet testing**. Deploy target **fashionrise.app** — **no DNS/deploy**. No merge / deploy.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
@@ -97,15 +97,19 @@
 - Model switch confirmation; Brush panel overlay; Magic notice-only
 - Docs: `docs/WEB-V2.1-PRIVATE-BETA.md`
 
-**WEB-V2.1A — data-loss prevention (this amendment):**
+**WEB-V2.1A — data-loss prevention:**
 
-- Authoritative `authoritativeDocRef` saves — never flush from uncommitted React state after restore
-- Local recovery write on every committed edit; “Saved on this device” only after IndexedDB OK; never “Saved” while newer pending
-- Backend optimistic concurrency: `expected_revision` + row lock + HTTP 409 payload; both copies retained until operator chooses
-- Studio `POST /designs` reconciles existing working draft (lost-response safe; no duplicates)
-- Persistent custom-reference uploads **disabled** for beta (URLs not owner-private)
-- Live FastAPI + isolated Postgres regression tests for 409 + reconcile
-- Remaining: private-beta access gating; operator tablet acceptance on live API
+- Authoritative snapshot saves; IndexedDB-on-edit + honest status; 409 concurrency; create reconcile; custom uploads disabled
+
+**WEB-V2.1B — final persistence hardening (this amendment):**
+
+- Monotonic IndexedDB writes (delayed cloud A cannot overwrite local B)
+- Atomic Studio create via per-owner advisory lock; equal-rev different-content → 409; identical retries idempotent
+- Studio updates require `expected_revision`; reject stale/non-advancing transitions; non-Studio stays compatible
+- Fingerprint no-op returns last server-acked revision (not unsent local rev)
+- Non-409 preferred PUT failures do not blind-reconcile/overwrite
+- Live FastAPI + isolated Postgres concurrency/create regressions
+- Remaining: private-beta access gating; **operator live tablet acceptance**
 - Deploy target: **fashionrise.app** via Cloudflare + isolated VPS — **not enabled in this PR**
 
 **Do not:**
@@ -118,8 +122,8 @@
 
 ## Suggested next steps
 
-1. **PM review of WEB-V2.1A** (data-loss prevention + live API evidence; visuals already approved).
-2. Operator manual tablet acceptance against live API/Postgres staging (two-tab conflict, refresh-after-draw).
+1. **PM review of WEB-V2.1B** (persistence safety gate complete).
+2. **Immediate next:** operator live tablet testing against staging API/Postgres.
 3. Private-beta invite / access gating; decide custom-reference privacy vs keep disabled.
 4. Later: fashionrise.app deploy (Cloudflare DNS + isolated VPS) — not in this PR.
 5. Later: Magic/backend connection after beta readiness.
@@ -180,6 +184,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-19 | **WEB-V2.1B final persistence hardening (PR #9):** monotonic IDB; atomic Studio create; required Studio `expected_revision`; honest syncedRevision on no-op; no blind reconcile. Live Postgres concurrency tests. Still draft. Next = PM review → live tablet testing. |
 | 2026-10-19 | **WEB-V2.1A data-loss prevention (PR #9):** authoritative snapshot saves; IndexedDB-on-edit + honest status; `expected_revision`/409 concurrency; create reconcile; custom uploads disabled (not private). Live Postgres tests. Still draft. Next = PM review. |
 | 2026-10-19 | **WEB-V2.1 private-beta persistence (PR #9):** designs API draft autosave + IndexedDB recovery/conflicts; custom upload; model-switch confirm; brush overlay; Magic still off. Still draft. Next = PM review + live tablet acceptance. |
 | 2026-10-19 | **WEB-V2 functional Studio integration (PR #9):** approved shell promoted to `/studio` with real drawing/tools/models; design-lab retained DEV-only; Magic disabled. Visual composition later approved for WEB-V2.1. |

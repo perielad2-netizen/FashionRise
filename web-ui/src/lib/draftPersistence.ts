@@ -79,6 +79,10 @@ function withCustomRefNotice(doc: StudioDraftDocument, notice: string | null): s
   return notice
 }
 
+function isNotFoundError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404
+}
+
 export async function restoreStudioDraft(userId: string): Promise<RestoreResult> {
   const local = await readLocalDraft(userId)
   const storedId = readStoredDesignId(userId)
@@ -201,6 +205,7 @@ export async function persistLocalRecovery(args: {
 /**
  * Ensure a single owner-scoped Studio working draft exists.
  * Reconciles lost POST responses by listing/updating instead of creating duplicates.
+ * Non-409 failures on a known design id do not blind-overwrite via list fallback.
  */
 export async function ensureStudioDraft(
   userId: string,
@@ -212,13 +217,23 @@ export async function ensureStudioDraft(
 
   if (preferredDesignId) {
     try {
+      let token = expectedRevision
+      if (token == null) {
+        // Never PUT a Studio draft without a server-acked revision token.
+        const current = await getDesign(preferredDesignId)
+        const serverDoc = extractStudioDraft(current)
+        if (!serverDoc) {
+          throw new ApiError('Preferred design is not a Studio working draft.', 409, null)
+        }
+        token = serverDoc.clientRevision
+      }
       return await updateStudioDraft(preferredDesignId, cloudDoc, {
-        expectedRevision: expectedRevision ?? undefined,
+        expectedRevision: token,
       })
     } catch (err) {
-      const conflict = parseDraftConflict(err)
-      if (conflict) throw err
-      // Fall through to list/create if the preferred id vanished.
+      if (parseDraftConflict(err)) throw err
+      // Only fall through when the preferred row is gone — never blind-reconcile on 5xx/network.
+      if (!isNotFoundError(err)) throw err
     }
   }
 
@@ -233,8 +248,12 @@ export async function ensureStudioDraft(
   if (existing) {
     writeStoredDesignId(userId, existing.id)
     const serverDoc = extractStudioDraft(existing)
+    const serverRev = serverDoc?.clientRevision
+    if (serverRev == null) {
+      throw new ApiError('Studio draft is missing a server revision.', 409, null)
+    }
     return updateStudioDraft(existing.id, cloudDoc, {
-      expectedRevision: serverDoc?.clientRevision ?? expectedRevision ?? undefined,
+      expectedRevision: serverRev,
     })
   }
 
@@ -243,19 +262,51 @@ export async function ensureStudioDraft(
     writeStoredDesignId(userId, created.id)
     return created
   } catch (createErr) {
-    // Response may have been lost after a successful create — reconcile.
+    // Response may have been lost after a successful create — reconcile carefully.
+    if (parseDraftConflict(createErr)) throw createErr
     try {
       const mine = await listMyDesigns()
       const recovered = pickLatestStudioDraft(mine)
       if (recovered) {
         writeStoredDesignId(userId, recovered.id)
         const serverDoc = extractStudioDraft(recovered)
+        if (!serverDoc) throw createErr
+        const serverRev = serverDoc.clientRevision
+        // Only advance when our content is a strict newer revision; otherwise surface conflict.
+        if (cloudDoc.clientRevision < serverRev) {
+          return recovered
+        }
+        if (cloudDoc.clientRevision === serverRev) {
+          const same =
+            draftContentFingerprint(documentForCloud(serverDoc)) ===
+            draftContentFingerprint(cloudDoc)
+          if (same) return recovered
+          throw createErr instanceof ApiError
+            ? createErr
+            : new ApiError(
+                'Studio working draft already exists with different content at this revision.',
+                409,
+                {
+                  detail: {
+                    code: 'conflict',
+                    message:
+                      'Studio working draft already exists with different content at this revision.',
+                    payload: {
+                      expected_revision: serverRev,
+                      current_revision: serverRev,
+                      design: recovered,
+                    },
+                  },
+                },
+              )
+        }
         return updateStudioDraft(recovered.id, cloudDoc, {
-          expectedRevision: serverDoc?.clientRevision ?? undefined,
+          expectedRevision: serverRev,
         })
       }
-    } catch {
-      /* rethrow original */
+    } catch (reconcileErr) {
+      if (parseDraftConflict(reconcileErr)) throw reconcileErr
+      /* rethrow original create failure below */
     }
     throw createErr
   }
@@ -269,6 +320,7 @@ export async function persistStudioDraft(args: {
   fingerprint: string
   /** Last fingerprint successfully acknowledged by the API for this design. */
   lastSyncedFingerprint: string | null
+  /** Last revision actually acknowledged by the server (not a speculative local rev). */
   expectedRevision: number | null
   /** When true, skip local write (caller already persisted). */
   skipLocalWrite?: boolean
@@ -288,12 +340,22 @@ export async function persistStudioDraft(args: {
   }
 
   if (args.lastSyncedFingerprint === cloudFingerprint && args.designId) {
+    // No cloud write — never invent a newer syncedRevision from the local document.
+    if (args.expectedRevision == null) {
+      return {
+        ok: false,
+        conflict: null,
+        localPersisted,
+        error: 'Missing server-acknowledged revision for unchanged draft fingerprint.',
+        designId: args.designId,
+      }
+    }
     return {
       ok: true,
       designId: args.designId,
       document: cloudDoc,
       fingerprint: cloudFingerprint,
-      syncedRevision: cloudDoc.clientRevision,
+      syncedRevision: args.expectedRevision,
       localPersisted,
     }
   }
@@ -307,6 +369,7 @@ export async function persistStudioDraft(args: {
     )
     writeStoredDesignId(args.userId, saved.id)
     const extracted = extractStudioDraft(saved) ?? cloudDoc
+    // Monotonic: must not overwrite a newer local recovery doc with this (possibly stale) save.
     const localAfter = await writeLocalDraft({
       userId: args.userId,
       designId: saved.id,

@@ -4,8 +4,13 @@ import {
   createEmptyDraftDocument,
   draftContentFingerprint,
 } from '@/lib/draftDocument'
-import { persistStudioDraft, restoreStudioDraft } from '@/lib/draftPersistence'
+import {
+  persistLocalRecovery,
+  persistStudioDraft,
+  restoreStudioDraft,
+} from '@/lib/draftPersistence'
 import type { StudioDraftDocument } from '@/lib/draftDocument'
+import { documentForCloud } from '@/services/designsApi'
 
 const localStore = vi.hoisted(() => ({
   records: new Map<string, unknown>(),
@@ -23,8 +28,23 @@ vi.mock('@/lib/localDraftStore', () => ({
     syncedRevision: number | null
   }) => {
     if (localStore.failWrites) return { ok: false, error: 'IndexedDB write failed' }
+    const existing = localStore.records.get(record.userId) as
+      | {
+          document: StudioDraftDocument
+          designId: string | null
+          syncedRevision: number | null
+          savedAt: string
+        }
+      | undefined
+    if (existing && existing.document.clientRevision > record.document.clientRevision) {
+      localStore.records.set(record.userId, {
+        ...existing,
+        designId: record.designId ?? existing.designId,
+      })
+      return { ok: true, wrote: false, reason: 'stale' }
+    }
     localStore.records.set(record.userId, record)
-    return { ok: true }
+    return { ok: true, wrote: true }
   },
   readStoredDesignId: (userId: string) => localStore.designIds.get(userId) ?? null,
   writeStoredDesignId: (userId: string, designId: string) => {
@@ -36,10 +56,22 @@ vi.mock('@/lib/localDraftStore', () => ({
 }))
 
 const api = vi.hoisted(() => ({
-  designs: new Map<string, { id: string; design_data: StudioDraftDocument; metadata: Record<string, unknown>; visibility: string; updated_at: string }>(),
+  designs: new Map<
+    string,
+    {
+      id: string
+      design_data: StudioDraftDocument
+      metadata: Record<string, unknown>
+      visibility: string
+      updated_at: string
+    }
+  >(),
   failCreateOnce: false,
+  failUpdateStatus: null as number | null,
   createCalls: 0,
   updateCalls: [] as Array<{ id: string; expected?: number | null }>,
+  updateGate: null as Promise<void> | null,
+  updateGateModel: null as string | null,
 }))
 
 vi.mock('@/services/designsApi', async (importOriginal) => {
@@ -62,7 +94,10 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
       })),
     getDesign: async (id: string) => {
       const d = api.designs.get(id)
-      if (!d) throw new Error('missing')
+      if (!d) {
+        const { ApiError } = await import('@/services/api/client')
+        throw new ApiError('not found', 404, null)
+      }
       return {
         id: d.id,
         user_id: 'u1',
@@ -81,7 +116,6 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
       api.createCalls += 1
       if (api.failCreateOnce) {
         api.failCreateOnce = false
-        // Simulate lost response: server already has the draft.
         const id = 'design-recovered'
         api.designs.set(id, {
           id,
@@ -120,9 +154,21 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
       document: StudioDraftDocument,
       options?: { expectedRevision?: number | null },
     ) => {
+      if (api.updateGate && api.updateGateModel && document.model === api.updateGateModel) {
+        await api.updateGate
+      }
+      if (api.failUpdateStatus != null) {
+        const status = api.failUpdateStatus
+        api.failUpdateStatus = null
+        const { ApiError } = await import('@/services/api/client')
+        throw new ApiError(status === 503 ? 'server down' : 'error', status, null)
+      }
       api.updateCalls.push({ id: designId, expected: options?.expectedRevision })
       const existing = api.designs.get(designId)
-      if (!existing) throw new Error('missing')
+      if (!existing) {
+        const { ApiError } = await import('@/services/api/client')
+        throw new ApiError('missing', 404, null)
+      }
       if (
         options?.expectedRevision != null &&
         existing.design_data.clientRevision !== options.expectedRevision
@@ -191,15 +237,18 @@ function strokedDoc(): StudioDraftDocument {
   })
 }
 
-describe('draftPersistence WEB-V2.1A', () => {
+describe('draftPersistence WEB-V2.1A/B', () => {
   beforeEach(() => {
     localStore.records.clear()
     localStore.designIds.clear()
     localStore.failWrites = false
     api.designs.clear()
     api.failCreateOnce = false
+    api.failUpdateStatus = null
     api.createCalls = 0
     api.updateCalls = []
+    api.updateGate = null
+    api.updateGateModel = null
   })
 
   it('restores a nonempty local document while the empty editor would otherwise win', async () => {
@@ -256,7 +305,6 @@ describe('draftPersistence WEB-V2.1A', () => {
       expectedRevision: null,
     })
     expect(localStore.records.size).toBe(0)
-    // Cloud create can still succeed, but localPersisted must stay false when IDB rejects.
     expect(result.localPersisted).toBe(false)
   })
 
@@ -276,7 +324,7 @@ describe('draftPersistence WEB-V2.1A', () => {
       document: local,
       fingerprint: draftContentFingerprint(local),
       lastSyncedFingerprint: null,
-      expectedRevision: 1, // stale vs server.clientRevision
+      expectedRevision: 1,
     })
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -321,5 +369,102 @@ describe('draftPersistence WEB-V2.1A', () => {
     const stored = [...api.designs.values()][0]!
     expect(stored.design_data.customReferenceUrl).toBeNull()
     expect(stored.design_data.customReferenceKey).toBeNull()
+  })
+
+  it('does not let a delayed cloud response for edit A overwrite local recovery for edit B', async () => {
+    const editA = strokedDoc()
+    api.designs.set('d1', {
+      id: 'd1',
+      design_data: createEmptyDraftDocument(),
+      metadata: { draftKind: 'studio_working_draft', clientRevision: 1 },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+
+    let releaseA!: () => void
+    api.updateGate = new Promise<void>((resolve) => {
+      releaseA = resolve
+    })
+    api.updateGateModel = 'male'
+
+    const saveA = persistStudioDraft({
+      userId: 'u1',
+      designId: 'd1',
+      document: editA,
+      fingerprint: draftContentFingerprint(editA),
+      lastSyncedFingerprint: null,
+      expectedRevision: 1,
+    })
+
+    const editB = bumpDraftDocument(editA, { model: 'blank', dimmed: true })
+    await persistLocalRecovery({
+      userId: 'u1',
+      designId: 'd1',
+      document: editB,
+      syncedRevision: 1,
+    })
+
+    releaseA()
+    await saveA
+
+    const recovered = localStore.records.get('u1') as { document: StudioDraftDocument }
+    expect(recovered.document.model).toBe('blank')
+    expect(recovered.document.dimmed).toBe(true)
+    expect(recovered.document.clientRevision).toBe(editB.clientRevision)
+  })
+
+  it('preserves server-acknowledged revision when fingerprint matches after edit→revert', async () => {
+    const base = createEmptyDraftDocument()
+    const edited = bumpDraftDocument(base, { model: 'male' })
+    const reverted = bumpDraftDocument(edited, { model: 'female' })
+    expect(draftContentFingerprint(documentForCloud(reverted))).toBe(
+      draftContentFingerprint(documentForCloud(base)),
+    )
+
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'd1',
+      document: reverted,
+      fingerprint: draftContentFingerprint(documentForCloud(reverted)),
+      lastSyncedFingerprint: draftContentFingerprint(documentForCloud(base)),
+      expectedRevision: 1,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.syncedRevision).toBe(1)
+      expect(result.syncedRevision).not.toBe(reverted.clientRevision)
+    }
+  })
+
+  it('does not blind-reconcile when preferred design update fails with a non-409 error', async () => {
+    api.designs.set('d1', {
+      id: 'd1',
+      design_data: createEmptyDraftDocument(),
+      metadata: { draftKind: 'studio_working_draft', clientRevision: 1 },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    api.designs.set('d2', {
+      id: 'd2',
+      design_data: bumpDraftDocument(createEmptyDraftDocument(), { model: 'blank' }),
+      metadata: { draftKind: 'studio_working_draft', clientRevision: 9 },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    api.failUpdateStatus = 503
+
+    const doc = strokedDoc()
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'd1',
+      document: doc,
+      fingerprint: draftContentFingerprint(doc),
+      lastSyncedFingerprint: null,
+      expectedRevision: 1,
+    })
+    expect(result.ok).toBe(false)
+    expect(api.designs.get('d1')!.design_data.model).toBe('female')
+    expect(api.designs.get('d2')!.design_data.model).toBe('blank')
+    expect(api.updateCalls).toHaveLength(0)
   })
 })

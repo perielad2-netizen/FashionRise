@@ -57,7 +57,7 @@ vi.mock('@/lib/draftPersistence', async (importOriginal) => {
 
 vi.mock('@/lib/localDraftStore', () => ({
   readLocalDraft: async () => null,
-  writeLocalDraft: async () => ({ ok: true }),
+  writeLocalDraft: async () => ({ ok: true, wrote: true }),
   clearLocalDraft: async () => undefined,
   readStoredDesignId: () => null,
   writeStoredDesignId: () => undefined,
