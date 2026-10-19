@@ -17,9 +17,13 @@ type Props = {
   activeTool: ToolKind
   brushColor: string
   brushSize: number
+  /** Opacity for new ink strokes (0–1). Older strokes keep their saved opacity. */
+  brushOpacity?: number
   referenceUrl: string | null
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
+  /** When false, host fills its parent frame (shell drawing workspace). */
+  framed?: boolean
 }
 
 /**
@@ -32,9 +36,11 @@ export function DrawingCanvas({
   activeTool,
   brushColor,
   brushSize,
+  brushOpacity = 1,
   referenceUrl,
   referenceOpacity,
   onStrokeComplete,
+  framed = true,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: DESIGN_WIDTH, h: DESIGN_HEIGHT })
@@ -244,12 +250,12 @@ export function DrawingCanvas({
         points: appendPoint([], point),
         color: brushColor,
         size: brushSize,
-        opacity: 1,
+        opacity: activeTool === 'erase' ? 1 : brushOpacity,
       }
       draftRef.current = stroke
       setDraft(stroke)
     },
-    [activeTool, brushColor, brushSize, pointFrom, session],
+    [activeTool, brushColor, brushOpacity, brushSize, pointFrom, session],
   )
 
   const onPointerMove = useCallback(
@@ -294,8 +300,11 @@ export function DrawingCanvas({
   const all = draft ? [...strokes, draft] : strokes
 
   return (
-    <div ref={hostRef} className={`${styles.host} studio-draw-surface`}>
-      <div className={styles.frame} style={{ width: size.w, height: size.h }}>
+    <div
+      ref={hostRef}
+      className={`${framed ? styles.host : styles.hostFlush} studio-draw-surface`}
+    >
+      <div className={framed ? styles.frame : styles.frameFlush} style={{ width: size.w, height: size.h }}>
         <Stage
           width={size.w}
           height={size.h}

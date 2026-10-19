@@ -23,7 +23,7 @@ export const BRUSH_SIZES: Record<BrushSizeId, number> = {
 export const INK_SWATCHES = [
   { id: 'ink', label: 'Ink', color: '#1C1C1E' },
   { id: 'navy', label: 'Navy', color: '#1E3A8A' },
-  { id: 'pink', label: 'Pink', color: '#EC4899' },
+  { id: 'pink', label: 'Pink', color: '#D63384' },
   { id: 'burgundy', label: 'Burgundy', color: '#9F1239' },
   { id: 'grey', label: 'Grey', color: '#6B7280' },
 ] as const

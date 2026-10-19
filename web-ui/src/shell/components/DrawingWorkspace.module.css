@@ -1,0 +1,79 @@
+.wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 8px 4px 56px;
+}
+
+.canvasFrame {
+  position: relative;
+  width: min(100%, 460px);
+  aspect-ratio: 768 / 1024;
+  max-height: 100%;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.55), transparent 40%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(120, 90, 70, 0.018) 2px,
+      rgba(120, 90, 70, 0.018) 3px
+    ),
+    var(--fr-cream);
+  border: 1px solid rgba(214, 51, 132, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 28px 60px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 0 40px rgba(180, 140, 110, 0.08);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.zoom {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #374151;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.zoomBtn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+}
+
+@media (max-width: 1200px) {
+  .canvasFrame {
+    width: min(100%, 380px);
+  }
+}
+
+@media (max-width: 820px) {
+  .wrap {
+    min-height: 420px;
+  }
+
+  .canvasFrame {
+    width: min(100%, 320px);
+  }
+}

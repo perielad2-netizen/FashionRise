@@ -1,27 +1,32 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { StudioInspector } from '@/components/studio/StudioInspector'
+import { SettingsInspector } from '@/shell/components/SettingsInspector'
 
-describe('StudioInspector', () => {
+describe('SettingsInspector', () => {
   it('toggles Dim reference', () => {
     const onToggleDim = vi.fn()
     render(
-      <StudioInspector
+      <SettingsInspector
         sizeId="medium"
-        color="#1C1C1E"
+        brushSize={3.5}
+        opacity={1}
         dimmed={false}
+        toolLabel="Pencil"
         studioNotice={null}
         magicNotice={null}
+        comingSoon={null}
         onSize={vi.fn()}
-        onColor={vi.fn()}
+        onBrushSize={vi.fn()}
+        onOpacity={vi.fn()}
         onToggleDim={onToggleDim}
         onMagic={vi.fn()}
         onDismissStudioNotice={vi.fn()}
         onDismissMagic={vi.fn()}
+        onDismissComingSoon={vi.fn()}
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Dim reference/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Dim reference off/i }))
     expect(onToggleDim).toHaveBeenCalled()
   })
 })

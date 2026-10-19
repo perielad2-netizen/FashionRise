@@ -1,0 +1,211 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 12px;
+  min-height: 0;
+  background: #101827;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: auto;
+}
+
+.tabs {
+  display: flex;
+  gap: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tab,
+.tabActive {
+  border: 0;
+  background: transparent;
+  padding: 0 0 10px;
+  color: var(--fr-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  position: relative;
+}
+
+.tabActive {
+  color: white;
+}
+
+.tabActive::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--fr-pink);
+}
+
+.section {
+  display: grid;
+  gap: 10px;
+}
+
+.section h3 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #e7b9cf;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fr-muted);
+}
+
+.select,
+.inputLike {
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-text);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--fr-muted);
+}
+
+.toggle,
+.toggleOn {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  position: relative;
+  cursor: default;
+}
+
+.toggleOn {
+  background: linear-gradient(90deg, var(--fr-pink), var(--fr-pink-deep));
+}
+
+.toggle::after,
+.toggleOn::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+}
+
+.toggleOn::after {
+  left: 21px;
+}
+
+.slider {
+  width: 100%;
+  accent-color: var(--fr-pink);
+}
+
+.shortcuts {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--fr-muted);
+}
+
+.shortcut {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kbd {
+  color: #e5e7eb;
+  font-weight: 600;
+}
+
+.generate {
+  margin-top: auto;
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--fr-pink), #f472b6 60%, #c084fc);
+  color: white;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: var(--fr-glow);
+  cursor: pointer;
+}
+
+.sizes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.size,
+.sizeActive {
+  min-height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+  font-size: 10px;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.sizeActive {
+  border-color: rgba(214, 51, 132, 0.55);
+  background: rgba(214, 51, 132, 0.2);
+  color: white;
+}
+
+.toggle,
+.toggleOn {
+  cursor: pointer;
+}
+
+.toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.toast {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: var(--fr-text);
+}
+
+.toast button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(214, 51, 132, 0.22);
+  color: white;
+  cursor: pointer;
+}
+
+/* Hidden via CreatorWorkspace settingsSlot at ≤1024; restored when dock opens. */

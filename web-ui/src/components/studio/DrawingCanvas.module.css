@@ -10,6 +10,17 @@
     var(--navy-950);
 }
 
+.hostFlush {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+}
+
 .frame {
   position: relative;
   border-radius: var(--radius-lg);
@@ -19,6 +30,13 @@
     inset 0 0 0 1px rgba(255, 250, 245, 0.45);
   border: 1px solid rgba(212, 175, 155, 0.72);
   background: var(--cream);
+  touch-action: none;
+}
+
+.frameFlush {
+  position: relative;
+  overflow: hidden;
+  background: transparent;
   touch-action: none;
 }
 

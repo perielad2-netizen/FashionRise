@@ -1,0 +1,33 @@
+.studioShellRoot {
+  --fr-navy: #070a14;
+  --fr-navy-2: #0c1220;
+  --fr-navy-3: #121a2c;
+  --fr-panel: #151d30;
+  --fr-panel-2: #1a2438;
+  --fr-pink: #d63384;
+  --fr-pink-soft: #f472b6;
+  --fr-pink-deep: #be185d;
+  --fr-cream: #f8f3ee;
+  --fr-cream-2: #fffaf5;
+  --fr-text: #f5f0ea;
+  --fr-muted: #9aa3b5;
+  --fr-line: rgba(212, 175, 155, 0.28);
+  --fr-serif: "Playfair Display", "Cormorant Garamond", Georgia, serif;
+  --fr-sans: "DM Sans", "Segoe UI", system-ui, sans-serif;
+  --fr-header-h: 56px;
+  --fr-nav-w: 92px;
+  --fr-models-w: 236px;
+  --fr-inspector-w: 236px;
+  --fr-radius: 14px;
+  --fr-radius-lg: 20px;
+  --fr-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  --fr-glow: 0 0 0 1px rgba(214, 51, 132, 0.35), 0 10px 28px rgba(214, 51, 132, 0.28);
+
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: var(--fr-sans);
+  color: var(--fr-text);
+  background: radial-gradient(1200px 700px at 18% -10%, #1a1030 0%, transparent 55%),
+    radial-gradient(900px 600px at 100% 0%, #15102a 0%, transparent 50%), var(--fr-navy);
+}
