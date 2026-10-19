@@ -1,5 +1,8 @@
 # FashionRise Unity — services (V1)
 
+> **LEGACY / ARCHIVED REFERENCE (2026-10-18)**
+> Active client is **`web-ui/`**. Service interfaces below are Unity-era history.
+
 | Interface | Mock | API implementation |
 |-----------|------|---------------------|
 | `IAuthService` | `MockAuthService` | `AuthApiService` |
@@ -19,7 +22,7 @@
 | `IImageRefinementService` | same mock | same API (maps to polish) |
 | `IShareLinkService` | `MockShareLinkService` | `ShareLinkService` |
 
-**`IGalleryService`**: `GetFeedAsync(GallerySort)`, **`GetUserPublicGalleryAsync(ownerUserId)`** → `GET /gallery/user/{id}`, `GetByIdAsync`, `LikeAsync` / `UnlikeAsync`, `GetCommentsAsync`, `PostCommentAsync`, **`PublishDesignAsync`** (`POST /gallery`).  
+**`IGalleryService`**: `GetFeedAsync(GallerySort)`, **`GetUserPublicGalleryAsync(ownerUserId)`** → `GET /gallery/user/{id}`, `GetByIdAsync`, `LikeAsync` / `UnlikeAsync`, `GetCommentsAsync`, `PostCommentAsync`, **`PublishDesignAsync`** (`POST /gallery`).
 
 **`IFollowService`**: `FollowAsync` / `UnfollowAsync`, `IsFollowingAsync`, `GetFollowedUserIdsAsync` → profile follow routes.
 

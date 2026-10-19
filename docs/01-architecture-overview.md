@@ -2,28 +2,25 @@
 
 ## Purpose
 
-FashionRise is a **premium** fashion creation platform (not a casual dress-up game): realistic clothing design, sketching, data-driven materials and palettes, avatar preview, studio-style presentation, public profile/gallery (including **per-creator** public lists and **follow** feeds), PNG export, ratings (1–10), **AI sketch jobs** (OpenAI when configured), and future **designer handoff** depth.
+FashionRise is a **premium** fashion creation platform: realistic clothing design, sketching, materials/palettes, gallery/social, AI sketch jobs (when configured), and designer handoff.
 
 ## Platform targets
 
 | Priority | Platform | Notes |
 |----------|----------|--------|
-| **v1 ship** | **Windows PC** (Unity standalone) | Primary desktop dev + builds |
-| **v1 ship** | **Android** | Phone/tablet; gallery import plugin under `Assets/Plugins/Android/` |
-| **Later** | iOS / iPadOS | Bundle id placeholder `com.fashionrise.ios`; not configured yet |
-| Layout | Tablets + phones | Touch-first; `DeviceLayoutPolicy` adjusts density |
-| Excluded for now | Web client | API designed so a web client could be added later |
+| **Active** | **Web PWA** (`web-ui/`) | Tablet-first; installable standalone; PC/desktop supported |
+| **Active** | **API** (FastAPI) | Shared backend for all clients |
+| **Later** | Tauri / native shell | Optional packaging of the same web app |
+| **Legacy** | Unity (Windows/Android) | Retained under `FashionRise/` as historical reference only |
 
 ## System context
 
 ```mermaid
 flowchart LR
-  subgraph unity["Unity FashionRise"]
-    UI[UI / Presentation]
-    App[Application use-cases]
-    Svc[Service interfaces]
-    Infra[Infrastructure adapters]
-    Mock[Local mock services]
+  subgraph web["web-ui React/PWA"]
+    UI[Login + Creator Studio]
+    AuthW[Auth / token store]
+    Draw[Konva stroke model]
   end
 
   subgraph edge["Ubuntu + Nginx"]
@@ -42,28 +39,26 @@ flowchart LR
 
   PG[(PostgreSQL)]
 
-  UI --> App --> Svc
-  Svc --> Infra
-  Svc --> Mock
-  Infra --> TLS
-  TLS --> RP --> Routers
+  UI --> AuthW --> Routers
+  Draw -. WEB-2 Magic .-> Routers
   Routers --> Auth
   Routers --> SvcB
   SvcB --> Repo
   SvcB --> Stor
   SvcB --> AIP
   Repo --> PG
+  TLS --> RP --> Routers
 ```
 
 ## Architectural principles
 
-### Unity client
+### Active web client (`web-ui/`)
 
-- **Backend-independent UI**: Screens use presenters/view-models and call **application use-cases**, not HTTP or URLs.
-- **Service interfaces** + **adapters**: Production REST lives in Infrastructure; **mock services** implement the same interfaces for offline work.
-- **No giant MonoBehaviours**: Thin views; logic in plain C# and use-cases.
-- **Data-driven catalogs**: Templates, materials, palettes from API + local cache/ScriptableObjects — not hardcoded in UI controllers.
-- **Tablet-first**: Shared UI with layout/safe-area policy from Config.
+- **Simple product flow:** Login → Creator Studio (no dashboard gate).
+- **Structured strokes** (not only flattened bitmaps) for future tools.
+- **Design tokens** and CSS modules — FashionRise visual system, not third-party UI kits.
+- **PWA standalone** install for app-like chrome.
+- **Reuse existing FastAPI contracts** — do not invent a parallel backend.
 
 ### Backend
 
@@ -73,16 +68,14 @@ flowchart LR
 - **Storage**: abstraction over local disk now; S3-compatible driver later.
 - **AI**: stable job API and internal provider interface — **no** vendor SDKs embedded in route handlers.
 
+### Legacy Unity client
+
+- Unity remains in-tree for reference and historical behavior.
+- **Do not** extend Unity UI as the product frontend.
+- See LEGACY docs: `02-unity-client.md`, `unity-*.md`.
+
 ### Cross-cutting
 
 - **Idempotency** for expensive operations (uploads, AI jobs) where duplicates hurt.
 - **Structured logging**, request correlation, health/readiness for ops.
 - **Moderation- and admin-ready** fields on gallery/designs/users (see [Database](./04-database.md)).
-
-## Related documents
-
-- [Unity client](./02-unity-client.md)  
-- [Backend](./03-backend.md)  
-- [Database](./04-database.md)  
-- [API](./05-api.md)  
-- [Implementation phases](./06-implementation-phases.md)

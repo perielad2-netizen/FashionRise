@@ -1,12 +1,13 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app.core.errors import ForbiddenError, NotFoundError
+from app.core.errors import ConflictError, ForbiddenError, NotFoundError
 from app.models.color_palette import ColorPalette
 from app.models.design_revision import DesignRevision
 from app.models.garment_design import GarmentDesign
@@ -14,10 +15,12 @@ from app.models.garment_template import GarmentTemplate
 from app.models.material_definition import MaterialDefinition
 from app.models.user import User
 from app.models.user_profile import UserProfile
-from app.schemas.design import DesignCreate, DesignUpdate
+from app.schemas.design import DesignCreate, DesignRead, DesignUpdate
 from app.schemas.export import ExportCreate
 from app.services import export_service
 from app.storage.local import LocalStorageBackend
+
+STUDIO_DRAFT_KIND = "studio_working_draft"
 
 
 def _assert_owner(design: GarmentDesign, user: User) -> None:
@@ -25,7 +28,115 @@ def _assert_owner(design: GarmentDesign, user: User) -> None:
         raise ForbiddenError("Not allowed to modify this design")
 
 
+def _studio_client_revision(design: GarmentDesign) -> int:
+    return _client_revision_from_payloads(design.metadata_ or {}, design.design_data or {})
+
+
+def _client_revision_from_payloads(*sources: dict[str, Any]) -> int:
+    for source in sources:
+        raw = source.get("clientRevision")
+        if isinstance(raw, int) and raw >= 0:
+            return raw
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
+    return 0
+
+
+def _is_studio_working_draft(design: GarmentDesign) -> bool:
+    meta = design.metadata_ or {}
+    data = design.design_data or {}
+    return meta.get("draftKind") == STUDIO_DRAFT_KIND or data.get("schema") == "fashionrise.studio.draft.v1"
+
+
+def _is_studio_payload(meta: dict[str, Any] | None, design_data: dict[str, Any] | None) -> bool:
+    meta = meta or {}
+    design_data = design_data or {}
+    return meta.get("draftKind") == STUDIO_DRAFT_KIND or design_data.get("schema") == "fashionrise.studio.draft.v1"
+
+
+def _studio_content_fingerprint(design_data: dict[str, Any] | None) -> str:
+    data = design_data or {}
+    payload = {
+        "strokes": data.get("strokes"),
+        "model": data.get("model"),
+        "customReferenceUrl": data.get("customReferenceUrl"),
+        "customReferenceKey": data.get("customReferenceKey"),
+        "brush": data.get("brush"),
+        "dimmed": data.get("dimmed"),
+    }
+    return json.dumps(payload, sort_keys=True, default=str)
+
+
+def _studio_lock_key(user_id: uuid.UUID) -> int:
+    """Stable signed 64-bit advisory lock key for per-owner Studio draft creation."""
+    return int.from_bytes(user_id.bytes[:8], "big", signed=True)
+
+
+def _conflict_payload(design: GarmentDesign, expected_revision: int | None) -> dict[str, Any]:
+    return {
+        "expected_revision": expected_revision,
+        "current_revision": _studio_client_revision(design),
+        "design": DesignRead.model_validate(design).model_dump(mode="json", by_alias=True),
+    }
+
+
+def find_studio_working_draft(db: Session, user: User) -> GarmentDesign | None:
+    """Return the newest owner-scoped Studio working draft, if any."""
+    rows = list(
+        db.scalars(
+            select(GarmentDesign)
+            .where(GarmentDesign.user_id == user.id, GarmentDesign.visibility == "private")
+            .order_by(GarmentDesign.updated_at.desc())
+        ).all()
+    )
+    for row in rows:
+        if _is_studio_working_draft(row):
+            return row
+    return None
+
+
 def create_design(db: Session, user: User, data: DesignCreate) -> GarmentDesign:
+    # Reconcile Studio working drafts so a lost POST response cannot spawn duplicates.
+    meta = data.metadata or {}
+    design_data = data.design_data or {}
+    is_studio = _is_studio_payload(meta, design_data)
+    if is_studio and data.visibility == "private":
+        # Serialize create/reconcile per owner so concurrent POSTs cannot insert duplicates.
+        db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _studio_lock_key(user.id)})
+        existing = find_studio_working_draft(db, user)
+        if existing:
+            incoming_rev = _client_revision_from_payloads(meta, design_data)
+            current_rev = _studio_client_revision(existing)
+            same_content = _studio_content_fingerprint(existing.design_data) == _studio_content_fingerprint(
+                design_data
+            )
+            # Identical retry (any revision relationship) is idempotent.
+            if same_content:
+                return existing
+            # Never clobber a newer concurrent save with a stale create retry.
+            if incoming_rev < current_rev:
+                return existing
+            # Equal revision + different content must not silently overwrite.
+            if incoming_rev == current_rev:
+                raise ConflictError(
+                    "Studio working draft already exists with different content at this revision.",
+                    payload=_conflict_payload(existing, incoming_rev),
+                )
+            existing.title = data.title
+            existing.description = data.description
+            existing.garment_category = data.garment_category
+            existing.template_id = data.template_id
+            existing.material_id = data.material_id
+            existing.color_palette_id = data.color_palette_id
+            existing.design_data = data.design_data
+            existing.metadata_ = data.metadata
+            existing.visibility = data.visibility
+            existing.status = data.status
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
+            return existing
+
     d = GarmentDesign(
         user_id=user.id,
         title=data.title,
@@ -67,10 +178,57 @@ def get_design(db: Session, design_id: uuid.UUID, user: User | None) -> GarmentD
 
 
 def update_design(db: Session, design_id: uuid.UUID, user: User, data: DesignUpdate) -> GarmentDesign:
-    d = db.get(GarmentDesign, design_id)
+    # Row lock prevents two concurrent Studio writers from both passing a stale
+    # revision check against the same snapshot.
+    d = db.execute(
+        select(GarmentDesign).where(GarmentDesign.id == design_id).with_for_update()
+    ).scalar_one_or_none()
     if not d:
         raise NotFoundError("Design not found")
     _assert_owner(d, user)
+
+    incoming_meta = data.metadata if data.metadata is not None else (d.metadata_ or {})
+    incoming_data = data.design_data if data.design_data is not None else (d.design_data or {})
+    touches_studio = _is_studio_working_draft(d) or _is_studio_payload(incoming_meta, incoming_data)
+
+    if touches_studio:
+        if data.expected_revision is None:
+            raise ConflictError(
+                "expected_revision is required when updating a Studio working draft.",
+                payload=_conflict_payload(d, None),
+            )
+        current_revision = _studio_client_revision(d)
+        if current_revision != data.expected_revision:
+            raise ConflictError(
+                "Draft was updated elsewhere. Resolve the conflict before saving again.",
+                payload=_conflict_payload(d, data.expected_revision),
+            )
+        if data.design_data is not None:
+            incoming_rev = _client_revision_from_payloads(incoming_meta, incoming_data)
+            same_content = _studio_content_fingerprint(d.design_data) == _studio_content_fingerprint(
+                data.design_data
+            )
+            if incoming_rev < current_revision:
+                raise ConflictError(
+                    "Studio draft revision is stale and cannot overwrite newer work.",
+                    payload=_conflict_payload(d, data.expected_revision),
+                )
+            if incoming_rev == current_revision and not same_content:
+                raise ConflictError(
+                    "Studio draft revision must advance when content changes.",
+                    payload=_conflict_payload(d, data.expected_revision),
+                )
+            if same_content:
+                # Idempotent retry — acknowledge without rewriting.
+                return d
+    elif data.expected_revision is not None:
+        current_revision = _studio_client_revision(d)
+        if current_revision != data.expected_revision:
+            raise ConflictError(
+                "Draft was updated elsewhere. Resolve the conflict before saving again.",
+                payload=_conflict_payload(d, data.expected_revision),
+            )
+
     if data.title is not None:
         d.title = data.title
     if data.description is not None:
