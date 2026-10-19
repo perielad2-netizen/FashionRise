@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-V2.1B** final persistence hardening on draft PR #9. Monotonic IndexedDB writes, atomic Studio create (advisory lock), required `expected_revision` for Studio PUTs, honest syncedRevision on fingerprint no-op, no blind reconcile after non-409 failures. Visuals approved; Magic off. Next = PM review then **live tablet testing**. Deploy target **fashionrise.app** — **no DNS/deploy**. No merge / deploy.
+**Last updated:** 2026-10-19 — **WEB-V2.1C** conflict-resolution final gate on draft PR #9. Keep-this-device rebases above the seen server revision; Use-cloud durably replaces IndexedDB even at a lower revision; autosave suspended during conflict; mismatched create/reconcile is not Saved. Next = PM review, then protected family-beta tablet testing. No merge / deploy / Magic.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
@@ -101,7 +101,17 @@
 
 - Authoritative snapshot saves; IndexedDB-on-edit + honest status; 409 concurrency; create reconcile; custom uploads disabled
 
-**WEB-V2.1B — final persistence hardening (this amendment):**
+**WEB-V2.1C — conflict resolution final gate (this amendment):**
+
+- Keep this device rebases onto a revision above the current server snapshot and saves with optimistic concurrency
+- Another concurrent server update reopens the choice; no silent overwrite
+- Use cloud draft replaces IndexedDB even when the cloud revision is lower; Saved only after that write succeeds
+- Automatic cloud writes suspended while a conflict is open
+- Create/reconcile cannot report Saved when acknowledged content differs from the local document
+- Next: PM review, then protected family-beta tablet testing on fashionrise.app
+- Deploy still **not** performed in this PR
+
+**WEB-V2.1B — final persistence hardening:**
 
 - Monotonic IndexedDB writes (delayed cloud A cannot overwrite local B)
 - Atomic Studio create via per-owner advisory lock; equal-rev different-content → 409; identical retries idempotent
@@ -122,9 +132,9 @@
 
 ## Suggested next steps
 
-1. **PM review of WEB-V2.1B** (persistence safety gate complete).
-2. **Immediate next:** operator live tablet testing against staging API/Postgres.
-3. Private-beta invite / access gating; decide custom-reference privacy vs keep disabled.
+1. **PM review of WEB-V2.1C** (conflict-resolution final gate).
+2. Protected family-beta tablet testing on fashionrise.app after PM approval.
+3. Private-beta invite / access gating; custom-reference uploads stay disabled until owner-private retrieval exists.
 4. Later: fashionrise.app deploy (Cloudflare DNS + isolated VPS) — not in this PR.
 5. Later: Magic/backend connection after beta readiness.
 
@@ -184,7 +194,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
-| 2026-10-19 | **WEB-V2.1B final persistence hardening (PR #9):** monotonic IDB; atomic Studio create; required Studio `expected_revision`; honest syncedRevision on no-op; no blind reconcile. Live Postgres concurrency tests. Still draft. Next = PM review → live tablet testing. |
+| 2026-10-19 | **WEB-V2.1C conflict resolution (PR #9):** Keep-device rebase + OCC; Use-cloud durable IDB replace; autosave paused during conflict; mismatched reconcile is not Saved. Still draft. Next = PM review → protected tablet beta. |
 | 2026-10-19 | **WEB-V2.1A data-loss prevention (PR #9):** authoritative snapshot saves; IndexedDB-on-edit + honest status; `expected_revision`/409 concurrency; create reconcile; custom uploads disabled (not private). Live Postgres tests. Still draft. Next = PM review. |
 | 2026-10-19 | **WEB-V2.1 private-beta persistence (PR #9):** designs API draft autosave + IndexedDB recovery/conflicts; custom upload; model-switch confirm; brush overlay; Magic still off. Still draft. Next = PM review + live tablet acceptance. |
 | 2026-10-19 | **WEB-V2 functional Studio integration (PR #9):** approved shell promoted to `/studio` with real drawing/tools/models; design-lab retained DEV-only; Magic disabled. Visual composition later approved for WEB-V2.1. |

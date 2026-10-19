@@ -2,12 +2,14 @@ import {
   createEmptyDraftDocument,
   draftContentFingerprint,
   documentFromEditorState,
+  rebaseChosenLocalDraft,
   resolveDraftConflict,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
 import {
   readLocalDraft,
   readStoredDesignId,
+  replaceLocalDraft,
   writeLocalDraft,
   writeStoredDesignId,
   type LocalWriteResult,
@@ -25,7 +27,7 @@ import {
 } from '@/services/designsApi'
 import { ApiError } from '@/services/api/client'
 
-export { documentFromEditorState }
+export { documentFromEditorState, rebaseChosenLocalDraft }
 
 export type RestoreResult = {
   designId: string | null
@@ -369,6 +371,22 @@ export async function persistStudioDraft(args: {
     )
     writeStoredDesignId(args.userId, saved.id)
     const extracted = extractStudioDraft(saved) ?? cloudDoc
+    const acknowledgedFingerprint = draftContentFingerprint(documentForCloud(extracted))
+    // Create/reconcile may return an existing draft that was not overwritten.
+    // Never report success when that copy differs from the document we sent.
+    if (acknowledgedFingerprint !== cloudFingerprint) {
+      return {
+        ok: false,
+        conflict: {
+          local: args.document,
+          server: extracted,
+          designId: saved.id,
+        },
+        localPersisted,
+        error:
+          'Server draft content differs from this device. Choose which copy to keep.',
+      }
+    }
     // Monotonic: must not overwrite a newer local recovery doc with this (possibly stale) save.
     const localAfter = await writeLocalDraft({
       userId: args.userId,
@@ -381,7 +399,7 @@ export async function persistStudioDraft(args: {
       ok: true,
       designId: saved.id,
       document: extracted,
-      fingerprint: draftContentFingerprint(documentForCloud(extracted)),
+      fingerprint: acknowledgedFingerprint,
       syncedRevision: extracted.clientRevision,
       localPersisted: localPersisted || localAfter.ok,
     }
@@ -416,4 +434,43 @@ export async function persistStudioDraft(args: {
       designId: args.designId,
     }
   }
+}
+
+/** Explicit Keep-this-device: rebase above the seen server revision, then OCC save. */
+export async function commitKeepDeviceChoice(args: {
+  userId: string
+  designId: string
+  local: StudioDraftDocument
+  serverRevision: number
+}): Promise<PersistResult> {
+  const rebased = rebaseChosenLocalDraft(args.local, args.serverRevision)
+  return persistStudioDraft({
+    userId: args.userId,
+    designId: args.designId,
+    document: rebased,
+    fingerprint: draftContentFingerprint(documentForCloud(rebased)),
+    lastSyncedFingerprint: null,
+    expectedRevision: args.serverRevision,
+  })
+}
+
+/**
+ * Explicit Use-cloud: durably replace IndexedDB even if the cloud revision is lower.
+ * Caller must not show Saved unless this returns ok.
+ */
+export async function commitUseCloudChoice(args: {
+  userId: string
+  designId: string
+  server: StudioDraftDocument
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const replaced = await replaceLocalDraft({
+    userId: args.userId,
+    designId: args.designId,
+    document: args.server,
+    savedAt: new Date().toISOString(),
+    syncedRevision: args.server.clientRevision,
+  })
+  if (!replaced.ok) return { ok: false, error: replaced.error }
+  writeStoredDesignId(args.userId, args.designId)
+  return { ok: true }
 }

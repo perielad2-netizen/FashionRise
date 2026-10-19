@@ -1,8 +1,15 @@
-# WEB-V2.1 / WEB-V2.1A / WEB-V2.1B — Private beta draft persistence & tablet readiness
+# WEB-V2.1 / WEB-V2.1A / WEB-V2.1B / WEB-V2.1C — Private beta draft persistence & tablet readiness
 
 **Date:** 2026-10-19  
 **Branch:** `cursor/web-ui-reboot` (draft PR #9)  
 **Scope:** Production `/studio` only. No Magic. No merge/deploy. No redesign.
+
+## WEB-V2.1C — conflict resolution final gate
+
+- **Keep this device** rebases the chosen local draft to `max(local, server) + 1` and saves with `expected_revision` equal to the server revision just seen. Strokes and brush settings are preserved. A concurrent server advance returns 409 and reopens the choice; it does not overwrite.
+- **Use cloud draft** replaces the IndexedDB recovery record even when the cloud revision is numerically lower. Saved is shown only after that replacement succeeds. A failed IndexedDB write stays on Save failed and keeps the dialog.
+- Automatic cloud writes stay suspended while a conflict is unresolved.
+- Create/reconcile responses whose acknowledged content differs from the local document are conflicts, not Saved.
 
 ## WEB-V2.1B amendment (final persistence hardening)
 
@@ -61,7 +68,7 @@ Closes the remaining PM correctness risks from WEB-V2.1A review.
 
 | Gate | Result |
 |------|--------|
-| Frontend `npm test` | **Pass — 55 tests / 20 files** |
+| Frontend `npm test` | **Pass — 63 tests / 21 files** |
 | `npm run build` | **Pass** |
 | `npm run lint` | **Pass** (pre-existing warnings only) |
 | Backend pytest (isolated Postgres `fashionrise_test`) | **Pass — 44** incl. 10 Studio concurrency/create |

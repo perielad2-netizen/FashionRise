@@ -132,6 +132,36 @@ export async function writeLocalDraft(record: LocalDraftRecord): Promise<LocalWr
   }
 }
 
+/**
+ * Explicit operator choice ("Use cloud draft").
+ * Replaces the recovery record even when the chosen revision is numerically lower.
+ * Normal background writes must keep using writeLocalDraft (monotonic).
+ */
+export async function replaceLocalDraft(record: LocalDraftRecord): Promise<LocalWriteResult> {
+  try {
+    const db = await openDb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      tx.objectStore(STORE).put(record)
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => reject(tx.error ?? new Error('IndexedDB write failed'))
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB write aborted'))
+    })
+    return { ok: true, wrote: true }
+  } catch (err) {
+    const message =
+      err instanceof DOMException && err.name === 'QuotaExceededError'
+        ? 'Local storage quota exceeded'
+        : err instanceof Error
+          ? err.message
+          : 'IndexedDB write failed'
+    return { ok: false, error: message }
+  }
+}
+
 export async function clearLocalDraft(userId: string): Promise<void> {
   try {
     const db = await openDb()

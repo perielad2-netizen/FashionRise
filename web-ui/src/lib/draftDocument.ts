@@ -176,6 +176,25 @@ export function studioDraftMetadata(doc: StudioDraftDocument) {
  * Build the next authoritative document from a known previous snapshot.
  * Callers must pass the committed snapshot — never reconstruct from stale React state.
  */
+/**
+ * Explicit "Keep this device" rebase: new revision strictly above the server
+ * snapshot the operator just saw. Strokes and settings are copied unchanged.
+ */
+export function rebaseChosenLocalDraft(
+  local: StudioDraftDocument,
+  serverRevision: number,
+  now = new Date(),
+): StudioDraftDocument {
+  const floor = Number.isFinite(serverRevision) ? serverRevision : 0
+  return {
+    ...local,
+    strokes: local.strokes.map((stroke) => ({ ...stroke, points: [...stroke.points] })),
+    brush: { ...local.brush },
+    clientRevision: Math.max(local.clientRevision, floor) + 1,
+    updatedAt: now.toISOString(),
+  }
+}
+
 export function documentFromEditorState(input: {
   prev: StudioDraftDocument
   strokes: StudioDraftDocument['strokes']

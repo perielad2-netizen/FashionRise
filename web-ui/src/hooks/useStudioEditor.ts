@@ -6,10 +6,13 @@ import {
   createEmptyDraftDocument,
   draftContentFingerprint,
   documentFromEditorState,
+  rebaseChosenLocalDraft,
   type SaveStatus,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
 import {
+  commitKeepDeviceChoice,
+  commitUseCloudChoice,
   persistLocalRecovery,
   persistStudioDraft,
   restoreStudioDraft,
@@ -73,6 +76,8 @@ export function useStudioEditor() {
   const bootedRef = useRef(false)
   const skipNextAutosaveRef = useRef(true)
   const scheduleCloudSaveRef = useRef<() => void>(() => {})
+  /** Blocks automatic cloud writes until the operator resolves a conflict. */
+  const conflictOpenRef = useRef(false)
 
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [tool, setTool] = useState<ToolKind>('draw')
@@ -128,6 +133,7 @@ export function useStudioEditor() {
 
   const flushCloudSave = useCallback(async () => {
     if (!user?.id || !bootedRef.current) return
+    if (conflictOpenRef.current) return
     const doc = authoritativeDocRef.current
     const fingerprint = draftContentFingerprint(documentForCloud(doc))
     cloudDirtyRef.current = false
@@ -172,6 +178,7 @@ export function useStudioEditor() {
       }
 
       if (result.conflict) {
+        conflictOpenRef.current = true
         setDraftConflict(result.conflict)
         setSaveError(result.error)
         setSaveStatus(result.localPersisted ? 'local-only' : 'error')
@@ -194,6 +201,7 @@ export function useStudioEditor() {
 
   const scheduleCloudSave = useCallback(() => {
     if (!bootedRef.current || !user?.id) return
+    if (conflictOpenRef.current) return
     cloudDirtyRef.current = true
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = window.setTimeout(() => {
@@ -290,6 +298,7 @@ export function useStudioEditor() {
       }
 
       if (restored.conflict) {
+        conflictOpenRef.current = true
         setDraftConflict(restored.conflict)
         applyDocument(restored.conflict.local, restored.conflict.designId)
         setSaveStatus('local-only')
@@ -489,38 +498,81 @@ export function useStudioEditor() {
   }, [])
 
   const resolveConflictKeepLocal = useCallback(() => {
-    if (!draftConflict) return
-    const local = draftConflict.local
-    const designId = draftConflict.designId
-    // Explicit operator choice: overwrite cloud using the server's current revision as the token.
-    syncedRevisionRef.current = draftConflict.server.clientRevision
-    syncedFingerprintRef.current = null
-    authoritativeDocRef.current = local
-    designIdRef.current = designId
-    applyDocument(local, designId)
-    setDraftConflict(null)
-    void commitDocument(local, { syncCloudImmediately: true })
-  }, [applyDocument, commitDocument, draftConflict])
+    if (!draftConflict || !user?.id) return
+    const prompt = draftConflict
+    conflictOpenRef.current = true
+    void (async () => {
+      setSaveStatus('saving')
+      setSaveError(null)
+      const result = await commitKeepDeviceChoice({
+        userId: user.id,
+        designId: prompt.designId,
+        local: prompt.local,
+        serverRevision: prompt.server.clientRevision,
+      })
+      const rebased = rebaseChosenLocalDraft(prompt.local, prompt.server.clientRevision)
+      if (result.ok) {
+        const expectedFp = draftContentFingerprint(documentForCloud(rebased))
+        if (result.fingerprint !== expectedFp) {
+          conflictOpenRef.current = true
+          setDraftConflict({
+            local: rebased,
+            server: result.document,
+            designId: result.designId,
+          })
+          setSaveError('Server draft content differs from this device.')
+          setSaveStatus('error')
+          return
+        }
+        conflictOpenRef.current = false
+        authoritativeDocRef.current = rebased
+        designIdRef.current = result.designId
+        syncedRevisionRef.current = result.syncedRevision
+        syncedFingerprintRef.current = result.fingerprint
+        applyDocument(rebased, result.designId)
+        setDraftConflict(null)
+        setSaveStatus('saved')
+        return
+      }
+      conflictOpenRef.current = true
+      if (result.conflict) {
+        setDraftConflict(result.conflict)
+        setSaveError(result.error)
+        setSaveStatus('error')
+        return
+      }
+      setSaveError(result.error)
+      setSaveStatus('error')
+    })()
+  }, [applyDocument, draftConflict, user?.id])
 
   const resolveConflictUseServer = useCallback(() => {
-    if (!draftConflict) return
-    const server = draftConflict.server
-    const designId = draftConflict.designId
-    authoritativeDocRef.current = server
-    designIdRef.current = designId
-    syncedRevisionRef.current = server.clientRevision
-    syncedFingerprintRef.current = draftContentFingerprint(documentForCloud(server))
-    applyDocument(server, designId)
-    setDraftConflict(null)
-    setSaveStatus('saved')
-    if (user?.id) {
-      void persistLocalRecovery({
+    if (!draftConflict || !user?.id) return
+    const prompt = draftConflict
+    conflictOpenRef.current = true
+    void (async () => {
+      setSaveStatus('saving')
+      setSaveError(null)
+      const replaced = await commitUseCloudChoice({
         userId: user.id,
-        designId,
-        document: server,
-        syncedRevision: server.clientRevision,
+        designId: prompt.designId,
+        server: prompt.server,
       })
-    }
+      if (!replaced.ok) {
+        conflictOpenRef.current = true
+        setSaveError(replaced.error)
+        setSaveStatus('error')
+        return
+      }
+      conflictOpenRef.current = false
+      authoritativeDocRef.current = prompt.server
+      designIdRef.current = prompt.designId
+      syncedRevisionRef.current = prompt.server.clientRevision
+      syncedFingerprintRef.current = draftContentFingerprint(documentForCloud(prompt.server))
+      applyDocument(prompt.server, prompt.designId)
+      setDraftConflict(null)
+      setSaveStatus('saved')
+    })()
   }, [applyDocument, draftConflict, user?.id])
 
   const saveStatusLabel = useMemo(() => {
