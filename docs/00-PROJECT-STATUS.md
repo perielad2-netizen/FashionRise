@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-18 — **WEB-1** draft PR #9. Windows operator review: login + Studio load succeeded; visual direction is significantly better than Unity. Release-blocking pointer-up drawing bug found and fixed in this amendment, with pencil tuning and FashionRise card/tool artwork. WEB-1 remains **DRAFT / NOT MERGED**. Backend/AI **UNCHANGED**. Paid OpenAI **NONE**. Next = operator retest of drawing interaction and the visual asset pass.
+**Last updated:** 2026-10-19 — **WEB-1** draft PR #9. Final visual/asset integration: central `uiAssets` registry, cleaned glyph/model PNGs, male croquis display asset (baked light bg removed), header branding without double FR monogram, truthful “Unsaved session” status. Pointer lifecycle from `c0322127` preserved. Domain **fashionrise.app** purchased (Cloudflare) — **no DNS/deploy in this PR**. Future hosting = isolated VPS + HTTPS same-origin app/API. WEB-1 remains **DRAFT / NOT MERGED**. Backend/Unity/AI **UNCHANGED**. Next = PM/operator visual review.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
@@ -73,9 +73,17 @@
 - Critical bug: a click could leave drawing armed so later mouse moves continued the stroke
 - Fix: pointer lifecycle requires the primary button (or an active pointer) and ends on pointerup, pointercancel, window release, and mouse `buttons` without bit 1
 - Pencil sizes/freehand retuned for a finer sketch line; pen pressure is stored when the device reports it
-- Selector cards use FashionRise model artwork; the canvas still uses `public/models/female_model.png` and `male_model.png`
-- WEB-1 remains draft/unmerged. No backend/AI changes
-- Next action: operator retest of drawing (click/release/move, hold-draw-release, release outside canvas) and the visual asset pass
+- Selector cards use FashionRise model artwork; canvas uses female croquis + cleaned male display croquis (original male source preserved)
+
+**Final visual & asset integration (this amendment):**
+
+- Central registry `web-ui/src/assets/uiAssets.ts` + manifest `web-ui/docs/ASSET_MANIFEST.md`
+- Icon PNGs audited (true alpha) and re-cropped to glyph-only 128×128; CSS owns button chrome
+- Model-card art tightened so previews fill cream cards; selection is CSS border/glow only
+- Male canvas croquis: source `/models/male_model.png` had baked near-white opaque background (looked checkerboard-like in screenshots). Runtime uses cleaned `/models/male_model_display.png`; original preserved
+- Header: FashionRise logo via registry; removed redundant FR text monogram; status = **Unsaved session** (sketches are memory-only — draft persistence is a private-beta readiness requirement, not in this PR)
+- Pointer regression: `pointerSession.ts` unchanged; DrawingCanvas lifecycle preserved
+- Domain: **fashionrise.app** purchased through Cloudflare. Deploy plan = isolated VPS + HTTPS same-origin. **No Cloudflare DNS changes, no deploy, no production enablement in this PR**
 
 **Do not:**
 
@@ -83,15 +91,17 @@
 - Start WEB-2 until operator approves WEB-1 visuals
 - Call OpenAI / Magic / paid AI from WEB-1
 - Delete the Unity tree in this milestone
+- Claim autosave / draft persistence until implemented
 
 ---
 
 ## Suggested next steps
 
-1. **Operator retest of WEB-1 drawing + assets** — click then move with the button up must not draw; hold-drag-release must stop immediately; check pencil weight and model-card artwork. Then WEB-2 only after that review.
-2. After approval: **WEB-2** — connect Magic to existing backend sketch pipeline (still no Unity work).
-3. Broader shell nav (Home / Design Book / Discover) only after the creation workflow is excellent.
-4. Optional later: Tauri packaging of the same web app for native Windows — **not** in WEB-1.
+1. **PM/operator visual review of WEB-1** at 1024×768 / 1440×900 / 768×1024 / 390×844 — assets, male croquis on cream, pointer lifecycle. Then WEB-2 only after approval.
+2. Private-beta readiness: reliable sketch draft save/restore (not started).
+3. After approval: **WEB-2** — connect Magic to existing backend sketch pipeline (still no Unity work). Plan fashionrise.app same-origin deploy separately (do not enable in WEB-1).
+4. Broader shell nav (Home / Design Book / Discover) only after the creation workflow is excellent.
+5. Optional later: Tauri packaging of the same web app for native Windows — **not** in WEB-1.
 
 ---
 
@@ -149,6 +159,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-19 | **WEB-1 final visual/asset integration (PR #9):** `uiAssets` registry + manifest; glyph/model cleanup; male croquis display asset; Unsaved session label; fashionrise.app noted (no deploy). Pointer preserved. Still draft. Next = PM/operator visual review. |
 | 2026-10-18 | **WEB-1 drawing + asset pass (PR #9):** operator confirmed login/Studio and preferred the web look over Unity; pointer-up bug fixed; pencil retuned; FashionRise card/tool glyphs added. Still draft. Next = operator drawing retest. |
 | 2026-10-18 | **WEB-1 pre-operator hardening (PR #9):** real login validation; export eraser ink-only; Pointer Events-only canvas; custom MIME validation. Draft/not merged. No backend/Unity/AI/paid calls. Next = operator Windows browser/PWA review. |
 | 2026-10-18 | **WEB-1 web/PWA pivot:** Active client = `web-ui/` (Login → Studio). Unity marked LEGACY; PR #8 superseded for product path. Backend preserved. No paid AI. |

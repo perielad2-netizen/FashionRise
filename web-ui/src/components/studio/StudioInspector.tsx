@@ -1,3 +1,4 @@
+import { UI_ASSETS } from '@/assets/uiAssets'
 import { BRUSH_SIZES, INK_SWATCHES, type BrushSizeId } from '@/lib/strokes'
 import styles from './StudioInspector.module.css'
 
@@ -77,7 +78,7 @@ export function StudioInspector({
           onClick={onToggleDim}
         >
           <img
-            src="/assets/ui/icons/fr_icon_reference.png"
+            src={UI_ASSETS.inspector.reference}
             alt=""
             width={20}
             height={20}
@@ -105,7 +106,7 @@ export function StudioInspector({
           </div>
         ) : null}
         <button type="button" className={styles.magic} onClick={onMagic}>
-          <img src="/assets/ui/icons/fr_icon_magic.png" alt="" width={22} height={22} draggable={false} />
+          <img src={UI_ASSETS.inspector.magic} alt="" width={22} height={22} draggable={false} />
           Magic
         </button>
       </div>

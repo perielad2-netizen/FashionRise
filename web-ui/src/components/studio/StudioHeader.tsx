@@ -1,4 +1,5 @@
 import { LogOut } from 'lucide-react'
+import { UI_ASSETS } from '@/assets/uiAssets'
 import styles from './StudioHeader.module.css'
 
 type Props = {
@@ -13,20 +14,18 @@ export function StudioHeader({ username, savedLabel, onMagic, onLogout }: Props)
     <header className={styles.header}>
       <div className={styles.brand}>
         <img
-          src="/branding/fashion_rise_logo.png"
-          alt=""
+          src={UI_ASSETS.brand.logo}
+          alt="FashionRise"
           className={styles.logo}
-          width={48}
-          height={48}
+          width={56}
+          height={56}
+          draggable={false}
         />
         <div className={styles.brandText}>
-          <div className={styles.wordmark}>
-            <span className={styles.fr}>FR</span>
-            <span className={styles.name}>
-              Fashion<span>Rise</span>
-            </span>
-          </div>
-          <p className={styles.context}>New Design · Creator Studio</p>
+          <p className={styles.name}>
+            Fashion<span>Rise</span>
+          </p>
+          <p className={styles.context}>Creator Studio</p>
         </div>
       </div>
 
@@ -37,12 +36,22 @@ export function StudioHeader({ username, savedLabel, onMagic, onLogout }: Props)
       <div className={styles.actions}>
         <span className={styles.saved}>{savedLabel}</span>
         <button type="button" className={styles.magic} onClick={onMagic}>
-          <img src="/assets/ui/icons/fr_icon_magic.png" alt="" className={styles.magicIcon} draggable={false} />
+          <img
+            src={UI_ASSETS.header.magic}
+            alt=""
+            className={styles.magicIcon}
+            draggable={false}
+          />
           Magic
         </button>
         <div className={styles.user}>
           <span className={styles.avatar} aria-hidden>
-            <img src="/assets/ui/icons/fr_icon_profile.png" alt="" className={styles.avatarIcon} draggable={false} />
+            <img
+              src={UI_ASSETS.header.profile}
+              alt=""
+              className={styles.avatarIcon}
+              draggable={false}
+            />
           </span>
           <span className={styles.userName}>{username}</span>
           <button type="button" className={styles.logout} onClick={onLogout} aria-label="Sign out">

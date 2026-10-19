@@ -1,4 +1,5 @@
 import { useRef, type ReactNode } from 'react'
+import { UI_ASSETS } from '@/assets/uiAssets'
 import styles from './ModelPanel.module.css'
 
 export type ModelChoice = 'female' | 'male' | 'custom' | 'blank'
@@ -43,10 +44,10 @@ export function ModelPanel({ selected, customPreviewUrl, onSelect, onCustomFile 
           selected={selected === 'female'}
           onClick={() => onSelect('female')}
         >
-          <img src="/assets/ui/models/fr_model_female.png" alt="" className={styles.croquis} />
+          <img src={UI_ASSETS.model.female} alt="" className={styles.croquis} />
         </ModelCard>
         <ModelCard label="Male" selected={selected === 'male'} onClick={() => onSelect('male')}>
-          <img src="/assets/ui/models/fr_model_male.png" alt="" className={styles.croquis} />
+          <img src={UI_ASSETS.model.male} alt="" className={styles.croquis} />
         </ModelCard>
         <ModelCard
           label="Custom"
@@ -56,11 +57,11 @@ export function ModelPanel({ selected, customPreviewUrl, onSelect, onCustomFile 
           {customPreviewUrl ? (
             <img src={customPreviewUrl} alt="" className={styles.croquis} />
           ) : (
-            <img src="/assets/ui/models/fr_model_custom.png" alt="" className={styles.croquis} />
+            <img src={UI_ASSETS.model.custom} alt="" className={styles.croquis} />
           )}
         </ModelCard>
         <ModelCard label="Blank" selected={selected === 'blank'} onClick={() => onSelect('blank')}>
-          <img src="/assets/ui/models/fr_model_blank.png" alt="" className={styles.croquis} />
+          <img src={UI_ASSETS.model.blank} alt="" className={styles.croquis} />
         </ModelCard>
       </div>
 

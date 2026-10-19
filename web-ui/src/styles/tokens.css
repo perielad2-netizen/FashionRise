@@ -75,11 +75,11 @@
 
   /* Touch / chrome metrics */
   --touch-min: 44px;
-  --header-h: 64px;
-  --panel-models-w: 220px;
-  --panel-tools-w: 72px;
+  --header-h: 68px;
+  --panel-models-w: 228px;
+  --panel-tools-w: 68px;
   --panel-studio-w: 268px;
-  --tool-size: 52px;
+  --tool-size: 46px;
 
   /* Motion */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);

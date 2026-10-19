@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { UI_ASSETS } from '@/assets/uiAssets'
 import type { ToolKind } from '@/lib/strokes'
 import styles from './ToolRail.module.css'
 
@@ -33,13 +34,13 @@ export function ToolRail({
         label="Draw"
         active={tool === 'draw'}
         onClick={() => onTool('draw')}
-        icon={<Glyph name="fr_icon_draw" />}
+        icon={<Glyph src={UI_ASSETS.tool.draw} />}
       />
       <ToolButton
         label="Erase"
         active={tool === 'erase'}
         onClick={() => onTool('erase')}
-        icon={<Glyph name="fr_icon_erase" />}
+        icon={<Glyph src={UI_ASSETS.tool.erase} />}
       />
       <div className={styles.sep} aria-hidden />
       <ToolButton
@@ -47,27 +48,27 @@ export function ToolRail({
         active={false}
         onClick={onUndo}
         disabled={!canUndo}
-        icon={<Glyph name="fr_icon_undo" />}
+        icon={<Glyph src={UI_ASSETS.tool.undo} />}
       />
       <ToolButton
         label="Redo"
         active={false}
         onClick={onRedo}
         disabled={!canRedo}
-        icon={<Glyph name="fr_icon_redo" />}
+        icon={<Glyph src={UI_ASSETS.tool.redo} />}
       />
       <ToolButton
         label="Clear"
         active={false}
         onClick={onClear}
-        icon={<Glyph name="fr_icon_clear" />}
+        icon={<Glyph src={UI_ASSETS.tool.clear} />}
       />
     </div>
   )
 }
 
-function Glyph({ name }: { name: string }) {
-  return <img src={`/assets/ui/icons/${name}.png`} alt="" className={styles.glyph} draggable={false} />
+function Glyph({ src }: { src: string }) {
+  return <img src={src} alt="" className={styles.glyph} draggable={false} />
 }
 
 function ToolButton({

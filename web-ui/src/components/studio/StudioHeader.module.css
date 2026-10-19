@@ -6,7 +6,7 @@
   align-items: center;
   gap: var(--space-md);
   padding: 0 var(--space-md);
-  background: linear-gradient(180deg, #0d1424 0%, var(--navy-950) 100%);
+  background: linear-gradient(180deg, #0f1729 0%, var(--navy-950) 100%);
   border-bottom: 1px solid rgba(212, 175, 155, 0.28);
   box-shadow: 0 1px 0 rgba(236, 72, 153, 0.08);
 }
@@ -14,45 +14,30 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
 .logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  object-fit: cover;
-  box-shadow: 0 0 0 1px rgba(212, 175, 155, 0.4);
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 4px 14px rgba(236, 72, 153, 0.22));
 }
 
 .brandText {
   min-width: 0;
 }
 
-.wordmark {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.fr {
-  font-family: var(--font-serif);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  background: linear-gradient(135deg, var(--rose-gold), var(--pink-soft));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
 .name {
+  margin: 0;
   font-family: var(--font-serif);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--text-primary);
+  line-height: 1.1;
 }
 
 .name span {
@@ -60,9 +45,9 @@
 }
 
 .context {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   font-size: 11px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-muted);
   white-space: nowrap;
@@ -76,8 +61,8 @@
   font-size: 11px;
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  color: var(--pink-soft);
-  opacity: 0.85;
+  color: var(--rose-gold-soft);
+  opacity: 0.9;
 }
 
 .actions {
@@ -90,10 +75,11 @@
 .saved {
   font-size: 12px;
   color: var(--text-muted);
+  letter-spacing: 0.02em;
 }
 
 .magic {
-  min-height: 40px;
+  min-height: 42px;
   padding: 0 16px;
   display: inline-flex;
   align-items: center;
@@ -119,13 +105,12 @@
 }
 
 .avatar {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: rgba(212, 175, 155, 0.18);
-  color: var(--rose-gold);
+  background: rgba(212, 175, 155, 0.14);
   overflow: hidden;
 }
 
@@ -177,20 +162,28 @@
     padding: 10px 12px;
   }
 
-  .userName {
-    display: none;
-  }
-
+  .userName,
   .saved {
     display: none;
   }
 
   .logo {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
 
   .name {
-    font-size: 18px;
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 420px) {
+  .context {
+    display: none;
+  }
+
+  .magic {
+    padding: 0 12px;
+    min-height: 40px;
   }
 }

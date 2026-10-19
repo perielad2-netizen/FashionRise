@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
+import { UI_ASSETS } from '@/assets/uiAssets'
 import { validateLogin, type LoginFieldErrors } from '@/lib/validateLogin'
 import { ApiError } from '@/services/api/client'
 import { useAuth } from '@/services/auth/AuthProvider'
@@ -52,11 +53,12 @@ export function LoginPage() {
       <div className={styles.card}>
         <div className={styles.brand}>
           <img
-            src="/branding/fashion_rise_logo.png"
-            alt=""
+            src={UI_ASSETS.brand.logo}
+            alt="FashionRise"
             className={styles.logo}
             width={72}
             height={72}
+            draggable={false}
           />
           <div>
             <h1 className={styles.wordmark}>

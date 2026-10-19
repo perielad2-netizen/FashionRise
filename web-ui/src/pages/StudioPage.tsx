@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { UI_ASSETS } from '@/assets/uiAssets'
 import { DrawingCanvas } from '@/components/studio/DrawingCanvas'
 import { ModelPanel, type ModelChoice } from '@/components/studio/ModelPanel'
 import { StudioHeader } from '@/components/studio/StudioHeader'
@@ -17,8 +18,8 @@ import {
 import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './StudioPage.module.css'
 
-const FEMALE_URL = '/models/female_model.png'
-const MALE_URL = '/models/male_model.png'
+const FEMALE_URL = UI_ASSETS.canvas.female
+const MALE_URL = UI_ASSETS.canvas.male
 
 export function StudioPage() {
   const { user, logout } = useAuth()
@@ -130,7 +131,7 @@ export function StudioPage() {
     <div className={`${styles.page} studio-chrome`}>
       <StudioHeader
         username={user?.username ?? 'Creator'}
-        savedLabel="Local draft"
+        savedLabel="Unsaved session"
         onMagic={onMagic}
         onLogout={onLogout}
       />
