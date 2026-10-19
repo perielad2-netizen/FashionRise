@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-1** draft PR #9. Final visual/asset integration: central `uiAssets` registry, cleaned glyph/model PNGs, male croquis display asset (baked light bg removed), header branding without double FR monogram, truthful “Unsaved session” status. Pointer lifecycle from `c0322127` preserved. Domain **fashionrise.app** purchased (Cloudflare) — **no DNS/deploy in this PR**. Future hosting = isolated VPS + HTTPS same-origin app/API. WEB-1 remains **DRAFT / NOT MERGED**. Backend/Unity/AI **UNCHANGED**. Next = PM/operator visual review.
+**Last updated:** 2026-10-19 — **WEB-V1** design-lab visual reconstruction on draft PR #9. WEB-1 functional foundation (`/studio`) remains, but original mockup visual fidelity was not accepted. New **DEV-only** route `/_design/studio` rebuilds the full approved mockup as a visual prototype (shell, nav, materials, layers, AI button chrome). Prototype controls do **not** imply production features. Beta blockers include reliable draft saving and private access controls. Deploy target **fashionrise.app** (Cloudflare + isolated VPS) — **no DNS/deploy**. Next = **PM/operator visual approval** before functional shell integration. No WEB-V2 / paid AI / merge.
 
 **Phase:** FashionRise Web Reboot **WEB-1** — Login → Creator Studio (tablet-first PWA)
 
@@ -75,33 +75,40 @@
 - Pencil sizes/freehand retuned for a finer sketch line; pen pressure is stored when the device reports it
 - Selector cards use FashionRise model artwork; canvas uses female croquis + cleaned male display croquis (original male source preserved)
 
-**Final visual & asset integration (this amendment):**
+**Final visual & asset integration:**
 
 - Central registry `web-ui/src/assets/uiAssets.ts` + manifest `web-ui/docs/ASSET_MANIFEST.md`
-- Icon PNGs audited (true alpha) and re-cropped to glyph-only 128×128; CSS owns button chrome
-- Model-card art tightened so previews fill cream cards; selection is CSS border/glow only
-- Male canvas croquis: source `/models/male_model.png` had baked near-white opaque background (looked checkerboard-like in screenshots). Runtime uses cleaned `/models/male_model_display.png`; original preserved
-- Header: FashionRise logo via registry; removed redundant FR text monogram; status = **Unsaved session** (sketches are memory-only — draft persistence is a private-beta readiness requirement, not in this PR)
-- Pointer regression: `pointerSession.ts` unchanged; DrawingCanvas lifecycle preserved
-- Domain: **fashionrise.app** purchased through Cloudflare. Deploy plan = isolated VPS + HTTPS same-origin. **No Cloudflare DNS changes, no deploy, no production enablement in this PR**
+- Male canvas croquis display asset; Unsaved session label; pointer lifecycle preserved
+
+**WEB-V1 — design-lab mockup reconstruction (this amendment):**
+
+- DEV-only route `/_design/studio` (`import.meta.env.DEV`); not accessible in production builds
+- Full app shell visual prototype: GlobalHeader, GlobalNavigation, CreatorWorkspace, ModelLibrary, floating tools/brush, Colors/Fabrics/Gradients/Layers, Settings inspector, Generate with AI chrome
+- Production `/studio` **unchanged** functionally (auth, pointer, eraser, undo/redo, references)
+- Features shown in the lab are **not** implemented product features
+- Visual QA captures + discrepancy report: `docs/WEB-V1-VISUAL-QA.md` (1536×1024 primary vs mock)
+- Missing licensed artwork: photographic model catalog; finished hat/dress sketch; optional fabric photos
+- Current beta blockers: reliable draft saving/restoration; private access controls
+- Deploy target: **fashionrise.app** via Cloudflare + isolated VPS / HTTPS same-origin — **not enabled in this PR**
+- **STOP for PM visual review** before any shell → `/studio` integration
 
 **Do not:**
 
 - Continue Unity UI / merge PR #8 as product
-- Start WEB-2 until operator approves WEB-1 visuals
-- Call OpenAI / Magic / paid AI from WEB-1
-- Delete the Unity tree in this milestone
+- Integrate design-lab shell into `/studio` until PM visual approval
+- Start WEB-V2 / WEB-2 / paid AI / beta deployment
+- Call OpenAI / Magic from WEB-1 or the design lab
 - Claim autosave / draft persistence until implemented
 
 ---
 
 ## Suggested next steps
 
-1. **PM/operator visual review of WEB-1** at 1024×768 / 1440×900 / 768×1024 / 390×844 — assets, male croquis on cream, pointer lifecycle. Then WEB-2 only after approval.
-2. Private-beta readiness: reliable sketch draft save/restore (not started).
-3. After approval: **WEB-2** — connect Magic to existing backend sketch pipeline (still no Unity work). Plan fashionrise.app same-origin deploy separately (do not enable in WEB-1).
-4. Broader shell nav (Home / Design Book / Discover) only after the creation workflow is excellent.
-5. Optional later: Tauri packaging of the same web app for native Windows — **not** in WEB-1.
+1. **PM/operator visual approval of `/_design/studio`** vs the approved mockup (1536×1024 primary).
+2. After approval: integrate approved reusable shell into working `/studio` (separate milestone).
+3. Private-beta readiness: draft save/restore + access controls.
+4. Later: Magic/backend connection and fashionrise.app deploy (not in this PR).
+5. Optional later: Tauri packaging — not in WEB-1/WEB-V1.
 
 ---
 
@@ -159,6 +166,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-19 | **WEB-V1 design-lab reconstruction (PR #9):** DEV-only `/_design/studio` full mockup visual prototype; production `/studio` preserved. Features in lab are not production. Still draft. Next = PM visual approval before shell integration. |
 | 2026-10-19 | **WEB-1 final visual/asset integration (PR #9):** `uiAssets` registry + manifest; glyph/model cleanup; male croquis display asset; Unsaved session label; fashionrise.app noted (no deploy). Pointer preserved. Still draft. Next = PM/operator visual review. |
 | 2026-10-18 | **WEB-1 drawing + asset pass (PR #9):** operator confirmed login/Studio and preferred the web look over Unity; pointer-up bug fixed; pencil retuned; FashionRise card/tool glyphs added. Still draft. Next = operator drawing retest. |
 | 2026-10-18 | **WEB-1 pre-operator hardening (PR #9):** real login validation; export eraser ink-only; Pointer Events-only canvas; custom MIME validation. Draft/not merged. No backend/Unity/AI/paid calls. Next = operator Windows browser/PWA review. |
