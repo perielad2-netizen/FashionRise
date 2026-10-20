@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
+import { BrushControls } from '@/shell/components/BrushControls'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
-import { FloatingBrushPanel } from '@/shell/components/FloatingBrushPanel'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
 import { ModelLibraryPanel } from '@/shell/components/ModelLibraryPanel'
 import { BetaNotice } from '@/shell/components/BetaNotice'
@@ -55,8 +55,16 @@ export function CreatorWorkspace({ editor }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [setTool, undo, redo])
 
+  useEffect(() => {
+    if (!dock) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDock(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [dock])
+
   const toolLabel = editor.tool === 'erase' ? 'Eraser' : 'Pencil'
-  const showFloatingBrush = !tablet
   const brushOverlay = dock === 'brush' && tablet
   const betaNotice = editor.magicNotice
     ? { message: editor.magicNotice, dismiss: () => editor.setMagicNotice(null) }
@@ -146,9 +154,6 @@ export function CreatorWorkspace({ editor }: Props) {
             referenceUrl={editor.referenceUrl}
             referenceOpacity={editor.referenceOpacity}
             onStrokeComplete={editor.onStrokeComplete}
-            onBrushSize={editor.setBrushSizePx}
-            onOpacity={editor.setBrushOpacity}
-            showFloatingBrush={showFloatingBrush}
           />
           <div className={`${styles.materialsSlot} ${dock === 'materials' ? styles.slotOpen : ''}`}>
             <ColorAndMaterialsPanel
@@ -190,14 +195,12 @@ export function CreatorWorkspace({ editor }: Props) {
                 Done
               </button>
             </div>
-            <FloatingBrushPanel
+            <BrushControls
               tool={editor.tool}
               brushSize={editor.brushSize}
               opacity={editor.opacity}
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
-              hiddenOnNarrow={false}
-              variant="sheet"
             />
           </div>
         </div>
