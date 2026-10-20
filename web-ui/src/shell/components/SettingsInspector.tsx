@@ -141,16 +141,18 @@ export function SettingsInspector({
         </div>
       </section>
 
-      <button
-        type="button"
-        className={styles.generateSoon}
-        onClick={onMagic}
-        title="AI generation is not available in this beta"
-      >
-        <Sparkles size={16} />
-        Generate with AI
-        <span className={styles.soon}>Soon</span>
-      </button>
+      <div className={styles.footer}>
+        <button
+          type="button"
+          className={styles.generateSoon}
+          onClick={onMagic}
+          title="AI generation is not available in this beta"
+        >
+          <Sparkles size={15} aria-hidden />
+          <span className={styles.generateLabel}>Generate with AI</span>
+          <span className={styles.soon}>Soon</span>
+        </button>
+      </div>
     </aside>
   )
 }
