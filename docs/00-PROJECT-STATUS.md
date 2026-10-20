@@ -3,13 +3,28 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-19 — **WEB-V2.2** notice fix: Magic, Back, and header Settings messages show in the workspace on every width, including when Settings is docked away. Still **not deployed**. Protected production remains `https://fashionrise.app` at `6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`. Next = PM review of draft PR #11. Do not merge or deploy.
+**Last updated:** 2026-10-20. **WEB-V2.3** tablet landscape fit is on draft PR [#12](https://github.com/perielad2-netizen/FashionRise/pull/12) and is **not deployed**. Production runs WEB-V2.2. Next step: PM review of PR #12. Do not merge or deploy.
 
-**Phase:** FashionRise Web — protected family beta live; WEB-V2.2 is local/PR only
+**Phase:** **WEB-V2.3**: responsive tablet landscape fix and final UI refinements. The protected family beta is live.
 
-**Production:** `main` **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** on `https://fashionrise.app` (operator confirmed login, sketching, and Saved)
+**Production (`https://fashionrise.app`, behind Cloudflare Access):**
 
-**WEB-V2.2 branch:** `cursor/web-v22-premium-ui-77c6` — draft PR [#11](https://github.com/perielad2-netizen/FashionRise/pull/11) — polish `ac06db12921bff8d60d1c031fae557d88a7b828a`, notice visibility `e547ab3cada6d47e1d90710a8b38de1b32d17dce`
+| Layer | Deployed SHA |
+|---|---|
+| Frontend (`web-ui`) | **`9db1fa864ef9ddf622664be9be48c841f8a2a0ff`** (merge of PR #11, WEB-V2.2) |
+| Backend (FastAPI + PostgreSQL) | **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** (merge of PR #9) |
+
+**WEB-V2.2 acceptance on production:**
+
+| Check | Result |
+|---|---|
+| Desktop acceptance | **5 / 5 PASS** |
+| Cross-device cloud recovery | **PASS** |
+| Two-tab conflict resolution | **PASS** |
+| Tablet portrait | Usable |
+| Tablet landscape in a normal browser | **Limited.** Tabs and the address bar leave too little height, so the paper and side panels were cut off. WEB-V2.3 corrects this. |
+
+**WEB-V2.3 branch:** `cursor/web-v23-tablet-landscape-77c6`, draft PR [#12](https://github.com/perielad2-netizen/FashionRise/pull/12), based on `main` `9db1fa86`. Report: `docs/WEB-V2.3-TABLET-LANDSCAPE-QA.md`
 
 ---
 
@@ -34,12 +49,13 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| Current `main` / production pin | **`6df327ba`** — merge of PR #9 |
+| Current `main` | **`9db1fa86`**, merge of PR #11 |
+| Production frontend / backend | **`9db1fa86`** / **`6df327ba`** |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
-| **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9. That commit is the protected production app. |
-| **WEB-V2.2** | Draft PR on `cursor/web-v22-premium-ui-77c6`. **Not merged. Not deployed.** |
-| INFRA-2 docs | Separate draft PR #10. Not part of this branch. |
-| Production deploy of WEB-V2.2 | **NOT PERFORMED** |
+| **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`). Still the deployed backend. |
+| **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and **deployed** as a web-only release |
+| **WEB-V2.3** | Draft PR #12 on `cursor/web-v23-tablet-landscape-77c6`. **Not merged. Not deployed.** |
+| INFRA-2 docs | Separate draft PR #10. Not part of the WEB-V2.3 branch. |
 | Paid OpenAI | **NONE** |
 | Persistent AI/backend behavior | **UNCHANGED** |
 
@@ -124,7 +140,7 @@
 - Remaining: private-beta access gating; **operator live tablet acceptance**
 - Deploy target: **fashionrise.app** via Cloudflare + isolated VPS — **not enabled in this PR**
 
-**WEB-V2.2 — premium UI, brand assets, beta honesty (this branch, not deployed):**
+**WEB-V2.2 — premium UI, brand assets, beta honesty (merged as PR #11, deployed frontend `9db1fa86`):**
 
 - Login uses the approved emblem and wordmark on a cream plate. Header uses the approved monogram plus a readable cream/pink wordmark.
 - Library cards are derived from the existing artwork. Female edge matte removed. Originals kept.
@@ -134,20 +150,49 @@
 - Persistence, Magic API, uploads, registration, and infra were not changed.
 - Report: `docs/WEB-V2.2-VISUAL-QA.md`
 
+**WEB-V2.3 — tablet landscape fit and final UI refinements (draft PR #12, not deployed):**
+
+Changes in this PR (frontend only):
+
+- **Short landscape:** `#root` uses `100dvh` and the shell pads by safe-area insets. Grid rows are `minmax(0, 1fr)`, so panels scroll inside their own column. The 3:4 paper is sized from available width and height (`min(100cqw, max width, 75cqh)`). Compact header, dock, notice, rail, and panel spacing apply only at `(min-width: 821px) and (max-height: 760px)`. The tool rail scrolls when it is taller than the paper column. Model cards no longer overlap in a short library.
+- **Sidebar:** the cropped “Fashion is your superpower” promo card is removed. Navigation controls are unchanged.
+- **Generate with AI:** one line with the Soon label, in a sticky footer inside the Settings panel. Still notice-only.
+- **Desktop brush window:** removed, and the paper takes the reclaimed room. Brush size and opacity stay in Settings. At 1024px and below, the Brush dock opens a dismissible sheet (`BrushControls`, formerly `FloatingBrushPanel`).
+- Portrait keeps the WEB-V2.2 layout. With the Models dock open on a phone, the paper now shrinks instead of running off-screen.
+- No change to persistence, backend, database, Nginx, Cloudflare, AI, uploads, registration, or brand assets.
+
+Correction measured in local Chrome at 100% zoom (offline notice showing):
+
+| Viewport | WEB-V2.2 paper | WEB-V2.3 paper |
+|---|---|---|
+| 1024 × 550 | 346 × 461, bottom 208px below the viewport | 227 × 302, fully visible (260 × 346 with no notice) |
+| 1024 × 700 | 346 × 461, bottom 58px below the viewport | 339 × 452, fully visible |
+| 1180 × 600 | Fits, but the brush window and Generate with AI were below the viewport | 291 × 388; brush controls and Generate visible in Settings |
+| 1440 × 900 | 345 × 460 plus floating brush window | 468 × 624, no floating window |
+
+**Intentionally disabled (unchanged):** Magic and Generate with AI (notice only), persistent custom uploads (session preview only), public registration, Home / Design Book / Discover / My Looks, future rail tools, My Gallery, fabrics, gradients, layer editing, zoom/fit/fullscreen, pressure toggle, placeholder poses.
+
+**Remaining blockers before WEB-V2.3 can ship:**
+
+- PM review of PR #12.
+- Physical-tablet acceptance in landscape with browser chrome visible, plus rotation during a session and the installed PWA. Browser simulations passed, but they are not device proof. See the checklist in `docs/WEB-V2.3-TABLET-LANDSCAPE-QA.md`.
+
 **Do not:**
 
 - Continue Unity UI / merge PR #8 as product
-- Merge or deploy WEB-V2.2 before PM approval
+- Merge or deploy WEB-V2.3 before PM approval
 - Activate Magic / public registration / persistent uploads
+- Mix INFRA-2 PR #10 into WEB-V2.3
 
 ---
 
 ## Suggested next steps
 
-1. **PM review of the WEB-V2.2 draft PR.** Do not merge or deploy it in this step.
-2. After approval, real-device acceptance on a tablet and in the production browser at 100% zoom.
-3. Custom-reference uploads stay disabled until owner-private retrieval exists.
-4. Later: Magic/backend connection after beta readiness.
+1. **PM review of draft PR #12 (WEB-V2.3).** Do not merge or deploy it in this step.
+2. After approval: merge, then do a web-only deploy of the merged SHA, with the same versioned-release and atomic-switch process used for WEB-V2.2. No FastAPI or PostgreSQL restart.
+3. Run physical-tablet acceptance on fashionrise.app: landscape in the browser with tabs visible, rotation mid-session, installed PWA, stylus strokes, Brush sheet, Generate notice.
+4. Custom-reference uploads stay disabled until owner-private retrieval exists.
+5. Later: Magic/backend connection after beta readiness. Reconcile INFRA-2 PR #10 separately.
 
 ---
 
@@ -183,20 +228,24 @@ FashionRise/
 3. Do **not** resume Unity Creator Studio UI work.
 4. Backend: venv + `alembic upgrade head` + uvicorn on the port matching `VITE_API_BASE_URL`.
 5. Frontend: `cd web-ui && npm run dev`.
-6. Pick work from **Suggested next steps**. WEB-V2.2 is waiting on PM review and is not deployed.
+6. Pick work from **Suggested next steps**. WEB-V2.3 is waiting on PM review and is not deployed.
 
 ---
 
-## WEB-V2.2 verification (this branch)
+## WEB-V2.3 verification (draft PR #12)
 
 | Gate | Result |
 |------|--------|
-| `npm test` | Pass — includes notice visibility at 390, 768, and 1440 |
-| `npm run build` | Pass |
-| `npm run lint` | Pass with the same three pre-existing oxlint warnings |
+| `npm test` | **Pass: 87 tests, 24 files.** Adds landscape notices, brush access, Generate notice, orientation changes, sidebar, and a CSS layout contract. |
+| `npm run lint` | Pass, with the same three pre-existing oxlint warnings |
+| `npm run build` | Pass. Production CSS keeps `100dvh`, the container-unit paper sizing, and its fallback. |
+| Browser matrix | **Pass** at 1024×550, 1180×600, 1024×700, 768×1024, 390×844, 1440×900, 1920×1080, on both the dev server and `vite preview` |
+| Orientation / browser-chrome resize | **Pass.** Same canvas node, ink kept, Undo enabled. |
+| Mouse, pen, and touch stroke placement | **Pass** (CDP-simulated pen and touch) |
+| Desktop pixel diff vs WEB-V2.2 | Only the three approved changes: promo, Generate footer, paper area |
 | OpenAI / paid AI | **None** |
 | Backend / persistence / infra | **Unchanged** |
-| Browser | Local headless Chrome at 100% zoom. Not production. Not a physical tablet. |
+| Physical tablet | **Not yet.** Local headless Chrome only. |
 
 ---
 
@@ -204,6 +253,8 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **WEB-V2.3 (draft PR #12, not deployed):** short-landscape fit (`100dvh`, safe areas, height-aware 3:4 paper, constrained grid rows, compact chrome); sidebar promo removed; Generate with AI pinned in Settings; desktop floating brush window removed (dock sheet kept on tablets). 87 tests pass. Production stays frontend `9db1fa86` / backend `6df327ba`. |
+| 2026-10-19 | **WEB-V2.2 deployed:** PR #11 merged at `9db1fa86`, then a web-only deploy. Desktop 5/5, cross-device recovery, and two-tab conflict PASS. Tablet portrait usable; landscape limited by browser chrome. |
 | 2026-10-19 | **WEB-V2.2 notice visibility (`e547ab3c`):** Magic, Back, and header Settings messages render once under the workspace title at every width, including when Settings is hidden. Draft PR #11. Not deployed. |
 | 2026-10-19 | **WEB-V2.2 UI polish (draft, not deployed):** brand crops, library-card cleanup, honest Soon states, wired shortcuts, responsive spacing. Production stays `6df327ba` on fashionrise.app. |
 | 2026-10-19 | **Protected production:** operator confirmed login, sketching, and Saved on fashionrise.app at `6df327ba`. |
