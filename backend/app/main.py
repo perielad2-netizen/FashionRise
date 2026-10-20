@@ -17,6 +17,8 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.api.v1.router import api_router
+from app.core.cloudflare_access import JwksClient, jwks_url_for_team, validate_team_domain
+from app.core.cloudflare_access_middleware import CloudflareAccessJWTMiddleware
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.rate_limit import limiter as http_limiter
@@ -112,6 +114,35 @@ async def lifespan(_app: FastAPI):
             await worker_task
 
 
+def _install_cloudflare_access_middleware(app: FastAPI, settings) -> None:
+    """Protect ``/api/**`` with Access JWT when enabled. Fail closed on bad config."""
+    if not settings.cf_access_jwt_validation:
+        return
+    try:
+        team_domain = validate_team_domain(settings.cf_access_team_domain)
+    except Exception as exc:  # noqa: BLE001 — convert to startup failure
+        raise RuntimeError(
+            "CF_ACCESS_JWT_VALIDATION=true requires a valid CF_ACCESS_TEAM_DOMAIN "
+            "(https://<team>.cloudflareaccess.com)"
+        ) from exc
+    aud = (settings.cf_access_aud or "").strip()
+    if not aud:
+        raise RuntimeError(
+            "CF_ACCESS_JWT_VALIDATION=true requires CF_ACCESS_AUD "
+            "(Cloudflare Access Application Audience tag)"
+        )
+    jwks = JwksClient(jwks_url=jwks_url_for_team(team_domain))
+    # Added last → outermost: runs before CORS/SlowAPI on the request path.
+    app.add_middleware(
+        CloudflareAccessJWTMiddleware,
+        enabled=True,
+        team_domain=team_domain,
+        audience=aud,
+        jwks_client=jwks,
+    )
+    _log.info("cloudflare_access_jwt_validation enabled for /api/**")
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
@@ -130,6 +161,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(SlowAPIMiddleware)
+    _install_cloudflare_access_middleware(app, settings)
 
     app.include_router(api_router, prefix="/api/v1")
 

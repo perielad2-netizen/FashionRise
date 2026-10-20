@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     # that overwrites the header with $remote_addr. Default false ignores client XFF.
     trust_proxy_headers: bool = False
 
+    # Origin Cloudflare Access JWT gate for /api/** (default off until approved deploy).
+    # When true, CF_ACCESS_TEAM_DOMAIN + CF_ACCESS_AUD are required (fail closed at startup).
+    cf_access_jwt_validation: bool = False
+    cf_access_team_domain: str = ""
+    cf_access_aud: str = ""
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_cors(cls, v: str) -> str:
