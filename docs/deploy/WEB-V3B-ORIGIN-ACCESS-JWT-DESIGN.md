@@ -1,6 +1,6 @@
 # FashionRise — Origin Cloudflare Access JWT validation (design only)
 
-**Status:** architecture approved in principle for a **separate draft implementation PR**. **Not deployed.**  
+**Status:** architecture reference; implementation **merged into GitHub as PR #24**, but **not deployed or enabled**. Stage C security integration remains blocked.  
 **Related:** `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md` · Stage C readiness  
 **Residual edge-only Access risk:** **not approved** by Technical PM — this layer is required before registration activation.
 
@@ -132,14 +132,14 @@ Never “open” origin by disabling AOP to debug JWT.
 
 - Assert raw JWT / `CF_Authorization` never appear in caplog at INFO+.
 
-## 9. Implementation sketch (not committed code)
+## 9. Implemented code reference (merged in GitHub; not deployed)
 
-- Dependency: `PyJWT[crypto]` already available via jose stack — prefer `jwt` + `cryptography` or existing `python-jose` with explicit RS256 + JWKS.
+- Dependency: existing `python-jose[cryptography]` with explicit RS256 + JWKS (PR #24); do not assume separate PyJWT is installed.
 - Module: `app/core/cloudflare_access.py` + middleware registered in `app/main.py`.
 - Config fields on `Settings` with defaults **disabled**.
-- Separate draft code PR after this design is approved; no secrets in fixtures (use generated RSA keys for unit tests).
+- Implemented and source-reviewed in PR #24 with synthetic RSA test keys. Live Cloudflare integration, separately authorized deployment and flag enablement remain pending; no production tokens in fixtures.
 
-## 10. Operator prerequisites before coding merge
+## 10. Operator prerequisites before enabled deployment
 
 1. Confirm team domain string.
 2. Copy Application Audience (AUD) Tag from Cloudflare Zero Trust UI.
