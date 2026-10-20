@@ -6,6 +6,9 @@
 **Live frontend release:** `/var/www/fashionrise/releases/8c6a391a`  
 **Backend unchanged:** `/opt/fashionrise/src` @ `85b6561b…` · Alembic **`003`** · `fashionrise-api` **active**
 
+**Operator browser acceptance (valid Access session): 6 / 6 PASS** (operator-confirmed; not Cursor-executed).  
+**Genuinely expired Cloudflare Access session:** still **PENDING** (separate security acceptance).
+
 ## Pre-switch recheck
 
 All Stage A safety conditions reconfirmed before switch: Nginx root was `85b6561b`, hotfix `sw.js` present (`24e572df…`), AOP on, Access 302 without session, register Nginx deny, Alembic `003`, registration unset/false, 83G free disk.
@@ -50,17 +53,29 @@ All Stage A safety conditions reconfirmed before switch: Nginx root was `85b6561
 | No Access session: `/login`, `/register`, `/studio`, `/studio/designs`, `/sw.js` | **302** to Cloudflare Access (**PASS**) |
 | Origin without client cert | **400** AOP (**PASS**) |
 | Origin with AOP client cert: SPA + SW | **200** (**PASS**) |
-| Valid Access session browser login/Studio | **INCOMPLETE** — no Access credentials in this agent environment |
-| Genuinely expired Access session | **INCOMPLETE** — not testable here |
+| Valid Access session (operator browser) | **6 / 6 PASS** (operator-confirmed — see table below) |
+| Genuinely expired Access session | **PENDING** — not claimed from no-cookie / fresh profile alone |
 
-### Application API (partial)
+### Application — Cursor infrastructure probes (partial)
 
 | Check | Result |
 |---|---|
 | `fashionrise-api` health | **PASS** `{"status":"ok"}` |
 | Login route reachable (bad password) | **401** unauthorized (**PASS** path) |
 | Designs unauthenticated | **401** (**PASS**) |
-| Existing-user sign-in / draw / My Designs / Export / draft recovery | **INCOMPLETE** — requires valid Access + app session |
+
+### Application — Operator browser acceptance (valid Access session)
+
+| Check | Result | Evidence class |
+|---|---|---|
+| Existing account sign-in | **PASS** | Operator-confirmed |
+| Studio opens / drawing tools | **PASS** | Operator-confirmed |
+| Existing private cloud drafts load | **PASS** | Operator-confirmed |
+| My Designs loads | **PASS** | Operator-confirmed |
+| Saved design reopen (no unintended replacement) | **PASS** | Operator-confirmed |
+| PNG Export | **PASS** | Operator-confirmed |
+| Offline save/retry | Not separately scored in the 6/6 set | — |
+| Create Account remains hidden | Expected with gated build | Operator context / Stage B gate |
 
 ### Registration boundary (PASS)
 
@@ -80,12 +95,12 @@ All Stage A safety conditions reconfirmed before switch: Nginx root was `85b6561
 - Do **not** restore `sw.js.pre-incident-hotfix`.
 - Do **not** clear IndexedDB.
 
-## Outstanding (operator)
+## Outstanding
 
-1. Valid Cloudflare Access session: login, Studio, drafts, My Designs, reopen, PNG export, offline retry.
-2. Genuinely expired Access session: confirm network document (not SW shell).
-3. Optional: confirm installed clients update from hotfix SW → permanent Workbox SW.
+1. **Genuinely expired Cloudflare Access session** with the permanent SW: document navigation must reach Cloudflare Access (not a cached HTML shell). Still **PENDING**.
+2. Optional: confirm installed clients updated from hotfix SW → permanent Workbox SW without clearing site data.
+3. WEB-V3B registration activation remains a **separate** Stage D authorization (see Stage C readiness).
 
 ## Next action
 
-Operator acceptance of items above. Separate PM approval still required for WEB-V3B registration activation (migration `004`, Nginx allowlist, invitations, `VITE_REGISTRATION_UI_ENABLED=true`).
+Keep expired-Access verification on the security backlog. Stage C prepares WEB-V3B activation without enabling registration.

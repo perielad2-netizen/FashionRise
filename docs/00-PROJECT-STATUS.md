@@ -42,11 +42,13 @@
 | Two-device draft conflict **detection** | **PASS** (detection only; both resolution choices not fully accepted) |
 | Login/Studio recovery after temporary SW mitigation (“I'm in”) | **PASS** |
 
-**Still outstanding for WEB-V3A / Access:** operator re-acceptance after Stage B (valid Access login → Studio → My Designs → Export); **expired** Cloudflare Access session check with the permanent SW; second-account privacy (needs registration activation); untested conflict-resolution branches (Keep device / Use cloud).
+**Stage B operator browser acceptance:** **6 / 6 PASS** (valid Access: sign-in, Studio, drafts, My Designs, reopen, PNG Export — operator-confirmed). Cursor infrastructure probes (Access 302, AOP, SW hash, registration UI off) remain separately recorded in `docs/deploy/PWA-FRONTEND-ROLLOUT-STAGE-B.md`.
 
-**WEB-V3B:** **MERGED** to `main` as PR [#19](https://github.com/perielad2-netizen/FashionRise/pull/19). Frontend gate **MERGED** as PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). **Registration not enabled.** Migration **`004` not applied**. Create Account hidden in production build (`VITE_REGISTRATION_UI_ENABLED=false`). Report: `docs/WEB-V3B-INVITE-REGISTRATION-QA.md`.
+**Still outstanding for WEB-V3A / Access:** **expired** Cloudflare Access session check with the permanent SW; second-account privacy (needs registration activation); untested conflict-resolution branches (Keep device / Use cloud).
 
-**PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. Live `sw.js` sha256 `a51964e6acf2f2f7bd0c2c62caa9ecc49a8cdca5e8cfcc2944263a8eae43007e`. No-session Access **302** verified; AOP **400** without client cert verified. Valid-session Studio acceptance **pending operator**.
+**WEB-V3B:** **MERGED** to `main` as PR [#19](https://github.com/perielad2-netizen/FashionRise/pull/19). Frontend gate **MERGED** as PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). **Registration not enabled.** Migration **`004` not applied**. Create Account hidden in production build (`VITE_REGISTRATION_UI_ENABLED=false`). Stage C readiness: `docs/deploy/WEB-V3B-STAGE-C-REGISTRATION-READINESS.md`. Report: `docs/WEB-V3B-INVITE-REGISTRATION-QA.md`.
+
+**PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. Live `sw.js` sha256 `a51964e6acf2f2f7bd0c2c62caa9ecc49a8cdca5e8cfcc2944263a8eae43007e`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
 ---
 
@@ -275,12 +277,11 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **PM review + merge draft PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20)** (registration UI gate) — required before any immutable frontend deploy of `main`/PWA fix.
-2. **Stage B PM authorization** for frontend-only switch to gated release (see `docs/deploy/PWA-FRONTEND-ROLLOUT-STAGE-A.md`). Do not clear IndexedDB / site data.
-3. After Stage B: verify Access valid + expired/absent; login; Studio; My Designs; export; confirm Create Account stays hidden.
-4. Remaining WEB-V3A gaps: second-account privacy (after registration deploy); untested conflict-resolution choices.
-5. **Separate WEB-V3B activation** later: Alembic `004` → `REGISTRATION_ENABLED=true` → Nginx register allowlist → invitations → then a frontend build with `VITE_REGISTRATION_UI_ENABLED=true`.
-6. Later milestones (not authorized now): save dedupe, rename/delete saved designs, Magic/backend connection, INFRA-2 PR #10.
+1. **Expired Access session** check with permanent SW (document navigations must hit Cloudflare Access; not inventable from a fresh/no-cookie profile alone).
+2. **PM review Stage C** WEB-V3B readiness and decide Cloudflare→Nginx real-client-IP strategy before Stage D (`docs/deploy/WEB-V3B-STAGE-C-REGISTRATION-READINESS.md`).
+3. **Stage D** (not authorized): backend deploy with registration still off → migration `004` → Nginx POST allowlist + trusted client IP → invitations → gated frontend UI on → one second user → privacy acceptance.
+4. Remaining WEB-V3A gaps after second account exists: cross-account privacy acceptance; untested conflict-resolution choices.
+5. Later milestones (not authorized now): save dedupe, rename/delete saved designs, Magic/backend connection, INFRA-2 PR #10.
 
 ---
 
@@ -385,6 +386,8 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **Stage B operator acceptance 6/6 PASS** (valid Access). Expired Access session still pending. |
+| 2026-10-20 | **Stage B PWA frontend deploy SUCCESS:** live root `/var/www/fashionrise/releases/8c6a391a`; permanent SW `a51964e6…`; backend/Alembic unchanged; registration still off. |
 | 2026-10-20 | **Stage A PWA rollout preflight:** production verified at `85b6561b` + SW hotfix; `main=ceb10a4e`; staging build of gated SHA `c017fa68`; **BLOCKED** on draft PR #20 before Stage B. No production switch. |
 | 2026-10-20 | **PWA Access final amendment (draft PR #16):** standard `npm run build` embeds SW Access check; WEB-V3A operator acceptance table corrected (desktop 5/5, tablet 4/4, offline, conflict detection). Later merged as `ceb10a4e`. |
 | 2026-10-20 | **PWA Access permanent fix (draft PR #16):** rebased onto `main` `28449c41`; no HTML precache; `navigateFallback: null`; `check:sw` fail-closed; route smoke with SW controller. Stop for PM review. Not merged / not deployed. |
