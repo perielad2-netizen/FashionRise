@@ -1,8 +1,8 @@
 # WEB-V3A — Export, Save & My Designs: design and QA report
 
-**Branch:** `cursor/web-v3a-design-library-77c6`, draft PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13), based on `main` `f8a5b222`.
-**Status:** waiting for PM **re-review** after the focused safety amendment. Not merged, not deployed.
-**Scope:** frontend (`web-ui/`), one narrowly justified backend create/reconcile safety change (no new endpoint, no migration), plus backend regression tests. No Nginx, Cloudflare, AI, upload, or registration changes.
+**Branch:** `cursor/web-v3a-design-library-77c6`, PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) merged at `85b6561b`.
+**Status:** **DEPLOYED** to production 2026-10-20T12:45Z UTC (frontend + backend `85b6561b`, Alembic `003`). Operator physical-device acceptance still pending.
+**Scope:** frontend (`web-ui/`), one narrowly justified backend create/reconcile safety change (no new endpoint, no migration), plus backend regression tests. Production Nginx change was the release root only; Cloudflare, AI, upload, and registration rules unchanged.
 
 A signed-in user can now:
 

@@ -3,17 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **WEB-V3A** (Export, Save & My Designs) is on draft PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) with the final createOnly recovery fix. It is **not merged and not deployed**. Next step: PM **final approval** of PR #13. Do not merge or deploy.
+**Last updated:** 2026-10-20T12:45Z. **WEB-V3A** is **merged** (PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) → `85b6561b`) and **DEPLOYED** to production. Operator **physical-device acceptance is still pending**. Do not start WEB-V3B. Do not enable AI, uploads, Gallery, or registration.
 
-**Phase:** **WEB-V3A**: first functional milestone after the visual work. Users can export a real PNG, save named private designs, browse them in My Designs, and reopen one safely. The protected family beta is live.
+**Phase:** **WEB-V3A** live on the protected family beta: Export PNG, Save as design, My Designs, and safe reopen.
 
-**Production (`https://fashionrise.app`, behind Cloudflare Access):**
+**Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`), last confirmed by a deploy log | **`9db1fa864ef9ddf622664be9be48c841f8a2a0ff`** (merge of PR #11, WEB-V2.2) |
-| Frontend (`web-ui`), probably live | **`f8a5b22292d2a389b113bcd63394d99986bcb110`** (merge of PR #12, WEB-V2.3). Operator real-tablet acceptance passed 6/6, but the VPS deploy log was not supplied. **Verify the live revision at the next deployment.** |
-| Backend (FastAPI + PostgreSQL) | **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** (merge of PR #9) |
+| Frontend (`web-ui`) | **`85b6561b338e31c102d101c8d458a1624e7b9f29`** — Nginx root `/var/www/fashionrise/releases/85b6561b` (WEB-V3A). Previous release retained: `f8a5b22`. |
+| Backend (FastAPI + PostgreSQL) | **`85b6561b338e31c102d101c8d458a1624e7b9f29`** — unit `fashionrise-api`, `127.0.0.1:8010`. Previous: `6df327ba`. |
+| Database | `fashionrise_beta` — Alembic **`003`** (no migration applied) |
+| Deploy result | **DEPLOYED** 2026-10-20T12:45Z UTC. Backup: `/var/backups/fashionrise/web-v3a-deploy-20261020T124335Z` |
 
 **WEB-V2.2 acceptance on production:**
 
@@ -27,7 +28,7 @@
 
 **WEB-V2.3:** merged as PR [#12](https://github.com/perielad2-netizen/FashionRise/pull/12) at `f8a5b222`. Real-tablet acceptance 6/6 PASS. Report: `docs/WEB-V2.3-TABLET-LANDSCAPE-QA.md`
 
-**WEB-V3A branch:** `cursor/web-v3a-design-library-77c6`, draft PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13), based on `main` `f8a5b222`. Report: `docs/WEB-V3A-DESIGN-LIBRARY-QA.md`
+**WEB-V3A:** merged PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) at `85b6561b` and deployed. Report: `docs/WEB-V3A-DESIGN-LIBRARY-QA.md`. Physical-device acceptance still pending.
 
 ---
 
@@ -52,16 +53,17 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| Current `main` | **`f8a5b222`**, merge of PR #12 |
-| Production frontend / backend | **`9db1fa86`** confirmed (`f8a5b222` probably live, unverified) / **`6df327ba`** |
+| Current `main` | **`85b6561b`**, merge of PR #13 (WEB-V3A) |
+| Production frontend / backend | **`85b6561b` / `85b6561b`** (deployed 2026-10-20T12:45Z UTC) |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
-| **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`). Still the deployed backend. |
-| **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and **deployed** as a web-only release |
-| **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. Deploy log not supplied. |
-| **WEB-V3A** | Draft PR #13 on `cursor/web-v3a-design-library-77c6`. **Not merged. Not deployed.** |
+| **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
+| **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
+| **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. Superseded in production by WEB-V3A. |
+| **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator physical-device acceptance **pending**. |
 | INFRA-2 docs | Separate draft PR #10. Not part of the WEB-V3A branch. |
 | Paid OpenAI | **NONE** |
 | Persistent AI/backend behavior | **UNCHANGED** |
+| Safety flags (prod) | Registration / AI / uploads / public docs / Gallery remain Nginx-denied. AOP `ssl_verify_client on`. Cloudflare Access unchanged. |
 
 ---
 
@@ -176,7 +178,7 @@ Correction measured in local Chrome at 100% zoom (offline notice showing):
 
 WEB-V2.3 was merged as PR #12 (`f8a5b222`) and passed real-tablet acceptance 6/6.
 
-**WEB-V3A — Export, Save & My Designs (draft PR #13, not deployed):**
+**WEB-V3A — Export, Save & My Designs (PR #13 merged at `85b6561b`, deployed 2026-10-20T12:45Z):**
 
 What changed:
 
@@ -227,22 +229,36 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 - No paid AI or OpenAI calls. Magic and Generate with AI stay notice-only.
 - Persistent custom uploads stay disabled. Saved designs never store custom-reference images.
 - Public registration stays off. Public Gallery and unrestricted API routing stay off.
-- No Cloudflare, Nginx, VPS, or production-data changes. No automatic deploy.
 - Home, Design Book, Discover, My Looks, and future rail tools stay disabled.
+- **Production deploy (2026-10-20T12:45Z):** frontend release `/var/www/fashionrise/releases/85b6561b` + backend `85b6561b`; Nginx root switched atomically; only `fashionrise-api` restarted; Alembic remained `003`; no pip install; no data changes. Safety deny rules and AOP unchanged (Nginx diff was the root path only).
+
+**Production verification (deploy engineer, not operator acceptance):**
+
+| Check | Result |
+|---|---|
+| Frontend REVISION file | `85b6561b338e31c102d101c8d458a1624e7b9f29` |
+| Backend HEAD | `85b6561b338e31c102d101c8d458a1624e7b9f29` |
+| `127.0.0.1:8010/health` + `/ready` | **200** (`ok` / `ready`, database `ok`) |
+| Designs without auth | **401** on design id / `auth/me`; POST `/designs` **401** |
+| Register / Gallery / AI / uploads / docs / OpenAPI via origin | **403** (after AOP client cert); **400** without client cert |
+| AOP | `ssl_verify_client on` still enforced |
+| Paid AI | **None** issued |
+| Neighbors | CureCompass, PickWise, synagogue-management API, nginx, postgresql **active** |
+| Operator physical-device acceptance | **Pending** — not claimed |
 
 **Known limitations:**
 
-- A duplicate **Save as design** card is possible only if the original request is still being processed on the server when a retry's lookup runs. Accepted as a non-blocking beta limitation for this PR; server-side dedupe is deferred.
+- A duplicate **Save as design** card is possible only if the original request is still being processed on the server when a retry's lookup runs. Accepted as a non-blocking beta limitation; server-side dedupe is deferred.
 - If a reopen response is lost and the user refreshes instead of retrying, the normal conflict dialog may appear. The user chooses; nothing is lost. In-dialog errors now say the outcome is unconfirmed.
 - Custom references are not saved.
 - Saved designs cannot be renamed or deleted yet.
 - `/designs/my` returns full rows. This is fine at beta scale.
-- Tested only in local headless Chrome against an isolated database. Physical-device acceptance is still to do.
+- Physical-device / Cloudflare Access acceptance on real desktop and tablet is still to do.
 
 **Do not:**
 
 - Continue Unity UI / merge PR #8 as product
-- Merge or deploy WEB-V3A before PM approval
+- Start WEB-V3B in this authorization window
 - Activate Magic / public registration / persistent uploads / public Gallery
 - Mix INFRA-2 PR #10 into WEB-V3A
 
@@ -250,17 +266,13 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **PM final approval of draft PR #13 (WEB-V3A).** Do not merge or deploy it in this step.
-2. After approval and merge:
-   - Before deploying, record the frontend revision **actually** live on the VPS.
-   - Deploy the merged SHA, then **restart FastAPI** for the create/reconcile 409 change. No PostgreSQL migration.
-   - Check that the PWA service worker picks up the new version.
-3. Run the production acceptance list in `docs/WEB-V3A-DESIGN-LIBRARY-QA.md` §9: save, browse, open, and export on desktop and tablet; cross-device; two-device conflict; offline retry; second-account isolation.
-4. PM decisions for a later milestone:
+1. **Operator physical-device acceptance** on `https://fashionrise.app` (desktop + tablet): follow `docs/WEB-V3A-DESIGN-LIBRARY-QA.md` §9 — save, browse, open, export; cross-device; two-device conflict; offline retry; second-account isolation; confirm PWA/service worker refreshes to the new build.
+2. After operator sign-off, PM may close the WEB-V3A deploy window.
+3. PM decisions for a later milestone (not authorized now):
    - server-side save dedupe
    - rename and delete for saved designs
    - a paged summary list endpoint
-5. Custom-reference uploads stay disabled until owner-private retrieval exists. Magic/backend connection comes later, after beta readiness. Reconcile INFRA-2 PR #10 separately.
+4. Custom-reference uploads stay disabled until owner-private retrieval exists. Magic/backend connection comes later. Reconcile INFRA-2 PR #10 separately.
 
 ---
 
@@ -296,7 +308,7 @@ FashionRise/
 3. Do **not** resume Unity Creator Studio UI work.
 4. Backend: venv + `alembic upgrade head` + uvicorn on the port matching `VITE_API_BASE_URL`.
 5. Frontend: `cd web-ui && npm run dev`.
-6. Pick work from **Suggested next steps**. WEB-V3A is waiting on PM review and is not deployed.
+6. Pick work from **Suggested next steps**. WEB-V3A is **deployed**; next gate is **operator physical-device acceptance**. Do not start WEB-V3B or enable blocked features.
 
 ---
 
