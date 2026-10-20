@@ -49,11 +49,27 @@ describe('swAccessSafety helpers', () => {
   })
 })
 
+describe('unsafe SW fixture (red path)', () => {
+  it('fails closed on the checked-in unsafe fixture', () => {
+    const fixture = path.join(
+      rootDir,
+      'scripts/fixtures/unsafe-sw-with-html-navigation.js',
+    )
+    expect(existsSync(fixture)).toBe(true)
+    const source = readFileSync(fixture, 'utf8')
+    const result = assertServiceWorkerAccessSafe(source)
+    expect(result.ok).toBe(false)
+    expect(result.htmlPrecacheUrls).toContain('index.html')
+    expect(result.hasNavigationRoute).toBe(true)
+    expect(result.hasCreateHandlerBoundToURL).toBe(true)
+  })
+})
+
 describe('generated production dist/sw.js (post-build artifact)', () => {
   it('has no HTML precache and no NavigationRoute when dist exists', () => {
     if (!existsSync(distSw)) {
       // Local `npm test` without a prior build still exercises the helpers above.
-      // CI / PR verification runs `npm run build` then `npm run check:sw`.
+      // Standard `npm run build` embeds the Access safety assert after Vite.
       expect(existsSync(distSw)).toBe(false)
       return
     }

@@ -30,11 +30,23 @@
 
 **WEB-V2.3:** merged as PR [#12](https://github.com/perielad2-netizen/FashionRise/pull/12) at `f8a5b222`. Real-tablet acceptance 6/6 PASS. Report: `docs/WEB-V2.3-TABLET-LANDSCAPE-QA.md`
 
-**WEB-V3A:** merged PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) at `85b6561b` and deployed 2026-10-20T12:45Z. Report: `docs/WEB-V3A-DESIGN-LIBRARY-QA.md`. Deploy record: draft PR [#15](https://github.com/perielad2-netizen/FashionRise/pull/15). **Acceptance:** operator confirmed Studio/login recovery after the temporary SW mitigation (“I'm in”, 2026-10-20). Full physical-device export/save/library checklist in QA §9 remains the operator bar for a future immutable frontend release.
+**WEB-V3A:** merged PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) at `85b6561b` and deployed 2026-10-20T12:45Z. Report: `docs/WEB-V3A-DESIGN-LIBRARY-QA.md`. Deploy record: draft PR [#15](https://github.com/perielad2-netizen/FashionRise/pull/15).
+
+**WEB-V3A operator-reported production acceptance** (recorded via PR #15; not independently reproduced by Cursor):
+
+| Check | Result |
+|---|---|
+| Desktop draw → Save → My Designs → Open → Export PNG | **5 / 5 PASS** |
+| Tablet / cross-device library, reopen, rotation, export | **4 / 4 PASS** |
+| Offline Save → honest error → online Try again (one card) | **PASS** |
+| Two-device draft conflict **detection** | **PASS** (detection only; both resolution choices not fully accepted) |
+| Login/Studio recovery after temporary SW mitigation (“I'm in”) | **PASS** |
+
+**Still outstanding for WEB-V3A / Access:** second-account privacy (needs registration deployment); expired Cloudflare Access session check after the **permanent** SW deploy; any untested conflict-resolution branches (Keep device / Use cloud).
 
 **WEB-V3B:** **MERGED** to `main` as PR [#19](https://github.com/perielad2-netizen/FashionRise/pull/19) (`28449c41`). **Not deployed. Registration not enabled.** Report: `docs/WEB-V3B-INVITE-REGISTRATION-QA.md`.
 
-**PWA / Cloudflare Access incident:** Temporary production `sw.js` edit restored login. Permanent source fix = draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) (no HTML precache, no `navigateFallback`/`NavigationRoute`; `npm run check:sw` fails closed). Must merge + deploy an immutable frontend build before any further production web release.
+**PWA / Cloudflare Access incident:** Temporary production `sw.js` edit restored login (mitigation only; release bytes diverge from immutable `85b6561b`). Permanent source fix = draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) (no HTML precache, no `navigateFallback`/`NavigationRoute`; standard `npm run build` fails closed via embedded `check:sw`). Must merge + deploy an immutable frontend build before any further production web release.
 
 ---
 
@@ -66,7 +78,7 @@
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
-| **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator login/Studio recovery after SW incident **confirmed**. |
+| **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator-reported desktop 5/5, tablet/cross-device 4/4, offline retry, conflict detection PASS (see above). |
 | **WEB-V3B** | **MERGED** PR #19 into `main` (`28449c41`). **Not deployed.** `REGISTRATION_ENABLED` defaults **false**. Migration **`004`** not applied in production. |
 | PWA Access fix | Draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) on latest `main` — required before the next production frontend rebuild. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record). |
@@ -262,9 +274,9 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **PM review + merge permanent PWA fix** draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16), then deploy an **immutable** frontend release that replaces the temporary in-place `sw.js` hotfix (restore release-artifact discipline).
-2. After that frontend release: operator re-check login with a valid Access session and with Access expired/absent (must hit Cloudflare Access, never a cached HTML shell). Avoid “Clear site data” (preserves IndexedDB drafts).
-3. Complete remaining WEB-V3A physical-device checklist items on production as needed (`docs/WEB-V3A-DESIGN-LIBRARY-QA.md` §9).
+1. **PM final approval + merge permanent PWA fix** draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16), then deploy an **immutable** frontend release that replaces the temporary in-place `sw.js` hotfix (restore release-artifact discipline). Do not clear IndexedDB / site data.
+2. After that frontend release: verify login with a valid Access session **and** with Access expired/absent (must reach Cloudflare Access, never a cached HTML shell).
+3. Remaining WEB-V3A gaps: second-account privacy (after registration deploy); finish any untested conflict-resolution choices.
 4. **Separate activation window for WEB-V3B** (already on `main`): backup DB → apply Alembic `004` → set `REGISTRATION_ENABLED=true` → apply proposed Nginx register allowlist → restart only `fashionrise-api` → create a test invitation. Still behind Cloudflare Access. Do **not** enable registration until explicitly authorized.
 5. Later milestones (not authorized now): save dedupe, rename/delete saved designs, Magic/backend connection, INFRA-2 PR #10.
 
@@ -359,7 +371,8 @@ FashionRise/
 | Branch base | Rebased onto `main` `28449c41` (preserves WEB-V3B) |
 | `navigateFallback` | Explicit `null` (no Workbox `NavigationRoute`) |
 | HTML precache | Removed from `globPatterns`; `**/*.html` ignored |
-| `npm run build` + `npm run check:sw` | Pass — `dist/sw.js` has **0** HTML precache URLs, no `NavigationRoute` / `createHandlerBoundToURL` |
+| Standard `npm run build` | Runs `tsc` → `vite build` → **embedded** `assert-sw-access-safe` (fails closed). Standalone `npm run check:sw` kept for audits |
+| Unsafe SW fixture red-path | `scripts/fixtures/unsafe-sw-with-html-navigation.js` → `check:sw` exit **1** |
 | Frontend tests | **199 / 199** (includes SW safety unit tests) |
 | Lint / tsc / build | Pass |
 | Route smoke (Playwright + active SW) | `/login`, `/register`, `/studio`, `/studio/designs` — document navigations **not** served from SW (`fromServiceWorker=0`) |
@@ -370,6 +383,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **PWA Access final amendment (draft PR #16):** standard `npm run build` embeds SW Access check; WEB-V3A operator acceptance table corrected (desktop 5/5, tablet 4/4, offline, conflict detection). Stop for final PM approval. Not merged / not deployed. |
 | 2026-10-20 | **PWA Access permanent fix (draft PR #16):** rebased onto `main` `28449c41`; no HTML precache; `navigateFallback: null`; `check:sw` fail-closed; route smoke with SW controller. Stop for PM review. Not merged / not deployed. |
 | 2026-10-20 | **WEB-V3B merged** to `main` as PR #19 (`28449c41`). Not deployed; registration remains off. |
 | 2026-10-20 | **WEB-V3B final safety corrections (draft PR #19):** bound `run_migration_smoke.py` (Alembic cannot silently use `.env` prod); invite `--code-file` O_EXCL/no-symlink + revoke on delivery failure; rate-limit activation note for per-client login buckets. Later merged. |
