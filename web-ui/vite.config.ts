@@ -52,7 +52,12 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,svg,woff2}', 'icons/*.png', 'branding/*.png'],
         globIgnores: ['**/models/**'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        navigateFallback: '/index.html',
+        // Do NOT cache navigations. fashionrise.app sits behind Cloudflare Access;
+        // a NavigationRoute/navigateFallback for /index.html can serve /login from
+        // the SW cache without an Access check. The following POST /api/v1/auth/login
+        // then receives an Access 302 to another origin and fetch() fails with
+        // "Unable to reach FashionRise". Nginx already try_files SPA fallbacks.
+        navigateFallback: undefined,
       },
       devOptions: {
         enabled: false,
