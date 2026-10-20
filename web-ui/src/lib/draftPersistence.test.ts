@@ -72,6 +72,8 @@ const api = vi.hoisted(() => ({
   updateCalls: [] as Array<{ id: string; expected?: number | null }>,
   updateGate: null as Promise<void> | null,
   updateGateModel: null as string | null,
+  /** Runs after list-empty and immediately before create — inject a raced draft here. */
+  onBeforeCreate: null as null | (() => void),
 }))
 
 vi.mock('@/services/designsApi', async (importOriginal) => {
@@ -113,21 +115,69 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
       }
     },
     createStudioDraft: async (document: StudioDraftDocument) => {
+      api.onBeforeCreate?.()
       api.createCalls += 1
+      const cloud = actual.documentForCloud(document)
+      const existing = [...api.designs.values()].find(
+        (d) => d.metadata.draftKind === 'studio_working_draft',
+      )
+      if (existing) {
+        const sameFp =
+          draftContentFingerprint(actual.documentForCloud(existing.design_data)) ===
+          draftContentFingerprint(cloud)
+        if (sameFp) {
+          return {
+            id: existing.id,
+            user_id: 'u1',
+            title: 'Studio working draft',
+            description: null,
+            garment_category: 'studio',
+            design_data: existing.design_data as unknown as Record<string, unknown>,
+            metadata: existing.metadata,
+            visibility: 'private',
+            status: 'draft',
+            created_at: existing.updated_at,
+            updated_at: existing.updated_at,
+          }
+        }
+        const { ApiError } = await import('@/services/api/client')
+        throw new ApiError('Studio working draft already exists with different content.', 409, {
+          detail: {
+            code: 'conflict',
+            message: 'Studio working draft already exists with different content.',
+            payload: {
+              expected_revision: cloud.clientRevision,
+              current_revision: existing.design_data.clientRevision,
+              design: {
+                id: existing.id,
+                user_id: 'u1',
+                title: 'Studio working draft',
+                description: null,
+                garment_category: 'studio',
+                design_data: existing.design_data,
+                metadata: existing.metadata,
+                visibility: 'private',
+                status: 'draft',
+                created_at: existing.updated_at,
+                updated_at: existing.updated_at,
+              },
+            },
+          },
+        })
+      }
       if (api.failCreateOnce) {
         api.failCreateOnce = false
         const id = 'design-recovered'
         api.designs.set(id, {
           id,
-          design_data: actual.documentForCloud(document),
-          metadata: { draftKind: 'studio_working_draft', clientRevision: document.clientRevision },
+          design_data: cloud,
+          metadata: { draftKind: 'studio_working_draft', clientRevision: cloud.clientRevision },
           visibility: 'private',
           updated_at: new Date().toISOString(),
         })
         throw new Error('network dropped after create')
       }
       const id = `design-${api.createCalls}`
-      const cloud = actual.documentForCloud(document)
       api.designs.set(id, {
         id,
         design_data: cloud,
@@ -249,6 +299,7 @@ describe('draftPersistence WEB-V2.1A/B', () => {
     api.updateCalls = []
     api.updateGate = null
     api.updateGateModel = null
+    api.onBeforeCreate = null
   })
 
   it('restores a nonempty local document while the empty editor would otherwise win', async () => {
@@ -434,6 +485,132 @@ describe('draftPersistence WEB-V2.1A/B', () => {
       expect(result.syncedRevision).toBe(1)
       expect(result.syncedRevision).not.toBe(reverted.clientRevision)
     }
+  })
+
+  it('createOnly opens a brand-new account without adopting another draft', async () => {
+    const doc = strokedDoc()
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: null,
+      document: doc,
+      fingerprint: draftContentFingerprint(doc),
+      lastSyncedFingerprint: null,
+      expectedRevision: null,
+      createOnly: true,
+    })
+    expect(result.ok).toBe(true)
+    expect(api.designs.size).toBe(1)
+    expect(api.updateCalls).toHaveLength(0)
+  })
+
+  it('createOnly refuses a draft that appears between list and create', async () => {
+    const openDoc = strokedDoc()
+    const foreign = bumpDraftDocument(createEmptyDraftDocument(), {
+      model: 'blank',
+      strokes: [
+        {
+          id: 'other-device',
+          tool: 'draw',
+          points: [1, 1, 0.5],
+          color: '#1C1C1E',
+          size: 2,
+          opacity: 1,
+        },
+      ],
+    })
+    api.onBeforeCreate = () => {
+      api.designs.set('foreign', {
+        id: 'foreign',
+        design_data: foreign,
+        metadata: { draftKind: 'studio_working_draft', clientRevision: foreign.clientRevision },
+        visibility: 'private',
+        updated_at: new Date().toISOString(),
+      })
+    }
+
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: null,
+      document: openDoc,
+      fingerprint: draftContentFingerprint(openDoc),
+      lastSyncedFingerprint: null,
+      expectedRevision: null,
+      createOnly: true,
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.conflict?.designId).toBe('foreign')
+      expect(result.conflict?.server.strokes[0]?.id).toBe('other-device')
+    }
+    expect(api.designs.get('foreign')!.design_data.strokes[0]!.id).toBe('other-device')
+    expect(api.updateCalls).toHaveLength(0)
+  })
+
+  it('createOnly preserves an existing different draft found before create', async () => {
+    const foreign = bumpDraftDocument(createEmptyDraftDocument(), { model: 'blank' })
+    api.designs.set('foreign', {
+      id: 'foreign',
+      design_data: foreign,
+      metadata: { draftKind: 'studio_working_draft', clientRevision: foreign.clientRevision },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    const openDoc = strokedDoc()
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: null,
+      document: openDoc,
+      fingerprint: draftContentFingerprint(openDoc),
+      lastSyncedFingerprint: null,
+      expectedRevision: null,
+      createOnly: true,
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.conflict?.designId).toBe('foreign')
+    expect(api.designs.get('foreign')!.design_data.model).toBe('blank')
+    expect(api.updateCalls).toHaveLength(0)
+    expect(api.createCalls).toBe(0)
+  })
+
+  it('createOnly recovers a lost create response with matching content', async () => {
+    api.failCreateOnce = true
+    const doc = strokedDoc()
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: null,
+      document: doc,
+      fingerprint: draftContentFingerprint(doc),
+      lastSyncedFingerprint: null,
+      expectedRevision: null,
+      createOnly: true,
+    })
+    expect(result.ok).toBe(true)
+    expect(api.designs.size).toBe(1)
+    expect(api.updateCalls).toHaveLength(0)
+    if (result.ok) expect(result.designId).toBe('design-recovered')
+  })
+
+  it('autosave without createOnly still adopts an existing draft via OCC update', async () => {
+    const existing = bumpDraftDocument(createEmptyDraftDocument(), { model: 'blank' })
+    api.designs.set('d1', {
+      id: 'd1',
+      design_data: existing,
+      metadata: { draftKind: 'studio_working_draft', clientRevision: existing.clientRevision },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    const doc = strokedDoc()
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: null,
+      document: doc,
+      fingerprint: draftContentFingerprint(doc),
+      lastSyncedFingerprint: null,
+      expectedRevision: null,
+    })
+    expect(result.ok).toBe(true)
+    expect(api.updateCalls).toEqual([{ id: 'd1', expected: existing.clientRevision }])
+    expect(api.designs.get('d1')!.design_data.model).toBe('male')
   })
 
   it('does not blind-reconcile when preferred design update fails with a non-409 error', async () => {

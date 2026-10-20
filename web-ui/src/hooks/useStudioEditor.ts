@@ -825,6 +825,8 @@ export function useStudioEditor() {
           return
         }
         openingRef.current = true
+        // No known draft id: createOnly so a draft that appears mid-open is preserved.
+        const createOnly = designIdRef.current === null
         try {
           if (state === 'clean-empty') {
             const mine = await listMyDesigns()
@@ -855,6 +857,7 @@ export function useStudioEditor() {
             lastSyncedFingerprint: null,
             expectedRevision: syncedRevisionRef.current,
             skipLocalWrite: true,
+            createOnly,
           })
           if (result.ok) {
             finishOpen(record, next, result.designId, result.syncedRevision)
@@ -897,12 +900,13 @@ export function useStudioEditor() {
             navigate('/studio')
             return
           }
+          // Network / 5xx: the server write may have committed before the response was lost.
           setOpenDesign({
             phase: 'error',
             designId: record.id,
             record,
             canRetry: true,
-            message: `${result.error} Nothing was replaced.`,
+            message: `${result.error} Whether the server draft changed could not be confirmed. Studio on this device was left unchanged. Try again — FashionRise will reconcile safely.`,
           })
         } catch {
           setOpenDesign({
@@ -910,7 +914,8 @@ export function useStudioEditor() {
             designId: record.id,
             record,
             canRetry: true,
-            message: 'Could not reach FashionRise. Nothing was replaced.',
+            message:
+              'Could not reach FashionRise. Whether the server draft changed could not be confirmed. Studio on this device was left unchanged. Try again — FashionRise will reconcile safely.',
           })
         } finally {
           openingRef.current = false

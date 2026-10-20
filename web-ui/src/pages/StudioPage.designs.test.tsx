@@ -469,6 +469,64 @@ describe('Reopen a saved design', () => {
     })
     await screen.findByRole('heading', { name: 'New Design' })
     expect(strokeIds()).toBe('snap-1,snap-2')
+    expect(mocks.persistStudioDraft.mock.calls[0]![0].createOnly).toBeFalsy()
+  })
+
+  it('first-time users create the working draft with createOnly', async () => {
+    mocks.restoreStudioDraft.mockResolvedValue({
+      designId: null,
+      document: workingDoc({ strokes: [], clientRevision: 1 }),
+      syncedRevision: null,
+      conflict: null,
+      notice: null,
+    })
+    renderAt('/studio/designs')
+    await screen.findByRole('heading', { name: 'My Designs' })
+    await act(async () => {
+      await openFromLibrary()
+    })
+    await screen.findByRole('heading', { name: 'New Design' })
+    expect(strokeIds()).toBe('snap-1,snap-2')
+    expect(mocks.persistStudioDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        designId: null,
+        expectedRevision: null,
+        createOnly: true,
+        skipLocalWrite: true,
+      }),
+    )
+  })
+
+  it('refuses when another device creates a draft during an empty open', async () => {
+    mocks.restoreStudioDraft.mockResolvedValue({
+      designId: null,
+      document: workingDoc({ strokes: [], clientRevision: 1 }),
+      syncedRevision: null,
+      conflict: null,
+      notice: null,
+    })
+    const foreign = workingDoc({
+      clientRevision: 2,
+      strokes: [{ ...STROKE, id: 'other-device' }],
+      model: 'blank',
+    })
+    mocks.persistStudioDraft.mockResolvedValueOnce({
+      ok: false,
+      conflict: { local: workingDoc({ strokes: [] }), server: foreign, designId: 'foreign-draft' },
+      localPersisted: true,
+      error: 'Your working draft was created on another device.',
+    })
+    renderAt('/studio/designs')
+    await screen.findByRole('heading', { name: 'My Designs' })
+    await act(async () => {
+      await openFromLibrary()
+    })
+    expect(await screen.findByRole('dialog', { name: 'Draft recovery conflict' })).toBeInTheDocument()
+    expect(strokeIds()).toBe('')
+    expect(mocks.persistStudioDraft.mock.calls[0]![0].createOnly).toBe(true)
+    expect(
+      screen.getByRole('status', { name: /changed on another device, so the design was not opened/ }),
+    ).toBeInTheDocument()
   })
 
   it('refuses while edits are unsynced, then waits for the queued save before switching', async () => {
@@ -552,7 +610,7 @@ describe('Reopen a saved design', () => {
     expect(screen.queryByRole('dialog', { name: 'Draft recovery conflict' })).toBeNull()
   })
 
-  it('a failed write replaces nothing and can be retried', async () => {
+  it('an uncertain write never claims the server was unchanged and can be retried', async () => {
     mocks.persistStudioDraft.mockResolvedValueOnce({
       ok: false,
       conflict: null,
@@ -568,7 +626,11 @@ describe('Reopen a saved design', () => {
       fireEvent.click(within(dialog).getByRole('button', { name: 'Replace and open' }))
     })
     dialog = await screen.findByRole('dialog', { name: 'Could not open design' })
-    expect(within(dialog).getByRole('alert')).toHaveTextContent('Nothing was replaced')
+    const alert = within(dialog).getByRole('alert')
+    expect(alert).toHaveTextContent(/could not be confirmed/i)
+    expect(alert).not.toHaveTextContent(/Nothing was replaced/)
+    // Still on My Designs — Studio view was not updated.
+    expect(screen.getByRole('heading', { name: 'My Designs' })).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }))
     dialog = await screen.findByRole('dialog', { name: 'Open “Evening gown”?' })
     await act(async () => {
@@ -576,6 +638,49 @@ describe('Reopen a saved design', () => {
     })
     await screen.findByRole('heading', { name: 'New Design' })
     expect(mocks.persistStudioDraft.mock.calls.map((c) => c[0].expectedRevision)).toEqual([3, 3])
+    expect(strokeIds()).toBe('snap-1,snap-2')
+  })
+
+  it('recovers a lost response after the server write committed without overwriting', async () => {
+    // First attempt: network drops after the server accepted our open write.
+    mocks.persistStudioDraft.mockResolvedValueOnce({
+      ok: false,
+      conflict: null,
+      localPersisted: false,
+      error: 'Unable to reach FashionRise.',
+      designId: 'draft-1',
+    })
+    renderAt('/studio/designs')
+    await ready()
+    await openFromLibrary()
+    let dialog = await screen.findByRole('dialog', { name: 'Open “Evening gown”?' })
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Replace and open' }))
+    })
+    dialog = await screen.findByRole('dialog', { name: 'Could not open design' })
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/could not be confirmed/i)
+    expect(screen.getByRole('heading', { name: 'My Designs' })).toBeInTheDocument()
+
+    // Retry: server already holds our opened content → recovered via conflict fingerprint match.
+    mocks.persistStudioDraft.mockImplementationOnce(({ document }: { document: StudioDraftDocument }) =>
+      Promise.resolve({
+        ok: false,
+        conflict: { local: document, server: { ...document }, designId: 'draft-1' },
+        localPersisted: false,
+        error: 'Draft was updated elsewhere.',
+      }),
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }))
+    dialog = await screen.findByRole('dialog', { name: 'Open “Evening gown”?' })
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Replace and open' }))
+    })
+    await screen.findByRole('heading', { name: 'New Design' })
+    expect(strokeIds()).toBe('snap-1,snap-2')
+    expect(screen.queryByRole('dialog', { name: 'Draft recovery conflict' })).toBeNull()
+    expect(mocks.persistLocalRecovery).toHaveBeenCalledWith(
+      expect.objectContaining({ designId: 'draft-1', syncedRevision: 4 }),
+    )
   })
 
   it('refuses a malformed or foreign design without retry', async () => {

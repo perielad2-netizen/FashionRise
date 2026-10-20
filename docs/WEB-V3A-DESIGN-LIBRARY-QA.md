@@ -1,8 +1,8 @@
 # WEB-V3A — Export, Save & My Designs: design and QA report
 
 **Branch:** `cursor/web-v3a-design-library-77c6`, draft PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13), based on `main` `f8a5b222`.
-**Status:** waiting for PM review. Not merged, not deployed.
-**Scope:** frontend only (`web-ui/`), plus one new backend test file. No backend code, database, migration, endpoint, Nginx, Cloudflare, AI, upload, or registration changes.
+**Status:** waiting for PM **re-review** after the focused safety amendment. Not merged, not deployed.
+**Scope:** frontend (`web-ui/`), one narrowly justified backend create/reconcile safety change (no new endpoint, no migration), plus backend regression tests. No Nginx, Cloudflare, AI, upload, or registration changes.
 
 A signed-in user can now:
 
@@ -166,15 +166,21 @@ Opening a saved design **replaces the content of the single working draft** with
 3. **Switch.** The write runs on the same serialized save chain as autosave, after any queued save:
    - The debounce timer is cleared.
    - Automatic saves are paused (`openingRef`) and the state is re-checked.
-   - It then writes `PUT` with `expected_revision = last synced revision` and revision `max(local, synced) + 1`.
+   - **Known draft id:** `PUT` with `expected_revision = last synced revision` and revision `max(local, synced) + 1` (unchanged OCC).
+   - **No known draft id** (first-time / empty Studio): `persistStudioDraft({ createOnly: true })`. This may only create a new singleton draft or recover a lost response whose content matches the open. If another device’s draft appears at any point — including between the empty preflight list and the create — that draft is **preserved** and the open becomes an explicit conflict. It never adopts or overwrites a foreign draft solely to open a saved design.
 4. **Outcome:**
    - **Success:** the Studio document, IndexedDB, and refs are updated together, and **undo history starts fresh**, so undo never spans designs. The status shows Saved and the app goes to Studio.
    - **409 whose server content is our snapshot:** treated as a recovered lost response and opened.
-   - **409 with other content:** another device changed the draft. **Nothing is replaced.** The existing draft conflict dialog (Keep this device / Use cloud draft) is shown.
-   - **Any other failure:** nothing is replaced, and **Try again** is offered.
+   - **409 with other content:** another device changed the draft. **Studio on this device is not updated.** The existing draft conflict dialog (Keep this device / Use cloud draft) is shown.
+   - **Network / 5xx (uncertain):** Studio on this device is left unchanged, and the message says the server outcome **could not be confirmed** (it never claims “nothing was replaced”). **Try again** remains available; retry reuses the same safe OCC / createOnly path.
 5. **Refresh** after opening restores the opened document from the server or IndexedDB with no conflict.
 
-No case was found where switching could not be made safe, so no PM-review blocker was raised for this part.
+### Safety amendment (PM review follow-up)
+
+Two issues from the Technical PM review are closed in this amendment:
+
+1. **Empty-Studio cross-device race.** A preflight `listMyDesigns` alone was not atomic with create. Reopen with no known draft id now uses `createOnly`, and Studio create/reconcile on the backend returns **409** (instead of overwriting) when an existing working draft has different content at the same or higher revision. Autosave that already knows the draft id still uses `PUT` + OCC; autosave that discovers an existing draft without `createOnly` still adopts via OCC update.
+2. **Uncertain reopen messaging.** Generic failures no longer say “Nothing was replaced,” because a server write may have committed before the response was lost.
 
 ---
 
@@ -197,11 +203,11 @@ No case was found where switching could not be made safe, so no PM-review blocke
 
 | Gate | Result |
 |---|---|
-| `npm test` (web-ui) | **Pass: 161 tests, 29 files.** |
+| `npm test` (web-ui) | **Pass: 169 tests, 29 files.** |
 | `npm run lint` | Pass. Same three pre-existing oxlint warnings, none new. |
 | `npm run build` (`tsc -b` + Vite + PWA) | Pass. |
-| Backend `pytest` (isolated `fashionrise_test` DB) | **102 passed, 1 failed.** The failure is `test_gpt6_luna_live_eval::test_cli_default_is_dry_run`, which also fails on clean `main`. It is unrelated. |
-| Backend saved-design + Studio concurrency suites | **14 / 14 pass.** |
+| Backend `pytest` focused suites (isolated `fashionrise_test` DB) | Studio concurrency + saved-design isolation: **15 / 15 pass.** |
+| Backend full `pytest` | **103 passed, 1 failed.** The failure is `test_gpt6_luna_live_eval::test_cli_default_is_dry_run`, which also fails on clean `main`. It is unrelated. |
 
 New test coverage:
 
@@ -211,14 +217,18 @@ New test coverage:
 | Save / idempotency | Matching acknowledgement only; lost response recovered without a second POST; uncertain retry finds the earlier row; posts once when the earlier attempt provably did not land; never posts blind; 4xx final; offline; mismatched acknowledgement; another account's request id ignored; dialog retry reuses the id; title validation; empty canvas blocked. |
 | PNG export | Composition order; dim opacity; eraser on ink only; scaling; reference failure skip vs throw; missing 2D context; PNG blob validation; download plus guaranteed URL revoke; safe filenames; thumbnail-only minimum ink width. |
 | Library | Sidebar entry without placeholders; same editor mounted across screens; draft shown separately; hostile titles as text; empty, error, and refresh states; preview concurrency, cache, release, and dispose. |
-| Reopen | OCC replace after confirm; undo never spans designs; cancel is a no-op; empty draft opens directly; unsynced edits refused, then waits for the queued save; another device's change opens the conflict dialog with nothing replaced; 409 with our content recovered; failed write retryable; malformed or foreign design refused; open conflict must be resolved first. |
+| Reopen | OCC replace after confirm; undo never spans designs; cancel is a no-op; empty draft opens directly; first-time users pass `createOnly`; draft created between preflight and persist is preserved (conflict, no overwrite); unsynced edits refused, then waits for the queued save; another device's change opens the conflict dialog; 409 with our content recovered; uncertain network messaging never claims the server was unchanged; lost-response-after-commit recovers on retry; malformed or foreign design refused; open conflict must be resolved first. |
+| Persistence `createOnly` | Brand-new create; race between list and create; existing different draft refused; lost create with matching content recovered; autosave without `createOnly` still adopts via OCC update. |
+| Backend create/reconcile | Same-content create is idempotent; different-content create at higher revision returns 409 and preserves the existing draft. |
 | Layout | My Designs scroll and grid contract; short-landscape and phone rules; More menu above notices. |
 
 ### Local browser full flow (simulated)
 
 **Simulated, not production.** Headless Chrome via Playwright, against local FastAPI on `127.0.0.1:8011` and an **isolated PostgreSQL database `fashionrise_v3a_qa`**. Two throwaway accounts (`qa_owner@example.com`, `qa_other@example.com`). `AI_WORKER_ENABLED=false`, empty OpenAI key. The production database was not used.
 
-**33 / 33 checks passed:**
+**Original full flow: 33 / 33 checks passed.** Safety amendment re-check (isolated DB, throwaway accounts): **16 / 16 passed** — backend create 409, brand-new open, empty-open race (device B preserved + conflict UI), uncertain PUT abort messaging, and safe retry after lost response.
+
+**33 / 33 original checks covered:**
 
 - **Save:**
   - Save creates exactly one row on double-click.
@@ -270,7 +280,7 @@ Screenshots (`/opt/cursor/artifacts/web-v3a/`):
 ## 8. Known limitations
 
 - **Idempotency race:** see §2. Duplicates are possible only if the original POST is still being processed when the retry's lookup runs. Server-side dedupe would close it (a backend change for PM decision).
-- **Lost reopen response, then refresh:** if the reopen response is lost and the user refreshes instead of pressing Try again, the next load shows the normal conflict dialog. No data is lost; the user chooses explicitly.
+- **Lost reopen response, then refresh:** if the reopen response is lost and the user refreshes instead of pressing Try again, the next load shows the normal conflict dialog (or restores the opened content if the write committed and this device never applied it). No data is lost; the user chooses explicitly. The in-dialog error now says the server outcome is unconfirmed rather than claiming the draft was unchanged.
 - **Custom references are not saved.** Saved designs keep the model id only. Persistent uploads remain disabled.
 - **No rename or delete** for saved designs yet.
 - `/designs/my` returns full rows for every design. This is fine at family-beta scale; a paged, summary-only list would need a backend change.

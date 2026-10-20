@@ -116,26 +116,13 @@ def create_design(db: Session, user: User, data: DesignCreate) -> GarmentDesign:
             # Never clobber a newer concurrent save with a stale create retry.
             if incoming_rev < current_rev:
                 return existing
-            # Equal revision + different content must not silently overwrite.
-            if incoming_rev == current_rev:
-                raise ConflictError(
-                    "Studio working draft already exists with different content at this revision.",
-                    payload=_conflict_payload(existing, incoming_rev),
-                )
-            existing.title = data.title
-            existing.description = data.description
-            existing.garment_category = data.garment_category
-            existing.template_id = data.template_id
-            existing.material_id = data.material_id
-            existing.color_palette_id = data.color_palette_id
-            existing.design_data = data.design_data
-            existing.metadata_ = data.metadata
-            existing.visibility = data.visibility
-            existing.status = data.status
-            db.add(existing)
-            db.commit()
-            db.refresh(existing)
-            return existing
+            # Different content at the same or higher revision must not silently overwrite.
+            # Concurrent first creates (and reopen-into-empty) use PUT+OCC when they already
+            # know the draft id; create/reconcile only preserves or conflicts.
+            raise ConflictError(
+                "Studio working draft already exists with different content.",
+                payload=_conflict_payload(existing, incoming_rev),
+            )
 
     d = GarmentDesign(
         user_id=user.id,
