@@ -5,7 +5,7 @@ Usage (from backend/, venv active):
 
   # Preferred under Cursor/SSH: write the one-time code to a NEW 0600 file (never stdout)
   python scripts/manage_invitations.py create user@example.com --hours 72 \\
-      --code-file /root/.fashionrise-invites/user.code
+      --code-file /var/lib/fashionrise/invites/user.code
 
   python scripts/manage_invitations.py status --email user@example.com
   python scripts/manage_invitations.py status --id <uuid>
