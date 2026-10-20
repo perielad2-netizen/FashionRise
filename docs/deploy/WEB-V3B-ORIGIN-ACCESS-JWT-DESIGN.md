@@ -1,12 +1,16 @@
 # FashionRise — Origin Cloudflare Access JWT validation (design only)
 
-**Status:** design for PM review. **Not implemented. Not deployed.**  
+**Status:** architecture approved in principle for a **separate draft implementation PR**. **Not deployed.**  
 **Related:** `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md` · Stage C readiness  
 **Residual edge-only Access risk:** **not approved** by Technical PM — this layer is required before registration activation.
 
+### Coverage boundary (explicit)
+
+FastAPI middleware protects **application APIs** (`/api/**` after path normalization), **not** Nginx-served static HTML (`/index.html`, `/sw.js`, `/assets/**`, SPA document navigations). Those remain under **edge Cloudflare Access + FashionRise-private AOP** unless a separate Nginx `auth_request` design is approved later. Do **not** claim origin-wide Access JWT enforcement from API middleware alone.
+
 ## 1. Goal
 
-Ensure every request that reaches FashionRise application content or `/api/v1/*` was authorized by **this** Cloudflare Access application, even if:
+Ensure every request that reaches FashionRise **API** handlers under `/api/**` was authorized by **this** Cloudflare Access application, even if:
 
 - Custom AOP mTLS is satisfied, and/or
 - An attacker somehow presents FashionRise’s AOP client certificate.
@@ -18,8 +22,8 @@ Edge Access 302 for anonymous browsers remains necessary but is **not** sufficie
 | Item | Specification |
 |---|---|
 | Header (preferred) | `Cf-Access-Jwt-Assertion` (also accept `CF-Access-Jwt-Assertion` case-insensitively) |
-| Cookie (fallback only if header absent) | `CF_Authorization` — CF docs prefer header; browsers may send cookie |
-| Algorithm | `RS256` |
+| Cookie | **Not used** in the first implementation (avoids header/cookie ambiguity). Header-only. |
+| Algorithm | `RS256` via existing **`python-jose[cryptography]`** (pinned in `backend/requirements.txt`) |
 | JWKS URL | `https://<TEAM_DOMAIN>/cdn-cgi/access/certs` where `<TEAM_DOMAIN>` is `https://<team>.cloudflareaccess.com` |
 | Key selection | Match JWT `kid` to JWKS `keys[]` / `public_certs[]`; **do not** hard-code a single PEM; **do not** use only `public_cert` (rotation race) |
 | Rotation | CF rotates ~every 6 weeks; previous key valid ~7 days — fetch JWKS on demand with short TTL cache (e.g. 5–15 min) + refresh on unknown `kid` |
