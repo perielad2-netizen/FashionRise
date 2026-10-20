@@ -2,12 +2,12 @@
 
 **Stage:** C — **READ-ONLY / PREPARATION ONLY**  
 **Date (UTC):** 2026-10-20  
-**GitHub `main`:** `8c6a391a0d5bb3acc5e697e63c47e3ec242ec9fd`  
+**GitHub code baseline before this documentation merge:** `5df1cffe9cb34b347ce47ba31db2d734842ee436` (PRs #23/#24 merged into GitHub, not production)
 **Verdict:** **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION**
 
 **Not authorized in Stage C:** backend deploy, migrations, Nginx/Cloudflare edits, `REGISTRATION_ENABLED=true`, invitations, users, frontend switch, PR merges.
 
-Related: `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md` · `docs/deploy/PROPOSED-NGINX-REGISTER-ALLOWLIST.md` · Stage A/B PWA docs · `docs/WEB-V3B-INVITE-REGISTRATION-QA.md` · draft PR #21 (Stage B; **not yet merged** — reconcile after independent merge).
+Related: `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md` · `docs/deploy/PROPOSED-NGINX-REGISTER-ALLOWLIST.md` · Stage A/B PWA docs · `docs/WEB-V3B-INVITE-REGISTRATION-QA.md` · merged PR #21 (Stage B; reconciled after independent merge).
 
 ---
 
@@ -25,7 +25,7 @@ Related: `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md` · `docs/deploy/PROPOSED-NGINX-
 | Nginx register deny | **PASS** | `location = /api/v1/auth/register { return 403; }` (+ suffix deny) |
 | AOP | **PASS (custom)** | FashionRise-**private** AOP CA (not Cloudflare global) · `ssl_verify_client on` · no-cert **400** — details in trust-boundary doc |
 | Cloudflare Access (edge) | **PASS** | no-cookie `/login` **302** to Access — **not** origin JWT validation |
-| Origin Access JWT | **DRAFT code / not deployed** | Implementation draft PR [#24](https://github.com/perielad2-netizen/FashionRise/pull/24) (`CF_ACCESS_JWT_VALIDATION` default **false**; API `/api/**` only). **Not merged/deployed** — still blocks Stage D until reviewed, merged, configured (TEAM_DOMAIN+AUD), and enabled under approved deploy |
+| Origin Access JWT | **MERGED CODE / not deployed** | PR [#24](https://github.com/perielad2-netizen/FashionRise/pull/24) merged into GitHub, default `CF_ACCESS_JWT_VALIDATION=false`, API `/api/**` only. **Not deployed/enabled**; separate integration validation and approved flag rollout required |
 | `ngx_http_realip_module` | **PASS** | Built-in; dry-config `nginx -t` accepts `set_real_ip_from` / `real_ip_header` |
 | Users | **PASS** | `users=1` · no production invites |
 | Disk / backups | **PASS** | ~83G free · Stage B + WEB-V3A backups present |
@@ -118,8 +118,8 @@ Runner: `backend/scripts/run_migration_smoke.py` (fail-closed; never production)
 - Origin **Access JWT (AUD) validation** — design in `docs/deploy/WEB-V3B-ORIGIN-ACCESS-JWT-DESIGN.md` (**edge-only residual risk not approved**).
 - Operator confirm Cloudflare dashboard AOP client matches FashionRise fingerprint.
 - N3/N4 **fail-closed** if `CF-Connecting-IP` missing/malformed (no silent edge buckets) — see trust-boundary doc.
-- Merge/deploy SlowAPI hardening draft PR #23 before `TRUST_PROXY_HEADERS=true`.
-- Reconcile after PR #21 merges; keep PR #22 blocked until then.
+- PR #23 SlowAPI hardening is merged in GitHub; production deploy and validation required before `TRUST_PROXY_HEADERS=true`.
+- PR #21 merged; this documentation PR reconciled. Its merge does not clear the blocked Stage C activation gate.
 
 **Stage D must not set `TRUST_PROXY_HEADERS=true` until Option B is applied, negative tests pass, and backend parser hardening is deployed.**
 ---
@@ -274,8 +274,8 @@ Never clear IndexedDB to “fix” registration issues. Never touch PickWise / C
 ## 8. Outstanding decisions & risks
 
 1. **Option B real_ip + CF CIDRs** — design proposed; **not applied**; negative tests not yet executed on live Nginx.
-2. **Origin Access JWT (AUD) validation** — draft PR #24 exists (default off, API-only); **not merged/deployed/enabled**. Required before claiming Access-bound origin.
-3. **SlowAPI `ipaddress` hardening** — separate draft code PR; must land before `TRUST_PROXY_HEADERS=true`.
+2. **Origin Access JWT (AUD) validation** — PR #24 merged into GitHub, API-only and default off; **not deployed/enabled**. Live assertion/forwarding verification required before claiming Access-bound API protection.
+3. **SlowAPI `ipaddress` hardening** — PR #23 merged into GitHub; requires approved production deployment and Option B verification before `TRUST_PROXY_HEADERS=true`.
 4. **Operator confirm** Cloudflare dashboard uses FashionRise custom AOP client (not global).
 5. **Expired Access session** still untested with permanent SW (Stage B residual).
 6. **PR #21** (Stage B docs) **merged** at `ef4c42c2` — this PR rebased/reconciled; operator **6/6 PASS** preserved.
@@ -302,7 +302,7 @@ Never clear IndexedDB to “fix” registration issues. Never touch PickWise / C
 Stage D remains **unauthorized**. Reassess only after:
 
 1. Option B Nginx design approved and verification/negative tests planned or completed.
-2. Access JWT origin plan accepted (or residual risk explicitly accepted by PM).
-3. SlowAPI hardening PR reviewed.
-4. PR #21 merged/reconciled without losing Stage B 6/6.
+2. Access JWT implementation merged into GitHub; separately authorize and verify the API-only JWT integration with registration still disabled.
+3. SlowAPI parser deployed and Option B integration tests N1–N9 passed before any trusted-proxy flag activation.
+4. Private AOP dashboard certificate confirmed; genuine expired Access-session acceptance completed; Stage B 6/6 remains preserved.
 5. Explicit Stage D authorization.
