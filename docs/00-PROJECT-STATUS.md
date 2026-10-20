@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **GitHub code baseline before this docs merge:** `5df1cffe9cb34b347ce47ba31db2d734842ee436` (PRs #21, #23, #24 merged in GitHub; #23/#24 **not deployed**). **Production frontend** `/var/www/fashionrise/releases/8c6a391a` (operator **6/6 PASS**; expired Access **PENDING**). Production backend `85b6561b` · Alembic `003` · registration **OFF** · Access JWT validation **OFF** · trusted-proxy headers **OFF**. **Stage C remains `BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`**. PR #22 is a documentation-only milestone; its merge does not authorize Stage D.
+**Last updated:** 2026-10-20. **GitHub `main`:** `4aed16ce` (PRs #21–#24 merged in GitHub; security backend **not deployed**). **Production frontend** `/var/www/fashionrise/releases/8c6a391a` (operator **6/6 PASS**; expired Access **PENDING**). Production backend **`85b6561b`** · Alembic **`003`** · registration **OFF** · Access JWT validation **OFF** · trusted-proxy headers **OFF**. Read-only security preflight: `docs/deploy/SECURITY-INTEGRATION-PREFLIGHT.md` — **Checkpoint A GO (conditional)**; B/C/D and Stage D **not authorized**. **Stage C remains `BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`**.
 
 **Phase:** Protected family beta on WEB-V3A (export / save / My Designs) with permanent Access-safe PWA. WEB-V3B invite-only Create Account remains **not activated**.
 
@@ -74,8 +74,9 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub baseline before Stage C docs merge | **`5df1cffe`** — includes merged PRs #21, #23 (SlowAPI) and #24 (Access JWT, default off); production remains on separate older backend revision |
+| GitHub `main` | **`4aed16ce`** — PRs #21–#24 merged (SlowAPI + Access JWT default off + Stage C docs); production backend still **`85b6561b`** |
 | Production frontend / backend | **`8c6a391a` / `85b6561b`** (frontend Stage B 2026-10-20T16:32Z; backend unchanged) |
+| Security integration preflight | Draft runbook `docs/deploy/SECURITY-INTEGRATION-PREFLIGHT.md` — Checkpoint A conditional GO; no deploy authorized by the preflight itself |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
