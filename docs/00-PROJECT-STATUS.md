@@ -373,7 +373,7 @@ FashionRise/
 | HTML precache | Removed from `globPatterns`; `**/*.html` ignored |
 | Standard `npm run build` | Runs `tsc` → `vite build` → **embedded** `assert-sw-access-safe` (fails closed). Standalone `npm run check:sw` kept for audits |
 | Unsafe SW fixture red-path | `scripts/fixtures/unsafe-sw-with-html-navigation.js` → `check:sw` exit **1** |
-| Frontend tests | **199 / 199** (includes SW safety unit tests) |
+| Frontend tests | **200 / 200** (includes SW safety + unsafe-fixture red-path) |
 | Lint / tsc / build | Pass |
 | Route smoke (Playwright + active SW) | `/login`, `/register`, `/studio`, `/studio/designs` — document navigations **not** served from SW (`fromServiceWorker=0`) |
 | `REGISTRATION_ENABLED` default | **false** |
