@@ -1,7 +1,7 @@
 # WEB-V3B — Invite-Only Beta Registration
 
 **Branch:** `cursor/web-v3b-invite-registration-77c6`  
-**Status:** final safety corrections complete — awaiting Technical PM final approval. **Not merged. Not deployed. Registration remains disabled in production.**  
+**Status:** **MERGED** to `main` as PR #19 (code). **Not activated in production.** Registration remains disabled (Nginx deny, `REGISTRATION_ENABLED` off, Alembic `003`). Stage C trust boundary: **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION**.  
 **Depends on:** permanent PWA/service-worker fix (draft PR #16) before any production frontend rebuild that could reintroduce cached navigation.
 
 ## 1. User flow
