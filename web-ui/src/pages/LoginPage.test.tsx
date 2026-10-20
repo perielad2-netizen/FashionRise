@@ -50,16 +50,13 @@ describe('LoginPage validation', () => {
     expect(login).not.toHaveBeenCalled()
   })
 
-  it('links to Create account registration', () => {
+  it('hides Create account when registration UI is disabled (production default)', () => {
     render(
       <MemoryRouter>
         <LoginPage />
       </MemoryRouter>,
     )
-    expect(screen.getByRole('link', { name: /create account/i })).toHaveAttribute(
-      'href',
-      '/register',
-    )
+    expect(screen.queryByRole('link', { name: /create account/i })).not.toBeInTheDocument()
   })
 
   it('calls login with trimmed email on valid submit', async () => {

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
+import { isRegistrationUiEnabled } from '@/config/registrationUi'
 import { validateLogin, type LoginFieldErrors } from '@/lib/validateLogin'
 import { ApiError } from '@/services/api/client'
 import { useAuth } from '@/services/auth/AuthProvider'
@@ -134,9 +135,11 @@ export function LoginPage() {
           </button>
         </form>
 
-        <p className={styles.footerLinks}>
-          Invited to the beta? <Link to="/register">Create account</Link>
-        </p>
+        {isRegistrationUiEnabled() ? (
+          <p className={styles.footerLinks}>
+            Invited to the beta? <Link to="/register">Create account</Link>
+          </p>
+        ) : null}
       </div>
     </div>
   )
