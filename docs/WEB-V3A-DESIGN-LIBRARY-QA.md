@@ -289,10 +289,10 @@ Screenshots (`/opt/cursor/artifacts/web-v3a/`):
 
 ---
 
-## 9. Production acceptance tasks (after PM approval and a web-only deploy)
+## 9. Production acceptance tasks (after PM approval)
 
 1. Before deploying, record the frontend revision **actually** live on the VPS. The WEB-V2.3 deploy log was not supplied, so do not assume it.
-2. Deploy the merged SHA as a web-only release. No FastAPI or PostgreSQL change or restart is needed. Confirm the PWA service worker picks up the new version.
+2. Deploy the merged SHA, then **restart FastAPI** so the create/reconcile 409 change is live. No PostgreSQL migration. Confirm the PWA service worker picks up the new frontend version.
 3. On fashionrise.app, with a family-beta account:
    - Desktop: draw → Save design → My Designs → Open → Export PNG. Open the PNG and check paper, croquis, and ink.
    - Dim reference on → Export → reference visibly lighter.
