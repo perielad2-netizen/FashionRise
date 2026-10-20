@@ -24,7 +24,13 @@ location ^~ /api/v1/auth/register/ { return 403; }
 3. Allow **POST only**; reject other methods on that path.
 4. Preserve default-deny `location /api/`.
 5. Preserve Cloudflare Access and `ssl_verify_client on` (AOP).
-6. Overwrite forwarding headers with the real peer so FastAPI rate limits cannot be spoofed.
+6. Overwrite forwarding headers with a **visitor** IP Cloudflare provides, not bare `$remote_addr`.
+
+### Why not `$remote_addr` alone?
+
+On this host, Nginx `$remote_addr` for fashionrise.app is the **Cloudflare edge** (e.g. `172.70.x.x` in access logs). Authenticated Origin Pulls prove the TLS client is Cloudflare; they do **not** make `$remote_addr` equal the browser’s IP.
+
+**Preferred (Decision Gate 0 Option A):** because AOP already requires Cloudflare’s client cert, trust `CF-Connecting-IP` on this server block only:
 
 ```nginx
 # Suffix paths under register remain denied.
@@ -36,10 +42,9 @@ location = /api/v1/auth/register {
         deny all;
     }
 
-    # Trustworthy client IP for upstream rate limiting:
-    # overwrite (do not append) so clients cannot forge X-Forwarded-For.
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $remote_addr;
+    # Visitor IP from Cloudflare (AOP proves peer is CF). Overwrite — do not append.
+    proxy_set_header X-Real-IP $http_cf_connecting_ip;
+    proxy_set_header X-Forwarded-For $http_cf_connecting_ip;
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header Host $host;
 
@@ -51,6 +56,8 @@ location = /api/v1/auth/register {
     add_header Cache-Control "no-store" always;
 }
 ```
+
+**Do not** activate with `proxy_set_header X-Real-IP $remote_addr` — that keys SlowAPI on shared CF edge addresses.
 
 Remove the old `location = /api/v1/auth/register { return 403; }` once the proxy block above is installed.
 
@@ -80,17 +87,11 @@ SlowAPI keys on `client_ip_key`:
 
 **Required before flipping `TRUST_PROXY_HEADERS=true` in production:**
 
-1. Apply the same header overwrite snippet to **every** proxied API location that hits SlowAPI — at minimum `login`, `refresh`, `logout`, `me`, `register`, and designs — not only register:
-
-```nginx
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-For $remote_addr;
-```
-
-2. Confirm with a staging probe that two distinct Access clients receive distinct `X-Real-IP` values upstream and do not exhaust a shared `30/minute` login bucket.
+1. Apply the **same** visitor-IP header overwrite (`$http_cf_connecting_ip` under AOP, or Option B `real_ip` module) to **every** proxied API location that hits SlowAPI — at minimum `login`, `refresh`, `logout`, `me`, `register`, and designs — not only register.
+2. Confirm two distinct Access clients produce distinct `X-Real-IP` values upstream and do not share one login bucket.
 3. Then set `TRUST_PROXY_HEADERS=true` on `fashionrise-api` and restart only that unit.
 
-Leave `TRUST_PROXY_HEADERS=false` if the API is ever exposed without that Nginx sanitization — forged `X-Forwarded-For` is ignored by design.
+Leave `TRUST_PROXY_HEADERS=false` if the API is ever exposed without that Nginx sanitization — forged `X-Forwarded-For` is ignored by design. See Stage C Decision Gate 0 in `docs/deploy/WEB-V3B-STAGE-C-REGISTRATION-READINESS.md`.
 
 ## Application gate still required
 
