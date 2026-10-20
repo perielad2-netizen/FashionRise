@@ -17,12 +17,17 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.api.v1.router import api_router
-from app.core.cloudflare_access import JwksClient, jwks_url_for_team, validate_team_domain
+from app.core.cloudflare_access import (
+    CloudflareAccessError,
+    JwksClient,
+    jwks_url_for_team,
+    validate_team_domain,
+)
 from app.core.cloudflare_access_middleware import CloudflareAccessJWTMiddleware
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
-from app.core.rate_limit import limiter as http_limiter
 from app.core.logging_config import configure_logging
+from app.core.rate_limit import limiter as http_limiter
 from app.db.session import SessionLocal, engine, get_db
 from app.seed import run_seed_if_configured
 from app.services.ai_worker import run_worker_tick
@@ -120,7 +125,7 @@ def _install_cloudflare_access_middleware(app: FastAPI, settings) -> None:
         return
     try:
         team_domain = validate_team_domain(settings.cf_access_team_domain)
-    except Exception as exc:  # noqa: BLE001 — convert to startup failure
+    except CloudflareAccessError as exc:
         raise RuntimeError(
             "CF_ACCESS_JWT_VALIDATION=true requires a valid CF_ACCESS_TEAM_DOMAIN "
             "(https://<team>.cloudflareaccess.com)"

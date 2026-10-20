@@ -71,7 +71,10 @@ def validate_team_domain(team_domain: str) -> str:
         raise CloudflareAccessError("bad_team_domain")
     # Canonicalize host case for issuer matching.
     parsed = urlparse(raw)
-    return f"https://{parsed.hostname.lower()}"
+    host = parsed.hostname
+    if not host:
+        raise CloudflareAccessError("bad_team_domain")
+    return f"https://{host.lower()}"
 
 
 def jwks_url_for_team(team_domain: str) -> str:
@@ -167,7 +170,7 @@ class JwksClient:
                 resp = client.get(self._jwks_url)
                 resp.raise_for_status()
                 payload = resp.json()
-        except Exception:
+        except (httpx.HTTPError, ValueError, TypeError):
             _log.warning("cf_access_jwks_fetch_failed code=jwks_http")
             raise CloudflareAccessError("jwks_http") from None
 

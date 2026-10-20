@@ -10,7 +10,7 @@ import httpx
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jose import jwt
 from starlette.datastructures import Headers
@@ -459,16 +459,15 @@ def test_registration_disabled_compatible_with_access_gate(rsa_material, monkeyp
     monkeypatch.setenv("REGISTRATION_ENABLED", "false")
     get_settings.cache_clear()
 
-    # Tiny app mirroring register surface + Access middleware
     from fastapi import HTTPException
 
     app = FastAPI()
 
     @app.post("/api/v1/auth/register")
-    def register() -> None:
+    def register() -> dict[str, str]:
         if not get_settings().registration_enabled:
             raise HTTPException(status_code=403, detail="Registration is disabled")
-        return None
+        return {"ok": "registered"}
 
     app.add_middleware(
         CloudflareAccessJWTMiddleware,
@@ -492,26 +491,21 @@ def test_registration_disabled_compatible_with_access_gate(rsa_material, monkeyp
 
 
 def test_app_jwt_still_required_after_access_ok(rsa_material):
-    """Valid Access JWT does not satisfy FashionRise Bearer auth."""
-    from app.auth.dependencies import get_current_user
+    """Valid Access JWT does not satisfy FashionRise Bearer auth on real /auth/me."""
+    from app.main import app as full_app
 
-    app = FastAPI()
-
-    @app.get("/api/v1/auth/me")
-    def me(user=Depends(get_current_user)):  # noqa: ANN001
-        return {"id": str(user.id)}
-
-    app.add_middleware(
-        CloudflareAccessJWTMiddleware,
+    # Install Access middleware outermost on the real app for this request only.
+    wrapped = CloudflareAccessJWTMiddleware(
+        full_app,
         enabled=True,
         team_domain=TEAM,
         audience=AUD,
         jwks_client=_jwks_client(rsa_material),
     )
-    client = TestClient(app)
+    client = TestClient(wrapped)
     r = client.get(
         "/api/v1/auth/me",
         headers={"Cf-Access-Jwt-Assertion": _mint(rsa_material)},
     )
-    # Missing app Bearer → 401/403 from existing auth, not Access success alone.
-    assert r.status_code in (401, 403)
+    # Missing app Bearer → 401 from existing auth, not Access success alone.
+    assert r.status_code == 401
