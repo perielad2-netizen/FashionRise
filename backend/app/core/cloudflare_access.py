@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -27,12 +28,19 @@ _log = logging.getLogger(__name__)
 _HEADER_NAME = "cf-access-jwt-assertion"
 _ALLOWED_ALG = "RS256"
 _CLOCK_SKEW_SECONDS = 60
+
+# JWKS cache / reliability
 _JWKS_TTL_SECONDS = 300.0
+_JWKS_MAX_STALE_SECONDS = 600.0  # finite grace after last successful fetch
+_JWKS_REFRESH_BACKOFF_SECONDS = 5.0
 _JWKS_TIMEOUT_SECONDS = 5.0
 _JWKS_MAX_BYTES = 65_536
 _JWKS_MAX_KEYS = 32
 _UNKNOWN_KID_REFRESH_MIN_INTERVAL = 10.0
 _UNKNOWN_KID_NEGATIVE_TTL = 30.0
+_NEGATIVE_KIDS_MAX = 256
+_KID_MAX_LEN = 128
+_KID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 # Compact JWS: three base64url segments (Access JWTs never contain commas/spaces).
 _JWT_SHAPE_RE = re.compile(r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
@@ -88,6 +96,16 @@ def jwks_url_for_team(team_domain: str) -> str:
     return f"{validate_team_domain(team_domain)}/cdn-cgi/access/certs"
 
 
+def validate_kid(kid: str | None) -> str:
+    """Bound kid length/charset before caching or network use. Never log the value."""
+    if kid is None:
+        raise CloudflareAccessError("missing_kid")
+    text = str(kid)
+    if not text or len(text) > _KID_MAX_LEN or not _KID_RE.match(text):
+        raise CloudflareAccessError("bad_kid")
+    return text
+
+
 def raw_assertion_header_values(headers: Any) -> list[str]:
     """Return every Cf-Access-Jwt-Assertion field value, including empties.
 
@@ -141,92 +159,152 @@ class AccessClaims:
 
 
 class JwksClient:
-    """Async JWKS fetch with TTL cache, single-flight refresh, and unknown-kid throttle."""
+    """Async JWKS client with finite stale grace, refresh backoff, and bounded negative cache."""
 
     def __init__(
         self,
         *,
         jwks_url: str,
         ttl_seconds: float = _JWKS_TTL_SECONDS,
+        max_stale_seconds: float = _JWKS_MAX_STALE_SECONDS,
+        refresh_backoff_seconds: float = _JWKS_REFRESH_BACKOFF_SECONDS,
         timeout_seconds: float = _JWKS_TIMEOUT_SECONDS,
         max_bytes: int = _JWKS_MAX_BYTES,
         max_keys: int = _JWKS_MAX_KEYS,
         unknown_kid_refresh_min_interval: float = _UNKNOWN_KID_REFRESH_MIN_INTERVAL,
         unknown_kid_negative_ttl: float = _UNKNOWN_KID_NEGATIVE_TTL,
+        max_negative_kids: int = _NEGATIVE_KIDS_MAX,
         transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
+        # Grace must cover at least one TTL period.
         self._jwks_url = jwks_url
         self._ttl = ttl_seconds
+        self._max_stale = max(max_stale_seconds, ttl_seconds)
+        self._refresh_backoff = refresh_backoff_seconds
         self._timeout = timeout_seconds
         self._max_bytes = max_bytes
         self._max_keys = max_keys
         self._force_min_interval = unknown_kid_refresh_min_interval
         self._negative_ttl = unknown_kid_negative_ttl
+        self._max_negative_kids = max_negative_kids
         self._transport = transport
+        self._clock = clock or time.monotonic
         self._lock = asyncio.Lock()
         self._fetched_at = 0.0
+        self._next_retry_at = 0.0
         self._last_force_refresh_at = 0.0
         self._keys: dict[str, Any] = {}
         self._negative_kids: dict[str, float] = {}
-        self._fetch_count = 0  # test/observability aid (not logged with secrets)
+        self._fetch_count = 0
 
     @property
     def fetch_count(self) -> int:
         return self._fetch_count
 
+    @property
+    def negative_cache_size(self) -> int:
+        return len(self._negative_kids)
+
     def clear(self) -> None:
         self._keys.clear()
         self._fetched_at = 0.0
+        self._next_retry_at = 0.0
         self._last_force_refresh_at = 0.0
         self._negative_kids.clear()
 
+    def _now(self) -> float:
+        return float(self._clock())
+
+    def _cache_age(self, now: float) -> float:
+        if self._fetched_at <= 0.0:
+            return float("inf")
+        return now - self._fetched_at
+
+    def _usable_stale(self, now: float) -> bool:
+        return bool(self._keys) and self._cache_age(now) <= self._max_stale
+
+    def _arm_backoff(self) -> None:
+        self._next_retry_at = self._now() + self._refresh_backoff
+
     async def get_key(self, kid: str | None) -> Any:
-        if not kid or not str(kid).strip():
-            raise CloudflareAccessError("missing_kid")
-        kid_s = str(kid)
+        kid_s = validate_kid(kid)
 
         async with self._lock:
-            now = time.monotonic()
+            now = self._now()
+            self._prune_negative_kids(now)
+
             neg_until = self._negative_kids.get(kid_s)
             if neg_until is not None and now < neg_until:
                 raise CloudflareAccessError("unknown_kid")
 
-            await self._ensure_fresh_unlocked(force=False)
+            await self._ensure_keys_unlocked()
+
+            now = self._now()
             key = self._keys.get(kid_s)
-            if key is not None:
+            if key is not None and self._usable_stale(now):
                 return key
 
-            # Unknown kid: allow at most one force refresh per throttle window.
-            if (
-                self._keys
-                and (now - self._last_force_refresh_at) < self._force_min_interval
-            ):
-                self._negative_kids[kid_s] = now + self._negative_ttl
+            # Unknown kid (or cache past max stale without this kid): forced refresh path.
+            if (now - self._last_force_refresh_at) < self._force_min_interval or now < self._next_retry_at:
+                self._remember_unknown(kid_s, now)
+                if self._keys and not self._usable_stale(now):
+                    raise CloudflareAccessError("jwks_stale")
                 raise CloudflareAccessError("unknown_kid")
 
-            await self._ensure_fresh_unlocked(force=True)
-            self._last_force_refresh_at = time.monotonic()
+            try:
+                await self._do_fetch_unlocked()
+                self._next_retry_at = 0.0
+            except CloudflareAccessError:
+                # Always advance force timestamp on attempt so failures cannot storm.
+                self._last_force_refresh_at = self._now()
+                self._arm_backoff()
+                self._remember_unknown(kid_s, self._now())
+                if self._keys and not self._usable_stale(self._now()):
+                    raise CloudflareAccessError("jwks_stale") from None
+                raise
+            self._last_force_refresh_at = self._now()
+
+            now = self._now()
             key = self._keys.get(kid_s)
-            if key is None:
-                self._negative_kids[kid_s] = time.monotonic() + self._negative_ttl
-                raise CloudflareAccessError("unknown_kid")
-            self._negative_kids.pop(kid_s, None)
-            return key
+            if key is not None and self._usable_stale(now):
+                self._negative_kids.pop(kid_s, None)
+                return key
+            self._remember_unknown(kid_s, now)
+            raise CloudflareAccessError("unknown_kid")
 
-    async def _ensure_fresh_unlocked(self, *, force: bool) -> None:
-        now = time.monotonic()
-        if not force and self._keys and (now - self._fetched_at) < self._ttl:
+    async def _ensure_keys_unlocked(self) -> None:
+        """Refresh when TTL expires; serve finite-stale keys on backoff; fail closed past max stale."""
+        now = self._now()
+
+        if self._keys and self._cache_age(now) < self._ttl:
             return
-        try:
-            await self._fetch_unlocked()
-        except CloudflareAccessError:
-            # Keep serving known kids from a warm cache during JWKS outages.
-            if self._keys and not force:
-                _log.warning("cf_access_jwks_fetch_failed code=jwks_stale_cache")
-                return
-            raise
 
-    async def _fetch_unlocked(self) -> None:
+        if self._usable_stale(now):
+            # TTL expired but within grace: one attempt, then backoff without storming.
+            if now < self._next_retry_at:
+                return
+            try:
+                await self._do_fetch_unlocked()
+                self._next_retry_at = 0.0
+            except CloudflareAccessError:
+                self._arm_backoff()
+                _log.warning("cf_access_jwks_fetch_failed code=jwks_stale_cache")
+            return
+
+        # Cold start or past max_stale — must succeed or deny.
+        if now < self._next_retry_at:
+            raise CloudflareAccessError("jwks_stale" if self._fetched_at else "jwks_http")
+        try:
+            await self._do_fetch_unlocked()
+            self._next_retry_at = 0.0
+        except CloudflareAccessError:
+            self._arm_backoff()
+            code = "jwks_stale" if self._fetched_at else "jwks_http"
+            _log.warning("cf_access_jwks_fetch_failed code=%s", code)
+            raise CloudflareAccessError(code) from None
+
+    async def _do_fetch_unlocked(self) -> None:
         self._fetch_count += 1
         try:
             payload = await self._http_get_jwks()
@@ -241,7 +319,7 @@ class JwksClient:
         if not keys_out:
             raise CloudflareAccessError("jwks_empty")
         self._keys = keys_out
-        self._fetched_at = time.monotonic()
+        self._fetched_at = self._now()
 
     async def _http_get_jwks(self) -> Any:
         timeout = httpx.Timeout(self._timeout)
@@ -257,6 +335,19 @@ class JwksClient:
             return json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise CloudflareAccessError("jwks_malformed") from exc
+
+    def _prune_negative_kids(self, now: float) -> None:
+        expired = [k for k, until in self._negative_kids.items() if until <= now]
+        for key in expired:
+            del self._negative_kids[key]
+
+    def _remember_unknown(self, kid: str, now: float) -> None:
+        self._prune_negative_kids(now)
+        while len(self._negative_kids) >= self._max_negative_kids:
+            # Evict soonest-expiring entry (deterministic bound).
+            victim = min(self._negative_kids, key=self._negative_kids.__getitem__)
+            del self._negative_kids[victim]
+        self._negative_kids[kid] = now + self._negative_ttl
 
 
 def _coerce_async_transport(
@@ -306,10 +397,16 @@ def _parse_jwks_payload(payload: Any, *, max_keys: int) -> dict[str, Any]:
         if not isinstance(item, dict):
             continue
         kid = item.get("kid")
-        if not kid or item.get("kty") != "RSA":
+        if not isinstance(kid, str):
             continue
         try:
-            keys_out[str(kid)] = jwk.construct(item, algorithm=_ALLOWED_ALG)
+            kid_s = validate_kid(kid)
+        except CloudflareAccessError:
+            continue
+        if item.get("kty") != "RSA":
+            continue
+        try:
+            keys_out[kid_s] = jwk.construct(item, algorithm=_ALLOWED_ALG)
         except (JOSEError, ValueError, TypeError):
             continue
     return keys_out

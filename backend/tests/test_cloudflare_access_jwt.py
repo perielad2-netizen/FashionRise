@@ -350,7 +350,18 @@ async def test_alg_confusion_rejected(rsa_material):
     assert exc.value.code == "bad_alg"
 
 
-# --- Task B: JWKS reliability ---
+# --- JWKS reliability (stale bound, backoff, negative-cache memory) ---
+
+
+class _FakeClock:
+    def __init__(self, start: float = 1_000.0) -> None:
+        self.t = start
+
+    def __call__(self) -> float:
+        return self.t
+
+    def advance(self, seconds: float) -> None:
+        self.t += seconds
 
 
 @pytest.mark.asyncio
@@ -389,6 +400,71 @@ async def test_unknown_kid_refresh_then_ok(rsa_material):
 
 
 @pytest.mark.asyncio
+async def test_key_rotation_recovers_after_outage(rsa_material):
+    """After JWKS outage + backoff, a successful refresh accepts a rotated kid."""
+    clock = _FakeClock()
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    other_pem = other.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    other_numbers = other.public_key().public_numbers()
+    rotated_jwk = {
+        "kty": "RSA",
+        "kid": "kid-rotated",
+        "use": "sig",
+        "alg": "RS256",
+        "n": _b64u_int(other_numbers.n),
+        "e": _b64u_int(other_numbers.e),
+    }
+    mode = {"v": "primary"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if mode["v"] == "down":
+            return httpx.Response(503, json={"error": "down"})
+        if mode["v"] == "rotated":
+            return httpx.Response(200, json={"keys": [rsa_material["jwk"], rotated_jwk]})
+        return httpx.Response(200, json={"keys": [rsa_material["jwk"]]})
+
+    client = cf.JwksClient(
+        jwks_url=f"{TEAM}/cdn-cgi/access/certs",
+        transport=httpx.MockTransport(handler),
+        ttl_seconds=10,
+        max_stale_seconds=100,
+        refresh_backoff_seconds=5,
+        unknown_kid_refresh_min_interval=0.0,
+        clock=clock,
+    )
+    await cf.verify_access_token(
+        _mint(rsa_material), team_domain=TEAM, audience=AUD, jwks_client=client
+    )
+    mode["v"] = "down"
+    clock.advance(11)
+    # Stale primary still works within grace.
+    await cf.verify_access_token(
+        _mint(rsa_material), team_domain=TEAM, audience=AUD, jwks_client=client
+    )
+    mode["v"] = "rotated"
+    clock.advance(6)  # past backoff
+    rotated_token = jwt.encode(
+        {
+            "sub": "cf-user-1",
+            "iss": TEAM,
+            "aud": AUD,
+            "exp": int(time.time()) + 3600,
+        },
+        other_pem,
+        algorithm="RS256",
+        headers={"kid": "kid-rotated"},
+    )
+    claims = await cf.verify_access_token(
+        rotated_token, team_domain=TEAM, audience=AUD, jwks_client=client
+    )
+    assert claims.subject == "cf-user-1"
+
+
+@pytest.mark.asyncio
 async def test_unknown_kid_throttled_no_fetch_storm(rsa_material):
     """Repeated unknown kids must not trigger unbounded JWKS fetches."""
     calls = {"n": 0}
@@ -404,7 +480,6 @@ async def test_unknown_kid_throttled_no_fetch_storm(rsa_material):
         unknown_kid_refresh_min_interval=60.0,
         unknown_kid_negative_ttl=60.0,
     )
-    # Warm cache with a valid token first.
     await cf.verify_access_token(
         _mint(rsa_material),
         team_domain=TEAM,
@@ -421,8 +496,179 @@ async def test_unknown_kid_throttled_no_fetch_storm(rsa_material):
                 bad, team_domain=TEAM, audience=AUD, jwks_client=client
             )
         assert exc.value.code == "unknown_kid"
-    # One force refresh after warm, then negative cache / throttle — not 20+.
     assert calls["n"] <= warm_fetches + 1
+
+
+@pytest.mark.asyncio
+async def test_unknown_kid_refresh_failure_throttled(rsa_material):
+    """Unknown-kid force refresh that 503s must advance throttle (no storm)."""
+    clock = _FakeClock()
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(200, json={"keys": [rsa_material["jwk"]]})
+        return httpx.Response(503, json={"error": "down"})
+
+    client = cf.JwksClient(
+        jwks_url=f"{TEAM}/cdn-cgi/access/certs",
+        transport=httpx.MockTransport(handler),
+        ttl_seconds=300,
+        max_stale_seconds=600,
+        refresh_backoff_seconds=30,
+        unknown_kid_refresh_min_interval=60.0,
+        unknown_kid_negative_ttl=30.0,
+        clock=clock,
+    )
+    await client.get_key("kid-primary")
+    assert calls["n"] == 1
+
+    for i in range(40):
+        with pytest.raises(cf.CloudflareAccessError):
+            await client.get_key(f"missing-{i}")
+        clock.advance(0.5)  # 20s total — still inside 60s force throttle
+    # Warm + at most one failed force refresh inside the throttle window.
+    assert calls["n"] <= 2
+
+
+@pytest.mark.asyncio
+async def test_short_outage_allows_stale_known_key(rsa_material):
+    clock = _FakeClock()
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(200, json={"keys": [rsa_material["jwk"]]})
+        return httpx.Response(503, json={"error": "down"})
+
+    client = cf.JwksClient(
+        jwks_url=f"{TEAM}/cdn-cgi/access/certs",
+        transport=httpx.MockTransport(handler),
+        ttl_seconds=10,
+        max_stale_seconds=100,
+        refresh_backoff_seconds=20,
+        clock=clock,
+    )
+    token = _mint(rsa_material)
+    await cf.verify_access_token(token, team_domain=TEAM, audience=AUD, jwks_client=client)
+    clock.advance(11)  # past TTL, within max stale
+    claims = await cf.verify_access_token(
+        token, team_domain=TEAM, audience=AUD, jwks_client=client
+    )
+    assert claims.subject == "cf-user-1"
+    first_fail_fetches = calls["n"]
+    assert first_fail_fetches == 2
+    # Still in backoff: no additional fetch.
+    clock.advance(5)
+    await cf.verify_access_token(token, team_domain=TEAM, audience=AUD, jwks_client=client)
+    assert calls["n"] == first_fail_fetches
+
+
+@pytest.mark.asyncio
+async def test_stale_key_rejected_after_max_lifetime(rsa_material):
+    clock = _FakeClock()
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(200, json={"keys": [rsa_material["jwk"]]})
+        return httpx.Response(503, json={"error": "down"})
+
+    client = cf.JwksClient(
+        jwks_url=f"{TEAM}/cdn-cgi/access/certs",
+        transport=httpx.MockTransport(handler),
+        ttl_seconds=10,
+        max_stale_seconds=50,
+        refresh_backoff_seconds=5,
+        clock=clock,
+    )
+    token = _mint(rsa_material)
+    await cf.verify_access_token(token, team_domain=TEAM, audience=AUD, jwks_client=client)
+    clock.advance(51)  # beyond max stale
+    with pytest.raises(cf.CloudflareAccessError) as exc:
+        await cf.verify_access_token(
+            token, team_domain=TEAM, audience=AUD, jwks_client=client
+        )
+    assert exc.value.code == "jwks_stale"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_refresh_failure_bounded_fetches(rsa_material):
+    clock = _FakeClock()
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(200, json={"keys": [rsa_material["jwk"]]})
+        return httpx.Response(503, json={"error": "down"})
+
+    client = cf.JwksClient(
+        jwks_url=f"{TEAM}/cdn-cgi/access/certs",
+        transport=httpx.MockTransport(handler),
+        ttl_seconds=10,
+        max_stale_seconds=100,
+        refresh_backoff_seconds=30,
+        clock=clock,
+    )
+    token = _mint(rsa_material)
+    await cf.verify_access_token(token, team_domain=TEAM, audience=AUD, jwks_client=client)
+    clock.advance(11)
+
+    async def one() -> str:
+        claims = await cf.verify_access_token(
+            token, team_domain=TEAM, audience=AUD, jwks_client=client
+        )
+        return claims.subject or ""
+
+    results = await asyncio.gather(*[one() for _ in range(20)])
+    assert results == ["cf-user-1"] * 20
+    # Warm + one failed refresh; backoff prevents a herd of sequential 503s.
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_distinct_unknown_kids_bounded_memory_and_fetches(rsa_material):
+    clock = _FakeClock()
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"keys": [rsa_material["jwk"]]})
+
+    client = cf.JwksClient(
+        jwks_url=f"{TEAM}/cdn-cgi/access/certs",
+        transport=httpx.MockTransport(handler),
+        ttl_seconds=300,
+        unknown_kid_refresh_min_interval=3600.0,
+        unknown_kid_negative_ttl=120.0,
+        max_negative_kids=64,
+        clock=clock,
+    )
+    await client.get_key("kid-primary")
+    warm = calls["n"]
+
+    for i in range(3000):
+        with pytest.raises(cf.CloudflareAccessError) as exc:
+            await client.get_key(f"u{i}")
+        assert exc.value.code == "unknown_kid"
+        if i % 100 == 0:
+            clock.advance(0.01)
+
+    assert client.negative_cache_size <= 64
+    assert calls["n"] <= warm + 1
+
+
+def test_oversized_kid_rejected_without_network():
+    with pytest.raises(cf.CloudflareAccessError) as exc:
+        cf.validate_kid("x" * 200)
+    assert exc.value.code == "bad_kid"
+    with pytest.raises(cf.CloudflareAccessError) as exc2:
+        cf.validate_kid("bad kid!")
+    assert exc2.value.code == "bad_kid"
 
 
 @pytest.mark.asyncio
@@ -525,31 +771,6 @@ async def test_jwks_cache_ttl_avoids_refetch(rsa_material):
 
 
 @pytest.mark.asyncio
-async def test_stale_cache_serves_known_kid_during_outage(rsa_material):
-    calls = {"n": 0}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return httpx.Response(200, json={"keys": [rsa_material["jwk"]]})
-        return httpx.Response(503, json={"error": "down"})
-
-    client = cf.JwksClient(
-        jwks_url=f"{TEAM}/cdn-cgi/access/certs",
-        transport=httpx.MockTransport(handler),
-        ttl_seconds=0.01,
-    )
-    token = _mint(rsa_material)
-    await cf.verify_access_token(token, team_domain=TEAM, audience=AUD, jwks_client=client)
-    await asyncio.sleep(0.02)
-    claims = await cf.verify_access_token(
-        token, team_domain=TEAM, audience=AUD, jwks_client=client
-    )
-    assert claims.subject == "cf-user-1"
-    assert calls["n"] >= 2
-
-
-@pytest.mark.asyncio
 async def test_concurrent_valid_requests_single_flight(rsa_material):
     calls = {"n": 0}
 
@@ -572,7 +793,6 @@ async def test_concurrent_valid_requests_single_flight(rsa_material):
 
     results = await asyncio.gather(*[one() for _ in range(12)])
     assert results == ["cf-user-1"] * 12
-    # Lock serializes refresh; warm cache means one fetch for the burst.
     assert calls["n"] == 1
 
 
