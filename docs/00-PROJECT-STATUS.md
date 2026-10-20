@@ -278,7 +278,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 ## Suggested next steps
 
 1. **Operator:** confirm CF AOP client + Access team domain + AUD; expired Access session test (still PENDING).
-2. **PM:** review origin Access JWT implementation draft PR; guarded merge of PR #23 (SlowAPI) when authorized.
+2. **PM:** review origin Access JWT implementation draft PR [#24](https://github.com/perielad2-netizen/FashionRise/pull/24); guarded merge of PR #23 (SlowAPI) when authorized.
 3. **Keep PR #22 blocked** until trust-boundary verification clears (Option B staging, JWT deploy plan, AOP dashboard confirm).
 4. **Stage D** (not authorized) only after **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION** clears.
 5. Remaining WEB-V3A gaps after second account: cross-account privacy; untested conflict-resolution choices.

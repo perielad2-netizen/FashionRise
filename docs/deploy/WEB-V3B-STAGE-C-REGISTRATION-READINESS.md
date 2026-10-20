@@ -25,7 +25,7 @@ Related: `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md` · `docs/deploy/PROPOSED-NGINX-
 | Nginx register deny | **PASS** | `location = /api/v1/auth/register { return 403; }` (+ suffix deny) |
 | AOP | **PASS (custom)** | FashionRise-**private** AOP CA (not Cloudflare global) · `ssl_verify_client on` · no-cert **400** — details in trust-boundary doc |
 | Cloudflare Access (edge) | **PASS** | no-cookie `/login` **302** to Access — **not** origin JWT validation |
-| Origin Access JWT | **FAIL / absent** | No AUD / JWT verification in API — blocks Stage D approval |
+| Origin Access JWT | **DRAFT code / not deployed** | Implementation draft PR [#24](https://github.com/perielad2-netizen/FashionRise/pull/24) (`CF_ACCESS_JWT_VALIDATION` default **false**; API `/api/**` only). **Not merged/deployed** — still blocks Stage D until reviewed, merged, configured (TEAM_DOMAIN+AUD), and enabled under approved deploy |
 | `ngx_http_realip_module` | **PASS** | Built-in; dry-config `nginx -t` accepts `set_real_ip_from` / `real_ip_header` |
 | Users | **PASS** | `users=1` · no production invites |
 | Disk / backups | **PASS** | ~83G free · Stage B + WEB-V3A backups present |
@@ -274,7 +274,7 @@ Never clear IndexedDB to “fix” registration issues. Never touch PickWise / C
 ## 8. Outstanding decisions & risks
 
 1. **Option B real_ip + CF CIDRs** — design proposed; **not applied**; negative tests not yet executed on live Nginx.
-2. **Origin Access JWT (AUD) validation** — absent; required before claiming Access-bound origin.
+2. **Origin Access JWT (AUD) validation** — draft PR #24 exists (default off, API-only); **not merged/deployed/enabled**. Required before claiming Access-bound origin.
 3. **SlowAPI `ipaddress` hardening** — separate draft code PR; must land before `TRUST_PROXY_HEADERS=true`.
 4. **Operator confirm** Cloudflare dashboard uses FashionRise custom AOP client (not global).
 5. **Expired Access session** still untested with permanent SW (Stage B residual).
