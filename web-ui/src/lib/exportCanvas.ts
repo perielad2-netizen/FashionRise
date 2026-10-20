@@ -62,6 +62,17 @@ export type RenderOptions = ExportOptions & {
   /** 'skip' renders without the reference when it cannot be loaded; 'throw' rejects. */
   onReferenceError?: 'skip' | 'throw'
   loadReference?: (src: string) => Promise<CanvasImageSource & { width: number; height: number }>
+  /**
+   * Minimum stroke size in output pixels. Thumbnails need it because hairline brushes
+   * fall below one pixel when 768×1024 is scaled down. Leave unset for exports.
+   */
+  minInkSize?: number
+}
+
+export function withMinimumSize(strokes: Stroke[], minDesignSize: number): Stroke[] {
+  return strokes.map((stroke) =>
+    stroke.size >= minDesignSize ? stroke : { ...stroke, size: minDesignSize },
+  )
 }
 
 /**
@@ -111,7 +122,10 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
   if (!inkCtx) throw new Error('Canvas 2D unavailable')
   if (sx !== 1 || sy !== 1) inkCtx.scale(sx, sy)
 
-  paintInkStrokes(inkCtx, options.strokes)
+  const strokes = options.minInkSize
+    ? withMinimumSize(options.strokes, options.minInkSize / Math.min(sx, sy))
+    : options.strokes
+  paintInkStrokes(inkCtx, strokes)
 
   baseCtx.drawImage(ink, 0, 0, width, height)
   return { canvas: base, referenceIncluded }

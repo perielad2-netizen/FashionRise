@@ -7,6 +7,8 @@ export const PREVIEW_HEIGHT = 320
 export const PREVIEW_CONCURRENCY = 2
 /** Previews are rendered for at most this many cards per page of the library. */
 export const PREVIEW_PAGE_SIZE = 24
+/** Thumbnail-only floor so pencil-fine strokes stay visible at 240×320. */
+export const PREVIEW_MIN_INK_SIZE = 1.5
 
 export function previewReferenceUrl(snapshot: Pick<SavedDesignSnapshot, 'model'>): string | null {
   if (snapshot.model === 'female') return UI_ASSETS.canvas.female
@@ -35,6 +37,7 @@ export async function renderPreviewBlob(snapshot: SavedDesignSnapshot): Promise<
     height: PREVIEW_HEIGHT,
     onReferenceError: 'skip',
     loadReference: cachedReference,
+    minInkSize: PREVIEW_MIN_INK_SIZE,
   })
   return canvasToPngBlob(canvas)
 }

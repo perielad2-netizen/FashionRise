@@ -6,12 +6,14 @@ import {
   exportFilename,
   exportSketchPng,
   renderSketchCanvas,
+  withMinimumSize,
 } from '@/lib/exportCanvas'
 import type { Stroke } from '@/lib/strokes'
 
-vi.mock('@/lib/freehand', () => ({
-  strokeToSvgPath: (s: Stroke) => `M${s.points[0]} ${s.points[1]} Z`,
+const { strokeToSvgPath } = vi.hoisted(() => ({
+  strokeToSvgPath: vi.fn((s: Stroke) => `M${s.points[0]} ${s.points[1]} Z`),
 }))
+vi.mock('@/lib/freehand', () => ({ strokeToSvgPath }))
 
 beforeAll(() => {
   if (typeof Path2D === 'undefined') {
@@ -108,6 +110,26 @@ describe('renderSketchCanvas composition', () => {
     })
     expect(ops.find((o) => o.op === 'scale')).toMatchObject({ canvas: 1, detail: [0.3125, 0.3125] })
     expect(ops.find((o) => o.canvas === 0 && o.op === 'drawImage')).toMatchObject({ detail: { a: [60, 0, 120, 320] } })
+  })
+
+  it('keeps exact stroke sizes unless a minimum output ink size is requested', async () => {
+    installFakeCanvas()
+    strokeToSvgPath.mockClear()
+    await renderSketchCanvas({ strokes, referenceUrl: null, width: 240, height: 320 })
+    expect(strokeToSvgPath.mock.calls.map(([s]) => s.size)).toEqual([3.5, 7])
+
+    strokeToSvgPath.mockClear()
+    await renderSketchCanvas({ strokes, referenceUrl: null, width: 240, height: 320, minInkSize: 1.5 })
+    // 1.5 output px at 0.3125 scale = 4.8 design units; the 7-unit eraser is already larger.
+    expect(strokeToSvgPath.mock.calls.map(([s]) => s.size)).toEqual([4.8, 7])
+    expect(strokes[0]!.size).toBe(3.5)
+  })
+
+  it('withMinimumSize copies only the strokes it widens', () => {
+    const out = withMinimumSize(strokes, 5)
+    expect(out.map((s) => s.size)).toEqual([5, 7])
+    expect(out[0]).not.toBe(strokes[0])
+    expect(out[1]).toBe(strokes[1])
   })
 
   it('skips an unloadable reference and still renders the ink', async () => {
