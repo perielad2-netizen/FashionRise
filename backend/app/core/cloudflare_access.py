@@ -9,9 +9,10 @@ Coverage: FastAPI ``/api/**`` only — Nginx static HTML remains edge Access + A
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import re
-import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -28,6 +29,13 @@ _ALLOWED_ALG = "RS256"
 _CLOCK_SKEW_SECONDS = 60
 _JWKS_TTL_SECONDS = 300.0
 _JWKS_TIMEOUT_SECONDS = 5.0
+_JWKS_MAX_BYTES = 65_536
+_JWKS_MAX_KEYS = 32
+_UNKNOWN_KID_REFRESH_MIN_INTERVAL = 10.0
+_UNKNOWN_KID_NEGATIVE_TTL = 30.0
+
+# Compact JWS: three base64url segments (Access JWTs never contain commas/spaces).
+_JWT_SHAPE_RE = re.compile(r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
 
 # https://<team>.cloudflareaccess.com  (no path/query/fragment, no trailing slash)
 _TEAM_DOMAIN_RE = re.compile(
@@ -69,7 +77,6 @@ def validate_team_domain(team_domain: str) -> str:
     raw = (team_domain or "").strip().rstrip("/")
     if not raw or not _TEAM_DOMAIN_RE.match(raw):
         raise CloudflareAccessError("bad_team_domain")
-    # Canonicalize host case for issuer matching.
     parsed = urlparse(raw)
     host = parsed.hostname
     if not host:
@@ -81,32 +88,46 @@ def jwks_url_for_team(team_domain: str) -> str:
     return f"{validate_team_domain(team_domain)}/cdn-cgi/access/certs"
 
 
-def assertion_header_values(headers: Any) -> list[str]:
-    """Return every Cf-Access-Jwt-Assertion field (Starlette getlist-aware).
+def raw_assertion_header_values(headers: Any) -> list[str]:
+    """Return every Cf-Access-Jwt-Assertion field value, including empties.
 
-    Comma-joined single fields are expanded so callers can reject ambiguity.
-    Access JWTs are base64url (no commas); a comma always means multiple values.
+    Empty duplicates must be visible to callers so they can reject ambiguity.
     """
-    values: list[str] = []
     getlist = getattr(headers, "getlist", None)
     if callable(getlist):
-        values = [str(v).strip() for v in getlist(_HEADER_NAME) if str(v).strip()]
-    else:
-        raw = None
-        if hasattr(headers, "get"):
-            raw = headers.get(_HEADER_NAME)
-            if raw is None:
-                raw = headers.get("Cf-Access-Jwt-Assertion")
-        if raw is not None and str(raw).strip():
-            values = [str(raw).strip()]
+        return [str(v) for v in getlist(_HEADER_NAME)]
+    if hasattr(headers, "get"):
+        raw = headers.get(_HEADER_NAME)
+        if raw is None:
+            raw = headers.get("Cf-Access-Jwt-Assertion")
+        if raw is None:
+            return []
+        return [str(raw)]
+    return []
 
-    expanded: list[str] = []
-    for item in values:
-        if "," in item:
-            expanded.extend(p.strip() for p in item.split(",") if p.strip())
-        else:
-            expanded.append(item)
-    return expanded
+
+def extract_assertion_token(headers: Any) -> str:
+    """Return exactly one well-formed assertion token or raise.
+
+    Rejects: missing, any duplicate field (including empty), any comma (including
+    leading/trailing), whitespace padding, and non-JWS shapes.
+    """
+    values = raw_assertion_header_values(headers)
+    if not values:
+        raise CloudflareAccessError("missing")
+    if len(values) != 1:
+        raise CloudflareAccessError("ambiguous_header")
+
+    token = values[0]
+    if token == "" or token.strip() == "":
+        raise CloudflareAccessError("missing")
+    if token != token.strip():
+        raise CloudflareAccessError("malformed")
+    if "," in token:
+        raise CloudflareAccessError("ambiguous_header")
+    if not _JWT_SHAPE_RE.match(token):
+        raise CloudflareAccessError("malformed")
+    return token
 
 
 @dataclass
@@ -120,7 +141,7 @@ class AccessClaims:
 
 
 class JwksClient:
-    """Thread-safe JWKS fetch with TTL cache and unknown-kid refresh."""
+    """Async JWKS fetch with TTL cache, single-flight refresh, and unknown-kid throttle."""
 
     def __init__(
         self,
@@ -128,67 +149,170 @@ class JwksClient:
         jwks_url: str,
         ttl_seconds: float = _JWKS_TTL_SECONDS,
         timeout_seconds: float = _JWKS_TIMEOUT_SECONDS,
-        transport: httpx.BaseTransport | None = None,
+        max_bytes: int = _JWKS_MAX_BYTES,
+        max_keys: int = _JWKS_MAX_KEYS,
+        unknown_kid_refresh_min_interval: float = _UNKNOWN_KID_REFRESH_MIN_INTERVAL,
+        unknown_kid_negative_ttl: float = _UNKNOWN_KID_NEGATIVE_TTL,
+        transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None,
     ) -> None:
         self._jwks_url = jwks_url
         self._ttl = ttl_seconds
         self._timeout = timeout_seconds
+        self._max_bytes = max_bytes
+        self._max_keys = max_keys
+        self._force_min_interval = unknown_kid_refresh_min_interval
+        self._negative_ttl = unknown_kid_negative_ttl
         self._transport = transport
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
         self._fetched_at = 0.0
+        self._last_force_refresh_at = 0.0
         self._keys: dict[str, Any] = {}
+        self._negative_kids: dict[str, float] = {}
+        self._fetch_count = 0  # test/observability aid (not logged with secrets)
+
+    @property
+    def fetch_count(self) -> int:
+        return self._fetch_count
 
     def clear(self) -> None:
-        with self._lock:
-            self._keys.clear()
-            self._fetched_at = 0.0
+        self._keys.clear()
+        self._fetched_at = 0.0
+        self._last_force_refresh_at = 0.0
+        self._negative_kids.clear()
 
-    def get_key(self, kid: str | None) -> Any:
-        if not kid:
+    async def get_key(self, kid: str | None) -> Any:
+        if not kid or not str(kid).strip():
             raise CloudflareAccessError("missing_kid")
-        with self._lock:
-            self._ensure_fresh_unlocked(force=False)
-            key = self._keys.get(kid)
+        kid_s = str(kid)
+
+        async with self._lock:
+            now = time.monotonic()
+            neg_until = self._negative_kids.get(kid_s)
+            if neg_until is not None and now < neg_until:
+                raise CloudflareAccessError("unknown_kid")
+
+            await self._ensure_fresh_unlocked(force=False)
+            key = self._keys.get(kid_s)
             if key is not None:
                 return key
-            # Unknown kid — force refresh once (rotation window).
-            self._ensure_fresh_unlocked(force=True)
-            key = self._keys.get(kid)
-            if key is None:
+
+            # Unknown kid: allow at most one force refresh per throttle window.
+            if (
+                self._keys
+                and (now - self._last_force_refresh_at) < self._force_min_interval
+            ):
+                self._negative_kids[kid_s] = now + self._negative_ttl
                 raise CloudflareAccessError("unknown_kid")
+
+            await self._ensure_fresh_unlocked(force=True)
+            self._last_force_refresh_at = time.monotonic()
+            key = self._keys.get(kid_s)
+            if key is None:
+                self._negative_kids[kid_s] = time.monotonic() + self._negative_ttl
+                raise CloudflareAccessError("unknown_kid")
+            self._negative_kids.pop(kid_s, None)
             return key
 
-    def _ensure_fresh_unlocked(self, *, force: bool) -> None:
+    async def _ensure_fresh_unlocked(self, *, force: bool) -> None:
         now = time.monotonic()
         if not force and self._keys and (now - self._fetched_at) < self._ttl:
             return
-        self._fetch_unlocked()
-
-    def _fetch_unlocked(self) -> None:
         try:
-            with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
-                resp = client.get(self._jwks_url)
-                resp.raise_for_status()
-                payload = resp.json()
-        except (httpx.HTTPError, ValueError, TypeError):
+            await self._fetch_unlocked()
+        except CloudflareAccessError:
+            # Keep serving known kids from a warm cache during JWKS outages.
+            if self._keys and not force:
+                _log.warning("cf_access_jwks_fetch_failed code=jwks_stale_cache")
+                return
+            raise
+
+    async def _fetch_unlocked(self) -> None:
+        self._fetch_count += 1
+        try:
+            payload = await self._http_get_jwks()
+            keys_out = _parse_jwks_payload(payload, max_keys=self._max_keys)
+        except CloudflareAccessError as exc:
+            _log.warning("cf_access_jwks_fetch_failed code=%s", exc.code)
+            raise
+        except (httpx.HTTPError, TimeoutError, OSError, ValueError, TypeError):
             _log.warning("cf_access_jwks_fetch_failed code=jwks_http")
             raise CloudflareAccessError("jwks_http") from None
 
-        keys_out: dict[str, Any] = {}
-        for item in payload.get("keys") or []:
-            if not isinstance(item, dict):
-                continue
-            kid = item.get("kid")
-            if not kid or item.get("kty") != "RSA":
-                continue
-            try:
-                keys_out[str(kid)] = jwk.construct(item, algorithm=_ALLOWED_ALG)
-            except (JOSEError, ValueError, TypeError):
-                continue
         if not keys_out:
             raise CloudflareAccessError("jwks_empty")
         self._keys = keys_out
         self._fetched_at = time.monotonic()
+
+    async def _http_get_jwks(self) -> Any:
+        timeout = httpx.Timeout(self._timeout)
+        transport = _coerce_async_transport(self._transport)
+        async with (
+            httpx.AsyncClient(timeout=timeout, transport=transport) as client,
+            client.stream("GET", self._jwks_url) as resp,
+        ):
+            if resp.status_code >= 400:
+                raise CloudflareAccessError("jwks_http")
+            body = await _read_bounded(resp, self._max_bytes)
+        try:
+            return json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CloudflareAccessError("jwks_malformed") from exc
+
+
+def _coerce_async_transport(
+    transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None,
+) -> httpx.AsyncBaseTransport | None:
+    if transport is None:
+        return None
+    if isinstance(transport, httpx.AsyncBaseTransport):
+        return transport
+    return _SyncTransportAdapter(transport)
+
+
+class _SyncTransportAdapter(httpx.AsyncBaseTransport):
+    """Allow tests to inject ``httpx.MockTransport`` without blocking the loop forever."""
+
+    def __init__(self, sync_transport: httpx.BaseTransport) -> None:
+        self._sync = sync_transport
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        return await asyncio.to_thread(self._sync.handle_request, request)
+
+
+async def _read_bounded(resp: httpx.Response, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in resp.aiter_bytes():
+        total += len(chunk)
+        if total > max_bytes:
+            raise CloudflareAccessError("jwks_too_large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _parse_jwks_payload(payload: Any, *, max_keys: int) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise CloudflareAccessError("jwks_malformed")
+    keys = payload.get("keys")
+    if keys is None:
+        raise CloudflareAccessError("jwks_empty")
+    if not isinstance(keys, list):
+        raise CloudflareAccessError("jwks_malformed")
+    if len(keys) > max_keys:
+        raise CloudflareAccessError("jwks_too_many_keys")
+
+    keys_out: dict[str, Any] = {}
+    for item in keys:
+        if not isinstance(item, dict):
+            continue
+        kid = item.get("kid")
+        if not kid or item.get("kty") != "RSA":
+            continue
+        try:
+            keys_out[str(kid)] = jwk.construct(item, algorithm=_ALLOWED_ALG)
+        except (JOSEError, ValueError, TypeError):
+            continue
+    return keys_out
 
 
 def _unverified_header(token: str) -> dict[str, Any]:
@@ -198,7 +322,7 @@ def _unverified_header(token: str) -> dict[str, Any]:
         raise CloudflareAccessError("malformed") from exc
 
 
-def verify_access_token(
+async def verify_access_token(
     token: str,
     *,
     team_domain: str,
@@ -215,7 +339,7 @@ def verify_access_token(
     alg = header.get("alg")
     if alg != _ALLOWED_ALG:
         raise CloudflareAccessError("bad_alg")
-    key = jwks_client.get_key(header.get("kid"))
+    key = await jwks_client.get_key(header.get("kid"))
 
     try:
         claims = jwt.decode(
@@ -260,21 +384,17 @@ def verify_access_token(
     )
 
 
-def extract_and_verify_assertion(
+async def extract_and_verify_assertion(
     headers: Any,
     *,
     team_domain: str,
     audience: str,
     jwks_client: JwksClient,
 ) -> AccessClaims:
-    """Fail closed on missing/duplicate assertion headers (header-only; no cookie)."""
-    values = assertion_header_values(headers)
-    if not values:
-        raise CloudflareAccessError("missing")
-    if len(values) != 1:
-        raise CloudflareAccessError("ambiguous_header")
-    return verify_access_token(
-        values[0],
+    """Fail closed on missing/duplicate/malformed assertion (header-only; no cookie)."""
+    token = extract_assertion_token(headers)
+    return await verify_access_token(
+        token,
         team_domain=team_domain,
         audience=audience,
         jwks_client=jwks_client,

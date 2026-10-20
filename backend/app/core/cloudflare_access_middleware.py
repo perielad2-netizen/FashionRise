@@ -2,6 +2,8 @@
 
 When ``CF_ACCESS_JWT_VALIDATION`` is false, this is a no-op.
 When true, missing/invalid configuration must already have failed at app startup.
+
+Protects FastAPI application APIs only — not Nginx-served static HTML.
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ class CloudflareAccessJWTMiddleware:
 
         request = Request(scope, receive=receive)
         try:
-            claims = extract_and_verify_assertion(
+            claims = await extract_and_verify_assertion(
                 request.headers,
                 team_domain=self.team_domain,
                 audience=self.audience,

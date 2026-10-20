@@ -17,9 +17,21 @@
 
 ## Behavior
 
-- Header-only: `Cf-Access-Jwt-Assertion` (case-insensitive). **No cookie fallback** (avoids header/cookie ambiguity).
-- Duplicate or comma-joined assertion header values → **403** (`ambiguous_header`).
-- RS256 only; JWKS from `{CF_ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`; TTL cache + unknown-`kid` refresh; 5s HTTP timeout.
+- Header-only: `Cf-Access-Jwt-Assertion` (case-insensitive). **No cookie fallback**.
+- Assertion hardening (fail closed → `403`):
+  - Any duplicate header field, including identical or empty duplicates.
+  - Any comma in the value (leading, trailing, or joined tokens).
+  - Empty / whitespace-only / whitespace-padded values.
+  - Non-compact-JWS shapes.
+- RS256 only; JWKS from `{CF_ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`.
+- **Async** JWKS fetch via `httpx.AsyncClient` (no sync HTTP on the ASGI event loop).
+- JWKS reliability controls:
+  - Bounded timeout (5s).
+  - `asyncio.Lock` single-flight refresh.
+  - TTL cache (300s); stale warm cache may serve **known** kids during JWKS outage.
+  - Unknown-`kid` force-refresh throttled (min interval) + negative cache.
+  - Max response bytes (64 KiB) and max key count (32).
+  - Malformed JWKS JSON / non-dict / bad `keys` type → controlled denial codes.
 - Exact issuer = validated team domain; audience must match `CF_ACCESS_AUD`; `exp` required; `nbf` verified when present; ≤60s leeway.
 - Failures → generic `403 {"detail":"Access denied"}`. Logs reason **codes only** (never raw JWT, cookies, email, or secrets).
 - Does **not** auto-create FashionRise users from Cloudflare identity.
@@ -32,12 +44,15 @@
 
 Both remain independent. Enabling this flag does not enable registration.
 
-## Operator prerequisites (dashboard — not done by this PR)
+## Pre-enable staging gate (operator — not done by this PR)
 
-1. Confirm Zero Trust team domain URL (candidate observed: `black-flower-30bb.cloudflareaccess.com`).
-2. Copy FashionRise Access **Application Audience (AUD)** tag.
-3. Confirm private AOP client cert still bound in Cloudflare (unchanged by this PR).
-4. Separate approved deploy to set env + restart API — **not authorized here**.
+Before any enabled deployment:
+
+1. Confirm Zero Trust team domain + FashionRise Access **AUD** from the dashboard.
+2. Confirm Cloudflare injects exactly one `Cf-Access-Jwt-Assertion` on browser API requests and Nginx forwards that single value unchanged.
+3. Confirm private AOP client cert still bound.
+4. Exercise protected API routes with a real Access session while registration remains disabled.
+5. Prepare rollback: set `CF_ACCESS_JWT_VALIDATION=false` and restart API.
 
 ## Rollback
 
