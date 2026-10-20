@@ -27,7 +27,7 @@ export default function App() {
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
-            path="/studio"
+            path="/studio/*"
             element={
               <ProtectedRoute>
                 <StudioPage />

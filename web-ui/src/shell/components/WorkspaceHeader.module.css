@@ -106,6 +106,38 @@
   opacity: 0.45;
 }
 
+.saveDesign {
+  min-height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 243, 238, 0.22);
+  background: rgba(248, 243, 238, 0.08);
+  color: var(--fr-text);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.saveDesign:hover {
+  border-color: rgba(244, 114, 182, 0.6);
+}
+
+.saveDesign:focus-visible,
+.moreItem:focus-visible,
+.iconBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.moreItem:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .moreWrap {
   position: relative;
 }
@@ -151,7 +183,8 @@
   }
 
   .iconBtn,
-  .magicSoon {
+  .magicSoon,
+  .saveDesign {
     height: 32px;
     min-height: 32px;
   }
@@ -169,5 +202,15 @@
 
   .title {
     font-size: 17px;
+  }
+}
+
+@media (max-width: 520px) {
+  .saveDesign {
+    padding: 0 10px;
+  }
+
+  .saveDesignLabel {
+    display: none;
   }
 }

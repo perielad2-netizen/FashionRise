@@ -66,3 +66,61 @@
   color: #f5f0ea;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+.primary:disabled,
+.danger:disabled,
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog:focus {
+  outline: none;
+}
+
+.primary:focus-visible,
+.danger:focus-visible,
+.ghost:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f5f0ea;
+}
+
+.input {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5f0ea;
+  font: inherit;
+  font-size: 14px;
+}
+
+.input:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 1px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: #9aa6bd;
+}
+
+.error {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #fca5a5;
+}

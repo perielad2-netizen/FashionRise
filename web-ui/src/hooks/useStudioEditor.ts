@@ -17,7 +17,18 @@ import {
   persistStudioDraft,
   restoreStudioDraft,
 } from '@/lib/draftPersistence'
-import { documentForCloud } from '@/services/designsApi'
+import { documentForCloud, listMyDesigns, pickLatestStudioDraft } from '@/services/designsApi'
+import { downloadBlob, exportFilename, exportSketchPng } from '@/lib/exportCanvas'
+import {
+  createSaveRequestId,
+  defaultDesignTitle,
+  snapshotFromDocument,
+  validateDesignTitle,
+  workingDocumentFromSnapshot,
+  type SavedDesignRecord,
+  type SavedDesignSnapshot,
+} from '@/lib/savedDesign'
+import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
 import { StrokeHistory } from '@/lib/history'
 import { validateReferenceImageFile } from '@/lib/referenceFile'
 import {
@@ -60,6 +71,35 @@ export type DraftConflictPrompt = {
   designId: string
 }
 
+export type SaveDesignDialogState = {
+  defaultTitle: string
+  saving: boolean
+  error: string | null
+  customReferenceOmitted: boolean
+}
+
+export type OpenDesignState =
+  | { phase: 'loading'; designId: string }
+  | { phase: 'confirm'; record: SavedDesignRecord }
+  | { phase: 'unsynced'; record: SavedDesignRecord; message: string }
+  | { phase: 'conflict'; record: SavedDesignRecord }
+  | { phase: 'opening'; record: SavedDesignRecord }
+  | { phase: 'error'; designId: string; record: SavedDesignRecord | null; message: string; canRetry: boolean }
+
+type PendingSave = {
+  saveRequestId: string
+  snapshot: SavedDesignSnapshot
+  sourceRevision: number | null
+  uncertain: boolean
+}
+
+const EXPORT_FAILED =
+  'PNG export failed. Your sketch is unchanged. Try again, or reload the page if it keeps failing.'
+const EXPORT_NO_REFERENCE =
+  'PNG exported without the reference image because it could not be loaded. Your ink is included.'
+const OPEN_CUSTOM_REFERENCE_NOTE =
+  ' Custom reference images are not saved with designs. Choose the image again if you need it.'
+
 export function useStudioEditor() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -78,6 +118,13 @@ export function useStudioEditor() {
   const scheduleCloudSaveRef = useRef<() => void>(() => {})
   /** Blocks automatic cloud writes until the operator resolves a conflict. */
   const conflictOpenRef = useRef(false)
+  /** Blocks automatic cloud writes while a saved design replaces the working-draft content. */
+  const openingRef = useRef(false)
+  const cloudInFlightRef = useRef(0)
+  const pendingSaveRef = useRef<PendingSave | null>(null)
+  const saveInFlightRef = useRef(false)
+  const exportingRef = useRef(false)
+  const openRequestRef = useRef(0)
 
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [tool, setTool] = useState<ToolKind>('draw')
@@ -105,6 +152,11 @@ export function useStudioEditor() {
   const [modelSwitchPrompt, setModelSwitchPrompt] = useState<ModelSwitchPrompt | null>(null)
   const [draftConflict, setDraftConflict] = useState<DraftConflictPrompt | null>(null)
   const [ready, setReady] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [saveDesignDialog, setSaveDesignDialog] = useState<SaveDesignDialogState | null>(null)
+  const [openDesign, setOpenDesign] = useState<OpenDesignState | null>(null)
+  /** Bumped after each acknowledged Save as design so My Designs refetches. */
+  const [libraryVersion, setLibraryVersion] = useState(0)
 
   useEffect(() => {
     return () => {
@@ -147,20 +199,26 @@ export function useStudioEditor() {
     const run = async () => {
       // A save queued behind an in-flight request must not run after that
       // request opens a conflict. Check at execution time, before any API call.
-      if (conflictOpenRef.current) {
+      if (conflictOpenRef.current || openingRef.current) {
         return
       }
       setSaveStatus((prev) => (prev === 'pending' ? 'pending' : 'saving'))
       setSaveError(null)
-      const result = await persistStudioDraft({
-        userId: user.id,
-        designId: designIdRef.current,
-        document: doc,
-        fingerprint,
-        lastSyncedFingerprint: syncedFingerprintRef.current,
-        expectedRevision: syncedRevisionRef.current,
-        skipLocalWrite: localPersistedFpRef.current === draftContentFingerprint(doc),
-      })
+      cloudInFlightRef.current += 1
+      let result: Awaited<ReturnType<typeof persistStudioDraft>>
+      try {
+        result = await persistStudioDraft({
+          userId: user.id,
+          designId: designIdRef.current,
+          document: doc,
+          fingerprint,
+          lastSyncedFingerprint: syncedFingerprintRef.current,
+          expectedRevision: syncedRevisionRef.current,
+          skipLocalWrite: localPersistedFpRef.current === draftContentFingerprint(doc),
+        })
+      } finally {
+        cloudInFlightRef.current -= 1
+      }
 
       // A newer edit may have landed while this request was in flight.
       const stillCurrent =
@@ -212,7 +270,7 @@ export function useStudioEditor() {
 
   const scheduleCloudSave = useCallback(() => {
     if (!bootedRef.current || !user?.id) return
-    if (conflictOpenRef.current) return
+    if (conflictOpenRef.current || openingRef.current) return
     cloudDirtyRef.current = true
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = window.setTimeout(() => {
@@ -590,6 +648,353 @@ export function useStudioEditor() {
     })()
   }, [applyDocument, draftConflict, user?.id])
 
+  const referenceUrlForDocument = useCallback(
+    (doc: StudioDraftDocument): string | null => {
+      switch (doc.model) {
+        case 'female':
+          return FEMALE_URL
+        case 'male':
+          return MALE_URL
+        case 'custom':
+          return blobUrl ?? doc.customReferenceUrl
+        case 'blank':
+          return null
+      }
+    },
+    [blobUrl],
+  )
+
+  /** Export the authoritative document (plus any session-only custom reference) as PNG. */
+  const exportPng = useCallback(async () => {
+    if (exportingRef.current) return
+    exportingRef.current = true
+    setExporting(true)
+    const doc = authoritativeDocRef.current
+    try {
+      const { blob, referenceIncluded } = await exportSketchPng({
+        strokes: doc.strokes,
+        referenceUrl: referenceUrlForDocument(doc),
+        referenceOpacity: doc.dimmed ? 0.4 : 1,
+      })
+      downloadBlob(blob, exportFilename(null))
+      const wantedReference = referenceUrlForDocument(doc) !== null
+      publishStudioNotice(
+        wantedReference && !referenceIncluded
+          ? EXPORT_NO_REFERENCE
+          : 'PNG exported (768 × 1024). Check your downloads.',
+      )
+    } catch {
+      publishStudioNotice(EXPORT_FAILED)
+    } finally {
+      exportingRef.current = false
+      setExporting(false)
+    }
+  }, [publishStudioNotice, referenceUrlForDocument])
+
+  const beginSaveDesign = useCallback(() => {
+    if (!ready || saveInFlightRef.current) return
+    const doc = authoritativeDocRef.current
+    if (doc.strokes.length === 0) {
+      publishStudioNotice('Draw something before saving a design.')
+      return
+    }
+    pendingSaveRef.current = {
+      saveRequestId: createSaveRequestId(),
+      snapshot: snapshotFromDocument(doc),
+      sourceRevision: syncedRevisionRef.current,
+      uncertain: false,
+    }
+    setSaveDesignDialog({
+      defaultTitle: defaultDesignTitle(),
+      saving: false,
+      error: null,
+      customReferenceOmitted: doc.model === 'custom',
+    })
+  }, [publishStudioNotice, ready])
+
+  const cancelSaveDesign = useCallback(() => {
+    if (saveInFlightRef.current) return
+    pendingSaveRef.current = null
+    setSaveDesignDialog(null)
+  }, [])
+
+  const confirmSaveDesign = useCallback(
+    async (rawTitle: string) => {
+      const pending = pendingSaveRef.current
+      if (!pending || !user?.id || saveInFlightRef.current) return
+      const validated = validateDesignTitle(rawTitle)
+      if (!validated.ok) {
+        setSaveDesignDialog((prev) => (prev ? { ...prev, error: validated.message } : prev))
+        return
+      }
+      saveInFlightRef.current = true
+      setSaveDesignDialog((prev) => (prev ? { ...prev, saving: true, error: null } : prev))
+      try {
+        const result = await saveDesignSnapshot({
+          ownerId: user.id,
+          title: validated.title,
+          snapshot: pending.snapshot,
+          saveRequestId: pending.saveRequestId,
+          sourceRevision: pending.sourceRevision,
+          previousAttemptUncertain: pending.uncertain,
+        })
+        if (result.ok) {
+          pendingSaveRef.current = null
+          setSaveDesignDialog(null)
+          setLibraryVersion((v) => v + 1)
+          publishStudioNotice(
+            `Saved “${result.record.title}” to My Designs. Your Studio sketch is unchanged.`,
+          )
+          return
+        }
+        pending.uncertain = pending.uncertain || result.outcomeUncertain
+        setSaveDesignDialog((prev) =>
+          prev ? { ...prev, saving: false, error: result.error } : prev,
+        )
+      } finally {
+        saveInFlightRef.current = false
+      }
+    },
+    [publishStudioNotice, user?.id],
+  )
+
+  /** The working copy matches the last server-acknowledged revision, with nothing queued. */
+  const workingCopyState = useCallback((): 'clean' | 'clean-empty' | 'unsynced' | 'conflict' => {
+    if (conflictOpenRef.current) return 'conflict'
+    if (!bootedRef.current) return 'unsynced'
+    if (cloudDirtyRef.current || cloudInFlightRef.current > 0) return 'unsynced'
+    const doc = authoritativeDocRef.current
+    if (designIdRef.current === null) {
+      return doc.strokes.length === 0 ? 'clean-empty' : 'unsynced'
+    }
+    if (syncedRevisionRef.current === null) return 'unsynced'
+    return syncedFingerprintRef.current === draftContentFingerprint(documentForCloud(doc))
+      ? 'clean'
+      : 'unsynced'
+  }, [])
+
+  const finishOpen = useCallback(
+    (record: SavedDesignRecord, doc: StudioDraftDocument, designId: string, syncedRevision: number) => {
+      applyDocument(doc, designId)
+      syncedRevisionRef.current = syncedRevision
+      syncedFingerprintRef.current = draftContentFingerprint(documentForCloud(doc))
+      localPersistedFpRef.current = draftContentFingerprint(doc)
+      cloudDirtyRef.current = false
+      setSaveStatus('saved')
+      setSaveError(null)
+      setOpenDesign(null)
+      publishStudioNotice(
+        `Opened “${record.title}” in Studio. The saved design stays unchanged.${
+          record.snapshot.model === 'custom' ? OPEN_CUSTOM_REFERENCE_NOTE : ''
+        }`,
+      )
+      navigate('/studio')
+    },
+    [applyDocument, navigate, publishStudioNotice],
+  )
+
+  /**
+   * Replace the singleton working draft's content with a saved snapshot.
+   * Runs on the serialized save chain, writes the server first with the last acknowledged
+   * revision as the OCC token, and only then updates the editor and IndexedDB.
+   * Any failure leaves the editor, IndexedDB and the server draft as they were.
+   */
+  const performOpen = useCallback(
+    (record: SavedDesignRecord) => {
+      if (!user?.id || openingRef.current) return
+      const userId = user.id
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+      setOpenDesign({ phase: 'opening', record })
+
+      const op = async () => {
+        const state = workingCopyState()
+        if (state === 'conflict') {
+          setOpenDesign({ phase: 'conflict', record })
+          return
+        }
+        if (state === 'unsynced') {
+          setOpenDesign({
+            phase: 'unsynced',
+            record,
+            message: 'Your Studio sketch changed before the design could be opened.',
+          })
+          if (cloudDirtyRef.current) scheduleCloudSaveRef.current()
+          return
+        }
+        openingRef.current = true
+        try {
+          if (state === 'clean-empty') {
+            const mine = await listMyDesigns()
+            if (pickLatestStudioDraft(mine)) {
+              setOpenDesign({
+                phase: 'error',
+                designId: record.id,
+                record,
+                canRetry: false,
+                message:
+                  'Your working draft was created on another device. Reload Studio, then open the design again.',
+              })
+              return
+            }
+          }
+          const current = authoritativeDocRef.current
+          const next = workingDocumentFromSnapshot({
+            current,
+            serverRevision: syncedRevisionRef.current,
+            snapshot: record.snapshot,
+          })
+          const nextCloudFp = draftContentFingerprint(documentForCloud(next))
+          const result = await persistStudioDraft({
+            userId,
+            designId: designIdRef.current,
+            document: next,
+            fingerprint: nextCloudFp,
+            lastSyncedFingerprint: null,
+            expectedRevision: syncedRevisionRef.current,
+            skipLocalWrite: true,
+          })
+          if (result.ok) {
+            finishOpen(record, next, result.designId, result.syncedRevision)
+            return
+          }
+          if (result.conflict) {
+            const server = result.conflict.server
+            if (draftContentFingerprint(documentForCloud(server)) === nextCloudFp) {
+              // An earlier attempt reached the server but its response was lost.
+              const local = await persistLocalRecovery({
+                userId,
+                designId: result.conflict.designId,
+                document: server,
+                syncedRevision: server.clientRevision,
+              })
+              if (!local.ok) {
+                setOpenDesign({
+                  phase: 'error',
+                  designId: record.id,
+                  record,
+                  canRetry: true,
+                  message: local.error,
+                })
+                return
+              }
+              finishOpen(record, server, result.conflict.designId, server.clientRevision)
+              return
+            }
+            conflictOpenRef.current = true
+            setDraftConflict({
+              local: current,
+              server,
+              designId: result.conflict.designId,
+            })
+            setSaveStatus('local-only')
+            setOpenDesign(null)
+            publishStudioNotice(
+              'Your working draft changed on another device, so the design was not opened. Choose which draft to keep, then open the design again.',
+            )
+            navigate('/studio')
+            return
+          }
+          setOpenDesign({
+            phase: 'error',
+            designId: record.id,
+            record,
+            canRetry: true,
+            message: `${result.error} Nothing was replaced.`,
+          })
+        } catch {
+          setOpenDesign({
+            phase: 'error',
+            designId: record.id,
+            record,
+            canRetry: true,
+            message: 'Could not reach FashionRise. Nothing was replaced.',
+          })
+        } finally {
+          openingRef.current = false
+        }
+      }
+
+      saveChainRef.current = saveChainRef.current.then(op, op)
+    },
+    [finishOpen, navigate, publishStudioNotice, user?.id, workingCopyState],
+  )
+
+  const evaluateOpen = useCallback(
+    (record: SavedDesignRecord) => {
+      const state = workingCopyState()
+      if (state === 'conflict') {
+        setOpenDesign({ phase: 'conflict', record })
+      } else if (state === 'unsynced') {
+        setOpenDesign({
+          phase: 'unsynced',
+          record,
+          message: !bootedRef.current
+            ? 'Studio is still restoring your working draft.'
+            : 'Your Studio sketch has changes that are not saved to your account yet.',
+        })
+      } else if (authoritativeDocRef.current.strokes.length === 0) {
+        performOpen(record)
+      } else {
+        setOpenDesign({ phase: 'confirm', record })
+      }
+    },
+    [performOpen, workingCopyState],
+  )
+
+  const requestOpenDesign = useCallback(
+    async (designId: string) => {
+      if (!user?.id || openingRef.current) return
+      const token = ++openRequestRef.current
+      setOpenDesign({ phase: 'loading', designId })
+      const fetched = await fetchSavedDesign(user.id, designId)
+      if (token !== openRequestRef.current) return
+      if (!fetched.ok) {
+        setOpenDesign({
+          phase: 'error',
+          designId,
+          record: null,
+          canRetry: fetched.reason === 'network',
+          message: fetched.error,
+        })
+        return
+      }
+      evaluateOpen(fetched.record)
+    },
+    [evaluateOpen, user?.id],
+  )
+
+  const retryOpenDesign = useCallback(async () => {
+    const current = openDesign
+    if (!current) return
+    if (current.phase === 'unsynced') {
+      const token = ++openRequestRef.current
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+      if (bootedRef.current && !conflictOpenRef.current) await flushCloudSave()
+      else await saveChainRef.current
+      if (token !== openRequestRef.current) return
+      evaluateOpen(current.record)
+      return
+    }
+    if (current.phase === 'error' && current.canRetry) {
+      if (current.record) evaluateOpen(current.record)
+      else await requestOpenDesign(current.designId)
+    }
+  }, [evaluateOpen, flushCloudSave, openDesign, requestOpenDesign])
+
+  const confirmOpenDesign = useCallback(() => {
+    if (openDesign?.phase === 'confirm') performOpen(openDesign.record)
+  }, [openDesign, performOpen])
+
+  const cancelOpenDesign = useCallback(() => {
+    if (openDesign?.phase === 'opening') return
+    openRequestRef.current += 1
+    setOpenDesign(null)
+  }, [openDesign])
+
   const saveStatusLabel = useMemo(() => {
     switch (saveStatus) {
       case 'restoring':
@@ -663,6 +1068,18 @@ export function useStudioEditor() {
     draftConflict,
     resolveConflictKeepLocal,
     resolveConflictUseServer,
+    exporting,
+    exportPng,
+    saveDesignDialog,
+    beginSaveDesign,
+    confirmSaveDesign,
+    cancelSaveDesign,
+    libraryVersion,
+    openDesign,
+    requestOpenDesign,
+    confirmOpenDesign,
+    retryOpenDesign,
+    cancelOpenDesign,
   }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, MoreHorizontal, Redo2, Sparkles, Undo2 } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, MoreHorizontal, Redo2, Sparkles, Undo2 } from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
 import styles from './WorkspaceHeader.module.css'
 
@@ -15,6 +15,10 @@ type Props = {
   saveStatusLabel: string
   saveError: string | null
   onRetrySave?: () => void
+  onSaveDesign?: () => void
+  onExportPng?: () => void
+  exporting?: boolean
+  onOpenLibrary?: () => void
 }
 
 export function WorkspaceHeader({
@@ -29,6 +33,10 @@ export function WorkspaceHeader({
   saveStatusLabel,
   saveError,
   onRetrySave,
+  onSaveDesign,
+  onExportPng,
+  exporting = false,
+  onOpenLibrary,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -107,6 +115,18 @@ export function WorkspaceHeader({
           Magic
           <span className={styles.soon}>Soon</span>
         </button>
+        {onSaveDesign ? (
+          <button
+            type="button"
+            className={styles.saveDesign}
+            onClick={onSaveDesign}
+            aria-label="Save design"
+            title="Save a named private copy to My Designs"
+          >
+            <BookmarkPlus size={15} aria-hidden="true" />
+            <span className={styles.saveDesignLabel}>Save design</span>
+          </button>
+        ) : null}
         <div className={styles.moreWrap} ref={menuRef}>
           <button
             type="button"
@@ -119,6 +139,46 @@ export function WorkspaceHeader({
           </button>
           {menuOpen ? (
             <div className={styles.moreMenu} role="menu">
+              {onSaveDesign ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onSaveDesign()
+                  }}
+                >
+                  Save as design…
+                </button>
+              ) : null}
+              {onExportPng ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  disabled={exporting}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onExportPng()
+                  }}
+                >
+                  {exporting ? 'Exporting PNG…' : 'Export PNG'}
+                </button>
+              ) : null}
+              {onOpenLibrary ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onOpenLibrary()
+                  }}
+                >
+                  My Designs
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"
