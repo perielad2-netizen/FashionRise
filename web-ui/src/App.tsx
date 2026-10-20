@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
+import { isRegistrationUiEnabled } from '@/config/registrationUi'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { StudioPage } from '@/pages/StudioPage'
@@ -34,7 +35,12 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/register"
+            element={
+              isRegistrationUiEnabled() ? <RegisterPage /> : <Navigate to="/login" replace />
+            }
+          />
           <Route
             path="/studio/*"
             element={
