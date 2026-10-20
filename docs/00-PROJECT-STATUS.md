@@ -65,7 +65,7 @@
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
 | **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator physical-device acceptance **pending**. |
-| **WEB-V3B** | Invite-only registration — **draft PR #19, not merged, not deployed**. Security amendments pushed for PM re-review. `REGISTRATION_ENABLED` defaults **false**. Migration **`004`** not applied in production. |
+| **WEB-V3B** | Invite-only registration — **draft PR #19, not merged, not deployed**. Final safety corrections pushed for PM final approval. `REGISTRATION_ENABLED` defaults **false**. Migration **`004`** not applied in production. |
 | PWA Access fix | Draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) — required before the next production frontend rebuild. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record). |
 | INFRA-2 docs | Separate draft PR #10. |
