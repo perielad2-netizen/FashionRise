@@ -2,7 +2,7 @@
 
 **Branch:** `cursor/web-v3b-invite-registration-77c6`  
 **Status:** **MERGED** to `main` as PR #19 (code). **Not activated in production.** Registration remains disabled (Nginx deny, `REGISTRATION_ENABLED` off, Alembic `003`). Stage C trust boundary: **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION**.  
-**Depends on:** permanent PWA/service-worker fix (draft PR #16) before any production frontend rebuild that could reintroduce cached navigation.
+**PWA dependency:** permanent Access-safe service-worker fix PR #16 is merged and deployed in Stage B. Preserve its navigation safety assertion in future frontend releases.
 
 ## 1. User flow
 
