@@ -3,15 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **WEB-V2.3** tablet landscape fit is on draft PR [#12](https://github.com/perielad2-netizen/FashionRise/pull/12) and is **not deployed**. Production runs WEB-V2.2. Next step: PM review of PR #12. Do not merge or deploy.
+**Last updated:** 2026-10-20. **WEB-V3A** (Export, Save & My Designs) is on draft PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13). It is **not merged and not deployed**. Next step: PM review of PR #13. Do not merge or deploy.
 
-**Phase:** **WEB-V2.3**: responsive tablet landscape fix and final UI refinements. The protected family beta is live.
+**Phase:** **WEB-V3A**: first functional milestone after the visual work. Users can export a real PNG, save named private designs, browse them in My Designs, and reopen one safely. The protected family beta is live.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access):**
 
-| Layer | Deployed SHA |
+| Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`9db1fa864ef9ddf622664be9be48c841f8a2a0ff`** (merge of PR #11, WEB-V2.2) |
+| Frontend (`web-ui`), last confirmed by a deploy log | **`9db1fa864ef9ddf622664be9be48c841f8a2a0ff`** (merge of PR #11, WEB-V2.2) |
+| Frontend (`web-ui`), probably live | **`f8a5b22292d2a389b113bcd63394d99986bcb110`** (merge of PR #12, WEB-V2.3). Operator real-tablet acceptance passed 6/6, but the VPS deploy log was not supplied. **Verify the live revision at the next deployment.** |
 | Backend (FastAPI + PostgreSQL) | **`6df327ba9c40c2e28faaa04a9a97f97a2b092dd0`** (merge of PR #9) |
 
 **WEB-V2.2 acceptance on production:**
@@ -24,7 +25,9 @@
 | Tablet portrait | Usable |
 | Tablet landscape in a normal browser | **Limited.** Tabs and the address bar leave too little height, so the paper and side panels were cut off. WEB-V2.3 corrects this. |
 
-**WEB-V2.3 branch:** `cursor/web-v23-tablet-landscape-77c6`, draft PR [#12](https://github.com/perielad2-netizen/FashionRise/pull/12), based on `main` `9db1fa86`. Report: `docs/WEB-V2.3-TABLET-LANDSCAPE-QA.md`
+**WEB-V2.3:** merged as PR [#12](https://github.com/perielad2-netizen/FashionRise/pull/12) at `f8a5b222`. Real-tablet acceptance 6/6 PASS. Report: `docs/WEB-V2.3-TABLET-LANDSCAPE-QA.md`
+
+**WEB-V3A branch:** `cursor/web-v3a-design-library-77c6`, draft PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13), based on `main` `f8a5b222`. Report: `docs/WEB-V3A-DESIGN-LIBRARY-QA.md`
 
 ---
 
@@ -49,13 +52,14 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| Current `main` | **`9db1fa86`**, merge of PR #11 |
-| Production frontend / backend | **`9db1fa86`** / **`6df327ba`** |
+| Current `main` | **`f8a5b222`**, merge of PR #12 |
+| Production frontend / backend | **`9db1fa86`** confirmed (`f8a5b222` probably live, unverified) / **`6df327ba`** |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`). Still the deployed backend. |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and **deployed** as a web-only release |
-| **WEB-V2.3** | Draft PR #12 on `cursor/web-v23-tablet-landscape-77c6`. **Not merged. Not deployed.** |
-| INFRA-2 docs | Separate draft PR #10. Not part of the WEB-V2.3 branch. |
+| **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. Deploy log not supplied. |
+| **WEB-V3A** | Draft PR #13 on `cursor/web-v3a-design-library-77c6`. **Not merged. Not deployed.** |
+| INFRA-2 docs | Separate draft PR #10. Not part of the WEB-V3A branch. |
 | Paid OpenAI | **NONE** |
 | Persistent AI/backend behavior | **UNCHANGED** |
 
@@ -150,9 +154,9 @@
 - Persistence, Magic API, uploads, registration, and infra were not changed.
 - Report: `docs/WEB-V2.2-VISUAL-QA.md`
 
-**WEB-V2.3 — tablet landscape fit and final UI refinements (draft PR #12, not deployed):**
+**WEB-V2.3 — tablet landscape fit and final UI refinements (merged as PR #12, `f8a5b222`):**
 
-Changes in this PR (frontend only):
+Changes (frontend only):
 
 - **Short landscape:** `#root` uses `100dvh` and the shell pads by safe-area insets. Grid rows are `minmax(0, 1fr)`, so panels scroll inside their own column. The 3:4 paper is sized from available width and height (`min(100cqw, max width, 75cqh)`). Compact header, dock, notice, rail, and panel spacing apply only at `(min-width: 821px) and (max-height: 760px)`. The tool rail scrolls when it is taller than the paper column. Model cards no longer overlap in a short library.
 - **Sidebar:** the cropped “Fashion is your superpower” promo card is removed. Navigation controls are unchanged.
@@ -170,29 +174,89 @@ Correction measured in local Chrome at 100% zoom (offline notice showing):
 | 1180 × 600 | Fits, but the brush window and Generate with AI were below the viewport | 291 × 388; brush controls and Generate visible in Settings |
 | 1440 × 900 | 345 × 460 plus floating brush window | 468 × 624, no floating window |
 
-**Intentionally disabled (unchanged):** Magic and Generate with AI (notice only), persistent custom uploads (session preview only), public registration, Home / Design Book / Discover / My Looks, future rail tools, My Gallery, fabrics, gradients, layer editing, zoom/fit/fullscreen, pressure toggle, placeholder poses.
+WEB-V2.3 was merged as PR #12 (`f8a5b222`) and passed real-tablet acceptance 6/6.
 
-**Remaining blockers before WEB-V2.3 can ship:**
+**WEB-V3A — Export, Save & My Designs (draft PR #13, not deployed):**
 
-- PM review of PR #12.
-- Physical-tablet acceptance in landscape with browser chrome visible, plus rotation during a session and the installed PWA. Browser simulations passed, but they are not device proof. See the checklist in `docs/WEB-V2.3-TABLET-LANDSCAPE-QA.md`.
+What changed (frontend only, plus one backend test file):
+
+- **Export PNG** (More menu):
+  - 768×1024 PNG rendered on the device from the authoritative document.
+  - Cream paper, croquis reference (dimmed when Dim reference is on), and ink in original colours. The eraser never erases the reference. No UI chrome.
+  - Safe filename `fashionrise-<title>-YYYY-MM-DD-HHMM.png`. Honest failures. The object URL is always revoked. No AI and no upload.
+- **Save as design** (header button and More menu):
+  - Dialog with a validated title (1–80 characters).
+  - Stores an owner-private snapshot as a separate design record.
+  - Success is shown only after the server acknowledges a matching snapshot. Retries cannot create duplicates; see the QA doc for the one small documented race. Offline never reports success.
+  - The Studio working draft is untouched.
+- **My Designs** (`/studio/designs`, sidebar item):
+  - The working draft and saved designs are shown separately, with title, date, model, and a bounded on-device preview.
+  - Loading, empty, error, damaged, and refresh states.
+  - Titles are rendered as text. Owner-private. No Gallery or social features.
+- **Open a saved design:**
+  - Fresh fetch plus strict validation.
+  - Never silently replaces unsaved edits: they must sync first (Retry save). A synced sketch needs an explicit "Replace and open".
+  - Writes the single working draft forward with the normal `expected_revision` check. If another device changed it, nothing is replaced and the existing conflict dialog appears.
+  - Undo history starts fresh, and refresh restores the opened sketch.
+- Fix found in browser QA: the More menu now stays above workspace notices.
+
+**Working draft vs saved designs:**
+
+| | Studio working draft | Saved design |
+|---|---|---|
+| Count per user | Exactly one (unchanged) | Any number |
+| `design_data.schema` | `fashionrise.studio.draft.v1` | `fashionrise.saved_design.v1` (snapshot nested inside) |
+| `metadata` marker | `draftKind: "studio_working_draft"` | `designKind: "saved_design"`, no `draftKind` |
+| Writes | Autosave, `expected_revision` OCC, create reconcile | One plain create per save. Never updated or overwritten by the UI. |
+| Visibility | Private | Private |
+
+The backend's singleton logic only matches the working-draft marker or a top-level Studio schema, so saved designs never enter create-reconcile or revision checks. This is proven against live FastAPI and PostgreSQL in `backend/tests/test_saved_design_isolation.py`.
+
+**Database / API / migration impact:** **none.**
+
+- Reuses the authenticated `POST /api/v1/designs`, `GET /api/v1/designs/my`, `GET /api/v1/designs/{id}`, and the existing working-draft `PUT`.
+- No backend code change, no new endpoint, no migration (Alembic head stays `003`), no data backfill.
+- `/api/v1/gallery` is not used.
+
+**Safety flags and disabled features (unchanged):**
+
+- No paid AI or OpenAI calls. Magic and Generate with AI stay notice-only.
+- Persistent custom uploads stay disabled. Saved designs never store custom-reference images.
+- Public registration stays off. Public Gallery and unrestricted API routing stay off.
+- No Cloudflare, Nginx, VPS, or production-data changes. No automatic deploy.
+- Home, Design Book, Discover, My Looks, and future rail tools stay disabled.
+
+**Known limitations:**
+
+- A duplicate save is possible only if the original request is still being processed on the server when a retry's lookup runs. Fixing it fully needs server-side dedupe, a backend change for PM decision.
+- If a reopen response is lost and the user refreshes instead of retrying, the normal conflict dialog appears. The user chooses; nothing is lost.
+- Custom references are not saved.
+- Saved designs cannot be renamed or deleted yet.
+- `/designs/my` returns full rows. This is fine at beta scale.
+- Tested only in local headless Chrome against an isolated database. Physical-device acceptance is still to do.
 
 **Do not:**
 
 - Continue Unity UI / merge PR #8 as product
-- Merge or deploy WEB-V2.3 before PM approval
-- Activate Magic / public registration / persistent uploads
-- Mix INFRA-2 PR #10 into WEB-V2.3
+- Merge or deploy WEB-V3A before PM approval
+- Activate Magic / public registration / persistent uploads / public Gallery
+- Mix INFRA-2 PR #10 into WEB-V3A
 
 ---
 
 ## Suggested next steps
 
-1. **PM review of draft PR #12 (WEB-V2.3).** Do not merge or deploy it in this step.
-2. After approval: merge, then do a web-only deploy of the merged SHA, with the same versioned-release and atomic-switch process used for WEB-V2.2. No FastAPI or PostgreSQL restart.
-3. Run physical-tablet acceptance on fashionrise.app: landscape in the browser with tabs visible, rotation mid-session, installed PWA, stylus strokes, Brush sheet, Generate notice.
-4. Custom-reference uploads stay disabled until owner-private retrieval exists.
-5. Later: Magic/backend connection after beta readiness. Reconcile INFRA-2 PR #10 separately.
+1. **PM review of draft PR #13 (WEB-V3A).** Do not merge or deploy it in this step.
+2. After approval and merge:
+   - Before deploying, record the frontend revision **actually** live on the VPS.
+   - Then do a web-only deploy of the merged SHA. No FastAPI or PostgreSQL change or restart is needed.
+   - Check that the PWA service worker picks up the new version.
+3. Run the production acceptance list in `docs/WEB-V3A-DESIGN-LIBRARY-QA.md` §9: save, browse, open, and export on desktop and tablet; cross-device; two-device conflict; offline retry; second-account isolation.
+4. PM decisions for a later milestone:
+   - server-side save dedupe
+   - rename and delete for saved designs
+   - a paged summary list endpoint
+5. Custom-reference uploads stay disabled until owner-private retrieval exists. Magic/backend connection comes later, after beta readiness. Reconcile INFRA-2 PR #10 separately.
 
 ---
 
@@ -228,11 +292,26 @@ FashionRise/
 3. Do **not** resume Unity Creator Studio UI work.
 4. Backend: venv + `alembic upgrade head` + uvicorn on the port matching `VITE_API_BASE_URL`.
 5. Frontend: `cd web-ui && npm run dev`.
-6. Pick work from **Suggested next steps**. WEB-V2.3 is waiting on PM review and is not deployed.
+6. Pick work from **Suggested next steps**. WEB-V3A is waiting on PM review and is not deployed.
 
 ---
 
-## WEB-V2.3 verification (draft PR #12)
+## WEB-V3A verification (draft PR #13)
+
+| Gate | Result |
+|------|--------|
+| `npm test` | **Pass: 161 tests, 29 files.** Adds PNG export, save idempotency, format isolation, private filtering, previews, reopen without loss, offline, switching with queued saves, cross-device conflict, and layout contracts. |
+| `npm run lint` | Pass, with the same three pre-existing oxlint warnings |
+| `npm run build` (`tsc -b` + Vite + PWA) | Pass |
+| Backend `pytest` (isolated test DB) | **102 passed, 1 failed.** The failure, `test_gpt6_luna_live_eval::test_cli_default_is_dry_run`, also fails on clean `main` and is unrelated. Saved-design isolation plus Studio concurrency: 14 / 14. |
+| Singleton rules | **Intact.** Backend tests show saved designs never reconcile with the working draft and Studio OCC rules still hold. The browser run ends with exactly one working draft. |
+| Local browser full flow (**simulated**) | **33 / 33 PASS.** Headless Chrome, local FastAPI, isolated `fashionrise_v3a_qa` database, two throwaway accounts. Covers desktop, tablet portrait, 1024×550 short landscape, and a 390-wide phone. |
+| Production database | **Not used** |
+| OpenAI / paid AI | **None** |
+| Backend code / migration / infra | **Unchanged** |
+| Physical device | **Not yet** |
+
+## WEB-V2.3 verification (PR #12, merged)
 
 | Gate | Result |
 |------|--------|
@@ -253,6 +332,8 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **WEB-V3A (draft PR #13, not deployed):** Export PNG; Save as design (private `fashionrise.saved_design.v1` records, idempotent retries); My Designs library with previews; safe reopen into the single working draft through OCC. No backend code, endpoint, or migration change. 161 frontend tests, backend 102 pass (1 pre-existing unrelated failure), simulated browser flow 33/33. |
+| 2026-10-20 | **WEB-V2.3 merged** as PR #12 (`f8a5b222`). Operator real-tablet acceptance 6/6. Deploy log not supplied, so verify the live frontend revision at the next deploy. |
 | 2026-10-20 | **WEB-V2.3 (draft PR #12, not deployed):** short-landscape fit (`100dvh`, safe areas, height-aware 3:4 paper, constrained grid rows, compact chrome); sidebar promo removed; Generate with AI pinned in Settings; desktop floating brush window removed (dock sheet kept on tablets). 87 tests pass. Production stays frontend `9db1fa86` / backend `6df327ba`. |
 | 2026-10-19 | **WEB-V2.2 deployed:** PR #11 merged at `9db1fa86`, then a web-only deploy. Desktop 5/5, cross-device recovery, and two-tab conflict PASS. Tablet portrait usable; landscape limited by browser chrome. |
 | 2026-10-19 | **WEB-V2.2 notice visibility (`e547ab3c`):** Magic, Back, and header Settings messages render once under the workspace title at every width, including when Settings is hidden. Draft PR #11. Not deployed. |
