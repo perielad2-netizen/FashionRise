@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **WEB-V3A** is **merged and DEPLOYED** at `85b6561b`. **WEB-V3B** (invite-only registration) is in draft review — **not merged, not deployed, registration stays off**. Do not enable public registration. Permanent PWA Access fix remains draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16).
+**Last updated:** 2026-10-20. **WEB-V3A** is **merged and DEPLOYED** at `85b6561b`. **WEB-V3B** (invite-only registration) security amendments are on draft PR [#19](https://github.com/perielad2-netizen/FashionRise/pull/19) awaiting Technical PM re-review — **not merged, not deployed, registration stays off**. Do not enable public registration. Permanent PWA Access fix remains draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16).
 
 **Phase:** Protected family beta on WEB-V3A (export / save / My Designs). WEB-V3B adds invite-only Create Account behind Cloudflare Access + application invitations.
 
@@ -32,7 +32,7 @@
 
 **WEB-V3A:** merged PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) at `85b6561b` and deployed 2026-10-20T12:45Z. Report: `docs/WEB-V3A-DESIGN-LIBRARY-QA.md`. Physical-device acceptance still pending. Deploy status also in draft PR [#15](https://github.com/perielad2-netizen/FashionRise/pull/15).
 
-**WEB-V3B:** invite-only registration on `cursor/web-v3b-invite-registration-77c6`. Report: `docs/WEB-V3B-INVITE-REGISTRATION-QA.md`.
+**WEB-V3B:** invite-only registration on `cursor/web-v3b-invite-registration-77c6` (draft PR #19). Security amendments (test-DB fail-closed, concurrent register 409, locked revoke, trusted rate-limit IP, secure invite `--code-file`, FE isolation/uncertain recovery) applied; stop for PM re-review. Report: `docs/WEB-V3B-INVITE-REGISTRATION-QA.md`.
 
 ---
 
@@ -65,7 +65,7 @@
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
 | **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator physical-device acceptance **pending**. |
-| **WEB-V3B** | Invite-only registration — **draft PR, not merged, not deployed**. `REGISTRATION_ENABLED` defaults **false**. Migration **`004`** not applied in production. |
+| **WEB-V3B** | Invite-only registration — **draft PR #19, not merged, not deployed**. Security amendments pushed for PM re-review. `REGISTRATION_ENABLED` defaults **false**. Migration **`004`** not applied in production. |
 | PWA Access fix | Draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) — required before the next production frontend rebuild. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record). |
 | INFRA-2 docs | Separate draft PR #10. |
@@ -262,7 +262,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 1. **Operator physical-device acceptance** of WEB-V3A on `https://fashionrise.app` (see `docs/WEB-V3A-DESIGN-LIBRARY-QA.md` §9).
 2. **PM review + merge permanent PWA fix** draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) before any new production frontend build.
-3. **PM security/code review of WEB-V3B** invite registration (this draft). Do **not** merge/deploy/activate yet.
+3. **Technical PM re-review of WEB-V3B** draft PR #19 (security amendments). Do **not** merge/deploy/activate yet.
 4. After WEB-V3B approval (separate window): apply migration `004`, set `REGISTRATION_ENABLED=true`, apply proposed Nginx register allowlist (`docs/deploy/PROPOSED-NGINX-REGISTER-ALLOWLIST.md`), restart only `fashionrise-api`, create a test invitation — still behind Cloudflare Access.
 5. Later milestones (not authorized now): save dedupe, rename/delete saved designs, Magic/backend connection, INFRA-2 PR #10.
 
@@ -336,10 +336,24 @@ FashionRise/
 
 ---
 
+## WEB-V3B verification (draft PR #19, security amendment)
+
+| Gate | Result |
+|------|--------|
+| Test DB safety | Fail-closed: missing `DATABASE_URL_TEST` → exit **2**; `fashionrise_beta` rejected; suites ran only on `fashionrise_test` / `fashionrise_mig_v3b` |
+| Invite + concurrency pytest | **19 / 19 pass** |
+| Full backend pytest | **135 pass**, 1 pre-existing unrelated fail (`test_cli_default_is_dry_run`) |
+| Alembic `0→head` + `003↔004` | **Pass** on disposable `fashionrise_mig_v3b` |
+| `npm test` | **195 / 195 pass** (35 files) — adds isolation, uncertain register recovery, `/auth/me` failure, AuthProvider switch |
+| `npm run lint` / `tsc` / `npm run build` | Pass (same 3 pre-existing oxlint warnings) |
+| Browser SPA smoke | Playwright: login → Create account → register form with Invitation code **PASS** |
+| Production DB / Nginx / CF / registration gate | **Untouched** |
+
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **WEB-V3B security amendment (draft PR #19):** test-DB fail-closed; concurrent register IntegrityError→409; FOR UPDATE revoke; trusted rate-limit IP; Nginx POST-only proposal; secure `--code-file` invites; FE isolation/uncertain recovery. Stop for PM re-review. Not merged / not deployed. |
 | 2026-10-20 | **WEB-V3A final recovery fix (draft PR #13):** removed clean-empty list preflight that blocked same-content createOnly retry after a lost create response. 170 frontend tests. Still draft / not deployed. |
 | 2026-10-20 | **WEB-V3A safety amendment (draft PR #13):** empty-Studio reopen uses `createOnly`; Studio create/reconcile 409s on different content (no silent overwrite); uncertain reopen messaging corrected. Focused backend 15/15; amendment browser 16/16. Still draft / not deployed. |
 | 2026-10-20 | **WEB-V3A (draft PR #13, not deployed):** Export PNG; Save as design (private `fashionrise.saved_design.v1` records, idempotent retries); My Designs library with previews; safe reopen into the single working draft through OCC. Later amended for empty-open race + uncertain messaging. |
