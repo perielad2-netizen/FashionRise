@@ -44,10 +44,10 @@
 ```bash
 cd /opt/fashionrise/src/backend   # or local backend/
 # After approved migration 004 and REGISTRATION_ENABLED=true in that environment:
-mkdir -p /root/.fashionrise-invites && chmod 700 /root/.fashionrise-invites
+mkdir -p /var/lib/fashionrise/invites && chmod 700 /var/lib/fashionrise/invites
 # --code-file creates a NEW 0600 file only (refuses overwrite / symlinks).
 python scripts/manage_invitations.py create person@example.com --hours 72 \
-  --code-file /root/.fashionrise-invites/person.code
+  --code-file /var/lib/fashionrise/invites/person.code
 # Operator reads the file out-of-band; do not cat into shared logs/chat.
 python scripts/manage_invitations.py status --email person@example.com
 python scripts/manage_invitations.py revoke --id <uuid>

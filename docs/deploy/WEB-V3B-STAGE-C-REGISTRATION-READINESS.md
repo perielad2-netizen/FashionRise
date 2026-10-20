@@ -3,11 +3,11 @@
 **Stage:** C — **READ-ONLY / PREPARATION ONLY**  
 **Date (UTC):** 2026-10-20  
 **GitHub `main`:** `8c6a391a0d5bb3acc5e697e63c47e3ec242ec9fd`  
-**Verdict:** **READY_FOR_STAGE_D_APPROVAL** (with mandatory Decision Gate 0 on client-IP)
+**Verdict:** **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION**
 
 **Not authorized in Stage C:** backend deploy, migrations, Nginx/Cloudflare edits, `REGISTRATION_ENABLED=true`, invitations, users, frontend switch, PR merges.
 
-Related: Stage A/B PWA docs · `docs/WEB-V3B-INVITE-REGISTRATION-QA.md` · `docs/deploy/PROPOSED-NGINX-REGISTER-ALLOWLIST.md` · draft PR #21 (Stage B deploy record).
+Related: `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md` · `docs/deploy/PROPOSED-NGINX-REGISTER-ALLOWLIST.md` · Stage A/B PWA docs · `docs/WEB-V3B-INVITE-REGISTRATION-QA.md` · draft PR #21 (Stage B; **not yet merged** — reconcile after independent merge).
 
 ---
 
@@ -23,8 +23,10 @@ Related: Stage A/B PWA docs · `docs/WEB-V3B-INVITE-REGISTRATION-QA.md` · `docs
 | `REGISTRATION_ENABLED` | **PASS (off)** | unset → defaults false |
 | `TRUST_PROXY_HEADERS` | **PASS (off)** | unset → defaults false |
 | Nginx register deny | **PASS** | `location = /api/v1/auth/register { return 403; }` (+ suffix deny) |
-| AOP | **PASS** | `ssl_verify_client on` · no-cert **400** |
-| Cloudflare Access | **PASS** | no-cookie `/login` **302** to Access |
+| AOP | **PASS (custom)** | FashionRise-**private** AOP CA (not Cloudflare global) · `ssl_verify_client on` · no-cert **400** — details in trust-boundary doc |
+| Cloudflare Access (edge) | **PASS** | no-cookie `/login` **302** to Access — **not** origin JWT validation |
+| Origin Access JWT | **FAIL / absent** | No AUD / JWT verification in API — blocks Stage D approval |
+| `ngx_http_realip_module` | **PASS** | Built-in; dry-config `nginx -t` accepts `set_real_ip_from` / `real_ip_header` |
 | Users | **PASS** | `users=1` · no production invites |
 | Disk / backups | **PASS** | ~83G free · Stage B + WEB-V3A backups present |
 | Isolation | **PASS** | Other nginx sites / DBs present; **not touched** |
@@ -96,25 +98,24 @@ Runner: `backend/scripts/run_migration_smoke.py` (fail-closed; never production)
 
 ---
 
-## 4. Decision Gate 0 — Cloudflare → Nginx real client IP
+## 4. Decision Gate 0 — Cloudflare → Nginx real client IP (amended)
 
-**Problem:** Proposed allowlist doc previously set `X-Real-IP` / `X-Forwarded-For` to `$remote_addr`. Behind Cloudflare + AOP, `$remote_addr` is the **Cloudflare edge IP**, so SlowAPI buckets would merge many visitors (or entire POPs).
+**Problem:** `$remote_addr` is the Cloudflare edge; trusting visitor IP for SlowAPI requires a proven peer ∈ Cloudflare CIDRs before using `CF-Connecting-IP`.
 
-**AOP fact:** `ssl_verify_client on` already proves the TLS peer holds Cloudflare’s Authenticated Origin Pull certificate. Trusting Cloudflare-injected `CF-Connecting-IP` is therefore reasonable **only** on that FashionRise server block.
+**AOP finding (corrected):** Origin trusts a **FashionRise-private AOP CA** (`CN = FashionRise Private AOP CA`), not Cloudflare’s **global** shared AOP cert. Custom AOP is zone/hostname-class and stronger than global AOP, but **does not replace** (1) `real_ip` + explicit CF ranges for header provenance, or (2) origin Access JWT validation for Access-application binding. Full evidence: `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md`.
 
-### Options for PM
+### Options (PM-aligned)
 
-| Option | Mechanism | Rate-limit key | Recommendation |
-|---|---|---|---|
-| **A (preferred)** | `proxy_set_header X-Real-IP $http_cf_connecting_ip;` (and same for XFF overwrite) on **all** proxied API locations; keep AOP; set `TRUST_PROXY_HEADERS=true` | Visitor IP from CF | Prefer for activation |
-| **B** | `real_ip_header CF-Connecting-IP` + `set_real_ip_from` Cloudflare IP ranges; then `$remote_addr` becomes visitor | Visitor IP | Acceptable if IP list maintained |
-| **C** | Leave `TRUST_PROXY_HEADERS=false` | Shared `127.0.0.1` bucket | **Not acceptable** for registration activation |
-| **D** | Overwrite with `$remote_addr` only | Shared CF edge IP | **Reject** for activation |
+| Option | Mechanism | Recommendation |
+|---|---|---|
+| **B (preferred)** | FashionRise-only `set_real_ip_from` **official Cloudflare IPv4/IPv6 CIDRs** + `real_ip_header CF-Connecting-IP`; then overwrite `X-Real-IP` / `X-Forwarded-For` with normalized `$remote_addr` on **all** proxied API locations | **Required design for Stage D** |
+| **A** | Unconditional `$http_cf_connecting_ip` without peer allowlist | **Rejected** as primary design |
+| **C** | `TRUST_PROXY_HEADERS=false` | Shared `127.0.0.1` bucket — **not acceptable** for registration activation |
+| **D** | Overwrite with edge `$remote_addr` without real_ip | Shared CF edge buckets — **reject** |
 
-Updated proposal text lives in `docs/deploy/PROPOSED-NGINX-REGISTER-ALLOWLIST.md`.
+**Also blocking:** implement or schedule origin **Access JWT (AUD) validation**; confirm Cloudflare dashboard still uses FashionRise custom AOP client (operator). Merge SlowAPI `ipaddress` hardening draft PR before enabling `TRUST_PROXY_HEADERS`.
 
-**Stage D must not set `TRUST_PROXY_HEADERS=true` until Option A or B is approved and applied to login, refresh, logout, me, register, and designs.**
-
+**Stage D must not set `TRUST_PROXY_HEADERS=true` until Option B is applied, negative tests pass, and backend parser hardening is deployed.**
 ---
 
 ## 5. Exact Stage D activation sequence (proposed)
@@ -123,10 +124,11 @@ Ordered checkpoints. Each has a rollback. FashionRise only.
 
 ### D0 — Preflight & decisions
 
-- Confirm `main` SHA approved for backend.
-- Confirm Decision Gate 0 (Option A or B).
+- Confirm `main` SHA approved for backend (include SlowAPI `ipaddress` hardening).
+- Confirm Decision Gate 0 **Option B** + Access JWT plan accepted.
 - Confirm Access roster for invitee(s).
 - Confirm Stage B frontend still `8c6a391a` (or newer approved gated build).
+- Confirm `mkdir -m 700 /var/lib/fashionrise/invites` as `fashionriseapp` (not `/root`).
 
 ### D1 — Backup
 
@@ -151,13 +153,14 @@ Ordered checkpoints. Each has a rollback. FashionRise only.
 
 **Rollback:** prefer keep `004` + flag off; `downgrade 003` only if PM accepts invite-table drop and no redemptions occurred.
 
-### D4 — Nginx POST-only register allowlist + IP headers
+### D4 — Nginx POST-only register allowlist + Option B real_ip
 
+- Scope `set_real_ip_from` / `real_ip_header` to FashionRise HTTPS `server` only (full current CF CIDR lists).
+- Overwrite `X-Real-IP` / `X-Forwarded-For` with `$remote_addr` on login, refresh, logout, me, register, designs.
 - Apply proposed register location (POST only).
-- Apply Decision Gate 0 header strategy on **all** proxied API locations.
-- `nginx -t` && reload.
-- Probe: register POST reaches API but returns **403/Forbidden** while flag false; GET register still denied; other `/api/` still denied.
-- Confirm AOP + Access unchanged.
+- `nginx -T` isolation check → `nginx -t` → reload.
+- Run negative tests N1–N8 from trust-boundary doc; confirm other VPS sites unaffected.
+- Probe: register POST reaches API but app still Forbidden while flag false.
 
 **Rollback:** restore prior nginx file; reload.
 
@@ -177,9 +180,11 @@ Ordered checkpoints. Each has a rollback. FashionRise only.
 
 ### D7 — Secure invitation
 
-- `python scripts/manage_invitations.py create … --code-file /root/…` (mode 0600, O_EXCL).
-- Deliver out-of-band; **never** paste code into tickets/chats.
-- Do not create invites before D6.
+- As `fashionriseapp` (or root writing into a fashionriseapp-owned path):  
+  `python scripts/manage_invitations.py create … --code-file /var/lib/fashionrise/invites/<invitee>.code`  
+  (`O_EXCL`, mode `0600`, no symlink, revoke on delivery failure).
+- Deliver out-of-band; **never** paste codes into tickets/chats/agent logs.
+- Do not create invites before D6. **Do not** use `/root/…`.
 
 **Rollback:** `revoke --id`.
 
@@ -262,11 +267,13 @@ Never clear IndexedDB to “fix” registration issues. Never touch PickWise / C
 
 ## 8. Outstanding decisions & risks
 
-1. **Decision Gate 0 (blocking for D4/D5):** approve CF-Connecting-IP (or real_ip) strategy.
-2. **Expired Access session** still untested with permanent SW.
-3. **Backend deploy window** with registration off still restarts API — schedule for low traffic; confirm no long-running jobs (AI worker already off in prod intent).
-4. **Invite delivery** is out-of-band only; operator must use `--code-file`.
-5. Reconcile docs: draft PR #21 (Stage B) vs this Stage C PR for `00-PROJECT-STATUS.md`.
+1. **Option B real_ip + CF CIDRs** — design proposed; **not applied**; negative tests not yet executed on live Nginx.
+2. **Origin Access JWT (AUD) validation** — absent; required before claiming Access-bound origin.
+3. **SlowAPI `ipaddress` hardening** — separate draft code PR; must land before `TRUST_PROXY_HEADERS=true`.
+4. **Operator confirm** Cloudflare dashboard uses FashionRise custom AOP client (not global).
+5. **Expired Access session** still untested with permanent SW (Stage B residual).
+6. **PR #21** (Stage B docs) still open — rebase/reconcile this PR after #21 merges; do not overwrite operator **6/6 PASS**.
+7. Invite codes only via `/var/lib/fashionrise/invites/` + `--code-file`.
 
 ---
 
@@ -275,17 +282,21 @@ Never clear IndexedDB to “fix” registration issues. Never touch PickWise / C
 | Area | Status |
 |---|---|
 | Production preflight | **PASS** |
-| Backend deploy readiness (reg off) | **READY** |
+| Backend deploy readiness (reg off) | **READY** (code) |
 | Migration `004` | **READY** (smoke PASS) |
-| Security config (Nginx deny, flags off, Access, AOP) | **PASS (current)** |
-| Nginx allowlist + TRUST_PROXY design | **READY pending Decision Gate 0** |
+| Edge Access + custom AOP (current) | **PASS** (observed) |
+| Trust boundary (real_ip Option B + JWT + parser) | **BLOCKED** — unverified |
+| Nginx allowlist design | **DRAFTED** — not applied |
 | Frontend UI activation design | **READY** (gated build) |
-| Expired Access acceptance | **PENDING** (tracked) |
+| Stage B operator acceptance | **6/6 PASS** (preserved) |
+| Expired Access acceptance | **PENDING** |
 
-### **READY_FOR_STAGE_D_APPROVAL**
+### **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION**
 
-Stage D remains **unauthorized** until Technical PM:
+Stage D remains **unauthorized**. Reassess only after:
 
-1. Approves Decision Gate 0 (client IP).
-2. Explicitly authorizes Stage D execution.
-3. Separately accepts residual Access expired-session testing plan.
+1. Option B Nginx design approved and verification/negative tests planned or completed.
+2. Access JWT origin plan accepted (or residual risk explicitly accepted by PM).
+3. SlowAPI hardening PR reviewed.
+4. PR #21 merged/reconciled without losing Stage B 6/6.
+5. Explicit Stage D authorization.
