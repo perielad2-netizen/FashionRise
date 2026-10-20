@@ -9,7 +9,9 @@
     "lint": "oxlint src",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:sw": "node scripts/assert-sw-access-safe.mjs",
+    "build:verify-sw": "npm run build && npm run check:sw"
   },
   "dependencies": {
     "konva": "^10.9.0",

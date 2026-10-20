@@ -7,6 +7,25 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
+/**
+ * Cloudflare Access sits in front of fashionrise.app.
+ * Never precache HTML or install a Workbox NavigationRoute/navigateFallback:
+ * a cached /index.html shell can satisfy /login|/register|/studio navigations
+ * without an Access round-trip, so the following credentialed API calls fail
+ * (Access 302 cross-origin → "Unable to reach FashionRise").
+ * Nginx already serves SPA HTML via try_files; offline app shell is intentionally
+ * not provided for document navigations.
+ */
+const pwaWorkbox = {
+  // Versioned static assets only — no HTML shell.
+  globPatterns: ['**/*.{js,css,ico,svg,woff2}', 'icons/*.png', 'branding/*.png'],
+  globIgnores: ['**/models/**', '**/*.html', '**/index.html'],
+  maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+  // vite-plugin-pwa defaults navigateFallback to 'index.html'. Explicit null
+  // disables NavigationRoute generation (workbox-build accepts null).
+  navigateFallback: null,
+} as const
+
 export default defineConfig({
   plugins: [
     react(),
@@ -47,18 +66,10 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
-        // Large croquis stay network-loaded; keep SW under size limits.
-        globPatterns: ['**/*.{js,css,html,ico,svg,woff2}', 'icons/*.png', 'branding/*.png'],
-        globIgnores: ['**/models/**'],
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        // Do NOT cache navigations. fashionrise.app sits behind Cloudflare Access;
-        // a NavigationRoute/navigateFallback for /index.html can serve /login from
-        // the SW cache without an Access check. The following POST /api/v1/auth/login
-        // then receives an Access 302 to another origin and fetch() fails with
-        // "Unable to reach FashionRise". Nginx already try_files SPA fallbacks.
-        navigateFallback: undefined,
-      },
+      // Cast: plugin d.ts types navigateFallback as string only; workbox-build
+      // accepts null to disable. Verified against generated dist/sw.js.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      workbox: pwaWorkbox as any,
       devOptions: {
         enabled: false,
       },
