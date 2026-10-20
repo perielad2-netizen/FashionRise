@@ -71,9 +71,26 @@ Exact `location =` beats prefix `^~` for the identical path; the suffix `^~ /api
 - `POST /api/v1/auth/register/extra` → 403
 - Other `/api/…` → 403 unless already allowlisted
 
-## Upstream rate limiting
+## Upstream rate limiting (activation requirement)
 
-With the header overwrite above, set `TRUST_PROXY_HEADERS=true` on `fashionrise-api` so SlowAPI keys on `X-Real-IP`. Leave `TRUST_PROXY_HEADERS=false` (default) if the API is ever exposed without that Nginx sanitization — forged `X-Forwarded-For` is ignored.
+SlowAPI keys on `client_ip_key`:
+
+- `TRUST_PROXY_HEADERS=false` (default today): uses the direct ASGI peer. Behind Nginx that is almost always `127.0.0.1`, so **every user shares one login / refresh / register bucket**. Do **not** activate registration (or leave production in this mode after any allowlist change) without fixing client IP.
+- `TRUST_PROXY_HEADERS=true`: keys on a single `X-Real-IP` value. Safe **only** when Nginx **overwrites** that header with `$remote_addr` (never appends client-supplied XFF).
+
+**Required before flipping `TRUST_PROXY_HEADERS=true` in production:**
+
+1. Apply the same header overwrite snippet to **every** proxied API location that hits SlowAPI — at minimum `login`, `refresh`, `logout`, `me`, `register`, and designs — not only register:
+
+```nginx
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $remote_addr;
+```
+
+2. Confirm with a staging probe that two distinct Access clients receive distinct `X-Real-IP` values upstream and do not exhaust a shared `30/minute` login bucket.
+3. Then set `TRUST_PROXY_HEADERS=true` on `fashionrise-api` and restart only that unit.
+
+Leave `TRUST_PROXY_HEADERS=false` if the API is ever exposed without that Nginx sanitization — forged `X-Forwarded-For` is ignored by design.
 
 ## Application gate still required
 

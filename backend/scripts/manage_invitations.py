@@ -3,7 +3,7 @@ Operator CLI: create / inspect / revoke invite-only beta invitations.
 
 Usage (from backend/, venv active):
 
-  # Preferred under Cursor/SSH: write the one-time code to a 0600 file (never stdout)
+  # Preferred under Cursor/SSH: write the one-time code to a NEW 0600 file (never stdout)
   python scripts/manage_invitations.py create user@example.com --hours 72 \\
       --code-file /root/.fashionrise-invites/user.code
 
@@ -33,6 +33,10 @@ from app.db.session import SessionLocal  # noqa: E402
 from app.services import invitation_service  # noqa: E402
 
 
+class InvitationCodeDeliveryError(RuntimeError):
+    """Secure code-file delivery failed. Message must never include the plaintext code."""
+
+
 def _print_row(row) -> None:
     status = invitation_service.invitation_status(row)
     print(f"id={row.id}")
@@ -47,22 +51,81 @@ def _print_row(row) -> None:
     print("token=REDACTED")
 
 
-def _write_code_file(path: Path, code: str) -> None:
+def _assert_code_file_destination_safe(path: Path) -> Path:
+    """Fail closed before creating an invitation if the destination is unsafe."""
     path = path.expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # Write privately: owner read/write only.
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    if path.exists() or path.is_symlink():
+        raise InvitationCodeDeliveryError(
+            "invitation code file already exists or is a symlink; refusing to overwrite"
+        )
+    parent = path.parent
+    if parent.exists() and parent.is_symlink():
+        raise InvitationCodeDeliveryError(
+            "invitation code directory is a symlink; refusing unsafe delivery path"
+        )
+    # Create the parent directory if needed (not a symlink race on the leaf).
+    parent.mkdir(parents=True, exist_ok=True)
+    if parent.is_symlink():
+        raise InvitationCodeDeliveryError(
+            "invitation code directory resolved to a symlink; refusing unsafe delivery path"
+        )
+    # Re-check leaf after mkdir in case of races / odd mounts.
+    if path.exists() or path.is_symlink():
+        raise InvitationCodeDeliveryError(
+            "invitation code file already exists or is a symlink; refusing to overwrite"
+        )
+    return path
+
+
+def _write_code_file(path: Path, code: str) -> Path:
+    """Create a new owner-only file. Never truncate, overwrite, or follow symlinks."""
+    path = _assert_code_file_destination_safe(path)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(str(path), flags, 0o600)
+    except FileExistsError as exc:
+        raise InvitationCodeDeliveryError(
+            "invitation code file already exists; refusing to overwrite"
+        ) from exc
+    except OSError as exc:
+        # Do not include path details that might echo secrets; keep message generic.
+        raise InvitationCodeDeliveryError(
+            f"failed to create invitation code file ({type(exc).__name__})"
+        ) from exc
+
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(code)
             handle.write("\n")
-    except Exception:
+            handle.flush()
+            os.fsync(handle.fileno())
+    except Exception as exc:
         try:
-            os.close(fd)
+            os.unlink(str(path))
         except OSError:
             pass
-        raise
+        raise InvitationCodeDeliveryError(
+            f"failed to write invitation code file ({type(exc).__name__})"
+        ) from exc
+
     os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    # Final symlink/mode check on the created inode path.
+    if path.is_symlink():
+        try:
+            os.unlink(str(path))
+        except OSError:
+            pass
+        raise InvitationCodeDeliveryError(
+            "invitation code path became a symlink after create; refusing delivery"
+        )
+    return path
+
+
+def _revoke_undelivered(db, invitation_id: uuid.UUID) -> None:
+    """Best-effort revoke so a failed delivery leaves no redeemable orphan invite."""
+    invitation_service.revoke_invitation(db, invitation_id)
 
 
 def main() -> None:
@@ -77,7 +140,7 @@ def main() -> None:
         "--code-file",
         type=Path,
         default=None,
-        help="Write the one-time invitation code to this file with mode 0600 (recommended)",
+        help="Write the one-time invitation code to a NEW file with mode 0600 (recommended)",
     )
     create_p.add_argument(
         "--print-code",
@@ -103,6 +166,17 @@ def main() -> None:
                     file=sys.stderr,
                 )
                 sys.exit(2)
+
+            # Validate destination before inserting so we do not create an orphan on
+            # obvious path problems (existing file / symlink).
+            code_path: Path | None = None
+            if args.code_file:
+                try:
+                    code_path = _assert_code_file_destination_safe(args.code_file)
+                except InvitationCodeDeliveryError as exc:
+                    print(f"invitation_code_delivery_failed: {exc}", file=sys.stderr)
+                    sys.exit(2)
+
             created = invitation_service.create_invitation(
                 db,
                 email=args.email,
@@ -112,13 +186,35 @@ def main() -> None:
             print(f"id={created.id}")
             print(f"email={created.email}")
             print(f"expires_at={created.expires_at.isoformat()}")
-            if args.code_file:
-                _write_code_file(args.code_file, created.plaintext_token)
-                print(f"invitation_code_file={args.code_file.expanduser()}")
+
+            if code_path is not None:
+                try:
+                    written = _write_code_file(code_path, created.plaintext_token)
+                except InvitationCodeDeliveryError as exc:
+                    # Never print the plaintext token. Revoke so the invite cannot be used.
+                    try:
+                        _revoke_undelivered(db, created.id)
+                        print(
+                            "invitation_revoked_after_delivery_failure=yes",
+                            file=sys.stderr,
+                        )
+                    except Exception as revoke_exc:  # noqa: BLE001
+                        print(
+                            f"invitation_revoke_after_delivery_failure_error="
+                            f"{type(revoke_exc).__name__}",
+                            file=sys.stderr,
+                        )
+                    print(f"invitation_code_delivery_failed: {exc}", file=sys.stderr)
+                    sys.exit(1)
+                print(f"invitation_code_file={written}")
                 print("Read the code from that file out-of-band; it is not printed here.")
+
             if args.print_code:
                 print(f"invitation_code={created.plaintext_token}")
-                print("Deliver the invitation_code out-of-band. It will not be stored in the database.")
+                print(
+                    "Deliver the invitation_code out-of-band. "
+                    "It will not be stored in the database."
+                )
             return
 
         if args.command == "status":

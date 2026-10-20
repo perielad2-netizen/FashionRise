@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **WEB-V3A** is **merged and DEPLOYED** at `85b6561b`. **WEB-V3B** (invite-only registration) security amendments are on draft PR [#19](https://github.com/perielad2-netizen/FashionRise/pull/19) awaiting Technical PM re-review — **not merged, not deployed, registration stays off**. Do not enable public registration. Permanent PWA Access fix remains draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16).
+**Last updated:** 2026-10-20. **WEB-V3A** is **merged and DEPLOYED** at `85b6561b`. **WEB-V3B** (invite-only registration) final safety corrections are on draft PR [#19](https://github.com/perielad2-netizen/FashionRise/pull/19) awaiting Technical PM final approval — **not merged, not deployed, registration stays off**. Do not enable public registration. Permanent PWA Access fix remains draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16).
 
 **Phase:** Protected family beta on WEB-V3A (export / save / My Designs). WEB-V3B adds invite-only Create Account behind Cloudflare Access + application invitations.
 
@@ -32,7 +32,7 @@
 
 **WEB-V3A:** merged PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) at `85b6561b` and deployed 2026-10-20T12:45Z. Report: `docs/WEB-V3A-DESIGN-LIBRARY-QA.md`. Physical-device acceptance still pending. Deploy status also in draft PR [#15](https://github.com/perielad2-netizen/FashionRise/pull/15).
 
-**WEB-V3B:** invite-only registration on `cursor/web-v3b-invite-registration-77c6` (draft PR #19). Security amendments (test-DB fail-closed, concurrent register 409, locked revoke, trusted rate-limit IP, secure invite `--code-file`, FE isolation/uncertain recovery) applied; stop for PM re-review. Report: `docs/WEB-V3B-INVITE-REGISTRATION-QA.md`.
+**WEB-V3B:** invite-only registration on `cursor/web-v3b-invite-registration-77c6` (draft PR #19). Final safety corrections: bound migration smoke runner + non-overwrite invite `--code-file`. Stop for PM final approval. Report: `docs/WEB-V3B-INVITE-REGISTRATION-QA.md`.
 
 ---
 
@@ -262,7 +262,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 1. **Operator physical-device acceptance** of WEB-V3A on `https://fashionrise.app` (see `docs/WEB-V3A-DESIGN-LIBRARY-QA.md` §9).
 2. **PM review + merge permanent PWA fix** draft PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) before any new production frontend build.
-3. **Technical PM re-review of WEB-V3B** draft PR #19 (security amendments). Do **not** merge/deploy/activate yet.
+3. **Technical PM final approval of WEB-V3B** draft PR #19 (final safety corrections). Do **not** merge/deploy/activate yet.
 4. After WEB-V3B approval (separate window): apply migration `004`, set `REGISTRATION_ENABLED=true`, apply proposed Nginx register allowlist (`docs/deploy/PROPOSED-NGINX-REGISTER-ALLOWLIST.md`), restart only `fashionrise-api`, create a test invitation — still behind Cloudflare Access.
 5. Later milestones (not authorized now): save dedupe, rename/delete saved designs, Magic/backend connection, INFRA-2 PR #10.
 
@@ -336,23 +336,25 @@ FashionRise/
 
 ---
 
-## WEB-V3B verification (draft PR #19, security amendment)
+## WEB-V3B verification (draft PR #19, final safety corrections)
 
 | Gate | Result |
 |------|--------|
-| Test DB safety | Fail-closed: missing `DATABASE_URL_TEST` → exit **2**; `fashionrise_beta` rejected; suites ran only on `fashionrise_test` / `fashionrise_mig_v3b` |
+| Test DB safety | Fail-closed: missing `DATABASE_URL_TEST` → exit **2**; `fashionrise_beta` rejected; suites on `fashionrise_test` / `fashionrise_mig_v3b` only |
+| Bound migration smoke | `run_migration_smoke.py` refuses missing/beta without connecting; `0→head` + `003↔004` on `fashionrise_mig_v3b` with ambient `DATABASE_URL` pointing at beta name — Alembic still bound to mig DB |
+| Invite code-file | New-file only (`O_EXCL`/`O_NOFOLLOW`); existing/symlink refused; write failure revokes invite; secret never in stdout/stderr |
 | Invite + concurrency pytest | **19 / 19 pass** |
-| Full backend pytest | **135 pass**, 1 pre-existing unrelated fail (`test_cli_default_is_dry_run`) |
-| Alembic `0→head` + `003↔004` | **Pass** on disposable `fashionrise_mig_v3b` |
-| `npm test` | **195 / 195 pass** (35 files) — adds isolation, uncertain register recovery, `/auth/me` failure, AuthProvider switch |
+| Full backend pytest | **145 pass**, 1 pre-existing unrelated fail (`test_cli_default_is_dry_run`) |
+| `npm test` | **195 / 195 pass** (35 files) |
 | `npm run lint` / `tsc` / `npm run build` | Pass (same 3 pre-existing oxlint warnings) |
-| Browser SPA smoke | Playwright: login → Create account → register form with Invitation code **PASS** |
+| Rate-limit activation note | `TRUST_PROXY_HEADERS=true` only after Nginx overwrites `X-Real-IP` on **all** proxied API locations (login/refresh included); otherwise all users share `127.0.0.1` |
 | Production DB / Nginx / CF / registration gate | **Untouched** |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **WEB-V3B final safety corrections (draft PR #19):** bound `run_migration_smoke.py` (Alembic cannot silently use `.env` prod); invite `--code-file` O_EXCL/no-symlink + revoke on delivery failure; rate-limit activation note for per-client login buckets. Stop for PM final approval. Not merged / not deployed. |
 | 2026-10-20 | **WEB-V3B security amendment (draft PR #19):** test-DB fail-closed; concurrent register IntegrityError→409; FOR UPDATE revoke; trusted rate-limit IP; Nginx POST-only proposal; secure `--code-file` invites; FE isolation/uncertain recovery. Stop for PM re-review. Not merged / not deployed. |
 | 2026-10-20 | **WEB-V3A final recovery fix (draft PR #13):** removed clean-empty list preflight that blocked same-content createOnly retry after a lost create response. 170 frontend tests. Still draft / not deployed. |
 | 2026-10-20 | **WEB-V3A safety amendment (draft PR #13):** empty-Studio reopen uses `createOnly`; Studio create/reconcile 409s on different content (no silent overwrite); uncertain reopen messaging corrected. Focused backend 15/15; amendment browser 16/16. Still draft / not deployed. |

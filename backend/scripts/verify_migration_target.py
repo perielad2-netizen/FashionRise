@@ -1,40 +1,49 @@
-"""Assert a disposable Alembic target before upgrade/downgrade smoke runs.
+"""Validate a disposable Alembic smoke target without connecting.
 
-Usage:
+Prefer the bound runner for actual migrations:
+
   DATABASE_URL_TEST=postgresql+psycopg2://…/fashionrise_mig_v3b \\
-    python scripts/verify_migration_target.py
+    python scripts/run_migration_smoke.py upgrade head
 
-Exits non-zero without connecting when the URL is missing, production-like,
-or equal to DATABASE_URL / settings.database_url.
+This script only checks the URL. It does **not** prove a subsequent bare
+`alembic` command will use the same database — use ``run_migration_smoke.py``
+for that.
 """
 
 from __future__ import annotations
 
-import os
+import importlib.util
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_BACKEND_ROOT))
 
-from app.core.test_db_guard import UnsafeTestDatabaseError, assert_safe_test_database_url  # noqa: E402
+from app.core.test_db_guard import UnsafeTestDatabaseError  # noqa: E402
+
+
+def _load_runner():
+    path = _BACKEND_ROOT / "scripts" / "run_migration_smoke.py"
+    spec = importlib.util.spec_from_file_location("run_migration_smoke", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def main() -> None:
-    test_url = os.environ.get("DATABASE_URL_TEST") or os.environ.get("ALEMBIC_SMOKE_DATABASE_URL")
-    app_url = os.environ.get("DATABASE_URL")
+    runner = _load_runner()
     try:
-        cleaned = assert_safe_test_database_url(
-            test_url,
-            app_database_url=app_url,
-            require_env_name="DATABASE_URL_TEST",
-        )
+        cleaned = runner.resolve_smoke_database_url()
     except UnsafeTestDatabaseError as exc:
         print(f"UNSAFE migration target: {exc}", file=sys.stderr)
         sys.exit(2)
-    # Do not print the full URL (may contain credentials); only the safety verdict.
     print("migration_target=safe")
-    print(f"database_name_ok=yes")
-    # Expose cleaned URL to callers via exit 0 only; they already have DATABASE_URL_TEST.
+    print("database_name_ok=yes")
+    print(
+        "note=Use scripts/run_migration_smoke.py to execute Alembic against this URL; "
+        "a standalone preflight does not bind bare `alembic`."
+    )
     _ = cleaned
 
 

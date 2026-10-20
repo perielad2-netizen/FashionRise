@@ -1,7 +1,7 @@
 # WEB-V3B — Invite-Only Beta Registration
 
 **Branch:** `cursor/web-v3b-invite-registration-77c6`  
-**Status:** security-amendment complete — awaiting Technical PM re-review. **Not merged. Not deployed. Registration remains disabled in production.**  
+**Status:** final safety corrections complete — awaiting Technical PM final approval. **Not merged. Not deployed. Registration remains disabled in production.**  
 **Depends on:** permanent PWA/service-worker fix (draft PR #16) before any production frontend rebuild that could reintroduce cached navigation.
 
 ## 1. User flow
@@ -45,12 +45,28 @@
 cd /opt/fashionrise/src/backend   # or local backend/
 # After approved migration 004 and REGISTRATION_ENABLED=true in that environment:
 mkdir -p /root/.fashionrise-invites && chmod 700 /root/.fashionrise-invites
+# --code-file creates a NEW 0600 file only (refuses overwrite / symlinks).
 python scripts/manage_invitations.py create person@example.com --hours 72 \
   --code-file /root/.fashionrise-invites/person.code
 # Operator reads the file out-of-band; do not cat into shared logs/chat.
 python scripts/manage_invitations.py status --email person@example.com
 python scripts/manage_invitations.py revoke --id <uuid>
 ```
+
+**Disposable migration smoke (never production):**
+
+```bash
+# Binds validation + Alembic execution to the same DATABASE_URL_TEST.
+# Do NOT use bare `alembic` after a standalone preflight — that can still hit .env.
+DATABASE_URL_TEST=postgresql+psycopg2://…/fashionrise_mig_v3b \
+  python scripts/run_migration_smoke.py upgrade head
+DATABASE_URL_TEST=…/fashionrise_mig_v3b \
+  python scripts/run_migration_smoke.py downgrade 003
+DATABASE_URL_TEST=…/fashionrise_mig_v3b \
+  python scripts/run_migration_smoke.py upgrade 004
+```
+
+Production migrations remain the separately authorized `alembic upgrade/downgrade` path with the real `DATABASE_URL` / `backend/.env` after PM approval.
 
 **Cloudflare Access:** In Zero Trust → Access → Applications → FashionRise, add the invitee’s email (or IdP group) to the existing allow policy. Do not broaden to “Everyone”. Do not disable Access.
 
@@ -89,7 +105,8 @@ python scripts/manage_invitations.py revoke --id <uuid>
 | Design isolation across two invited users | Backend |
 | Test DB fail-closed (no connection) | `test_test_db_guard` |
 | Trusted rate-limit IP | `test_rate_limit_ip` |
-| Secure `--code-file` delivery | `test_manage_invitations_code_file` |
+| Secure `--code-file` delivery (new-file only, no symlink, revoke on failure) | `test_manage_invitations_code_file` |
+| Bound migration smoke runner (no silent `.env` target) | `test_migration_smoke_runner` + disposable DB |
 | Login ↔ Register navigation | Frontend |
 | Validation / confirm password / double-submit | Frontend |
 | Uncertain register → sign-in recovery (no duplicate POST) | Frontend |
@@ -98,31 +115,36 @@ python scripts/manage_invitations.py revoke --id <uuid>
 | Studio remount on user id | `App.accountIsolation` |
 | IndexedDB per-user isolation | `localDraftStore.isolation` |
 
-## 8. Verification (security amendment)
+## 8. Verification (final safety corrections)
 
-**Test database safety evidence**
+**Test database / migration smoke safety evidence**
 
 | Check | Result |
 |---|---|
-| `DATABASE_URL_TEST` | Explicit `fashionrise_test` (localhost) |
-| Reject missing `DATABASE_URL_TEST` | Exit code **2** — refuses create/drop |
+| `DATABASE_URL_TEST` | Explicit `fashionrise_test` / `fashionrise_mig_v3b` (localhost) |
+| Reject missing `DATABASE_URL_TEST` for pytest | Exit code **2** — refuses create/drop |
 | Reject `fashionrise_beta` as test target | Exit code **2** (no connection) |
-| `verify_migration_target.py` on `fashionrise_mig_v3b` | `migration_target=safe` |
+| `run_migration_smoke.py` missing TEST URL | Exit code **2** (no Alembic spawn) |
+| `run_migration_smoke.py` beta name | Exit code **2** (no Alembic spawn) |
+| Bound smoke with ambient `DATABASE_URL` → beta name | Still migrates **only** `fashionrise_mig_v3b` |
 | Local prod DB present? | `fashionrise_beta` count **0** on this agent host |
+
+**Rate-limit activation (proposed; not applied)**
+
+With Nginx overwriting `X-Real-IP`/`X-Forwarded-For` to `$remote_addr` on **login, refresh, logout, me, register, and designs**, and `TRUST_PROXY_HEADERS=true`, SlowAPI buckets by real client IP — users do **not** share a single `127.0.0.1` login bucket. Leaving `TRUST_PROXY_HEADERS=false` behind local Nginx would share one bucket; that must not be the activated production posture.
 
 **Suites**
 
 | Gate | Result |
 |---|---|
-| Guard / rate-limit / code-file unit | **13 / 13 pass** (no DB) |
+| Guard / rate-limit / code-file / migration-runner unit | **23 / 23 pass** (no DB) |
 | Invite + concurrency (`test_invite_registration`) | **19 / 19 pass** on `fashionrise_test` |
-| Full backend `pytest` | **135 pass**, **1 pre-existing unrelated fail** (`test_cli_default_is_dry_run`) |
-| Alembic clean `0→head` on `fashionrise_mig_v3b` | **Pass** → `004` |
-| Alembic `004→003→004` | **Pass** |
+| Full backend `pytest` | **145 pass**, **1 pre-existing unrelated fail** (`test_cli_default_is_dry_run`) |
+| Bound Alembic clean `0→head` on `fashionrise_mig_v3b` | **Pass** → `004` |
+| Bound Alembic `004→003→004` | **Pass** |
 | Frontend `npm test` | **195 / 195 pass** (35 files) |
 | `npm run lint` | Pass (3 pre-existing oxlint warnings) |
 | `tsc -b` + `npm run build` | Pass |
-| Browser SPA smoke (Playwright, `serve -s` dist) | `/login` → Create account → `/register` with Invitation code — **PASS**. Screenshot: `/opt/cursor/artifacts/screenshots/playwright-register.png` |
 
 ## 9. Rollback strategy
 
