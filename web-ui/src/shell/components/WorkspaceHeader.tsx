@@ -60,7 +60,7 @@ export function WorkspaceHeader({
           : styles.sessionStatus
 
   return (
-    <div className={styles.header}>
+    <div className={`${styles.header} ${menuOpen ? styles.headerMenuOpen : ''}`}>
       <div className={styles.left}>
         <button
           type="button"

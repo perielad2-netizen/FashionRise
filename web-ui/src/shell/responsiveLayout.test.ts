@@ -80,4 +80,14 @@ describe('WEB-V3A My Designs layout contract', () => {
     expect(libraryCss).toContain(SHORT_LANDSCAPE)
     expect(libraryCss).toContain('@media (max-width: 820px)')
   })
+
+  it('lifts the open More menu above workspace notices but not above the brush scrim', async () => {
+    const { default: headerCss } = await import('@/shell/components/WorkspaceHeader.module.css?raw')
+    const { default: noticeCss } = await import('@/shell/components/BetaNotice.module.css?raw')
+    const zIndex = (block: string) => Number(/z-index:\s*(\d+)/.exec(block)?.[1])
+    const menuOpen = zIndex(rule(headerCss, '.headerMenuOpen'))
+    expect(rule(headerCss, '.header')).toContain('position: relative')
+    expect(menuOpen).toBeGreaterThan(zIndex(noticeCss))
+    expect(rule(headerCss, '.header')).not.toContain('z-index')
+  })
 })

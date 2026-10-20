@@ -6,6 +6,12 @@
   min-height: 52px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+}
+
+/* Above the workspace BetaNotice (z-index 40) only while the More menu is open. */
+.headerMenuOpen {
+  z-index: 45;
 }
 
 .left,
