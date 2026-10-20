@@ -17,7 +17,7 @@ import {
   persistStudioDraft,
   restoreStudioDraft,
 } from '@/lib/draftPersistence'
-import { documentForCloud, listMyDesigns, pickLatestStudioDraft } from '@/services/designsApi'
+import { documentForCloud } from '@/services/designsApi'
 import { downloadBlob, exportFilename, exportSketchPng } from '@/lib/exportCanvas'
 import {
   createSaveRequestId,
@@ -825,23 +825,11 @@ export function useStudioEditor() {
           return
         }
         openingRef.current = true
-        // No known draft id: createOnly so a draft that appears mid-open is preserved.
+        // No known draft id: createOnly creates, recovers identical content, or conflicts —
+        // never overwrites another device's draft. No separate list preflight: that blocked
+        // same-content recovery after a committed create whose response was lost.
         const createOnly = designIdRef.current === null
         try {
-          if (state === 'clean-empty') {
-            const mine = await listMyDesigns()
-            if (pickLatestStudioDraft(mine)) {
-              setOpenDesign({
-                phase: 'error',
-                designId: record.id,
-                record,
-                canRetry: false,
-                message:
-                  'Your working draft was created on another device. Reload Studio, then open the design again.',
-              })
-              return
-            }
-          }
           const current = authoritativeDocRef.current
           const next = workingDocumentFromSnapshot({
             current,

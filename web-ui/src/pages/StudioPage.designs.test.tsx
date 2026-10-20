@@ -529,6 +529,89 @@ describe('Reopen a saved design', () => {
     ).toBeInTheDocument()
   })
 
+  it('retries createOnly open after a committed create whose response and reconcile list were lost', async () => {
+    mocks.restoreStudioDraft.mockResolvedValue({
+      designId: null,
+      document: workingDoc({ strokes: [], clientRevision: 1 }),
+      syncedRevision: null,
+      conflict: null,
+      notice: null,
+    })
+    // A list after the first attempt would see the draft we just created — createOnly must
+    // still recover it. There is no blocking list preflight anymore.
+    mocks.listMyDesigns.mockResolvedValue([
+      {
+        id: 'draft-recovered',
+        user_id: 'u1',
+        title: 'Studio working draft',
+        description: null,
+        garment_category: 'studio',
+        design_data: {
+          schema: 'fashionrise.studio.draft.v1',
+          strokes: RECORD.snapshot.strokes,
+          model: RECORD.snapshot.model,
+          customReferenceUrl: null,
+          customReferenceKey: null,
+          brush: RECORD.snapshot.brush,
+          dimmed: RECORD.snapshot.dimmed,
+          clientRevision: 2,
+          updatedAt: '2026-10-20T10:00:00.000Z',
+        },
+        metadata: { draftKind: 'studio_working_draft', clientRevision: 2 },
+        visibility: 'private',
+        status: 'draft',
+        created_at: '2026-10-20T10:00:00.000Z',
+        updated_at: '2026-10-20T10:00:00.000Z',
+      },
+    ])
+    mocks.persistStudioDraft.mockResolvedValueOnce({
+      ok: false,
+      conflict: null,
+      localPersisted: false,
+      error: 'Unable to reach FashionRise.',
+      designId: null,
+    })
+
+    renderAt('/studio/designs')
+    await screen.findByRole('heading', { name: 'My Designs' })
+    await act(async () => {
+      await openFromLibrary()
+    })
+    const err = await screen.findByRole('dialog', { name: 'Could not open design' })
+    expect(within(err).getByRole('alert')).toHaveTextContent(/could not be confirmed/i)
+    expect(within(err).getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(mocks.persistStudioDraft).toHaveBeenCalledTimes(1)
+    expect(mocks.persistStudioDraft.mock.calls[0]![0].createOnly).toBe(true)
+
+    mocks.persistStudioDraft.mockImplementationOnce(({ document }: { document: StudioDraftDocument }) =>
+      Promise.resolve({
+        ok: true as const,
+        designId: 'draft-recovered',
+        document,
+        fingerprint: draftContentFingerprint({
+          ...document,
+          customReferenceUrl: null,
+          customReferenceKey: null,
+        }),
+        syncedRevision: document.clientRevision,
+        localPersisted: true,
+      }),
+    )
+    await act(async () => {
+      fireEvent.click(within(err).getByRole('button', { name: 'Try again' }))
+    })
+    await screen.findByRole('heading', { name: 'New Design' })
+    expect(strokeIds()).toBe('snap-1,snap-2')
+    expect(mocks.persistStudioDraft).toHaveBeenCalledTimes(2)
+    expect(mocks.persistStudioDraft.mock.calls[1]![0]).toMatchObject({
+      designId: null,
+      createOnly: true,
+      expectedRevision: null,
+    })
+    expect(screen.queryByRole('dialog', { name: 'Could not open design' })).toBeNull()
+    expect(screen.queryByText(/Reload Studio/i)).toBeNull()
+  })
+
   it('refuses while edits are unsynced, then waits for the queued save before switching', async () => {
     renderAt('/studio')
     await ready()

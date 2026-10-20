@@ -167,7 +167,7 @@ Opening a saved design **replaces the content of the single working draft** with
    - The debounce timer is cleared.
    - Automatic saves are paused (`openingRef`) and the state is re-checked.
    - **Known draft id:** `PUT` with `expected_revision = last synced revision` and revision `max(local, synced) + 1` (unchanged OCC).
-   - **No known draft id** (first-time / empty Studio): `persistStudioDraft({ createOnly: true })`. This may only create a new singleton draft or recover a lost response whose content matches the open. If another device’s draft appears at any point — including between the empty preflight list and the create — that draft is **preserved** and the open becomes an explicit conflict. It never adopts or overwrites a foreign draft solely to open a saved design.
+   - **No known draft id** (first-time / empty Studio): `persistStudioDraft({ createOnly: true })` end-to-end — create, recover identical content, or conflict. There is **no separate list preflight** before persistence (that blocked same-content recovery after a committed create whose response and reconcile list were lost). If another device’s draft has different content, it is **preserved** and the open becomes an explicit conflict.
 4. **Outcome:**
    - **Success:** the Studio document, IndexedDB, and refs are updated together, and **undo history starts fresh**, so undo never spans designs. The status shows Saved and the app goes to Studio.
    - **409 whose server content is our snapshot:** treated as a recovered lost response and opened.
@@ -179,8 +179,9 @@ Opening a saved design **replaces the content of the single working draft** with
 
 Two issues from the Technical PM review are closed in this amendment:
 
-1. **Empty-Studio cross-device race.** A preflight `listMyDesigns` alone was not atomic with create. Reopen with no known draft id now uses `createOnly`, and Studio create/reconcile on the backend returns **409** (instead of overwriting) when an existing working draft has different content at the same or higher revision. Autosave that already knows the draft id still uses `PUT` + OCC; autosave that discovers an existing draft without `createOnly` still adopts via OCC update.
+1. **Empty-Studio cross-device race.** Reopen with no known draft id uses `createOnly`, and Studio create/reconcile on the backend returns **409** (instead of overwriting) when an existing working draft has different content at the same or higher revision. Autosave that already knows the draft id still uses `PUT` + OCC; autosave that discovers an existing draft without `createOnly` still adopts via OCC update.
 2. **Uncertain reopen messaging.** Generic failures no longer say “Nothing was replaced,” because a server write may have committed before the response was lost.
+3. **Lost create-only response retry.** A redundant `clean-empty` list preflight that aborted with an unretryable error whenever any working draft existed was removed. Retry after an uncertain create-only open now reaches `createOnly`, which acknowledges identical content or conflicts on different content.
 
 ---
 
@@ -203,7 +204,7 @@ Two issues from the Technical PM review are closed in this amendment:
 
 | Gate | Result |
 |---|---|
-| `npm test` (web-ui) | **Pass: 169 tests, 29 files.** |
+| `npm test` (web-ui) | **Pass: 170 tests, 29 files.** |
 | `npm run lint` | Pass. Same three pre-existing oxlint warnings, none new. |
 | `npm run build` (`tsc -b` + Vite + PWA) | Pass. |
 | Backend `pytest` focused suites (isolated `fashionrise_test` DB) | Studio concurrency + saved-design isolation: **15 / 15 pass.** |
@@ -217,7 +218,7 @@ New test coverage:
 | Save / idempotency | Matching acknowledgement only; lost response recovered without a second POST; uncertain retry finds the earlier row; posts once when the earlier attempt provably did not land; never posts blind; 4xx final; offline; mismatched acknowledgement; another account's request id ignored; dialog retry reuses the id; title validation; empty canvas blocked. |
 | PNG export | Composition order; dim opacity; eraser on ink only; scaling; reference failure skip vs throw; missing 2D context; PNG blob validation; download plus guaranteed URL revoke; safe filenames; thumbnail-only minimum ink width. |
 | Library | Sidebar entry without placeholders; same editor mounted across screens; draft shown separately; hostile titles as text; empty, error, and refresh states; preview concurrency, cache, release, and dispose. |
-| Reopen | OCC replace after confirm; undo never spans designs; cancel is a no-op; empty draft opens directly; first-time users pass `createOnly`; draft created between preflight and persist is preserved (conflict, no overwrite); unsynced edits refused, then waits for the queued save; another device's change opens the conflict dialog; 409 with our content recovered; uncertain network messaging never claims the server was unchanged; lost-response-after-commit recovers on retry; malformed or foreign design refused; open conflict must be resolved first. |
+| Reopen | OCC replace after confirm; undo never spans designs; cancel is a no-op; empty draft opens directly; first-time users pass `createOnly` with no blocking list preflight; different concurrent draft is preserved (conflict); committed create-only open whose response and reconcile list were lost recovers on retry via identical-content acknowledgement; unsynced edits refused, then waits for the queued save; another device's change opens the conflict dialog; 409 with our content recovered; uncertain network messaging never claims the server was unchanged; malformed or foreign design refused; open conflict must be resolved first. |
 | Persistence `createOnly` | Brand-new create; race between list and create; existing different draft refused; lost create with matching content recovered; autosave without `createOnly` still adopts via OCC update. |
 | Backend create/reconcile | Same-content create is idempotent; different-content create at higher revision returns 409 and preserves the existing draft. |
 | Layout | My Designs scroll and grid contract; short-landscape and phone rules; More menu above notices. |

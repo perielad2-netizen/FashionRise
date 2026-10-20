@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **WEB-V3A** (Export, Save & My Designs) is on draft PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) with a focused safety amendment. It is **not merged and not deployed**. Next step: PM **re-review** of PR #13. Do not merge or deploy.
+**Last updated:** 2026-10-20. **WEB-V3A** (Export, Save & My Designs) is on draft PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) with the final createOnly recovery fix. It is **not merged and not deployed**. Next step: PM **final approval** of PR #13. Do not merge or deploy.
 
 **Phase:** **WEB-V3A**: first functional milestone after the visual work. Users can export a real PNG, save named private designs, browse them in My Designs, and reopen one safely. The protected family beta is live.
 
@@ -197,11 +197,11 @@ What changed:
   - Fresh fetch plus strict validation.
   - Never silently replaces unsaved edits: they must sync first (Retry save). A synced sketch needs an explicit "Replace and open".
   - Known draft id: writes the single working draft forward with the normal `expected_revision` check.
-  - No known draft id: `createOnly` create path — never adopts or overwrites another device's draft solely to open a saved design.
-  - Uncertain network/5xx errors say the server outcome could not be confirmed (they never claim the draft was unchanged). Retry stays safe.
+  - No known draft id: `createOnly` end-to-end (create, recover identical content, or conflict). No blocking list preflight before persistence.
+  - Uncertain network/5xx errors say the server outcome could not be confirmed (they never claim the draft was unchanged). Retry stays safe and can acknowledge the draft created by the first attempt.
   - Undo history starts fresh, and refresh restores the opened sketch.
 - Fix found in browser QA: the More menu now stays above workspace notices.
-- **Safety amendment (after PM review):** empty-Studio reopen race closed (`createOnly` + backend create/reconcile 409 on different content); uncertain reopen messaging corrected.
+- **Safety amendments (after PM review):** empty-Studio reopen race closed (`createOnly` + backend create/reconcile 409 on different content); uncertain reopen messaging corrected; redundant clean-empty list preflight removed so lost create-only responses recover on retry.
 
 **Working draft vs saved designs:**
 
@@ -250,7 +250,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **PM re-review of draft PR #13 (WEB-V3A safety amendment).** Do not merge or deploy it in this step.
+1. **PM final approval of draft PR #13 (WEB-V3A).** Do not merge or deploy it in this step.
 2. After approval and merge:
    - Before deploying, record the frontend revision **actually** live on the VPS.
    - Deploy the merged SHA, then **restart FastAPI** for the create/reconcile 409 change. No PostgreSQL migration.
@@ -304,7 +304,7 @@ FashionRise/
 
 | Gate | Result |
 |------|--------|
-| `npm test` | **Pass: 169 tests, 29 files.** Adds PNG export, save idempotency, format isolation, private filtering, previews, reopen without loss, `createOnly` race/refusal/recovery, uncertain reopen messaging, offline, switching with queued saves, cross-device conflict, and layout contracts. |
+| `npm test` | **Pass: 170 tests, 29 files.** Adds PNG export, save idempotency, format isolation, private filtering, previews, reopen without loss, `createOnly` race/refusal/recovery (including lost create-only response retry), uncertain reopen messaging, offline, switching with queued saves, cross-device conflict, and layout contracts. |
 | `npm run lint` | Pass, with the same three pre-existing oxlint warnings |
 | `npm run build` (`tsc -b` + Vite + PWA) | Pass |
 | Backend focused suites | Studio concurrency + saved-design isolation: **15 / 15**. Full suite: 103 pass, 1 pre-existing unrelated failure (`test_cli_default_is_dry_run`). |
@@ -336,7 +336,8 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
-| 2026-10-20 | **WEB-V3A safety amendment (draft PR #13):** empty-Studio reopen uses `createOnly`; Studio create/reconcile 409s on different content (no silent overwrite); uncertain reopen messaging corrected. 169 frontend tests; focused backend 15/15; amendment browser 16/16. Still draft / not deployed. |
+| 2026-10-20 | **WEB-V3A final recovery fix (draft PR #13):** removed clean-empty list preflight that blocked same-content createOnly retry after a lost create response. 170 frontend tests. Still draft / not deployed. |
+| 2026-10-20 | **WEB-V3A safety amendment (draft PR #13):** empty-Studio reopen uses `createOnly`; Studio create/reconcile 409s on different content (no silent overwrite); uncertain reopen messaging corrected. Focused backend 15/15; amendment browser 16/16. Still draft / not deployed. |
 | 2026-10-20 | **WEB-V3A (draft PR #13, not deployed):** Export PNG; Save as design (private `fashionrise.saved_design.v1` records, idempotent retries); My Designs library with previews; safe reopen into the single working draft through OCC. Later amended for empty-open race + uncertain messaging. |
 | 2026-10-20 | **WEB-V2.3 merged** as PR #12 (`f8a5b222`). Operator real-tablet acceptance 6/6. Deploy log not supplied, so verify the live frontend revision at the next deploy. |
 | 2026-10-20 | **WEB-V2.3 (draft PR #12, not deployed):** short-landscape fit (`100dvh`, safe areas, height-aware 3:4 paper, constrained grid rows, compact chrome); sidebar promo removed; Generate with AI pinned in Settings; desktop floating brush window removed (dock sheet kept on tablets). 87 tests pass. Production stays frontend `9db1fa86` / backend `6df327ba`. |
