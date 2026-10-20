@@ -126,7 +126,7 @@ Remove the old `location = /api/v1/auth/register { return 403; }` only when the 
 - `TRUST_PROXY_HEADERS=false` (default): ASGI peer ≈ `127.0.0.1` behind Nginx → **shared bucket**. Unacceptable for registration activation.
 - `TRUST_PROXY_HEADERS=true`: keys on single `X-Real-IP` after Nginx overwrite from real_ip-normalized `$remote_addr`.
 
-Backend parser must use strict `ipaddress` validation (separate draft code PR).
+Backend parser strict `ipaddress` validation is merged in GitHub PR #23, **not deployed**. Deploy/verify under separate authorization before setting `TRUST_PROXY_HEADERS=true`.
 
 ## Application / Access gates still required
 
