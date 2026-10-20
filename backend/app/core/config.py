@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     # an independently approved deployment flips the gate (and Nginx allowlists POST).
     registration_enabled: bool = False
 
+    # When true, rate limiting may key on X-Real-IP set by a trusted reverse proxy
+    # that overwrites the header with $remote_addr. Default false ignores client XFF.
+    trust_proxy_headers: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_cors(cls, v: str) -> str:

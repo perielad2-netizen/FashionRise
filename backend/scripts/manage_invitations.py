@@ -3,18 +3,26 @@ Operator CLI: create / inspect / revoke invite-only beta invitations.
 
 Usage (from backend/, venv active):
 
-  python scripts/manage_invitations.py create user@example.com --hours 72
+  # Preferred under Cursor/SSH: write the one-time code to a 0600 file (never stdout)
+  python scripts/manage_invitations.py create user@example.com --hours 72 \\
+      --code-file /root/.fashionrise-invites/user.code
+
   python scripts/manage_invitations.py status --email user@example.com
   python scripts/manage_invitations.py status --id <uuid>
   python scripts/manage_invitations.py revoke --id <uuid>
 
-The plaintext invitation code is printed ONLY on create. Store it out-of-band;
-never commit it, paste it into tickets, or leave it in shell history on shared hosts.
+  # Local interactive only — prints the code to stdout (avoid under agent tooling):
+  python scripts/manage_invitations.py create user@example.com --print-code
+
+Plaintext invitation tokens are never stored in the database (digest only).
+Do not paste production codes into tickets, PRs, or Cursor chat.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
+import stat
 import sys
 import uuid
 from pathlib import Path
@@ -36,8 +44,25 @@ def _print_row(row) -> None:
     print(f"redeemed_at={row.redeemed_at.isoformat() if row.redeemed_at else ''}")
     print(f"redeemed_by_user_id={row.redeemed_by_user_id or ''}")
     print(f"note={row.note or ''}")
-    # Never print token_hash in operator-facing status (still a secret amenity).
     print("token=REDACTED")
+
+
+def _write_code_file(path: Path, code: str) -> None:
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Write privately: owner read/write only.
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(code)
+            handle.write("\n")
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        raise
+    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
 
 
 def main() -> None:
@@ -48,6 +73,17 @@ def main() -> None:
     create_p.add_argument("email", help="Invited email address")
     create_p.add_argument("--hours", type=int, default=72, help="Expiry in hours (default 72)")
     create_p.add_argument("--note", default=None, help="Optional operator note (not a secret)")
+    create_p.add_argument(
+        "--code-file",
+        type=Path,
+        default=None,
+        help="Write the one-time invitation code to this file with mode 0600 (recommended)",
+    )
+    create_p.add_argument(
+        "--print-code",
+        action="store_true",
+        help="Print invitation code to stdout (local interactive only; avoid under Cursor/SSH logs)",
+    )
 
     status_p = sub.add_parser("status", help="Inspect invitation status (never prints the token)")
     status_p.add_argument("--id", dest="invitation_id", default=None, help="Invitation UUID")
@@ -60,6 +96,13 @@ def main() -> None:
     db = SessionLocal()
     try:
         if args.command == "create":
+            if not args.code_file and not args.print_code:
+                print(
+                    "Refusing to emit an invitation code without --code-file or --print-code. "
+                    "Prefer --code-file so agent/SSH logs never capture the secret.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
             created = invitation_service.create_invitation(
                 db,
                 email=args.email,
@@ -69,8 +112,13 @@ def main() -> None:
             print(f"id={created.id}")
             print(f"email={created.email}")
             print(f"expires_at={created.expires_at.isoformat()}")
-            print(f"invitation_code={created.plaintext_token}")
-            print("Deliver the invitation_code out-of-band. It will not be shown again.")
+            if args.code_file:
+                _write_code_file(args.code_file, created.plaintext_token)
+                print(f"invitation_code_file={args.code_file.expanduser()}")
+                print("Read the code from that file out-of-band; it is not printed here.")
+            if args.print_code:
+                print(f"invitation_code={created.plaintext_token}")
+                print("Deliver the invitation_code out-of-band. It will not be stored in the database.")
             return
 
         if args.command == "status":

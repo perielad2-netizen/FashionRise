@@ -49,6 +49,12 @@ export function RegisterPage() {
     e.preventDefault()
     if (busy) return
 
+    // After an uncertain outcome, do not POST /register again — recover via sign-in.
+    if (uncertain) {
+      navigate('/login')
+      return
+    }
+
     setFormError(null)
     setUncertain(false)
     const validated = validateRegister({
@@ -286,7 +292,7 @@ export function RegisterPage() {
           ) : null}
 
           <button type="submit" className={styles.submit} disabled={busy}>
-            {busy ? 'Creating account…' : 'Create account'}
+            {busy ? 'Creating account…' : uncertain ? 'Sign in instead' : 'Create account'}
           </button>
         </form>
 

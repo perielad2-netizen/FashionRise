@@ -370,3 +370,232 @@ def test_concurrent_invitation_redemption(engine):
         assert invitation_service.invitation_status(inv) == "redeemed"
     finally:
         verify.close()
+
+
+def _status_code_from_exc(exc: BaseException) -> int:
+    from app.core.errors import AppError, ConflictError, ForbiddenError
+
+    if isinstance(exc, ForbiddenError):
+        return 403
+    if isinstance(exc, ConflictError):
+        return 409
+    if isinstance(exc, AppError):
+        return exc.status_code
+    return 500
+
+
+def test_concurrent_different_invites_same_email_one_409(engine):
+    """Two valid invites for the same email: one register wins, loser gets 409, loser invite stays pending."""
+    from app.schemas.auth import UserRegister
+    from app.services import auth_service
+
+    Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    setup = Session()
+    try:
+        inv_a = invitation_service.create_invitation(setup, email="same_email@example.com")
+        inv_b = invitation_service.create_invitation(setup, email="same_email@example.com")
+        token_a, token_b = inv_a.plaintext_token, inv_b.plaintext_token
+        id_a, id_b = inv_a.id, inv_b.id
+        setup.commit()
+    finally:
+        setup.close()
+
+    results: list[tuple[str, int]] = []
+    lock = threading.Lock()
+
+    def attempt(label: str, token: str, username: str) -> None:
+        db = Session()
+        try:
+            try:
+                auth_service.register_user(
+                    db,
+                    UserRegister(
+                        email="same_email@example.com",
+                        username=username,
+                        password="StrongPass123!",
+                        invitation_code=token,
+                    ),
+                )
+                code = 200
+            except Exception as exc:  # noqa: BLE001
+                code = _status_code_from_exc(exc)
+            with lock:
+                results.append((label, code))
+        finally:
+            db.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1 = pool.submit(attempt, "a", token_a, "same_email_a")
+        f2 = pool.submit(attempt, "b", token_b, "same_email_b")
+        f1.result()
+        f2.result()
+
+    codes = [c for _, c in results]
+    assert codes.count(200) == 1
+    assert codes.count(409) == 1
+
+    from sqlalchemy import select
+
+    verify = Session()
+    try:
+        users = list(verify.scalars(select(User).where(User.email == "same_email@example.com")).all())
+        assert len(users) == 1
+        row_a = verify.get(RegistrationInvitation, id_a)
+        row_b = verify.get(RegistrationInvitation, id_b)
+        assert row_a is not None and row_b is not None
+        statuses = {
+            invitation_service.invitation_status(row_a),
+            invitation_service.invitation_status(row_b),
+        }
+        assert "redeemed" in statuses
+        assert "pending" in statuses
+        # Loser invite must still be redeemable for a *different* email? No — email-bound.
+        # It remains pending so operator can revoke or the invitee cannot use it for another email.
+        pending = row_a if invitation_service.invitation_status(row_a) == "pending" else row_b
+        assert pending.redeemed_at is None
+        assert pending.revoked_at is None
+    finally:
+        verify.close()
+
+
+def test_concurrent_different_invites_same_username_one_409(engine):
+    """Different emails, same username: one wins, loser 409, loser invite remains pending."""
+    from app.schemas.auth import UserRegister
+    from app.services import auth_service
+
+    Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    setup = Session()
+    try:
+        inv_a = invitation_service.create_invitation(setup, email="user_a_name@example.com")
+        inv_b = invitation_service.create_invitation(setup, email="user_b_name@example.com")
+        token_a, token_b = inv_a.plaintext_token, inv_b.plaintext_token
+        id_a, id_b = inv_a.id, inv_b.id
+        setup.commit()
+    finally:
+        setup.close()
+
+    results: list[int] = []
+    lock = threading.Lock()
+
+    def attempt(email: str, token: str) -> None:
+        db = Session()
+        try:
+            try:
+                auth_service.register_user(
+                    db,
+                    UserRegister(
+                        email=email,
+                        username="shared_username",
+                        password="StrongPass123!",
+                        invitation_code=token,
+                    ),
+                )
+                code = 200
+            except Exception as exc:  # noqa: BLE001
+                code = _status_code_from_exc(exc)
+            with lock:
+                results.append(code)
+        finally:
+            db.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1 = pool.submit(attempt, "user_a_name@example.com", token_a)
+        f2 = pool.submit(attempt, "user_b_name@example.com", token_b)
+        f1.result()
+        f2.result()
+
+    assert results.count(200) == 1
+    assert results.count(409) == 1
+
+    verify = Session()
+    try:
+        from sqlalchemy import select
+
+        users = list(verify.scalars(select(User).where(User.username == "shared_username")).all())
+        assert len(users) == 1
+        row_a = verify.get(RegistrationInvitation, id_a)
+        row_b = verify.get(RegistrationInvitation, id_b)
+        statuses = sorted(
+            [
+                invitation_service.invitation_status(row_a),
+                invitation_service.invitation_status(row_b),
+            ]
+        )
+        assert statuses == ["pending", "redeemed"]
+    finally:
+        verify.close()
+
+
+def test_revoke_wins_over_redeem(engine):
+    """Deterministic ordering: revoke commits first; subsequent redeem is rejected."""
+    from app.core.errors import ForbiddenError
+    from app.schemas.auth import UserRegister
+    from app.services import auth_service
+
+    Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    setup = Session()
+    try:
+        created = invitation_service.create_invitation(setup, email="revoke_first@example.com")
+        token = created.plaintext_token
+        invite_id = created.id
+        setup.commit()
+    finally:
+        setup.close()
+
+    db_rev = Session()
+    db_reg = Session()
+    try:
+        invitation_service.revoke_invitation(db_rev, invite_id)
+        with pytest.raises(ForbiddenError):
+            auth_service.register_user(
+                db_reg,
+                UserRegister(
+                    email="revoke_first@example.com",
+                    username="revoke_first_user",
+                    password="StrongPass123!",
+                    invitation_code=token,
+                ),
+            )
+        row = db_rev.get(RegistrationInvitation, invite_id)
+        assert invitation_service.invitation_status(row) == "revoked"
+        assert row.redeemed_at is None
+    finally:
+        db_rev.close()
+        db_reg.close()
+
+
+def test_redeem_wins_over_revoke(engine):
+    from app.core.errors import ConflictError
+    from app.schemas.auth import UserRegister
+    from app.services import auth_service
+
+    Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    setup = Session()
+    try:
+        created = invitation_service.create_invitation(setup, email="redeem_first@example.com")
+        token = created.plaintext_token
+        invite_id = created.id
+        setup.commit()
+    finally:
+        setup.close()
+
+    db_reg = Session()
+    db_rev = Session()
+    try:
+        auth_service.register_user(
+            db_reg,
+            UserRegister(
+                email="redeem_first@example.com",
+                username="redeem_first_user",
+                password="StrongPass123!",
+                invitation_code=token,
+            ),
+        )
+        with pytest.raises(ConflictError, match="already redeemed"):
+            invitation_service.revoke_invitation(db_rev, invite_id)
+        row = db_reg.get(RegistrationInvitation, invite_id)
+        assert invitation_service.invitation_status(row) == "redeemed"
+        assert row.revoked_at is None
+    finally:
+        db_reg.close()
+        db_rev.close()

@@ -102,14 +102,25 @@ def list_invitations_for_email(db: Session, email: str) -> list[RegistrationInvi
     )
 
 
+def _lock_invitation_by_id(db: Session, invitation_id: uuid.UUID) -> RegistrationInvitation | None:
+    return db.scalar(
+        select(RegistrationInvitation)
+        .where(RegistrationInvitation.id == invitation_id)
+        .with_for_update()
+    )
+
+
 def revoke_invitation(db: Session, invitation_id: uuid.UUID) -> RegistrationInvitation:
-    row = db.get(RegistrationInvitation, invitation_id)
+    """Revoke under the same row lock used by redemption so races have a single winner."""
+    row = _lock_invitation_by_id(db, invitation_id)
     if not row:
         raise AppError("not_found", "Invitation not found", 404)
     status = invitation_status(row)
     if status == "redeemed":
         raise ConflictError("Invitation was already redeemed")
     if status == "revoked":
+        db.commit()
+        db.refresh(row)
         return row
     row.revoked_at = datetime.now(timezone.utc)
     db.add(row)
@@ -120,7 +131,7 @@ def revoke_invitation(db: Session, invitation_id: uuid.UUID) -> RegistrationInvi
 
 def _lock_invitation_by_token(db: Session, raw_token: str) -> RegistrationInvitation | None:
     digest = hash_invitation_token(raw_token)
-    # Row lock so concurrent redemptions serialize correctly.
+    # Row lock so concurrent redemptions/revocations serialize correctly.
     return db.scalar(
         select(RegistrationInvitation)
         .where(RegistrationInvitation.token_hash == digest)

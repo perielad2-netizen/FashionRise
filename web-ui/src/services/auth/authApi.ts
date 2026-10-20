@@ -37,6 +37,8 @@ function toStored(tokens: TokenResponse): StoredTokens {
 }
 
 export async function login(payload: LoginPayload): Promise<{ user: User; tokens: StoredTokens }> {
+  // Drop any prior tokens before applying a new session (account switch).
+  tokenStore.clear()
   const tokens = await apiRequest<TokenResponse>('/auth/login', {
     method: 'POST',
     body: {
@@ -47,8 +49,13 @@ export async function login(payload: LoginPayload): Promise<{ user: User; tokens
   })
   const stored = toStored(tokens)
   tokenStore.set(stored)
-  const user = await fetchMe()
-  return { user, tokens: stored }
+  try {
+    const user = await fetchMe()
+    return { user, tokens: stored }
+  } catch (err) {
+    tokenStore.clear()
+    throw err
+  }
 }
 
 export async function register(
@@ -69,8 +76,15 @@ export async function register(
   })
   const stored = toStored(tokens)
   tokenStore.set(stored)
-  const user = await fetchMe()
-  return { user, tokens: stored }
+  try {
+    const user = await fetchMe()
+    return { user, tokens: stored }
+  } catch (err) {
+    // Registration may have committed, but identity bootstrap failed. Drop the
+    // half-session so no stale prior account remains; recover via sign-in.
+    tokenStore.clear()
+    throw err
+  }
 }
 
 export async function fetchMe(): Promise<User> {

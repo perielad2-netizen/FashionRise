@@ -32,7 +32,8 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["redeemed_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("token_hash"),
+        # UniqueConstraint creates the uniqueness index; do not add a duplicate ix_*.
+        sa.UniqueConstraint("token_hash", name="uq_registration_invitations_token_hash"),
     )
     op.create_index(
         "ix_registration_invitations_email_normalized",
@@ -40,16 +41,9 @@ def upgrade() -> None:
         ["email_normalized"],
         unique=False,
     )
-    op.create_index(
-        "ix_registration_invitations_token_hash",
-        "registration_invitations",
-        ["token_hash"],
-        unique=False,
-    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_registration_invitations_token_hash", table_name="registration_invitations", if_exists=True)
     op.drop_index(
         "ix_registration_invitations_email_normalized",
         table_name="registration_invitations",
