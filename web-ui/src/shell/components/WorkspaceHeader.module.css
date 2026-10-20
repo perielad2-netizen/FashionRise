@@ -140,6 +140,27 @@
   background: rgba(214, 51, 132, 0.16);
 }
 
+@media (min-width: 821px) and (max-height: 760px) {
+  .header {
+    min-height: 42px;
+    padding: 0 12px;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .iconBtn,
+  .magicSoon {
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .iconBtn {
+    width: 32px;
+  }
+}
+
 @media (max-width: 820px) {
   .header {
     padding: 8px 12px;

@@ -2,13 +2,16 @@
   height: 100%;
   width: 100%;
   display: grid;
-  grid-template-rows: var(--fr-header-h) 1fr;
+  grid-template-rows: var(--fr-header-h) minmax(0, 1fr);
   min-height: 0;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
 
 .body {
   display: grid;
   grid-template-columns: var(--fr-nav-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
   position: relative;
@@ -50,6 +53,12 @@
 
   .main {
     padding: 8px 8px 8px 0;
+  }
+}
+
+@media (min-width: 821px) and (max-height: 760px) {
+  .main {
+    padding: 6px 8px 6px 0;
   }
 }
 

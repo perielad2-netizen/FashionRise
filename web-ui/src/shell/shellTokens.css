@@ -31,3 +31,9 @@
   background: radial-gradient(1200px 700px at 18% -10%, #1a1030 0%, transparent 55%),
     radial-gradient(900px 600px at 100% 0%, #15102a 0%, transparent 50%), var(--fr-navy);
 }
+
+@media (min-width: 821px) and (max-height: 760px) {
+  .studioShellRoot {
+    --fr-header-h: 46px;
+  }
+}

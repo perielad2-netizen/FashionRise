@@ -37,3 +37,15 @@
   outline: 2px solid #f9a8d4;
   outline-offset: 2px;
 }
+
+@media (min-width: 821px) and (max-height: 760px) {
+  .notice {
+    margin: 6px 10px 0;
+    padding: 4px 6px 4px 12px;
+    font-size: 12px;
+  }
+
+  .notice button {
+    min-height: 28px;
+  }
+}

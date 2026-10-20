@@ -1,5 +1,5 @@
-.wrap,
-.wrapWithBrush {
+.wrap {
+  --paper-max-w: 520px;
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -8,21 +8,20 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   padding: 8px 4px;
-}
-
-.wrapWithBrush .canvasFrame {
-  max-height: calc(100% - 156px);
+  container-type: size;
 }
 
 .canvasFrame {
   position: relative;
-  width: min(100%, 420px);
-  aspect-ratio: 768 / 1024;
+  /* Fallback for browsers without container query units. */
+  width: min(100%, var(--paper-max-w));
   max-height: 100%;
+  /* Fit the 3:4 paper inside both the available width and height. */
+  width: min(100cqw, var(--paper-max-w), 75cqh);
+  aspect-ratio: 768 / 1024;
   min-height: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   border-radius: 20px;
   background:
     radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.55), transparent 40%),
@@ -74,17 +73,37 @@
 }
 
 @media (max-width: 1200px) {
+  .wrap {
+    --paper-max-w: 380px;
+  }
+}
+
+@media (min-width: 821px) and (max-height: 760px) {
+  .wrap {
+    padding: 4px;
+  }
+
   .canvasFrame {
-    width: min(100%, 380px);
+    border-radius: 16px;
+  }
+
+  .zoom {
+    right: 10px;
+    bottom: 10px;
+    gap: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .zoomBtn {
+    width: 22px;
+    height: 22px;
   }
 }
 
 @media (max-width: 820px) {
   .wrap {
-    min-height: 420px;
-  }
-
-  .canvasFrame {
-    width: min(100%, 320px);
+    --paper-max-w: 320px;
+    justify-content: flex-start;
   }
 }
