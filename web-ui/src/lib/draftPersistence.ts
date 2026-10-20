@@ -85,6 +85,28 @@ function isNotFoundError(err: unknown): boolean {
   return err instanceof ApiError && err.status === 404
 }
 
+function conflictWithExistingDraft(
+  existing: DesignRead,
+  message: string,
+  expectedRevision: number,
+): ApiError {
+  return new ApiError(message, 409, {
+    detail: {
+      code: 'conflict',
+      message,
+      payload: {
+        expected_revision: expectedRevision,
+        current_revision: expectedRevision,
+        design: existing,
+      },
+    },
+  })
+}
+
+function sameCloudContent(a: StudioDraftDocument, b: StudioDraftDocument): boolean {
+  return draftContentFingerprint(documentForCloud(a)) === draftContentFingerprint(documentForCloud(b))
+}
+
 export async function restoreStudioDraft(userId: string): Promise<RestoreResult> {
   const local = await readLocalDraft(userId)
   const storedId = readStoredDesignId(userId)
@@ -208,14 +230,20 @@ export async function persistLocalRecovery(args: {
  * Ensure a single owner-scoped Studio working draft exists.
  * Reconciles lost POST responses by listing/updating instead of creating duplicates.
  * Non-409 failures on a known design id do not blind-overwrite via list fallback.
+ *
+ * When `createOnly` is true (reopen into an empty Studio with no known draft id), never
+ * adopt or overwrite another device's draft: same-content rows are recovered as a lost
+ * response; anything else becomes a conflict for the caller to resolve explicitly.
  */
 export async function ensureStudioDraft(
   userId: string,
   document: StudioDraftDocument,
   preferredDesignId: string | null,
   expectedRevision: number | null,
+  options: { createOnly?: boolean } = {},
 ): Promise<DesignRead> {
   const cloudDoc = documentForCloud(document)
+  const createOnly = Boolean(options.createOnly)
 
   if (preferredDesignId) {
     try {
@@ -248,12 +276,23 @@ export async function ensureStudioDraft(
   }
 
   if (existing) {
-    writeStoredDesignId(userId, existing.id)
     const serverDoc = extractStudioDraft(existing)
     const serverRev = serverDoc?.clientRevision
-    if (serverRev == null) {
+    if (serverRev == null || !serverDoc) {
       throw new ApiError('Studio draft is missing a server revision.', 409, null)
     }
+    if (sameCloudContent(serverDoc, cloudDoc)) {
+      writeStoredDesignId(userId, existing.id)
+      return existing
+    }
+    if (createOnly) {
+      throw conflictWithExistingDraft(
+        existing,
+        'Your working draft was created on another device.',
+        serverRev,
+      )
+    }
+    writeStoredDesignId(userId, existing.id)
     return updateStudioDraft(existing.id, cloudDoc, {
       expectedRevision: serverRev,
     })
@@ -270,36 +309,32 @@ export async function ensureStudioDraft(
       const mine = await listMyDesigns()
       const recovered = pickLatestStudioDraft(mine)
       if (recovered) {
-        writeStoredDesignId(userId, recovered.id)
         const serverDoc = extractStudioDraft(recovered)
         if (!serverDoc) throw createErr
         const serverRev = serverDoc.clientRevision
+        if (sameCloudContent(serverDoc, cloudDoc)) {
+          writeStoredDesignId(userId, recovered.id)
+          return recovered
+        }
+        if (createOnly) {
+          throw conflictWithExistingDraft(
+            recovered,
+            'Your working draft was created on another device.',
+            serverRev,
+          )
+        }
+        writeStoredDesignId(userId, recovered.id)
         // Only advance when our content is a strict newer revision; otherwise surface conflict.
         if (cloudDoc.clientRevision < serverRev) {
           return recovered
         }
         if (cloudDoc.clientRevision === serverRev) {
-          const same =
-            draftContentFingerprint(documentForCloud(serverDoc)) ===
-            draftContentFingerprint(cloudDoc)
-          if (same) return recovered
           throw createErr instanceof ApiError
             ? createErr
-            : new ApiError(
+            : conflictWithExistingDraft(
+                recovered,
                 'Studio working draft already exists with different content at this revision.',
-                409,
-                {
-                  detail: {
-                    code: 'conflict',
-                    message:
-                      'Studio working draft already exists with different content at this revision.',
-                    payload: {
-                      expected_revision: serverRev,
-                      current_revision: serverRev,
-                      design: recovered,
-                    },
-                  },
-                },
+                serverRev,
               )
         }
         return updateStudioDraft(recovered.id, cloudDoc, {
@@ -326,6 +361,11 @@ export async function persistStudioDraft(args: {
   expectedRevision: number | null
   /** When true, skip local write (caller already persisted). */
   skipLocalWrite?: boolean
+  /**
+   * Reopen-into-empty only: create the singleton draft, but never adopt/overwrite a
+   * draft that appears from another device. Autosave must leave this unset.
+   */
+  createOnly?: boolean
 }): Promise<PersistResult> {
   const cloudDoc = documentForCloud(args.document)
   const cloudFingerprint = draftContentFingerprint(cloudDoc)
@@ -368,6 +408,7 @@ export async function persistStudioDraft(args: {
       cloudDoc,
       args.designId,
       args.expectedRevision,
+      { createOnly: args.createOnly },
     )
     writeStoredDesignId(args.userId, saved.id)
     const extracted = extractStudioDraft(saved) ?? cloudDoc

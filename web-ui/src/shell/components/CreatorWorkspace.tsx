@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
+import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { BrushControls } from '@/shell/components/BrushControls'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
@@ -16,9 +17,14 @@ type Dock = 'models' | 'materials' | 'settings' | 'brush' | null
 
 type Props = {
   editor: StudioEditor
+  onOpenLibrary?: () => void
 }
 
-export function CreatorWorkspace({ editor }: Props) {
+function modalOpen(): boolean {
+  return document.querySelector('[aria-modal="true"]') !== null
+}
+
+export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   const [dock, setDock] = useState<Dock>(null)
   const [narrow, setNarrow] = useState(false)
   const [tablet, setTablet] = useState(false)
@@ -44,7 +50,7 @@ export function CreatorWorkspace({ editor }: Props) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const action = matchStudioShortcut(event)
-      if (!action) return
+      if (!action || modalOpen()) return
       event.preventDefault()
       if (action === 'draw') setTool('draw')
       else if (action === 'erase') setTool('erase')
@@ -58,7 +64,7 @@ export function CreatorWorkspace({ editor }: Props) {
   useEffect(() => {
     if (!dock) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDock(null)
+      if (event.key === 'Escape' && !modalOpen()) setDock(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -88,6 +94,10 @@ export function CreatorWorkspace({ editor }: Props) {
         saveStatusLabel={editor.saveStatusLabel}
         saveError={editor.saveError}
         onRetrySave={editor.retrySave}
+        onSaveDesign={editor.beginSaveDesign}
+        onExportPng={() => void editor.exportPng()}
+        exporting={editor.exporting}
+        onOpenLibrary={onOpenLibrary}
       />
 
       {betaNotice ? (
@@ -252,6 +262,17 @@ export function CreatorWorkspace({ editor }: Props) {
             you choose. Nothing is overwritten automatically.
           </p>
         </ConfirmDialog>
+      ) : null}
+
+      {editor.saveDesignDialog && !editor.draftConflict && !editor.modelSwitchPrompt ? (
+        <SaveDesignDialog
+          defaultTitle={editor.saveDesignDialog.defaultTitle}
+          saving={editor.saveDesignDialog.saving}
+          error={editor.saveDesignDialog.error}
+          customReferenceOmitted={editor.saveDesignDialog.customReferenceOmitted}
+          onConfirm={(title) => void editor.confirmSaveDesign(title)}
+          onCancel={editor.cancelSaveDesign}
+        />
       ) : null}
     </section>
   )

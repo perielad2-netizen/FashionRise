@@ -137,7 +137,7 @@ def test_update_without_expected_revision_remains_compatible(client):
     assert updated.json()["title"] == "Legacy look v2"
 
 
-def test_duplicate_studio_create_reconciles_to_one_draft(client):
+def test_duplicate_studio_create_same_content_is_idempotent(client):
     tokens = _register(client, "recon@example.com", "recon_user")
     headers = _auth(tokens["access_token"])
 
@@ -145,11 +145,11 @@ def test_duplicate_studio_create_reconciles_to_one_draft(client):
     assert first.status_code == 201, first.text
     first_id = first.json()["id"]
 
-    # Simulate lost response retry: second POST must not create a second working draft.
+    # Lost-response retry with the same content must not create a second working draft.
     second = client.post(
         "/api/v1/designs",
         headers=headers,
-        json=_studio_payload(2, model="male", stroke_id="b"),
+        json=_studio_payload(1, stroke_id="a"),
     )
     assert second.status_code == 201, second.text
     assert second.json()["id"] == first_id
@@ -163,8 +163,30 @@ def test_duplicate_studio_create_reconciles_to_one_draft(client):
         or (d.get("design_data") or {}).get("schema") == "fashionrise.studio.draft.v1"
     ]
     assert len(studio) == 1
-    assert studio[0]["design_data"]["clientRevision"] == 2
-    assert studio[0]["design_data"]["strokes"][0]["id"] == "b"
+    assert studio[0]["design_data"]["strokes"][0]["id"] == "a"
+
+
+def test_concurrent_create_different_content_preserves_existing(client):
+    """Higher-rev create must not overwrite another device's draft (WEB-V3A reopen race)."""
+    tokens = _register(client, "create_race@example.com", "create_race")
+    headers = _auth(tokens["access_token"])
+
+    first = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="device-b"))
+    assert first.status_code == 201, first.text
+    first_id = first.json()["id"]
+
+    conflict = client.post(
+        "/api/v1/designs",
+        headers=headers,
+        json=_studio_payload(2, model="male", stroke_id="device-a-open"),
+    )
+    assert conflict.status_code == 409, conflict.text
+    assert conflict.json()["detail"]["payload"]["design"]["id"] == first_id
+
+    got = client.get(f"/api/v1/designs/{first_id}", headers=headers)
+    assert got.status_code == 200
+    assert got.json()["design_data"]["clientRevision"] == 1
+    assert got.json()["design_data"]["strokes"][0]["id"] == "device-b"
 
 
 def test_stale_create_retry_does_not_clobber_newer_revision(client):

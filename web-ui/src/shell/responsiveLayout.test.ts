@@ -63,3 +63,31 @@ describe('WEB-V2.3 responsive layout contract', () => {
     expect(rule(settingsCss, '.generateSoon')).toContain('white-space: nowrap')
   })
 })
+
+describe('WEB-V3A My Designs layout contract', () => {
+  it('scrolls the library inside the shell instead of growing the page', async () => {
+    const { default: libraryCss } = await import('@/shell/components/MyDesignsScreen.module.css?raw')
+    expect(rule(libraryCss, '.screen')).toContain('min-height: 0')
+    const scroll = rule(libraryCss, '.scroll')
+    expect(scroll).toContain('min-height: 0')
+    expect(scroll).toContain('overflow-y: auto')
+    expect(rule(libraryCss, '.grid')).toContain('repeat(auto-fill, minmax(170px, 1fr))')
+    expect(rule(libraryCss, '.paper')).toContain('aspect-ratio: 3 / 4')
+  })
+
+  it('compacts on short landscape and goes full-bleed in portrait phones', async () => {
+    const { default: libraryCss } = await import('@/shell/components/MyDesignsScreen.module.css?raw')
+    expect(libraryCss).toContain(SHORT_LANDSCAPE)
+    expect(libraryCss).toContain('@media (max-width: 820px)')
+  })
+
+  it('lifts the open More menu above workspace notices but not above the brush scrim', async () => {
+    const { default: headerCss } = await import('@/shell/components/WorkspaceHeader.module.css?raw')
+    const { default: noticeCss } = await import('@/shell/components/BetaNotice.module.css?raw')
+    const zIndex = (block: string) => Number(/z-index:\s*(\d+)/.exec(block)?.[1])
+    const menuOpen = zIndex(rule(headerCss, '.headerMenuOpen'))
+    expect(rule(headerCss, '.header')).toContain('position: relative')
+    expect(menuOpen).toBeGreaterThan(zIndex(noticeCss))
+    expect(rule(headerCss, '.header')).not.toContain('z-index')
+  })
+})

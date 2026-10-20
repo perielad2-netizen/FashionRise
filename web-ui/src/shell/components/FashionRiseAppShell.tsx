@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Menu, X } from 'lucide-react'
 import { GlobalHeader } from '@/shell/components/GlobalHeader'
-import { GlobalNavigation } from '@/shell/components/GlobalNavigation'
+import { GlobalNavigation, type NavDestination } from '@/shell/components/GlobalNavigation'
 import styles from './FashionRiseAppShell.module.css'
 
 type Props = {
@@ -9,9 +9,18 @@ type Props = {
   username: string
   onLogout: () => void
   onComingSoon?: (label: string) => void
+  currentNav?: NavDestination
+  onNavigate?: (destination: NavDestination) => void
 }
 
-export function FashionRiseAppShell({ children, username, onLogout, onComingSoon }: Props) {
+export function FashionRiseAppShell({
+  children,
+  username,
+  onLogout,
+  onComingSoon,
+  currentNav,
+  onNavigate,
+}: Props) {
   const [navOpen, setNavOpen] = useState(false)
 
   return (
@@ -33,7 +42,14 @@ export function FashionRiseAppShell({ children, username, onLogout, onComingSoon
       />
       <div className={styles.body}>
         <div className={`${styles.navSlot} ${navOpen ? styles.navOpen : ''}`}>
-          <GlobalNavigation onComingSoon={onComingSoon} />
+          <GlobalNavigation
+            current={currentNav}
+            onComingSoon={onComingSoon}
+            onNavigate={(destination) => {
+              setNavOpen(false)
+              onNavigate?.(destination)
+            }}
+          />
         </div>
         {navOpen ? (
           <button
