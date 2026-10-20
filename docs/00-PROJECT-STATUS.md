@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **GitHub `main`:** `4aed16ce` (PRs #21–#24 merged in GitHub; security backend **not deployed**). **Production frontend** `/var/www/fashionrise/releases/8c6a391a` (operator **6/6 PASS**; expired Access **PENDING**). Production backend **`85b6561b`** · Alembic **`003`** · registration **OFF** · Access JWT validation **OFF** · trusted-proxy headers **OFF**. Read-only security preflight: `docs/deploy/SECURITY-INTEGRATION-PREFLIGHT.md` — **Checkpoint A GO (conditional)**; B/C/D and Stage D **not authorized**. **Stage C remains `BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`**.
+**Last updated:** 2026-10-20. **GitHub Checkpoint A pin:** `4aed16ce` (PRs #21–#24 merged; security backend **not deployed**). **Production frontend** `/var/www/fashionrise/releases/8c6a391a` (operator **6/6 PASS**; expired Access **PENDING**). Production backend **`85b6561b`** · Alembic **`003`** · registration **OFF** · Access JWT validation **OFF** · trusted-proxy headers **OFF**. Preflight runbook: `docs/deploy/SECURITY-INTEGRATION-PREFLIGHT.md` — Checkpoint A **plan conditionally accepted** (final ops gates); **production deploy not authorized**. B/C/D and Stage D **NO-GO**. **Stage C remains `BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`**.
 
 **Phase:** Protected family beta on WEB-V3A (export / save / My Designs) with permanent Access-safe PWA. WEB-V3B invite-only Create Account remains **not activated**.
 
@@ -76,7 +76,7 @@
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
 | GitHub `main` | **`4aed16ce`** — PRs #21–#24 merged (SlowAPI + Access JWT default off + Stage C docs); production backend still **`85b6561b`** |
 | Production frontend / backend | **`8c6a391a` / `85b6561b`** (frontend Stage B 2026-10-20T16:32Z; backend unchanged) |
-| Security integration preflight | Draft runbook `docs/deploy/SECURITY-INTEGRATION-PREFLIGHT.md` — Checkpoint A conditional GO; no deploy authorized by the preflight itself |
+| Security integration preflight (PR #25) | Draft runbook `docs/deploy/SECURITY-INTEGRATION-PREFLIGHT.md` — Checkpoint A **plan conditionally accepted** (ops gates A0–A7); **docs merge ≠ deploy**; production Checkpoint A still needs separate authorization |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
@@ -278,9 +278,9 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **PM:** review `docs/deploy/SECURITY-INTEGRATION-PREFLIGHT.md` — **Checkpoint A GO (conditional)** only; authorize backend deploy to `4aed16ce` with flags OFF if accepted.
-2. **Operator:** confirm CF AOP client dashboard binding + Access team domain + AUD; expired Access session test (still PENDING).
-3. **After Checkpoint A (if authorized):** Checkpoint B JWT header forwarding proof → Checkpoint C enable Access JWT → Checkpoint D Option B + `TRUST_PROXY_HEADERS` — each separately authorized; registration OFF throughout.
+1. **PM:** re-review amended Checkpoint A runbook (effective flags, git STOP rules, backup/rollback, acceptance/STOP). Docs merge ≠ deploy authorization.
+2. **Operator (separate):** if accepted, authorize Checkpoint A only — pin `4aed16ce`, restart `fashionrise-api`, flags effectively false, no Nginx/CF/migration.
+3. **Later (each separately authorized):** Checkpoint B JWT header proof → C enable Access JWT → D Option B + `TRUST_PROXY_HEADERS`; registration OFF throughout.
 4. **Stage C / Stage D** remain blocked until trust-boundary verification clears.
 5. Remaining WEB-V3A gaps after second account: cross-account privacy; untested conflict-resolution choices.
 6. Later milestones (not authorized now): save dedupe, rename/delete, Magic/backend, INFRA-2 PR #10.
@@ -388,6 +388,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **PR #25 Checkpoint A runbook (final ops gates):** effective systemd flag probe; git worktree STOP rules (no clean/hard reset); pin `4aed16ce…`; secrets-safe backup/rollback; `.env` edits need separate auth; A6 acceptance + A7 auto-rollback. Plan conditionally accepted; **no deploy/merge authorized**. B/C/D still NO-GO. |
 | 2026-10-20 | **GitHub code merges:** PR #23 strict SlowAPI and PR #24 Access JWT merged to main; no VPS deploy, flags unchanged. PR #22 docs merge approved separately; Stage C and Stage D remain blocked. |
 | 2026-10-20 | **PR #22 rebased** onto `main` `ef4c42c2` after PR #21 merge; Stage B 6/6 + expired PENDING preserved; Stage C still **BLOCKED**. |
 | 2026-10-20 | **Stage C trust-boundary prep:** AOP dashboard confirm PENDING; N3 fail-closed chosen; invite parent 750/no symlink verified; JWT design doc added; Uvicorn proxy-headers peer rewrite documented; PR #23 SlowAPI tests expanded. Still **BLOCKED**. |

@@ -1,9 +1,10 @@
 # FashionRise — Security Integration Preflight (read-only)
 
 **Date (UTC):** 2026-10-20  
-**GitHub `main`:** `4aed16ce9ea22d919266d85b8372e9fc546db078` (PRs #21–#24 merged in GitHub)  
-**Assignment:** preparation only — **no production changes authorized**  
-**Stage C verdict:** remains **`BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`**
+**GitHub pin for Checkpoint A:** `4aed16ce9ea22d919266d85b8372e9fc546db078` (PRs #21–#24 merged in GitHub)  
+**Assignment:** preparation only — **no production changes authorized by this document**  
+**Stage C verdict:** remains **`BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`**  
+**PM status:** Checkpoint A **plan conditionally accepted**; final operational gates in §5 and §7 (A0–A7). Production deploy still needs **separate** authorization.
 
 This runbook prepares controlled deployment of merged backend security code (SlowAPI `ipaddress` parser + origin Access JWT middleware) while preserving current production behavior. Registration stays disabled across all checkpoints.
 
@@ -95,11 +96,13 @@ Environment: disposable DBs only (`fashionrise_test` / `fashionrise_v3a_qa`). **
 
 | Item | SHA / value |
 |---|---|
-| GitHub `main` (deploy source) | `4aed16ce9ea22d919266d85b8372e9fc546db078` |
-| Production backend (live) | `85b6561b338e31c102d101c8d458a1624e7b9f29` |
-| Production frontend | `8c6a391a0d5bb3acc5e697e63c47e3ec242ec9fd` |
-| Production Alembic | `003` |
+| **Checkpoint A backend pin** (immutable) | `4aed16ce9ea22d919266d85b8372e9fc546db078` |
+| Checkpoint A rollback (current live) | `85b6561b338e31c102d101c8d458a1624e7b9f29` |
+| Production frontend (must stay) | `8c6a391a0d5bb3acc5e697e63c47e3ec242ec9fd` |
+| Production Alembic (must stay) | `003` |
 | Merged security PRs (GitHub) | #21 docs · #22 Stage C docs · #23 SlowAPI · #24 Access JWT |
+
+If `origin/main` later advances past the pin (e.g. docs-only merges), Checkpoint A still targets **`4aed16ce…` only** unless a new authorization names a different SHA.
 
 ---
 
