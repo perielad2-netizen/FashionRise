@@ -1,8 +1,8 @@
 # WEB-V3B — Invite-Only Beta Registration
 
 **Branch:** `cursor/web-v3b-invite-registration-77c6`  
-**Status:** final safety corrections complete — awaiting Technical PM final approval. **Not merged. Not deployed. Registration remains disabled in production.**  
-**Depends on:** permanent PWA/service-worker fix (draft PR #16) before any production frontend rebuild that could reintroduce cached navigation.
+**Status:** **MERGED** to `main` as PR #19 (code). **Not activated in production.** Registration remains disabled (Nginx deny, `REGISTRATION_ENABLED` off, Alembic `003`). Stage C trust boundary: **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION**.  
+**PWA dependency:** permanent Access-safe service-worker fix PR #16 is merged and deployed in Stage B. Preserve its navigation safety assertion in future frontend releases.
 
 ## 1. User flow
 
@@ -44,10 +44,10 @@
 ```bash
 cd /opt/fashionrise/src/backend   # or local backend/
 # After approved migration 004 and REGISTRATION_ENABLED=true in that environment:
-mkdir -p /root/.fashionrise-invites && chmod 700 /root/.fashionrise-invites
+mkdir -p /var/lib/fashionrise/invites && chmod 700 /var/lib/fashionrise/invites
 # --code-file creates a NEW 0600 file only (refuses overwrite / symlinks).
 python scripts/manage_invitations.py create person@example.com --hours 72 \
-  --code-file /root/.fashionrise-invites/person.code
+  --code-file /var/lib/fashionrise/invites/person.code
 # Operator reads the file out-of-band; do not cat into shared logs/chat.
 python scripts/manage_invitations.py status --email person@example.com
 python scripts/manage_invitations.py revoke --id <uuid>
