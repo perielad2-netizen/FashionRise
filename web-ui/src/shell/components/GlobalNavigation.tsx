@@ -1,5 +1,4 @@
 import { BookOpen, Compass, Home, Images, Sparkles } from 'lucide-react'
-import { UI_ASSETS } from '@/assets/uiAssets'
 import styles from './GlobalNavigation.module.css'
 
 const ITEMS = [
@@ -38,16 +37,6 @@ export function GlobalNavigation({ onComingSoon }: Props) {
             </button>
           )
         })}
-      </div>
-      <div className={styles.brandPanel} aria-hidden>
-        <img
-          src={UI_ASSETS.canvas.female}
-          alt=""
-          className={styles.brandPhoto}
-          draggable={false}
-        />
-        <p className={styles.brandCopy}>Fashion is your superpower</p>
-        <img src={UI_ASSETS.brand.mark} alt="" className={styles.brandMark} draggable={false} />
       </div>
     </nav>
   )

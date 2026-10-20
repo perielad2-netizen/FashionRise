@@ -15,6 +15,14 @@ body,
   padding: 0;
 }
 
+/* Track the visible viewport, so browser tabs and the address bar never push the
+   app below the fold. Installed PWA mode reports its own height the same way. */
+@supports (height: 100dvh) {
+  #root {
+    height: 100dvh;
+  }
+}
+
 html {
   background: var(--shell-bg);
 }

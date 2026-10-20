@@ -1,6 +1,6 @@
 import type { ToolKind } from '@/lib/strokes'
 import { BRUSH_SIZES } from '@/lib/strokes'
-import styles from './FloatingBrushPanel.module.css'
+import styles from './BrushControls.module.css'
 
 type Props = {
   tool: ToolKind
@@ -8,26 +8,13 @@ type Props = {
   opacity: number
   onBrushSize: (px: number) => void
   onOpacity: (value: number) => void
-  /** When true, panel is hidden (narrow screens use brush sheet instead). */
-  hiddenOnNarrow?: boolean
-  variant?: 'float' | 'sheet'
 }
 
-export function FloatingBrushPanel({
-  tool,
-  brushSize,
-  opacity,
-  onBrushSize,
-  onOpacity,
-  hiddenOnNarrow = true,
-  variant = 'float',
-}: Props) {
+/** Brush size and opacity for the dock sheet when the Settings column is hidden. */
+export function BrushControls({ tool, brushSize, opacity, onBrushSize, onOpacity }: Props) {
   const title = tool === 'erase' ? 'Eraser' : 'Pencil'
   return (
-    <div
-      className={`${variant === 'sheet' ? styles.sheet : styles.panel} ${hiddenOnNarrow && variant === 'float' ? styles.hideNarrow : ''}`}
-      aria-label="Brush settings"
-    >
+    <div className={styles.sheet} aria-label="Brush settings">
       <p className={styles.title}>{title}</p>
       <div className={styles.preview} aria-hidden>
         <div

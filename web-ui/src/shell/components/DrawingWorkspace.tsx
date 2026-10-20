@@ -1,6 +1,5 @@
 import { Maximize2, ScanSearch, Search } from 'lucide-react'
 import { DrawingCanvas } from '@/components/studio/DrawingCanvas'
-import { FloatingBrushPanel } from '@/shell/components/FloatingBrushPanel'
 import type { Stroke, ToolKind } from '@/lib/strokes'
 import styles from './DrawingWorkspace.module.css'
 
@@ -13,9 +12,6 @@ type Props = {
   referenceUrl: string | null
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
-  onBrushSize: (px: number) => void
-  onOpacity: (value: number) => void
-  showFloatingBrush: boolean
 }
 
 export function DrawingWorkspace({
@@ -27,13 +23,10 @@ export function DrawingWorkspace({
   referenceUrl,
   referenceOpacity,
   onStrokeComplete,
-  onBrushSize,
-  onOpacity,
-  showFloatingBrush,
 }: Props) {
   return (
-    <div className={showFloatingBrush ? styles.wrapWithBrush : styles.wrap}>
-      <div className={styles.canvasFrame}>
+    <div className={styles.wrap}>
+      <div className={styles.canvasFrame} data-testid="paper-frame">
         <DrawingCanvas
           strokes={strokes}
           activeTool={tool}
@@ -58,16 +51,6 @@ export function DrawingWorkspace({
           </button>
         </div>
       </div>
-      {showFloatingBrush ? (
-        <FloatingBrushPanel
-          tool={tool}
-          brushSize={brushSize}
-          opacity={brushOpacity}
-          onBrushSize={onBrushSize}
-          onOpacity={onOpacity}
-          hiddenOnNarrow
-        />
-      ) : null}
     </div>
   )
 }

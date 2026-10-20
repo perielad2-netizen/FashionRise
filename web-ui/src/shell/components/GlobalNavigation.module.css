@@ -42,72 +42,26 @@
   box-shadow: var(--fr-glow);
 }
 
-.brandPanel {
-  margin-top: auto;
-  border-radius: 16px;
-  overflow: hidden;
-  min-height: 160px;
-  position: relative;
-  border: 1px solid rgba(214, 51, 132, 0.22);
-  background:
-    linear-gradient(180deg, rgba(8, 10, 20, 0.2), rgba(8, 10, 20, 0.88)),
-    radial-gradient(circle at 40% 20%, rgba(214, 51, 132, 0.35), transparent 55%),
-    #121018;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 14px 12px;
-  gap: 10px;
-}
-
-.brandPhoto {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center top;
-  opacity: 0.42;
-  filter: saturate(0.75) contrast(1.05);
-  pointer-events: none;
-}
-
-.brandCopy,
-.brandMark {
-  position: relative;
-  z-index: 1;
-}
-
-.brandCopy {
-  margin: 0;
-  font-family: var(--fr-serif);
-  font-size: 13px;
-  line-height: 1.25;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.brandMark {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-  opacity: 0.92;
-}
-
 @media (max-width: 1100px) {
   .item span,
   .itemActive span {
     display: none;
   }
+}
 
-  .brandCopy {
-    font-size: 11px;
+@media (min-width: 821px) and (max-height: 760px) {
+  .nav {
+    padding: 8px 8px;
   }
 
-  .brandPanel {
-    min-height: 120px;
-    padding: 10px;
+  .items {
+    gap: 4px;
+  }
+
+  .item,
+  .itemActive {
+    gap: 4px;
+    padding: 8px 6px;
   }
 }
 
