@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **`main` = `8c6a391a`**. **Stage B frontend SUCCESS** at `/var/www/fashionrise/releases/8c6a391a` (operator browser **6/6 PASS**; expired Access **PENDING**). Backend **`85b6561b`** · Alembic **`003`** · registration **off**. **Stage C: BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION** (Option B real_ip + Access JWT + SlowAPI hardening). Reports: Stage A/B docs · `docs/deploy/WEB-V3B-STAGE-C-REGISTRATION-READINESS.md` · `docs/deploy/WEB-V3B-TRUST-BOUNDARY.md`. Draft PR #21 (Stage B) still open — reconcile after merge.
+**Last updated:** 2026-10-20. **`main` = `8c6a391a`**. **Stage B frontend SUCCESS** at `/var/www/fashionrise/releases/8c6a391a` (operator browser **6/6 PASS**; expired Access **PENDING**). Backend **`85b6561b`** · Alembic **`003`** · registration **off**. **Stage C: BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION** (Option B real_ip + origin Access JWT design + SlowAPI PR #23). Reports: Stage A/B · `WEB-V3B-STAGE-C-REGISTRATION-READINESS.md` · `WEB-V3B-TRUST-BOUNDARY.md` · `WEB-V3B-ORIGIN-ACCESS-JWT-DESIGN.md`. Draft PR #21 still open — **do not merge #22 until #21 is merged and reconciled**.
 
 **Phase:** Protected family beta on WEB-V3A (export / save / My Designs) with permanent Access-safe PWA. WEB-V3B invite-only Create Account remains **not activated**.
 
@@ -387,6 +387,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **Stage C trust-boundary prep:** AOP dashboard confirm PENDING; N3 fail-closed chosen; invite parent 750/no symlink verified; JWT design doc added; Uvicorn proxy-headers peer rewrite documented; PR #23 SlowAPI tests expanded. Still **BLOCKED**. |
 | 2026-10-20 | **Stage C security amendment:** custom AOP CA verified; Option B real_ip preferred; Access JWT gap documented; invite path → `/var/lib/fashionrise/invites/`; verdict **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION**. No prod changes. |
 | 2026-10-20 | **Stage C WEB-V3B readiness (initial):** preflight PASS; migration smoke PASS; later amended after PM review (Option A rejected as primary). |
 | 2026-10-20 | **Stage B operator acceptance 6/6 PASS** (valid Access). Expired Access session still pending. |

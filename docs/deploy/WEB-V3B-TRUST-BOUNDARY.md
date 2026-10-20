@@ -40,7 +40,9 @@ Browser
 
 **Implication:** Global-AOP “any Cloudflare account” weakness does **not** apply to the mTLS layer as configured. Possession of FashionRise’s AOP **client private key** (or a CF config that presents that client cert) would still be required to satisfy origin mTLS.
 
-**Still insufficient alone for Access policy binding:** AOP proves “Cloudflare pulled with FashionRise’s AOP client.” It does **not** validate that the HTTP request carried a valid **Cloudflare Access JWT** for this application’s AUD. Edge Access 302 for anonymous browsers is necessary but not origin-enforced Access.
+**Dashboard confirmation (PENDING):** Operator must confirm in Cloudflare SSL/TLS → Origin Server / Authenticated Origin Pulls that the **active** zone-level or per-hostname client certificate matches fingerprint `83:81:C8:91:…:02:FD` (FashionRise Cloudflare AOP Client). Document rotation: replace client cert before NotAfter 2027-10-19; revoke old cert in CF; keep origin CA trust aligned. **Do not** paste private keys into tickets.
+
+**Still insufficient alone for Access policy binding:** AOP proves “Cloudflare pulled with FashionRise’s AOP client.” It does **not** validate that the HTTP request carried a valid **Cloudflare Access JWT** for this application’s AUD. Edge Access 302 for anonymous browsers is necessary but not origin-enforced Access. **Edge-only residual risk is not approved.** Design: `docs/deploy/WEB-V3B-ORIGIN-ACCESS-JWT-DESIGN.md`.
 
 ## 2. Decision Gate 0 (revised) — prefer Option B
 
@@ -87,8 +89,8 @@ Execute only after approved Nginx Option B staging or carefully scoped prod chan
 |---|---|---|
 | N1 | Forged client `X-Real-IP` / `X-Forwarded-For` from trusted CF peer | Upstream key uses `real_ip`-normalized visitor; forged headers overwritten, not appended |
 | N2 | Forged `CF-Connecting-IP` from **non**-Cloudflare peer | `$remote_addr` unchanged (not in `set_real_ip_from`); request should still fail AOP without FashionRise client cert |
-| N3 | Missing `CF-Connecting-IP` from CF peer | Documented fallback (keep edge IP or fail closed — **choose before Stage D**) |
-| N4 | Malformed IP in `CF-Connecting-IP` | real_ip ignores / no crash; FastAPI rejects bad `X-Real-IP` via `ipaddress` |
+| N3 | Missing `CF-Connecting-IP` from CF peer | **Fail closed (chosen):** do not silently rate-limit on shared edge IP. Prefer Nginx `if` / map that returns **400** for API locations when `$http_cf_connecting_ip` is empty **after** peer matched `set_real_ip_from`, **or** omit `X-Real-IP` and keep `TRUST_PROXY_HEADERS` path failing closed to a non-shared internal deny. Exact directive must be staging-tested; silent edge-bucket accept is **forbidden**. |
+| N4 | Malformed IP in `CF-Connecting-IP` | real_ip leaves `$remote_addr` as edge; treat like N3 (fail closed for API) + FastAPI rejects bad `X-Real-IP` via `ipaddress` / duplicate headers |
 | N5 | Direct origin attempt, no client cert | **400** AOP |
 | N6 | Direct origin with stolen/wrong client cert | Fail verify (not FashionRise CA) |
 | N7 | Two distinct legitimate Access clients | Distinct rate-limit buckets after Option B + `TRUST_PROXY_HEADERS=true` |
@@ -109,8 +111,51 @@ Execute only after approved Nginx Option B staging or carefully scoped prod chan
 | On delivery failure | Auto-revoke invitation (existing CLI behavior) |
 | Delivery | Out-of-band; never paste codes into tickets/chats/agent logs |
 
-Create the directory in Stage D before first `manage_invitations.py create … --code-file /var/lib/fashionrise/invites/<invitee>.code`.
+### Invite path readiness check (read-only, 2026-10-20)
 
-## 6. Separate code hardening
+| Check | Result |
+|---|---|
+| Parent `/var/lib/fashionrise` | Owner `fashionriseapp:fashionriseapp`, mode `750` (`drwxr-x---`); ancestry `/` → `var` → `lib` are root-owned normal dirs (**no symlink** in `namei -l`) |
+| `/var/lib/fashionrise/invites` | **Absent** today — create in Stage D as `fashionriseapp`: `mkdir -m 700 invites` (do **not** rely on CLI `mkdir(parents=True)` alone for mode) |
+| Execution user | `fashionriseapp` (systemd `User=` / nologin home) can write under home |
+| Invitations created | **None** (Stage C / this amendment) |
 
-SlowAPI `client_ip_key` coarse regex → strict `ipaddress` validation: draft PR (application code; not this docs PR). Must merge/deploy only under later authorization.
+## 6. Uvicorn peer vs SlowAPI fallback
+
+Production: `python -m uvicorn app.main:app --host 127.0.0.1 --port 8010` (uvicorn **0.31.1**).
+
+Default **`--proxy-headers` enabled**; trusted hosts default **`127.0.0.1`**. When Nginx on localhost sends `X-Forwarded-For`, `ProxyHeadersMiddleware` may rewrite `scope["client"]` from that header. Therefore SlowAPI’s `get_remote_address` fallback is **post-middleware** client host — **not** guaranteed to be literal `127.0.0.1`.
+
+**Until Option B overwrites XFF with a single visitor IP**, forged or appended XFF from the browser→CF→Nginx chain can influence the ASGI peer. Mitigation path: Option B overwrite + `TRUST_PROXY_HEADERS=true` with PR #23 parser; consider `--forwarded-allow-ips=` empty or `--no-proxy-headers` only under a separate approved change if needed.
+
+## 7. Option B verification checklist (not executed)
+
+Before `TRUST_PROXY_HEADERS=true` in production:
+
+1. Install FashionRise-only `set_real_ip_from` with **full current** Cloudflare IPv4 **and** IPv6 CIDRs (re-fetch https://www.cloudflare.com/ips-v4 and ips-v6).
+2. `real_ip_header CF-Connecting-IP;`
+3. Overwrite `X-Real-IP` / `X-Forwarded-For` with `$remote_addr` on **login, refresh, logout, me, register, designs**.
+4. `nginx -T` proves other vhosts unchanged.
+5. Execute N1–N9 including two-client bucket isolation and IPv6 client.
+6. Deploy PR #23 parser first.
+7. Only then set `TRUST_PROXY_HEADERS=true`.
+
+## 8. Separate code / docs artifacts
+
+| Artifact | Role |
+|---|---|
+| Draft PR #23 | Strict SlowAPI `ipaddress` + duplicate-header fail-closed |
+| `WEB-V3B-ORIGIN-ACCESS-JWT-DESIGN.md` | Origin Access JWT/AUD design (**required** before activation) |
+| Draft PR #21 | Stage B docs — **merge first** when authorized; then rebase #22 |
+| Draft PR #22 | This trust-boundary pack — stay **BLOCKED**; do not merge until #21 reconciled |
+
+## 9. Outstanding (unchanged blockers)
+
+1. CF dashboard AOP client match confirmation + rotation notes.
+2. Option B live verification + N3 fail-closed directive staging.
+3. Origin Access JWT implementation after design approval.
+4. PR #23 merge/deploy authorization.
+5. Genuine expired Access session test (**PENDING**).
+6. PR #21 merge → rebase/reconcile #22; preserve Stage B operator **6/6 PASS**.
+
+**Verdict remains `BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`.**

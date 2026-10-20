@@ -113,7 +113,13 @@ Runner: `backend/scripts/run_migration_smoke.py` (fail-closed; never production)
 | **C** | `TRUST_PROXY_HEADERS=false` | Shared `127.0.0.1` bucket — **not acceptable** for registration activation |
 | **D** | Overwrite with edge `$remote_addr` without real_ip | Shared CF edge buckets — **reject** |
 
-**Also blocking:** implement or schedule origin **Access JWT (AUD) validation**; confirm Cloudflare dashboard still uses FashionRise custom AOP client (operator). Merge SlowAPI `ipaddress` hardening draft PR before enabling `TRUST_PROXY_HEADERS`.
+**Also blocking:**
+
+- Origin **Access JWT (AUD) validation** — design in `docs/deploy/WEB-V3B-ORIGIN-ACCESS-JWT-DESIGN.md` (**edge-only residual risk not approved**).
+- Operator confirm Cloudflare dashboard AOP client matches FashionRise fingerprint.
+- N3/N4 **fail-closed** if `CF-Connecting-IP` missing/malformed (no silent edge buckets) — see trust-boundary doc.
+- Merge/deploy SlowAPI hardening draft PR #23 before `TRUST_PROXY_HEADERS=true`.
+- Reconcile after PR #21 merges; keep PR #22 blocked until then.
 
 **Stage D must not set `TRUST_PROXY_HEADERS=true` until Option B is applied, negative tests pass, and backend parser hardening is deployed.**
 ---
