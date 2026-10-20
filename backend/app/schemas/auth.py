@@ -10,6 +10,8 @@ class UserRegister(BaseModel):
     username: UsernameStr
     password: Annotated[str, StringConstraints(min_length=8, max_length=128)]
     display_name: str | None = Field(default=None, max_length=120)
+    # Required for invite-only beta. Never log or echo this value.
+    invitation_code: Annotated[str, StringConstraints(min_length=16, max_length=128)]
 
 
 class UserLogin(BaseModel):

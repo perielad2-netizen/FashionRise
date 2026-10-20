@@ -10,8 +10,10 @@ import {
 import {
   login as apiLogin,
   logoutLocal,
+  register as apiRegister,
   restoreSession,
   type LoginPayload,
+  type RegisterPayload,
   type User,
 } from '@/services/auth/authApi'
 import { tokenStore } from '@/services/auth/tokenStore'
@@ -20,6 +22,7 @@ type AuthState = {
   user: User | null
   bootstrapping: boolean
   login: (payload: LoginPayload) => Promise<void>
+  register: (payload: RegisterPayload) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
 }
@@ -49,7 +52,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback(async (payload: LoginPayload) => {
+    // Drop any prior in-memory identity before applying the new session.
+    setUser(null)
     const result = await apiLogin(payload)
+    setUser(result.user)
+  }, [])
+
+  const register = useCallback(async (payload: RegisterPayload) => {
+    setUser(null)
+    const result = await apiRegister(payload)
     setUser(result.user)
   }, [])
 
@@ -63,10 +74,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       bootstrapping,
       login,
+      register,
       logout,
       isAuthenticated: Boolean(user),
     }),
-    [user, bootstrapping, login, logout],
+    [user, bootstrapping, login, register, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

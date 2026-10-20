@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { validateLogin, type LoginFieldErrors } from '@/lib/validateLogin'
@@ -133,6 +133,10 @@ export function LoginPage() {
             {busy ? 'Signing in…' : 'Enter Studio'}
           </button>
         </form>
+
+        <p className={styles.footerLinks}>
+          Invited to the beta? <Link to="/register">Create account</Link>
+        </p>
       </div>
     </div>
   )

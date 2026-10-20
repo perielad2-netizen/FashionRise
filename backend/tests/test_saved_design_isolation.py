@@ -53,7 +53,7 @@ def _saved_payload(save_request_id: str, *, title: str = "Evening gown", nested_
 
 
 def test_saved_designs_never_reconcile_with_the_working_draft(client, db_session):
-    tokens = _register(client, "v3a_owner@example.com", "v3a_owner")
+    tokens = _register(client, db_session, "v3a_owner@example.com", "v3a_owner")
     headers = _auth(tokens["access_token"])
 
     draft = client.post("/api/v1/designs", headers=headers, json=_studio_payload(3, stroke_id="w1"))
@@ -89,7 +89,7 @@ def test_saved_designs_never_reconcile_with_the_working_draft(client, db_session
 
 
 def test_nested_snapshot_schema_is_ignored_by_singleton_detection(client, db_session):
-    tokens = _register(client, "v3a_nested@example.com", "v3a_nested")
+    tokens = _register(client, db_session, "v3a_nested@example.com", "v3a_nested")
     headers = _auth(tokens["access_token"])
     draft = client.post("/api/v1/designs", headers=headers, json=_studio_payload(2, stroke_id="w1")).json()
 
@@ -108,8 +108,8 @@ def test_nested_snapshot_schema_is_ignored_by_singleton_detection(client, db_ses
     assert found is not None and str(found.id) == draft["id"]
 
 
-def test_working_draft_rules_still_hold_after_saved_designs_exist(client):
-    tokens = _register(client, "v3a_rules@example.com", "v3a_rules")
+def test_working_draft_rules_still_hold_after_saved_designs_exist(client, db_session):
+    tokens = _register(client, db_session, "v3a_rules@example.com", "v3a_rules")
     headers = _auth(tokens["access_token"])
     draft = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="w1")).json()
     client.post("/api/v1/designs", headers=headers, json=_saved_payload("req-a"))
@@ -157,9 +157,9 @@ def test_working_draft_rules_still_hold_after_saved_designs_exist(client):
     assert len([d for d in mine if d["design_data"].get("schema") == "fashionrise.saved_design.v1"]) == 1
 
 
-def test_saved_designs_are_owner_private(client):
-    owner = _auth(_register(client, "v3a_a@example.com", "v3a_a")["access_token"])
-    other = _auth(_register(client, "v3a_b@example.com", "v3a_b")["access_token"])
+def test_saved_designs_are_owner_private(client, db_session):
+    owner = _auth(_register(client, db_session, "v3a_a@example.com", "v3a_a")["access_token"])
+    other = _auth(_register(client, db_session, "v3a_b@example.com", "v3a_b")["access_token"])
     saved = client.post("/api/v1/designs", headers=owner, json=_saved_payload("req-private")).json()
 
     assert client.get(f"/api/v1/designs/{saved['id']}", headers=other).status_code == 404

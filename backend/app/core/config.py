@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 25
     allowed_upload_image_types: str = "image/jpeg,image/png,image/webp"
 
+    # Invite-only beta registration. Default false so production stays closed until
+    # an independently approved deployment flips the gate (and Nginx allowlists POST).
+    registration_enabled: bool = False
+
+    # When true, rate limiting may key on X-Real-IP set by a trusted reverse proxy
+    # that overwrites the header with $remote_addr. Default false ignores client XFF.
+    trust_proxy_headers: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_cors(cls, v: str) -> str:

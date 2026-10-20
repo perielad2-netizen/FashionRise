@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 
-def _register(client, email: str, username: str, password: str = "StrongPass123!") -> dict:
-    r = client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "username": username, "password": password, "display_name": username},
-    )
-    assert r.status_code == 200, r.text
-    return r.json()
+def _register(client, db_session, email: str, username: str, password: str = "StrongPass123!") -> dict:
+    from tests.auth_test_helpers import register_with_invite
+
+    return register_with_invite(client, db_session, email, username, password)
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -59,8 +56,8 @@ def _studio_payload(client_revision: int, *, model: str = "female", stroke_id: s
     }
 
 
-def test_stale_expected_revision_returns_409_and_preserves_server_copy(client):
-    tokens = _register(client, "studio_a@example.com", "studio_a")
+def test_stale_expected_revision_returns_409_and_preserves_server_copy(client, db_session):
+    tokens = _register(client, db_session, "studio_a@example.com", "studio_a")
     headers = _auth(tokens["access_token"])
 
     created = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="s1"))
@@ -104,8 +101,8 @@ def test_stale_expected_revision_returns_409_and_preserves_server_copy(client):
     assert got.json()["design_data"]["model"] == "male"
 
 
-def test_update_without_expected_revision_remains_compatible(client):
-    tokens = _register(client, "legacy@example.com", "legacy_user")
+def test_update_without_expected_revision_remains_compatible(client, db_session):
+    tokens = _register(client, db_session, "legacy@example.com", "legacy_user")
     headers = _auth(tokens["access_token"])
 
     created = client.post(
@@ -137,8 +134,8 @@ def test_update_without_expected_revision_remains_compatible(client):
     assert updated.json()["title"] == "Legacy look v2"
 
 
-def test_duplicate_studio_create_same_content_is_idempotent(client):
-    tokens = _register(client, "recon@example.com", "recon_user")
+def test_duplicate_studio_create_same_content_is_idempotent(client, db_session):
+    tokens = _register(client, db_session, "recon@example.com", "recon_user")
     headers = _auth(tokens["access_token"])
 
     first = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="a"))
@@ -166,9 +163,9 @@ def test_duplicate_studio_create_same_content_is_idempotent(client):
     assert studio[0]["design_data"]["strokes"][0]["id"] == "a"
 
 
-def test_concurrent_create_different_content_preserves_existing(client):
+def test_concurrent_create_different_content_preserves_existing(client, db_session):
     """Higher-rev create must not overwrite another device's draft (WEB-V3A reopen race)."""
-    tokens = _register(client, "create_race@example.com", "create_race")
+    tokens = _register(client, db_session, "create_race@example.com", "create_race")
     headers = _auth(tokens["access_token"])
 
     first = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="device-b"))
@@ -189,8 +186,8 @@ def test_concurrent_create_different_content_preserves_existing(client):
     assert got.json()["design_data"]["strokes"][0]["id"] == "device-b"
 
 
-def test_stale_create_retry_does_not_clobber_newer_revision(client):
-    tokens = _register(client, "stale_create@example.com", "stale_create")
+def test_stale_create_retry_does_not_clobber_newer_revision(client, db_session):
+    tokens = _register(client, db_session, "stale_create@example.com", "stale_create")
     headers = _auth(tokens["access_token"])
 
     first = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="a"))
@@ -219,8 +216,8 @@ def test_stale_create_retry_does_not_clobber_newer_revision(client):
     assert retry.json()["design_data"]["strokes"][0]["id"] == "newer"
 
 
-def test_matching_expected_revision_allows_update(client):
-    tokens = _register(client, "ok_rev@example.com", "ok_rev")
+def test_matching_expected_revision_allows_update(client, db_session):
+    tokens = _register(client, db_session, "ok_rev@example.com", "ok_rev")
     headers = _auth(tokens["access_token"])
 
     created = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="s1"))
@@ -238,8 +235,8 @@ def test_matching_expected_revision_allows_update(client):
     assert updated.json()["design_data"]["clientRevision"] == 2
 
 
-def test_studio_put_requires_expected_revision(client):
-    tokens = _register(client, "need_rev@example.com", "need_rev")
+def test_studio_put_requires_expected_revision(client, db_session):
+    tokens = _register(client, db_session, "need_rev@example.com", "need_rev")
     headers = _auth(tokens["access_token"])
 
     created = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="s1"))
@@ -254,8 +251,8 @@ def test_studio_put_requires_expected_revision(client):
     assert missing.json()["detail"]["code"] == "conflict"
 
 
-def test_studio_put_rejects_nonadvancing_revision_with_new_content(client):
-    tokens = _register(client, "nonadv@example.com", "nonadv")
+def test_studio_put_rejects_nonadvancing_revision_with_new_content(client, db_session):
+    tokens = _register(client, db_session, "nonadv@example.com", "nonadv")
     headers = _auth(tokens["access_token"])
 
     created = client.post("/api/v1/designs", headers=headers, json=_studio_payload(1, stroke_id="s1"))
@@ -274,8 +271,8 @@ def test_studio_put_rejects_nonadvancing_revision_with_new_content(client):
     assert got.json()["design_data"]["strokes"][0]["id"] == "s1"
 
 
-def test_equal_revision_different_content_create_returns_409(client):
-    tokens = _register(client, "eqrev@example.com", "eqrev")
+def test_equal_revision_different_content_create_returns_409(client, db_session):
+    tokens = _register(client, db_session, "eqrev@example.com", "eqrev")
     headers = _auth(tokens["access_token"])
 
     first = client.post("/api/v1/designs", headers=headers, json=_studio_payload(3, stroke_id="a"))
@@ -294,8 +291,8 @@ def test_equal_revision_different_content_create_returns_409(client):
     assert got.json()["design_data"]["strokes"][0]["id"] == "a"
 
 
-def test_identical_create_retry_is_idempotent(client):
-    tokens = _register(client, "idem@example.com", "idem")
+def test_identical_create_retry_is_idempotent(client, db_session):
+    tokens = _register(client, db_session, "idem@example.com", "idem")
     headers = _auth(tokens["access_token"])
     payload = _studio_payload(2, model="male", stroke_id="same")
 
