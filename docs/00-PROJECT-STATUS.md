@@ -278,10 +278,10 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Operator:** confirm CF AOP client + Access team domain + AUD; expired Access session test (still PENDING).
-2. **Security integration:** PRs [#23](https://github.com/perielad2-netizen/FashionRise/pull/23) and [#24](https://github.com/perielad2-netizen/FashionRise/pull/24) are **merged into GitHub only**, **not deployed**. Prepare separately authorized API-only JWT integration checks and FashionRise-scoped Nginx Option B tests; keep registration OFF.
-3. **Stage C activation readiness remains BLOCKED**, even when this docs-only PR #22 is merged: Option B staging, Access JWT validation, AOP dashboard confirmation, and expired-session acceptance remain pending.
-4. **Stage D** (not authorized) only after **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION** clears.
+1. **PM:** review `docs/deploy/SECURITY-INTEGRATION-PREFLIGHT.md` — **Checkpoint A GO (conditional)** only; authorize backend deploy to `4aed16ce` with flags OFF if accepted.
+2. **Operator:** confirm CF AOP client dashboard binding + Access team domain + AUD; expired Access session test (still PENDING).
+3. **After Checkpoint A (if authorized):** Checkpoint B JWT header forwarding proof → Checkpoint C enable Access JWT → Checkpoint D Option B + `TRUST_PROXY_HEADERS` — each separately authorized; registration OFF throughout.
+4. **Stage C / Stage D** remain blocked until trust-boundary verification clears.
 5. Remaining WEB-V3A gaps after second account: cross-account privacy; untested conflict-resolution choices.
 6. Later milestones (not authorized now): save dedupe, rename/delete, Magic/backend, INFRA-2 PR #10.
 

@@ -103,18 +103,55 @@ Environment: disposable DBs only (`fashionrise_test` / `fashionrise_v3a_qa`). **
 
 ---
 
-## 5. Configuration requirements (flags remain OFF for Checkpoint A)
+## 5. Effective safety flags (systemd runtime — not `.env` absence alone)
 
-After code deploy, ensure `backend/.env` (or equivalent) contains **explicit** safeties:
+Checkpoint A requires the **resolved** FastAPI settings under the live `fashionrise-api` process to be false for all three gates. Absence of a key in `backend/.env` is **not** sufficient proof if systemd injects overrides.
+
+### 5.1 Inspect actual runtime configuration (read-only; never print secrets)
 
 ```bash
-REGISTRATION_ENABLED=false
-CF_ACCESS_JWT_VALIDATION=false
-TRUST_PROXY_HEADERS=false
-# Leave unset/empty until Checkpoint C:
-# CF_ACCESS_TEAM_DOMAIN=
-# CF_ACCESS_AUD=
+# Unit + drop-ins (paths/names only; redact any Environment= values that look like secrets)
+systemctl cat fashionrise-api
+systemctl show fashionrise-api -p Environment -p EnvironmentFiles -p WorkingDirectory -p ExecStart -p User --no-pager
+
+# Confirm WorkingDirectory / ExecStart point at FashionRise backend (do not modify under A)
+# Expected (preflight): WorkingDirectory=/opt/fashionrise/src/backend
+#   ExecStart=/opt/fashionrise/.venv/bin/python -B -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --workers 1
 ```
+
+### 5.2 Assert effective boolean flags (safe probe — no secrets)
+
+Prefer evaluating settings **as the service user** with the same cwd/venv the unit uses. Print **only** the three booleans:
+
+```bash
+sudo -u fashionriseapp -H bash -lc '
+  cd /opt/fashionrise/src/backend &&
+  /opt/fashionrise/.venv/bin/python - <<'"'"'PY'"'"'
+from app.core.config import get_settings
+get_settings.cache_clear()
+s = get_settings()
+print("registration_enabled=", s.registration_enabled)
+print("cf_access_jwt_validation=", s.cf_access_jwt_validation)
+print("trust_proxy_headers=", s.trust_proxy_headers)
+raise SystemExit(0 if (
+    s.registration_enabled is False
+    and s.cf_access_jwt_validation is False
+    and s.trust_proxy_headers is False
+) else 2)
+PY'
+```
+
+**Required result before and after Checkpoint A restart:** all three print `False` and exit code `0`.
+
+Do **not** dump `SECRET_KEY`, `DATABASE_URL`, `CF_ACCESS_AUD`, tokens, or full `.env`.
+
+### 5.3 Production `.env` edits — separate authorization
+
+Writing `REGISTRATION_ENABLED=false` (or any `.env` change) is a **production configuration change**. It is **not** implied by authorization that only covers `git checkout` + `systemctl restart`.
+
+**Preference for Checkpoint A:** if the effective-flag probe (§5.2) already returns all-false on the target code SHA, **leave `.env` untouched**.
+
+If an `.env` edit is later deemed necessary, request that **exact scope** and a secrets-safe rollback copy in the deployment authorization. Never paste `.env` contents into chat/PR/logs.
 
 Do **not** run `alembic upgrade 004` in any checkpoint of this preflight series.
 
@@ -165,50 +202,157 @@ N3/N4 fail-closed for missing/malformed `CF-Connecting-IP` after peer ∈ CF ran
 
 ## 7. Checkpoint rollout plan (none authorized by this document)
 
-Registration **disabled** in every checkpoint. No invitations/users created.
+Registration **disabled** in every checkpoint. No invitations/users created.  
+**Docs merge of PR #25 and production Checkpoint A deployment are distinct decisions** — each needs its own operator/PM authorization.
 
-### Checkpoint A — Deploy merged backend security code, flags OFF
+### Checkpoint A — Deploy pinned backend security code, flags OFF (final runbook)
 
-**Goal:** Run `main` backend at origin with identical security posture (JWT off, trust proxy off, registration off).  
+**Pinned backend target SHA (immutable for A):**  
+`4aed16ce9ea22d919266d85b8372e9fc546db078`
+
+Do **not** deploy “whatever `origin/main` is at execution time” if it has moved past this SHA. Later docs-only merges must not change the Checkpoint A pin without a new authorization.
+
+**Rollback SHA (current live):** `85b6561b338e31c102d101c8d458a1624e7b9f29`  
 **DB:** stay on Alembic **003** (no `004`).  
-**Nginx/CF:** unchanged.
+**Nginx / Cloudflare / frontend release root:** **unchanged**.  
+**Scope:** FashionRise backend git checkout + `fashionrise-api` restart only (plus `.env` **only** if separately authorized per §5.3).
 
-**Proposed steps (authorization required before any command):**
+#### A0 — Preconditions (hard STOP if any fail)
 
-1. Backup: copy `/opt/fashionrise/src` revision + `backend/.env` (redacted inventory) + `systemctl cat fashionrise-api` to `/var/backups/fashionrise/security-cp-a-<UTC>/`.
-2. `git -C /opt/fashionrise/src fetch origin main && git -C /opt/fashionrise/src checkout 4aed16ce` (or merge/ff to that SHA).
-3. Ensure venv deps still satisfy `requirements.txt` (no prod pip without approval if versions drift).
-4. Write explicit flag lines in `.env` (§5).
-5. `systemctl restart fashionrise-api` → curl `127.0.0.1:8010/health`.
-6. Smoke: Access-authenticated browser login + Studio designs (operator); register still 403 at Nginx and app.
+1. Separate written authorization naming: pin SHA `4aed16ce…`, restart unit `fashionrise-api`, **no** Nginx/CF, **no** migration, **no** flag enablement.
+2. Confirm frontend Nginx `root` still `/var/www/fashionrise/releases/8c6a391a` (do not switch).
+3. Neighbor sites (`pickwise`, `curecompass`, `kehilabapark.app`) not in scope.
 
-**Rollback A:**
+#### A1 — Production Git worktree verification (STOP on surprises)
 
 ```bash
-# AFTER authorization only — illustrative
-git -C /opt/fashionrise/src checkout 85b6561b338e31c102d101c8d458a1624e7b9f29
-# restore .env from backup if modified
-systemctl restart fashionrise-api
-curl -sS http://127.0.0.1:8010/health
+cd /opt/fashionrise/src
+git rev-parse HEAD                    # expect 85b6561b… before A
+git status --porcelain                # must be empty of unexpected tracked diffs
+git remote -v                         # FashionRise origin only
+ls -ld /opt/fashionrise/src           # owner/mode inventory
 ```
 
-### Checkpoint B — Validate real Access JWT forwarding
+**Rules:**
+
+- **STOP** if porcelain shows unexpected modified tracked files, divergent branch state, or unknown remotes.
+- List untracked files; **preserve** them. **Never** `git clean`, `git reset --hard`, or force-push.
+- Confirm ancestry: `git merge-base --is-ancestor 85b6561b338e31c102d101c8d458a1624e7b9f29 4aed16ce9ea22d919266d85b8372e9fc546db078` (or document the intended checkout path).
+- Confirm `systemctl show fashionrise-api -p WorkingDirectory -p ExecStart` still points at `/opt/fashionrise/src/backend` and the existing venv uvicorn command — **do not modify the unit under A**.
+
+#### A2 — Secrets-safe backup + rollback package (verify before mutate)
+
+```bash
+UTC=$(date -u +%Y%m%dT%H%M%SZ)
+B=/var/backups/fashionrise/security-cp-a-$UTC
+mkdir -m 700 "$B"
+# Code SHA pointer + unit (no secrets)
+git -C /opt/fashionrise/src rev-parse HEAD > "$B/PRE_SHA.txt"
+systemctl cat fashionrise-api > "$B/fashionrise-api.service.txt"
+# .env copy — mode 600, root-only; NEVER cat/less into chat/PR/logs
+install -m 600 /opt/fashionrise/src/backend/.env "$B/backend.env"
+# Optional: tar of src excluding .git/objects bulk if operator prefers full tree
+printf '%s\n' "pre_sha=$(cat "$B/PRE_SHA.txt")" "target_sha=4aed16ce9ea22d919266d85b8372e9fc546db078" "frontend_root_untouched=8c6a391a" > "$B/META.txt"
+chmod 600 "$B"/* 2>/dev/null || true
+chmod 700 "$B"
+ls -la "$B"   # names/modes only — do not display .env contents
+```
+
+**Rollback script** (write to `$B/ROLLBACK.sh`, mode `750`, review before use):
+
+```bash
+#!/bin/bash
+# Checkpoint A rollback — FashionRise backend only. AFTER authorization if auto-invoked.
+set -euo pipefail
+git -C /opt/fashionrise/src checkout 85b6561b338e31c102d101c8d458a1624e7b9f29
+# Restore .env ONLY if it was modified under a separately authorized edit:
+#   install -m 600 "$B/backend.env" /opt/fashionrise/src/backend/.env
+systemctl restart fashionrise-api
+curl -sS -m 5 http://127.0.0.1:8010/health
+# Re-run effective flag probe (§5.2) and alembic current == 003
+```
+
+Verify: parent `700`, env copy `600`, rollback executable by intended operator (root), script touches **only** `/opt/fashionrise/src` + `fashionrise-api` (no DB migrate, no other vhosts).
+
+#### A3 — Effective flags before mutate
+
+Run §5.2 against **current** `85b6561b` tree (sanity) and record pass/fail.  
+After checkout to pin (A4), run §5.2 again **before** restart if import path allows; **required** after restart.
+
+#### A4 — Checkout pinned SHA (no clean/hard reset)
+
+```bash
+cd /opt/fashionrise/src
+git fetch origin
+git checkout 4aed16ce9ea22d919266d85b8372e9fc546db078
+test "$(git rev-parse HEAD)" = "4aed16ce9ea22d919266d85b8372e9fc546db078"
+# STOP if test fails
+# Do not modify Nginx root; do not touch other apps
+# requirements.txt is byte-identical to 85b6561b — no pip unless separately authorized
+```
+
+#### A5 — Restart API only
+
+```bash
+systemctl restart fashionrise-api
+systemctl is-active fashionrise-api   # must be active
+```
+
+#### A6 — Post-restart acceptance (all required)
+
+| # | Check | Pass criteria |
+|---|---|---|
+| 1 | API health | `curl -sS http://127.0.0.1:8010/health` → `{"status":"ok"}` |
+| 2 | Effective flags | §5.2 all `False` |
+| 3 | Alembic | `alembic current` (service venv) → **`003`**; no `registration_invitations` |
+| 4 | App JWT login | Existing Access-authenticated operator: login succeeds; `/api/v1/auth/me` OK |
+| 5 | Designs | My Designs list + reopen a saved design OK |
+| 6 | Registration blocked | `POST /api/v1/auth/register` via public edge still **Nginx 403**; Create Account UI remains hidden |
+| 7 | Edge Access | Anonymous HTTPS `/` or `/login` still **302** to Access (no token capture) |
+| 8 | AOP | Origin without FashionRise client cert still **400** |
+| 9 | Frontend pin | Nginx root still `…/releases/8c6a391a` |
+| 10 | Isolation | Other vhosts unchanged |
+
+**Do not** clear browser site data / IndexedDB to “fix” issues.
+
+#### A7 — Automatic STOP / rollback conditions
+
+**Immediate STOP and execute `$B/ROLLBACK.sh` (or equivalent) if any of:**
+
+- `fashionrise-api` fails to become `active`, crash-loops, or `/health` fails
+- Effective flags ≠ all false
+- Alembic ≠ `003` or unexpected schema objects appear
+- Existing user cannot login / `/auth/me` / My Designs / reopen regresses
+- Public register is no longer Nginx-denied, or registration UI appears
+- Edge Access challenge or AOP denial regresses
+- Nginx frontend root or non-FashionRise sites changed
+- Any unauthorized `.env` / unit / Cloudflare change detected
+
+After rollback: re-verify health, flags, Alembic `003`, login/designs, Access/AOP.
+
+#### Out of Checkpoint A authorization (explicit)
+
+- Checkpoints **B / C / D**
+- Stage D / registration enable / invitations / users
+- Migration **004**
+- `CF_ACCESS_JWT_VALIDATION=true` / `TRUST_PROXY_HEADERS=true`
+- Nginx Option B or any Cloudflare dashboard change
+- Assuming JWT assertion forwarding from Nginx defaults (belongs to **B**)
+
+---
+
+### Checkpoint B — Validate real Access JWT forwarding (NO-GO here)
 
 **Goal:** Prove Cloudflare injects assertion and Nginx delivers exactly one value to Uvicorn (still `CF_ACCESS_JWT_VALIDATION=false`).  
-**Method:** operator/staging probe with Access session; inspect presence/count only — **never log token**.  
-**Optional Nginx prep (still needs auth):** explicit `proxy_set_header Cf-Access-Jwt-Assertion ...` on API locations only.
+Nginx defaults ≠ proof of injection. Operator/staging probe only; **never log tokens**.
 
-### Checkpoint C — Enable API-only Access JWT validation
+### Checkpoint C — Enable API-only Access JWT validation (NO-GO here)
 
-**Prereqs:** Checkpoint B PASS · team domain + AUD set · rollback drilled · registration still false.  
-**Steps (auth required):** set `CF_ACCESS_TEAM_DOMAIN` + `CF_ACCESS_AUD` · `CF_ACCESS_JWT_VALIDATION=true` · restart API · smoke login/designs · missing assertion → 403.  
-**Rollback C:** `CF_ACCESS_JWT_VALIDATION=false` + restart.
+Requires B PASS + team domain + AUD + separate authorization.
 
-### Checkpoint D — FashionRise-only Option B + `TRUST_PROXY_HEADERS`
+### Checkpoint D — FashionRise-only Option B + `TRUST_PROXY_HEADERS` (NO-GO here)
 
-**Prereqs:** Checkpoint A code live · N1–N9 staging PASS · PR #23 parser live.  
-**Steps (auth required):** install Option B in FashionRise server only · `nginx -t` · reload · set `TRUST_PROXY_HEADERS=true` · restart API · N7 two-client buckets.  
-**Rollback D:** restore prior nginx from backup · `TRUST_PROXY_HEADERS=false` · reload/restart.
+Requires A code live + N1–N9 PASS + separate authorization.
 
 ---
 
@@ -216,33 +360,29 @@ curl -sS http://127.0.0.1:8010/health
 
 | Risk / blocker | Severity | Notes |
 |---|---|---|
-| Origin JWT not yet proven end-to-end | High for C | Header path must be verified before enable |
+| Origin JWT not end-to-end verified | High for C | Nginx default header pass ≠ Cloudflare injection proof (Checkpoint B) |
 | AOP dashboard client match PENDING | High for trust | Disk CA/client ≠ confirmed Cloudflare upload |
-| Option B not applied | High for D | Do not enable trusted proxy yet |
+| Option B not applied | High for D | Do not enable trusted proxy; Uvicorn XFF risk remains until D |
 | Expired Access session test PENDING | Medium | Stage B residual |
-| Invites directory missing | Medium | Only needed before invitations (not these checkpoints) |
-| Uvicorn default proxy-headers | Medium | Documented; Option B overwrite mitigates |
-| Neighbor apps on same VPS | Low if scoped | Keep all nginx edits FashionRise-only |
+| Invites directory missing | Medium | Only needed before invitations (not Checkpoint A) |
+| Neighbor apps on same VPS | Low if scoped | Keep all mutations FashionRise-backend-only |
 
 ---
 
 ## 9. GO / NO-GO for Checkpoint A
 
-### **GO (conditional)** for Checkpoint A only
+### **CHECKPOINT A PLAN: CONDITIONALLY ACCEPTED** (runbook complete)
 
-Deploying GitHub `main` backend (`4aed16ce`) with **all security/registration flags explicitly false**, **no migration 004**, and **no Nginx/CF changes** is compatible with:
+Compatible path: pin backend to **`4aed16ce9ea22d919266d85b8372e9fc546db078`**, keep Alembic **003**, keep all three safety flags **effectively false**, no Nginx/CF changes.
 
-- Production schema `003`
-- Existing login / me / designs flows
-- Current edge Access + private AOP posture
+**Still required before any production mutation:**
 
-**Conditions before executing Checkpoint A:**
+1. Separate operator/PM authorization for **docs merge** (this PR) — optional/independent.
+2. Separate operator/PM authorization for **Checkpoint A deployment** naming the pin SHA + restart-only scope.
+3. Backup package verified (`700`/`600`, rollback script reviewed).
+4. Git worktree clean of unexpected changes; untracked files preserved (no `clean`/`reset --hard`).
+5. Post-restart acceptance table (§A6) with automatic rollback triggers (§A7).
 
-1. Explicit Technical PM / operator authorization for backend git update + `fashionrise-api` restart only.
-2. Pre-restart backup of `/opt/fashionrise/src` SHA + `.env` + unit file.
-3. Post-restart smoke: health, Access login, designs; register remains denied.
-4. No other checkpoints implied.
+### **NO-GO** (unchanged)
 
-### **NO-GO** for Checkpoints B/C/D, Stage D, migration 004, registration, invitations, Nginx/CF changes
-
-until separately authorized after this preflight review.
+Checkpoints B/C/D, Stage D, migration 004, registration, invitations, Nginx/Cloudflare changes, JWT enablement, `TRUST_PROXY_HEADERS=true`.
