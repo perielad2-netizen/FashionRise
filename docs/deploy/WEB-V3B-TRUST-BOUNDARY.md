@@ -144,18 +144,18 @@ Before `TRUST_PROXY_HEADERS=true` in production:
 
 | Artifact | Role |
 |---|---|
-| Draft PR #23 | Strict SlowAPI `ipaddress` + duplicate-header fail-closed |
+| Merged PR #23 (GitHub only) | Strict SlowAPI `ipaddress` + duplicate-header fail-closed; not deployed |
 | `WEB-V3B-ORIGIN-ACCESS-JWT-DESIGN.md` | Origin Access JWT/AUD design (**required** before activation) |
-| Draft PR #21 | Stage B docs — **merge first** when authorized; then rebase #22 |
-| Draft PR #22 | This trust-boundary pack — stay **BLOCKED**; do not merge until #21 reconciled |
+| Merged PR #21 | Stage B docs and 6/6 operator acceptance preserved; PR #22 reconciled |
+| PR #22 documentation | Docs-only GitHub merge does not lift **BLOCKED** Stage C activation gate |
 
 ## 9. Outstanding (unchanged blockers)
 
 1. CF dashboard AOP client match confirmation + rotation notes.
 2. Option B live verification + N3 fail-closed directive staging.
-3. Origin Access JWT implementation after design approval.
-4. PR #23 merge/deploy authorization.
+3. Origin Access JWT PR #24 merged into GitHub; production deployment/flag activation and live header verification remain pending.
+4. PR #23 merged into GitHub; production deployment and Option B integration still require separate approval.
 5. Genuine expired Access session test (**PENDING**).
-6. PR #21 merge → rebase/reconcile #22; preserve Stage B operator **6/6 PASS**.
+6. PR #21 merged and PR #22 documentation reconciled; preserve Stage B operator **6/6 PASS**.
 
 **Verdict remains `BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`.**
