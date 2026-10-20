@@ -234,6 +234,91 @@ def test_existing_user_can_still_login(client, db_session):
     assert r.json()["access_token"]
 
 
+def test_invited_user_register_save_relogin_isolation_journey(client, db_session):
+    """Product journey: invite → register → Studio save → logout → login → private designs."""
+    password = "StrongPass123!"
+    tokens = register_with_invite(
+        client, db_session, "journey_a@example.com", "journey_a", password
+    )
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    me = client.get("/api/v1/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["email"] == "journey_a@example.com"
+
+    created = client.post(
+        "/api/v1/designs",
+        headers=headers,
+        json={
+            "title": "Journey look",
+            "description": "kept across sessions",
+            "garment_category": "dress",
+            "template_id": None,
+            "material_id": None,
+            "color_palette_id": None,
+            "design_data": {
+                "schema": "fashionrise.saved_design.v1",
+                "snapshot": {
+                    "schema": "fashionrise.studio.draft.v1",
+                    "strokes": [],
+                    "model": "female",
+                    "customReferenceUrl": None,
+                    "customReferenceKey": None,
+                    "brush": {"sizeId": "thin", "opacity": 1, "color": "#1C1C1E"},
+                    "dimmed": False,
+                    "clientRevision": 1,
+                    "updatedAt": "2026-10-20T00:00:00.000Z",
+                },
+            },
+            "metadata": {"designKind": "saved_design"},
+            "visibility": "private",
+            "status": "draft",
+        },
+    )
+    assert created.status_code == 201, created.text
+    design_id = created.json()["id"]
+
+    logout = client.post("/api/v1/auth/logout", headers=headers)
+    assert logout.status_code == 204
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "journey_a@example.com", "password": password},
+    )
+    assert login.status_code == 200, login.text
+    relogin_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    mine = client.get("/api/v1/designs/my", headers=relogin_headers)
+    assert mine.status_code == 200
+    assert any(d["id"] == design_id for d in mine.json())
+
+    reopen = client.get(f"/api/v1/designs/{design_id}", headers=relogin_headers)
+    assert reopen.status_code == 200
+    assert reopen.json()["title"] == "Journey look"
+
+    other = register_with_invite(client, db_session, "journey_b@example.com", "journey_b")
+    other_h = {"Authorization": f"Bearer {other['access_token']}"}
+    other_list = client.get("/api/v1/designs/my", headers=other_h)
+    assert other_list.status_code == 200
+    assert all(d["id"] != design_id for d in other_list.json())
+    other_get = client.get(f"/api/v1/designs/{design_id}", headers=other_h)
+    assert other_get.status_code in (403, 404)
+
+
+def test_username_charset_rejected(client, db_session):
+    created = invitation_service.create_invitation(db_session, email="baduser@example.com")
+    r = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "baduser@example.com",
+            "username": "bad-user!",
+            "password": "StrongPass123!",
+            "invitation_code": created.plaintext_token,
+        },
+    )
+    assert r.status_code == 422
+
+
 def test_direct_register_cannot_bypass_invitation(client, db_session):
     # Even with registration enabled, omitting/forging invitation fails.
     r = client.post(

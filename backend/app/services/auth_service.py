@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import ConflictError, ForbiddenError, UnauthorizedError
+from app.core.errors import ConflictError, ForbiddenError, UnauthorizedError, ValidationAppError
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
@@ -51,7 +51,7 @@ def register_user(db: Session, data: UserRegister) -> User:
     email_norm = _normalize_email(str(data.email))
     username = data.username.strip()
     if not username:
-        raise ConflictError("Username already taken")
+        raise ValidationAppError("Username is required")
 
     # Lock + validate invitation before creating the user. Same transaction as insert.
     invitation = invitation_service.assert_invitation_redeemable(

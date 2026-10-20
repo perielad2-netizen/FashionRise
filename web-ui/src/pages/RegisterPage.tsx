@@ -1,40 +1,30 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
+import { mapRegisterError } from '@/lib/mapRegisterError'
 import { validateRegister, type RegisterFieldErrors } from '@/lib/validateRegister'
 import { ApiError } from '@/services/api/client'
 import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './RegisterPage.module.css'
 
-function mapRegisterError(err: ApiError): string {
-  if (err.status === 0) {
-    return 'Unable to reach FashionRise. Check that the API is running.'
-  }
-  if (err.status === 403) {
-    return 'This invitation is not valid. Ask the operator for a new invite, or sign in if you already created an account.'
-  }
-  if (err.status === 409) {
-    return err.message || 'An account with this email or username already exists. Try signing in.'
-  }
-  if (err.status === 422) {
-    return 'Please check your details and try again.'
-  }
-  if (err.status >= 500) {
-    return 'FashionRise is temporarily unavailable. If this continues, try signing in — your account may already exist.'
-  }
-  return err.message || 'Unable to create your account. Please try again.'
+function initialFromQuery(params: URLSearchParams, key: string): string {
+  return (params.get(key) || '').trim()
 }
 
 export function RegisterPage() {
   const { register, isAuthenticated, bootstrapping } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [searchParams] = useSearchParams()
+  const [email, setEmail] = useState(() => initialFromQuery(searchParams, 'email'))
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [invitationCode, setInvitationCode] = useState('')
+  const [invitationCode, setInvitationCode] = useState(() => {
+    // Prefer ?code=; accept ?invite= as an alias used in operator notes.
+    return initialFromQuery(searchParams, 'code') || initialFromQuery(searchParams, 'invite')
+  })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({})
@@ -112,7 +102,9 @@ export function RegisterPage() {
         </div>
 
         <h1 className={styles.title}>Create account</h1>
-        <p className={styles.subtitle}>Invite-only FashionRise beta access.</p>
+        <p className={styles.subtitle}>
+          Enter your invitation details to join FashionRise and open Creator Studio.
+        </p>
 
         <form className={styles.form} onSubmit={onSubmit} noValidate>
           <label className={styles.field}>
@@ -269,13 +261,21 @@ export function RegisterPage() {
               }}
               disabled={busy}
               aria-invalid={Boolean(fieldErrors.invitationCode)}
-              aria-describedby={fieldErrors.invitationCode ? 'register-invite-error' : undefined}
+              aria-describedby={
+                fieldErrors.invitationCode
+                  ? 'register-invite-error'
+                  : 'register-invite-hint'
+              }
             />
             {fieldErrors.invitationCode ? (
               <span id="register-invite-error" className={styles.fieldError} role="alert">
                 {fieldErrors.invitationCode}
               </span>
-            ) : null}
+            ) : (
+              <span id="register-invite-hint" className={styles.hintInline}>
+                Paste the one-time code from your operator. Email must match the invite.
+              </span>
+            )}
           </label>
 
           {formError ? (

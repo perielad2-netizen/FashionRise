@@ -2,7 +2,11 @@ from typing import Annotated
 
 from pydantic import BaseModel, EmailStr, Field, StringConstraints
 
-UsernameStr = Annotated[str, StringConstraints(min_length=2, max_length=64)]
+# Keep in sync with web-ui validateRegister USERNAME_RE.
+UsernameStr = Annotated[
+    str,
+    StringConstraints(min_length=2, max_length=64, pattern=r"^[A-Za-z0-9_]+$"),
+]
 
 
 class UserRegister(BaseModel):
