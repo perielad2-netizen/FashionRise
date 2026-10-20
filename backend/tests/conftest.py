@@ -12,11 +12,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("ENVIRONMENT", "production")
 os.environ.setdefault("AI_WORKER_ENABLED", "false")
+# Integration tests exercise invited registration. Production default remains false.
+os.environ.setdefault("REGISTRATION_ENABLED", "true")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-at-least-32-characters-long")
+os.environ.setdefault("CORS_ORIGINS", "https://fashionrise.app")
 
 from app.main import app  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.db.base import Base, import_models  # noqa: E402
 from app.db.session import get_db  # noqa: E402
+
+# Ensure settings pick up REGISTRATION_ENABLED from the env set above.
+get_settings.cache_clear()
+
 
 
 @pytest.fixture(scope="session")

@@ -1,0 +1,216 @@
+.page {
+  min-height: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: var(--space-lg);
+  background:
+    radial-gradient(ellipse 70% 50% at 20% 10%, rgba(236, 72, 153, 0.16), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 80%, rgba(212, 175, 155, 0.12), transparent 55%),
+    var(--navy-950);
+  position: relative;
+  overflow: auto;
+}
+
+.glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(180deg, transparent 0%, rgba(9, 15, 31, 0.2) 100%);
+}
+
+.card {
+  position: relative;
+  width: min(460px, 100%);
+  padding: var(--space-xl) var(--space-lg);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(165deg, rgba(24, 34, 53, 0.96), rgba(17, 24, 39, 0.98));
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-panel);
+}
+
+.brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-lg);
+}
+
+.logoPlate {
+  width: min(280px, 100%);
+  padding: 12px 16px 8px;
+  border-radius: 18px;
+  background: #f8f3ee;
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 155, 0.45);
+}
+
+.logo {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.title {
+  margin: 0 0 6px;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  text-align: center;
+}
+
+.subtitle {
+  margin: 0 0 var(--space-lg);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.field input {
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.field input:focus {
+  border-color: var(--pink-soft);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.18);
+}
+
+.field input[aria-invalid='true'] {
+  border-color: rgba(248, 113, 113, 0.75);
+}
+
+.fieldError {
+  font-size: var(--font-size-xs);
+  color: #fecaca;
+}
+
+.passwordRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.passwordRow input {
+  padding-right: 48px;
+}
+
+.eye {
+  position: absolute;
+  right: 6px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.eye:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+  font-size: var(--font-size-sm);
+}
+
+.hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(212, 175, 155, 0.1);
+  border: 1px solid rgba(212, 175, 155, 0.28);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.submit {
+  margin-top: var(--space-xs);
+  min-height: 52px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-soft) 55%, var(--rose-gold) 140%);
+  color: white;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: var(--shadow-glow-pink);
+  transition: transform var(--duration-fast) var(--ease-out), opacity var(--duration-fast);
+}
+
+.submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.submit:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.footerLinks {
+  margin-top: var(--space-md);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.footerLinks a {
+  color: var(--pink-soft);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.footerLinks a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: var(--space-lg) var(--space-md);
+  }
+
+  .logoPlate {
+    width: min(220px, 100%);
+    padding: 8px 10px 4px;
+  }
+}
+
+@media (min-width: 821px) and (max-height: 760px) {
+  .page {
+    place-items: start center;
+    padding-top: var(--space-md);
+  }
+
+  .card {
+    padding: var(--space-lg) var(--space-md);
+  }
+
+  .brand {
+    margin-bottom: var(--space-md);
+  }
+}

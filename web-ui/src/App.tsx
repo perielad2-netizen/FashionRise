@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { LoginPage } from '@/pages/LoginPage'
+import { RegisterPage } from '@/pages/RegisterPage'
 import { StudioPage } from '@/pages/StudioPage'
 import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
 
@@ -19,6 +20,13 @@ function RootRedirect() {
   return <Navigate to={isAuthenticated ? '/studio' : '/login'} replace />
 }
 
+/** Remount Studio when the authenticated user changes so local canvas state cannot leak. */
+function UserScopedStudio() {
+  const { user } = useAuth()
+  if (!user) return null
+  return <StudioPage key={user.id} />
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -26,11 +34,12 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route
             path="/studio/*"
             element={
               <ProtectedRoute>
-                <StudioPage />
+                <UserScopedStudio />
               </ProtectedRoute>
             }
           />

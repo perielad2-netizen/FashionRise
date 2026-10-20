@@ -11,6 +11,7 @@ vi.mock('@/services/auth/AuthProvider', () => ({
     bootstrapping: false,
     isAuthenticated: false,
     login,
+    register: vi.fn(),
     logout: vi.fn(),
   }),
 }))
@@ -47,6 +48,18 @@ describe('LoginPage validation', () => {
 
     expect(await screen.findByText(/valid email/i)).toBeInTheDocument()
     expect(login).not.toHaveBeenCalled()
+  })
+
+  it('links to Create account registration', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: /create account/i })).toHaveAttribute(
+      'href',
+      '/register',
+    )
   })
 
   it('calls login with trimmed email on valid submit', async () => {

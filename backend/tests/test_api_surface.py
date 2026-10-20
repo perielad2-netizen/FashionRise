@@ -1,21 +1,18 @@
 import base64
 
 
-def _register(client, email: str, username: str, password: str = "StrongPass123!") -> dict:
-    r = client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "username": username, "password": password, "display_name": username},
-    )
-    assert r.status_code == 200, r.text
-    return r.json()
+def _register(client, db_session, email: str, username: str, password: str = "StrongPass123!") -> dict:
+    from tests.auth_test_helpers import register_with_invite
+
+    return register_with_invite(client, db_session, email, username, password)
 
 
 def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_catalog_endpoints_and_ai_upload_export_flow(client):
-    tokens = _register(client, "surface@example.com", "surface_user")
+def test_catalog_endpoints_and_ai_upload_export_flow(client, db_session):
+    tokens = _register(client, db_session, "surface@example.com", "surface_user")
     headers = _auth_header(tokens["access_token"])
 
     # Catalog endpoints should respond even when lists are empty.

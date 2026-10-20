@@ -21,6 +21,14 @@ export type LoginPayload = {
   password: string
 }
 
+export type RegisterPayload = {
+  email: string
+  username: string
+  password: string
+  displayName?: string | null
+  invitationCode: string
+}
+
 function toStored(tokens: TokenResponse): StoredTokens {
   return {
     accessToken: tokens.access_token,
@@ -34,6 +42,28 @@ export async function login(payload: LoginPayload): Promise<{ user: User; tokens
     body: {
       email: payload.email.trim().toLowerCase(),
       password: payload.password,
+    },
+    auth: false,
+  })
+  const stored = toStored(tokens)
+  tokenStore.set(stored)
+  const user = await fetchMe()
+  return { user, tokens: stored }
+}
+
+export async function register(
+  payload: RegisterPayload,
+): Promise<{ user: User; tokens: StoredTokens }> {
+  // Clear any previous session before accepting a newly created account.
+  tokenStore.clear()
+  const tokens = await apiRequest<TokenResponse>('/auth/register', {
+    method: 'POST',
+    body: {
+      email: payload.email.trim().toLowerCase(),
+      username: payload.username.trim(),
+      password: payload.password,
+      display_name: payload.displayName ?? null,
+      invitation_code: payload.invitationCode.trim(),
     },
     auth: false,
   })
