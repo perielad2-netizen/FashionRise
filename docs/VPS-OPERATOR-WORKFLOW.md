@@ -17,6 +17,16 @@
 - **Safety-first commands:** avoid force checkouts, deletion/cleanup of unknown files, auto-migrations, broad service restarts and updates to generic deploy scripts. Establish backups and rollback paths before mutating actions. Abort and return for PM review when assumptions or security boundaries differ.
 - **Evidence:** Report actions and exact SHAs; distinguish Cursor-reported output from independently verified GitHub facts and from manual device acceptance. Update `docs/00-PROJECT-STATUS.md` after verified milestones.
 
+## Git authentication available to Cursor
+
+**Operator update (2026-10-20):** Cursor has also been configured with `GIT_USER` and `GIT_SECRET` as **All Repositories** environment variables, for authenticated Git operations when required. Future PM assignments may tell Cursor to use these preconfigured credentials for authorized fetch/pull/other Git operations instead of asking the human to handle repository credentials manually.
+
+- Treat `GIT_USER` as the configured Git account name and `GIT_SECRET` as a **secret whose exact credential type/scope is not assumed** (for example, do not claim it is a PAT without checking the supported authentication mechanism). Use the account's existing authorized Git remote and least-privilege access.
+- **Prefer existing working Git authentication.** First attempt noninteractive, read-only `git fetch` or `git ls-remote` as appropriate; only access the new environment variables if the remote requires authentication. Verify the remote destination and requested branch/commit against the explicit task scope.
+- **Scope matters:** these environment variables are configured for the **Cursor execution environment**, not automatically on the VPS reached through SSH. Do not assume they exist in a remote shell or copy them permanently into the server's environment. If a remote private-repository fetch truly needs authentication, use a securely scoped **temporary**, non-logging credential mechanism under the approved task; remove ephemeral credential material afterward. Stop and report if a secure method is unavailable.
+- Never print `GIT_SECRET`, expand it into command arguments, put it in a Git remote URL, command history, trace/debug logs, CI build logs, source code, configuration, documentation, or PR comments. Do not enable shell tracing around credential operations; avoid persistent plaintext Git credential helpers.
+- Access to Git credentials **does not** authorize a new branch merge, force push, repository modification, checkout, application deploy, or cross-project operation. Explicit PM authorization and pinned-SHA checks still apply. Do not reset or clean a production checkout to make Git auth work.
+
 ## Current pinned FashionRise deployment context (historical until reverified)
 
 - WEB-V3A PR #13 merged at `85b6561b338e31c102d101c8d458a1624e7b9f29`; this was the explicitly approved rollout target. Do not silently substitute a newer Git revision for the rollout.
