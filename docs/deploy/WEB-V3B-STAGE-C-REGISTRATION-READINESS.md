@@ -278,7 +278,7 @@ Never clear IndexedDB to “fix” registration issues. Never touch PickWise / C
 3. **SlowAPI `ipaddress` hardening** — separate draft code PR; must land before `TRUST_PROXY_HEADERS=true`.
 4. **Operator confirm** Cloudflare dashboard uses FashionRise custom AOP client (not global).
 5. **Expired Access session** still untested with permanent SW (Stage B residual).
-6. **PR #21** (Stage B docs) still open — rebase/reconcile this PR after #21 merges; do not overwrite operator **6/6 PASS**.
+6. **PR #21** (Stage B docs) **merged** at `ef4c42c2` — this PR rebased/reconciled; operator **6/6 PASS** preserved.
 7. Invite codes only via `/var/lib/fashionrise/invites/` + `--code-file`.
 
 ---
