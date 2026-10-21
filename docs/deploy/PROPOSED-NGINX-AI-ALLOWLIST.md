@@ -1,6 +1,6 @@
 # Proposed Nginx allowlist — Magic AI routes (NOT applied)
 
-**Status:** documentation only. Do **not** edit production Nginx until Technical PM / operator authorization for WEB-V4A Magic activation.
+**Status:** documentation only — **not applied**. Operator authorized WEB-V4A Magic activation on 2026-10-21, but rollout **STOPPED** at AI readiness (`OPENAI_API_KEY` empty / worker off / image model off). Production Nginx still uses the blanket AI deny below. Do **not** apply this allowlist until OpenAI/worker readiness is confirmed and activation is re-authorized.
 
 **Companion:** `docs/deploy/REGISTRATION-ACTIVATION.md` (registration already live); this note is FashionRise-only AI routing.
 

@@ -390,6 +390,8 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-21 | **WEB-V4A Magic production activation STOPPED:** approved `dc9e31aa`; preflight backup `magic-activation-preflight-20261021T173550Z`; prod unchanged at `46747e85`. Blocker: empty `OPENAI_API_KEY`, `AI_WORKER_ENABLED=false`, `OPENAI_IMAGE_MODEL=off`. No Nginx/FE Magic deploy; no paid calls. `READY_FOR_ONE_OPERATOR_MAGIC_TEST=false`. |
+| 2026-10-21 | **WEB-V4A merged** PR #27 → `main` `dc9e31aa` (reviewed head `11a1dc4f`). |
 | 2026-10-21 | **WEB-V4A Magic integration corrections (PR #27):** Nginx AI allowlist precedence; redact `image_base64` from job responses; See last result after refresh; fail closed on missing reference capture; overlapping Magic guarded. |
 | 2026-10-21 | **WEB-V4A Magic → React (draft):** reuse Unity polish + poll/recovery; `GET /ai/jobs/{id}/image` owner-auth; MagicLookPanel; `VITE_MAGIC_UI_ENABLED` default off; Nginx AI allowlist docs only. No prod Magic deploy / no paid calls. |
 | 2026-10-21 | **Registration second-user browser acceptance PASS** (operator-confirmed). |
