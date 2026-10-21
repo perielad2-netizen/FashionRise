@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginPage } from '@/pages/LoginPage'
 
 const login = vi.fn()
@@ -19,6 +19,11 @@ vi.mock('@/services/auth/AuthProvider', () => ({
 describe('LoginPage validation', () => {
   beforeEach(() => {
     login.mockReset()
+    vi.stubEnv('VITE_REGISTRATION_UI_ENABLED', 'false')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('does not call login() when email and password are empty', async () => {

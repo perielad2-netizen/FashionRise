@@ -10,6 +10,7 @@ type Props = {
   onRedo: () => void
   onClear: () => void
   onMagic: () => void
+  magicEnabled?: boolean
   onComingSoon?: (label: string) => void
   saveStatus: SaveStatus
   saveStatusLabel: string
@@ -28,6 +29,7 @@ export function WorkspaceHeader({
   onRedo,
   onClear,
   onMagic,
+  magicEnabled = false,
   onComingSoon,
   saveStatus,
   saveStatusLabel,
@@ -107,13 +109,17 @@ export function WorkspaceHeader({
         </button>
         <button
           type="button"
-          className={styles.magicSoon}
+          className={magicEnabled ? styles.magicReady : styles.magicSoon}
           onClick={onMagic}
-          title="Magic is not available in this beta"
+          title={
+            magicEnabled
+              ? 'Turn your sketch into a finished fashion look'
+              : 'Magic is not available in this beta'
+          }
         >
           <Sparkles size={15} />
           Magic
-          <span className={styles.soon}>Soon</span>
+          {magicEnabled ? null : <span className={styles.soon}>Soon</span>}
         </button>
         {onSaveDesign ? (
           <button
