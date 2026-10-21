@@ -1,7 +1,8 @@
 # WEB-V3B — Invite-Only Beta Registration
 
-**Branch:** `cursor/web-v3b-invite-registration-77c6`  
-**Status:** **MERGED** to `main` as PR #19 (code). **Not activated in production.** Registration remains disabled (Nginx deny, `REGISTRATION_ENABLED` off, Alembic `003`). Stage C trust boundary: **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION**.  
+**Branch:** `cursor/web-v3b-invite-registration-77c6` (+ product polish on `cursor/registration-product-activation-77c6`)  
+**Status:** **MERGED** to `main` as PR #19 (code) + PR #20 (UI gate). **Not activated in production.** Registration remains disabled (Nginx deny, `REGISTRATION_ENABLED` off, Alembic `003`).  
+**Activation procedure:** `docs/deploy/REGISTRATION-ACTIVATION.md` (product path). Trust-boundary JWT/Option B remains a **separate** hardening track.  
 **PWA dependency:** permanent Access-safe service-worker fix PR #16 is merged and deployed in Stage B. Preserve its navigation safety assertion in future frontend releases.
 
 ## 1. User flow

@@ -31,6 +31,13 @@ class UnauthorizedError(AppError):
         super().__init__("unauthorized", message, status.HTTP_401_UNAUTHORIZED)
 
 
+class ValidationAppError(AppError):
+    """Application-level validation failure (HTTP 422), distinct from Pydantic request parsing."""
+
+    def __init__(self, message: str):
+        super().__init__("validation_error", message, status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:

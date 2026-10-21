@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-20. **GitHub code baseline before this docs merge:** `5df1cffe9cb34b347ce47ba31db2d734842ee436` (PRs #21, #23, #24 merged in GitHub; #23/#24 **not deployed**). **Production frontend** `/var/www/fashionrise/releases/8c6a391a` (operator **6/6 PASS**; expired Access **PENDING**). Production backend `85b6561b` · Alembic `003` · registration **OFF** · Access JWT validation **OFF** · trusted-proxy headers **OFF**. **Stage C remains `BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION`**. PR #22 is a documentation-only milestone; its merge does not authorize Stage D.
+**Last updated:** 2026-10-20. **GitHub `main`:** `4aed16ce` (+ registration product PR in flight). **Production frontend** `/var/www/fashionrise/releases/8c6a391a` (operator **6/6 PASS**; expired Access **PENDING**). Production backend **`85b6561b`** · Alembic **`003`** · registration **OFF** · Access JWT validation **OFF** · trusted-proxy headers **OFF**. Invite registration **code ready**; activation procedure in `docs/deploy/REGISTRATION-ACTIVATION.md` — **not authorized for production**. Trust-boundary Stage C docs remain blocked for JWT/Option B hardening; that track is **separate** from product registration activation.
 
-**Phase:** Protected family beta on WEB-V3A (export / save / My Designs) with permanent Access-safe PWA. WEB-V3B invite-only Create Account remains **not activated**.
+**Phase:** Protected family beta on WEB-V3A (export / save / My Designs) with permanent Access-safe PWA. WEB-V3B invite-only Create Account is **implemented and tested in isolation**; production activation awaits operator approval.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -82,6 +82,7 @@
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
 | **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator-reported desktop 5/5, tablet/cross-device 4/4, offline retry, conflict detection PASS (see above). |
 | **WEB-V3B** | **MERGED** PR #19 into `main` (`28449c41`). **Not deployed.** `REGISTRATION_ENABLED` defaults **false**. Migration **`004`** not applied in production. |
+| Registration product polish | Draft PR — distinct invite errors, email-only `?email=` prefill (invite code pasted), username charset sync, journey test, `docs/deploy/REGISTRATION-ACTIVATION.md`. **No production changes.** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). **Deployed** Stage B @ `8c6a391a`. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build keeps UI **off**. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record). |
@@ -277,10 +278,10 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Operator:** confirm CF AOP client + Access team domain + AUD; expired Access session test (still PENDING).
-2. **Security integration:** PRs [#23](https://github.com/perielad2-netizen/FashionRise/pull/23) and [#24](https://github.com/perielad2-netizen/FashionRise/pull/24) are **merged into GitHub only**, **not deployed**. Prepare separately authorized API-only JWT integration checks and FashionRise-scoped Nginx Option B tests; keep registration OFF.
-3. **Stage C activation readiness remains BLOCKED**, even when this docs-only PR #22 is merged: Option B staging, Access JWT validation, AOP dashboard confirmation, and expired-session acceptance remain pending.
-4. **Stage D** (not authorized) only after **BLOCKED_PENDING_TRUST_BOUNDARY_VERIFICATION** clears.
+1. **PM product review:** registration product PR + `docs/deploy/REGISTRATION-ACTIVATION.md` (backend deploy → `004` → Nginx POST allowlist → `REGISTRATION_ENABLED` → frontend UI gate → invite).
+2. **Operator (separate authorization):** run activation only after approval; no live accounts without explicit go-ahead.
+3. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
+4. **Separate security track (optional later):** Access JWT enablement + Option B `real_ip` — not required to deliver invite registration UX.
 5. Remaining WEB-V3A gaps after second account: cross-account privacy; untested conflict-resolution choices.
 6. Later milestones (not authorized now): save dedupe, rename/delete, Magic/backend, INFRA-2 PR #10.
 
@@ -387,6 +388,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-20 | **Registration product polish:** distinct invite error copy; email-only `?email=` prefill (no invite token in URL); username charset aligned FE/BE; journey test (register→save→relogin→isolation); activation procedure `docs/deploy/REGISTRATION-ACTIVATION.md`. No production changes. |
 | 2026-10-20 | **GitHub code merges:** PR #23 strict SlowAPI and PR #24 Access JWT merged to main; no VPS deploy, flags unchanged. PR #22 docs merge approved separately; Stage C and Stage D remain blocked. |
 | 2026-10-20 | **PR #22 rebased** onto `main` `ef4c42c2` after PR #21 merge; Stage B 6/6 + expired PENDING preserved; Stage C still **BLOCKED**. |
 | 2026-10-20 | **Stage C trust-boundary prep:** AOP dashboard confirm PENDING; N3 fail-closed chosen; invite parent 750/no symlink verified; JWT design doc added; Uvicorn proxy-headers peer rewrite documented; PR #23 SlowAPI tests expanded. Still **BLOCKED**. |

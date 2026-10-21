@@ -100,6 +100,12 @@
   color: #fecaca;
 }
 
+.hintInline {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 .passwordRow {
   position: relative;
   display: flex;

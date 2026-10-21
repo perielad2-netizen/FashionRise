@@ -18,9 +18,9 @@ vi.mock('@/services/auth/AuthProvider', () => ({
   useAuth: () => authState,
 }))
 
-function renderRegister() {
+function renderRegister(initialPath = '/register') {
   return render(
-    <MemoryRouter initialEntries={['/register']}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/login" element={<div>Sign in page</div>} />
@@ -96,6 +96,12 @@ describe('RegisterPage', () => {
     await waitFor(() => expect(screen.getByText('Studio')).toBeInTheDocument())
   })
 
+  it('prefills email from query params but not invitation code', () => {
+    renderRegister('/register?email=invited%40example.com&code=should-not-prefill-token')
+    expect(screen.getByRole('textbox', { name: /^email$/i })).toHaveValue('invited@example.com')
+    expect(screen.getByRole('textbox', { name: /invitation code/i })).toHaveValue('')
+  })
+
   it('shows invitation error from API without retrying', async () => {
     const user = userEvent.setup()
     const { ApiError } = await import('@/services/api/client')
@@ -114,6 +120,16 @@ describe('RegisterPage', () => {
     )
     await user.click(screen.getByRole('button', { name: /create account/i }))
     expect(await screen.findByText(/invitation is not valid/i)).toBeInTheDocument()
+  })
+
+  it('surfaces expired invitation distinctly', async () => {
+    const user = userEvent.setup()
+    const { ApiError } = await import('@/services/api/client')
+    registerMock.mockRejectedValueOnce(new ApiError('Invitation has expired', 403, null))
+    renderRegister()
+    await fillValidForm(user)
+    await user.click(screen.getByRole('button', { name: /create account/i }))
+    expect(await screen.findByText(/invitation has expired/i)).toBeInTheDocument()
   })
 
   async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
