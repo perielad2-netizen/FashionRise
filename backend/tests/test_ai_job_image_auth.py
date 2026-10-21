@@ -104,3 +104,42 @@ def test_storage_key_from_public_url_roundtrip():
     url = storage.save_file(key=key, data=io.BytesIO(_png_bytes()), content_type="image/png")
     assert storage.key_from_public_url(url) == key
     assert storage.resolve_existing_file(key=key) is not None
+
+
+def test_polish_and_status_omit_image_base64_but_preserve_db_input(client, db_session):
+    tokens = register_with_invite(client, db_session, "redact@example.com", "redact_user")
+    tiny = base64.b64encode(_png_bytes()).decode("ascii")
+    data_url = f"data:image/png;base64,{tiny}"
+    created = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "notes": "polish concept",
+                "local_path_placeholder": "file:/tmp/sketch.png",
+                "image_base64": data_url,
+            }
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert "image_base64" not in body["input_data"]
+    assert "imageBase64" not in body["input_data"]
+    assert body["input_data"].get("has_sketch_image") is True
+    assert body["input_data"].get("notes") == "polish concept"
+    assert body["input_data"].get("local_path_placeholder") == "file:/tmp/sketch.png"
+    job_id = body["id"]
+
+    # Stored worker input still contains the sketch bytes.
+    row = db_session.get(AIJob, uuid.UUID(job_id))
+    assert row is not None
+    assert isinstance(row.input_data, dict)
+    assert row.input_data.get("image_base64") == data_url
+
+    status = client.get(f"/api/v1/ai/jobs/{job_id}", headers=_auth(tokens))
+    assert status.status_code == 200, status.text
+    polled = status.json()
+    assert "image_base64" not in polled["input_data"]
+    assert polled["input_data"].get("has_sketch_image") is True
+    assert polled["job_type"] == "sketch_polish"
+    assert polled["status"] in {"queued", "running", "completed", "failed"}

@@ -155,7 +155,10 @@ export function useStudioEditor() {
   const magicAbortRef = useRef<AbortController | null>(null)
   const magicLookUrlRef = useRef<string | null>(null)
   const magicSketchUrlRef = useRef<string | null>(null)
+  const magicInFlightRef = useRef(false)
   const magicEnabled = isMagicUiEnabled()
+  const magicBusy =
+    magicPhase === 'capturing' || magicPhase === 'submitting' || magicPhase === 'polling'
   const [studioNotice, setStudioNotice] = useState<string | null>(null)
   const [comingSoon, setComingSoon] = useState<string | null>(null)
 
@@ -603,6 +606,11 @@ export function useStudioEditor() {
       setMagicNotice('Sign in to use Magic.')
       return
     }
+    if (magicInFlightRef.current) {
+      setMagicOpen(true)
+      return
+    }
+    magicInFlightRef.current = true
     setStudioNotice(null)
     setComingSoon(null)
     setMagicNotice(null)
@@ -670,6 +678,8 @@ export function useStudioEditor() {
             : 'Magic could not complete.'
       setMagicPhase('failed')
       setMagicError(message)
+    } finally {
+      magicInFlightRef.current = false
     }
   }, [referenceOpacity, referenceUrl, revokeMagicUrls, strokes, user?.id])
 
@@ -680,11 +690,19 @@ export function useStudioEditor() {
       setMagicNotice(MAGIC_NOTICE)
       return
     }
+    if (magicInFlightRef.current || magicBusy) {
+      setMagicOpen(true)
+      return
+    }
     void runMagicPipeline()
-  }, [magicEnabled, runMagicPipeline])
+  }, [magicBusy, magicEnabled, runMagicPipeline])
 
   const recoverLastMagic = useCallback(() => {
     if (!user?.id) return
+    if (magicInFlightRef.current) {
+      setMagicOpen(true)
+      return
+    }
     const jobId = magicJobId || readMagicJobId(user.id)
     if (!jobId) {
       setMagicError('No previous Magic job to recover.')
@@ -692,18 +710,33 @@ export function useStudioEditor() {
       setMagicOpen(true)
       return
     }
+    magicInFlightRef.current = true
     setMagicOpen(true)
     setMagicPhase('polling')
     setMagicError(null)
+    setStudioNotice(null)
+    setComingSoon(null)
+    setMagicNotice(null)
     magicAbortRef.current?.abort()
     const controller = new AbortController()
     magicAbortRef.current = controller
-    void applySettledMagicJob(jobId, controller.signal).catch((err) => {
-      if (controller.signal.aborted) return
-      setMagicPhase('failed')
-      setMagicError(err instanceof Error ? err.message : 'Unable to recover Magic result.')
-    })
+    void applySettledMagicJob(jobId, controller.signal)
+      .catch((err) => {
+        if (controller.signal.aborted) return
+        setMagicPhase('failed')
+        setMagicError(err instanceof Error ? err.message : 'Unable to recover Magic result.')
+      })
+      .finally(() => {
+        magicInFlightRef.current = false
+      })
   }, [applySettledMagicJob, magicJobId, user?.id])
+
+  // After refresh, restore the stored job id for "See last result" without enqueue.
+  useEffect(() => {
+    if (!user?.id) return
+    const stored = readMagicJobId(user.id)
+    if (stored && !magicJobId) setMagicJobId(stored)
+  }, [magicJobId, user?.id])
 
   const cancelMagicWait = useCallback(() => {
     magicAbortRef.current?.abort()
@@ -1236,6 +1269,7 @@ export function useStudioEditor() {
     magicEnabled,
     magicOpen,
     magicPhase,
+    magicBusy,
     magicResult,
     magicError,
     magicLookUrl,

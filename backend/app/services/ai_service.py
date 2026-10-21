@@ -77,6 +77,26 @@ def get_job(db: Session, user: User, job_id: uuid.UUID) -> AIJob:
     return job
 
 
+_REDACTED_IMAGE_KEYS = ("image_base64", "imageBase64")
+
+
+def sanitize_job_input_for_response(input_data: dict | None) -> dict:
+    """Omit large sketch payloads from API responses; keep DB/worker input intact.
+
+    Unity-compatible: other input_data keys (notes, local_path_placeholder, etc.)
+    remain. When a sketch was present, set has_sketch_image=true.
+    """
+    raw = dict(input_data or {})
+    had_image = False
+    for key in _REDACTED_IMAGE_KEYS:
+        if key in raw:
+            had_image = True
+            raw.pop(key, None)
+    if had_image:
+        raw["has_sketch_image"] = True
+    return raw
+
+
 def extract_result_image_url(result_data: dict | None) -> str | None:
     if not isinstance(result_data, dict):
         return None

@@ -11,6 +11,9 @@ type Props = {
   onClear: () => void
   onMagic: () => void
   magicEnabled?: boolean
+  magicBusy?: boolean
+  canRecoverLastMagic?: boolean
+  onRecoverLastMagic?: () => void
   onComingSoon?: (label: string) => void
   saveStatus: SaveStatus
   saveStatusLabel: string
@@ -30,6 +33,9 @@ export function WorkspaceHeader({
   onClear,
   onMagic,
   magicEnabled = false,
+  magicBusy = false,
+  canRecoverLastMagic = false,
+  onRecoverLastMagic,
   onComingSoon,
   saveStatus,
   saveStatusLabel,
@@ -111,9 +117,13 @@ export function WorkspaceHeader({
           type="button"
           className={magicEnabled ? styles.magicReady : styles.magicSoon}
           onClick={onMagic}
+          disabled={magicEnabled && magicBusy}
+          aria-busy={magicEnabled && magicBusy}
           title={
             magicEnabled
-              ? 'Turn your sketch into a finished fashion look'
+              ? magicBusy
+                ? 'Magic is already running'
+                : 'Turn your sketch into a finished fashion look'
               : 'Magic is not available in this beta'
           }
         >
@@ -183,6 +193,20 @@ export function WorkspaceHeader({
                   }}
                 >
                   My Designs
+                </button>
+              ) : null}
+              {magicEnabled && canRecoverLastMagic && onRecoverLastMagic ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  disabled={magicBusy}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onRecoverLastMagic()
+                  }}
+                >
+                  See last result
                 </button>
               ) : null}
               <button

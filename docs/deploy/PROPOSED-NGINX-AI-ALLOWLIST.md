@@ -9,9 +9,10 @@
 Allow authenticated Cloudflare Access clients (with FashionRise AOP) to call **only**:
 
 - `POST /api/v1/ai/sketch/polish`
-- `GET /api/v1/ai/jobs/*` (job status + authenticated image)
+- `GET /api/v1/ai/jobs/{uuid}`
+- `GET /api/v1/ai/jobs/{uuid}/image`
 
-without opening general `/api/v1/ai`, uploads, docs, or public `/static/uploads`.
+without opening general `/api/v1/ai`, sibling AI routes, uploads, docs, or public `/static/uploads`.
 
 ## Current production deny (unchanged today)
 
@@ -27,6 +28,18 @@ Keep `/static/uploads` **denied**. React Magic retrieves look images via:
 
 `GET /api/v1/ai/jobs/{job_id}/image` (Bearer + job ownership).
 
+## Nginx precedence (critical)
+
+Do **not** use a final `location ^~ /api/v1/ai/ { return 403; }` alongside a regex jobs rule.
+
+With `^~`, Nginx stops after the longest matching prefix and **never evaluates** the jobs regex, so GET status/image would stay denied.
+
+Correct pattern:
+
+1. Exact `=` locations (polish POST, bare `/api/v1/ai` deny).
+2. Regex `~` for GET job + GET job image.
+3. Plain prefix `location /api/v1/ai/` (**no** `^~`) as catch-all deny for sibling AI routes.
+
 ## Smallest FashionRise-only change (future activation)
 
 Inside the FashionRise HTTPS `server` block, **replace** the blanket AI deny with:
@@ -36,7 +49,6 @@ Inside the FashionRise HTTPS `server` block, **replace** the blanket AI deny wit
 location = /static/uploads { return 403; }
 location ^~ /static/uploads/ { return 403; }
 
-# Deny AI prefix children except explicit allowlist below.
 location = /api/v1/ai { return 403; }
 
 location = /api/v1/ai/sketch/polish {
@@ -53,7 +65,8 @@ location = /api/v1/ai/sketch/polish {
     add_header Cache-Control "no-store" always;
 }
 
-# Job status + authenticated image (GET only).
+# Job status + authenticated image (GET only). Must be regex so it beats
+# the plain prefix deny below (do not mark the deny with ^~).
 location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {
     limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
@@ -67,11 +80,29 @@ location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {
     add_header Cache-Control "no-store" always;
 }
 
-# Everything else under /api/v1/ai stays closed.
-location ^~ /api/v1/ai/ { return 403; }
+# Sibling AI routes stay closed. Plain prefix (no ^~) so regex jobs still match.
+location /api/v1/ai/ { return 403; }
 ```
 
 Do **not** enable `CF_ACCESS_JWT_VALIDATION` or `TRUST_PROXY_HEADERS` as part of Magic activation unless separately authorized.
+
+## Pre-activation routing / method matrix (isolated)
+
+Run against an isolated candidate config (never production) with `nginx -t`, then method probes:
+
+| Request | Expected |
+|---|---|
+| `POST /api/v1/ai/sketch/polish` | Proxied (allowlist) |
+| `GET /api/v1/ai/sketch/polish` | Denied (`limit_except`) |
+| `GET /api/v1/ai/jobs/{uuid}` | Proxied (regex) |
+| `GET /api/v1/ai/jobs/{uuid}/image` | Proxied (regex) |
+| `POST /api/v1/ai/jobs/{uuid}` | Denied (`limit_except`) |
+| `POST /api/v1/ai/sketch/clean` | **403** (prefix deny) |
+| `GET /api/v1/ai/jobs` | **403** (prefix deny) |
+| `GET /static/uploads/...` | **403** |
+| Neighbor vhosts | Untouched |
+
+Automated check: `backend/scripts/verify_nginx_ai_allowlist.py` (writes a temp conf, runs `nginx -t`, asserts location precedence comments/matrix expectations).
 
 ## Frontend gate
 

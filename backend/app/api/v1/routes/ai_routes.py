@@ -22,7 +22,7 @@ def _sketch_enqueue(
         user,
         AIJobCreate(design_id=b.design_id, job_type=job_type, input_data=b.input_data),
     )
-    return AIJobRead.model_validate(job)
+    return AIJobRead.from_job(job)
 
 
 @router.post("/sketch/clean", response_model=AIJobRead, status_code=status.HTTP_201_CREATED)
@@ -68,7 +68,7 @@ def create_job(
 ) -> AIJobRead:
     _ = request.url
     job = ai_service.enqueue_job(db, user, data)
-    return AIJobRead.model_validate(job)
+    return AIJobRead.from_job(job)
 
 
 @router.get("/jobs/{job_id}", response_model=AIJobRead)
@@ -78,7 +78,7 @@ def get_job(
 ) -> AIJobRead:
     _ = request.url
     job = ai_service.get_job(db, user, job_id)
-    return AIJobRead.model_validate(job)
+    return AIJobRead.from_job(job)
 
 
 @router.get("/jobs/{job_id}/image")

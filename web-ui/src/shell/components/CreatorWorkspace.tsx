@@ -91,6 +91,9 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         onClear={editor.clear}
         onMagic={editor.onMagic}
         magicEnabled={editor.magicEnabled}
+        magicBusy={editor.magicBusy}
+        canRecoverLastMagic={editor.magicCanRecover}
+        onRecoverLastMagic={editor.recoverLastMagic}
         onComingSoon={editor.showComingSoon}
         saveStatus={editor.saveStatus}
         saveStatusLabel={editor.saveStatusLabel}
