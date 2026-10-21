@@ -3,18 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-21. **GitHub `main`:** `46747e85` (PR #26 registration product merged). **Production backend/frontend:** `46747e85` · Alembic **`004`** · `REGISTRATION_ENABLED=true` · registration UI **on** · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · Magic / AI Nginx **still denied**. Registration production activation **PASS**; real second-user browser acceptance **PASS** (operator-confirmed 2026-10-21). **WEB-V4A** React Magic port in draft PR #27 — reuses Unity/backend polish pipeline; production Magic remains disabled.
+**Last updated:** 2026-10-21. **GitHub `main`:** `dc9e31aa` (PR #27 WEB-V4A Magic React merged). **Production backend/frontend:** still **`46747e85`** · Alembic **`004`** · `REGISTRATION_ENABLED=true` · registration UI **on** · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · Magic / AI Nginx **still denied** · `VITE_MAGIC_UI_ENABLED` **off**. Registration activation **PASS**; second-user browser acceptance **PASS**. **WEB-V4A Magic production activation STOPPED** at AI readiness (no paid calls; no Magic UI/Nginx change).
 
-**Phase:** Protected family beta on WEB-V3A + activated invite registration (second-user acceptance PASS). WEB-V4A ports proven Unity Magic into React Studio (integration corrections in review; not production-activated).
+**Phase:** Protected family beta on WEB-V3A + activated invite registration (second-user acceptance PASS). WEB-V4A Magic React is on `main` but **not production-activated** pending OpenAI/worker readiness.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`46747e85…`** — Nginx root `/var/www/fashionrise/releases/46747e85`. `VITE_REGISTRATION_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Prior release retained: `8c6a391a`. |
-| Backend (FastAPI + PostgreSQL) | **`46747e85cb8ff8dd740d7acab7bf126d003cca92`** — `fashionrise-api` on `127.0.0.1:8010` |
-| Database | `fashionrise_beta` — Alembic **`004`** · `registration_invitations` present · users=1 at activation |
-| Deploy backup | Registration activation: `/var/backups/fashionrise/reg-activation-20261021T105742Z` |
+| Frontend (`web-ui`) | **`46747e85…`** — Nginx root `/var/www/fashionrise/releases/46747e85`. `VITE_REGISTRATION_UI_ENABLED=true`. Magic UI **off**. Permanent Workbox SW (no HTML precache / NavigationRoute). Prior release retained: `8c6a391a`. |
+| Backend (FastAPI + PostgreSQL) | **`46747e85cb8ff8dd740d7acab7bf126d003cca92`** — `fashionrise-api` on `127.0.0.1:8010` (approved Magic commit `dc9e31aa` **not** checked out) |
+| Database | `fashionrise_beta` — Alembic **`004`** · `registration_invitations` present · users=2 |
+| Deploy backup | Magic activation preflight: `/var/backups/fashionrise/magic-activation-preflight-20261021T173550Z` (also prior reg-activation `…105742Z`) |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -44,11 +44,13 @@
 
 **Stage B operator browser acceptance:** **6 / 6 PASS** (valid Access: sign-in, Studio, drafts, My Designs, reopen, PNG Export — operator-confirmed). Cursor infrastructure probes (Access 302, AOP, SW hash, registration UI off) remain separately recorded in `docs/deploy/PWA-FRONTEND-ROLLOUT-STAGE-B.md`.
 
-**Still outstanding for WEB-V3A / Access:** **expired** Cloudflare Access session check with the permanent SW; second-account privacy (needs registration activation); untested conflict-resolution branches (Keep device / Use cloud).
+**Still outstanding for WEB-V3A / Access:** **expired** Cloudflare Access session check with the permanent SW; untested conflict-resolution branches (Keep device / Use cloud).
 
 **WEB-V3B / registration:** **MERGED** PRs [#19](https://github.com/perielad2-netizen/FashionRise/pull/19)/[#20](https://github.com/perielad2-netizen/FashionRise/pull/20)/[#26](https://github.com/perielad2-netizen/FashionRise/pull/26). **Production activation PASS** (2026-10-21): backend `46747e85`, migration `004`, Nginx POST register allowlist, `REGISTRATION_ENABLED=true`, frontend Create Account on. **Real second-user browser acceptance PASS** (operator-confirmed 2026-10-21). Access/AOP unchanged. JWT/Option B hardening remains a **separate** optional track.
 
-**WEB-V4A (Magic → React):** Draft PR [#27](https://github.com/perielad2-netizen/FashionRise/pull/27) — ports Unity polish + poll/recovery; authenticated job image; redacts `image_base64` from job API responses; See last result after refresh; Nginx AI allowlist precedence fixed in docs + isolated verifier. Gate `VITE_MAGIC_UI_ENABLED` default **false**. **Not deployed / no paid calls.**
+**WEB-V4A (Magic → React):** **MERGED** PR [#27](https://github.com/perielad2-netizen/FashionRise/pull/27) at `dc9e31aa` (reviewed head `11a1dc4f`). Ports Unity polish + poll/recovery; owner-auth job image; redacts `image_base64` from job API responses; See last result after refresh; Nginx AI allowlist docs + isolated verifier. Gate `VITE_MAGIC_UI_ENABLED` default **false**.
+
+**WEB-V4A production activation attempt (2026-10-21) — STOPPED (readiness blocker):** Operator authorized controlled Magic rollout + one browser-initiated paid job at approved `dc9e31aa`. Preflight backup taken. **No backend checkout, no Nginx AI allowlist, no Magic-on frontend deploy, no paid OpenAI calls.** Production remains `46747e85` with AI routes denied. Blocker: production `.env` has `OPENAI_API_KEY` empty, `AI_WORKER_ENABLED=false`, `OPENAI_IMAGE_MODEL=off` → `sketch_openai.is_configured()=False` (would stub). Neighbor OpenAI credentials were **not** reused. `READY_FOR_ONE_OPERATOR_MAGIC_TEST=false`.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. Live `sw.js` sha256 `a51964e6acf2f2f7bd0c2c62caa9ecc49a8cdca5e8cfcc2944263a8eae43007e`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -76,20 +78,20 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub `main` | **`46747e85`** — includes PRs #21–#24, #26 |
-| Production frontend / backend | **`46747e85` / `46747e85`** (registration activation 2026-10-21) |
+| GitHub `main` | **`dc9e31aa`** — includes PRs #21–#24, #26, #27 |
+| Production frontend / backend | **`46747e85` / `46747e85`** (unchanged; Magic activation blocked at AI readiness) |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
 | **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator-reported desktop 5/5, tablet/cross-device 4/4, offline retry, conflict detection PASS (see above). |
 | **WEB-V3B** | **MERGED** + **production registration activated** (PR #26 @ `46747e85`, Alembic `004`) |
-| **WEB-V4A Magic React** | Draft — Unity polish/poll reuse + authenticated job image; Magic UI gated off |
+| **WEB-V4A Magic React** | **MERGED** PR #27 (`dc9e31aa`). Production Magic **not** activated (OpenAI/worker readiness blocker). |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record). |
 | INFRA-2 docs | Separate draft PR #10. |
-| Paid OpenAI | **NONE in production Magic** (Nginx AI denied; `VITE_MAGIC_UI_ENABLED` false) |
+| Paid OpenAI | **NONE** (Nginx AI denied; Magic UI off; key empty / worker off / image model off) |
 | Safety flags (prod) | Registration **on** (invite-gated). AI / uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
 
 ---
