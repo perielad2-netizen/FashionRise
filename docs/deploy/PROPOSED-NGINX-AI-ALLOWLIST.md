@@ -1,6 +1,6 @@
 # Proposed Nginx allowlist — Magic AI routes (NOT applied)
 
-**Status:** documentation only. Do **not** edit production Nginx until Technical PM / operator authorization for WEB-V4A Magic activation.
+**Status:** **applied in production** on 2026-10-21 as part of WEB-V4A Magic activation (`dc9e31aa`). Live config uses a **quoted** job regex (`location ~ "^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$"`) so nginx does not misparse `{36}`. Sibling AI routes and `/static/uploads` remain denied. Operator browser Magic generation acceptance still PENDING.
 
 **Companion:** `docs/deploy/REGISTRATION-ACTIVATION.md` (registration already live); this note is FashionRise-only AI routing.
 
