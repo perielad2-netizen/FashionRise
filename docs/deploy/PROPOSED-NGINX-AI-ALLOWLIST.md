@@ -1,6 +1,6 @@
 # Proposed Nginx allowlist — Magic AI routes (NOT applied)
 
-**Status:** documentation only — **not applied**. Operator authorized WEB-V4A Magic activation on 2026-10-21; resume blocked because Cursor Secret `FASHION_OPENAI_MODEL_KEY` is not injected into the agent run, and the in-process sync AI worker needs a reviewed non-blocking path before enablement. Production Nginx still uses the blanket AI deny below.
+**Status:** **applied in production** on 2026-10-21 as part of WEB-V4A Magic activation (`dc9e31aa`). Live config uses a **quoted** job regex (`location ~ "^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$"`) so nginx does not misparse `{36}`. Sibling AI routes and `/static/uploads` remain denied. Operator browser Magic generation acceptance still PENDING.
 
 **Companion:** `docs/deploy/REGISTRATION-ACTIVATION.md` (registration already live); this note is FashionRise-only AI routing.
 
