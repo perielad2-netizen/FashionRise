@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-21. **GitHub `main`:** `dc9e31aa` (PR #27 WEB-V4A Magic React merged). **Production backend/frontend:** still **`46747e85`** · Alembic **`004`** · `REGISTRATION_ENABLED=true` · registration UI **on** · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · Magic / AI Nginx **still denied** · `VITE_MAGIC_UI_ENABLED` **off**. Registration activation **PASS**; second-user browser acceptance **PASS**. **WEB-V4A Magic production activation STOPPED** at AI readiness (no paid calls; no Magic UI/Nginx change).
+**Last updated:** 2026-10-21. **GitHub `main`:** `dc9e31aa` (PR #27 WEB-V4A Magic React merged). **Production backend/frontend:** still **`46747e85`** · Alembic **`004`** · `REGISTRATION_ENABLED=true` · registration UI **on** · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · Magic / AI Nginx **still denied** · `VITE_MAGIC_UI_ENABLED` **off**. Registration activation **PASS**; second-user browser acceptance **PASS**. **WEB-V4A Magic production activation STOPPED** — Cursor Secret `FASHION_OPENAI_MODEL_KEY` not injected into this agent run (no paid calls; no Magic UI/Nginx change).
 
-**Phase:** Protected family beta on WEB-V3A + activated invite registration (second-user acceptance PASS). WEB-V4A Magic React is on `main` but **not production-activated** pending OpenAI/worker readiness.
+**Phase:** Protected family beta on WEB-V3A + activated invite registration (second-user acceptance PASS). WEB-V4A Magic React is on `main` but **not production-activated** pending secret injection + worker safety.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -50,7 +50,13 @@
 
 **WEB-V4A (Magic → React):** **MERGED** PR [#27](https://github.com/perielad2-netizen/FashionRise/pull/27) at `dc9e31aa` (reviewed head `11a1dc4f`). Ports Unity polish + poll/recovery; owner-auth job image; redacts `image_base64` from job API responses; See last result after refresh; Nginx AI allowlist docs + isolated verifier. Gate `VITE_MAGIC_UI_ENABLED` default **false**.
 
-**WEB-V4A production activation attempt (2026-10-21) — STOPPED (readiness blocker):** Operator authorized controlled Magic rollout + one browser-initiated paid job at approved `dc9e31aa`. Preflight backup taken. **No backend checkout, no Nginx AI allowlist, no Magic-on frontend deploy, no paid OpenAI calls.** Production remains `46747e85` with AI routes denied. Blocker: production `.env` has `OPENAI_API_KEY` empty, `AI_WORKER_ENABLED=false`, `OPENAI_IMAGE_MODEL=off` → `sketch_openai.is_configured()=False` (would stub). Neighbor OpenAI credentials were **not** reused. `READY_FOR_ONE_OPERATOR_MAGIC_TEST=false`.
+**WEB-V4A production activation attempts (2026-10-21) — STOPPED:**
+
+1. **First attempt (preflight):** backup `magic-activation-preflight-20261021T173550Z`. Production `.env` had `OPENAI_API_KEY` empty, `AI_WORKER_ENABLED=false`, `OPENAI_IMAGE_MODEL=off`. No deploy.
+2. **Resume attempt (secret path):** Operator reported Cursor Secret `FASHION_OPENAI_MODEL_KEY`. This agent run **cannot access it** — absent from process env and from `CLOUD_AGENT_ALL_SECRET_NAMES` (only `FASHIONRISE_VPS_*` present). No secure transfer possible; value never seen. **No VPS `.env` write, no backend/Nginx/frontend Magic deploy, no paid OpenAI calls.** Production remains `46747e85` with AI routes denied.
+3. **Additional readiness finding (not deployed):** in-process AI worker in `backend/app/main.py` calls synchronous `run_worker_tick` (OpenAI SDK network I/O) directly inside an asyncio task — can block the FastAPI event loop for the duration of a Magic job. Requires a reviewed non-blocking path (e.g. `asyncio.to_thread` or standalone `python -m app.ai_worker`) before enabling `AI_WORKER_ENABLED=true` on the API process. Do not silently deploy unreviewed code.
+
+`READY_FOR_ONE_OPERATOR_MAGIC_TEST=false`
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. Live `sw.js` sha256 `a51964e6acf2f2f7bd0c2c62caa9ecc49a8cdca5e8cfcc2944263a8eae43007e`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -281,11 +287,11 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Unblock Magic activation:** operator places a real FashionRise `OPENAI_API_KEY` in production `.env`, sets `AI_WORKER_ENABLED=true`, and sets `OPENAI_IMAGE_MODEL` to the approved image-edit model (not `off`). Do not reuse neighbor-app keys.
-2. **Re-authorize / resume WEB-V4A rollout** at approved `dc9e31aa`: backend deploy, Nginx AI allowlist, Magic-on frontend, then exactly one operator browser Magic click.
-3. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
-4. Remaining WEB-V3A gaps: untested conflict-resolution choices (Keep device / Use cloud).
-5. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10.
+1. **Inject Cursor Secret `FASHION_OPENAI_MODEL_KEY` into this Cloud Agent environment/run** so the agent can securely transfer it to VPS `OPENAI_API_KEY` (stdin/file handoff only). Do not paste the key into chat.
+2. **Reviewed worker-safety fix** (narrow): run `run_worker_tick` off the event loop (`asyncio.to_thread`) or use standalone `python -m app.ai_worker` with API `AI_WORKER_ENABLED=false`. Merge/approve before Magic worker enablement.
+3. **Resume WEB-V4A rollout** at approved `dc9e31aa` after secret + worker path ready: configure key/models/worker, clear/hold historical queued jobs, Nginx AI allowlist, Magic-on frontend, then exactly one operator browser Magic click.
+4. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
+5. Remaining WEB-V3A gaps: untested conflict-resolution choices (Keep device / Use cloud).
 
 ---
 
@@ -390,6 +396,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-21 | **WEB-V4A Magic resume STOPPED:** Cursor Secret `FASHION_OPENAI_MODEL_KEY` not injected into agent env (`CLOUD_AGENT_ALL_SECRET_NAMES` lacks it). Also noted sync AI worker can block asyncio event loop — needs reviewed fix before enable. Prod unchanged `46747e85`. Paid calls by Cursor: 0. `READY_FOR_ONE_OPERATOR_MAGIC_TEST=false`. |
 | 2026-10-21 | **WEB-V4A Magic production activation STOPPED:** approved `dc9e31aa`; preflight backup `magic-activation-preflight-20261021T173550Z`; prod unchanged at `46747e85`. Blocker: empty `OPENAI_API_KEY`, `AI_WORKER_ENABLED=false`, `OPENAI_IMAGE_MODEL=off`. No Nginx/FE Magic deploy; no paid calls. `READY_FOR_ONE_OPERATOR_MAGIC_TEST=false`. |
 | 2026-10-21 | **WEB-V4A merged** PR #27 → `main` `dc9e31aa` (reviewed head `11a1dc4f`). |
 | 2026-10-21 | **WEB-V4A Magic integration corrections (PR #27):** Nginx AI allowlist precedence; redact `image_base64` from job responses; See last result after refresh; fail closed on missing reference capture; overlapping Magic guarded. |
