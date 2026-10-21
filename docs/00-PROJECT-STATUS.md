@@ -281,9 +281,9 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **PM merge review WEB-V4A PR #27** after final Magic integration corrections.
-2. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
-3. **Later (separate auth):** Magic production activation (`VITE_MAGIC_UI_ENABLED` + Nginx AI allowlist + worker/OpenAI).
+1. **Unblock Magic activation:** operator places a real FashionRise `OPENAI_API_KEY` in production `.env`, sets `AI_WORKER_ENABLED=true`, and sets `OPENAI_IMAGE_MODEL` to the approved image-edit model (not `off`). Do not reuse neighbor-app keys.
+2. **Re-authorize / resume WEB-V4A rollout** at approved `dc9e31aa`: backend deploy, Nginx AI allowlist, Magic-on frontend, then exactly one operator browser Magic click.
+3. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
 4. Remaining WEB-V3A gaps: untested conflict-resolution choices (Keep device / Use cloud).
 5. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10.
 
