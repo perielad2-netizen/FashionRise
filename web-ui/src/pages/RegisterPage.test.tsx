@@ -96,11 +96,10 @@ describe('RegisterPage', () => {
     await waitFor(() => expect(screen.getByText('Studio')).toBeInTheDocument())
   })
 
-  it('prefills email and invitation code from query params', () => {
-    const code = 'abcdefghijklmnopqrstuvwxyz012345'
-    renderRegister(`/register?email=invited%40example.com&code=${code}`)
+  it('prefills email from query params but not invitation code', () => {
+    renderRegister('/register?email=invited%40example.com&code=should-not-prefill-token')
     expect(screen.getByRole('textbox', { name: /^email$/i })).toHaveValue('invited@example.com')
-    expect(screen.getByRole('textbox', { name: /invitation code/i })).toHaveValue(code)
+    expect(screen.getByRole('textbox', { name: /invitation code/i })).toHaveValue('')
   })
 
   it('shows invitation error from API without retrying', async () => {

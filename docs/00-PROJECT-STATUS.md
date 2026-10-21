@@ -82,7 +82,7 @@
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
 | **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator-reported desktop 5/5, tablet/cross-device 4/4, offline retry, conflict detection PASS (see above). |
 | **WEB-V3B** | **MERGED** PR #19 into `main` (`28449c41`). **Not deployed.** `REGISTRATION_ENABLED` defaults **false**. Migration **`004`** not applied in production. |
-| Registration product polish | Draft PR — distinct invite errors, `?email=&code=` prefill, username charset sync, journey test, `docs/deploy/REGISTRATION-ACTIVATION.md`. **No production changes.** |
+| Registration product polish | Draft PR — distinct invite errors, email-only `?email=` prefill (invite code pasted), username charset sync, journey test, `docs/deploy/REGISTRATION-ACTIVATION.md`. **No production changes.** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). **Deployed** Stage B @ `8c6a391a`. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build keeps UI **off**. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record). |
@@ -388,7 +388,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
-| 2026-10-20 | **Registration product polish:** distinct invite error copy; register deep-link prefill; username charset aligned FE/BE; journey test (register→save→relogin→isolation); activation procedure `docs/deploy/REGISTRATION-ACTIVATION.md`. No production changes. |
+| 2026-10-20 | **Registration product polish:** distinct invite error copy; email-only `?email=` prefill (no invite token in URL); username charset aligned FE/BE; journey test (register→save→relogin→isolation); activation procedure `docs/deploy/REGISTRATION-ACTIVATION.md`. No production changes. |
 | 2026-10-20 | **GitHub code merges:** PR #23 strict SlowAPI and PR #24 Access JWT merged to main; no VPS deploy, flags unchanged. PR #22 docs merge approved separately; Stage C and Stage D remain blocked. |
 | 2026-10-20 | **PR #22 rebased** onto `main` `ef4c42c2` after PR #21 merge; Stage B 6/6 + expired PENDING preserved; Stage C still **BLOCKED**. |
 | 2026-10-20 | **Stage C trust-boundary prep:** AOP dashboard confirm PENDING; N3 fail-closed chosen; invite parent 750/no symlink verified; JWT design doc added; Uvicorn proxy-headers peer rewrite documented; PR #23 SlowAPI tests expanded. Still **BLOCKED**. |

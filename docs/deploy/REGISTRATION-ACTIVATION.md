@@ -11,7 +11,7 @@
 
 1. Invitee opens FashionRise (Cloudflare Access still required).
 2. Chooses **Create account** on `/login`.
-3. Enters email, username, password, invitation code (optional deep-link `?email=&code=`).
+3. Enters email, username, password, and invitation code (optional `?email=` prefill only — paste the invite code into the form; never put tokens in URL query params).
 4. Completes registration → lands in Studio.
 5. Creates and saves a design.
 6. Logs out and logs back in — design remains.

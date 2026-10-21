@@ -16,15 +16,14 @@ export function RegisterPage() {
   const { register, isAuthenticated, bootstrapping } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  // Email-only query prefill is safe. Never put invitation tokens in URL query params
+  // (logs, history, Referer). Invitees paste the out-of-band code into the form.
   const [email, setEmail] = useState(() => initialFromQuery(searchParams, 'email'))
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [invitationCode, setInvitationCode] = useState(() => {
-    // Prefer ?code=; accept ?invite= as an alias used in operator notes.
-    return initialFromQuery(searchParams, 'code') || initialFromQuery(searchParams, 'invite')
-  })
+  const [invitationCode, setInvitationCode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({})
