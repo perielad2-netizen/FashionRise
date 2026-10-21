@@ -83,19 +83,29 @@
   cursor: not-allowed;
 }
 
-.magicSoon {
+.magicSoon,
+.magicReady {
   min-height: 34px;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  border: 1px dashed rgba(244, 114, 182, 0.55);
-  background: rgba(214, 51, 132, 0.08);
-  color: #f9a8d4;
   font-weight: 600;
   font-size: 12px;
   cursor: pointer;
+}
+
+.magicSoon {
+  border: 1px dashed rgba(244, 114, 182, 0.55);
+  background: rgba(214, 51, 132, 0.08);
+  color: #f9a8d4;
+}
+
+.magicReady {
+  border: 1px solid rgba(244, 114, 182, 0.65);
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.28), rgba(219, 39, 119, 0.18));
+  color: #fce7f3;
 }
 
 .soon {
@@ -190,6 +200,7 @@
 
   .iconBtn,
   .magicSoon,
+  .magicReady,
   .saveDesign {
     height: 32px;
     min-height: 32px;

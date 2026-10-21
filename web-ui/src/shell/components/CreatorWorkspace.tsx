@@ -8,6 +8,7 @@ import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
 import { ModelLibraryPanel } from '@/shell/components/ModelLibraryPanel'
 import { BetaNotice } from '@/shell/components/BetaNotice'
+import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
 import { SettingsInspector } from '@/shell/components/SettingsInspector'
 import { WorkspaceHeader } from '@/shell/components/WorkspaceHeader'
 import type { StudioEditor } from '@/hooks/useStudioEditor'
@@ -89,6 +90,10 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         onRedo={editor.redo}
         onClear={editor.clear}
         onMagic={editor.onMagic}
+        magicEnabled={editor.magicEnabled}
+        magicBusy={editor.magicBusy}
+        canRecoverLastMagic={editor.magicCanRecover}
+        onRecoverLastMagic={editor.recoverLastMagic}
         onComingSoon={editor.showComingSoon}
         saveStatus={editor.saveStatus}
         saveStatusLabel={editor.saveStatusLabel}
@@ -103,6 +108,21 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
       {betaNotice ? (
         <BetaNotice message={betaNotice.message} onDismiss={betaNotice.dismiss} />
       ) : null}
+
+      <MagicLookPanel
+        open={editor.magicOpen}
+        phase={editor.magicPhase}
+        result={editor.magicResult}
+        lookObjectUrl={editor.magicLookUrl}
+        sketchObjectUrl={editor.magicSketchUrl}
+        error={editor.magicError}
+        canRecover={editor.magicCanRecover}
+        onClose={editor.closeMagicPanel}
+        onCancel={editor.cancelMagicWait}
+        onDownload={editor.downloadMagicLook}
+        onRecover={editor.recoverLastMagic}
+        onBackToSketch={editor.backToSketchFromMagic}
+      />
 
       <div className={styles.mobileDock} aria-label="Studio panels">
         <button

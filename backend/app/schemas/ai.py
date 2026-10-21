@@ -31,3 +31,23 @@ class AIJobRead(BaseModel):
     error_message: str | None
     created_at: datetime
     updated_at: datetime
+
+    @classmethod
+    def from_job(cls, job: Any) -> "AIJobRead":
+        """Build a response DTO with sketch base64 stripped from input_data."""
+        from app.services.ai_service import sanitize_job_input_for_response
+
+        return cls(
+            id=job.id,
+            user_id=job.user_id,
+            design_id=job.design_id,
+            job_type=job.job_type,
+            status=job.status,
+            input_data=sanitize_job_input_for_response(
+                job.input_data if isinstance(job.input_data, dict) else {}
+            ),
+            result_data=job.result_data,
+            error_message=job.error_message,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )

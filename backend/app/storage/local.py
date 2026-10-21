@@ -1,4 +1,3 @@
-import os
 import uuid
 from pathlib import Path
 from typing import BinaryIO
@@ -36,3 +35,29 @@ class LocalStorageBackend:
         path = self._full_path(key)
         if path.is_file():
             path.unlink()
+
+    def key_from_public_url(self, url: str | None) -> str | None:
+        """Map a stored public upload URL back to a storage key (no network)."""
+        if not url or not isinstance(url, str):
+            return None
+        raw = url.strip()
+        if not raw:
+            return None
+        base = f"{self._public_base}/"
+        if raw.startswith(base):
+            return raw[len(base) :].lstrip("/")
+        marker = "/static/uploads/"
+        if marker in raw:
+            return raw.split(marker, 1)[1].lstrip("/")
+        return None
+
+    def resolve_existing_file(self, *, key: str) -> Path | None:
+        path = self._full_path(key).resolve()
+        root = (self._root / self._subdir).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            return None
+        if path.is_file():
+            return path
+        return None

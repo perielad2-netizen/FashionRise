@@ -18,7 +18,9 @@ import {
   restoreStudioDraft,
 } from '@/lib/draftPersistence'
 import { documentForCloud } from '@/services/designsApi'
+import { isMagicUiEnabled } from '@/config/magicUi'
 import { downloadBlob, exportFilename, exportSketchPng } from '@/lib/exportCanvas'
+import { captureSketchForMagic } from '@/lib/sketchCapture'
 import {
   createSaveRequestId,
   defaultDesignTitle,
@@ -29,6 +31,11 @@ import {
   type SavedDesignSnapshot,
 } from '@/lib/savedDesign'
 import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
+import { ApiError } from '@/services/api/client'
+import { enqueueSketchPolish, fetchJobImageBlob } from '@/services/ai/magicApi'
+import { persistMagicJobId, readMagicJobId } from '@/services/ai/magicJobStore'
+import { pollAiJobUntilSettled, recoverMagicJob } from '@/services/ai/pollAiJob'
+import { toMagicLookResult, type MagicLookResult } from '@/services/ai/aiJobTypes'
 import { StrokeHistory } from '@/lib/history'
 import { validateReferenceImageFile } from '@/lib/referenceFile'
 import {
@@ -39,6 +46,7 @@ import {
   type ToolKind,
 } from '@/lib/strokes'
 import { useAuth } from '@/services/auth/AuthProvider'
+import type { MagicPhase } from '@/shell/components/MagicLookPanel'
 
 const FEMALE_URL = UI_ASSETS.canvas.female
 const MALE_URL = UI_ASSETS.canvas.male
@@ -137,6 +145,20 @@ export function useStudioEditor() {
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [dimmed, setDimmed] = useState(false)
   const [magicNotice, setMagicNotice] = useState<string | null>(null)
+  const [magicOpen, setMagicOpen] = useState(false)
+  const [magicPhase, setMagicPhase] = useState<MagicPhase>('idle')
+  const [magicResult, setMagicResult] = useState<MagicLookResult | null>(null)
+  const [magicError, setMagicError] = useState<string | null>(null)
+  const [magicLookUrl, setMagicLookUrl] = useState<string | null>(null)
+  const [magicSketchUrl, setMagicSketchUrl] = useState<string | null>(null)
+  const [magicJobId, setMagicJobId] = useState<string | null>(null)
+  const magicAbortRef = useRef<AbortController | null>(null)
+  const magicLookUrlRef = useRef<string | null>(null)
+  const magicSketchUrlRef = useRef<string | null>(null)
+  const magicInFlightRef = useRef(false)
+  const magicEnabled = isMagicUiEnabled()
+  const magicBusy =
+    magicPhase === 'capturing' || magicPhase === 'submitting' || magicPhase === 'polling'
   const [studioNotice, setStudioNotice] = useState<string | null>(null)
   const [comingSoon, setComingSoon] = useState<string | null>(null)
 
@@ -533,10 +555,212 @@ export function useStudioEditor() {
     [blobUrl, commitFromEditor, publishStudioNotice, strokes.length],
   )
 
-  const onMagic = useCallback(() => {
+  const revokeMagicUrls = useCallback(() => {
+    if (magicLookUrlRef.current) {
+      URL.revokeObjectURL(magicLookUrlRef.current)
+      magicLookUrlRef.current = null
+    }
+    if (magicSketchUrlRef.current) {
+      URL.revokeObjectURL(magicSketchUrlRef.current)
+      magicSketchUrlRef.current = null
+    }
+    setMagicLookUrl(null)
+    setMagicSketchUrl(null)
+  }, [])
+
+  const closeMagicPanel = useCallback(() => {
+    magicAbortRef.current?.abort()
+    magicAbortRef.current = null
+    setMagicOpen(false)
+    setMagicPhase('idle')
+    setMagicError(null)
+  }, [])
+
+  const applySettledMagicJob = useCallback(
+    async (jobId: string, signal?: AbortSignal) => {
+      const job = await recoverMagicJob(jobId, signal)
+      const look = toMagicLookResult(job)
+      setMagicResult(look)
+      setMagicJobId(job.id)
+      if (user?.id) persistMagicJobId(user.id, job.id)
+      if (look.status === 'failed') {
+        setMagicPhase('failed')
+        setMagicError(look.summary)
+        return
+      }
+      if (look.hasImage) {
+        const blob = await fetchJobImageBlob(job.id, signal)
+        if (magicLookUrlRef.current) URL.revokeObjectURL(magicLookUrlRef.current)
+        const url = URL.createObjectURL(blob)
+        magicLookUrlRef.current = url
+        setMagicLookUrl(url)
+      }
+      setMagicPhase('ready')
+      setMagicError(null)
+    },
+    [user?.id],
+  )
+
+  const runMagicPipeline = useCallback(async () => {
+    if (!user?.id) {
+      setMagicNotice('Sign in to use Magic.')
+      return
+    }
+    if (magicInFlightRef.current) {
+      setMagicOpen(true)
+      return
+    }
+    magicInFlightRef.current = true
     setStudioNotice(null)
     setComingSoon(null)
-    setMagicNotice(MAGIC_NOTICE)
+    setMagicNotice(null)
+    setMagicError(null)
+    setMagicResult(null)
+    revokeMagicUrls()
+    setMagicOpen(true)
+    setMagicPhase('capturing')
+
+    magicAbortRef.current?.abort()
+    const controller = new AbortController()
+    magicAbortRef.current = controller
+
+    try {
+      const captured = await captureSketchForMagic({
+        strokes,
+        referenceUrl,
+        referenceOpacity,
+      })
+      if (controller.signal.aborted) return
+      const sketchUrl = URL.createObjectURL(captured.blob)
+      magicSketchUrlRef.current = sketchUrl
+      setMagicSketchUrl(sketchUrl)
+
+      setMagicPhase('submitting')
+      const job = await enqueueSketchPolish({
+        imageBase64: captured.dataUrl,
+        notes: 'polish concept',
+        signal: controller.signal,
+      })
+      setMagicJobId(job.id)
+      persistMagicJobId(user.id, job.id)
+
+      setMagicPhase('polling')
+      const settled = await pollAiJobUntilSettled({
+        jobId: job.id,
+        signal: controller.signal,
+      })
+      const look = toMagicLookResult(settled)
+      setMagicResult(look)
+      if (look.status === 'failed') {
+        setMagicPhase('failed')
+        setMagicError(look.summary)
+        return
+      }
+      if (look.hasImage) {
+        const blob = await fetchJobImageBlob(settled.id, controller.signal)
+        if (magicLookUrlRef.current) URL.revokeObjectURL(magicLookUrlRef.current)
+        const url = URL.createObjectURL(blob)
+        magicLookUrlRef.current = url
+        setMagicLookUrl(url)
+      }
+      setMagicPhase('ready')
+    } catch (err) {
+      if (controller.signal.aborted) {
+        setMagicPhase('failed')
+        setMagicError('Magic wait cancelled. Your sketch is unchanged — recover if the job already finished.')
+        return
+      }
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Magic could not complete.'
+      setMagicPhase('failed')
+      setMagicError(message)
+    } finally {
+      magicInFlightRef.current = false
+    }
+  }, [referenceOpacity, referenceUrl, revokeMagicUrls, strokes, user?.id])
+
+  const onMagic = useCallback(() => {
+    if (!magicEnabled) {
+      setStudioNotice(null)
+      setComingSoon(null)
+      setMagicNotice(MAGIC_NOTICE)
+      return
+    }
+    if (magicInFlightRef.current || magicBusy) {
+      setMagicOpen(true)
+      return
+    }
+    void runMagicPipeline()
+  }, [magicBusy, magicEnabled, runMagicPipeline])
+
+  const recoverLastMagic = useCallback(() => {
+    if (!user?.id) return
+    if (magicInFlightRef.current) {
+      setMagicOpen(true)
+      return
+    }
+    const jobId = magicJobId || readMagicJobId(user.id)
+    if (!jobId) {
+      setMagicError('No previous Magic job to recover.')
+      setMagicPhase('failed')
+      setMagicOpen(true)
+      return
+    }
+    magicInFlightRef.current = true
+    setMagicOpen(true)
+    setMagicPhase('polling')
+    setMagicError(null)
+    setStudioNotice(null)
+    setComingSoon(null)
+    setMagicNotice(null)
+    magicAbortRef.current?.abort()
+    const controller = new AbortController()
+    magicAbortRef.current = controller
+    void applySettledMagicJob(jobId, controller.signal)
+      .catch((err) => {
+        if (controller.signal.aborted) return
+        setMagicPhase('failed')
+        setMagicError(err instanceof Error ? err.message : 'Unable to recover Magic result.')
+      })
+      .finally(() => {
+        magicInFlightRef.current = false
+      })
+  }, [applySettledMagicJob, magicJobId, user?.id])
+
+  // After refresh, restore the stored job id for "See last result" without enqueue.
+  useEffect(() => {
+    if (!user?.id) return
+    const stored = readMagicJobId(user.id)
+    if (stored && !magicJobId) setMagicJobId(stored)
+  }, [magicJobId, user?.id])
+
+  const cancelMagicWait = useCallback(() => {
+    magicAbortRef.current?.abort()
+  }, [])
+
+  const downloadMagicLook = useCallback(() => {
+    if (!magicLookUrlRef.current) return
+    void fetch(magicLookUrlRef.current)
+      .then((r) => r.blob())
+      .then((blob) => downloadBlob(blob, exportFilename('look')))
+      .catch(() => setMagicError('Could not download the look image.'))
+  }, [])
+
+  const backToSketchFromMagic = useCallback(() => {
+    closeMagicPanel()
+    // Keep job id for recovery; never clear strokes — original sketch remains.
+  }, [closeMagicPanel])
+
+  useEffect(() => {
+    return () => {
+      magicAbortRef.current?.abort()
+      if (magicLookUrlRef.current) URL.revokeObjectURL(magicLookUrlRef.current)
+      if (magicSketchUrlRef.current) URL.revokeObjectURL(magicSketchUrlRef.current)
+    }
   }, [])
 
   const onLogout = useCallback(() => {
@@ -1042,6 +1266,20 @@ export function useStudioEditor() {
     onLogout,
     magicNotice,
     setMagicNotice,
+    magicEnabled,
+    magicOpen,
+    magicPhase,
+    magicBusy,
+    magicResult,
+    magicError,
+    magicLookUrl,
+    magicSketchUrl,
+    magicCanRecover: Boolean(magicJobId || (user?.id && readMagicJobId(user.id))),
+    closeMagicPanel,
+    cancelMagicWait,
+    recoverLastMagic,
+    downloadMagicLook,
+    backToSketchFromMagic,
     studioNotice,
     setStudioNotice,
     comingSoon,
