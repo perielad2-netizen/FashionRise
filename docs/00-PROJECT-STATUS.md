@@ -396,10 +396,11 @@ FashionRise/
 | Scope | Color picker + fashion palette + eyedropper; bucket fill; 6 bundled fabrics; gradients; undo/redo; V1-compatible `fills[]`; PNG/Magic capture parity via shared `paintFillOps` |
 | `npm test` | **Pass: 246 tests, 50 files** (flood-fill regions, fill paint, V1 draft reopen, export composition with fills under ink, Magic mock capture with fills, materials panel + tool rail) |
 | `npm run lint` / `npm run build` | **Pass** (same pre-existing oxlint warnings + one hex-draft sync warning in materials panel) |
-| OpenAI / paid Magic | **None** — capture mocked only; no polish enqueue in WEB-V4B work |
+| Interactive browser (local `5190` + mock API) | **PASS** — closed bodice/skirt fills (crimson/royal), denim fabric + rose-violet gradient, eyedropper (`#1E3A8A`), undo/redo, save design, reload, export PNG, tablet width; open-outline feedback verified; Magic not clicked |
+| OpenAI / paid Magic | **None** — capture unit-tested with fills only; no polish enqueue in WEB-V4B work |
 | Worker / Nginx / prompts | **Unchanged** |
 | Production deploy | **Not done** (draft only) |
-| Known limits | Fill needs a closed ink outline (open shapes get feedback, no canvas corruption); no layer manager; fabrics are procedural tiles (no external images) |
+| Known limits | Fill needs a closed ink outline (open shapes get feedback, no canvas corruption); no layer manager; fabrics are procedural tiles (no external images); mock API keeps designs local-only during QA |
 
 ## Changelog (handoff doc only)
 
