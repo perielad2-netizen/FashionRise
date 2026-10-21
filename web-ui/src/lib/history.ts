@@ -1,41 +1,45 @@
+import { cloneFills, type FillOp } from '@/lib/fills'
 import { cloneStrokes, type Stroke } from '@/lib/strokes'
 
 const DEFAULT_LIMIT = 80
 
-export type HistorySnapshot = Stroke[]
+export type ArtworkSnapshot = {
+  strokes: Stroke[]
+  fills: FillOp[]
+}
 
 /**
- * Bounded structured stroke history.
- * One completed gesture (or clear) = one undoable operation.
+ * Bounded artwork history (ink + fills).
+ * One completed gesture / fill / clear = one undoable operation.
  */
 export class StrokeHistory {
-  private past: HistorySnapshot[] = []
-  private future: HistorySnapshot[] = []
+  private past: ArtworkSnapshot[] = []
+  private future: ArtworkSnapshot[] = []
   private limit: number
 
   constructor(limit = DEFAULT_LIMIT) {
     this.limit = limit
   }
 
-  push(current: Stroke[]): void {
-    this.past.push(cloneStrokes(current))
+  push(current: ArtworkSnapshot): void {
+    this.past.push(cloneArtwork(current))
     if (this.past.length > this.limit) {
       this.past.shift()
     }
     this.future = []
   }
 
-  undo(current: Stroke[]): Stroke[] | null {
+  undo(current: ArtworkSnapshot): ArtworkSnapshot | null {
     if (this.past.length === 0) return null
     const previous = this.past.pop()!
-    this.future.push(cloneStrokes(current))
+    this.future.push(cloneArtwork(current))
     return previous
   }
 
-  redo(current: Stroke[]): Stroke[] | null {
+  redo(current: ArtworkSnapshot): ArtworkSnapshot | null {
     if (this.future.length === 0) return null
     const next = this.future.pop()!
-    this.past.push(cloneStrokes(current))
+    this.past.push(cloneArtwork(current))
     return next
   }
 
@@ -50,5 +54,12 @@ export class StrokeHistory {
   clear(): void {
     this.past = []
     this.future = []
+  }
+}
+
+export function cloneArtwork(state: ArtworkSnapshot): ArtworkSnapshot {
+  return {
+    strokes: cloneStrokes(state.strokes),
+    fills: cloneFills(state.fills),
   }
 }

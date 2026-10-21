@@ -13,6 +13,8 @@ describe('matchStudioShortcut', () => {
   it('maps the advertised beta shortcuts', () => {
     expect(matchStudioShortcut({ ...base, key: 'b' })).toBe('draw')
     expect(matchStudioShortcut({ ...base, key: 'E' })).toBe('erase')
+    expect(matchStudioShortcut({ ...base, key: 'g' })).toBe('fill')
+    expect(matchStudioShortcut({ ...base, key: 'i' })).toBe('eyedropper')
     expect(matchStudioShortcut({ ...base, key: 'z', ctrlKey: true })).toBe('undo')
     expect(matchStudioShortcut({ ...base, key: 'z', metaKey: true, shiftKey: true })).toBe('redo')
     expect(matchStudioShortcut({ ...base, key: 'y', ctrlKey: true })).toBe('redo')

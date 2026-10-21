@@ -1,4 +1,5 @@
 import type { ModelChoice } from '@/shell/modelTypes'
+import { cloneFills, parseFillOp, type FillOp } from '@/lib/fills'
 import {
   BRUSH_SIZES,
   type BrushSizeId,
@@ -25,9 +26,12 @@ export const SAVED_DESIGN_CATEGORY = 'studio' as const
 export const TITLE_MAX_LENGTH = 80
 export const MAX_SNAPSHOT_STROKES = 5000
 export const MAX_SNAPSHOT_POINTS = 1_500_000
+export const MAX_SNAPSHOT_FILLS = 500
 
 export type SavedDesignSnapshot = {
   strokes: Stroke[]
+  /** Optional; omitted on pre-WEB-V4B snapshots. */
+  fills?: FillOp[]
   model: ModelChoice
   brush: StudioBrushState
   dimmed: boolean
@@ -113,6 +117,7 @@ function canonicalStroke(s: Stroke): Stroke {
 export function snapshotFromDocument(doc: StudioDraftDocument): SavedDesignSnapshot {
   return {
     strokes: doc.strokes.map(canonicalStroke),
+    fills: cloneFills(doc.fills ?? []),
     model: doc.model,
     brush: { sizeId: doc.brush.sizeId, opacity: doc.brush.opacity, color: doc.brush.color },
     dimmed: doc.dimmed,
@@ -123,6 +128,7 @@ export function snapshotFromDocument(doc: StudioDraftDocument): SavedDesignSnaps
 export function snapshotFingerprint(snapshot: SavedDesignSnapshot): string {
   return JSON.stringify({
     strokes: snapshot.strokes.map(canonicalStroke),
+    fills: snapshot.fills ?? [],
     model: snapshot.model,
     brush: {
       sizeId: snapshot.brush.sizeId,
@@ -163,6 +169,7 @@ export function buildSavedDesignPayload(args: {
       savedAt,
       model: args.snapshot.model,
       strokeCount: args.snapshot.strokes.length,
+      fillCount: (args.snapshot.fills ?? []).length,
     },
     visibility: 'private' as const,
     status: 'draft' as const,
@@ -216,8 +223,19 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
     if (points > MAX_SNAPSHOT_POINTS) return null
     strokes.push(stroke)
   }
+  let fills: FillOp[] | undefined
+  if (s.fills !== undefined) {
+    if (!Array.isArray(s.fills) || s.fills.length > MAX_SNAPSHOT_FILLS) return null
+    fills = []
+    for (const rawFill of s.fills) {
+      const fill = parseFillOp(rawFill)
+      if (!fill) return null
+      fills.push(fill)
+    }
+  }
   return {
     strokes,
+    ...(fills ? { fills } : {}),
     model: s.model as ModelChoice,
     brush: {
       sizeId: brush.sizeId as BrushSizeId,
@@ -293,6 +311,7 @@ export function workingDocumentFromSnapshot(args: {
   return {
     ...args.current,
     strokes: args.snapshot.strokes.map(canonicalStroke),
+    fills: cloneFills(args.snapshot.fills ?? []),
     model: args.snapshot.model,
     customReferenceUrl: null,
     customReferenceKey: null,

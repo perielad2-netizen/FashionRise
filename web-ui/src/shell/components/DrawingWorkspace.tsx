@@ -1,55 +1,58 @@
-import { Maximize2, ScanSearch, Search } from 'lucide-react'
 import { DrawingCanvas } from '@/components/studio/DrawingCanvas'
+import type { FillOp, FillStyle } from '@/lib/fills'
 import type { Stroke, ToolKind } from '@/lib/strokes'
 import styles from './DrawingWorkspace.module.css'
 
 type Props = {
   strokes: Stroke[]
+  fills: FillOp[]
   tool: ToolKind
   brushColor: string
   brushSize: number
   brushOpacity: number
+  fillStyle: FillStyle
   referenceUrl: string | null
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
+  onFillComplete: (fill: FillOp) => void
+  onFillError: (message: string) => void
+  onEyedropperSample: (color: string) => void
 }
 
 export function DrawingWorkspace({
   strokes,
+  fills,
   tool,
   brushColor,
   brushSize,
   brushOpacity,
+  fillStyle,
   referenceUrl,
   referenceOpacity,
   onStrokeComplete,
+  onFillComplete,
+  onFillError,
+  onEyedropperSample,
 }: Props) {
   return (
     <div className={styles.wrap}>
       <div className={styles.canvasFrame} data-testid="paper-frame">
         <DrawingCanvas
           strokes={strokes}
+          fills={fills}
           activeTool={tool}
           brushColor={brushColor}
           brushSize={brushSize}
           brushOpacity={brushOpacity}
+          fillStyle={fillStyle}
           referenceUrl={referenceUrl}
           referenceOpacity={referenceOpacity}
           onStrokeComplete={onStrokeComplete}
+          onFillComplete={onFillComplete}
+          onFillError={onFillError}
+          onEyedropperSample={onEyedropperSample}
           framed={false}
         />
-        <div className={styles.zoom} aria-label="Zoom controls">
-          <button type="button" className={styles.zoomBtn} disabled aria-label="Zoom unavailable">
-            <Search size={14} />
-          </button>
-          <span>100%</span>
-          <button type="button" className={styles.zoomBtn} disabled aria-label="Fit unavailable">
-            <ScanSearch size={14} />
-          </button>
-          <button type="button" className={styles.zoomBtn} disabled aria-label="Fullscreen unavailable">
-            <Maximize2 size={14} />
-          </button>
-        </div>
       </div>
     </div>
   )

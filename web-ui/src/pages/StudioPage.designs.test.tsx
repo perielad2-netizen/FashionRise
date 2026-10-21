@@ -301,6 +301,7 @@ describe('Export PNG', () => {
     })
     expect(mocks.exportSketchPng).toHaveBeenCalledWith({
       strokes: [STROKE],
+      fills: [],
       referenceUrl: '/models/female_model.png',
       referenceOpacity: 0.4,
     })

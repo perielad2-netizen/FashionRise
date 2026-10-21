@@ -55,6 +55,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
       event.preventDefault()
       if (action === 'draw') setTool('draw')
       else if (action === 'erase') setTool('erase')
+      else if (action === 'fill') setTool('fill')
+      else if (action === 'eyedropper') setTool('eyedropper')
       else if (action === 'undo') undo()
       else redo()
     }
@@ -71,7 +73,14 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [dock])
 
-  const toolLabel = editor.tool === 'erase' ? 'Eraser' : 'Pencil'
+  const toolLabel =
+    editor.tool === 'erase'
+      ? 'Eraser'
+      : editor.tool === 'fill'
+        ? 'Fill'
+        : editor.tool === 'eyedropper'
+          ? 'Eyedropper'
+          : 'Pencil'
   const brushOverlay = dock === 'brush' && tablet
   const betaNotice = editor.magicNotice
     ? { message: editor.magicNotice, dismiss: () => editor.setMagicNotice(null) }
@@ -177,19 +186,30 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           />
           <DrawingWorkspace
             strokes={editor.strokes}
+            fills={editor.fills}
             tool={editor.tool}
             brushColor={editor.color}
             brushSize={editor.brushSize}
             brushOpacity={editor.opacity}
+            fillStyle={editor.fillStyle}
             referenceUrl={editor.referenceUrl}
             referenceOpacity={editor.referenceOpacity}
             onStrokeComplete={editor.onStrokeComplete}
+            onFillComplete={editor.onFillComplete}
+            onFillError={editor.onFillError}
+            onEyedropperSample={editor.onEyedropperSample}
           />
           <div className={`${styles.materialsSlot} ${dock === 'materials' ? styles.slotOpen : ''}`}>
             <ColorAndMaterialsPanel
               color={editor.color}
               onColor={editor.setColor}
               onColorHex={editor.setColorHex}
+              fillStyle={editor.fillStyle}
+              onFillStyle={editor.setFillStyle}
+              eyedropperActive={editor.tool === 'eyedropper'}
+              onToggleEyedropper={() =>
+                editor.setTool(editor.tool === 'eyedropper' ? 'draw' : 'eyedropper')
+              }
             />
           </div>
         </div>

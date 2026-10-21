@@ -1,4 +1,4 @@
-export type ToolKind = 'draw' | 'erase'
+export type ToolKind = 'draw' | 'erase' | 'fill' | 'eyedropper'
 
 export type Stroke = {
   id: string

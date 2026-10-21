@@ -1,34 +1,33 @@
 import { useEffect, useState } from 'react'
-import { Eye, Lock, Pipette, Plus, Trash2 } from 'lucide-react'
+import { Pipette } from 'lucide-react'
+import {
+  FABRIC_PRESETS,
+  FASHION_PALETTE,
+  GRADIENT_PRESETS,
+  type FillStyle,
+} from '@/lib/fills'
 import { INK_SWATCHES } from '@/lib/strokes'
 import styles from './ColorAndMaterialsPanel.module.css'
-
-const FABRICS = [
-  'linear-gradient(145deg,#f9a8d4,#be185d)',
-  'linear-gradient(145deg,#f5e6d3,#c4a484)',
-  'linear-gradient(145deg,#93c5fd,#1d4ed8)',
-  'linear-gradient(145deg,#d1d5db,#4b5563)',
-]
-const GRADIENTS = [
-  'linear-gradient(135deg,#d63384,#7c3aed)',
-  'linear-gradient(135deg,#f8f4f0,#d4af9b)',
-  'linear-gradient(135deg,#0ea5e9,#d63384)',
-  'linear-gradient(135deg,#111827,#9f1239)',
-]
-const LAYERS = [
-  { id: 'hat', label: 'Hat' },
-  { id: 'sketch', label: 'Sketch', active: true },
-  { id: 'notes', label: 'Design Notes' },
-  { id: 'bg', label: 'Background' },
-]
 
 type Props = {
   color: string
   onColor: (color: string) => void
   onColorHex: (hex: string) => boolean
+  fillStyle: FillStyle
+  onFillStyle: (style: FillStyle) => void
+  eyedropperActive: boolean
+  onToggleEyedropper: () => void
 }
 
-export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
+export function ColorAndMaterialsPanel({
+  color,
+  onColor,
+  onColorHex,
+  fillStyle,
+  onFillStyle,
+  eyedropperActive,
+  onToggleEyedropper,
+}: Props) {
   const [hexDraft, setHexDraft] = useState(color)
 
   useEffect(() => {
@@ -40,6 +39,11 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
     if (!ok) setHexDraft(color)
   }
 
+  const selectSolid = (next: string) => {
+    onColor(next)
+    setHexDraft(next)
+  }
+
   return (
     <div className={styles.stack} aria-label="Colors and materials">
       <section className={styles.card}>
@@ -48,7 +52,7 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
         </div>
         <div className={styles.currentInk}>
           <span className={styles.currentSwatch} style={{ background: color }} />
-          <span>Current ink</span>
+          <span>Current color</span>
         </div>
         <div className={styles.swatches}>
           {INK_SWATCHES.map((s) => (
@@ -59,10 +63,21 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
               style={{ background: s.color }}
               aria-label={s.label}
               title={s.label}
-              onClick={() => {
-                onColor(s.color)
-                setHexDraft(s.color)
-              }}
+              onClick={() => selectSolid(s.color)}
+            />
+          ))}
+        </div>
+        <p className={styles.note}>Fashion palette</p>
+        <div className={styles.swatches}>
+          {FASHION_PALETTE.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={color.toLowerCase() === s.color.toLowerCase() ? styles.swatchActive : styles.swatch}
+              style={{ background: s.color }}
+              aria-label={s.label}
+              title={s.label}
+              onClick={() => selectSolid(s.color)}
             />
           ))}
         </div>
@@ -77,7 +92,22 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
               if (e.key === 'Enter') commitHex()
             }}
           />
-          <button type="button" className={styles.iconBtn} disabled aria-label="Eyedropper unavailable">
+          <input
+            type="color"
+            className={styles.nativePicker}
+            value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : '#1C1C1E'}
+            aria-label="Color picker"
+            title="Pick a color"
+            onChange={(e) => selectSolid(e.target.value.toUpperCase())}
+          />
+          <button
+            type="button"
+            className={eyedropperActive ? styles.iconBtnActive : styles.iconBtn}
+            aria-label={eyedropperActive ? 'Eyedropper on' : 'Eyedropper'}
+            aria-pressed={eyedropperActive}
+            title="Sample a color from your sketch"
+            onClick={onToggleEyedropper}
+          >
             <Pipette size={14} />
           </button>
         </div>
@@ -85,73 +115,56 @@ export function ColorAndMaterialsPanel({ color, onColor, onColorHex }: Props) {
 
       <section className={styles.card}>
         <div className={styles.head}>
-          <h3>
-            Fabrics <span className={styles.soon}>Soon</span>
-          </h3>
+          <h3>Fabrics</h3>
         </div>
+        <p className={styles.note}>Select a fabric, then use Fill on a closed dress region.</p>
         <div className={styles.fabrics}>
-          {FABRICS.map((bg) => (
-            <button
-              key={bg}
-              type="button"
-              className={styles.fabric}
-              style={{ background: bg }}
-              disabled
-              aria-disabled
-              title="Unavailable"
-              aria-label="Fabric unavailable"
-            />
-          ))}
+          {FABRIC_PRESETS.map((fabric) => {
+            const active = fillStyle.kind === 'fabric' && fillStyle.fabricId === fabric.id
+            return (
+              <button
+                key={fabric.id}
+                type="button"
+                className={active ? styles.fabricActive : styles.fabric}
+                style={{ background: fabric.preview }}
+                aria-label={fabric.label}
+                aria-pressed={active}
+                title={fabric.label}
+                onClick={() => onFillStyle({ kind: 'fabric', fabricId: fabric.id })}
+              />
+            )
+          })}
         </div>
       </section>
 
       <section className={styles.card}>
         <div className={styles.head}>
-          <h3>
-            Gradients <span className={styles.soon}>Soon</span>
-          </h3>
+          <h3>Gradients</h3>
         </div>
+        <p className={styles.note}>Select a gradient, then Fill a closed region.</p>
         <div className={styles.gradients}>
-          {GRADIENTS.map((bg) => (
-            <button
-              key={bg}
-              type="button"
-              className={styles.gradient}
-              style={{ background: bg }}
-              disabled
-              aria-disabled
-              title="Unavailable"
-              aria-label="Gradient unavailable"
-            />
-          ))}
-        </div>
-      </section>
-
-      <section className={styles.card}>
-        <div className={styles.head}>
-          <h3>
-            Layers <span className={styles.soon}>Soon</span>
-          </h3>
-          <button type="button" className={styles.iconBtn} disabled aria-label="Add layer unavailable">
-            <Plus size={14} />
-          </button>
-        </div>
-        <p className={styles.note}>Layer editing is coming later. Sketch ink is the live layer.</p>
-        <div className={styles.layers}>
-          {LAYERS.map((layer) => (
-            <div key={layer.id} className={layer.active ? styles.layerActive : styles.layer}>
-              <span>{layer.label}</span>
-              <button type="button" className={styles.iconBtn} disabled aria-label="Visibility unavailable">
-                <Eye size={14} />
-              </button>
-              <button type="button" className={styles.iconBtn} disabled aria-label="Lock unavailable">
-                <Lock size={14} />
-              </button>
-              <button type="button" className={styles.iconBtn} disabled aria-label="Delete unavailable">
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
+          {GRADIENT_PRESETS.map((g) => {
+            const active = fillStyle.kind === 'gradient' && fillStyle.gradientId === g.id
+            return (
+              <button
+                key={g.id}
+                type="button"
+                className={active ? styles.gradientActive : styles.gradient}
+                style={{ background: g.preview }}
+                aria-label={g.label}
+                aria-pressed={active}
+                title={g.label}
+                onClick={() =>
+                  onFillStyle({
+                    kind: 'gradient',
+                    gradientId: g.id,
+                    colors: [...g.colors] as [string, string],
+                    angle: g.angle,
+                  })
+                }
+              />
+            )
+          })}
         </div>
       </section>
     </div>

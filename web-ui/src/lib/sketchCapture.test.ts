@@ -15,9 +15,36 @@ describe('captureSketchForMagic', () => {
 
   it('rejects empty canvas', async () => {
     await expect(
-      captureSketchForMagic({ strokes: [], referenceUrl: null }),
+      captureSketchForMagic({ strokes: [], fills: [], referenceUrl: null }),
     ).rejects.toThrow(/Draw a sketch/i)
     expect(exportMock).not.toHaveBeenCalled()
+  })
+
+  it('captures fills-only artwork for Magic without paid enqueue', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
+    const result = await captureSketchForMagic({
+      strokes: [],
+      fills: [
+        {
+          id: 'f1',
+          contour: [10, 10, 40, 10, 40, 40, 10, 40],
+          style: { kind: 'solid', color: '#B91C1C' },
+          seedX: 20,
+          seedY: 20,
+        },
+      ],
+      referenceUrl: null,
+    })
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fills: expect.arrayContaining([expect.objectContaining({ id: 'f1' })]),
+        onReferenceError: 'skip',
+      }),
+    )
+    expect(result.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
   })
 
   it('returns a png data URL for strokes without reference', async () => {

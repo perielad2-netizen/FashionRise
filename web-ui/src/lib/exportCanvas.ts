@@ -1,4 +1,6 @@
 import { strokeToSvgPath } from '@/lib/freehand'
+import type { FillOp } from '@/lib/fills'
+import { paintFillOps } from '@/lib/paintFills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 
 export const PAPER_BACKGROUND = '#F8F4F0'
@@ -6,6 +8,7 @@ const REFERENCE_TIMEOUT_MS = 10_000
 
 export type ExportOptions = {
   strokes: Stroke[]
+  fills?: FillOp[]
   referenceUrl: string | null
   referenceOpacity?: number
   background?: string
@@ -114,6 +117,16 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
       if (options.onReferenceError !== 'skip') throw err
     }
   }
+
+  // Fills sit above the reference and under ink (garment colour / fabric).
+  const fillLayer = document.createElement('canvas')
+  fillLayer.width = width
+  fillLayer.height = height
+  const fillCtx = fillLayer.getContext('2d')
+  if (!fillCtx) throw new Error('Canvas 2D unavailable')
+  if (sx !== 1 || sy !== 1) fillCtx.scale(sx, sy)
+  paintFillOps(fillCtx, options.fills ?? [])
+  baseCtx.drawImage(fillLayer, 0, 0, width, height)
 
   const ink = document.createElement('canvas')
   ink.width = width

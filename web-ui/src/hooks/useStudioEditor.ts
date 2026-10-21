@@ -20,6 +20,7 @@ import {
 import { documentForCloud } from '@/services/designsApi'
 import { isMagicUiEnabled } from '@/config/magicUi'
 import { downloadBlob, exportFilename, exportSketchPng } from '@/lib/exportCanvas'
+import { solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
 import { captureSketchForMagic } from '@/lib/sketchCapture'
 import {
   createSaveRequestId,
@@ -135,10 +136,12 @@ export function useStudioEditor() {
   const openRequestRef = useRef(0)
 
   const [strokes, setStrokes] = useState<Stroke[]>([])
+  const [fills, setFills] = useState<FillOp[]>([])
   const [tool, setTool] = useState<ToolKind>('draw')
   const [sizeId, setSizeId] = useState<BrushSizeId>('thin')
   const [opacity, setOpacity] = useState(1)
   const [color, setColor] = useState<string>(INK_SWATCHES[0]!.color)
+  const [fillStyle, setFillStyle] = useState<FillStyle>(() => solidStyle(INK_SWATCHES[0]!.color))
   const [model, setModelState] = useState<ModelChoice>('female')
   const [customUrl, setCustomUrl] = useState<string | null>(null)
   const [customKey, setCustomKey] = useState<string | null>(null)
@@ -196,12 +199,14 @@ export function useStudioEditor() {
     designIdRef.current = designId
     history.current = new StrokeHistory()
     setStrokes(doc.strokes)
+    setFills(doc.fills ?? [])
     setModelState(doc.model)
     setCustomUrl(doc.customReferenceUrl)
     setCustomKey(doc.customReferenceKey)
     setSizeId(doc.brush.sizeId)
     setOpacity(doc.brush.opacity)
     setColor(doc.brush.color)
+    setFillStyle(solidStyle(doc.brush.color))
     setDimmed(doc.dimmed)
     setCanUndo(false)
     setCanRedo(false)
@@ -340,6 +345,7 @@ export function useStudioEditor() {
   const commitFromEditor = useCallback(
     (patch: {
       strokes?: Stroke[]
+      fills?: FillOp[]
       model?: ModelChoice
       customReferenceUrl?: string | null
       customReferenceKey?: string | null
@@ -352,6 +358,7 @@ export function useStudioEditor() {
       const next = documentFromEditorState({
         prev,
         strokes: patch.strokes ?? prev.strokes,
+        fills: patch.fills ?? prev.fills ?? [],
         model: patch.model ?? prev.model,
         customReferenceUrl:
           patch.customReferenceUrl !== undefined ? patch.customReferenceUrl : prev.customReferenceUrl,
@@ -405,7 +412,7 @@ export function useStudioEditor() {
       const needsSync =
         restored.conflict === null &&
         (restored.designId === null
-          ? restored.document.strokes.length > 0
+          ? restored.document.strokes.length > 0 || (restored.document.fills?.length ?? 0) > 0
           : restored.notice?.includes('Syncing') === true)
       if (needsSync) {
         void flushCloudSave()
@@ -429,6 +436,7 @@ export function useStudioEditor() {
     const next = documentFromEditorState({
       prev,
       strokes,
+      fills,
       model,
       customReferenceUrl: customUrl,
       customReferenceKey: customKey,
@@ -439,7 +447,7 @@ export function useStudioEditor() {
     })
     if (draftContentFingerprint(prev) === draftContentFingerprint(next)) return
     void commitDocument(next)
-  }, [strokes, model, customUrl, customKey, sizeId, opacity, color, dimmed, ready, commitDocument])
+  }, [strokes, fills, model, customUrl, customKey, sizeId, opacity, color, dimmed, ready, commitDocument])
 
   useEffect(() => {
     return () => {
@@ -464,65 +472,105 @@ export function useStudioEditor() {
 
   const referenceOpacity = dimmed ? 0.4 : 1
 
+  const artwork = useCallback(
+    () => ({ strokes, fills }),
+    [fills, strokes],
+  )
+
   const onStrokeComplete = useCallback(
     (stroke: Stroke) => {
-      history.current.push(strokes)
+      history.current.push(artwork())
       const nextStrokes = [...strokes, stroke]
       setStrokes(nextStrokes)
       syncHistoryFlags()
-      // Effect will commit; also commit immediately for stroke durability before debounce.
-      commitFromEditor({ strokes: nextStrokes })
+      commitFromEditor({ strokes: nextStrokes, fills })
     },
-    [commitFromEditor, strokes, syncHistoryFlags],
+    [artwork, commitFromEditor, fills, strokes, syncHistoryFlags],
+  )
+
+  const onFillComplete = useCallback(
+    (fill: FillOp) => {
+      history.current.push(artwork())
+      const nextFills = [...fills, fill]
+      setFills(nextFills)
+      syncHistoryFlags()
+      commitFromEditor({ strokes, fills: nextFills })
+      publishStudioNotice('Region filled. Undo if you need to try again.')
+    },
+    [artwork, commitFromEditor, fills, publishStudioNotice, strokes, syncHistoryFlags],
+  )
+
+  const onFillError = useCallback(
+    (message: string) => {
+      publishStudioNotice(message)
+    },
+    [publishStudioNotice],
+  )
+
+  const onEyedropperSample = useCallback(
+    (sampled: string) => {
+      setColor(sampled)
+      setFillStyle(solidStyle(sampled))
+      setTool('draw')
+      publishStudioNotice(`Color set to ${sampled}`)
+    },
+    [publishStudioNotice],
   )
 
   const undo = useCallback(() => {
-    const prev = history.current.undo(strokes)
+    const prev = history.current.undo(artwork())
     if (!prev) return
-    setStrokes(prev)
+    setStrokes(prev.strokes)
+    setFills(prev.fills)
     syncHistoryFlags()
-  }, [strokes, syncHistoryFlags])
+    commitFromEditor({ strokes: prev.strokes, fills: prev.fills })
+  }, [artwork, commitFromEditor, syncHistoryFlags])
 
   const redo = useCallback(() => {
-    const next = history.current.redo(strokes)
+    const next = history.current.redo(artwork())
     if (!next) return
-    setStrokes(next)
+    setStrokes(next.strokes)
+    setFills(next.fills)
     syncHistoryFlags()
-  }, [strokes, syncHistoryFlags])
+    commitFromEditor({ strokes: next.strokes, fills: next.fills })
+  }, [artwork, commitFromEditor, syncHistoryFlags])
 
   const clear = useCallback(() => {
-    if (strokes.length === 0) return
-    history.current.push(strokes)
+    if (strokes.length === 0 && fills.length === 0) return
+    history.current.push(artwork())
     setStrokes([])
+    setFills([])
     syncHistoryFlags()
-  }, [strokes, syncHistoryFlags])
+    commitFromEditor({ strokes: [], fills: [] })
+  }, [artwork, commitFromEditor, fills.length, strokes.length, syncHistoryFlags])
 
   const commitModelChange = useCallback(
     (next: ModelChoice, clearStrokes: boolean) => {
-      if (clearStrokes && strokes.length > 0) {
-        history.current.push(strokes)
+      if (clearStrokes && (strokes.length > 0 || fills.length > 0)) {
+        history.current.push(artwork())
         setStrokes([])
+        setFills([])
         syncHistoryFlags()
         setModelState(next)
-        commitFromEditor({ model: next, strokes: [] })
+        commitFromEditor({ model: next, strokes: [], fills: [] })
       } else {
         setModelState(next)
       }
       setModelSwitchPrompt(null)
     },
-    [commitFromEditor, strokes, syncHistoryFlags],
+    [artwork, commitFromEditor, fills.length, strokes.length, syncHistoryFlags],
   )
 
   const requestModelChange = useCallback(
     (next: ModelChoice) => {
       if (next === model) return
-      if (strokes.length > 0) {
+      if (strokes.length > 0 || fills.length > 0) {
         setModelSwitchPrompt({ next })
         return
       }
       setModelState(next)
     },
-    [model, strokes.length],
+    [fills.length, model, strokes.length],
   )
 
   const onCustomFile = useCallback(
@@ -541,7 +589,7 @@ export function useStudioEditor() {
       setCustomKey(null)
       publishStudioNotice(CUSTOM_REF_BETA_NOTICE)
 
-      if (strokes.length > 0) {
+      if (strokes.length > 0 || fills.length > 0) {
         setModelSwitchPrompt({ next: 'custom' })
       } else {
         setModelState('custom')
@@ -552,7 +600,7 @@ export function useStudioEditor() {
         })
       }
     },
-    [blobUrl, commitFromEditor, publishStudioNotice, strokes.length],
+    [blobUrl, commitFromEditor, fills.length, publishStudioNotice, strokes.length],
   )
 
   const revokeMagicUrls = useCallback(() => {
@@ -627,6 +675,7 @@ export function useStudioEditor() {
     try {
       const captured = await captureSketchForMagic({
         strokes,
+        fills,
         referenceUrl,
         referenceOpacity,
       })
@@ -681,7 +730,7 @@ export function useStudioEditor() {
     } finally {
       magicInFlightRef.current = false
     }
-  }, [referenceOpacity, referenceUrl, revokeMagicUrls, strokes, user?.id])
+  }, [fills, referenceOpacity, referenceUrl, revokeMagicUrls, strokes, user?.id])
 
   const onMagic = useCallback(() => {
     if (!magicEnabled) {
@@ -781,11 +830,27 @@ export function useStudioEditor() {
     setOpacity(clamped)
   }, [])
 
+  const selectColor = useCallback((next: string) => {
+    const hex = next.toUpperCase()
+    setColor(hex)
+    setFillStyle(solidStyle(hex))
+  }, [])
+
   const setColorHex = useCallback((raw: string) => {
     const hex = raw.trim()
     if (!/^#([0-9a-fA-F]{6})$/.test(hex)) return false
-    setColor(hex.toUpperCase())
+    selectColor(hex)
     return true
+  }, [selectColor])
+
+  const selectFillStyle = useCallback((style: FillStyle) => {
+    setFillStyle(style)
+    if (style.kind === 'solid') {
+      setColor(style.color)
+      return
+    }
+    // Fabric / gradient selections imply the Fill tool for the next tap.
+    setTool('fill')
   }, [])
 
   const showComingSoon = useCallback((label: string) => {
@@ -897,6 +962,7 @@ export function useStudioEditor() {
     try {
       const { blob, referenceIncluded } = await exportSketchPng({
         strokes: doc.strokes,
+        fills: doc.fills ?? [],
         referenceUrl: referenceUrlForDocument(doc),
         referenceOpacity: doc.dimmed ? 0.4 : 1,
       })
@@ -918,7 +984,7 @@ export function useStudioEditor() {
   const beginSaveDesign = useCallback(() => {
     if (!ready || saveInFlightRef.current) return
     const doc = authoritativeDocRef.current
-    if (doc.strokes.length === 0) {
+    if (doc.strokes.length === 0 && (doc.fills?.length ?? 0) === 0) {
       publishStudioNotice('Draw something before saving a design.')
       return
     }
@@ -989,7 +1055,9 @@ export function useStudioEditor() {
     if (cloudDirtyRef.current || cloudInFlightRef.current > 0) return 'unsynced'
     const doc = authoritativeDocRef.current
     if (designIdRef.current === null) {
-      return doc.strokes.length === 0 ? 'clean-empty' : 'unsynced'
+      return doc.strokes.length === 0 && (doc.fills?.length ?? 0) === 0
+        ? 'clean-empty'
+        : 'unsynced'
     }
     if (syncedRevisionRef.current === null) return 'unsynced'
     return syncedFingerprintRef.current === draftContentFingerprint(documentForCloud(doc))
@@ -1152,7 +1220,10 @@ export function useStudioEditor() {
             ? 'Studio is still restoring your working draft.'
             : 'Your Studio sketch has changes that are not saved to your account yet.',
         })
-      } else if (authoritativeDocRef.current.strokes.length === 0) {
+      } else if (
+        authoritativeDocRef.current.strokes.length === 0 &&
+        (authoritativeDocRef.current.fills?.length ?? 0) === 0
+      ) {
         performOpen(record)
       } else {
         setOpenDesign({ phase: 'confirm', record })
@@ -1237,6 +1308,7 @@ export function useStudioEditor() {
     user,
     ready,
     strokes,
+    fills,
     tool,
     setTool,
     sizeId,
@@ -1246,8 +1318,10 @@ export function useStudioEditor() {
     opacity,
     setBrushOpacity,
     color,
-    setColor,
+    setColor: selectColor,
     setColorHex,
+    fillStyle,
+    setFillStyle: selectFillStyle,
     model,
     setModel: requestModelChange,
     customUrl: blobUrl ?? customUrl,
@@ -1257,6 +1331,9 @@ export function useStudioEditor() {
     referenceUrl,
     referenceOpacity,
     onStrokeComplete,
+    onFillComplete,
+    onFillError,
+    onEyedropperSample,
     undo,
     redo,
     clear,
