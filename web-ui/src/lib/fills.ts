@@ -183,6 +183,46 @@ export function parseFillOp(raw: unknown): FillOp | null {
   }
 }
 
+export type PersistableFillResult =
+  | { ok: true; fill: FillOp }
+  | { ok: false; message: string }
+
+/**
+ * Ensure a newly generated fill can round-trip through saved-design parse bounds
+ * before it enters editor state. Never silently truncate contours.
+ */
+export function checkPersistableFill(fill: FillOp): PersistableFillResult {
+  const parsed = parseFillOp(fill)
+  if (parsed) return { ok: true, fill: parsed }
+
+  if (!Array.isArray(fill.contour) || fill.contour.length < 6 || fill.contour.length % 2 !== 0) {
+    return {
+      ok: false,
+      message: 'That fill outline is too small to keep. Try tapping inside a larger closed area.',
+    }
+  }
+  if (fill.contour.length > MAX_FILL_CONTOUR_VALUES) {
+    return {
+      ok: false,
+      message:
+        'That fill outline is too detailed to save. Try a simpler closed region — nothing was added.',
+    }
+  }
+  for (const n of fill.contour) {
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < CONTOUR_COORD_MIN || n > CONTOUR_COORD_MAX) {
+      return {
+        ok: false,
+        message:
+          'That fill could not be saved in a form that reopens correctly. Nothing was added.',
+      }
+    }
+  }
+  return {
+    ok: false,
+    message: 'That fill could not be saved in a form that reopens correctly. Nothing was added.',
+  }
+}
+
 function parseFillStyle(raw: unknown): FillStyle | null {
   if (!raw || typeof raw !== 'object') return null
   const s = raw as Record<string, unknown>

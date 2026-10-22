@@ -20,7 +20,7 @@ import {
 import { documentForCloud } from '@/services/designsApi'
 import { isMagicUiEnabled } from '@/config/magicUi'
 import { downloadBlob, exportFilename, exportSketchPng } from '@/lib/exportCanvas'
-import { solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
+import { checkPersistableFill, solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
 import { MAX_SNAPSHOT_FILLS } from '@/lib/savedDesign'
 import { captureSketchForMagic } from '@/lib/sketchCapture'
 import {
@@ -498,8 +498,14 @@ export function useStudioEditor() {
         )
         return
       }
+      // Contours must satisfy persisted-fill bounds before any state/save write.
+      const persistable = checkPersistableFill(fill)
+      if (!persistable.ok) {
+        publishStudioNotice(persistable.message)
+        return
+      }
       history.current.push(artwork())
-      const nextFills = [...fills, fill]
+      const nextFills = [...fills, persistable.fill]
       setFills(nextFills)
       syncHistoryFlags()
       commitFromEditor({ strokes, fills: nextFills })

@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-22. **GitHub `main`:** `dc9e31aa` (PR #27 WEB-V4A Magic React merged). **Production backend/frontend:** `dc9e31aa` · Alembic **`004`** · `REGISTRATION_ENABLED=true` · registration UI **on** · Magic UI **on** (`VITE_MAGIC_UI_ENABLED=true`) · Nginx AI allowlist **on** (polish + job/image) · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. Registration second-user acceptance **PASS**. **Paid Magic generation: not yet run** (operator deferred; Cursor paid calls = 0). **WEB-V4B** fashion toolkit draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) — PM corrections applied; **STOP for Technical PM merge review** — not merged, not deployed.
+**Last updated:** 2026-10-22. **GitHub `main`:** `dc9e31aa` (PR #27 WEB-V4A Magic React merged). **Production backend/frontend:** `dc9e31aa` · Alembic **`004`** · `REGISTRATION_ENABLED=true` · registration UI **on** · Magic UI **on** (`VITE_MAGIC_UI_ENABLED=true`) · Nginx AI allowlist **on** (polish + job/image) · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. Registration second-user acceptance **PASS**. **Paid Magic generation: not yet run** (operator deferred; Cursor paid calls = 0). **WEB-V4B** fashion toolkit draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) — final eyedropper layering + persistable-fill guard amendment; **STOP for Technical PM merge decision** — not merged, not deployed.
 
 **Phase:** Protected family beta. Production Magic pipeline is **ready for one operator browser test**, but the operator chose to finish essential Studio drawing tools (WEB-V4B) before the first paid generation.
 
@@ -51,7 +51,7 @@
 
 **WEB-V4A (Magic → React):** **MERGED** PR [#27](https://github.com/perielad2-netizen/FashionRise/pull/27) at `dc9e31aa` and **deployed**. React Studio uses Unity polish + poll/recovery; authenticated job image; `image_base64` redacted from job API; See last result after refresh. Production Magic UI on; Nginx AI allowlist live. **No paid generation yet** (operator deferred). Docs-only draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) records activation — **do not merge as a deploy artifact**.
 
-**WEB-V4B (Fashion design toolkit):** Draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) on `cursor/web-v4b-fashion-toolkit-77c6`. Functional color picker + fashion palette + eyedropper, bucket fill, bundled fabrics, gradients, undo/redo, V1-compatible optional `fills[]`, shared Konva/PNG/Magic paint. **PM corrections (2026-10-22):** fill barriers = visible ink after erase (morphological gap-close from rendered ink); eyedropper samples composite rendered pixels; save/fill contour limits refuse oversized/malformed payloads without silent truncation; olive swatch `#6B8E23`. Curved-dress browser acceptance PASS. **No Magic spend, no merge, no deploy, no worker/Nginx/prompt changes.**
+**WEB-V4B (Fashion design toolkit):** Draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) on `cursor/web-v4b-fashion-toolkit-77c6`. Functional color picker + fashion palette + eyedropper, bucket fill, bundled fabrics, gradients, undo/redo, V1-compatible optional `fills[]`, shared Konva/PNG/Magic paint. **PM corrections (2026-10-22):** fill barriers = visible ink after erase; eyedropper samples composite pixels; save/fill contour limits; olive `#6B8E23`. **Final amendment:** eyedropper uses shared `compositeFillAndInkLayers` (ink-only eraser; fill remains under erased strokes); `checkPersistableFill` refuses oversized new contours before editor state/save. Curved-dress acceptance PASS. **No Magic spend, no merge, no deploy, no worker/Nginx/prompt changes.**
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -283,7 +283,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM merge review of WEB-V4B draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) (fashion toolkit + corrections). Merge only when accepted; do **not** deploy until PM says so.
+1. **Exact next action:** Technical PM merge decision on WEB-V4B draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) (toolkit + corrections + final eyedropper/persistable-fill amendment). Merge only when accepted; do **not** deploy until PM says so.
 2. After WEB-V4B is on production (or accepted for local use): **one operator paid Magic browser test** on current production `dc9e31aa` (or post-V4B deploy). Cursor must not spend OpenAI credits.
 3. **Do not auto-merge** unrelated draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status docs).
 4. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
@@ -394,20 +394,21 @@ FashionRise/
 | Gate | Result |
 |------|--------|
 | Scope | Color picker + fashion palette + eyedropper; bucket fill; 6 bundled fabrics; gradients; undo/redo; V1-compatible `fills[]`; PNG/Magic capture parity via shared `paintFillOps` |
-| PM corrections | Fill barriers from `paintInkStrokes` + dilate; erase removes seams; eyedropper via `sampleArtworkPixel` (solid/fabric/gradient/ink); refuse fills at `MAX_SNAPSHOT_FILLS` (500) and reject contours `> MAX_FILL_CONTOUR_VALUES` / out-of-bounds (no silent truncate); olive `#6B8E23` |
-| `npm test` | **Pass: 255 tests, 52 files** (+ barrier erase/seam, sampleArtworkPixel, contour/limit, olive) |
+| PM corrections | Fill barriers from `paintInkStrokes` + dilate; eyedropper via `sampleArtworkPixel` + shared `compositeFillAndInkLayers` (ink-only erase); refuse fills at `MAX_SNAPSHOT_FILLS` (500); `checkPersistableFill` before state write; olive `#6B8E23` |
+| `npm test` | **Pass** (focused eyedropper/fill/export regressions + full suite; see changelog) |
 | `npm run lint` / `npm run build` / SW safety | **Pass** (pre-existing oxlint warnings only); `assert-sw-access-safe` **ok=true** |
-| Curved-dress browser acceptance | **PASS** — sealed bodice/skirt/sleeve; solid + denim fabric + rose-violet gradient; eyedropper; undo/redo; save; reload; reopen Replace-and-open (5 fills restored); PNG export matches display; mock Magic capture 164KB with all styles; **no polish enqueue** |
+| Curved-dress browser acceptance | **PASS** — sealed bodice/skirt/sleeve; solid + denim fabric + rose-violet gradient; eyedropper; undo/redo; save; reload; reopen; PNG export; mock Magic capture; **no polish enqueue** |
 | OpenAI / paid Magic | **None** |
 | Worker / Nginx / prompts / Unity pipeline | **Unchanged** |
 | Production deploy | **Not done** (draft only) |
-| Blockers | **Technical PM merge review of PR #29** |
+| Blockers | **Technical PM merge decision on PR #29** |
 | Known limits | Fill needs a closed ink outline (open shapes get feedback); no layer manager; fabrics are procedural tiles |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-22 | **WEB-V4B final amendment (draft PR #29):** eyedropper `compositeFillAndInkLayers` (erase-over-fill samples fill); `checkPersistableFill` before editor state; focused + full FE tests/lint/build/SW. **STOP for Technical PM merge decision.** No Magic spend / no deploy. |
 | 2026-10-22 | **WEB-V4B PM corrections (draft PR #29):** visible-ink fill barriers + erase/seam tests; composite eyedropper; fill/contour save limits without silent truncate; olive swatch fix; curved-dress acceptance PASS (255 tests). **STOP for Technical PM merge review.** No Magic spend / no deploy. |
 | 2026-10-21 | **WEB-V4B fashion toolkit (draft):** functional fill/fabric/gradient/eyedropper; optional `fills[]` on draft/saved V1 schemas; shared Konva/PNG/Magic paint path; no paid Magic / no deploy. |
 | 2026-10-21 | **WEB-V4A Magic production activation:** release `dc9e31aa`, worker + Nginx AI allowlist + Magic UI on; **0 paid generations**; operator deferred first browser Magic test until toolkit. Docs PR #28. |

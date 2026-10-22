@@ -1,6 +1,5 @@
-import { paintInkStrokes } from '@/lib/exportCanvas'
+import { compositeFillAndInkLayers } from '@/lib/exportCanvas'
 import type { FillOp } from '@/lib/fills'
-import { paintFillOps } from '@/lib/paintFills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 
 export type ArtworkSampleInput = {
@@ -22,7 +21,8 @@ export type ArtworkSample = {
 
 /**
  * Sample the final composite pixel at a design-space point using the same
- * fill→ink paint path as Konva preview / PNG / Magic capture (no reference).
+ * fill→ink layering as Konva preview / PNG / Magic capture (no reference).
+ * Erasers remove ink only; fills beneath erased strokes remain sampleable.
  */
 export function sampleArtworkPixel(input: ArtworkSampleInput): ArtworkSample {
   const px = Math.round(input.x)
@@ -38,8 +38,12 @@ export function sampleArtworkPixel(input: ArtworkSampleInput): ArtworkSample {
   if (!ctx) return { hex: '#000000', hit: false }
 
   ctx.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-  paintFillOps(ctx, input.fills)
-  paintInkStrokes(ctx, input.strokes)
+  compositeFillAndInkLayers(ctx, {
+    fills: input.fills,
+    strokes: input.strokes,
+    width: DESIGN_WIDTH,
+    height: DESIGN_HEIGHT,
+  })
 
   const data = ctx.getImageData(px, py, 1, 1).data
   const a = data[3]!

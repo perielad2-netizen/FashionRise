@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  checkPersistableFill,
   cloneFills,
   contourToSvgPath,
   FABRIC_PRESETS,
@@ -114,5 +115,40 @@ describe('fills schema', () => {
         style: { kind: 'solid', color: '#111111' },
       }),
     ).toBeNull()
+  })
+
+  it('checkPersistableFill accepts round-trippable fills and refuses oversized contours', () => {
+    const ok = checkPersistableFill({
+      id: 'ok',
+      contour: [10, 10, 40, 10, 40, 40, 10, 40],
+      style: { kind: 'solid', color: '#B91C1C' },
+      seedX: 20,
+      seedY: 20,
+    })
+    expect(ok.ok).toBe(true)
+    if (ok.ok) expect(ok.fill.style).toEqual({ kind: 'solid', color: '#B91C1C' })
+
+    const hugeContour = Array.from({ length: MAX_FILL_CONTOUR_VALUES + 2 }, (_, i) => i % 200)
+    const refused = checkPersistableFill({
+      id: 'huge',
+      contour: hugeContour,
+      style: { kind: 'solid', color: '#111111' },
+      seedX: 0,
+      seedY: 0,
+    })
+    expect(refused.ok).toBe(false)
+    if (!refused.ok) {
+      expect(refused.message).toMatch(/too detailed|Nothing was added/i)
+    }
+
+    const oob = checkPersistableFill({
+      id: 'oob',
+      contour: [0, 0, 10, 0, 10, 50_000],
+      style: { kind: 'solid', color: '#111111' },
+      seedX: 0,
+      seedY: 0,
+    })
+    expect(oob.ok).toBe(false)
+    if (!oob.ok) expect(oob.message).toMatch(/reopens correctly|Nothing was added/i)
   })
 })

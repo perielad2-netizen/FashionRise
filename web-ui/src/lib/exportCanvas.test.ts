@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { paintInkStrokes } from '@/lib/exportCanvas'
+import { compositeFillAndInkLayers, paintInkStrokes } from '@/lib/exportCanvas'
+import type { FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
 
 vi.mock('@/lib/freehand', () => ({
@@ -60,5 +61,85 @@ describe('paintInkStrokes (ink-only eraser)', () => {
     expect(ops).toEqual(['fill:source-over', 'fill:destination-out'])
     // Eraser never draws onto a shared base — callers must composite ink over base separately.
     expect(ctx.drawImage).not.toHaveBeenCalled()
+  })
+})
+
+describe('compositeFillAndInkLayers', () => {
+  it('draws fill and ink from separate canvases onto the target', () => {
+    const created: unknown[] = []
+    const realCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
+      if (tag !== 'canvas') return realCreate(tag)
+      const canvas = {
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          scale: vi.fn(),
+          fillStyle: '#000',
+          globalAlpha: 1,
+          globalCompositeOperation: 'source-over',
+          save: vi.fn(),
+          restore: vi.fn(),
+          fill: vi.fn(),
+          fillRect: vi.fn(),
+          beginPath: vi.fn(),
+          moveTo: vi.fn(),
+          lineTo: vi.fn(),
+          closePath: vi.fn(),
+          createLinearGradient: () => ({ addColorStop: vi.fn() }),
+          createPattern: () => null,
+          drawImage: vi.fn(),
+          setLineDash: vi.fn(),
+          clip: vi.fn(),
+        }),
+      }
+      created.push(canvas)
+      return canvas as unknown as HTMLCanvasElement
+    }) as typeof document.createElement)
+
+    const drawImage = vi.fn()
+    const target = {
+      fillStyle: '#000',
+      globalAlpha: 1,
+      globalCompositeOperation: 'source-over',
+      fillRect: vi.fn(),
+      fill: vi.fn(),
+      drawImage,
+      save: vi.fn(),
+      restore: vi.fn(),
+    }
+
+    const fills: FillOp[] = [
+      {
+        id: 'f',
+        contour: [0, 0, 10, 0, 10, 10, 0, 10],
+        style: { kind: 'solid', color: '#B91C1C' },
+        seedX: 5,
+        seedY: 5,
+      },
+    ]
+    const strokes: Stroke[] = [
+      {
+        id: 'd',
+        tool: 'draw',
+        points: [0, 0, 0.5, 10, 10, 0.5],
+        color: '#111111',
+        size: 4,
+        opacity: 1,
+      },
+    ]
+
+    compositeFillAndInkLayers(target, {
+      fills,
+      strokes,
+      width: 32,
+      height: 32,
+    })
+
+    expect(created).toHaveLength(2)
+    expect(drawImage).toHaveBeenCalledTimes(2)
+    expect(drawImage.mock.calls[0]![0]).toBe(created[0])
+    expect(drawImage.mock.calls[1]![0]).toBe(created[1])
+    vi.restoreAllMocks()
   })
 })
