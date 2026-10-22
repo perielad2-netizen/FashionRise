@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-22. **GitHub `main`:** `d7e37b59` (WEB-V4B PR #29 + WEB-V4C PR #30 merged). **Production backend/frontend:** **`d7e37b59`** · Alembic **`005`** live · `REGISTRATION_ENABLED=true` · registration UI **on** · Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Paid Magic generation: not yet run** (Cursor paid calls = 0). **Production fill-autosave acceptance BLOCKED** — hotfix draft PR on `cursor/hotfix-fill-fingerprint-77c6` — **STOP for Technical PM review** (do not merge/deploy yet).
+**Last updated:** 2026-10-22. **GitHub `main`:** `d7e37b59` (WEB-V4B PR #29 + WEB-V4C PR #30 merged). **Production backend/frontend:** **`d7e37b59`** · Alembic **`005`** live · `REGISTRATION_ENABLED=true` · registration UI **on** · Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Paid Magic generation: not yet run** (Cursor paid calls = 0). **Production fill-autosave acceptance BLOCKED** — hotfix draft PR [#32](https://github.com/perielad2-netizen/FashionRise/pull/32) on `cursor/hotfix-fill-fingerprint-77c6` — **STOP for Technical PM review** (do not merge/deploy yet).
 
 **Phase:** Protected family beta. V4B/V4C are live on production. Fill-only cloud autosave is broken until the Studio content-fingerprint hotfix lands.
 
@@ -94,7 +94,7 @@
 | **WEB-V4A Magic React** | **MERGED** PR #27 @ `dc9e31aa` and **deployed**; paid generation **PENDING** operator click |
 | **WEB-V4B Fashion toolkit** | **MERGED** PR #29 · **deployed** @ `d7e37b59` |
 | **WEB-V4C Custom fabrics** | **MERGED** PR #30 · **deployed** @ `d7e37b59` / Alembic **`005`** |
-| **Hotfix: fill autosave fingerprint** | **Draft** `cursor/hotfix-fill-fingerprint-77c6` — production acceptance **BLOCKED**; **STOP for Technical PM review** |
+| **Hotfix: fill autosave fingerprint** | **Draft PR [#32](https://github.com/perielad2-netizen/FashionRise/pull/32)** — production acceptance **BLOCKED**; **STOP for Technical PM review** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status — do not auto-merge). |
@@ -289,7 +289,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM review + approve merge of fill-autosave fingerprint hotfix (`cursor/hotfix-fill-fingerprint-77c6`), then authorize a **backend-only** production roll-forward of that SHA (Alembic stays **`005`** — no migration). After deploy: operator keeps the open Studio tab / IndexedDB draft, chooses **Keep this device**, confirm Saved, reopen cloud draft and verify fills.
+1. **Exact next action:** Technical PM review + approve merge of fill-autosave fingerprint hotfix [PR #32](https://github.com/perielad2-netizen/FashionRise/pull/32), then authorize a **backend-only** production roll-forward of that SHA (Alembic stays **`005`** — no migration). After deploy: operator keeps the open Studio tab / IndexedDB draft, chooses **Keep this device**, confirm Saved, reopen cloud draft and verify fills.
 2. Until hotfix is live: **do not** select Use cloud draft, clear browser storage/IndexedDB, delete designs, or click Magic.
 3. After fill-autosave acceptance PASS: **one operator paid Magic browser test**. Cursor must not spend OpenAI credits.
 4. **Do not auto-merge** unrelated draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status docs).
@@ -422,7 +422,7 @@ FashionRise/
 | Blocked operations | Merge, production deploy, Alembic `005` on prod, Nginx reload, paid Magic |
 | Next action | **Technical PM final review of draft PR #30** → approve merge; separate auth later for migrate `005` + fabrics Nginx allowlist + FE deploy |
 
-## Hotfix verification — fill fingerprint (draft `cursor/hotfix-fill-fingerprint-77c6`)
+## Hotfix verification — fill fingerprint (draft PR [#32](https://github.com/perielad2-netizen/FashionRise/pull/32))
 
 | Gate | Result |
 |------|--------|
