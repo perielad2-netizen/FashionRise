@@ -3,16 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-22. **GitHub `main`:** `d7e37b59` (WEB-V4B PR #29 + WEB-V4C PR #30 merged). **Production backend/frontend:** **`d7e37b59`** · Alembic **`005`** live · `REGISTRATION_ENABLED=true` · registration UI **on** · Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Paid Magic generation: not yet run** (Cursor paid calls = 0). **Production fill-autosave acceptance BLOCKED** — hotfix draft PR [#32](https://github.com/perielad2-netizen/FashionRise/pull/32) on `cursor/hotfix-fill-fingerprint-77c6` — **STOP for Technical PM review** (do not merge/deploy yet).
+**Last updated:** 2026-10-22. **GitHub `main`:** `c21fee6b` (PR #32 fill-fingerprint hotfix merged + backend deployed). **Production backend:** **`c21fee6b`** · **Production frontend:** **`d7e37b59`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **First paid Magic browser test: COMPLETED** — **quality acceptance FAILED** (too pale / not professional fashion polish). Cursor paid calls during agent work remain 0 for new jobs. **Active drafts:** WEB-V4D PR #34 (Studio UX / legacy croquis) + **WEB-V4E Magic quality (this PR)** — **STOP for Technical PM review** (do not merge/deploy).
 
-**Phase:** Protected family beta. V4B/V4C are live on production. Fill-only cloud autosave is broken until the Studio content-fingerprint hotfix lands.
+**Phase:** Protected family beta. Fill-autosave hotfix is live on the API. Magic quality needs this WEB-V4E prompt/pipeline pass before another controlled operator generation.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`d7e37b59…`** — Nginx root under `/var/www/fashionrise/releases/…`. `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). |
-| Backend (FastAPI + PostgreSQL) | **`d7e37b59`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone) |
+| Backend (FastAPI + PostgreSQL) | **`c21fee6b`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone) |
 | AI worker | Standalone `fashionrise-ai-worker` · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` |
 | Database | `fashionrise_beta` — Alembic **`005`** · `registration_invitations` + `fabric_assets` present |
 | Deploy backup | Magic activation: `/var/backups/fashionrise/magic-activation-20261021T182235Z` |
@@ -83,23 +83,25 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub `main` | **`d7e37b59`** — includes PR #29 (WEB-V4B) + PR #30 (WEB-V4C) |
-| Production frontend / backend | **`d7e37b59` / `d7e37b59`** · Alembic **`005`** · **fill-autosave acceptance BLOCKED** |
+| GitHub `main` | **`c21fee6b`** — includes PR #32 fill-fingerprint hotfix |
+| Production frontend / backend | **`d7e37b59` / `c21fee6b`** · Alembic **`005`** |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
 | **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator-reported desktop 5/5, tablet/cross-device 4/4, offline retry, conflict detection PASS (see above). |
 | **WEB-V3B** | **MERGED** + **production registration activated** (PR #26 @ `46747e85`, Alembic `004`) |
-| **WEB-V4A Magic React** | **MERGED** PR #27 @ `dc9e31aa` and **deployed**; paid generation **PENDING** operator click |
+| **WEB-V4A Magic React** | **MERGED** PR #27 @ `dc9e31aa` and **deployed** |
 | **WEB-V4B Fashion toolkit** | **MERGED** PR #29 · **deployed** @ `d7e37b59` |
 | **WEB-V4C Custom fabrics** | **MERGED** PR #30 · **deployed** @ `d7e37b59` / Alembic **`005`** |
-| **Hotfix: fill autosave fingerprint** | **Draft PR [#32](https://github.com/perielad2-netizen/FashionRise/pull/32)** — production acceptance **BLOCKED**; **STOP for Technical PM review** |
+| **Hotfix: fill autosave fingerprint** | **MERGED** PR #32 @ `c21fee6b` · **backend deployed** |
+| **WEB-V4D Studio UX + models** | **Draft PR #34** (separate branch) — legacy croquis compat; **STOP for PM re-review** |
+| **WEB-V4E Magic quality** | **This draft** — professional refinement prompts; no generate fallback; **STOP for PM review** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status — do not auto-merge). |
 | INFRA-2 docs | Separate draft PR #10. |
-| Paid OpenAI | **Pipeline ready; 0 paid generations so far** (operator deferred until WEB-V4B toolkit) |
+| Paid OpenAI | **First paid Magic browser test COMPLETED** — **quality FAILED**; Cursor agent paid calls remain 0 for new jobs |
 | Safety flags (prod) | Registration **on** (invite-gated). Magic AI allowlisted (polish + job/image only). Uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
 
 ---
@@ -289,9 +291,9 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM review + approve merge of fill-autosave fingerprint hotfix [PR #32](https://github.com/perielad2-netizen/FashionRise/pull/32), then authorize a **backend-only** production roll-forward of that SHA (Alembic stays **`005`** — no migration). After deploy: operator keeps the open Studio tab / IndexedDB draft, chooses **Keep this device**, confirm Saved, reopen cloud draft and verify fills.
-2. Until hotfix is live: **do not** select Use cloud draft, clear browser storage/IndexedDB, delete designs, or click Magic.
-3. After fill-autosave acceptance PASS: **one operator paid Magic browser test**. Cursor must not spend OpenAI credits.
+1. **Exact next action:** Technical PM review of **WEB-V4E Magic quality** (this draft) and amended **WEB-V4D PR #34**. No merge/deploy until authorized.
+2. If operator still has a pre-hotfix local conflict: choose **Keep this device** once (do not clear IndexedDB) and confirm Saved.
+3. After WEB-V4E acceptance + authorized backend deploy: **one new controlled operator paid Magic browser test** (human visual rubric in `docs/WEB-V4E-MAGIC-QUALITY.md`). Cursor must not spend OpenAI credits.
 4. **Do not auto-merge** unrelated draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status docs).
 5. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
 6. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10.
@@ -439,10 +441,26 @@ FashionRise/
 | Blocked | Merge, production deploy of hotfix, Magic click |
 | Next | **Technical PM review** → merge → backend-only deploy → operator Keep-this-device recovery |
 
+## WEB-V4E verification (draft — Magic quality)
+
+| Gate | Result |
+|------|--------|
+| Scope | Backend Magic prompts + edit-only pipeline; **no FE / migration / Nginx** |
+| Models | **Unchanged** — `gpt-6-luna` + `gpt-image-1` (`input_fidelity=high`) |
+| Prompt | Professional fashion refinement; design identity + refine_ok; no light-wash / child-sketch retain |
+| Fallback | **Removed** reference-less `images.generate`; edit failure → job fail |
+| Provenance | `image_provenance: images.edit` when look stored |
+| Focused tests | `tests/test_magic_quality_prompts.py` + migration suite (mocked; **0 paid calls**) |
+| Visual acceptance | **Not claimed** — human rubric prepared for post-deploy operator run |
+| Production | **Not deployed** |
+| Next | **Technical PM review** → authorize deploy → one controlled operator Magic test |
+
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-22 | **WEB-V4E Magic quality (draft):** first paid Magic quality FAILED; professional refinement prompts; no generate fallback; offline prompt/pipeline tests; rubric prepared; models unchanged; **STOP for Technical PM review** (no merge/deploy/paid AI). |
+| 2026-10-22 | **Fill-autosave hotfix MERGED + backend deployed** PR #32 @ `c21fee6b` (FE still `d7e37b59`). |
 | 2026-10-22 | **URGENT fill-autosave hotfix (draft):** production `d7e37b59`/Alembic `005` acceptance BLOCKED; fingerprint now includes fills; Keep-device path covered by API tests; no FE change; no paid Magic; **STOP for Technical PM review** (do not merge/deploy). |
 | 2026-10-22 | **WEB-V4B+V4C production deploy** at `d7e37b59` / Alembic `005` (operator-authorized). Subsequent browser acceptance found fill-autosave defect. |
 | 2026-10-22 | **WEB-V4C PM corrections (draft PR #30):** private `private_fabrics/` storage; account-scoped caches; fashion base-tile scale; header dim reject; Nginx fabrics allowlist doc (verified missing live; not applied); FE 266 / BE fabric 6/6; multi-scale + privacy demo. **STOP for final Technical PM review.** |
