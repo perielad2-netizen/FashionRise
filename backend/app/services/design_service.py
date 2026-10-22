@@ -54,10 +54,26 @@ def _is_studio_payload(meta: dict[str, Any] | None, design_data: dict[str, Any] 
     return meta.get("draftKind") == STUDIO_DRAFT_KIND or design_data.get("schema") == "fashionrise.studio.draft.v1"
 
 
+def _normalize_studio_fills(design_data: dict[str, Any] | None) -> list[Any]:
+    """Normalize garment fills for fingerprinting.
+
+    Older Studio V1 drafts omit `fills`; treat missing and empty `[]` as equivalent
+    so legacy reopen/retry stays idempotent while fill-only edits still advance.
+    """
+    data = design_data or {}
+    fills = data.get("fills", [])
+    if fills is None:
+        return []
+    if not isinstance(fills, list):
+        return []
+    return fills
+
+
 def _studio_content_fingerprint(design_data: dict[str, Any] | None) -> str:
     data = design_data or {}
     payload = {
         "strokes": data.get("strokes"),
+        "fills": _normalize_studio_fills(data),
         "model": data.get("model"),
         "customReferenceUrl": data.get("customReferenceUrl"),
         "customReferenceKey": data.get("customReferenceKey"),
