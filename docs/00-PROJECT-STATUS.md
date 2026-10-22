@@ -55,7 +55,7 @@
 
 **WEB-V4C (Custom fabric upload):** **MERGED** PR [#30](https://github.com/perielad2-netizen/FashionRise/pull/30) and **deployed** at `d7e37b59` / Alembic **`005`**. Private `fabric_assets` + owner-auth image route live.
 
-**Production defect (2026-10-22) — fill autosave / Keep-this-device:** Browser acceptance **BLOCKED**. Fills render, but cloud autosave surfaces “Draft recovery conflict”; Keep-this-device → “Save failed”. **Root cause:** `design_service._studio_content_fingerprint()` omitted `fills`, so fill-only PUTs were treated as identical content and returned the unchanged draft; frontend correctly flagged a mismatch. **Correction (draft hotfix):** include normalized `fills` in the fingerprint (`None`/absent ≡ `[]`); OCC/locks/409/idempotency unchanged. Frontend already fingerprints fills — **no FE code change**. **Do not** clear IndexedDB, force cloud over local, delete drafts, or click Magic.
+**Production defect (2026-10-22) — fill autosave / Keep-this-device:** **Hotfix MERGED + backend deployed** at `c21fee6b`. Controlled API regression passed. Operator may still need to choose **Keep this device** once in any leftover conflict UI. **WEB-V4D** (this draft) is a separate frontend UX pass and does not change that API fix.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
