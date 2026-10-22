@@ -450,7 +450,7 @@ FashionRise/
 | Prompt | Professional fashion refinement; design identity + refine_ok; no light-wash / child-sketch retain |
 | Fallback | **Removed** reference-less `images.generate`; edit failure → job fail |
 | Provenance | `image_provenance: images.edit` when look stored |
-| Focused tests | `tests/test_magic_quality_prompts.py` + migration suite (mocked; **0 paid calls**) |
+| Focused tests | `test_magic_quality_prompts.py` **14/14** + migration suite **35** related (**49** combined mocked; **0 paid calls**) |
 | Visual acceptance | **Not claimed** — human rubric prepared for post-deploy operator run |
 | Production | **Not deployed** |
 | Next | **Technical PM review** → authorize deploy → one controlled operator Magic test |

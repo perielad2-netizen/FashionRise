@@ -59,7 +59,7 @@ Operator sample must remain recognizable: wide-brimmed hat, deep V neckline, flo
 
 ## Tests (offline)
 
-`pytest backend/tests/test_magic_quality_prompts.py` (+ existing OpenAI migration suite). Coverage:
+`pytest backend/tests/test_magic_quality_prompts.py` → **14/14** (+ OpenAI migration suite; **49** combined). Coverage:
 
 - Professional refinement + fidelity language
 - Operator-sample attributes in edit prompt
