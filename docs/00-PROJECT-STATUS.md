@@ -481,8 +481,10 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Lint | oxlint warnings only (no errors); unused-import cleaned in new tests |
 | TypeScript / production build | `tsc -b` + vite build **PASS** |
 | SW safety | `check:sw` **ok=true** (no NavigationRoute / HTML precache) |
+| Browser QA (DEV `/_design/v4f`) | Desktop / tablet / mobile / short-height / ~125% zoom: picker HEX↔RGB, black/white, Apply/Cancel/Esc; Magic full portrait (HAT+SHOES) + actions accessible |
 | Paid OpenAI during implementation | **0** |
 | Merge / deploy | **Blocked** — STOP for Technical PM review |
+| Outstanding Studio acceptance | Broader signed-in Studio (croquis/fills/save/export/focus) still operator-pending on production |
 
 ## Changelog (handoff doc only)
 
