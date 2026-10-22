@@ -8,7 +8,7 @@ export function V4fUiLabPage() {
   const [color, setColor] = useState('#C2185B')
   const [fillStyle, setFillStyle] = useState<FillStyle>(() => solidStyle('#C2185B'))
   const [eyedropper, setEyedropper] = useState(false)
-  const [magicOpen, setMagicOpen] = useState(true)
+  const [magicOpen, setMagicOpen] = useState(false)
   const lookObjectUrl = useMemo(() => makePortraitLookUrl(), [])
   const sketchObjectUrl = useMemo(() => makeSketchUrl(), [])
 
