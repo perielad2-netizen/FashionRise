@@ -40,7 +40,7 @@ export const FASHION_PALETTE: FashionPaletteSwatch[] = [
   { id: 'crimson', label: 'Crimson', color: '#B91C1C' },
   { id: 'coral', label: 'Coral', color: '#F97316' },
   { id: 'gold', label: 'Gold', color: '#D4A017' },
-  { id: 'olive', label: 'Olive', color: '#6B7280' },
+  { id: 'olive', label: 'Olive', color: '#6B8E23' },
   { id: 'forest', label: 'Forest', color: '#166534' },
   { id: 'teal', label: 'Teal', color: '#0F766E' },
   { id: 'sky', label: 'Sky', color: '#38BDF8' },
@@ -128,6 +128,13 @@ export const GRADIENT_PRESETS: GradientPreset[] = [
   },
 ]
 
+/** Max flat contour values ([x,y,...]) accepted when parsing persisted fills. */
+export const MAX_FILL_CONTOUR_VALUES = 4_000
+/** Soft design-space pad: reject wildly out-of-range coordinates (malformed payloads). */
+const DESIGN_PAD = 64
+const CONTOUR_COORD_MIN = -DESIGN_PAD
+const CONTOUR_COORD_MAX = 1024 + DESIGN_PAD
+
 export function createFillId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
   return `fill_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -154,16 +161,25 @@ export function parseFillOp(raw: unknown): FillOp | null {
   if (!raw || typeof raw !== 'object') return null
   const f = raw as Partial<FillOp>
   if (!Array.isArray(f.contour) || f.contour.length < 6) return null
-  const contour = f.contour.filter((n) => typeof n === 'number')
+  // Reject oversized / malformed contours outright — never silently truncate.
+  if (f.contour.length > MAX_FILL_CONTOUR_VALUES) return null
+  const contour: number[] = []
+  for (const n of f.contour) {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return null
+    if (n < CONTOUR_COORD_MIN || n > CONTOUR_COORD_MAX) return null
+    contour.push(n)
+  }
   if (contour.length < 6 || contour.length % 2 !== 0) return null
   const style = parseFillStyle(f.style)
   if (!style) return null
+  const seedX = typeof f.seedX === 'number' && Number.isFinite(f.seedX) ? f.seedX : contour[0]!
+  const seedY = typeof f.seedY === 'number' && Number.isFinite(f.seedY) ? f.seedY : contour[1]!
   return {
     id: typeof f.id === 'string' && f.id ? f.id : createFillId(),
     contour,
     style,
-    seedX: typeof f.seedX === 'number' ? f.seedX : contour[0]!,
-    seedY: typeof f.seedY === 'number' ? f.seedY : contour[1]!,
+    seedX,
+    seedY,
   }
 }
 

@@ -3,8 +3,10 @@ import {
   cloneFills,
   contourToSvgPath,
   FABRIC_PRESETS,
+  FASHION_PALETTE,
   fabricStyle,
   gradientStyleFromPreset,
+  MAX_FILL_CONTOUR_VALUES,
   parseFillOp,
   solidStyle,
 } from '@/lib/fills'
@@ -84,5 +86,33 @@ describe('fills schema', () => {
     expect(fabricStyle('lace')?.fabricId).toBe('lace')
     expect(gradientStyleFromPreset('champagne')?.colors[0]).toBe('#F8F4F0')
     expect(contourToSvgPath([0, 0, 10, 0, 10, 10])).toMatch(/^M 0 0 L 10 0 L 10 10 Z$/)
+  })
+
+  it('labels olive with a true olive green (not grey)', () => {
+    const olive = FASHION_PALETTE.find((s) => s.id === 'olive')
+    expect(olive?.color.toUpperCase()).toBe('#6B8E23')
+    expect(olive?.color.toUpperCase()).not.toBe('#6B7280')
+  })
+
+  it('rejects oversized or non-finite contours without truncating', () => {
+    const huge = Array.from({ length: MAX_FILL_CONTOUR_VALUES + 2 }, (_, i) => i)
+    expect(
+      parseFillOp({
+        contour: huge,
+        style: { kind: 'solid', color: '#111111' },
+      }),
+    ).toBeNull()
+    expect(
+      parseFillOp({
+        contour: [0, 0, 10, 0, Number.NaN, 10],
+        style: { kind: 'solid', color: '#111111' },
+      }),
+    ).toBeNull()
+    expect(
+      parseFillOp({
+        contour: [0, 0, 10, 0, 10, 50_000],
+        style: { kind: 'solid', color: '#111111' },
+      }),
+    ).toBeNull()
   })
 })

@@ -21,6 +21,7 @@ import { documentForCloud } from '@/services/designsApi'
 import { isMagicUiEnabled } from '@/config/magicUi'
 import { downloadBlob, exportFilename, exportSketchPng } from '@/lib/exportCanvas'
 import { solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
+import { MAX_SNAPSHOT_FILLS } from '@/lib/savedDesign'
 import { captureSketchForMagic } from '@/lib/sketchCapture'
 import {
   createSaveRequestId,
@@ -490,6 +491,13 @@ export function useStudioEditor() {
 
   const onFillComplete = useCallback(
     (fill: FillOp) => {
+      // Keep saved designs recoverable: refuse fills past the snapshot limit.
+      if (fills.length >= MAX_SNAPSHOT_FILLS) {
+        publishStudioNotice(
+          `This design already has ${MAX_SNAPSHOT_FILLS} fills (the save limit). Undo some fills before adding more.`,
+        )
+        return
+      }
       history.current.push(artwork())
       const nextFills = [...fills, fill]
       setFills(nextFills)

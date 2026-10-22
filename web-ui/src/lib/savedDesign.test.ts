@@ -122,6 +122,28 @@ describe('saved design envelope format', () => {
     expect(parsed!.saveRequestId).toBe('req-saved-1')
   })
 
+  it('accepts fills at the save limit and rejects one past it without truncating', () => {
+    const fill = {
+      id: 'f',
+      contour: [10, 10, 40, 10, 40, 40, 10, 40],
+      style: { kind: 'solid' as const, color: '#B91C1C' },
+      seedX: 20,
+      seedY: 20,
+    }
+    const atLimit = Array.from({ length: 500 }, (_, i) => ({ ...fill, id: `f${i}` }))
+    const ok = parseSavedDesign(
+      savedRow('limit', snapshotFromDocument(doc({ fills: atLimit }))),
+      OWNER,
+    )
+    expect(ok?.snapshot.fills).toHaveLength(500)
+
+    const over = savedRow('over', {
+      ...snapshotFromDocument(doc()),
+      fills: Array.from({ length: 501 }, (_, i) => ({ ...fill, id: `f${i}` })),
+    })
+    expect(parseSavedDesign(JSON.parse(JSON.stringify(over)), OWNER)).toBeNull()
+  })
+
   it('round-trips garment fills and still opens pre-V4B snapshots without fills', () => {
     const withFills = doc({
       fills: [

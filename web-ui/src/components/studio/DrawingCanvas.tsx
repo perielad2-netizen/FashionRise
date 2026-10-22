@@ -6,7 +6,7 @@ import { decidePointer, pressureForPointer } from '@/lib/pointerSession'
 import { floodFillRegion } from '@/lib/floodFill'
 import type { FillOp, FillStyle } from '@/lib/fills'
 import { paintFillOps } from '@/lib/paintFills'
-import { sampleColorFromStyle } from '@/lib/paintFills'
+import { sampleArtworkPixel } from '@/lib/sampleArtworkPixel'
 import {
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
@@ -275,43 +275,10 @@ export function DrawingCanvas({
 
   const sampleAt = useCallback(
     (x: number, y: number) => {
-      // Prefer topmost fill containing the point; else nearest ink; else brush color.
-      for (let i = fills.length - 1; i >= 0; i -= 1) {
-        const fill = fills[i]!
-        if (pointInContour(x, y, fill.contour)) {
-          onEyedropperSample?.(sampleColorFromStyle(fill.style))
-          return
-        }
-      }
-      // Sample from a tiny raster of ink at the point.
-      const canvas = document.createElement('canvas')
-      canvas.width = DESIGN_WIDTH
-      canvas.height = DESIGN_HEIGHT
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        for (const stroke of strokes) {
-          if (stroke.tool !== 'draw') continue
-          const d = strokeToSvgPath(stroke)
-          if (!d) continue
-          ctx.fillStyle = stroke.color
-          ctx.globalAlpha = stroke.opacity
-          ctx.fill(new Path2D(d))
-        }
-        const px = Math.round(x)
-        const py = Math.round(y)
-        if (px >= 0 && py >= 0 && px < DESIGN_WIDTH && py < DESIGN_HEIGHT) {
-          const data = ctx.getImageData(px, py, 1, 1).data
-          if (data[3]! > 20) {
-            const hex = `#${[data[0]!, data[1]!, data[2]!]
-              .map((n) => n.toString(16).padStart(2, '0'))
-              .join('')
-              .toUpperCase()}`
-            onEyedropperSample?.(hex)
-            return
-          }
-        }
-      }
-      onEyedropperSample?.(brushColor)
+      // Sample the same fill→ink composite the user sees (gradient position, fabric
+      // pixels, and foreground ink after erasers). Model reference is never sampled.
+      const sampled = sampleArtworkPixel({ fills, strokes, x, y })
+      onEyedropperSample?.(sampled.hit ? sampled.hex : brushColor)
     },
     [brushColor, fills, onEyedropperSample, strokes],
   )
@@ -470,20 +437,4 @@ export function DrawingCanvas({
       </div>
     </div>
   )
-}
-
-function pointInContour(x: number, y: number, contour: number[]): boolean {
-  // Ray casting
-  let inside = false
-  for (let i = 0, j = contour.length - 2; i < contour.length; i += 2) {
-    const xi = contour[i]!
-    const yi = contour[i + 1]!
-    const xj = contour[j]!
-    const yj = contour[j + 1]!
-    const intersect =
-      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + 0.0000001) + xi
-    if (intersect) inside = !inside
-    j = i
-  }
-  return inside
 }

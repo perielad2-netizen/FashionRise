@@ -1,4 +1,4 @@
-import { strokeToSvgPath } from '@/lib/freehand'
+import { paintInkStrokes } from '@/lib/exportCanvas'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 import { createFillId, type FillOp, type FillStyle } from '@/lib/fills'
 
@@ -14,9 +14,10 @@ export type FloodFillResult = FloodFillOk | FloodFillErr
 export const MAX_FILL_PIXELS = Math.floor(DESIGN_WIDTH * DESIGN_HEIGHT * 0.42)
 
 /**
- * Flood-fill a closed ink region. Barriers are existing draw strokes (not erasers,
- * not the model reference). Contours of prior fills are NOT barriers — ink outlines
- * define garment parts (bodice / skirt / sleeves).
+ * Flood-fill a closed ink region. Barriers are the **effective visible ink** after
+ * draw/erase compositing (same destination-out rules as the canvas). Model
+ * reference and fill contours are not barriers — garment parts are defined by
+ * the ink the designer can still see.
  */
 export function floodFillRegion(input: {
   strokes: Stroke[]
@@ -26,7 +27,7 @@ export function floodFillRegion(input: {
   /** Dilate ink barriers by this many pixels to close tiny gaps. */
   gapClose?: number
 }): FloodFillResult {
-  const barrier = buildBarrierMask(input.strokes, input.gapClose ?? 2)
+  const barrier = buildInkBarrierMask(input.strokes, input.gapClose ?? 2)
   return floodFillAgainstBarrier({
     barrier,
     x: input.x,
@@ -144,7 +145,11 @@ export function floodFillAgainstBarrier(input: {
   }
 }
 
-function buildBarrierMask(strokes: Stroke[], gapClose: number): Uint8Array {
+/**
+ * Rasterize draw+erase strokes into a barrier mask matching what the user sees.
+ * Exported for regression tests (erased seams must not remain invisible barriers).
+ */
+export function buildInkBarrierMask(strokes: Stroke[], gapClose = 3): Uint8Array {
   const canvas = document.createElement('canvas')
   canvas.width = DESIGN_WIDTH
   canvas.height = DESIGN_HEIGHT
@@ -152,32 +157,36 @@ function buildBarrierMask(strokes: Stroke[], gapClose: number): Uint8Array {
   if (!ctx) return new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
 
   ctx.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-  for (const stroke of strokes) {
-    if (stroke.tool !== 'draw') continue
-    const d = strokeToSvgPath(stroke)
-    if (!d) continue
-    const path = new Path2D(d)
-    ctx.fillStyle = '#000'
-    ctx.fill(path)
-  }
-
-  // Slight dilation closes hairline gaps between sketch strokes.
-  if (gapClose > 0) {
-    ctx.filter = `blur(${gapClose * 0.35}px)`
-    ctx.drawImage(canvas, 0, 0)
-    ctx.filter = 'none'
-    const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-    const out = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
-    for (let i = 0, p = 0; i < out.length; i += 1, p += 4) {
-      out[i] = img.data[p + 3]! > 20 ? 1 : 0
-    }
-    return out
-  }
+  // Same ink compositing as Konva/PNG: erase uses destination-out on ink only.
+  paintInkStrokes(ctx, strokes)
 
   const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-  const out = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
-  for (let i = 0, p = 0; i < out.length; i += 1, p += 4) {
-    out[i] = img.data[p + 3]! > 10 ? 1 : 0
+  const raw = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  for (let i = 0, p = 0; i < raw.length; i += 1, p += 4) {
+    raw[i] = img.data[p + 3]! > 12 ? 1 : 0
+  }
+  // Morphological dilate closes freehand hairline gaps at corners while staying
+  // derived from rendered ink (not inventing invisible seams).
+  if (gapClose <= 0) return raw
+  return dilateMask(raw, gapClose)
+}
+
+function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
+  if (radius <= 0) return mask
+  const out = new Uint8Array(mask.length)
+  for (let y = 0; y < DESIGN_HEIGHT; y += 1) {
+    for (let x = 0; x < DESIGN_WIDTH; x += 1) {
+      if (!mask[y * DESIGN_WIDTH + x]) continue
+      const y0 = Math.max(0, y - radius)
+      const y1 = Math.min(DESIGN_HEIGHT - 1, y + radius)
+      const x0 = Math.max(0, x - radius)
+      const x1 = Math.min(DESIGN_WIDTH - 1, x + radius)
+      for (let ny = y0; ny <= y1; ny += 1) {
+        for (let nx = x0; nx <= x1; nx += 1) {
+          out[ny * DESIGN_WIDTH + nx] = 1
+        }
+      }
+    }
   }
   return out
 }
