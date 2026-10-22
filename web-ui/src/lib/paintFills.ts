@@ -1,4 +1,4 @@
-import { getCachedFabricImage } from '@/lib/fabricAssetCache'
+import { getCachedFabricImage, registerFabricCacheClearHook } from '@/lib/fabricAssetCache'
 import {
   contourToSvgPath,
   type FabricFillStyle,
@@ -108,13 +108,26 @@ function makeFabricPattern(ctx: FillPaintContext, style: FabricFillStyle): Canva
 
 const uploadedTileCache = new Map<string, HTMLCanvasElement>()
 
+/** Fashion-sized base repeat unit (design px). Scale multiplies this — not raw image size —
+ * so 0.25× / 1× / 4× stay distinct even for 2048×2048 uploads (avoids 512px saturation). */
+export const UPLOADED_FABRIC_BASE_TILE_PX = 128
+export const UPLOADED_FABRIC_TILE_MIN_PX = 24
+export const UPLOADED_FABRIC_TILE_MAX_PX = 512
+
+/** Drop derived pattern tiles (call when the signed-in account changes). */
+export function clearUploadedFabricTileCache(): void {
+  uploadedTileCache.clear()
+}
+
+registerFabricCacheClearHook(clearUploadedFabricTileCache)
+
 function makeUploadedFabricPattern(
   ctx: FillPaintContext,
   style: UploadedFabricFillStyle,
 ): CanvasPattern | null {
   const img = getCachedFabricImage(style.assetId)
   if (!img) return null
-  const key = `${style.assetId}:${style.scale.toFixed(3)}`
+  const key = `${style.assetId.toLowerCase()}:${style.scale.toFixed(3)}`
   let tile = uploadedTileCache.get(key)
   if (!tile) {
     tile = renderUploadedFabricTile(img, style.scale)
@@ -123,13 +136,21 @@ function makeUploadedFabricPattern(
   return ctx.createPattern(tile, 'repeat')
 }
 
-function renderUploadedFabricTile(img: HTMLImageElement, scale: number): HTMLCanvasElement {
-  // Tile size in design pixels; clamp so patterns stay stable and memory-bounded.
-  const base = Math.max(img.width, img.height)
-  const target = Math.round(Math.min(512, Math.max(24, base * scale)))
+/**
+ * Deterministic, memory-bounded tile for uploaded fabrics.
+ * target = clamp(round(BASE_TILE × scale), MIN, MAX) — independent of source resolution.
+ */
+export function renderUploadedFabricTile(img: HTMLImageElement, scale: number): HTMLCanvasElement {
+  const safeScale = Number.isFinite(scale) ? scale : 1
+  const target = Math.round(
+    Math.min(
+      UPLOADED_FABRIC_TILE_MAX_PX,
+      Math.max(UPLOADED_FABRIC_TILE_MIN_PX, UPLOADED_FABRIC_BASE_TILE_PX * safeScale),
+    ),
+  )
   const aspect = img.width / Math.max(1, img.height)
-  const w = aspect >= 1 ? target : Math.max(24, Math.round(target * aspect))
-  const h = aspect >= 1 ? Math.max(24, Math.round(target / aspect)) : target
+  const w = aspect >= 1 ? target : Math.max(UPLOADED_FABRIC_TILE_MIN_PX, Math.round(target * aspect))
+  const h = aspect >= 1 ? Math.max(UPLOADED_FABRIC_TILE_MIN_PX, Math.round(target / aspect)) : target
   const c = document.createElement('canvas')
   c.width = w
   c.height = h

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import io
+from unittest.mock import patch
 
 from PIL import Image
 
+from app.models.fabric_asset import FabricAsset
+from app.storage.local import LocalStorageBackend
 from tests.auth_test_helpers import register_with_invite
 
 
@@ -91,6 +94,74 @@ def test_rejects_invalid_and_oversized(client, db_session, monkeypatch):
     get_settings.cache_clear()
     monkeypatch.delenv("MAX_FABRIC_DIMENSION_PX", raising=False)
     get_settings.cache_clear()
+
+
+def test_private_storage_outside_static_uploads(client, db_session):
+    """Fabric bytes must not live under the directory mounted at /static/uploads."""
+    tokens = register_with_invite(client, db_session, "fab_priv@example.com", "fab_priv")
+    created = _upload(client, tokens, name="Private silk")
+    assert created.status_code == 201, created.text
+    asset_id = created.json()["id"]
+
+    row = db_session.query(FabricAsset).filter(FabricAsset.id == asset_id).one()
+    storage = LocalStorageBackend()
+    path = storage.resolve_private_file(key=row.storage_key)
+    assert path is not None and path.is_file()
+
+    public_root = storage.public_upload_root()
+    private_root = storage.private_fabric_root()
+    resolved = path.resolve()
+    assert str(resolved).startswith(str(private_root.resolve()))
+    try:
+        resolved.relative_to(public_root)
+        raise AssertionError(f"fabric file is under public upload root: {resolved}")
+    except ValueError:
+        pass
+
+    # Public static mount must not expose the private key (404 / missing).
+    static_probe = client.get(f"/static/uploads/{row.storage_key}")
+    assert static_probe.status_code == 404
+
+    # Owner-auth image route still works.
+    image = client.get(f"/api/v1/fabrics/{asset_id}/image", headers=_auth(tokens))
+    assert image.status_code == 200
+    assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_oversized_dimensions_rejected_before_pixel_load(client, db_session, monkeypatch):
+    """Header dimensions are rejected before Image.open / load decompresses pixels."""
+    tokens = register_with_invite(client, db_session, "fab_dim@example.com", "fab_dim")
+
+    from app.core.config import get_settings
+    from app.core.upload_validation import probe_image_dimensions
+
+    # Confirm PNG IHDR probe sees 96×96 without Pillow.
+    assert probe_image_dimensions(_png_bytes(96, 96), "png") == (96, 96)
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("MAX_FABRIC_DIMENSION_PX", "48")
+    get_settings.cache_clear()
+
+    open_calls: list[str] = []
+    original_open = Image.open
+
+    def tracking_open(*args, **kwargs):
+        open_calls.append("open")
+        return original_open(*args, **kwargs)
+
+    try:
+        with patch.object(Image, "open", tracking_open):
+            rejected = _upload(client, tokens, raw=_png_bytes(96, 96))
+            assert rejected.status_code == 400
+            assert open_calls == [], f"expected no Image.open before reject, got {open_calls}"
+
+            accepted = _upload(client, tokens, raw=_png_bytes(32, 32), name="Ok size")
+            assert accepted.status_code == 201, accepted.text
+            assert open_calls, "accepted upload should decode via Image.open"
+    finally:
+        get_settings.cache_clear()
+        monkeypatch.delenv("MAX_FABRIC_DIMENSION_PX", raising=False)
+        get_settings.cache_clear()
 
 
 def test_soft_delete_hides_from_library_but_image_still_loads(client, db_session):

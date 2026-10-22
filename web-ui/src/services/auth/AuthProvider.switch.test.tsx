@@ -14,6 +14,10 @@ const tokenStore = vi.hoisted(() => ({
   clear: vi.fn(),
 }))
 
+const fabricCache = vi.hoisted(() => ({
+  bindFabricCacheToUser: vi.fn(),
+}))
+
 vi.mock('@/services/auth/authApi', () => ({
   login: (...args: unknown[]) => api.login(...args),
   register: (...args: unknown[]) => api.register(...args),
@@ -22,6 +26,10 @@ vi.mock('@/services/auth/authApi', () => ({
 }))
 
 vi.mock('@/services/auth/tokenStore', () => ({ tokenStore }))
+
+vi.mock('@/lib/fabricAssetCache', () => ({
+  bindFabricCacheToUser: (...args: unknown[]) => fabricCache.bindFabricCacheToUser(...args),
+}))
 
 import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
 
@@ -71,6 +79,7 @@ describe('AuthProvider account switching', () => {
     api.register.mockReset()
     api.restoreSession.mockReset()
     api.logoutLocal.mockReset()
+    fabricCache.bindFabricCacheToUser.mockReset()
     tokenStore.get.mockReturnValue(null)
     api.restoreSession.mockResolvedValue(null)
   })
@@ -109,6 +118,8 @@ describe('AuthProvider account switching', () => {
     })
 
     await waitFor(() => expect(screen.getByTestId('user-id')).toHaveTextContent('user-b'))
+    expect(fabricCache.bindFabricCacheToUser).toHaveBeenCalledWith(null)
+    expect(fabricCache.bindFabricCacheToUser).toHaveBeenCalledWith('user-b')
   })
 
   it('clears the previous user before register completes', async () => {
@@ -157,5 +168,6 @@ describe('AuthProvider account switching', () => {
     })
     expect(api.logoutLocal).toHaveBeenCalled()
     expect(screen.getByTestId('user-id')).toHaveTextContent('none')
+    expect(fabricCache.bindFabricCacheToUser).toHaveBeenCalledWith(null)
   })
 })

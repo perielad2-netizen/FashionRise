@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     local_storage_root: str = "./data/storage"
     public_upload_base_url: str = "http://127.0.0.1:8001/static/uploads"
     upload_subdir: str = "uploads"
+    # Private fabric bytes live here — sibling of upload_subdir, never mounted publicly.
+    private_fabric_subdir: str = "private_fabrics"
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 

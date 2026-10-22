@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { bindFabricCacheToUser } from '@/lib/fabricAssetCache'
 import {
   login as apiLogin,
   logoutLocal,
@@ -54,20 +55,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (payload: LoginPayload) => {
     // Drop any prior in-memory identity before applying the new session.
     setUser(null)
+    bindFabricCacheToUser(null)
     const result = await apiLogin(payload)
+    bindFabricCacheToUser(result.user.id)
     setUser(result.user)
   }, [])
 
   const register = useCallback(async (payload: RegisterPayload) => {
     setUser(null)
+    bindFabricCacheToUser(null)
     const result = await apiRegister(payload)
+    bindFabricCacheToUser(result.user.id)
     setUser(result.user)
   }, [])
 
   const logout = useCallback(() => {
     logoutLocal()
+    bindFabricCacheToUser(null)
     setUser(null)
   }, [])
+
+  // Keep fabric caches scoped to the restored / current user (covers session restore).
+  useEffect(() => {
+    bindFabricCacheToUser(user?.id ?? null)
+  }, [user?.id])
 
   const value = useMemo<AuthState>(
     () => ({
