@@ -317,7 +317,7 @@ def _try_edit_look_from_sketch(
     *,
     sketch: tuple[bytes, str],
 ) -> tuple[bytes | None, str]:
-    """Issue exactly one images.edit with the configured model. No model fanout / generate."""
+    """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0)."""
     sketch_bytes, mime = sketch
     model = (model or "").strip()
     if not model.startswith("gpt-image"):
@@ -344,7 +344,9 @@ def _try_edit_look_from_sketch(
         }
         if _supports_input_fidelity(model):
             kwargs["input_fidelity"] = "high"
-        result = client.images.edit(**kwargs)
+        # Disable OpenAI SDK automatic retries for this paid image call only.
+        # Chat Completions (vision) keeps the client default retry policy.
+        result = client.with_options(max_retries=0).images.edit(**kwargs)
         data = getattr(result, "data", None) or []
         raw = _extract_image_bytes(data[0]) if data else None
         if raw:
@@ -361,11 +363,12 @@ def _try_edit_look_from_sketch(
 
 
 def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, summary: str) -> str | None:
-    """Edit the uploaded sketch into a look image. Exactly one images.edit when enabled.
+    """Edit the uploaded sketch into a look image. Exactly one images.edit HTTP attempt when enabled.
 
-    When the image model is disabled, returns None. When editing is enabled but the sketch
-    is missing or the single edit fails, raises SketchCompletionError so the worker reports
-    a genuine failure. Never calls images.generate or a secondary edit model.
+    Uses SDK max_retries=0 for the edit call only. When the image model is disabled, returns None.
+    When editing is enabled but the sketch is missing or the single edit fails, raises
+    SketchCompletionError so the worker reports a genuine failure. Never calls images.generate
+    or a secondary edit model.
     """
     settings = get_settings()
     model = (getattr(settings, "openai_image_model", None) or "gpt-image-1").strip()

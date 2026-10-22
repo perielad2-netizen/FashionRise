@@ -461,13 +461,13 @@ FashionRise/
 | First paid prod Magic | **Technically successful**; **visually rejected** (pale / not professional) |
 | Models | **Unchanged** — `gpt-6-luna` + `gpt-image-1` (`input_fidelity=high`) |
 | Prompt | Professional fashion refinement; design identity + refine_ok; no light-wash / child-sketch retain |
-| Image calls | **Exactly one** `images.edit` per Magic job (configured model only); **no** `gpt-image-1-mini` / generate |
+| Image calls | **Exactly one** `images.edit` HTTP attempt (`with_options(max_retries=0)`); configured model only; **no** mini / generate; chat retries unchanged |
 | Failure | Sanitized `SketchCompletionError`; poll / recovery / ownership / sketch preserved |
 | Logging | Provider errors log exception class only; leak tests cover return + logs |
 | Provenance | `image_provenance: images.edit` when look stored |
 | Agent paid AI | **0** |
-| Focused Magic tests | `test_magic_quality_prompts.py` **16/16** |
-| Full BE suite | **252 passed**; 1 unrelated (`test_cli_default_is_dry_run` branch-guard) |
+| Focused Magic tests | `test_magic_quality_prompts.py` **17/17** (includes SDK `max_retries=0`) |
+| Full BE suite | see verification commit notes |
 | Ruff / mypy (changed) | Pass |
 | Visual acceptance | **Not claimed** — rubric in `docs/WEB-V4E-MAGIC-QUALITY.md` |
 | Production | **Not deployed** |
@@ -477,6 +477,7 @@ FashionRise/
 
 | Date | Summary |
 |------|---------|
+| 2026-10-22 | **WEB-V4E SDK retry correction (draft PR #35):** image-edit uses `with_options(max_retries=0)`; chat/vision retries unchanged; offline tests assert one edit attempt; **STOP for Technical PM final review.** |
 | 2026-10-22 | **WEB-V4E reconciled onto main after V4D merge:** PR #34 @ `3376827c` merged not deployed; PR #35 single-edit + sanitized logs; status doc conflicts resolved; **STOP for Technical PM final review.** |
 | 2026-10-22 | **WEB-V4E PM corrections (draft PR #35):** single configured `images.edit` only (no mini fanout); sanitized provider log tokens; one-shot sketch decode; leak tests cover logs; first paid Magic technically OK / visually rejected. |
 | 2026-10-22 | **WEB-V4D MERGED** PR #34 @ `3376827c` (not deployed). |

@@ -39,7 +39,7 @@ Hypotheses not proven without a new paid visual run:
 |------|--------|
 | Vision system prompt (`sketch_polish`) | Design director brief; `design_identity` + `refine_ok`; richer `image_prompt` rules |
 | `_build_image_prompt` | Professional fashion illustration + strict concept fidelity; removes light-wash / child-sketch retain language |
-| Look pipeline | **Exactly one** `images.edit` with configured `OPENAI_IMAGE_MODEL`; no mini downgrade; no `images.generate` |
+| Look pipeline | **Exactly one** `images.edit` with configured `OPENAI_IMAGE_MODEL` via `with_options(max_retries=0)`; no mini downgrade; no `images.generate`; Chat Completions retries unchanged |
 | Failure | Missing sketch or failed/empty edit → sanitized `SketchCompletionError` via existing job system (poll/recovery/ownership/sketch preserved) |
 | Logging | Provider failures log exception **class name only** (no raw body) |
 | Decode | Sketch bytes decoded once on the edit path and passed into the edit helper |
@@ -62,11 +62,12 @@ Operator sample must remain recognizable: wide-brimmed hat, deep V neckline, flo
 
 ## Tests (offline)
 
-`pytest backend/tests/test_magic_quality_prompts.py` → **16/16** (mocked; **0 paid calls**). Full BE: **252 passed** + 1 unrelated branch-guard fail. Coverage:
+`pytest backend/tests/test_magic_quality_prompts.py` → **17/17** (mocked; **0 paid calls**). Coverage:
 
 - Professional refinement + fidelity language
 - Operator-sample attributes in edit prompt
 - Exactly one `images.edit` on success / failure / empty response
+- SDK `max_retries=0` asserted for edit only (chat/vision untouched)
 - No generate fallback, no `gpt-image-1-mini` downgrade
 - Provenance + no base64/secret leaks in returned errors **or** captured logs
 - Single decode on the edit path

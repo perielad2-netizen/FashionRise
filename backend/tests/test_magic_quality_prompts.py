@@ -85,6 +85,29 @@ def settings(monkeypatch):
     return s
 
 
+class _EditTrackingClient:
+    """Fake OpenAI client: records with_options(max_retries=0) then one images.edit."""
+
+    def __init__(self, *, on_edit):
+        self._on_edit = on_edit
+        self.option_calls: list[dict[str, Any]] = []
+        self.edit_models: list[str] = []
+        self.generate_calls = 0
+        self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
+
+    def with_options(self, **kwargs):
+        self.option_calls.append(kwargs)
+        return self
+
+    def edit(self, **kwargs):
+        self.edit_models.append(kwargs["model"])
+        return self._on_edit(**kwargs)
+
+    def generate(self, **kwargs):
+        self.generate_calls += 1
+        raise AssertionError("images.generate must not run")
+
+
 def test_polish_system_prompt_separates_design_from_imperfections():
     prompt = sketch_openai._system_prompt("sketch_polish")
     assert "design decisions" in prompt.lower() or "DESIGN CONCEPT" in prompt
@@ -155,21 +178,13 @@ def test_build_image_prompt_avoids_generic_outfit_homogenization():
 
 def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, settings):
     captured: dict[str, Any] = {}
-    edit_calls: list[str] = []
 
-    class _EditClient:
-        def __init__(self):
-            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
+    def on_edit(**kwargs):
+        captured.update(kwargs)
+        item = SimpleNamespace(url=None, b64_json=base64.b64encode(b"FAKEPNG").decode("ascii"))
+        return SimpleNamespace(data=[item])
 
-        def edit(self, **kwargs):
-            edit_calls.append(kwargs["model"])
-            captured.update(kwargs)
-            item = SimpleNamespace(url=None, b64_json=base64.b64encode(b"FAKEPNG").decode("ascii"))
-            return SimpleNamespace(data=[item])
-
-        def generate(self, **kwargs):
-            raise AssertionError("images.generate must not run")
-
+    client = _EditTrackingClient(on_edit=on_edit)
     saved: list[tuple[str, bytes]] = []
 
     def fake_save(*, key, data, content_type):
@@ -185,10 +200,12 @@ def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, setti
 
     job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
     structured = _operator_sample_structured()
-    url = sketch_openai._generate_and_store_look_image(_EditClient(), job, structured, structured["summary"])
+    url = sketch_openai._generate_and_store_look_image(client, job, structured, structured["summary"])
 
     assert url.startswith("http://127.0.0.1:8001/static/uploads/ai/")
-    assert edit_calls == ["gpt-image-1"]
+    assert client.option_calls == [{"max_retries": 0}]
+    assert client.edit_models == ["gpt-image-1"]
+    assert client.generate_calls == 0
     assert captured["model"] == "gpt-image-1"
     assert captured["input_fidelity"] == "high"
     assert captured["n"] == 1
@@ -204,73 +221,99 @@ def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, setti
 
 
 def test_edit_failure_exactly_one_edit_no_generate_or_mini(monkeypatch, settings):
-    calls: list[tuple[str, str]] = []
+    def on_edit(**kwargs):
+        raise RuntimeError("edit unavailable SECRET_SHOULD_NOT_LEAK")
 
-    class _FailEditClient:
-        def __init__(self):
-            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
-
-        def edit(self, **kwargs):
-            calls.append(("edit", kwargs["model"]))
-            raise RuntimeError("edit unavailable SECRET_SHOULD_NOT_LEAK")
-
-        def generate(self, **kwargs):
-            calls.append(("generate", kwargs.get("model", "")))
-            raise AssertionError("images.generate must not run as Magic fallback")
-
+    client = _EditTrackingClient(on_edit=on_edit)
     job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
     with pytest.raises(sketch_openai.SketchCompletionError, match="sketch image edit failed"):
         sketch_openai._generate_and_store_look_image(
-            _FailEditClient(), job, _operator_sample_structured(), "summary"
+            client, job, _operator_sample_structured(), "summary"
         )
-    assert calls == [("edit", "gpt-image-1")]
+    assert client.option_calls == [{"max_retries": 0}]
+    assert client.edit_models == ["gpt-image-1"]
+    assert client.generate_calls == 0
 
 
 def test_empty_edit_response_exactly_one_edit_no_generate(monkeypatch, settings):
-    calls: list[str] = []
+    def on_edit(**kwargs):
+        return SimpleNamespace(data=[SimpleNamespace(url=None, b64_json=None)])
 
-    class _EmptyClient:
-        def __init__(self):
-            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
-
-        def edit(self, **kwargs):
-            calls.append(kwargs["model"])
-            return SimpleNamespace(data=[SimpleNamespace(url=None, b64_json=None)])
-
-        def generate(self, **kwargs):
-            raise AssertionError("images.generate must not run")
-
+    client = _EditTrackingClient(on_edit=on_edit)
     job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
     with pytest.raises(sketch_openai.SketchCompletionError, match="sketch image edit failed"):
         sketch_openai._generate_and_store_look_image(
-            _EmptyClient(), job, {"summary": "x", "image_prompt": "dress"}, "x"
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
-    assert calls == ["gpt-image-1"]
+    assert client.option_calls == [{"max_retries": 0}]
+    assert client.edit_models == ["gpt-image-1"]
+    assert client.generate_calls == 0
 
 
 def test_configured_image_model_used_once_never_downgraded(monkeypatch):
     s = _settings(openai_image_model="gpt-image-1")
     monkeypatch.setattr(sketch_openai, "get_settings", lambda: s)
-    edits: list[str] = []
 
-    class _Client:
-        def __init__(self):
-            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
+    def on_edit(**kwargs):
+        raise RuntimeError("fail configured model")
 
-        def edit(self, **kwargs):
-            edits.append(kwargs["model"])
-            raise RuntimeError("fail configured model")
-
-        def generate(self, **kwargs):
-            raise AssertionError("generate forbidden")
-
+    client = _EditTrackingClient(on_edit=on_edit)
     job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
     with pytest.raises(sketch_openai.SketchCompletionError, match="sketch image edit failed"):
         sketch_openai._generate_and_store_look_image(
-            _Client(), job, {"summary": "x", "image_prompt": "dress"}, "x"
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
-    assert edits == ["gpt-image-1"]
-    assert "gpt-image-1-mini" not in edits
+    assert client.option_calls == [{"max_retries": 0}]
+    assert client.edit_models == ["gpt-image-1"]
+    assert "gpt-image-1-mini" not in client.edit_models
+    assert client.generate_calls == 0
+
+
+def test_image_edit_disables_sdk_retries_without_touching_chat(monkeypatch, settings):
+    """Chat Completions must not inherit max_retries=0 from the image-edit path."""
+    chat_kwargs: dict[str, Any] = {}
+    payload = _operator_sample_structured()
+
+    class _Client:
+        def __init__(self):
+            self.chat_option_calls: list[dict[str, Any]] = []
+            self.edit_option_calls: list[dict[str, Any]] = []
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
+
+        def with_options(self, **kwargs):
+            # Only the edit path should call this; chat uses the bare client.
+            self.edit_option_calls.append(kwargs)
+            return self
+
+        def create(self, **kwargs):
+            chat_kwargs.update(kwargs)
+            return _completion(json.dumps(payload))
+
+        def edit(self, **kwargs):
+            item = SimpleNamespace(url=None, b64_json=base64.b64encode(b"FAKEPNG").decode("ascii"))
+            return SimpleNamespace(data=[item])
+
+        def generate(self, **kwargs):
+            raise AssertionError("generate")
+
+    client = _Client()
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
+    monkeypatch.setattr(
+        sketch_openai,
+        "LocalStorageBackend",
+        lambda: SimpleNamespace(
+            save_file=lambda **kw: "http://127.0.0.1:8001/static/uploads/ai/look.png"
+        ),
+    )
+
+    result = sketch_openai.complete_sketch_job(
+        _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    )
+    assert result["image_provenance"] == "images.edit"
+    assert client.edit_option_calls == [{"max_retries": 0}]
+    assert client.chat_option_calls == []
+    assert "max_retries" not in chat_kwargs
 
 
 def test_missing_sketch_fails_without_generate(monkeypatch, settings):
@@ -333,48 +376,43 @@ def test_complete_polish_records_images_edit_provenance(monkeypatch, settings):
 
 def test_complete_polish_propagates_edit_failure(monkeypatch, settings):
     payload = _operator_sample_structured()
-    edit_calls = {"n": 0}
 
-    class _Client:
+    class _Client(_EditTrackingClient):
         def __init__(self):
+            super().__init__(on_edit=self._boom)
             self.chat = SimpleNamespace(
                 completions=SimpleNamespace(create=lambda **kw: _completion(json.dumps(payload)))
             )
-            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
 
-        def edit(self, **kwargs):
-            edit_calls["n"] += 1
+        def _boom(self, **kwargs):
             raise RuntimeError("edit boom")
 
-        def generate(self, **kwargs):
-            raise AssertionError("generate")
-
-    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: _Client())
+    client = _Client()
+    monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)
 
     with pytest.raises(sketch_openai.SketchCompletionError, match="sketch image edit failed"):
         sketch_openai.complete_sketch_job(
             _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
         )
-    assert edit_calls["n"] == 1
+    assert client.option_calls == [{"max_retries": 0}]
+    assert client.edit_models == ["gpt-image-1"]
+    assert client.generate_calls == 0
 
 
 def test_failure_messages_and_logs_do_not_leak_base64_or_secrets(monkeypatch, settings, caplog):
     secret_b64 = "SECRET_SKETCH_PAYLOAD_" + ("A" * 80)
 
-    class _Client:
-        def __init__(self):
-            self.images = SimpleNamespace(
-                edit=lambda **kw: (_ for _ in ()).throw(RuntimeError(f"provider saw {secret_b64}")),
-                generate=lambda **kw: (_ for _ in ()).throw(AssertionError("generate")),
-            )
+    def on_edit(**kwargs):
+        raise RuntimeError(f"provider saw {secret_b64}")
 
+    client = _EditTrackingClient(on_edit=on_edit)
     job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
     with (
         caplog.at_level(logging.WARNING),
         pytest.raises(sketch_openai.SketchCompletionError) as excinfo,
     ):
         sketch_openai._generate_and_store_look_image(
-            _Client(), job, {"summary": "x", "image_prompt": "dress"}, "x"
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
     msg = str(excinfo.value)
     assert secret_b64 not in msg
@@ -387,6 +425,7 @@ def test_failure_messages_and_logs_do_not_leak_base64_or_secrets(monkeypatch, se
     assert "sk-test" not in joined
     assert "data:image" not in joined
     assert "image edit failed type=RuntimeError" in joined
+    assert client.option_calls == [{"max_retries": 0}]
 
 
 def test_edit_path_decodes_sketch_once(monkeypatch, settings):
@@ -399,14 +438,11 @@ def test_edit_path_decodes_sketch_once(monkeypatch, settings):
 
     monkeypatch.setattr(sketch_openai, "_decode_inline_base64", counting_decode)
 
-    class _EditClient:
-        def __init__(self):
-            self.images = SimpleNamespace(edit=self.edit)
+    def on_edit(**kwargs):
+        item = SimpleNamespace(url=None, b64_json=base64.b64encode(b"FAKEPNG").decode("ascii"))
+        return SimpleNamespace(data=[item])
 
-        def edit(self, **kwargs):
-            item = SimpleNamespace(url=None, b64_json=base64.b64encode(b"FAKEPNG").decode("ascii"))
-            return SimpleNamespace(data=[item])
-
+    client = _EditTrackingClient(on_edit=on_edit)
     monkeypatch.setattr(
         sketch_openai,
         "LocalStorageBackend",
@@ -417,9 +453,10 @@ def test_edit_path_decodes_sketch_once(monkeypatch, settings):
 
     job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
     sketch_openai._generate_and_store_look_image(
-        _EditClient(), job, {"summary": "x", "image_prompt": "dress"}, "x"
+        client, job, {"summary": "x", "image_prompt": "dress"}, "x"
     )
     assert decode_calls["n"] == 1
+    assert client.option_calls == [{"max_retries": 0}]
 
 
 def test_build_sketch_chat_request_polish_uses_new_system_prompt(settings):
