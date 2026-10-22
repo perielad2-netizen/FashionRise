@@ -62,7 +62,7 @@ Operator sample must remain recognizable: wide-brimmed hat, deep V neckline, flo
 
 ## Tests (offline)
 
-`pytest backend/tests/test_magic_quality_prompts.py` → **17/17** (mocked; **0 paid calls**). Coverage:
+`pytest backend/tests/test_magic_quality_prompts.py` → **17/17** (mocked; **0 paid calls**). Full BE: **253 passed** + 1 unrelated branch-guard. Coverage:
 
 - Professional refinement + fidelity language
 - Operator-sample attributes in edit prompt

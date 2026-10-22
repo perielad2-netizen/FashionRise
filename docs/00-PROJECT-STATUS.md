@@ -467,8 +467,9 @@ FashionRise/
 | Provenance | `image_provenance: images.edit` when look stored |
 | Agent paid AI | **0** |
 | Focused Magic tests | `test_magic_quality_prompts.py` **17/17** (includes SDK `max_retries=0`) |
-| Full BE suite | see verification commit notes |
-| Ruff / mypy (changed) | Pass |
+| Related Magic suites | **84** green |
+| Full BE suite | **253 passed**; 1 unrelated (`test_cli_default_is_dry_run` branch-guard) |
+| Ruff / mypy (changed) | Pass · openai SDK `with_options` confirmed on **1.109.1** |
 | Visual acceptance | **Not claimed** — rubric in `docs/WEB-V4E-MAGIC-QUALITY.md` |
 | Production | **Not deployed** |
 | Next | **Technical PM final review** → authorize backend deploy → one controlled operator Magic test |
