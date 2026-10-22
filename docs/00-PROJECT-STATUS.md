@@ -91,16 +91,17 @@
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
 | **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator-reported desktop 5/5, tablet/cross-device 4/4, offline retry, conflict detection PASS (see above). |
 | **WEB-V3B** | **MERGED** + **production registration activated** (PR #26 @ `46747e85`, Alembic `004`) |
-| **WEB-V4A Magic React** | **MERGED** PR #27 @ `dc9e31aa` and **deployed**; paid generation **PENDING** operator click |
+| **WEB-V4A Magic React** | **MERGED** PR #27 @ `dc9e31aa` and **deployed** |
 | **WEB-V4B Fashion toolkit** | **MERGED** PR #29 · **deployed** @ `d7e37b59` |
 | **WEB-V4C Custom fabrics** | **MERGED** PR #30 · **deployed** @ `d7e37b59` / Alembic **`005`** |
 | **Hotfix: fill autosave fingerprint** | **MERGED** PR #32 @ `c21fee6b` · **backend deployed** |
-| **WEB-V4D Studio UX + models** | **Draft** `cursor/web-v4d-studio-ux-77c6` — croquis library, tabbed materials, focus mode; **STOP for PM review** |
+| **WEB-V4D Studio UX + models** | **Draft PR #34** — legacy `female`/`male` geometry restored; new defaults `*-straight`; **STOP for PM re-review** |
+| **WEB-V4E Magic quality** | **Separate draft** from `main` — professional fashion refinement prompts; **STOP for PM review** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status — do not auto-merge). |
 | INFRA-2 docs | Separate draft PR #10. |
-| Paid OpenAI | **Pipeline ready; 0 paid generations so far** (operator deferred until WEB-V4B toolkit) |
+| Paid OpenAI | **First paid Magic browser test COMPLETED** — **quality FAILED**; Cursor agent paid calls remain 0 for new jobs |
 | Safety flags (prod) | Registration **on** (invite-gated). Magic AI allowlisted (polish + job/image only). Uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
 
 ---
@@ -290,9 +291,9 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM review of **WEB-V4D** draft PR (Studio UX + model library). Merge only when accepted; deploy is a **frontend-only** release (no Alembic / no API change). Do **not** auto-deploy.
+1. **Exact next action:** Technical PM re-review of amended **WEB-V4D PR #34** (legacy croquis geometry) and separate **WEB-V4E Magic quality** draft. No merge/deploy until authorized.
 2. If operator still has a pre-hotfix local conflict: choose **Keep this device** once (do not clear IndexedDB) and confirm Saved.
-3. After V4D acceptance + deploy: **one operator paid Magic browser test**. Cursor must not spend OpenAI credits.
+3. After WEB-V4E acceptance + authorized deploy: **one new controlled operator paid Magic browser test** (not a Cursor agent call). Visual acceptance is human-only.
 4. **Do not auto-merge** unrelated docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#33](https://github.com/perielad2-netizen/FashionRise/pull/33).
 5. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
 6. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10.
