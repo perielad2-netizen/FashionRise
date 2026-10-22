@@ -1,7 +1,7 @@
 # WEB-V4E — Magic quality (professional fashion refinement)
 
-**Status:** Draft PR #35 — **STOP for Technical PM final review**. No merge / no deploy / no paid AI in this PR.  
-**Branch:** `cursor/web-v4e-magic-quality-77c6` reconciled onto `main` @ `3376827c` (WEB-V4D **merged, not deployed**). Backend Magic-quality scope only.
+**Status:** PR #35 **MERGED** and **DEPLOYED** to production at `2cbc1ad0` (2026-10-22). Deploy paid AI calls **0**. Human visual Magic retest still **PENDING** separate operator authorization.  
+**Production:** BE/FE/worker `2cbc1ad0` · Alembic `005` · edit `max_retries=0`.
 
 ## Operator outcome (production)
 
