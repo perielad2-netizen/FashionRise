@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-22. **GitHub `main`:** `c21fee6b` (PR #32 fill-fingerprint hotfix merged + backend deployed). **Production backend:** **`c21fee6b`** · **Production frontend:** **`d7e37b59`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **First paid Magic browser test: COMPLETED** — **quality acceptance FAILED** (too pale / not professional fashion polish). Cursor paid calls during agent work remain 0 for new jobs. **Active drafts:** WEB-V4D PR #34 (legacy model geometry fix) + separate WEB-V4E Magic quality — **STOP for Technical PM review** (do not merge/deploy).
+**Last updated:** 2026-10-22. **GitHub `main`:** `3376827c` (PR #34 WEB-V4D **merged**, not deployed). **Production backend:** **`c21fee6b`** · **Production frontend:** **`d7e37b59`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **First paid Magic browser test: COMPLETED** — technically successful, **quality acceptance FAILED** (visually rejected: too pale / not professional fashion polish). Cursor paid calls during agent work remain 0 for new jobs. **Active draft:** WEB-V4E Magic quality PR #35 (backend-only) — **STOP for Technical PM final review** (do not merge/deploy).
 
-**Phase:** Protected family beta. Fill-autosave hotfix is live. WEB-V4D frontend UX is in draft amendment. Magic quality needs a separate WEB-V4E prompt/pipeline pass.
+**Phase:** Protected family beta. Fill-autosave hotfix is live. WEB-V4D is on `main` but **not deployed**. Magic quality needs WEB-V4E prompt/pipeline pass before another controlled operator generation.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -55,7 +55,7 @@
 
 **WEB-V4C (Custom fabric upload):** **MERGED** PR [#30](https://github.com/perielad2-netizen/FashionRise/pull/30) and **deployed** at `d7e37b59` / Alembic **`005`**. Private `fabric_assets` + owner-auth image route live.
 
-**Production defect (2026-10-22) — fill autosave / Keep-this-device:** **Hotfix MERGED + backend deployed** at `c21fee6b`. Controlled API regression passed. Operator may still need to choose **Keep this device** once in any leftover conflict UI. **WEB-V4D** (this draft) is a separate frontend UX pass and does not change that API fix.
+**Production defect (2026-10-22) — fill autosave / Keep-this-device:** **Hotfix MERGED + backend deployed** at `c21fee6b`. Controlled API regression passed. Operator may still need to choose **Keep this device** once in any leftover conflict UI. **WEB-V4D** is **merged to `main` at `3376827c` but not deployed**. **WEB-V4E** (this draft PR #35) is a separate backend Magic-quality pass.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -83,7 +83,7 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub `main` | **`c21fee6b`** — includes PR #32 fill-fingerprint hotfix |
+| GitHub `main` | **`3376827c`** — PR #34 WEB-V4D merged (not deployed); includes PR #32 hotfix |
 | Production frontend / backend | **FE `d7e37b59` / BE `c21fee6b`** · Alembic **`005`** |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
@@ -95,8 +95,8 @@
 | **WEB-V4B Fashion toolkit** | **MERGED** PR #29 · **deployed** @ `d7e37b59` |
 | **WEB-V4C Custom fabrics** | **MERGED** PR #30 · **deployed** @ `d7e37b59` / Alembic **`005`** |
 | **Hotfix: fill autosave fingerprint** | **MERGED** PR #32 @ `c21fee6b` · **backend deployed** |
-| **WEB-V4D Studio UX + models** | **Draft PR #34** — legacy `female`/`male` geometry restored; new defaults `*-straight`; **STOP for PM re-review** |
-| **WEB-V4E Magic quality** | **Separate draft** from `main` — professional fashion refinement prompts; **STOP for PM review** |
+| **WEB-V4D Studio UX + models** | **MERGED** PR #34 @ `3376827c` — **not deployed** (legacy croquis compat + library) |
+| **WEB-V4E Magic quality** | **Draft PR #35** — professional refinement; exactly one `images.edit`; **STOP for PM final review** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status — do not auto-merge). |
@@ -291,9 +291,9 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM re-review of amended **WEB-V4D PR #34** (legacy croquis geometry) and separate **WEB-V4E Magic quality** draft. No merge/deploy until authorized.
+1. **Exact next action:** Technical PM final review of **WEB-V4E PR #35** (backend Magic quality; reconciled onto `main` after V4D merge). No merge/deploy until authorized.
 2. If operator still has a pre-hotfix local conflict: choose **Keep this device** once (do not clear IndexedDB) and confirm Saved.
-3. After WEB-V4E acceptance + authorized deploy: **one new controlled operator paid Magic browser test** (not a Cursor agent call). Visual acceptance is human-only.
+3. After WEB-V4E acceptance + authorized **backend** deploy: **one new controlled operator paid Magic browser test** (human rubric in `docs/WEB-V4E-MAGIC-QUALITY.md`). Cursor must not spend OpenAI credits. WEB-V4D FE deploy remains a separate authorization.
 4. **Do not auto-merge** unrelated docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#33](https://github.com/perielad2-netizen/FashionRise/pull/33).
 5. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
 6. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10.
@@ -441,37 +441,49 @@ FashionRise/
 | Blocked | Merge, production deploy of hotfix, Magic click |
 | Next | **Technical PM review** → merge → backend-only deploy → operator Keep-this-device recovery |
 
-## WEB-V4D verification (draft PR #34 — Studio UX + model library)
+## WEB-V4D verification (MERGED PR #34 — not deployed)
 
 | Gate | Result |
 |------|--------|
+| Merge | **MERGED** to `main` @ `3376827c` (GitHub merge only) |
 | Scope | **Frontend-only** — no backend / migration / Nginx / worker / paid AI |
-| Models | 10 selectable (`female-straight`… / `male-straight`…); **legacy `female`/`male` keep original PNG geometry**; new defaults `female-straight`/`male-straight`; **no Unavailable cards** |
-| Compat | Regression: old drafts/snapshots retain strokes/fills + `/models/female_model.png` / `male_model_display.png` |
-| Tools UI | Tabbed Colors / Fabrics / Gradients |
-| Focus mode | Expand canvas; panels hide; quick bar + Esc |
+| Models | 10 selectable (`female-straight`… / `male-straight`…); **legacy `female`/`male` keep original PNG geometry**; new defaults `female-straight`/`male-straight` |
 | FE tests | **278 / 278** |
-| Lint / build / SW | Pass · `check:sw` **ok=true** |
-| Browser Studio acceptance | **Not claimed** (login-gated in agent env) |
-| OpenAI / new paid Magic | **None in this PR** |
-| Production | **Not deployed** |
-| Next | **Technical PM re-review of amended PR #34** |
+| Production | **Not deployed** (FE still `d7e37b59`) |
+| Next | Separate FE deploy authorization (independent of WEB-V4E) |
 
-## Magic quality (separate WEB-V4E)
+## WEB-V4E verification (draft PR #35 — Magic quality)
 
-| Item | Status |
+| Gate | Result |
 |------|--------|
-| First paid production Magic | **Done** — operator rejected quality |
-| Likely bias in `_build_image_prompt` | “light color wash” / “still look like the child's sketch” |
-| Edit→generate fallback | Can invent a new image without sketch pixels |
-| Track | Separate draft PR based on `main` (not V4D) |
+| Scope | Backend Magic prompts + **single** edit pipeline; **no FE / migration / Nginx** |
+| Base | Reconciled onto `main` @ `3376827c` after WEB-V4D merge |
+| First paid prod Magic | **Technically successful**; **visually rejected** (pale / not professional) |
+| Models | **Unchanged** — `gpt-6-luna` + `gpt-image-1` (`input_fidelity=high`) |
+| Prompt | Professional fashion refinement; design identity + refine_ok; no light-wash / child-sketch retain |
+| Image calls | **Exactly one** `images.edit` HTTP attempt (`with_options(max_retries=0)`); configured model only; **no** mini / generate; chat retries unchanged |
+| Failure | Sanitized `SketchCompletionError`; poll / recovery / ownership / sketch preserved |
+| Logging | Provider errors log exception class only; leak tests cover return + logs |
+| Provenance | `image_provenance: images.edit` when look stored |
+| Agent paid AI | **0** |
+| Focused Magic tests | `test_magic_quality_prompts.py` **17/17** (includes SDK `max_retries=0`) |
+| Related Magic suites | **84** green |
+| Full BE suite | **253 passed**; 1 unrelated (`test_cli_default_is_dry_run` branch-guard) |
+| Ruff / mypy (changed) | Pass · openai SDK `with_options` confirmed on **1.109.1** |
+| Visual acceptance | **Not claimed** — rubric in `docs/WEB-V4E-MAGIC-QUALITY.md` |
+| Production | **Not deployed** |
+| Next | **Technical PM final review** → authorize backend deploy → one controlled operator Magic test |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
-| 2026-10-22 | **WEB-V4D amendment:** legacy `female`/`male` restore original croquis geometry; new defaults `*-straight`; FE 278 tests; first paid Magic quality FAILED (tracked as WEB-V4E). **STOP for PM review.** |
-| 2026-10-22 | **WEB-V4D Studio UX + model library (draft):** approved croquis replace built-ins; tabbed materials; focus canvas mode; unavailable placeholders removed; FE 272 tests; build/SW PASS; **no backend**; **STOP for Technical PM review** (no merge/deploy). |
+| 2026-10-22 | **WEB-V4E SDK retry correction (draft PR #35):** image-edit uses `with_options(max_retries=0)`; chat/vision retries unchanged; offline tests assert one edit attempt; **STOP for Technical PM final review.** |
+| 2026-10-22 | **WEB-V4E reconciled onto main after V4D merge:** PR #34 @ `3376827c` merged not deployed; PR #35 single-edit + sanitized logs; status doc conflicts resolved; **STOP for Technical PM final review.** |
+| 2026-10-22 | **WEB-V4E PM corrections (draft PR #35):** single configured `images.edit` only (no mini fanout); sanitized provider log tokens; one-shot sketch decode; leak tests cover logs; first paid Magic technically OK / visually rejected. |
+| 2026-10-22 | **WEB-V4D MERGED** PR #34 @ `3376827c` (not deployed). |
+| 2026-10-22 | **WEB-V4D amendment:** legacy `female`/`male` restore original croquis geometry; new defaults `*-straight`; FE 278 tests; first paid Magic quality FAILED (tracked as WEB-V4E). |
+| 2026-10-22 | **WEB-V4D Studio UX + model library (draft):** approved croquis replace built-ins; tabbed materials; focus canvas mode; unavailable placeholders removed; FE 272 tests; build/SW PASS; **no backend**. |
 | 2026-10-22 | **Fill-autosave hotfix MERGED + backend deployed** PR #32 @ `c21fee6b` (FE still `d7e37b59`). |
 | 2026-10-22 | **URGENT fill-autosave hotfix (draft):** production `d7e37b59`/Alembic `005` acceptance BLOCKED; fingerprint now includes fills; Keep-device path covered by API tests; no FE change; no paid Magic; **STOP for Technical PM review** (do not merge/deploy). |
 | 2026-10-22 | **WEB-V4B+V4C production deploy** at `d7e37b59` / Alembic `005` (operator-authorized). Subsequent browser acceptance found fill-autosave defect. |

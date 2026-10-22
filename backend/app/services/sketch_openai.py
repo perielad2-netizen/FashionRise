@@ -1,4 +1,4 @@
-"""OpenAI vision + JSON for sketch jobs; polish also edits the child's sketch into a look image."""
+"""OpenAI vision + JSON for sketch jobs; polish edits the uploaded sketch into a look image."""
 
 from __future__ import annotations
 
@@ -182,12 +182,20 @@ def _system_prompt(job_type: str) -> str:
         )
     if job_type == "sketch_polish":
         return (
-            "You are a senior fashion design mentor helping kids polish a garment sketch. "
+            "You are a senior fashion design director. A young designer uploaded a rough fashion sketch. "
+            "Your job is to extract the DESIGN CONCEPT for a professional fashion-illustration edit. "
+            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence, versus "
+            "(B) drawing imperfections that may be professionally refined (wobbly lines, uneven fill, crude shading). "
             "Respond ONLY with valid JSON using keys: "
-            "summary (one short exciting sentence), "
-            "polish_bullets (array of 3–5 concise tips), "
-            "image_prompt (one short English paragraph listing ONLY what is visible in the sketch: "
-            "pose, hat/hair, neckline, sleeves, hem, shapes — for an image EDIT; invent nothing extra)."
+            "summary (one short exciting sentence about the design concept, not the rough drawing), "
+            "polish_bullets (array of 3–5 concise tips for the young designer), "
+            "design_identity (object with evidence-backed fields; use null only when not visible: "
+            "garment_category, silhouette, pose, neckline, sleeve_type, sleeve_length, hemline, "
+            "main_colors, fabric_patterns, accessories, asymmetry_notes, distinctive_details), "
+            "refine_ok (array of short drawing imperfections that MAY be upgraded — never design decisions), "
+            "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes to preserve: "
+            "pose, hat/hair, neckline, sleeves, hem, main colors, fabric patterns, asymmetry, accessories, "
+            "distinctive details — invent nothing; do not describe amateur line quality or ask to keep a child sketch look)."
         )
     return (
         "You are a fashion stylist AI. Respond ONLY with valid JSON using keys: "
@@ -213,24 +221,69 @@ def _user_text(job: AIJob) -> str:
     return "\n\n".join(parts) if parts else "Infer from the attached sketch image only."
 
 
+def _design_identity_clause(structured: dict[str, Any]) -> str:
+    """Fold vision design_identity fields into the edit brief when present."""
+    identity = structured.get("design_identity")
+    if not isinstance(identity, dict) or not identity:
+        return ""
+    order = (
+        "garment_category",
+        "silhouette",
+        "pose",
+        "neckline",
+        "sleeve_type",
+        "sleeve_length",
+        "hemline",
+        "main_colors",
+        "fabric_patterns",
+        "accessories",
+        "asymmetry_notes",
+        "distinctive_details",
+    )
+    bits: list[str] = []
+    for key in order:
+        val = identity.get(key)
+        if val is None:
+            continue
+        text = str(val).strip()
+        if text and text.lower() not in {"null", "none", "n/a", "unknown"}:
+            bits.append(f"{key.replace('_', ' ')}: {text}")
+    if not bits:
+        return ""
+    return "Preserve these design attributes: " + "; ".join(bits) + "."
+
+
 def _build_image_prompt(structured: Any, summary: str) -> str:
-    prompt = ""
+    """Build a professional fashion-illustration edit brief (not a pale wash / child-sketch retain)."""
+    evidence = ""
+    identity_clause = ""
     if isinstance(structured, dict):
-        prompt = str(structured.get("image_prompt") or "").strip()
-        if not prompt:
+        evidence = str(structured.get("image_prompt") or "").strip()
+        identity_clause = _design_identity_clause(structured)
+        if not evidence:
             bullets = structured.get("polish_bullets") or structured.get("cleanup_bullets") or []
             if isinstance(bullets, list) and bullets:
                 joined = "; ".join(str(b).strip() for b in bullets if str(b).strip())[:600]
-                prompt = f"{summary}. Design details: {joined}"
-    if not prompt:
-        prompt = summary or "Polish this fashion sketch"
+                evidence = f"{summary}. Design details: {joined}"
+    if not evidence:
+        evidence = summary or "Professional fashion illustration of this sketch"
+    detail_parts = [p for p in (identity_clause, evidence) if p]
+    detail = " ".join(detail_parts)
     return (
-        "Edit THIS uploaded fashion sketch. Keep the SAME pose, body proportions, hat shape, neckline, "
-        "sleeve style, hem length, and outfit silhouette. Only clean the linework and add a light color wash. "
-        f"{prompt} "
-        "Result must still look like the child's sketch — refined fashion croquis on white paper. "
-        "Do NOT invent a new character or outfit. Avoid photorealism, photography, CGI, magazine lookbook, "
-        "text, watermark, collage."
+        "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
+        "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
+        "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
+        "sleeve type and length, hemline, main colors, fabric/textile patterns, asymmetry, accessories "
+        "(such as hats), and distinctive design details. "
+        "UPGRADE construction and presentation: strong clean garment contours; sophisticated tailoring "
+        "and garment construction; visible fabric folds, draping, and texture; richer but faithful colors; "
+        "crisp repeating textile patterns; clearly defined necklines, sleeves, seams, and hems; attractive "
+        "fashion-presentation quality; clean full-body composition on a clean light presentation background. "
+        "Do NOT retain rough/amateur drawing imperfections. Do NOT apply only a faint watercolor or light "
+        "color wash. Do NOT invent a different garment, change the designer's colors, alter the silhouette, "
+        "add unnecessary accessories, or make every design look like the same generic fashion outfit. "
+        f"Design evidence: {detail} "
+        "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark."
     )[:3800]
 
 
@@ -245,126 +298,100 @@ def _extract_image_bytes(item: Any) -> bytes | None:
     return None
 
 
+def _sanitize_provider_error(exc: BaseException) -> str:
+    """Bounded log token: exception class only. Never the provider body (may hold image/secrets)."""
+    return type(exc).__name__[:80]
+
+
+def _supports_input_fidelity(model: str) -> bool:
+    m = (model or "").strip()
+    return m == "gpt-image-1" or m.startswith("gpt-image-1.") or m in {"gpt-image-1.5", "gpt-image-2"}
+
+
 def _try_edit_look_from_sketch(
-    client: OpenAI, job: AIJob, prompt: str, model: str, size: str
+    client: OpenAI,
+    job: AIJob,
+    prompt: str,
+    model: str,
+    size: str,
+    *,
+    sketch: tuple[bytes, str],
 ) -> tuple[bytes | None, str]:
-    sketch = _raw_sketch_bytes(job)
-    if sketch is None:
-        logger.warning("OpenAI job %s: no sketch bytes for image edit", job.id)
+    """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0)."""
+    sketch_bytes, mime = sketch
+    model = (model or "").strip()
+    if not model.startswith("gpt-image"):
+        logger.warning("OpenAI job %s: image model not eligible for edit", job.id)
         return None, ""
 
-    sketch_bytes, mime = sketch
     ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
-    models: list[str] = []
-    for m in (model, "gpt-image-1", "gpt-image-1-mini"):
-        if m and m not in models and str(m).startswith("gpt-image"):
-            models.append(m)
-
     size_value = size if size in {"1024x1024", "1024x1536", "1536x1024", "auto"} else "1024x1536"
-    last_error: Exception | None = None
-    for m in models:
-        try:
-            img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
-            logger.info(
-                "OpenAI job %s: editing sketch with %s size=%s (input_fidelity=high)",
-                job.id,
-                m,
-                size_value,
-            )
-            kwargs: dict[str, Any] = {
-                "model": m,
-                "image": img,
-                "prompt": prompt,
-                "size": size_value,
-                "n": 1,
-            }
-            if m == "gpt-image-1" or m.startswith("gpt-image-1.") or m in {"gpt-image-1.5", "gpt-image-2"}:
-                kwargs["input_fidelity"] = "high"
-            result = client.images.edit(**kwargs)
-            raw = _extract_image_bytes(result.data[0])
-            if raw:
-                return raw, m
-            logger.warning("OpenAI job %s: edit via %s returned no image bytes", job.id, m)
-        except Exception as e:
-            last_error = e
-            logger.warning("OpenAI job %s: image edit via %s failed: %s", job.id, m, e)
-
-    if last_error is not None:
-        logger.warning("OpenAI job %s: all sketch-edit attempts failed (last: %s)", job.id, last_error)
-    return None, ""
-
-
-def _image_gen_attempts(preferred_model: str, preferred_size: str, quality: str) -> list[dict[str, Any]]:
-    preferred = (preferred_model or "").strip() or "gpt-image-1"
-    size = (preferred_size or "").strip()
-    attempts: list[dict[str, Any]] = []
-
-    def add(model: str, size_value: str, *, with_quality: bool = False) -> None:
-        kw: dict[str, Any] = {"model": model, "prompt": "", "n": 1, "size": size_value}
-        if with_quality:
-            kw["quality"] = quality or "standard"
-        key = (model, size_value, with_quality)
-        if any((a["model"], a["size"], "quality" in a) == key for a in attempts):
-            return
-        attempts.append(kw)
-
-    if preferred.startswith("gpt-image"):
-        add(preferred, size if size in {"1024x1024", "1024x1536", "1536x1024", "auto"} else "1024x1536")
-    elif preferred == "dall-e-3":
-        add(preferred, size if size in {"1024x1024", "1024x1792", "1792x1024"} else "1024x1792", with_quality=True)
-    elif preferred == "dall-e-2":
-        add(preferred, "1024x1024")
-    else:
-        add(preferred, size or "1024x1024")
-
-    add("gpt-image-1", "1024x1536")
-    add("gpt-image-1-mini", "1024x1536")
-    add("dall-e-2", "1024x1024")
-    return attempts
+    try:
+        img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
+        logger.info(
+            "OpenAI job %s: editing sketch with %s size=%s (input_fidelity=%s)",
+            job.id,
+            model,
+            size_value,
+            "high" if _supports_input_fidelity(model) else "omit",
+        )
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "image": img,
+            "prompt": prompt,
+            "size": size_value,
+            "n": 1,
+        }
+        if _supports_input_fidelity(model):
+            kwargs["input_fidelity"] = "high"
+        # Disable OpenAI SDK automatic retries for this paid image call only.
+        # Chat Completions (vision) keeps the client default retry policy.
+        result = client.with_options(max_retries=0).images.edit(**kwargs)
+        data = getattr(result, "data", None) or []
+        raw = _extract_image_bytes(data[0]) if data else None
+        if raw:
+            return raw, model
+        logger.warning("OpenAI job %s: edit returned no image bytes", job.id)
+        return None, ""
+    except Exception as e:
+        logger.warning(
+            "OpenAI job %s: image edit failed type=%s",
+            job.id,
+            _sanitize_provider_error(e),
+        )
+        return None, ""
 
 
 def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, summary: str) -> str | None:
+    """Edit the uploaded sketch into a look image. Exactly one images.edit HTTP attempt when enabled.
+
+    Uses SDK max_retries=0 for the edit call only. When the image model is disabled, returns None.
+    When editing is enabled but the sketch is missing or the single edit fails, raises
+    SketchCompletionError so the worker reports a genuine failure. Never calls images.generate
+    or a secondary edit model.
+    """
     settings = get_settings()
     model = (getattr(settings, "openai_image_model", None) or "gpt-image-1").strip()
     if model.lower() in {"", "none", "off", "false", "0"}:
         return None
 
+    sketch = _raw_sketch_bytes(job)
+    if sketch is None:
+        raise SketchCompletionError("no sketch image for edit")
+
     prompt = _build_image_prompt(structured, summary)
     size = (getattr(settings, "openai_image_size", None) or "1024x1536").strip()
-    quality = (getattr(settings, "openai_image_quality", None) or "standard").strip()
 
-    raw, used_model = _try_edit_look_from_sketch(client, job, prompt, model, size)
-
+    raw, used_model = _try_edit_look_from_sketch(
+        client, job, prompt, model, size, sketch=sketch
+    )
     if not raw:
-        last_error: Exception | None = None
-        for attempt in _image_gen_attempts(model, size, quality):
-            attempt = dict(attempt)
-            attempt["prompt"] = prompt
-            try:
-                logger.info(
-                    "OpenAI job %s: fallback generate model %s size=%s",
-                    job.id,
-                    attempt["model"],
-                    attempt.get("size"),
-                )
-                result = client.images.generate(**attempt)
-                raw = _extract_image_bytes(result.data[0])
-                if raw:
-                    used_model = f"{attempt['model']}(generate)"
-                    break
-            except Exception as e:
-                last_error = e
-                logger.warning("OpenAI job %s: image model %s failed: %s", job.id, attempt["model"], e)
-        if not raw and last_error is not None:
-            logger.warning("OpenAI job %s: all image generation attempts failed (last: %s)", job.id, last_error)
-
-    if not raw:
-        return None
+        raise SketchCompletionError("sketch image edit failed")
 
     key = f"ai/{job.id.hex if hasattr(job.id, 'hex') else str(job.id).replace('-', '')}_{uuid.uuid4().hex[:10]}.png"
     storage = LocalStorageBackend()
     url = storage.save_file(key=key, data=BytesIO(raw), content_type="image/png")
-    logger.info("OpenAI job %s: stored look image via %s → %s", job.id, used_model, url)
+    logger.info("OpenAI job %s: stored look image via images.edit/%s → %s", job.id, used_model, url)
     return url
 
 
@@ -422,9 +449,12 @@ def complete_sketch_job(job: AIJob) -> dict[str, Any]:
     structured, summary, finish_reason, truncated = _parse_chat_completion(completion)
 
     image_url: str | None = None
+    image_provenance: str | None = None
     if job.job_type == "sketch_polish":
-        # Only a complete, valid JSON object may drive images.edit / images.generate.
+        # Only a complete, valid JSON object may drive images.edit (no generate fallback).
         image_url = _generate_and_store_look_image(client, job, structured, summary)
+        if image_url:
+            image_provenance = "images.edit"
 
     return {
         "message": "openai",
@@ -433,6 +463,7 @@ def complete_sketch_job(job: AIJob) -> dict[str, Any]:
         "summary": summary,
         "structured": structured,
         "image_url": image_url,
+        "image_provenance": image_provenance,
         "finish_reason": finish_reason,
         "truncated": truncated,
     }
