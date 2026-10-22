@@ -5,6 +5,7 @@ import { appendPoint, strokeToSvgPath } from '@/lib/freehand'
 import { decidePointer, pressureForPointer } from '@/lib/pointerSession'
 import { floodFillRegion } from '@/lib/floodFill'
 import type { FillOp, FillStyle } from '@/lib/fills'
+import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { paintFillOps } from '@/lib/paintFills'
 import { sampleArtworkPixel } from '@/lib/sampleArtworkPixel'
 import {
@@ -121,14 +122,23 @@ export function DrawingCanvas({
 
   useEffect(() => {
     let cancelled = false
-    const img = renderFillsImage(fills)
-    if (!img) {
+    if (fills.length === 0) {
       setFillsImage(null)
       return
     }
-    img.onload = () => {
-      if (!cancelled) setFillsImage(img)
-    }
+    void (async () => {
+      // Prefetch private fabrics; missing ones paint as a hatch placeholder.
+      await ensureFabricAssetsForFills(fills, { required: false }).catch(() => undefined)
+      if (cancelled) return
+      const img = renderFillsImage(fills)
+      if (!img) {
+        setFillsImage(null)
+        return
+      }
+      img.onload = () => {
+        if (!cancelled) setFillsImage(img)
+      }
+    })()
     return () => {
       cancelled = true
     }

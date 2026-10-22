@@ -1,10 +1,21 @@
-import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { solidStyle } from '@/lib/fills'
 
+vi.mock('@/services/fabricAssetsApi', () => ({
+  listMyFabrics: vi.fn(async () => []),
+  uploadFabric: vi.fn(),
+  deleteFabric: vi.fn(),
+  fetchFabricImageBlob: vi.fn(),
+}))
+
 describe('ColorAndMaterialsPanel', () => {
-  it('exposes fashion palette, native picker, fabrics and gradients as working controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('exposes fashion palette, native picker, fabrics, add fabric and gradients', async () => {
     const onColor = vi.fn()
     const onColorHex = vi.fn(() => true)
     const onFillStyle = vi.fn()
@@ -22,6 +33,8 @@ describe('ColorAndMaterialsPanel', () => {
       />,
     )
 
+    await waitFor(() => expect(screen.getByRole('button', { name: /Add Fabric/i })).toBeTruthy())
+
     fireEvent.click(screen.getByRole('button', { name: 'Crimson' }))
     expect(onColor).toHaveBeenCalledWith('#B91C1C')
 
@@ -38,5 +51,7 @@ describe('ColorAndMaterialsPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Eyedropper' }))
     expect(onToggleEyedropper).toHaveBeenCalled()
+
+    expect(screen.getByText(/My Fabrics/i)).toBeTruthy()
   })
 })

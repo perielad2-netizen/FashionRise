@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.ai_job import AIJob
     from app.models.design_export import DesignExport
     from app.models.design_revision import DesignRevision
+    from app.models.fabric_asset import FabricAsset
     from app.models.gallery_comment import GalleryComment
     from app.models.gallery_item import GalleryItem
     from app.models.gallery_like import GalleryLike
@@ -49,3 +50,4 @@ class User(Base):
     gallery_comments: Mapped[list["GalleryComment"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    fabric_assets: Mapped[list["FabricAsset"]] = relationship(back_populates="owner")

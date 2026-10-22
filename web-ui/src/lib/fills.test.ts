@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   checkPersistableFill,
   cloneFills,
+  collectUploadedFabricAssetIds,
   contourToSvgPath,
   FABRIC_PRESETS,
   FASHION_PALETTE,
@@ -10,6 +11,7 @@ import {
   MAX_FILL_CONTOUR_VALUES,
   parseFillOp,
   solidStyle,
+  uploadedFabricStyle,
 } from '@/lib/fills'
 
 describe('fills schema', () => {
@@ -43,6 +45,44 @@ describe('fills schema', () => {
       seedY: 5,
     })
     expect(fabric?.style).toEqual({ kind: 'fabric', fabricId: 'denim' })
+
+    const uploaded = parseFillOp({
+      contour: [0, 0, 20, 0, 20, 20, 0, 20],
+      style: {
+        kind: 'uploaded-fabric',
+        assetId: '11111111-1111-4111-8111-111111111111',
+        scale: 1.5,
+      },
+      seedX: 5,
+      seedY: 5,
+    })
+    expect(uploaded?.style).toEqual({
+      kind: 'uploaded-fabric',
+      assetId: '11111111-1111-4111-8111-111111111111',
+      scale: 1.5,
+    })
+  })
+
+  it('rejects invalid uploaded fabric ids and clamps scale', () => {
+    expect(
+      parseFillOp({
+        contour: [0, 0, 20, 0, 20, 20, 0, 20],
+        style: { kind: 'uploaded-fabric', assetId: 'not-a-uuid', scale: 1 },
+      }),
+    ).toBeNull()
+    const style = uploadedFabricStyle('22222222-2222-4222-8222-222222222222', 99)
+    expect(style?.scale).toBe(4)
+    expect(
+      collectUploadedFabricAssetIds([
+        {
+          id: 'a',
+          contour: [0, 0, 10, 0, 10, 10, 0, 10],
+          style: style!,
+          seedX: 1,
+          seedY: 1,
+        },
+      ]),
+    ).toEqual(['22222222-2222-4222-8222-222222222222'])
   })
 
   it('rejects unknown fabrics and tiny contours', () => {

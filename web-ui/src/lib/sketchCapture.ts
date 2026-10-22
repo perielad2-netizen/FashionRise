@@ -1,4 +1,5 @@
 import { exportSketchPng, type ExportOptions } from '@/lib/exportCanvas'
+import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 
 /** Soft client bound; backend also enforces max_upload_size_mb. */
 export const MAGIC_MAX_SKETCH_BYTES = 8 * 1024 * 1024
@@ -44,6 +45,7 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
     const { blob, referenceIncluded } = await exportSketchPng({
       ...options,
       onReferenceError: expectsReference ? 'throw' : 'skip',
+      onFabricError: 'throw',
     })
     if (expectsReference && !referenceIncluded) {
       throw new Error(
@@ -56,6 +58,11 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
     const dataUrl = await blobToDataUrl(blob)
     return { blob, dataUrl, byteLength: blob.size, referenceIncluded }
   } catch (err) {
+    if (err instanceof FabricAssetLoadError) {
+      throw new Error(
+        'A custom fabric in this sketch could not be loaded. Check your connection or re-upload the fabric — Magic was not started.',
+      )
+    }
     if (
       expectsReference &&
       err instanceof Error &&

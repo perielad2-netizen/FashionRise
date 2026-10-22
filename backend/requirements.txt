@@ -13,6 +13,7 @@ python-multipart>=0.0.6,<0.1.0
 email-validator>=2.1.0,<3.0.0
 slowapi>=0.1.9,<0.2.0
 httpx>=0.26.0,<0.28.0
+Pillow>=10.0.0,<12.0.0
 # Chat Completions reasoning_effort exists from 1.58.0, but this repo was validated
 # on 1.109.1 (keyword present on Completions.create). Floor is that verified version.
 openai>=1.109.1,<2.0.0

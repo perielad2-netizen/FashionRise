@@ -12,12 +12,27 @@ class LocalStorageBackend:
         subdir = getattr(settings, "upload_subdir", None) or getattr(settings, "upload_subdir", "uploads")
         self._root = Path(settings.local_storage_root)
         self._subdir = subdir
+        self._private_fabric_subdir = getattr(settings, "private_fabric_subdir", "private_fabrics")
         self._public_base = settings.public_upload_base_url.rstrip("/")
         self._root.mkdir(parents=True, exist_ok=True)
+
+    def public_upload_root(self) -> Path:
+        """Directory mounted at `/static/uploads` — never store private fabrics here."""
+        return (self._root / self._subdir).resolve()
+
+    def private_fabric_root(self) -> Path:
+        """Owner-private fabric bytes; not mounted as static files."""
+        root = (self._root / self._private_fabric_subdir).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        return root
 
     def _full_path(self, key: str) -> Path:
         safe = key.lstrip("/").replace("..", "")
         return self._root / self._subdir / safe
+
+    def _private_path(self, key: str) -> Path:
+        safe = key.lstrip("/").replace("..", "")
+        return self.private_fabric_root() / safe
 
     def save_file(self, *, key: str | None, data: BinaryIO, content_type: str | None) -> str:
         _ = content_type
@@ -53,10 +68,52 @@ class LocalStorageBackend:
 
     def resolve_existing_file(self, *, key: str) -> Path | None:
         path = self._full_path(key).resolve()
-        root = (self._root / self._subdir).resolve()
+        root = self.public_upload_root()
         try:
             path.relative_to(root)
         except ValueError:
+            return None
+        if path.is_file():
+            return path
+        return None
+
+    def save_private_file(self, *, key: str, data: BinaryIO, content_type: str | None = None) -> Path:
+        """Write bytes under the private fabric root (never under `/static/uploads`)."""
+        _ = content_type
+        if not key:
+            raise ValueError("private storage key required")
+        path = self._private_path(key).resolve()
+        private_root = self.private_fabric_root()
+        public_root = self.public_upload_root()
+        try:
+            path.relative_to(private_root)
+        except ValueError as exc:
+            raise ValueError("private storage path escapes private root") from exc
+        try:
+            path.relative_to(public_root)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("refusing to store private fabric under public upload root")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("wb") as out:
+            while chunk := data.read(1024 * 1024):
+                out.write(chunk)
+        return path
+
+    def resolve_private_file(self, *, key: str) -> Path | None:
+        path = self._private_path(key).resolve()
+        private_root = self.private_fabric_root()
+        public_root = self.public_upload_root()
+        try:
+            path.relative_to(private_root)
+        except ValueError:
+            return None
+        try:
+            path.relative_to(public_root)
+        except ValueError:
+            pass
+        else:
             return None
         if path.is_file():
             return path

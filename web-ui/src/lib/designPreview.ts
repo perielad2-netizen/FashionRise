@@ -37,6 +37,7 @@ export async function renderPreviewBlob(snapshot: SavedDesignSnapshot): Promise<
     width: PREVIEW_WIDTH,
     height: PREVIEW_HEIGHT,
     onReferenceError: 'skip',
+    onFabricError: 'skip',
     loadReference: cachedReference,
     minInkSize: PREVIEW_MIN_INK_SIZE,
   })

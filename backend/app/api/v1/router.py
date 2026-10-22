@@ -5,6 +5,7 @@ from app.api.v1.routes import (
     auth,
     designs,
     exports,
+    fabrics,
     gallery,
     materials,
     palettes,
@@ -25,4 +26,5 @@ api_router.include_router(gallery.router, prefix="/gallery", tags=["gallery"])
 api_router.include_router(ratings.router, prefix="/ratings", tags=["ratings"])
 api_router.include_router(exports.router, prefix="/exports", tags=["exports"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
+api_router.include_router(fabrics.router, prefix="/fabrics", tags=["fabrics"])
 api_router.include_router(ai_routes.router, prefix="/ai", tags=["ai"])

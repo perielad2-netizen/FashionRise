@@ -210,6 +210,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               onToggleEyedropper={() =>
                 editor.setTool(editor.tool === 'eyedropper' ? 'draw' : 'eyedropper')
               }
+              onNotice={editor.publishStudioNotice}
             />
           </div>
         </div>
