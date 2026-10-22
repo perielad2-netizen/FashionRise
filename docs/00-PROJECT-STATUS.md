@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-22. **GitHub `main`:** `c21fee6b` (PR #32 fill-fingerprint hotfix merged + backend deployed). **Production backend:** **`c21fee6b`** · **Production frontend:** **`d7e37b59`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Paid Magic generation: not yet run** (Cursor paid calls = 0). **Active draft:** WEB-V4D Studio UX + model library (`cursor/web-v4d-studio-ux-77c6`) — **STOP for Technical PM review** (do not merge/deploy).
+**Last updated:** 2026-10-22. **GitHub `main`:** `c21fee6b` (PR #32 fill-fingerprint hotfix merged + backend deployed). **Production backend:** **`c21fee6b`** · **Production frontend:** **`d7e37b59`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **First paid Magic browser test: COMPLETED** — **quality acceptance FAILED** (too pale / not professional fashion polish). Cursor paid calls during agent work remain 0 for new jobs. **Active drafts:** WEB-V4D PR #34 (legacy model geometry fix) + separate WEB-V4E Magic quality — **STOP for Technical PM review** (do not merge/deploy).
 
-**Phase:** Protected family beta. Fill-autosave hotfix is live on the API. WEB-V4D (frontend-only) refreshes built-in croquis, tabbed materials, and focus canvas mode.
+**Phase:** Protected family beta. Fill-autosave hotfix is live. WEB-V4D frontend UX is in draft amendment. Magic quality needs a separate WEB-V4E prompt/pipeline pass.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -440,25 +440,36 @@ FashionRise/
 | Blocked | Merge, production deploy of hotfix, Magic click |
 | Next | **Technical PM review** → merge → backend-only deploy → operator Keep-this-device recovery |
 
-## WEB-V4D verification (draft — Studio UX + model library)
+## WEB-V4D verification (draft PR #34 — Studio UX + model library)
 
 | Gate | Result |
 |------|--------|
 | Scope | **Frontend-only** — no backend / migration / Nginx / worker / paid AI |
-| Models | 6 female + 4 male approved croquis; defaults `female`/`male` standing; **no Unavailable cards**; mapping in `web-ui/src/assets/MODEL_LIBRARY.md` |
-| Tools UI | Tabbed Colors / Fabrics / Gradients in `ColorAndMaterialsPanel` (wider materials column) |
-| Focus mode | Expand canvas; side panels hide; Models/Materials/Settings via focus quick bar or Esc |
-| FE tests | **272 / 272** |
-| Lint | Pass (pre-existing oxlint warnings only) |
-| Build + SW | Pass · `check:sw` **ok=true** |
-| OpenAI / paid Magic | **None** |
+| Models | 10 selectable (`female-straight`… / `male-straight`…); **legacy `female`/`male` keep original PNG geometry**; new defaults `female-straight`/`male-straight`; **no Unavailable cards** |
+| Compat | Regression: old drafts/snapshots retain strokes/fills + `/models/female_model.png` / `male_model_display.png` |
+| Tools UI | Tabbed Colors / Fabrics / Gradients |
+| Focus mode | Expand canvas; panels hide; quick bar + Esc |
+| FE tests | **278 / 278** |
+| Lint / build / SW | Pass · `check:sw` **ok=true** |
+| Browser Studio acceptance | **Not claimed** (login-gated in agent env) |
+| OpenAI / new paid Magic | **None in this PR** |
 | Production | **Not deployed** |
-| Next | **Technical PM review** → approve merge → separate FE deploy auth |
+| Next | **Technical PM re-review of amended PR #34** |
+
+## Magic quality (separate WEB-V4E)
+
+| Item | Status |
+|------|--------|
+| First paid production Magic | **Done** — operator rejected quality |
+| Likely bias in `_build_image_prompt` | “light color wash” / “still look like the child's sketch” |
+| Edit→generate fallback | Can invent a new image without sketch pixels |
+| Track | Separate draft PR based on `main` (not V4D) |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-22 | **WEB-V4D amendment:** legacy `female`/`male` restore original croquis geometry; new defaults `*-straight`; FE 278 tests; first paid Magic quality FAILED (tracked as WEB-V4E). **STOP for PM review.** |
 | 2026-10-22 | **WEB-V4D Studio UX + model library (draft):** approved croquis replace built-ins; tabbed materials; focus canvas mode; unavailable placeholders removed; FE 272 tests; build/SW PASS; **no backend**; **STOP for Technical PM review** (no merge/deploy). |
 | 2026-10-22 | **Fill-autosave hotfix MERGED + backend deployed** PR #32 @ `c21fee6b` (FE still `d7e37b59`). |
 | 2026-10-22 | **URGENT fill-autosave hotfix (draft):** production `d7e37b59`/Alembic `005` acceptance BLOCKED; fingerprint now includes fills; Keep-device path covered by API tests; no FE change; no paid Magic; **STOP for Technical PM review** (do not merge/deploy). |
