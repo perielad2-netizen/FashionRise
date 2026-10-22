@@ -1,4 +1,4 @@
-"""OpenAI vision + JSON for sketch jobs; polish also edits the child's sketch into a look image."""
+"""OpenAI vision + JSON for sketch jobs; polish edits the uploaded sketch into a look image."""
 
 from __future__ import annotations
 
