@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureSketchForMagic, MAGIC_MAX_SKETCH_BYTES } from '@/lib/sketchCapture'
 import { exportSketchPng } from '@/lib/exportCanvas'
+import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 
 vi.mock('@/lib/exportCanvas', () => ({
   exportSketchPng: vi.fn(),
@@ -42,6 +43,7 @@ describe('captureSketchForMagic', () => {
       expect.objectContaining({
         fills: expect.arrayContaining([expect.objectContaining({ id: 'f1' })]),
         onReferenceError: 'skip',
+        onFabricError: 'throw',
       }),
     )
     expect(result.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
@@ -94,6 +96,32 @@ describe('captureSketchForMagic', () => {
     expect(exportMock).toHaveBeenCalledWith(
       expect.objectContaining({ onReferenceError: 'throw' }),
     )
+  })
+
+  it('fails closed when a custom fabric cannot be loaded (no paid enqueue)', async () => {
+    exportMock.mockRejectedValue(
+      new FabricAssetLoadError('33333333-3333-4333-8333-333333333333', 'missing'),
+    )
+    await expect(
+      captureSketchForMagic({
+        strokes: [],
+        fills: [
+          {
+            id: 'f1',
+            contour: [10, 10, 40, 10, 40, 40, 10, 40],
+            style: {
+              kind: 'uploaded-fabric',
+              assetId: '33333333-3333-4333-8333-333333333333',
+              scale: 1,
+            },
+            seedX: 20,
+            seedY: 20,
+          },
+        ],
+        referenceUrl: null,
+      }),
+    ).rejects.toThrow(/custom fabric|Magic was not started/i)
+    expect(exportMock).toHaveBeenCalledWith(expect.objectContaining({ onFabricError: 'throw' }))
   })
 
   it('fails closed when expected reference is omitted from the export result', async () => {

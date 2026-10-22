@@ -243,4 +243,180 @@
   line-height: 1.35;
 }
 
+.addFabric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 51, 132, 0.45);
+  background: rgba(214, 51, 132, 0.16);
+  color: #ffd6e8;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.addFabric:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.hiddenFile {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.myFabrics {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.myFabricRow {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.myFabricMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.myFabricName {
+  font-size: 12px;
+  color: var(--fr-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.removeFabric {
+  align-self: start;
+  border: none;
+  background: transparent;
+  color: var(--fr-muted);
+  font-size: 10px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.scaleRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--fr-muted);
+}
+
+.scaleRow input[type='range'] {
+  width: 100%;
+}
+
+.scaleValue {
+  font-variant-numeric: tabular-nums;
+  color: var(--fr-text);
+}
+
+.uploadScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(8, 10, 18, 0.62);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.uploadDialog {
+  width: min(360px, 100%);
+  border-radius: 16px;
+  background: #151a2a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.uploadTitle {
+  margin: 0;
+  font-size: 16px;
+  color: white;
+}
+
+.uploadPreview,
+.uploadPreviewEmpty {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.uploadPreviewEmpty {
+  display: grid;
+  place-items: center;
+  color: var(--fr-muted);
+  font-size: 12px;
+}
+
+.uploadField {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--fr-muted);
+}
+
+.uploadError {
+  margin: 0;
+  font-size: 12px;
+  color: #fecdd3;
+}
+
+.uploadActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.uploadGhost,
+.uploadPrimary {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.uploadGhost {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--fr-text);
+}
+
+.uploadPrimary {
+  border: none;
+  background: var(--fr-pink);
+  color: white;
+}
+
+.uploadPrimary:disabled,
+.uploadGhost:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* Hidden via CreatorWorkspace materialsSlot at ≤1200; restored when dock opens. */

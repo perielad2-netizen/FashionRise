@@ -1,9 +1,11 @@
+import { getCachedFabricImage } from '@/lib/fabricAssetCache'
 import {
   contourToSvgPath,
   type FabricFillStyle,
   type FillOp,
   type FillStyle,
   type GradientFillStyle,
+  type UploadedFabricFillStyle,
 } from '@/lib/fills'
 
 export type FillPaintContext = {
@@ -36,7 +38,27 @@ function resolveFillStyle(ctx: FillPaintContext, fill: FillOp): string | CanvasG
   const style = fill.style
   if (style.kind === 'solid') return style.color
   if (style.kind === 'gradient') return makeGradient(ctx, fill.contour, style)
+  if (style.kind === 'uploaded-fabric') {
+    return makeUploadedFabricPattern(ctx, style) ?? missingFabricPlaceholder(ctx)
+  }
   return makeFabricPattern(ctx, style) ?? '#CCCCCC'
+}
+
+function missingFabricPlaceholder(ctx: FillPaintContext): CanvasPattern | string {
+  const tile = document.createElement('canvas')
+  tile.width = 16
+  tile.height = 16
+  const t = tile.getContext('2d')
+  if (!t) return '#C4B5C8'
+  t.fillStyle = '#E7E0E8'
+  t.fillRect(0, 0, 16, 16)
+  t.strokeStyle = '#BE185D'
+  t.lineWidth = 2
+  t.beginPath()
+  t.moveTo(0, 16)
+  t.lineTo(16, 0)
+  t.stroke()
+  return ctx.createPattern(tile, 'repeat') ?? '#C4B5C8'
 }
 
 function contourBounds(contour: number[]): { minX: number; minY: number; maxX: number; maxY: number } {
@@ -82,6 +104,40 @@ function makeFabricPattern(ctx: FillPaintContext, style: FabricFillStyle): Canva
     fabricTileCache.set(style.fabricId, tile)
   }
   return ctx.createPattern(tile, 'repeat')
+}
+
+const uploadedTileCache = new Map<string, HTMLCanvasElement>()
+
+function makeUploadedFabricPattern(
+  ctx: FillPaintContext,
+  style: UploadedFabricFillStyle,
+): CanvasPattern | null {
+  const img = getCachedFabricImage(style.assetId)
+  if (!img) return null
+  const key = `${style.assetId}:${style.scale.toFixed(3)}`
+  let tile = uploadedTileCache.get(key)
+  if (!tile) {
+    tile = renderUploadedFabricTile(img, style.scale)
+    uploadedTileCache.set(key, tile)
+  }
+  return ctx.createPattern(tile, 'repeat')
+}
+
+function renderUploadedFabricTile(img: HTMLImageElement, scale: number): HTMLCanvasElement {
+  // Tile size in design pixels; clamp so patterns stay stable and memory-bounded.
+  const base = Math.max(img.width, img.height)
+  const target = Math.round(Math.min(512, Math.max(24, base * scale)))
+  const aspect = img.width / Math.max(1, img.height)
+  const w = aspect >= 1 ? target : Math.max(24, Math.round(target * aspect))
+  const h = aspect >= 1 ? Math.max(24, Math.round(target / aspect)) : target
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const tileCtx = c.getContext('2d')
+  if (!tileCtx) return c
+  tileCtx.imageSmoothingEnabled = true
+  tileCtx.drawImage(img, 0, 0, w, h)
+  return c
 }
 
 function renderFabricTile(fabricId: string): HTMLCanvasElement {
@@ -215,6 +271,7 @@ function renderFabricTile(fabricId: string): HTMLCanvasElement {
 export function sampleColorFromStyle(style: FillStyle): string {
   if (style.kind === 'solid') return style.color
   if (style.kind === 'gradient') return style.colors[0]
+  if (style.kind === 'uploaded-fabric') return '#BE185D'
   switch (style.fabricId) {
     case 'satin':
       return '#BE185D'

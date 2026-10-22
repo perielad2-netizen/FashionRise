@@ -15,7 +15,31 @@ export type FabricFillStyle = {
   fabricId: string
 }
 
-export type FillStyle = SolidFillStyle | GradientFillStyle | FabricFillStyle
+/** Designer-uploaded fabric referenced by private asset id (bytes stored server-side). */
+export type UploadedFabricFillStyle = {
+  kind: 'uploaded-fabric'
+  assetId: string
+  /** Tile scale relative to the source image (0.25–4). */
+  scale: number
+}
+
+export type FillStyle = SolidFillStyle | GradientFillStyle | FabricFillStyle | UploadedFabricFillStyle
+
+export const UPLOADED_FABRIC_SCALE_MIN = 0.25
+export const UPLOADED_FABRIC_SCALE_MAX = 4
+export const UPLOADED_FABRIC_SCALE_DEFAULT = 1
+
+const ASSET_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export function clampUploadedFabricScale(raw: number): number {
+  if (!Number.isFinite(raw)) return UPLOADED_FABRIC_SCALE_DEFAULT
+  return Math.min(UPLOADED_FABRIC_SCALE_MAX, Math.max(UPLOADED_FABRIC_SCALE_MIN, raw))
+}
+
+export function isAssetId(value: string): boolean {
+  return ASSET_UUID.test(value)
+}
 
 export type FillOp = {
   id: string
@@ -141,11 +165,20 @@ export function createFillId(): string {
 }
 
 export function cloneFills(fills: FillOp[]): FillOp[] {
-  return fills.map((f) => ({
-    ...f,
-    contour: [...f.contour],
-    style: { ...f.style, ...(f.style.kind === 'gradient' ? { colors: [...f.style.colors] as [string, string] } : {}) },
-  }))
+  return fills.map((f) => {
+    if (f.style.kind === 'gradient') {
+      return {
+        ...f,
+        contour: [...f.contour],
+        style: { ...f.style, colors: [...f.style.colors] as [string, string] },
+      }
+    }
+    return {
+      ...f,
+      contour: [...f.contour],
+      style: { ...f.style },
+    }
+  })
 }
 
 export function contourToSvgPath(contour: number[]): string {
@@ -249,6 +282,13 @@ function parseFillStyle(raw: unknown): FillStyle | null {
     if (!known) return null
     return { kind: 'fabric', fabricId: s.fabricId }
   }
+  if (s.kind === 'uploaded-fabric' && typeof s.assetId === 'string' && isAssetId(s.assetId)) {
+    return {
+      kind: 'uploaded-fabric',
+      assetId: s.assetId.toLowerCase(),
+      scale: clampUploadedFabricScale(typeof s.scale === 'number' ? s.scale : UPLOADED_FABRIC_SCALE_DEFAULT),
+    }
+  }
   return null
 }
 
@@ -259,6 +299,32 @@ export function solidStyle(color: string): SolidFillStyle {
 export function fabricStyle(fabricId: string): FabricFillStyle | null {
   if (!FABRIC_PRESETS.some((p) => p.id === fabricId)) return null
   return { kind: 'fabric', fabricId }
+}
+
+export function uploadedFabricStyle(
+  assetId: string,
+  scale: number = UPLOADED_FABRIC_SCALE_DEFAULT,
+): UploadedFabricFillStyle | null {
+  if (!isAssetId(assetId)) return null
+  return {
+    kind: 'uploaded-fabric',
+    assetId: assetId.toLowerCase(),
+    scale: clampUploadedFabricScale(scale),
+  }
+}
+
+/** Asset ids referenced by uploaded-fabric fills (deduped). */
+export function collectUploadedFabricAssetIds(fills: FillOp[]): string[] {
+  const ids: string[] = []
+  const seen = new Set<string>()
+  for (const fill of fills) {
+    if (fill.style.kind !== 'uploaded-fabric') continue
+    const id = fill.style.assetId
+    if (seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
 }
 
 export function gradientStyleFromPreset(id: string): GradientFillStyle | null {

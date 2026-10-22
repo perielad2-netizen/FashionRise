@@ -1,5 +1,6 @@
 import { strokeToSvgPath } from '@/lib/freehand'
 import type { FillOp } from '@/lib/fills'
+import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { paintFillOps } from '@/lib/paintFills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 
@@ -102,6 +103,11 @@ export type RenderedSketch = {
 export type RenderOptions = ExportOptions & {
   /** 'skip' renders without the reference when it cannot be loaded; 'throw' rejects. */
   onReferenceError?: 'skip' | 'throw'
+  /**
+   * Uploaded-fabric policy. Export/Magic default to `throw` so incomplete artwork
+   * is never silently submitted. Thumbnails may use `skip` (placeholder hatch).
+   */
+  onFabricError?: 'skip' | 'throw'
   loadReference?: (src: string) => Promise<CanvasImageSource & { width: number; height: number }>
   /**
    * Minimum stroke size in output pixels. Thumbnails need it because hairline brushes
@@ -156,13 +162,22 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
     }
   }
 
+  // Prefetch private fabric assets before paint so tiling matches live Studio.
+  const fills = options.fills ?? []
+  const fabricMode = options.onFabricError ?? 'throw'
+  try {
+    await ensureFabricAssetsForFills(fills, { required: fabricMode === 'throw' })
+  } catch (err) {
+    if (fabricMode === 'throw') throw err
+  }
+
   // Fills sit above the reference and under ink (garment colour / fabric).
   // Separate layers: eraser destination-out must not punch holes in fills.
   const strokes = options.minInkSize
     ? withMinimumSize(options.strokes, options.minInkSize / Math.min(sx, sy))
     : options.strokes
   compositeFillAndInkLayers(baseCtx, {
-    fills: options.fills ?? [],
+    fills,
     strokes,
     width,
     height,

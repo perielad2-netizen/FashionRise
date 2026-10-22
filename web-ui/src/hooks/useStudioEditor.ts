@@ -20,6 +20,7 @@ import {
 import { documentForCloud } from '@/services/designsApi'
 import { isMagicUiEnabled } from '@/config/magicUi'
 import { downloadBlob, exportFilename, exportSketchPng } from '@/lib/exportCanvas'
+import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 import { checkPersistableFill, solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
 import { MAX_SNAPSHOT_FILLS } from '@/lib/savedDesign'
 import { captureSketchForMagic } from '@/lib/sketchCapture'
@@ -863,7 +864,7 @@ export function useStudioEditor() {
       setColor(style.color)
       return
     }
-    // Fabric / gradient selections imply the Fill tool for the next tap.
+    // Fabric / uploaded fabric / gradient selections imply Fill for the next tap.
     setTool('fill')
   }, [])
 
@@ -987,8 +988,14 @@ export function useStudioEditor() {
           ? EXPORT_NO_REFERENCE
           : 'PNG exported (768 × 1024). Check your downloads.',
       )
-    } catch {
-      publishStudioNotice(EXPORT_FAILED)
+    } catch (err) {
+      if (err instanceof FabricAssetLoadError) {
+        publishStudioNotice(
+          'A custom fabric in this sketch could not be loaded. Check your connection or re-upload the fabric, then export again.',
+        )
+      } else {
+        publishStudioNotice(EXPORT_FAILED)
+      }
     } finally {
       exportingRef.current = false
       setExporting(false)
@@ -1373,6 +1380,7 @@ export function useStudioEditor() {
     backToSketchFromMagic,
     studioNotice,
     setStudioNotice,
+    publishStudioNotice,
     comingSoon,
     setComingSoon,
     showComingSoon,

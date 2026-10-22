@@ -1,12 +1,25 @@
-import { useEffect, useState } from 'react'
-import { Pipette } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Plus, Pipette } from 'lucide-react'
 import {
   FABRIC_PRESETS,
   FASHION_PALETTE,
   GRADIENT_PRESETS,
+  UPLOADED_FABRIC_SCALE_DEFAULT,
+  UPLOADED_FABRIC_SCALE_MAX,
+  UPLOADED_FABRIC_SCALE_MIN,
+  clampUploadedFabricScale,
   type FillStyle,
+  uploadedFabricStyle,
 } from '@/lib/fills'
 import { INK_SWATCHES } from '@/lib/strokes'
+import {
+  deleteFabric,
+  listMyFabrics,
+  uploadFabric,
+  type FabricAsset,
+} from '@/services/fabricAssetsApi'
+import { ApiError } from '@/services/api/client'
+import { loadFabricAssetImage } from '@/lib/fabricAssetCache'
 import styles from './ColorAndMaterialsPanel.module.css'
 
 type Props = {
@@ -17,7 +30,10 @@ type Props = {
   onFillStyle: (style: FillStyle) => void
   eyedropperActive: boolean
   onToggleEyedropper: () => void
+  onNotice?: (message: string) => void
 }
+
+type PreviewMap = Record<string, string>
 
 export function ColorAndMaterialsPanel({
   color,
@@ -27,12 +43,79 @@ export function ColorAndMaterialsPanel({
   onFillStyle,
   eyedropperActive,
   onToggleEyedropper,
+  onNotice,
 }: Props) {
   const [hexDraft, setHexDraft] = useState(color)
+  const [myFabrics, setMyFabrics] = useState<FabricAsset[]>([])
+  const [previews, setPreviews] = useState<PreviewMap>({})
+  const [libraryBusy, setLibraryBusy] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null)
+  const [pendingName, setPendingName] = useState('')
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const nameFieldId = useId()
+  const scale =
+    fillStyle.kind === 'uploaded-fabric' ? fillStyle.scale : UPLOADED_FABRIC_SCALE_DEFAULT
 
   useEffect(() => {
     setHexDraft(color)
   }, [color])
+
+  useEffect(() => {
+    let cancelled = false
+    setLibraryBusy(true)
+    void listMyFabrics()
+      .then((rows) => {
+        if (!cancelled) setMyFabrics(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setMyFabrics([])
+      })
+      .finally(() => {
+        if (!cancelled) setLibraryBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const urls: string[] = []
+    void (async () => {
+      const next: PreviewMap = {}
+      for (const fabric of myFabrics) {
+        try {
+          const img = await loadFabricAssetImage(fabric.id)
+          if (cancelled) return
+          const canvas = document.createElement('canvas')
+          canvas.width = 64
+          canvas.height = 64
+          const ctx = canvas.getContext('2d')
+          if (!ctx) continue
+          ctx.drawImage(img, 0, 0, 64, 64)
+          const url = canvas.toDataURL('image/png')
+          next[fabric.id] = url
+          urls.push(url)
+        } catch {
+          /* preview optional */
+        }
+      }
+      if (!cancelled) setPreviews(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [myFabrics])
+
+  useEffect(() => {
+    return () => {
+      if (pendingPreview) URL.revokeObjectURL(pendingPreview)
+    }
+  }, [pendingPreview])
 
   const commitHex = () => {
     const ok = onColorHex(hexDraft.startsWith('#') ? hexDraft : `#${hexDraft}`)
@@ -42,6 +125,83 @@ export function ColorAndMaterialsPanel({
   const selectSolid = (next: string) => {
     onColor(next)
     setHexDraft(next)
+  }
+
+  const openPicker = () => {
+    setUploadError(null)
+    fileInputRef.current?.click()
+  }
+
+  const onFileChosen = (file: File | null) => {
+    if (!file) return
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (file.type && !allowed.includes(file.type)) {
+      setUploadError('Use a JPG, PNG, or WebP image.')
+      setDialogOpen(true)
+      return
+    }
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview)
+    const url = URL.createObjectURL(file)
+    setPendingFile(file)
+    setPendingPreview(url)
+    setPendingName(file.name.replace(/\.[^.]+$/, '').slice(0, 80) || 'My fabric')
+    setUploadError(null)
+    setDialogOpen(true)
+  }
+
+  const closeDialog = () => {
+    setDialogOpen(false)
+    setPendingFile(null)
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview)
+    setPendingPreview(null)
+    setPendingName('')
+    setUploadError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const confirmUpload = async () => {
+    if (!pendingFile || uploading) return
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const created = await uploadFabric(pendingFile, pendingName)
+      setMyFabrics((prev) => [created, ...prev.filter((f) => f.id !== created.id)])
+      const style = uploadedFabricStyle(created.id, scale)
+      if (style) onFillStyle(style)
+      onNotice?.(`Fabric “${created.name}” added. Tap Fill inside a closed region.`)
+      closeDialog()
+    } catch (err) {
+      setUploadError(err instanceof ApiError ? err.message : 'Fabric upload failed.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const selectUploaded = (fabric: FabricAsset) => {
+    const style = uploadedFabricStyle(fabric.id, scale)
+    if (style) onFillStyle(style)
+  }
+
+  const removeUploaded = async (fabric: FabricAsset) => {
+    try {
+      await deleteFabric(fabric.id)
+      setMyFabrics((prev) => prev.filter((f) => f.id !== fabric.id))
+      if (fillStyle.kind === 'uploaded-fabric' && fillStyle.assetId === fabric.id) {
+        onFillStyle({ kind: 'fabric', fabricId: 'satin' })
+      }
+      onNotice?.(
+        `“${fabric.name}” removed from My Fabrics. Designs that already use it can still reopen.`,
+      )
+    } catch (err) {
+      onNotice?.(err instanceof ApiError ? err.message : 'Could not remove fabric.')
+    }
+  }
+
+  const onScaleChange = (raw: number) => {
+    const next = clampUploadedFabricScale(raw)
+    if (fillStyle.kind === 'uploaded-fabric') {
+      onFillStyle({ ...fillStyle, scale: next })
+    }
   }
 
   return (
@@ -116,8 +276,26 @@ export function ColorAndMaterialsPanel({
       <section className={styles.card}>
         <div className={styles.head}>
           <h3>Fabrics</h3>
+          <button
+            type="button"
+            className={styles.addFabric}
+            onClick={openPicker}
+            disabled={uploading}
+          >
+            <Plus size={14} aria-hidden="true" />
+            Add Fabric
+          </button>
         </div>
         <p className={styles.note}>Select a fabric, then use Fill on a closed dress region.</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+          className={styles.hiddenFile}
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
+        />
         <div className={styles.fabrics}>
           {FABRIC_PRESETS.map((fabric) => {
             const active = fillStyle.kind === 'fabric' && fillStyle.fabricId === fabric.id
@@ -135,6 +313,64 @@ export function ColorAndMaterialsPanel({
             )
           })}
         </div>
+
+        <p className={styles.note}>My Fabrics {libraryBusy ? '· loading…' : ''}</p>
+        {myFabrics.length === 0 ? (
+          <p className={styles.note}>Upload a JPG, PNG, or WebP to reuse across your designs.</p>
+        ) : (
+          <div className={styles.myFabrics}>
+            {myFabrics.map((fabric) => {
+              const active =
+                fillStyle.kind === 'uploaded-fabric' && fillStyle.assetId === fabric.id
+              return (
+                <div key={fabric.id} className={styles.myFabricRow}>
+                  <button
+                    type="button"
+                    className={active ? styles.fabricActive : styles.fabric}
+                    style={{
+                      backgroundImage: previews[fabric.id]
+                        ? `url(${previews[fabric.id]})`
+                        : undefined,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      backgroundColor: '#3f3340',
+                    }}
+                    aria-label={fabric.name}
+                    aria-pressed={active}
+                    title={fabric.name}
+                    onClick={() => selectUploaded(fabric)}
+                  />
+                  <div className={styles.myFabricMeta}>
+                    <span className={styles.myFabricName}>{fabric.name}</span>
+                    <button
+                      type="button"
+                      className={styles.removeFabric}
+                      onClick={() => void removeUploaded(fabric)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {fillStyle.kind === 'uploaded-fabric' ? (
+          <label className={styles.scaleRow}>
+            <span>Pattern scale</span>
+            <input
+              type="range"
+              min={UPLOADED_FABRIC_SCALE_MIN}
+              max={UPLOADED_FABRIC_SCALE_MAX}
+              step={0.05}
+              value={scale}
+              aria-label="Uploaded fabric pattern scale"
+              onChange={(e) => onScaleChange(Number(e.target.value))}
+            />
+            <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
+          </label>
+        ) : null}
       </section>
 
       <section className={styles.card}>
@@ -167,6 +403,55 @@ export function ColorAndMaterialsPanel({
           })}
         </div>
       </section>
+
+      {dialogOpen ? (
+        <div className={styles.uploadScrim} role="presentation">
+          <div
+            className={styles.uploadDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add fabric"
+          >
+            <h3 className={styles.uploadTitle}>Add fabric</h3>
+            {pendingPreview ? (
+              <img src={pendingPreview} alt="" className={styles.uploadPreview} />
+            ) : (
+              <div className={styles.uploadPreviewEmpty}>Choose an image to preview</div>
+            )}
+            <label className={styles.uploadField} htmlFor={nameFieldId}>
+              Name
+              <input
+                id={nameFieldId}
+                className={styles.hex}
+                value={pendingName}
+                maxLength={80}
+                onChange={(e) => setPendingName(e.target.value)}
+                disabled={uploading}
+              />
+            </label>
+            {uploadError ? (
+              <p className={styles.uploadError} role="alert">
+                {uploadError}
+              </p>
+            ) : (
+              <p className={styles.note}>JPG, PNG, or WebP · private to your account</p>
+            )}
+            <div className={styles.uploadActions}>
+              <button type="button" className={styles.uploadGhost} onClick={closeDialog} disabled={uploading}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.uploadPrimary}
+                onClick={() => void confirmUpload()}
+                disabled={!pendingFile || uploading}
+              >
+                {uploading ? 'Uploading…' : 'Save fabric'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -64,6 +64,10 @@ class Settings(BaseSettings):
 
     max_upload_size_mb: int = 25
     allowed_upload_image_types: str = "image/jpeg,image/png,image/webp"
+    # Private Studio fabric library (WEB-V4C). Separate from public /static/uploads.
+    max_fabric_upload_size_mb: int = 8
+    max_fabric_dimension_px: int = 2048
+    fabric_name_max_length: int = 80
 
     # Invite-only beta registration. Default false so production stays closed until
     # an independently approved deployment flips the gate (and Nginx allowlists POST).
@@ -121,6 +125,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return max(1, self.max_upload_size_mb) * 1024 * 1024
+
+    @property
+    def max_fabric_upload_bytes(self) -> int:
+        return max(1, self.max_fabric_upload_size_mb) * 1024 * 1024
 
 
 @lru_cache
