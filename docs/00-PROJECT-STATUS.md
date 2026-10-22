@@ -477,6 +477,10 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Base | `main` @ `2cbc1ad0` (production baseline) |
 | Color picker | Built-in HSV professional picker (SV square, hue, HEX/RGB sync, Apply/Cancel, portal modal) |
 | Magic modal | Full-image `object-fit: contain`; notes collapsible; actions remain accessible |
+| Frontend tests | **287/287** |
+| Lint | oxlint warnings only (no errors); unused-import cleaned in new tests |
+| TypeScript / production build | `tsc -b` + vite build **PASS** |
+| SW safety | `check:sw` **ok=true** (no NavigationRoute / HTML precache) |
 | Paid OpenAI during implementation | **0** |
 | Merge / deploy | **Blocked** — STOP for Technical PM review |
 

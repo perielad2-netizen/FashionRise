@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
 import { solidStyle, type FillStyle } from '@/lib/fills'
@@ -11,13 +11,6 @@ export function V4fUiLabPage() {
   const [magicOpen, setMagicOpen] = useState(true)
   const lookObjectUrl = useMemo(() => makePortraitLookUrl(), [])
   const sketchObjectUrl = useMemo(() => makeSketchUrl(), [])
-
-  useEffect(() => {
-    return () => {
-      URL.revokeObjectURL(lookObjectUrl)
-      URL.revokeObjectURL(sketchObjectUrl)
-    }
-  }, [lookObjectUrl, sketchObjectUrl])
 
   return (
     <div
