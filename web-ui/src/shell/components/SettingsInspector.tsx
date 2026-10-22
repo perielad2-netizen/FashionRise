@@ -131,6 +131,14 @@ export function SettingsInspector({
             <span className={styles.kbd}>E</span>
           </div>
           <div className={styles.shortcut}>
+            <span>Fill</span>
+            <span className={styles.kbd}>G</span>
+          </div>
+          <div className={styles.shortcut}>
+            <span>Eyedropper</span>
+            <span className={styles.kbd}>I</span>
+          </div>
+          <div className={styles.shortcut}>
             <span>Undo</span>
             <span className={styles.kbd}>Ctrl + Z</span>
           </div>

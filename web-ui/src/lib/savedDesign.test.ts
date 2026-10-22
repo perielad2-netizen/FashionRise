@@ -122,6 +122,64 @@ describe('saved design envelope format', () => {
     expect(parsed!.saveRequestId).toBe('req-saved-1')
   })
 
+  it('accepts fills at the save limit and rejects one past it without truncating', () => {
+    const fill = {
+      id: 'f',
+      contour: [10, 10, 40, 10, 40, 40, 10, 40],
+      style: { kind: 'solid' as const, color: '#B91C1C' },
+      seedX: 20,
+      seedY: 20,
+    }
+    const atLimit = Array.from({ length: 500 }, (_, i) => ({ ...fill, id: `f${i}` }))
+    const ok = parseSavedDesign(
+      savedRow('limit', snapshotFromDocument(doc({ fills: atLimit }))),
+      OWNER,
+    )
+    expect(ok?.snapshot.fills).toHaveLength(500)
+
+    const over = savedRow('over', {
+      ...snapshotFromDocument(doc()),
+      fills: Array.from({ length: 501 }, (_, i) => ({ ...fill, id: `f${i}` })),
+    })
+    expect(parseSavedDesign(JSON.parse(JSON.stringify(over)), OWNER)).toBeNull()
+  })
+
+  it('round-trips garment fills and still opens pre-V4B snapshots without fills', () => {
+    const withFills = doc({
+      fills: [
+        {
+          id: 'bodice',
+          contour: [10, 10, 40, 10, 40, 40, 10, 40],
+          style: { kind: 'fabric', fabricId: 'satin' },
+          seedX: 20,
+          seedY: 20,
+        },
+      ],
+    })
+    const saved = savedRow('filled', snapshotFromDocument(withFills))
+    const parsed = parseSavedDesign(JSON.parse(JSON.stringify(saved)), OWNER)
+    expect(parsed?.snapshot.fills).toHaveLength(1)
+    expect(parsed?.snapshot.fills?.[0]?.style).toEqual({ kind: 'fabric', fabricId: 'satin' })
+
+    const legacySnapshot: SavedDesignSnapshot = {
+      strokes: withFills.strokes,
+      model: 'female',
+      brush: withFills.brush,
+      dimmed: false,
+    }
+    const legacy = savedRow('legacy', legacySnapshot)
+    const legacyParsed = parseSavedDesign(JSON.parse(JSON.stringify(legacy)), OWNER)
+    expect(legacyParsed?.snapshot.strokes).toHaveLength(2)
+    expect(legacyParsed?.snapshot.fills).toBeUndefined()
+    const reopened = workingDocumentFromSnapshot({
+      current: createEmptyDraftDocument(),
+      serverRevision: 1,
+      snapshot: legacyParsed!.snapshot,
+    })
+    expect(reopened.strokes).toHaveLength(2)
+    expect(reopened.fills).toEqual([])
+  })
+
   it('snapshot is a deep copy: later edits never change it', () => {
     const source = doc()
     const snapshot = snapshotFromDocument(source)

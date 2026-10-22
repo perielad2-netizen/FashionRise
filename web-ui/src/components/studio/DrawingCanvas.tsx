@@ -3,6 +3,10 @@ import { Stage, Layer, Image as KonvaImage, Path, Rect } from 'react-konva'
 import type Konva from 'konva'
 import { appendPoint, strokeToSvgPath } from '@/lib/freehand'
 import { decidePointer, pressureForPointer } from '@/lib/pointerSession'
+import { floodFillRegion } from '@/lib/floodFill'
+import type { FillOp, FillStyle } from '@/lib/fills'
+import { paintFillOps } from '@/lib/paintFills'
+import { sampleArtworkPixel } from '@/lib/sampleArtworkPixel'
 import {
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
@@ -14,16 +18,35 @@ import styles from './DrawingCanvas.module.css'
 
 type Props = {
   strokes: Stroke[]
+  fills?: FillOp[]
   activeTool: ToolKind
   brushColor: string
   brushSize: number
   /** Opacity for new ink strokes (0–1). Older strokes keep their saved opacity. */
   brushOpacity?: number
+  /** Style applied when the Fill tool succeeds. */
+  fillStyle?: FillStyle
   referenceUrl: string | null
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
+  onFillComplete?: (fill: FillOp) => void
+  onFillError?: (message: string) => void
+  onEyedropperSample?: (color: string) => void
   /** When false, host fills its parent frame (shell drawing workspace). */
   framed?: boolean
+}
+
+function renderFillsImage(fills: FillOp[]): HTMLImageElement | null {
+  if (fills.length === 0) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = DESIGN_WIDTH
+  canvas.height = DESIGN_HEIGHT
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  paintFillOps(ctx, fills)
+  const img = new window.Image()
+  img.src = canvas.toDataURL('image/png')
+  return img
 }
 
 /**
@@ -33,19 +56,25 @@ type Props = {
  */
 export function DrawingCanvas({
   strokes,
+  fills = [],
   activeTool,
   brushColor,
   brushSize,
   brushOpacity = 1,
+  fillStyle,
   referenceUrl,
   referenceOpacity,
   onStrokeComplete,
+  onFillComplete,
+  onFillError,
+  onEyedropperSample,
   framed = true,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: DESIGN_WIDTH, h: DESIGN_HEIGHT })
   const [draft, setDraft] = useState<Stroke | null>(null)
   const [refImage, setRefImage] = useState<HTMLImageElement | null>(null)
+  const [fillsImage, setFillsImage] = useState<HTMLImageElement | null>(null)
   const drawing = useRef(false)
   const activePointerId = useRef<number | null>(null)
   const stageRef = useRef<Konva.Stage | null>(null)
@@ -90,6 +119,21 @@ export function DrawingCanvas({
     }
   }, [referenceUrl])
 
+  useEffect(() => {
+    let cancelled = false
+    const img = renderFillsImage(fills)
+    if (!img) {
+      setFillsImage(null)
+      return
+    }
+    img.onload = () => {
+      if (!cancelled) setFillsImage(img)
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [fills])
+
   const scale = size.w / DESIGN_WIDTH
 
   const refFit = useMemo(() => {
@@ -125,8 +169,6 @@ export function DrawingCanvas({
       const stage = stageRef.current
       if (stage && pointerId !== undefined) {
         try {
-          // Capture lives on the Konva content node (the element that receives
-          // pointer events), not the outer stage container.
           stage.content.releasePointerCapture(pointerId)
         } catch {
           /* already released */
@@ -199,7 +241,6 @@ export function DrawingCanvas({
         !!content &&
         evt.target instanceof Node &&
         (evt.target === content || content.contains(evt.target))
-      // Moves aimed at the drawing surface are appended by the stage handler.
       if (onSurface || !stage) return
 
       const point = pointFrom(stage, evt)
@@ -219,6 +260,29 @@ export function DrawingCanvas({
     }
   }, [extendDraft, finish, pointFrom, session])
 
+  const applyFillAt = useCallback(
+    (x: number, y: number) => {
+      const style = fillStyle ?? { kind: 'solid' as const, color: brushColor }
+      const result = floodFillRegion({ strokes, x, y, style })
+      if (!result.ok) {
+        onFillError?.(result.message)
+        return
+      }
+      onFillComplete?.(result.fill)
+    },
+    [brushColor, fillStyle, onFillComplete, onFillError, strokes],
+  )
+
+  const sampleAt = useCallback(
+    (x: number, y: number) => {
+      // Sample the same fill→ink composite the user sees (gradient position, fabric
+      // pixels, and foreground ink after erasers). Model reference is never sampled.
+      const sampled = sampleArtworkPixel({ fills, strokes, x, y })
+      onEyedropperSample?.(sampled.hit ? sampled.hex : brushColor)
+    },
+    [brushColor, fills, onEyedropperSample, strokes],
+  )
+
   const onPointerDown = useCallback(
     (e: Konva.KonvaEventObject<PointerEvent>) => {
       const evt = e.evt
@@ -234,15 +298,23 @@ export function DrawingCanvas({
       if (!stage) return
       const point = pointFrom(stage, evt)
       if (!point) return
+
+      if (activeTool === 'fill') {
+        applyFillAt(point.x, point.y)
+        return
+      }
+      if (activeTool === 'eyedropper') {
+        sampleAt(point.x, point.y)
+        return
+      }
+
       drawing.current = true
       activePointerId.current = evt.pointerId
       stageRef.current = stage
       try {
-        // Konva listens on `.konvajs-content`. Capturing the outer container
-        // retargets later moves away from that node, so the stroke never grows.
         stage.content.setPointerCapture(evt.pointerId)
       } catch {
-        /* capture optional; window listeners still end the stroke */
+        /* capture optional */
       }
       const stroke: Stroke = {
         id: createStrokeId(),
@@ -255,7 +327,16 @@ export function DrawingCanvas({
       draftRef.current = stroke
       setDraft(stroke)
     },
-    [activeTool, brushColor, brushOpacity, brushSize, pointFrom, session],
+    [
+      activeTool,
+      applyFillAt,
+      brushColor,
+      brushOpacity,
+      brushSize,
+      pointFrom,
+      sampleAt,
+      session,
+    ],
   )
 
   const onPointerMove = useCallback(
@@ -298,11 +379,14 @@ export function DrawingCanvas({
   )
 
   const all = draft ? [...strokes, draft] : strokes
+  const cursor =
+    activeTool === 'fill' ? 'cell' : activeTool === 'eyedropper' ? 'crosshair' : 'crosshair'
 
   return (
     <div
       ref={hostRef}
       className={`${framed ? styles.host : styles.hostFlush} studio-draw-surface`}
+      style={{ cursor }}
     >
       <div className={framed ? styles.frame : styles.frameFlush} style={{ width: size.w, height: size.h }}>
         <Stage
@@ -326,6 +410,9 @@ export function DrawingCanvas({
                 height={refFit.h}
                 opacity={referenceOpacity}
               />
+            ) : null}
+            {fillsImage ? (
+              <KonvaImage image={fillsImage} x={0} y={0} width={DESIGN_WIDTH} height={DESIGN_HEIGHT} />
             ) : null}
           </Layer>
           <Layer>

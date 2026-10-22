@@ -3,18 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-21. **GitHub `main`:** `46747e85` (PR #26 registration product merged). **Production backend/frontend:** `46747e85` · Alembic **`004`** · `REGISTRATION_ENABLED=true` · registration UI **on** · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · Magic / AI Nginx **still denied**. Registration production activation **PASS**; real second-user browser acceptance **PASS** (operator-confirmed 2026-10-21). **WEB-V4A** React Magic port in draft PR #27 — reuses Unity/backend polish pipeline; production Magic remains disabled.
+**Last updated:** 2026-10-22. **GitHub `main`:** `dc9e31aa` (PR #27 WEB-V4A Magic React merged). **Production backend/frontend:** `dc9e31aa` · Alembic **`004`** · `REGISTRATION_ENABLED=true` · registration UI **on** · Magic UI **on** (`VITE_MAGIC_UI_ENABLED=true`) · Nginx AI allowlist **on** (polish + job/image) · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. Registration second-user acceptance **PASS**. **Paid Magic generation: not yet run** (operator deferred; Cursor paid calls = 0). **WEB-V4B** fashion toolkit draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) — final eyedropper layering + persistable-fill guard amendment; **STOP for Technical PM merge decision** — not merged, not deployed.
 
-**Phase:** Protected family beta on WEB-V3A + activated invite registration (second-user acceptance PASS). WEB-V4A ports proven Unity Magic into React Studio (integration corrections in review; not production-activated).
+**Phase:** Protected family beta. Production Magic pipeline is **ready for one operator browser test**, but the operator chose to finish essential Studio drawing tools (WEB-V4B) before the first paid generation.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`46747e85…`** — Nginx root `/var/www/fashionrise/releases/46747e85`. `VITE_REGISTRATION_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Prior release retained: `8c6a391a`. |
-| Backend (FastAPI + PostgreSQL) | **`46747e85cb8ff8dd740d7acab7bf126d003cca92`** — `fashionrise-api` on `127.0.0.1:8010` |
-| Database | `fashionrise_beta` — Alembic **`004`** · `registration_invitations` present · users=1 at activation |
-| Deploy backup | Registration activation: `/var/backups/fashionrise/reg-activation-20261021T105742Z` |
+| Frontend (`web-ui`) | **`dc9e31aa…`** — Nginx root `/var/www/fashionrise/releases/dc9e31aa`. `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). |
+| Backend (FastAPI + PostgreSQL) | **`dc9e31aa`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone) |
+| AI worker | Standalone `fashionrise-ai-worker` · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` |
+| Database | `fashionrise_beta` — Alembic **`004`** · `registration_invitations` present |
+| Deploy backup | Magic activation: `/var/backups/fashionrise/magic-activation-20261021T182235Z` |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -48,9 +49,11 @@
 
 **WEB-V3B / registration:** **MERGED** PRs [#19](https://github.com/perielad2-netizen/FashionRise/pull/19)/[#20](https://github.com/perielad2-netizen/FashionRise/pull/20)/[#26](https://github.com/perielad2-netizen/FashionRise/pull/26). **Production activation PASS** (2026-10-21): backend `46747e85`, migration `004`, Nginx POST register allowlist, `REGISTRATION_ENABLED=true`, frontend Create Account on. **Real second-user browser acceptance PASS** (operator-confirmed 2026-10-21). Access/AOP unchanged. JWT/Option B hardening remains a **separate** optional track.
 
-**WEB-V4A (Magic → React):** Draft PR [#27](https://github.com/perielad2-netizen/FashionRise/pull/27) — ports Unity polish + poll/recovery; authenticated job image; redacts `image_base64` from job API responses; See last result after refresh; Nginx AI allowlist precedence fixed in docs + isolated verifier. Gate `VITE_MAGIC_UI_ENABLED` default **false**. **Not deployed / no paid calls.**
+**WEB-V4A (Magic → React):** **MERGED** PR [#27](https://github.com/perielad2-netizen/FashionRise/pull/27) at `dc9e31aa` and **deployed**. React Studio uses Unity polish + poll/recovery; authenticated job image; `image_base64` redacted from job API; See last result after refresh. Production Magic UI on; Nginx AI allowlist live. **No paid generation yet** (operator deferred). Docs-only draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) records activation — **do not merge as a deploy artifact**.
 
-**PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. Live `sw.js` sha256 `a51964e6acf2f2f7bd0c2c62caa9ecc49a8cdca5e8cfcc2944263a8eae43007e`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
+**WEB-V4B (Fashion design toolkit):** Draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) on `cursor/web-v4b-fashion-toolkit-77c6`. Functional color picker + fashion palette + eyedropper, bucket fill, bundled fabrics, gradients, undo/redo, V1-compatible optional `fills[]`, shared Konva/PNG/Magic paint. **PM corrections (2026-10-22):** fill barriers = visible ink after erase; eyedropper samples composite pixels; save/fill contour limits; olive `#6B8E23`. **Final amendment:** eyedropper uses shared `compositeFillAndInkLayers` (ink-only eraser; fill remains under erased strokes); `checkPersistableFill` refuses oversized new contours before editor state/save. Curved-dress acceptance PASS. **No Magic spend, no merge, no deploy, no worker/Nginx/prompt changes.**
+
+**PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
 ---
 
@@ -76,21 +79,22 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub `main` | **`46747e85`** — includes PRs #21–#24, #26 |
-| Production frontend / backend | **`46747e85` / `46747e85`** (registration activation 2026-10-21) |
+| GitHub `main` | **`dc9e31aa`** — includes PR #27 (WEB-V4A) |
+| Production frontend / backend | **`dc9e31aa` / `dc9e31aa`** (Magic activation 2026-10-21; no paid generation yet) |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
 | **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
 | **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator-reported desktop 5/5, tablet/cross-device 4/4, offline retry, conflict detection PASS (see above). |
 | **WEB-V3B** | **MERGED** + **production registration activated** (PR #26 @ `46747e85`, Alembic `004`) |
-| **WEB-V4A Magic React** | Draft — Unity polish/poll reuse + authenticated job image; Magic UI gated off |
+| **WEB-V4A Magic React** | **MERGED** PR #27 @ `dc9e31aa` and **deployed**; paid generation **PENDING** operator click |
+| **WEB-V4B Fashion toolkit** | **Draft PR #29** — toolkit + PM corrections; curved-dress acceptance PASS; awaiting Technical PM merge review; no deploy |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
-| Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record). |
+| Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status — do not auto-merge). |
 | INFRA-2 docs | Separate draft PR #10. |
-| Paid OpenAI | **NONE in production Magic** (Nginx AI denied; `VITE_MAGIC_UI_ENABLED` false) |
-| Safety flags (prod) | Registration **on** (invite-gated). AI / uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
+| Paid OpenAI | **Pipeline ready; 0 paid generations so far** (operator deferred until WEB-V4B toolkit) |
+| Safety flags (prod) | Registration **on** (invite-gated). Magic AI allowlisted (polish + job/image only). Uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
 
 ---
 
@@ -279,11 +283,12 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **PM merge review WEB-V4A PR #27** after final Magic integration corrections.
-2. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
-3. **Later (separate auth):** Magic production activation (`VITE_MAGIC_UI_ENABLED` + Nginx AI allowlist + worker/OpenAI).
-4. Remaining WEB-V3A gaps: untested conflict-resolution choices (Keep device / Use cloud).
-5. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10.
+1. **Exact next action:** Technical PM merge decision on WEB-V4B draft PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) (toolkit + corrections + final eyedropper/persistable-fill amendment). Merge only when accepted; do **not** deploy until PM says so.
+2. After WEB-V4B is on production (or accepted for local use): **one operator paid Magic browser test** on current production `dc9e31aa` (or post-V4B deploy). Cursor must not spend OpenAI credits.
+3. **Do not auto-merge** unrelated draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status docs).
+4. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
+5. Remaining WEB-V3A gaps: untested conflict-resolution choices (Keep device / Use cloud).
+6. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10.
 
 ---
 
@@ -384,12 +389,31 @@ FashionRise/
 | `REGISTRATION_ENABLED` default | **false** |
 | Production deploy | **Not done** (draft only) |
 
+## WEB-V4B verification (draft PR #29 — fashion toolkit)
+
+| Gate | Result |
+|------|--------|
+| Scope | Color picker + fashion palette + eyedropper; bucket fill; 6 bundled fabrics; gradients; undo/redo; V1-compatible `fills[]`; PNG/Magic capture parity via shared `paintFillOps` |
+| PM corrections | Fill barriers from `paintInkStrokes` + dilate; eyedropper via `sampleArtworkPixel` + shared `compositeFillAndInkLayers` (ink-only erase); refuse fills at `MAX_SNAPSHOT_FILLS` (500); `checkPersistableFill` before state write; olive `#6B8E23` |
+| `npm test` | **Pass: 259 tests, 52 files** (+ erase-over-fill eyedropper, persistable-fill guard, two-layer composite) |
+| `npm run lint` / `npm run build` / SW safety | **Pass** (pre-existing oxlint warnings only); `assert-sw-access-safe` **ok=true** |
+| Curved-dress browser acceptance | **PASS** — sealed bodice/skirt/sleeve; solid + denim fabric + rose-violet gradient; eyedropper; undo/redo; save; reload; reopen; PNG export; mock Magic capture; **no polish enqueue** |
+| OpenAI / paid Magic | **None** |
+| Worker / Nginx / prompts / Unity pipeline | **Unchanged** |
+| Production deploy | **Not done** (draft only) |
+| Blockers | **Technical PM merge decision on PR #29** |
+| Known limits | Fill needs a closed ink outline (open shapes get feedback); no layer manager; fabrics are procedural tiles |
+
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-22 | **WEB-V4B final amendment (draft PR #29):** eyedropper `compositeFillAndInkLayers` (erase-over-fill samples fill); `checkPersistableFill` before editor state; focused + full FE tests/lint/build/SW. **STOP for Technical PM merge decision.** No Magic spend / no deploy. |
+| 2026-10-22 | **WEB-V4B PM corrections (draft PR #29):** visible-ink fill barriers + erase/seam tests; composite eyedropper; fill/contour save limits without silent truncate; olive swatch fix; curved-dress acceptance PASS (255 tests). **STOP for Technical PM merge review.** No Magic spend / no deploy. |
+| 2026-10-21 | **WEB-V4B fashion toolkit (draft):** functional fill/fabric/gradient/eyedropper; optional `fills[]` on draft/saved V1 schemas; shared Konva/PNG/Magic paint path; no paid Magic / no deploy. |
+| 2026-10-21 | **WEB-V4A Magic production activation:** release `dc9e31aa`, worker + Nginx AI allowlist + Magic UI on; **0 paid generations**; operator deferred first browser Magic test until toolkit. Docs PR #28. |
 | 2026-10-21 | **WEB-V4A Magic integration corrections (PR #27):** Nginx AI allowlist precedence; redact `image_base64` from job responses; See last result after refresh; fail closed on missing reference capture; overlapping Magic guarded. |
-| 2026-10-21 | **WEB-V4A Magic → React (draft):** reuse Unity polish + poll/recovery; `GET /ai/jobs/{id}/image` owner-auth; MagicLookPanel; `VITE_MAGIC_UI_ENABLED` default off; Nginx AI allowlist docs only. No prod Magic deploy / no paid calls. |
+| 2026-10-21 | **WEB-V4A Magic → React:** reuse Unity polish + poll/recovery; `GET /ai/jobs/{id}/image` owner-auth; MagicLookPanel; merged + deployed at `dc9e31aa`. |
 | 2026-10-21 | **Registration second-user browser acceptance PASS** (operator-confirmed). |
 | 2026-10-21 | **Registration production activation PASS:** deploy `46747e85`, Alembic `004`, Nginx POST register, `REGISTRATION_ENABLED=true`, FE Create Account on. Access/AOP/neighbors OK. |
 | 2026-10-20 | **Registration product polish:** distinct invite error copy; email-only `?email=` prefill (no invite token in URL); username charset aligned FE/BE; journey test (register→save→relogin→isolation); activation procedure `docs/deploy/REGISTRATION-ACTIVATION.md`. No production changes. |

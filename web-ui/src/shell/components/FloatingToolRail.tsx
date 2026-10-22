@@ -1,15 +1,9 @@
 import {
-  Brush,
   Eraser,
-  Layers,
-  MousePointer2,
-  PenLine,
+  PaintBucket,
   Pencil,
   Pipette,
   Redo2,
-  Ruler,
-  Square,
-  Type,
   Undo2,
 } from 'lucide-react'
 import type { ToolKind } from '@/lib/strokes'
@@ -24,17 +18,6 @@ type Props = {
   onRedo: () => void
   orientation?: 'vertical' | 'horizontal'
 }
-
-const FUTURE = [
-  { id: 'pen', icon: PenLine, label: 'Pen' },
-  { id: 'brush', icon: Brush, label: 'Brush' },
-  { id: 'eyedropper', icon: Pipette, label: 'Eyedropper' },
-  { id: 'select', icon: MousePointer2, label: 'Select' },
-  { id: 'shape', icon: Square, label: 'Shape' },
-  { id: 'type', icon: Type, label: 'Type' },
-  { id: 'ruler', icon: Ruler, label: 'Ruler' },
-  { id: 'layers', icon: Layers, label: 'Layers' },
-] as const
 
 export function FloatingToolRail({
   tool,
@@ -71,23 +54,26 @@ export function FloatingToolRail({
       >
         <Eraser size={18} strokeWidth={1.75} />
       </button>
-      <div className={styles.sep} aria-hidden />
-      {FUTURE.map((item) => {
-        const Icon = item.icon
-        return (
-          <button
-            key={item.id}
-            type="button"
-            className={styles.btn}
-            aria-label={`${item.label} (coming later)`}
-            title={`${item.label} — coming later`}
-            disabled
-            aria-disabled
-          >
-            <Icon size={18} strokeWidth={1.75} />
-          </button>
-        )
-      })}
+      <button
+        type="button"
+        className={tool === 'fill' ? styles.btnActive : styles.btn}
+        aria-label="Fill"
+        aria-pressed={tool === 'fill'}
+        title="Fill a closed dress region"
+        onClick={() => onTool('fill')}
+      >
+        <PaintBucket size={18} strokeWidth={1.75} />
+      </button>
+      <button
+        type="button"
+        className={tool === 'eyedropper' ? styles.btnActive : styles.btn}
+        aria-label="Eyedropper"
+        aria-pressed={tool === 'eyedropper'}
+        title="Sample a color from your sketch"
+        onClick={() => onTool('eyedropper')}
+      >
+        <Pipette size={18} strokeWidth={1.75} />
+      </button>
       <div className={styles.sep} aria-hidden />
       <button
         type="button"

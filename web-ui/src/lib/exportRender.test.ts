@@ -52,6 +52,10 @@ function installFakeCanvas(options: { noContext?: boolean; blob?: Blob | null } 
         ctx.globalCompositeOperation = 'source-over'
       },
       scale: (x: number, y: number) => ops.push({ canvas: index, op: 'scale', detail: [x, y] }),
+      createLinearGradient: () => ({
+        addColorStop: () => undefined,
+      }),
+      createPattern: () => ({ id: `pattern-${index}` }),
     }
     const canvas = {
       width: 0,
@@ -78,25 +82,40 @@ afterEach(() => {
 })
 
 describe('renderSketchCanvas composition', () => {
-  it('paints cream paper, dimmed reference, then an ink layer composited on top', async () => {
+  it('paints cream paper, dimmed reference, fills under ink, then ink on top', async () => {
     const { ops } = installFakeCanvas()
     const result = await renderSketchCanvas({
       strokes,
+      fills: [
+        {
+          id: 'bodice',
+          contour: [200, 200, 400, 200, 400, 400, 200, 400],
+          style: { kind: 'solid', color: '#B91C1C' },
+          seedX: 300,
+          seedY: 300,
+        },
+      ],
       referenceUrl: '/models/female_model.png',
       referenceOpacity: 0.4,
       loadReference: async () => reference,
     })
     expect(result.referenceIncluded).toBe(true)
     const base = ops.filter((o) => o.canvas === 0)
-    const ink = ops.filter((o) => o.canvas === 1)
+    const fillLayer = ops.filter((o) => o.canvas === 1)
+    const ink = ops.filter((o) => o.canvas === 2)
     expect(base[0]).toMatchObject({ op: 'fillRect', detail: { a: [0, 0, 768, 1024], fill: '#F8F4F0' } })
     expect(base[1]).toMatchObject({ op: 'drawImage', detail: { img: reference, alpha: 0.4, a: [192, 0, 384, 1024] } })
+    // Fills paint on their own layer (under ink), never destination-out on the base.
+    expect(fillLayer.some((o) => o.op === 'fill')).toBe(true)
+    expect(fillLayer[0]).toMatchObject({ detail: { fill: '#B91C1C' } })
     // Eraser runs on the ink canvas only; the base never receives destination-out.
     expect(ink.map((o) => (o.detail as { mode: string }).mode)).toEqual(['source-over', 'destination-out'])
     expect(ink[0]).toMatchObject({ detail: { alpha: 0.5, fill: '#D63384' } })
     expect(base.some((o) => o.op === 'fill')).toBe(false)
     expect(base[2]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
     expect(((base[2]!.detail as { img: { id: string } }).img).id).toBe('canvas-1')
+    expect(base[3]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
+    expect(((base[3]!.detail as { img: { id: string } }).img).id).toBe('canvas-2')
   })
 
   it('scales design-space strokes and reference to a smaller output', async () => {
@@ -108,7 +127,9 @@ describe('renderSketchCanvas composition', () => {
       height: 320,
       loadReference: async () => reference,
     })
+    // Fill layer (canvas 1) and ink layer (canvas 2) both scale; first scale is the fill layer.
     expect(ops.find((o) => o.op === 'scale')).toMatchObject({ canvas: 1, detail: [0.3125, 0.3125] })
+    expect(ops.filter((o) => o.op === 'scale').map((o) => o.canvas)).toEqual([1, 2])
     expect(ops.find((o) => o.canvas === 0 && o.op === 'drawImage')).toMatchObject({ detail: { a: [60, 0, 120, 320] } })
   })
 
@@ -143,7 +164,7 @@ describe('renderSketchCanvas composition', () => {
       },
     })
     expect(result.referenceIncluded).toBe(false)
-    expect(ops.filter((o) => o.canvas === 1 && o.op === 'fill')).toHaveLength(2)
+    expect(ops.filter((o) => o.canvas === 2 && o.op === 'fill')).toHaveLength(2)
   })
 
   it('throws on reference failure when asked to', async () => {

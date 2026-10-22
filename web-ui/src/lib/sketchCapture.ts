@@ -34,7 +34,9 @@ function blobToDataUrl(blob: Blob): Promise<string> {
  * so we never enqueue a paid polish on an incomplete sketch.
  */
 export async function captureSketchForMagic(options: ExportOptions): Promise<CapturedSketch> {
-  if (!options.strokes.length && !options.referenceUrl) {
+  const hasArtwork =
+    options.strokes.length > 0 || (options.fills?.length ?? 0) > 0 || Boolean(options.referenceUrl)
+  if (!hasArtwork) {
     throw new Error('Draw a sketch before using Magic.')
   }
   const expectsReference = Boolean(options.referenceUrl)

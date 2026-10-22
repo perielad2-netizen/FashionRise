@@ -31,6 +31,7 @@ function cachedReference(src: string): Promise<HTMLImageElement> {
 export async function renderPreviewBlob(snapshot: SavedDesignSnapshot): Promise<Blob> {
   const { canvas } = await renderSketchCanvas({
     strokes: snapshot.strokes,
+    fills: snapshot.fills ?? [],
     referenceUrl: previewReferenceUrl(snapshot),
     referenceOpacity: snapshot.dimmed ? 0.4 : 1,
     width: PREVIEW_WIDTH,

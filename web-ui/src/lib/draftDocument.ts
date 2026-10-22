@@ -1,4 +1,5 @@
 import type { ModelChoice } from '@/shell/modelTypes'
+import { cloneFills, parseFillOp, type FillOp } from '@/lib/fills'
 import {
   BRUSH_SIZES,
   INK_SWATCHES,
@@ -19,6 +20,8 @@ export type StudioBrushState = {
 export type StudioDraftDocument = {
   schema: typeof STUDIO_DRAFT_SCHEMA
   strokes: Stroke[]
+  /** Optional garment fills; absent/empty on older V1 drafts. */
+  fills: FillOp[]
   model: ModelChoice
   customReferenceUrl: string | null
   customReferenceKey: string | null
@@ -45,6 +48,7 @@ export function createEmptyDraftDocument(now = new Date()): StudioDraftDocument 
   return {
     schema: STUDIO_DRAFT_SCHEMA,
     strokes: [],
+    fills: [],
     model: 'female',
     customReferenceUrl: null,
     customReferenceKey: null,
@@ -98,9 +102,19 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
     })
   }
 
+  const fills: FillOp[] = []
+  const rawFills = (raw as { fills?: unknown }).fills
+  if (Array.isArray(rawFills)) {
+    for (const item of rawFills) {
+      const fill = parseFillOp(item)
+      if (fill) fills.push(fill)
+    }
+  }
+
   return {
     schema: STUDIO_DRAFT_SCHEMA,
     strokes,
+    fills,
     model,
     customReferenceUrl:
       typeof raw.customReferenceUrl === 'string' && raw.customReferenceUrl
@@ -141,6 +155,7 @@ export function bumpDraftDocument(
 export function draftContentFingerprint(doc: StudioDraftDocument): string {
   return JSON.stringify({
     strokes: doc.strokes,
+    fills: doc.fills ?? [],
     model: doc.model,
     customReferenceUrl: doc.customReferenceUrl,
     customReferenceKey: doc.customReferenceKey,
@@ -189,6 +204,7 @@ export function rebaseChosenLocalDraft(
   return {
     ...local,
     strokes: local.strokes.map((stroke) => ({ ...stroke, points: [...stroke.points] })),
+    fills: cloneFills(local.fills ?? []),
     brush: { ...local.brush },
     clientRevision: Math.max(local.clientRevision, floor) + 1,
     updatedAt: now.toISOString(),
@@ -198,6 +214,7 @@ export function rebaseChosenLocalDraft(
 export function documentFromEditorState(input: {
   prev: StudioDraftDocument
   strokes: StudioDraftDocument['strokes']
+  fills?: StudioDraftDocument['fills']
   model: StudioDraftDocument['model']
   customReferenceUrl: string | null
   customReferenceKey: string | null
@@ -208,6 +225,7 @@ export function documentFromEditorState(input: {
 }): StudioDraftDocument {
   return bumpDraftDocument(input.prev, {
     strokes: input.strokes,
+    fills: input.fills ?? input.prev.fills ?? [],
     model: input.model,
     customReferenceUrl: input.customReferenceUrl,
     customReferenceKey: input.customReferenceKey,

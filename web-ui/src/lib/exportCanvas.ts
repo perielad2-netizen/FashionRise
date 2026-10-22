@@ -1,4 +1,6 @@
 import { strokeToSvgPath } from '@/lib/freehand'
+import type { FillOp } from '@/lib/fills'
+import { paintFillOps } from '@/lib/paintFills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 
 export const PAPER_BACKGROUND = '#F8F4F0'
@@ -6,6 +8,7 @@ const REFERENCE_TIMEOUT_MS = 10_000
 
 export type ExportOptions = {
   strokes: Stroke[]
+  fills?: FillOp[]
   referenceUrl: string | null
   referenceOpacity?: number
   background?: string
@@ -51,6 +54,44 @@ export function paintInkStrokes(ctx: Canvas2DLike, strokes: Stroke[]): void {
     ctx.fill(p)
     ctx.restore()
   }
+}
+
+export type ArtworkLayerOptions = {
+  fills: FillOp[]
+  strokes: Stroke[]
+  width: number
+  height: number
+  /** Design→output scale applied on each layer before paint (default 1). */
+  scaleX?: number
+  scaleY?: number
+}
+
+/**
+ * Composite garment fills then ink onto `target`, matching Konva / PNG layering:
+ * fills and ink use separate canvases so eraser destination-out removes ink only.
+ */
+export function compositeFillAndInkLayers(target: Canvas2DLike, options: ArtworkLayerOptions): void {
+  const { width, height, fills, strokes } = options
+  const sx = options.scaleX ?? 1
+  const sy = options.scaleY ?? 1
+
+  const fillLayer = document.createElement('canvas')
+  fillLayer.width = width
+  fillLayer.height = height
+  const fillCtx = fillLayer.getContext('2d')
+  if (!fillCtx) throw new Error('Canvas 2D unavailable')
+  if (sx !== 1 || sy !== 1) fillCtx.scale(sx, sy)
+  paintFillOps(fillCtx, fills)
+  target.drawImage(fillLayer, 0, 0, width, height)
+
+  const inkLayer = document.createElement('canvas')
+  inkLayer.width = width
+  inkLayer.height = height
+  const inkCtx = inkLayer.getContext('2d')
+  if (!inkCtx) throw new Error('Canvas 2D unavailable')
+  if (sx !== 1 || sy !== 1) inkCtx.scale(sx, sy)
+  paintInkStrokes(inkCtx, strokes)
+  target.drawImage(inkLayer, 0, 0, width, height)
 }
 
 export type RenderedSketch = {
@@ -115,19 +156,19 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
     }
   }
 
-  const ink = document.createElement('canvas')
-  ink.width = width
-  ink.height = height
-  const inkCtx = ink.getContext('2d')
-  if (!inkCtx) throw new Error('Canvas 2D unavailable')
-  if (sx !== 1 || sy !== 1) inkCtx.scale(sx, sy)
-
+  // Fills sit above the reference and under ink (garment colour / fabric).
+  // Separate layers: eraser destination-out must not punch holes in fills.
   const strokes = options.minInkSize
     ? withMinimumSize(options.strokes, options.minInkSize / Math.min(sx, sy))
     : options.strokes
-  paintInkStrokes(inkCtx, strokes)
-
-  baseCtx.drawImage(ink, 0, 0, width, height)
+  compositeFillAndInkLayers(baseCtx, {
+    fills: options.fills ?? [],
+    strokes,
+    width,
+    height,
+    scaleX: sx,
+    scaleY: sy,
+  })
   return { canvas: base, referenceIncluded }
 }
 

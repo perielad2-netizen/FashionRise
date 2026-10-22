@@ -1,4 +1,4 @@
-export type StudioShortcut = 'draw' | 'erase' | 'undo' | 'redo'
+export type StudioShortcut = 'draw' | 'erase' | 'fill' | 'eyedropper' | 'undo' | 'redo'
 
 type ShortcutEvent = {
   key: string
@@ -24,5 +24,7 @@ export function matchStudioShortcut(event: ShortcutEvent): StudioShortcut | null
   if (mod) return null
   if (key === 'b') return 'draw'
   if (key === 'e') return 'erase'
+  if (key === 'g') return 'fill'
+  if (key === 'i') return 'eyedropper'
   return null
 }
