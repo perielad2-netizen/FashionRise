@@ -418,25 +418,16 @@ FashionRise/
 | `READY_FOR_ONE_OPERATOR_MAGIC_TEST` | **true** (capture path ready; do not click until fabric acceptance) |
 | Next action | Operator browser acceptance of toolkit + custom fabrics on fashionrise.app; then optional single paid Magic test |
 
-## WEB-V4C verification (merged PR #30 — custom fabric upload)
+## WEB-V4C verification (merged PR #30 — historical pre-deploy record)
 
-| Gate | Result |
+Pre-deploy source/amendment record retained for audit. **Current production state** is in **WEB-V4B + WEB-V4C production deploy** above (`d7e37b59`, Alembic `005`, fabrics Nginx live).
+
+| Gate | Result (pre-deploy) |
 |------|--------|
-| Head | Draft PR #30 on `cursor/web-v4c-custom-fabric-77c6` (amendment after PM review of `cd7681b7`) |
-| Base | `5a9440c0` (required) |
-| Private storage | Bytes under `local_storage_root/private_fabrics/` — **outside** `/static/uploads` mount; owner-auth `GET …/image` only; static path **404** |
-| Account caches | `bindFabricCacheToUser` on login/logout/register/restore; generation guard drops in-flight; uploaded tile cache cleared |
-| Pattern scale | Base tile **128px** × scale, clamp 24–512 → 0.25×=32, 1×=128, 4×=512 (no 512-saturation on 2048 uploads) |
-| Image validation | `probe_image_dimensions` (PNG/JPEG/WebP headers) before `Image.open`/`load`; JPG/PNG/WebP + 8 MB / 2048 px preserved |
-| Backend tests | Full suite **226 passed**; 1 unrelated fail (`test_cli_default_is_dry_run` branch-guard expects `cursor/openai-gpt6-luna-77c6`). Fabric suite **6/6** |
-| Frontend tests | **266 / 266** (53 files); lint warnings only (pre-existing patterns); build + `check:sw` **ok=true** |
-| Browser / demo | Real 2048 fabric on curved dress at 0.25×/1×/4×; save/reopen; PNG export; mock Magic capture (no paid call); A→B privacy (list empty, image 404, cache clear, static 404) |
-| OpenAI / paid Magic | **None** |
-| Nginx | Live `nginx -T`: **no** `/api/v1/fabrics` location (auth/designs/AI only). Proposal: `docs/deploy/PROPOSED-NGINX-FABRICS-ALLOWLIST.md` — **not applied** |
-| Cloudflare / workers / Unity | **Unchanged** |
-| Production | **Not deployed** — still Alembic `004` / FE `dc9e31aa` |
-| Blocked operations | Merge, production deploy, Alembic `005` on prod, Nginx reload, paid Magic |
-| Next action | **Technical PM final review of draft PR #30** → approve merge; separate auth later for migrate `005` + fabrics Nginx allowlist + FE deploy |
+| Merged head | `baea63d8` → main merge `d7e37b59` |
+| Private storage / caches / scale / header probe | Implemented and tested before merge |
+| FE/BE tests (agent) | Fabric 6/6; FE 266/266; build/SW ok |
+| Nginx (pre-deploy) | Documented missing allowlist; applied during production rollout |
 
 ## Changelog (handoff doc only)
 
