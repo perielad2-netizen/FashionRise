@@ -153,17 +153,22 @@ def test_build_image_prompt_avoids_generic_outfit_homogenization():
     assert "invent a different garment" in prompt.lower() or "do not invent" in prompt.lower()
 
 
-def test_edit_request_uses_high_fidelity_and_sketch_bytes(monkeypatch, settings):
+def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, settings):
     captured: dict[str, Any] = {}
+    edit_calls: list[str] = []
 
     class _EditClient:
         def __init__(self):
-            self.images = SimpleNamespace(edit=self.edit)
+            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
 
         def edit(self, **kwargs):
+            edit_calls.append(kwargs["model"])
             captured.update(kwargs)
             item = SimpleNamespace(url=None, b64_json=base64.b64encode(b"FAKEPNG").decode("ascii"))
             return SimpleNamespace(data=[item])
+
+        def generate(self, **kwargs):
+            raise AssertionError("images.generate must not run")
 
     saved: list[tuple[str, bytes]] = []
 
@@ -183,6 +188,7 @@ def test_edit_request_uses_high_fidelity_and_sketch_bytes(monkeypatch, settings)
     url = sketch_openai._generate_and_store_look_image(_EditClient(), job, structured, structured["summary"])
 
     assert url.startswith("http://127.0.0.1:8001/static/uploads/ai/")
+    assert edit_calls == ["gpt-image-1"]
     assert captured["model"] == "gpt-image-1"
     assert captured["input_fidelity"] == "high"
     assert captured["n"] == 1
@@ -197,19 +203,19 @@ def test_edit_request_uses_high_fidelity_and_sketch_bytes(monkeypatch, settings)
     assert saved and saved[0][1] == b"FAKEPNG"
 
 
-def test_no_reference_less_generate_fallback_on_edit_failure(monkeypatch, settings):
-    calls: list[str] = []
+def test_edit_failure_exactly_one_edit_no_generate_or_mini(monkeypatch, settings):
+    calls: list[tuple[str, str]] = []
 
     class _FailEditClient:
         def __init__(self):
             self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
 
         def edit(self, **kwargs):
-            calls.append("edit")
-            raise RuntimeError("edit unavailable")
+            calls.append(("edit", kwargs["model"]))
+            raise RuntimeError("edit unavailable SECRET_SHOULD_NOT_LEAK")
 
         def generate(self, **kwargs):
-            calls.append("generate")
+            calls.append(("generate", kwargs.get("model", "")))
             raise AssertionError("images.generate must not run as Magic fallback")
 
     job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
@@ -217,12 +223,34 @@ def test_no_reference_less_generate_fallback_on_edit_failure(monkeypatch, settin
         sketch_openai._generate_and_store_look_image(
             _FailEditClient(), job, _operator_sample_structured(), "summary"
         )
-    assert calls  # edit may retry across gpt-image models
-    assert all(c == "edit" for c in calls)
-    assert "generate" not in calls
+    assert calls == [("edit", "gpt-image-1")]
 
 
-def test_edit_retries_image_models_but_never_generate(monkeypatch, settings):
+def test_empty_edit_response_exactly_one_edit_no_generate(monkeypatch, settings):
+    calls: list[str] = []
+
+    class _EmptyClient:
+        def __init__(self):
+            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
+
+        def edit(self, **kwargs):
+            calls.append(kwargs["model"])
+            return SimpleNamespace(data=[SimpleNamespace(url=None, b64_json=None)])
+
+        def generate(self, **kwargs):
+            raise AssertionError("images.generate must not run")
+
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError, match="sketch image edit failed"):
+        sketch_openai._generate_and_store_look_image(
+            _EmptyClient(), job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    assert calls == ["gpt-image-1"]
+
+
+def test_configured_image_model_used_once_never_downgraded(monkeypatch):
+    s = _settings(openai_image_model="gpt-image-1")
+    monkeypatch.setattr(sketch_openai, "get_settings", lambda: s)
     edits: list[str] = []
 
     class _Client:
@@ -231,7 +259,7 @@ def test_edit_retries_image_models_but_never_generate(monkeypatch, settings):
 
         def edit(self, **kwargs):
             edits.append(kwargs["model"])
-            raise RuntimeError(f"fail {kwargs['model']}")
+            raise RuntimeError("fail configured model")
 
         def generate(self, **kwargs):
             raise AssertionError("generate forbidden")
@@ -241,8 +269,8 @@ def test_edit_retries_image_models_but_never_generate(monkeypatch, settings):
         sketch_openai._generate_and_store_look_image(
             _Client(), job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
-    assert "gpt-image-1" in edits
-    assert "gpt-image-1-mini" in edits
+    assert edits == ["gpt-image-1"]
+    assert "gpt-image-1-mini" not in edits
 
 
 def test_missing_sketch_fails_without_generate(monkeypatch, settings):
@@ -305,16 +333,21 @@ def test_complete_polish_records_images_edit_provenance(monkeypatch, settings):
 
 def test_complete_polish_propagates_edit_failure(monkeypatch, settings):
     payload = _operator_sample_structured()
+    edit_calls = {"n": 0}
 
     class _Client:
         def __init__(self):
             self.chat = SimpleNamespace(
                 completions=SimpleNamespace(create=lambda **kw: _completion(json.dumps(payload)))
             )
-            self.images = SimpleNamespace(
-                edit=lambda **kw: (_ for _ in ()).throw(RuntimeError("edit boom")),
-                generate=lambda **kw: (_ for _ in ()).throw(AssertionError("generate")),
-            )
+            self.images = SimpleNamespace(edit=self.edit, generate=self.generate)
+
+        def edit(self, **kwargs):
+            edit_calls["n"] += 1
+            raise RuntimeError("edit boom")
+
+        def generate(self, **kwargs):
+            raise AssertionError("generate")
 
     monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: _Client())
 
@@ -322,9 +355,10 @@ def test_complete_polish_propagates_edit_failure(monkeypatch, settings):
         sketch_openai.complete_sketch_job(
             _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
         )
+    assert edit_calls["n"] == 1
 
 
-def test_failure_messages_do_not_leak_base64_or_secrets(monkeypatch, settings, caplog):
+def test_failure_messages_and_logs_do_not_leak_base64_or_secrets(monkeypatch, settings, caplog):
     secret_b64 = "SECRET_SKETCH_PAYLOAD_" + ("A" * 80)
 
     class _Client:
@@ -335,17 +369,57 @@ def test_failure_messages_do_not_leak_base64_or_secrets(monkeypatch, settings, c
             )
 
     job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
-    with caplog.at_level(logging.WARNING):
-        with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
-            sketch_openai._generate_and_store_look_image(
-                _Client(), job, {"summary": "x", "image_prompt": "dress"}, "x"
-            )
+    with (
+        caplog.at_level(logging.WARNING),
+        pytest.raises(sketch_openai.SketchCompletionError) as excinfo,
+    ):
+        sketch_openai._generate_and_store_look_image(
+            _Client(), job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
     msg = str(excinfo.value)
     assert secret_b64 not in msg
     assert "sk-test" not in msg
     assert "data:image" not in msg
-    # Worker-facing token stays short and sanitized.
     assert msg == "sketch image edit failed"
+    joined = "\n".join(r.getMessage() for r in caplog.records)
+    assert secret_b64 not in joined
+    assert "provider saw" not in joined
+    assert "sk-test" not in joined
+    assert "data:image" not in joined
+    assert "image edit failed type=RuntimeError" in joined
+
+
+def test_edit_path_decodes_sketch_once(monkeypatch, settings):
+    decode_calls = {"n": 0}
+    real_decode = sketch_openai._decode_inline_base64
+
+    def counting_decode(data: str):
+        decode_calls["n"] += 1
+        return real_decode(data)
+
+    monkeypatch.setattr(sketch_openai, "_decode_inline_base64", counting_decode)
+
+    class _EditClient:
+        def __init__(self):
+            self.images = SimpleNamespace(edit=self.edit)
+
+        def edit(self, **kwargs):
+            item = SimpleNamespace(url=None, b64_json=base64.b64encode(b"FAKEPNG").decode("ascii"))
+            return SimpleNamespace(data=[item])
+
+    monkeypatch.setattr(
+        sketch_openai,
+        "LocalStorageBackend",
+        lambda: SimpleNamespace(
+            save_file=lambda **kw: "http://127.0.0.1:8001/static/uploads/ai/look.png"
+        ),
+    )
+
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    sketch_openai._generate_and_store_look_image(
+        _EditClient(), job, {"summary": "x", "image_prompt": "dress"}, "x"
+    )
+    assert decode_calls["n"] == 1
 
 
 def test_build_sketch_chat_request_polish_uses_new_system_prompt(settings):

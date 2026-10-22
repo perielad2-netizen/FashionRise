@@ -96,7 +96,7 @@
 | **WEB-V4C Custom fabrics** | **MERGED** PR #30 · **deployed** @ `d7e37b59` / Alembic **`005`** |
 | **Hotfix: fill autosave fingerprint** | **MERGED** PR #32 @ `c21fee6b` · **backend deployed** |
 | **WEB-V4D Studio UX + models** | **Draft PR #34** (separate branch) — legacy croquis compat; **STOP for PM re-review** |
-| **WEB-V4E Magic quality** | **This draft** — professional refinement prompts; no generate fallback; **STOP for PM review** |
+| **WEB-V4E Magic quality** | **Draft PR #35** — professional refinement; **exactly one** `images.edit`; no generate/mini fallback; **STOP for PM re-review** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status — do not auto-merge). |
@@ -291,7 +291,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM review of **WEB-V4E Magic quality** (this draft) and amended **WEB-V4D PR #34**. No merge/deploy until authorized.
+1. **Exact next action:** Technical PM re-review of amended **WEB-V4E PR #35** (single-edit policy) and **WEB-V4D PR #34**. After #34 merges, rebase/reconcile #35 onto new `main` before final review. No merge/deploy until authorized.
 2. If operator still has a pre-hotfix local conflict: choose **Keep this device** once (do not clear IndexedDB) and confirm Saved.
 3. After WEB-V4E acceptance + authorized backend deploy: **one new controlled operator paid Magic browser test** (human visual rubric in `docs/WEB-V4E-MAGIC-QUALITY.md`). Cursor must not spend OpenAI credits.
 4. **Do not auto-merge** unrelated draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status docs).
@@ -441,24 +441,28 @@ FashionRise/
 | Blocked | Merge, production deploy of hotfix, Magic click |
 | Next | **Technical PM review** → merge → backend-only deploy → operator Keep-this-device recovery |
 
-## WEB-V4E verification (draft — Magic quality)
+## WEB-V4E verification (draft PR #35 — Magic quality)
 
 | Gate | Result |
 |------|--------|
-| Scope | Backend Magic prompts + edit-only pipeline; **no FE / migration / Nginx** |
+| Scope | Backend Magic prompts + **single** edit pipeline; **no FE / migration / Nginx** |
+| First paid prod Magic | **Technically successful**; **visually rejected** (pale / not professional) |
 | Models | **Unchanged** — `gpt-6-luna` + `gpt-image-1` (`input_fidelity=high`) |
 | Prompt | Professional fashion refinement; design identity + refine_ok; no light-wash / child-sketch retain |
-| Fallback | **Removed** reference-less `images.generate`; edit failure → job fail |
+| Image calls | **Exactly one** `images.edit` per Magic job (configured model only); **no** `gpt-image-1-mini` / generate |
+| Failure | Sanitized `SketchCompletionError`; poll / recovery / ownership / sketch preserved |
+| Logging | Provider errors log exception class only (no raw body); leak tests cover return + logs |
 | Provenance | `image_provenance: images.edit` when look stored |
-| Focused tests | `test_magic_quality_prompts.py` **14/14** + migration suite **35** related (**49** combined mocked; **0 paid calls**) |
-| Visual acceptance | **Not claimed** — human rubric prepared for post-deploy operator run |
+| Agent paid AI | **0** |
+| Visual acceptance | **Not claimed** — human rubric in `docs/WEB-V4E-MAGIC-QUALITY.md` |
 | Production | **Not deployed** |
-| Next | **Technical PM review** → authorize deploy → one controlled operator Magic test |
+| Next | **Technical PM re-review** → after #34 merge reconcile onto `main` → authorize deploy → one controlled operator Magic test |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-22 | **WEB-V4E PM corrections (draft PR #35):** single configured `images.edit` only (no mini fanout); sanitized provider log tokens; one-shot sketch decode on edit path; leak tests cover logs; first paid Magic technically OK / visually rejected; **STOP for Technical PM re-review.** |
 | 2026-10-22 | **WEB-V4E Magic quality (draft):** first paid Magic quality FAILED; professional refinement prompts; no generate fallback; offline prompt/pipeline tests; rubric prepared; models unchanged; **STOP for Technical PM review** (no merge/deploy/paid AI). |
 | 2026-10-22 | **Fill-autosave hotfix MERGED + backend deployed** PR #32 @ `c21fee6b` (FE still `d7e37b59`). |
 | 2026-10-22 | **URGENT fill-autosave hotfix (draft):** production `d7e37b59`/Alembic `005` acceptance BLOCKED; fingerprint now includes fills; Keep-device path covered by API tests; no FE change; no paid Magic; **STOP for Technical PM review** (do not merge/deploy). |

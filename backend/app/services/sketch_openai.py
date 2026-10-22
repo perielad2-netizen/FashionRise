@@ -298,76 +298,91 @@ def _extract_image_bytes(item: Any) -> bytes | None:
     return None
 
 
+def _sanitize_provider_error(exc: BaseException) -> str:
+    """Bounded log token: exception class only. Never the provider body (may hold image/secrets)."""
+    return type(exc).__name__[:80]
+
+
+def _supports_input_fidelity(model: str) -> bool:
+    m = (model or "").strip()
+    return m == "gpt-image-1" or m.startswith("gpt-image-1.") or m in {"gpt-image-1.5", "gpt-image-2"}
+
+
 def _try_edit_look_from_sketch(
-    client: OpenAI, job: AIJob, prompt: str, model: str, size: str
+    client: OpenAI,
+    job: AIJob,
+    prompt: str,
+    model: str,
+    size: str,
+    *,
+    sketch: tuple[bytes, str],
 ) -> tuple[bytes | None, str]:
-    sketch = _raw_sketch_bytes(job)
-    if sketch is None:
-        logger.warning("OpenAI job %s: no sketch bytes for image edit", job.id)
+    """Issue exactly one images.edit with the configured model. No model fanout / generate."""
+    sketch_bytes, mime = sketch
+    model = (model or "").strip()
+    if not model.startswith("gpt-image"):
+        logger.warning("OpenAI job %s: image model not eligible for edit", job.id)
         return None, ""
 
-    sketch_bytes, mime = sketch
     ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
-    models: list[str] = []
-    for m in (model, "gpt-image-1", "gpt-image-1-mini"):
-        if m and m not in models and str(m).startswith("gpt-image"):
-            models.append(m)
-
     size_value = size if size in {"1024x1024", "1024x1536", "1536x1024", "auto"} else "1024x1536"
-    last_error: Exception | None = None
-    for m in models:
-        try:
-            img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
-            logger.info(
-                "OpenAI job %s: editing sketch with %s size=%s (input_fidelity=high)",
-                job.id,
-                m,
-                size_value,
-            )
-            kwargs: dict[str, Any] = {
-                "model": m,
-                "image": img,
-                "prompt": prompt,
-                "size": size_value,
-                "n": 1,
-            }
-            if m == "gpt-image-1" or m.startswith("gpt-image-1.") or m in {"gpt-image-1.5", "gpt-image-2"}:
-                kwargs["input_fidelity"] = "high"
-            result = client.images.edit(**kwargs)
-            raw = _extract_image_bytes(result.data[0])
-            if raw:
-                return raw, m
-            logger.warning("OpenAI job %s: edit via %s returned no image bytes", job.id, m)
-        except Exception as e:
-            last_error = e
-            logger.warning("OpenAI job %s: image edit via %s failed: %s", job.id, m, e)
-
-    if last_error is not None:
-        logger.warning("OpenAI job %s: all sketch-edit attempts failed (last: %s)", job.id, last_error)
-    return None, ""
+    try:
+        img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
+        logger.info(
+            "OpenAI job %s: editing sketch with %s size=%s (input_fidelity=%s)",
+            job.id,
+            model,
+            size_value,
+            "high" if _supports_input_fidelity(model) else "omit",
+        )
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "image": img,
+            "prompt": prompt,
+            "size": size_value,
+            "n": 1,
+        }
+        if _supports_input_fidelity(model):
+            kwargs["input_fidelity"] = "high"
+        result = client.images.edit(**kwargs)
+        data = getattr(result, "data", None) or []
+        raw = _extract_image_bytes(data[0]) if data else None
+        if raw:
+            return raw, model
+        logger.warning("OpenAI job %s: edit returned no image bytes", job.id)
+        return None, ""
+    except Exception as e:
+        logger.warning(
+            "OpenAI job %s: image edit failed type=%s",
+            job.id,
+            _sanitize_provider_error(e),
+        )
+        return None, ""
 
 
 def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, summary: str) -> str | None:
-    """Edit the uploaded sketch into a look image. No reference-less images.generate fallback.
+    """Edit the uploaded sketch into a look image. Exactly one images.edit when enabled.
 
     When the image model is disabled, returns None. When editing is enabled but the sketch
-    cannot be edited, raises SketchCompletionError so the worker reports a genuine failure
-    instead of inventing a new image without the source sketch pixels.
+    is missing or the single edit fails, raises SketchCompletionError so the worker reports
+    a genuine failure. Never calls images.generate or a secondary edit model.
     """
     settings = get_settings()
     model = (getattr(settings, "openai_image_model", None) or "gpt-image-1").strip()
     if model.lower() in {"", "none", "off", "false", "0"}:
         return None
 
-    if _raw_sketch_bytes(job) is None:
+    sketch = _raw_sketch_bytes(job)
+    if sketch is None:
         raise SketchCompletionError("no sketch image for edit")
 
     prompt = _build_image_prompt(structured, summary)
     size = (getattr(settings, "openai_image_size", None) or "1024x1536").strip()
 
-    raw, used_model = _try_edit_look_from_sketch(client, job, prompt, model, size)
+    raw, used_model = _try_edit_look_from_sketch(
+        client, job, prompt, model, size, sketch=sketch
+    )
     if not raw:
-        # WEB-V4E: do not call images.generate — that invents a look without the sketch.
         raise SketchCompletionError("sketch image edit failed")
 
     key = f"ai/{job.id.hex if hasattr(job.id, 'hex') else str(job.id).replace('-', '')}_{uuid.uuid4().hex[:10]}.png"
