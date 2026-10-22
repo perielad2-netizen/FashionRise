@@ -466,6 +466,9 @@ FashionRise/
 | Logging | Provider errors log exception class only; leak tests cover return + logs |
 | Provenance | `image_provenance: images.edit` when look stored |
 | Agent paid AI | **0** |
+| Focused Magic tests | `test_magic_quality_prompts.py` **16/16** |
+| Full BE suite | **252 passed**; 1 unrelated (`test_cli_default_is_dry_run` branch-guard) |
+| Ruff / mypy (changed) | Pass |
 | Visual acceptance | **Not claimed** — rubric in `docs/WEB-V4E-MAGIC-QUALITY.md` |
 | Production | **Not deployed** |
 | Next | **Technical PM final review** → authorize backend deploy → one controlled operator Magic test |
