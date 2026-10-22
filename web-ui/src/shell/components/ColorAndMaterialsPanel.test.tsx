@@ -15,7 +15,7 @@ describe('ColorAndMaterialsPanel', () => {
     vi.clearAllMocks()
   })
 
-  it('exposes fashion palette, native picker, fabrics, add fabric and gradients', async () => {
+  it('opens the professional picker, applies color, and keeps fabrics/gradients', async () => {
     const onColor = vi.fn()
     const onColorHex = vi.fn(() => true)
     const onFillStyle = vi.fn()
@@ -40,7 +40,15 @@ describe('ColorAndMaterialsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Crimson' }))
     expect(onColor).toHaveBeenCalledWith('#B91C1C')
 
-    fireEvent.change(screen.getByLabelText('Color picker'), { target: { value: '#0f766e' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Choose any color' })[0]!)
+    const picker = screen.getByRole('dialog', { name: 'Choose color' })
+    expect(picker).toBeTruthy()
+    const pickerHex = screen.getByRole('dialog', { name: 'Choose color' }).querySelector(
+      'input[aria-label="Hex color"]',
+    ) as HTMLInputElement
+    fireEvent.change(pickerHex, { target: { value: '#0f766e' } })
+    fireEvent.blur(pickerHex)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(onColor).toHaveBeenCalledWith('#0F766E')
 
     fireEvent.click(screen.getByRole('button', { name: 'Eyedropper' }))
@@ -57,5 +65,28 @@ describe('ColorAndMaterialsPanel', () => {
     expect(onFillStyle).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'gradient', gradientId: 'rose-violet' }),
     )
+  })
+
+  it('cancels the professional picker without committing', () => {
+    const onColor = vi.fn()
+    render(
+      <ColorAndMaterialsPanel
+        color="#ABCDEF"
+        onColor={onColor}
+        onColorHex={() => true}
+        fillStyle={solidStyle('#ABCDEF')}
+        onFillStyle={() => undefined}
+        eyedropperActive={false}
+        onToggleEyedropper={() => undefined}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open color picker' }))
+    const pickerHex = screen.getByRole('dialog', { name: 'Choose color' }).querySelector(
+      'input[aria-label="Hex color"]',
+    ) as HTMLInputElement
+    fireEvent.change(pickerHex, { target: { value: '#112233' } })
+    fireEvent.blur(pickerHex)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onColor).not.toHaveBeenCalled()
   })
 })
