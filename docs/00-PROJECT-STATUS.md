@@ -454,6 +454,10 @@ FashionRise/
 | Logging | Provider errors log exception class only (no raw body); leak tests cover return + logs |
 | Provenance | `image_provenance: images.edit` when look stored |
 | Agent paid AI | **0** |
+| Focused Magic tests | `test_magic_quality_prompts.py` **16/16**; related Magic auth/migration/poll **83** green |
+| Full BE suite | **252 passed**; 1 unrelated fail (`test_cli_default_is_dry_run` branch-guard expects `cursor/openai-gpt6-luna-77c6`) |
+| Ruff (changed files) | Pass (`--ignore PIE810,BLE001` pre-existing patterns) |
+| mypy (`sketch_openai.py`, `--follow-imports=skip`) | Pass |
 | Visual acceptance | **Not claimed** — human rubric in `docs/WEB-V4E-MAGIC-QUALITY.md` |
 | Production | **Not deployed** |
 | Next | **Technical PM re-review** → after #34 merge reconcile onto `main` → authorize deploy → one controlled operator Magic test |
