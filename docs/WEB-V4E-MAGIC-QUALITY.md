@@ -1,7 +1,7 @@
 # WEB-V4E — Magic quality (professional fashion refinement)
 
-**Status:** Draft PR #35 — **STOP for Technical PM review**. No merge / no deploy / no paid AI in this PR.  
-**Branch:** `cursor/web-v4e-magic-quality-77c6` (based on `main` @ `c21fee6b`, **not** WEB-V4D). Backend-focused; reconcile with `main` after PR #34 merges.
+**Status:** Draft PR #35 — **STOP for Technical PM final review**. No merge / no deploy / no paid AI in this PR.  
+**Branch:** `cursor/web-v4e-magic-quality-77c6` reconciled onto `main` @ `3376827c` (WEB-V4D **merged, not deployed**). Backend Magic-quality scope only.
 
 ## Operator outcome (production)
 

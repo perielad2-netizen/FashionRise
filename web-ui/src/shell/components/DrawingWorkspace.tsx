@@ -35,7 +35,7 @@ export function DrawingWorkspace({
   onEyedropperSample,
 }: Props) {
   return (
-    <div className={styles.wrap}>
+    <div className={styles.wrap} data-studio-paper="true">
       <div className={styles.canvasFrame} data-testid="paper-frame">
         <DrawingCanvas
           strokes={strokes}

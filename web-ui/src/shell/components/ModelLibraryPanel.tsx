@@ -1,63 +1,38 @@
 import { useMemo, useRef, useState } from 'react'
 import { UI_ASSETS } from '@/assets/uiAssets'
-import type { ModelChoice, ModelLibraryCard } from '@/shell/modelTypes'
+import { BUILTIN_MODELS, type ModelChoice } from '@/assets/modelLibrary'
+import type { ModelLibraryCard } from '@/shell/modelTypes'
 import styles from './ModelLibraryPanel.module.css'
 
-const CARDS: ModelLibraryCard[] = [
-  {
-    id: 'female',
-    label: 'Female',
-    src: UI_ASSETS.model.female,
-    filter: 'female',
-    kind: 'production',
-    choice: 'female',
-  },
-  {
-    id: 'male',
-    label: 'Male',
-    src: UI_ASSETS.model.male,
-    filter: 'male',
-    kind: 'production',
-    choice: 'male',
-  },
+const UTILITY_CARDS: ModelLibraryCard[] = [
   {
     id: 'custom',
     label: 'Custom',
+    pose: 'Upload',
     src: UI_ASSETS.model.custom,
     filter: 'utility',
-    kind: 'production',
     choice: 'custom',
   },
   {
     id: 'blank',
     label: 'Blank',
+    pose: 'Paper',
     src: UI_ASSETS.model.blank,
     filter: 'utility',
-    kind: 'production',
     choice: 'blank',
   },
-  {
-    id: 'ph-f1',
-    label: 'Pose A',
-    src: '/assets/ui/design-lab/models/croquis-female-01.png',
-    filter: 'female',
-    kind: 'placeholder',
-  },
-  {
-    id: 'ph-f2',
-    label: 'Pose B',
-    src: '/assets/ui/design-lab/models/croquis-female-02.png',
-    filter: 'female',
-    kind: 'placeholder',
-  },
-  {
-    id: 'ph-m1',
-    label: 'Pose E',
-    src: '/assets/ui/design-lab/models/croquis-male-01.png',
-    filter: 'male',
-    kind: 'placeholder',
-  },
 ]
+
+const BUILTIN_CARDS: ModelLibraryCard[] = BUILTIN_MODELS.map((m) => ({
+  id: m.id,
+  label: m.label,
+  pose: m.pose,
+  src: m.cardSrc,
+  filter: m.gender,
+  choice: m.id,
+}))
+
+const CARDS: ModelLibraryCard[] = [...BUILTIN_CARDS, ...UTILITY_CARDS]
 
 type Filter = 'all' | 'female' | 'male'
 
@@ -100,11 +75,13 @@ export function ModelLibraryPanel({
         </button>
       </div>
 
-      <div className={styles.filters}>
+      <div className={styles.filters} role="tablist" aria-label="Model filters">
         {(['all', 'female', 'male'] as const).map((id) => (
           <button
             key={id}
             type="button"
+            role="tab"
+            aria-selected={filter === id}
             className={filter === id ? styles.filterActive : styles.filter}
             onClick={() => setFilter(id)}
           >
@@ -113,40 +90,37 @@ export function ModelLibraryPanel({
         ))}
       </div>
 
-        <div className={styles.grid}>
-          {cards.map((card) => {
-            const isSelected = card.choice === selected
-            const previewSrc =
-              card.choice === 'custom' && customPreviewUrl ? customPreviewUrl : card.src
-            const disabled = card.kind === 'placeholder'
-            return (
-              <button
-                key={card.id}
-                type="button"
-                className={isSelected ? styles.cardSelected : styles.card}
-                disabled={disabled}
-                aria-disabled={disabled}
-                aria-pressed={isSelected}
-                aria-label={
-                  disabled ? `${card.label} unavailable` : `Select ${card.label} reference`
+      <div className={styles.grid}>
+        {cards.map((card) => {
+          const isSelected = card.choice === selected
+          const previewSrc =
+            card.choice === 'custom' && customPreviewUrl ? customPreviewUrl : card.src
+          const title = card.pose ? `${card.label} · ${card.pose}` : card.label
+          return (
+            <button
+              key={card.id}
+              type="button"
+              className={isSelected ? styles.cardSelected : styles.card}
+              aria-pressed={isSelected}
+              aria-label={`Select ${title} reference`}
+              title={title}
+              onClick={() => {
+                if (card.choice === 'custom') {
+                  inputRef.current?.click()
+                  return
                 }
-                title={disabled ? 'Unavailable placeholder' : card.label}
-                onClick={() => {
-                  if (disabled || !card.choice) return
-                  if (card.choice === 'custom') {
-                    inputRef.current?.click()
-                    return
-                  }
-                  onSelect(card.choice)
-                }}
-              >
-                <img src={previewSrc} alt="" className={styles.thumb} draggable={false} />
-                {disabled ? <span className={styles.badge}>Unavailable</span> : null}
-                {!disabled ? <span className={styles.cardLabel}>{card.label}</span> : null}
-              </button>
-            )
-          })}
-        </div>
+                onSelect(card.choice)
+              }}
+            >
+              <img src={previewSrc} alt="" className={styles.thumb} draggable={false} />
+              <span className={styles.cardLabel}>
+                <span className={styles.cardTitle}>{card.label}</span>
+                {card.pose ? <span className={styles.cardPose}>{card.pose}</span> : null}
+              </span>
+            </button>
+          )
+        })}
+      </div>
 
       <input
         ref={inputRef}

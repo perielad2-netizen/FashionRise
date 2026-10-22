@@ -25,10 +25,135 @@
   min-height: 0;
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 240px;
+  grid-template-columns: auto minmax(0, 1fr) minmax(260px, 280px);
   grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   padding: 12px 10px 12px 8px;
+}
+
+.canvasStage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.focusToggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 28, 30, 0.12);
+  background: rgba(255, 250, 245, 0.92);
+  color: #1c1c1e;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+}
+
+.focusToggle[aria-pressed='true'] {
+  border-color: rgba(214, 51, 132, 0.45);
+  background: rgba(214, 51, 132, 0.14);
+  color: #9d174d;
+}
+
+.focusQuick {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(15, 22, 38, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+.focusQuick button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.focusQuick button:hover {
+  background: rgba(214, 51, 132, 0.28);
+}
+
+.focusMode .body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.focusMode .modelsSlot,
+.focusMode .settingsSlot,
+.focusMode .materialsSlot {
+  display: none !important;
+}
+
+.focusMode .center {
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 8px;
+}
+
+.focusMode .canvasStage {
+  min-height: 0;
+}
+
+.focusMode .canvasStage [data-studio-paper='true'] {
+  --paper-max-w: 720px;
+}
+
+.focusMode .modelsSlot.slotOpen,
+.focusMode .settingsSlot.slotOpen,
+.focusMode .materialsSlot.slotOpen {
+  display: block !important;
+  position: absolute;
+  z-index: 24;
+  overflow: auto;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.focusMode .modelsSlot.slotOpen {
+  left: 10px;
+  top: 10px;
+  bottom: 10px;
+  width: min(280px, 84vw);
+  display: block !important;
+}
+
+.focusMode .settingsSlot.slotOpen {
+  right: 10px;
+  top: 10px;
+  bottom: 10px;
+  width: min(280px, 84vw);
+  display: block !important;
+}
+
+.focusMode .materialsSlot.slotOpen {
+  right: 10px;
+  top: 10px;
+  bottom: 10px;
+  width: min(320px, 88vw);
+  display: block !important;
 }
 
 .modelsSlot,

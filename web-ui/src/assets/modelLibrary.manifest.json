@@ -1,0 +1,192 @@
+[
+  {
+    "id": "female-straight",
+    "legacy": "female",
+    "gender": "female",
+    "label": "Standing",
+    "src": "2af1aab5-e16e-4d4d-8f7b-dbd8bf10457a.png",
+    "default": true,
+    "canvasPath": "/models/library/female-straight.png",
+    "cardPath": "/assets/ui/models/library/female-straight_card.png",
+    "canvasSize": [
+      656,
+      1199
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 306824
+  },
+  {
+    "id": "female-hand-hip",
+    "legacy": null,
+    "gender": "female",
+    "label": "Hand on hip",
+    "src": "947e1503-5681-4ca5-b96a-3970df97abc5.png",
+    "default": false,
+    "canvasPath": "/models/library/female-hand-hip.png",
+    "cardPath": "/assets/ui/models/library/female-hand-hip_card.png",
+    "canvasSize": [
+      656,
+      1199
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 336543
+  },
+  {
+    "id": "female-contrapposto",
+    "legacy": null,
+    "gender": "female",
+    "label": "Contrapposto",
+    "src": "989ca41b-66f3-4456-80e2-3c79c75a0a8d.png",
+    "default": false,
+    "canvasPath": "/models/library/female-contrapposto.png",
+    "cardPath": "/assets/ui/models/library/female-contrapposto_card.png",
+    "canvasSize": [
+      900,
+      1200
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 275225
+  },
+  {
+    "id": "female-cross-ankle",
+    "legacy": null,
+    "gender": "female",
+    "label": "Crossed ankles",
+    "src": "637f3e1d-c79c-447a-a38a-3361e6350bdd.png",
+    "default": false,
+    "canvasPath": "/models/library/female-cross-ankle.png",
+    "cardPath": "/assets/ui/models/library/female-cross-ankle_card.png",
+    "canvasSize": [
+      900,
+      1200
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 251815
+  },
+  {
+    "id": "female-atelier",
+    "legacy": null,
+    "gender": "female",
+    "label": "Atelier",
+    "src": "714fabee-6f1e-467b-b3ca-0495c926607e.png",
+    "default": false,
+    "canvasPath": "/models/library/female-atelier.png",
+    "cardPath": "/assets/ui/models/library/female-atelier_card.png",
+    "canvasSize": [
+      900,
+      1200
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 276617
+  },
+  {
+    "id": "female-cross-leg",
+    "legacy": null,
+    "gender": "female",
+    "label": "Crossed leg",
+    "src": "e56254df-b619-4ed1-a7f4-1951fc339204.png",
+    "default": false,
+    "canvasPath": "/models/library/female-cross-leg.png",
+    "cardPath": "/assets/ui/models/library/female-cross-leg_card.png",
+    "canvasSize": [
+      900,
+      1200
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 272914
+  },
+  {
+    "id": "male-straight",
+    "legacy": "male",
+    "gender": "male",
+    "label": "Standing",
+    "src": "a9cb0141-3789-4fe3-bd31-11ed409276fd.png",
+    "default": true,
+    "canvasPath": "/models/library/male-straight.png",
+    "cardPath": "/assets/ui/models/library/male-straight_card.png",
+    "canvasSize": [
+      900,
+      1200
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 323118
+  },
+  {
+    "id": "male-step",
+    "legacy": null,
+    "gender": "male",
+    "label": "Step",
+    "src": "930a5fff-ff49-4e63-b8c5-fec0624c89fc.png",
+    "default": false,
+    "canvasPath": "/models/library/male-step.png",
+    "cardPath": "/assets/ui/models/library/male-step_card.png",
+    "canvasSize": [
+      900,
+      1200
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 354328
+  },
+  {
+    "id": "male-walk",
+    "legacy": null,
+    "gender": "male",
+    "label": "Walk",
+    "src": "d29b1add-224f-46d4-b36f-2d890713a00e.png",
+    "default": false,
+    "canvasPath": "/models/library/male-walk.png",
+    "cardPath": "/assets/ui/models/library/male-walk_card.png",
+    "canvasSize": [
+      900,
+      1200
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 327430
+  },
+  {
+    "id": "male-contrapposto",
+    "legacy": null,
+    "gender": "male",
+    "label": "Contrapposto",
+    "src": "f7f70909-2204-4923-86d6-5a5cba96a3cd.png",
+    "default": false,
+    "canvasPath": "/models/library/male-contrapposto.png",
+    "cardPath": "/assets/ui/models/library/male-contrapposto_card.png",
+    "canvasSize": [
+      900,
+      1200
+    ],
+    "alphaExtrema": [
+      0,
+      255
+    ],
+    "bytes": 338900
+  }
+]

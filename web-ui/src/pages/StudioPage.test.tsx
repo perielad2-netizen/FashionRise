@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StudioPage } from '@/pages/StudioPage'
 import type { Stroke } from '@/lib/strokes'
 
+vi.mock('@/config/magicUi', () => ({
+  // Keep Studio chrome “Soon” notices deterministic regardless of local .env.
+  isMagicUiEnabled: () => false,
+}))
+
 vi.mock('@/services/auth/AuthProvider', () => ({
   useAuth: () => ({
     user: { id: 'u1', username: 'demo' },
