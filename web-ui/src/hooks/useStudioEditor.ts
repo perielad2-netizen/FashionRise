@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { canvasSrcForModel, type ModelChoice } from '@/assets/modelLibrary'
+import { DEFAULT_MODEL, canvasSrcForModel, type ModelChoice } from '@/assets/modelLibrary'
 import {
   createEmptyDraftDocument,
   draftContentFingerprint,
@@ -141,7 +141,7 @@ export function useStudioEditor() {
   const [opacity, setOpacity] = useState(1)
   const [color, setColor] = useState<string>(INK_SWATCHES[0]!.color)
   const [fillStyle, setFillStyle] = useState<FillStyle>(() => solidStyle(INK_SWATCHES[0]!.color))
-  const [model, setModelState] = useState<ModelChoice>('female')
+  const [model, setModelState] = useState<ModelChoice>(DEFAULT_MODEL)
   const [customUrl, setCustomUrl] = useState<string | null>(null)
   const [customKey, setCustomKey] = useState<string | null>(null)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)

@@ -15,7 +15,7 @@ describe('ModelPanel', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Select Male · Standing reference/i }))
-    expect(onSelect).toHaveBeenCalledWith('male')
+    expect(onSelect).toHaveBeenCalledWith('male-straight')
 
     fireEvent.click(screen.getByRole('button', { name: /Select Blank · Paper reference/i }))
     expect(onSelect).toHaveBeenCalledWith('blank')

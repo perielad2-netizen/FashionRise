@@ -28,8 +28,8 @@ describe('UI_ASSETS registry', () => {
     expect(UI_ASSETS.tool.clear).toMatch(/fr_icon_clear\.png$/)
     expect(UI_ASSETS.inspector.reference).toMatch(/fr_icon_reference\.png$/)
     expect(UI_ASSETS.inspector.magic).toMatch(/fr_icon_magic\.png$/)
-    expect(UI_ASSETS.canvas.female).toBe('/models/library/female-straight.png')
-    expect(UI_ASSETS.canvas.male).toBe('/models/library/male-straight.png')
+    expect(UI_ASSETS.canvas.female).toBe('/models/female_model.png')
+    expect(UI_ASSETS.canvas.male).toBe('/models/male_model_display.png')
   })
 
   it('keeps canvas croquis separate from decorative model cards', () => {
@@ -46,6 +46,9 @@ describe('UI_ASSETS registry', () => {
       'models/library/male-step.png',
       'assets/ui/models/library/female-straight_card.png',
       'assets/ui/models/library/male-straight_card.png',
+      // Legacy geometry must remain on disk for old saved designs.
+      'models/female_model.png',
+      'models/male_model_display.png',
     ]
     for (const rel of library) {
       expect(existsSync(resolve(publicRoot, rel)), `missing ${rel}`).toBe(true)

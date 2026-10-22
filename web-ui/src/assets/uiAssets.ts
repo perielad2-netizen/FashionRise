@@ -47,16 +47,13 @@ export const UI_ASSETS = {
   },
   canvas: {
     /**
-     * Drawing-canvas croquis defaults (WEB-V4D standing straight).
-     * Full library lives under `/models/library/` — see `modelLibrary.ts`.
+     * Legacy croquis geometry for pre-V4D `model: 'female' | 'male'` documents.
+     * New drawings use `/models/library/*` via `modelLibrary.ts` (`female-straight`, …).
      */
-    female: '/models/library/female-straight.png',
-    male: '/models/library/male-straight.png',
-    /** Legacy pre-V4D male source (opaque) — do not use in UI. */
+    female: '/models/female_model.png',
+    male: '/models/male_model_display.png',
+    /** Original opaque male source — do not use in UI. */
     maleSource: '/models/male_model.png',
-    /** Compatibility aliases kept for older tests / docs. */
-    femaleLegacy: '/models/female_model.png',
-    maleDisplayLegacy: '/models/male_model_display.png',
   },
 } as const
 

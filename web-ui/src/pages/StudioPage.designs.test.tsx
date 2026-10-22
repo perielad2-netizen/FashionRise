@@ -302,7 +302,8 @@ describe('Export PNG', () => {
     expect(mocks.exportSketchPng).toHaveBeenCalledWith({
       strokes: [STROKE],
       fills: [],
-      referenceUrl: '/models/library/female-straight.png',
+      // Legacy model id must keep original croquis geometry.
+      referenceUrl: '/models/female_model.png',
       referenceOpacity: 0.4,
     })
     expect(mocks.downloadBlob).toHaveBeenCalledWith(blob, expect.stringMatching(/^fashionrise-sketch-\d{4}-\d{2}-\d{2}-\d{4}\.png$/))

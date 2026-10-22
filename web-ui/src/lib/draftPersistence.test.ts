@@ -466,8 +466,8 @@ describe('draftPersistence WEB-V2.1A/B', () => {
 
   it('preserves server-acknowledged revision when fingerprint matches after edit→revert', async () => {
     const base = createEmptyDraftDocument()
-    const edited = bumpDraftDocument(base, { model: 'male' })
-    const reverted = bumpDraftDocument(edited, { model: 'female' })
+    const edited = bumpDraftDocument(base, { model: 'male-straight' })
+    const reverted = bumpDraftDocument(edited, { model: 'female-straight' })
     expect(draftContentFingerprint(documentForCloud(reverted))).toBe(
       draftContentFingerprint(documentForCloud(base)),
     )
@@ -640,7 +640,7 @@ describe('draftPersistence WEB-V2.1A/B', () => {
       expectedRevision: 1,
     })
     expect(result.ok).toBe(false)
-    expect(api.designs.get('d1')!.design_data.model).toBe('female')
+    expect(api.designs.get('d1')!.design_data.model).toBe('female-straight')
     expect(api.designs.get('d2')!.design_data.model).toBe('blank')
     expect(api.updateCalls).toHaveLength(0)
   })
