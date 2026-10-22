@@ -302,6 +302,7 @@ describe('Export PNG', () => {
     expect(mocks.exportSketchPng).toHaveBeenCalledWith({
       strokes: [STROKE],
       fills: [],
+      // Legacy model id must keep original croquis geometry.
       referenceUrl: '/models/female_model.png',
       referenceOpacity: 0.4,
     })

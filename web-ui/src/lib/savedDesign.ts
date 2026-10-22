@@ -1,4 +1,8 @@
-import type { ModelChoice } from '@/shell/modelTypes'
+import {
+  isModelChoice,
+  modelLabel as libraryModelLabel,
+  type ModelChoice,
+} from '@/assets/modelLibrary'
 import { cloneFills, parseFillOp, type FillOp } from '@/lib/fills'
 import {
   BRUSH_SIZES,
@@ -72,7 +76,6 @@ type DesignRowLike = {
   created_at: string
 }
 
-const MODEL_CHOICES: readonly ModelChoice[] = ['female', 'male', 'custom', 'blank']
 const SIZE_IDS = Object.keys(BRUSH_SIZES) as BrushSizeId[]
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 // eslint-disable-next-line no-control-regex
@@ -206,7 +209,8 @@ function parseStroke(raw: unknown): Stroke | null {
 export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | null {
   if (!raw || typeof raw !== 'object') return null
   const s = raw as Record<string, unknown>
-  if (!MODEL_CHOICES.includes(s.model as ModelChoice)) return null
+  if (!isModelChoice(s.model)) return null
+  const model = s.model
   if (typeof s.dimmed !== 'boolean') return null
   const brush = s.brush as Record<string, unknown> | null
   if (!brush || typeof brush !== 'object') return null
@@ -236,7 +240,7 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
   return {
     strokes,
     ...(fills ? { fills } : {}),
-    model: s.model as ModelChoice,
+    model,
     brush: {
       sizeId: brush.sizeId as BrushSizeId,
       opacity: brush.opacity,
@@ -323,14 +327,5 @@ export function workingDocumentFromSnapshot(args: {
 }
 
 export function modelLabel(model: ModelChoice): string {
-  switch (model) {
-    case 'female':
-      return 'Female croquis'
-    case 'male':
-      return 'Male croquis'
-    case 'custom':
-      return 'Custom reference'
-    case 'blank':
-      return 'Blank paper'
-  }
+  return libraryModelLabel(model)
 }

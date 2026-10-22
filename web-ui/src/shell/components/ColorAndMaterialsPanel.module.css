@@ -3,8 +3,49 @@
   flex-direction: column;
   gap: 10px;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding-right: 2px;
+  height: 100%;
+}
+
+.panelChrome {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.materialTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgba(8, 12, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.materialTab,
+.materialTabActive {
+  min-height: 32px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fr-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.materialTabActive {
+  color: white;
+  background: rgba(214, 51, 132, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(214, 51, 132, 0.45);
 }
 
 .card {
@@ -13,6 +54,9 @@
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
   padding: 12px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
 }
 
 .head {
@@ -135,11 +179,16 @@
   font-size: 12px;
 }
 
-.fabrics,
+.fabrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .gradients {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .fabric,
@@ -162,8 +211,9 @@
 
 .gradient,
 .gradientActive {
-  aspect-ratio: 1.4 / 1;
-  border-radius: 8px;
+  aspect-ratio: 2 / 1;
+  min-height: 56px;
+  border-radius: 12px;
 }
 
 .nativePicker {

@@ -1,4 +1,4 @@
-import { UI_ASSETS } from '@/assets/uiAssets'
+import { canvasSrcForModel } from '@/assets/modelLibrary'
 import { canvasToPngBlob, loadImage, renderSketchCanvas } from '@/lib/exportCanvas'
 import type { SavedDesignSnapshot } from '@/lib/savedDesign'
 
@@ -11,9 +11,7 @@ export const PREVIEW_PAGE_SIZE = 24
 export const PREVIEW_MIN_INK_SIZE = 1.5
 
 export function previewReferenceUrl(snapshot: Pick<SavedDesignSnapshot, 'model'>): string | null {
-  if (snapshot.model === 'female') return UI_ASSETS.canvas.female
-  if (snapshot.model === 'male') return UI_ASSETS.canvas.male
-  return null
+  return canvasSrcForModel(snapshot.model)
 }
 
 const referenceCache = new Map<string, Promise<HTMLImageElement>>()

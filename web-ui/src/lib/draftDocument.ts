@@ -1,4 +1,8 @@
-import type { ModelChoice } from '@/shell/modelTypes'
+import {
+  DEFAULT_MODEL,
+  normalizeModelChoice,
+  type ModelChoice,
+} from '@/assets/modelLibrary'
 import { cloneFills, parseFillOp, type FillOp } from '@/lib/fills'
 import {
   BRUSH_SIZES,
@@ -41,7 +45,6 @@ export type SaveStatus =
   | 'error'
   | 'local-only'
 
-const MODEL_CHOICES: ModelChoice[] = ['female', 'male', 'custom', 'blank']
 const SIZE_IDS = Object.keys(BRUSH_SIZES) as BrushSizeId[]
 
 export function createEmptyDraftDocument(now = new Date()): StudioDraftDocument {
@@ -49,7 +52,7 @@ export function createEmptyDraftDocument(now = new Date()): StudioDraftDocument 
     schema: STUDIO_DRAFT_SCHEMA,
     strokes: [],
     fills: [],
-    model: 'female',
+    model: DEFAULT_MODEL,
     customReferenceUrl: null,
     customReferenceKey: null,
     brush: {
@@ -71,9 +74,7 @@ export function isStudioDraftDocument(value: unknown): value is StudioDraftDocum
 
 export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | null {
   if (!isStudioDraftDocument(raw)) return null
-  const model = MODEL_CHOICES.includes(raw.model as ModelChoice)
-    ? (raw.model as ModelChoice)
-    : 'female'
+  const model = normalizeModelChoice(raw.model)
   const sizeId = SIZE_IDS.includes(raw.brush?.sizeId as BrushSizeId)
     ? (raw.brush.sizeId as BrushSizeId)
     : 'thin'

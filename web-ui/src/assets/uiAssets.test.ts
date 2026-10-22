@@ -38,6 +38,23 @@ describe('UI_ASSETS registry', () => {
     expect(UI_ASSETS.canvas.maleSource).toBe('/models/male_model.png')
   })
 
+  it('ships WEB-V4D library croquis with transparency-ready PNGs', () => {
+    const library = [
+      'models/library/female-straight.png',
+      'models/library/male-straight.png',
+      'models/library/female-hand-hip.png',
+      'models/library/male-step.png',
+      'assets/ui/models/library/female-straight_card.png',
+      'assets/ui/models/library/male-straight_card.png',
+      // Legacy geometry must remain on disk for old saved designs.
+      'models/female_model.png',
+      'models/male_model_display.png',
+    ]
+    for (const rel of library) {
+      expect(existsSync(resolve(publicRoot, rel)), `missing ${rel}`).toBe(true)
+    }
+  })
+
   it('manifest covers every mapped UI object once', () => {
     const objects = UI_ASSET_MANIFEST.map((e) => e.uiObject)
     expect(new Set(objects).size).toBe(objects.length)

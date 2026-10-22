@@ -117,37 +117,44 @@
   padding: 6px 4px 0;
 }
 
-.badge {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: rgba(17, 24, 39, 0.72);
-  color: white;
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .cardLabel {
   position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   font-size: 10px;
   font-weight: 600;
   color: #111827;
   text-align: center;
-  background: rgba(255, 250, 245, 0.88);
+  background: rgba(255, 250, 245, 0.92);
   border-radius: 8px;
-  padding: 2px 4px;
+  padding: 3px 4px 4px;
+  line-height: 1.15;
 }
 
-.card:disabled,
-.cardSelected:disabled {
-  opacity: 0.72;
-  cursor: not-allowed;
+.cardTitle {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.cardPose {
+  font-size: 9px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.card:hover,
+.cardSelected:hover {
+  border-color: rgba(214, 51, 132, 0.55);
+}
+
+.card,
+.cardSelected {
+  cursor: pointer;
 }
 
 .filter,
