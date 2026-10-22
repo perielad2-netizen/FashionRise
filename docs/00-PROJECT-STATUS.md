@@ -395,7 +395,7 @@ FashionRise/
 |------|--------|
 | Scope | Color picker + fashion palette + eyedropper; bucket fill; 6 bundled fabrics; gradients; undo/redo; V1-compatible `fills[]`; PNG/Magic capture parity via shared `paintFillOps` |
 | PM corrections | Fill barriers from `paintInkStrokes` + dilate; eyedropper via `sampleArtworkPixel` + shared `compositeFillAndInkLayers` (ink-only erase); refuse fills at `MAX_SNAPSHOT_FILLS` (500); `checkPersistableFill` before state write; olive `#6B8E23` |
-| `npm test` | **Pass** (focused eyedropper/fill/export regressions + full suite; see changelog) |
+| `npm test` | **Pass: 259 tests, 52 files** (+ erase-over-fill eyedropper, persistable-fill guard, two-layer composite) |
 | `npm run lint` / `npm run build` / SW safety | **Pass** (pre-existing oxlint warnings only); `assert-sw-access-safe` **ok=true** |
 | Curved-dress browser acceptance | **PASS** — sealed bodice/skirt/sleeve; solid + denim fabric + rose-violet gradient; eyedropper; undo/redo; save; reload; reopen; PNG export; mock Magic capture; **no polish enqueue** |
 | OpenAI / paid Magic | **None** |
