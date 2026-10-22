@@ -95,7 +95,7 @@ describe('renderSketchCanvas composition', () => {
           seedY: 300,
         },
       ],
-      referenceUrl: '/models/female_model.png',
+      referenceUrl: '/models/library/female-straight.png',
       referenceOpacity: 0.4,
       loadReference: async () => reference,
     })

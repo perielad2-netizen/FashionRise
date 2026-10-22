@@ -302,7 +302,7 @@ describe('Export PNG', () => {
     expect(mocks.exportSketchPng).toHaveBeenCalledWith({
       strokes: [STROKE],
       fills: [],
-      referenceUrl: '/models/female_model.png',
+      referenceUrl: '/models/library/female-straight.png',
       referenceOpacity: 0.4,
     })
     expect(mocks.downloadBlob).toHaveBeenCalledWith(blob, expect.stringMatching(/^fashionrise-sketch-\d{4}-\d{2}-\d{2}-\d{4}\.png$/))

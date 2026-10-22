@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Maximize2, Minimize2 } from 'lucide-react'
+import { modelLabel } from '@/assets/modelLibrary'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
@@ -27,6 +29,7 @@ function modalOpen(): boolean {
 
 export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   const [dock, setDock] = useState<Dock>(null)
+  const [focusMode, setFocusMode] = useState(false)
   const [narrow, setNarrow] = useState(false)
   const [tablet, setTablet] = useState(false)
 
@@ -65,13 +68,18 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   }, [setTool, undo, redo])
 
   useEffect(() => {
-    if (!dock) return
+    if (!dock && !focusMode) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !modalOpen()) setDock(null)
+      if (event.key !== 'Escape' || modalOpen()) return
+      if (dock) {
+        setDock(null)
+        return
+      }
+      if (focusMode) setFocusMode(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dock])
+  }, [dock, focusMode])
 
   const toolLabel =
     editor.tool === 'erase'
@@ -91,7 +99,10 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         : null
 
   return (
-    <section className={styles.workspace} aria-label="Creator workspace">
+    <section
+      className={`${styles.workspace} ${focusMode ? styles.focusMode : ''}`}
+      aria-label="Creator workspace"
+    >
       <WorkspaceHeader
         canUndo={editor.canUndo}
         canRedo={editor.canRedo}
@@ -162,6 +173,17 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         >
           Settings
         </button>
+        <button
+          type="button"
+          className={focusMode ? styles.dockActive : styles.dockBtn}
+          aria-pressed={focusMode}
+          onClick={() => {
+            setFocusMode((v) => !v)
+            setDock(null)
+          }}
+        >
+          {focusMode ? 'Exit focus' : 'Focus'}
+        </button>
       </div>
 
       <div className={styles.body}>
@@ -184,21 +206,50 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
             onRedo={editor.redo}
             orientation={narrow ? 'horizontal' : 'vertical'}
           />
-          <DrawingWorkspace
-            strokes={editor.strokes}
-            fills={editor.fills}
-            tool={editor.tool}
-            brushColor={editor.color}
-            brushSize={editor.brushSize}
-            brushOpacity={editor.opacity}
-            fillStyle={editor.fillStyle}
-            referenceUrl={editor.referenceUrl}
-            referenceOpacity={editor.referenceOpacity}
-            onStrokeComplete={editor.onStrokeComplete}
-            onFillComplete={editor.onFillComplete}
-            onFillError={editor.onFillError}
-            onEyedropperSample={editor.onEyedropperSample}
-          />
+          <div className={styles.canvasStage}>
+            <DrawingWorkspace
+              strokes={editor.strokes}
+              fills={editor.fills}
+              tool={editor.tool}
+              brushColor={editor.color}
+              brushSize={editor.brushSize}
+              brushOpacity={editor.opacity}
+              fillStyle={editor.fillStyle}
+              referenceUrl={editor.referenceUrl}
+              referenceOpacity={editor.referenceOpacity}
+              onStrokeComplete={editor.onStrokeComplete}
+              onFillComplete={editor.onFillComplete}
+              onFillError={editor.onFillError}
+              onEyedropperSample={editor.onEyedropperSample}
+            />
+            <button
+              type="button"
+              className={styles.focusToggle}
+              aria-pressed={focusMode}
+              aria-label={focusMode ? 'Exit focused sketch mode' : 'Enter focused sketch mode'}
+              title={focusMode ? 'Exit focus mode (Esc)' : 'Expand canvas'}
+              onClick={() => {
+                setFocusMode((v) => !v)
+                setDock(null)
+              }}
+            >
+              {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              <span>{focusMode ? 'Exit focus' : 'Focus'}</span>
+            </button>
+            {focusMode ? (
+              <div className={styles.focusQuick} aria-label="Focus mode panels">
+                <button type="button" onClick={() => setDock('models')}>
+                  Models
+                </button>
+                <button type="button" onClick={() => setDock('materials')}>
+                  Materials
+                </button>
+                <button type="button" onClick={() => setDock('settings')}>
+                  Settings
+                </button>
+              </div>
+            ) : null}
+          </div>
           <div className={`${styles.materialsSlot} ${dock === 'materials' ? styles.slotOpen : ''}`}>
             <ColorAndMaterialsPanel
               color={editor.color}
@@ -277,7 +328,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           <p>
             Your current sketch will stay on the canvas if you keep strokes. Clearing removes ink
             before switching to{' '}
-            <strong>{editor.modelSwitchPrompt.next}</strong>.
+            <strong>{modelLabel(editor.modelSwitchPrompt.next)}</strong>.
           </p>
         </ConfirmDialog>
       ) : null}

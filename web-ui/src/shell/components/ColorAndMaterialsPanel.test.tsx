@@ -33,7 +33,9 @@ describe('ColorAndMaterialsPanel', () => {
       />,
     )
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Add Fabric/i })).toBeTruthy())
+    expect(screen.getByRole('tab', { name: 'Colors' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Fabrics' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Gradients' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Crimson' }))
     expect(onColor).toHaveBeenCalledWith('#B91C1C')
@@ -41,17 +43,19 @@ describe('ColorAndMaterialsPanel', () => {
     fireEvent.change(screen.getByLabelText('Color picker'), { target: { value: '#0f766e' } })
     expect(onColor).toHaveBeenCalledWith('#0F766E')
 
+    fireEvent.click(screen.getByRole('button', { name: 'Eyedropper' }))
+    expect(onToggleEyedropper).toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Fabrics' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Add Fabric/i })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Denim' }))
     expect(onFillStyle).toHaveBeenCalledWith({ kind: 'fabric', fabricId: 'denim' })
+    expect(screen.getByText(/My Fabrics/i)).toBeTruthy()
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Gradients' }))
     fireEvent.click(screen.getByRole('button', { name: 'Rose violet' }))
     expect(onFillStyle).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'gradient', gradientId: 'rose-violet' }),
     )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Eyedropper' }))
-    expect(onToggleEyedropper).toHaveBeenCalled()
-
-    expect(screen.getByText(/My Fabrics/i)).toBeTruthy()
   })
 })

@@ -47,17 +47,16 @@ export const UI_ASSETS = {
   },
   canvas: {
     /**
-     * Drawing-canvas croquis (NOT the decorative model-card art).
-     * Female source already has a true alpha channel.
+     * Drawing-canvas croquis defaults (WEB-V4D standing straight).
+     * Full library lives under `/models/library/` — see `modelLibrary.ts`.
      */
-    female: '/models/female_model.png',
-    /**
-     * Runtime male reference is a cleaned display asset.
-     * Original opaque source preserved at `/models/male_model.png`.
-     */
-    male: '/models/male_model_display.png',
-    /** Original male source (baked light background) — do not use in UI. */
+    female: '/models/library/female-straight.png',
+    male: '/models/library/male-straight.png',
+    /** Legacy pre-V4D male source (opaque) — do not use in UI. */
     maleSource: '/models/male_model.png',
+    /** Compatibility aliases kept for older tests / docs. */
+    femaleLegacy: '/models/female_model.png',
+    maleDisplayLegacy: '/models/male_model_display.png',
   },
 } as const
 

@@ -28,14 +28,28 @@ describe('UI_ASSETS registry', () => {
     expect(UI_ASSETS.tool.clear).toMatch(/fr_icon_clear\.png$/)
     expect(UI_ASSETS.inspector.reference).toMatch(/fr_icon_reference\.png$/)
     expect(UI_ASSETS.inspector.magic).toMatch(/fr_icon_magic\.png$/)
-    expect(UI_ASSETS.canvas.female).toBe('/models/female_model.png')
-    expect(UI_ASSETS.canvas.male).toBe('/models/male_model_display.png')
+    expect(UI_ASSETS.canvas.female).toBe('/models/library/female-straight.png')
+    expect(UI_ASSETS.canvas.male).toBe('/models/library/male-straight.png')
   })
 
   it('keeps canvas croquis separate from decorative model cards', () => {
     expect(UI_ASSETS.canvas.female).not.toBe(UI_ASSETS.model.female)
     expect(UI_ASSETS.canvas.male).not.toBe(UI_ASSETS.model.male)
     expect(UI_ASSETS.canvas.maleSource).toBe('/models/male_model.png')
+  })
+
+  it('ships WEB-V4D library croquis with transparency-ready PNGs', () => {
+    const library = [
+      'models/library/female-straight.png',
+      'models/library/male-straight.png',
+      'models/library/female-hand-hip.png',
+      'models/library/male-step.png',
+      'assets/ui/models/library/female-straight_card.png',
+      'assets/ui/models/library/male-straight_card.png',
+    ]
+    for (const rel of library) {
+      expect(existsSync(resolve(publicRoot, rel)), `missing ${rel}`).toBe(true)
+    }
   })
 
   it('manifest covers every mapped UI object once', () => {

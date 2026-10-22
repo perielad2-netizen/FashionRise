@@ -3,16 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-22. **GitHub `main`:** `d7e37b59` (WEB-V4B PR #29 + WEB-V4C PR #30 merged). **Production backend/frontend:** **`d7e37b59`** · Alembic **`005`** live · `REGISTRATION_ENABLED=true` · registration UI **on** · Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Paid Magic generation: not yet run** (Cursor paid calls = 0). **Production fill-autosave acceptance BLOCKED** — hotfix draft PR [#32](https://github.com/perielad2-netizen/FashionRise/pull/32) on `cursor/hotfix-fill-fingerprint-77c6` — **STOP for Technical PM review** (do not merge/deploy yet).
+**Last updated:** 2026-10-22. **GitHub `main`:** `c21fee6b` (PR #32 fill-fingerprint hotfix merged + backend deployed). **Production backend:** **`c21fee6b`** · **Production frontend:** **`d7e37b59`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Paid Magic generation: not yet run** (Cursor paid calls = 0). **Active draft:** WEB-V4D Studio UX + model library (`cursor/web-v4d-studio-ux-77c6`) — **STOP for Technical PM review** (do not merge/deploy).
 
-**Phase:** Protected family beta. V4B/V4C are live on production. Fill-only cloud autosave is broken until the Studio content-fingerprint hotfix lands.
+**Phase:** Protected family beta. Fill-autosave hotfix is live on the API. WEB-V4D (frontend-only) refreshes built-in croquis, tabbed materials, and focus canvas mode.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`d7e37b59…`** — Nginx root under `/var/www/fashionrise/releases/…`. `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). |
-| Backend (FastAPI + PostgreSQL) | **`d7e37b59`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone) |
+| Frontend (`web-ui`) | **`d7e37b59…`** — Nginx root `/var/www/fashionrise/releases/d7e37b59`. `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). |
+| Backend (FastAPI + PostgreSQL) | **`c21fee6b`** — `fashionrise-api` on `127.0.0.1:8010`; fill fingerprint hotfix live; `AI_WORKER_ENABLED=false` (worker is standalone) |
 | AI worker | Standalone `fashionrise-ai-worker` · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` |
 | Database | `fashionrise_beta` — Alembic **`005`** · `registration_invitations` + `fabric_assets` present |
 | Deploy backup | Magic activation: `/var/backups/fashionrise/magic-activation-20261021T182235Z` |
@@ -83,8 +83,8 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub `main` | **`d7e37b59`** — includes PR #29 (WEB-V4B) + PR #30 (WEB-V4C) |
-| Production frontend / backend | **`d7e37b59` / `d7e37b59`** · Alembic **`005`** · **fill-autosave acceptance BLOCKED** |
+| GitHub `main` | **`c21fee6b`** — includes PR #32 fill-fingerprint hotfix |
+| Production frontend / backend | **FE `d7e37b59` / BE `c21fee6b`** · Alembic **`005`** |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
@@ -94,7 +94,8 @@
 | **WEB-V4A Magic React** | **MERGED** PR #27 @ `dc9e31aa` and **deployed**; paid generation **PENDING** operator click |
 | **WEB-V4B Fashion toolkit** | **MERGED** PR #29 · **deployed** @ `d7e37b59` |
 | **WEB-V4C Custom fabrics** | **MERGED** PR #30 · **deployed** @ `d7e37b59` / Alembic **`005`** |
-| **Hotfix: fill autosave fingerprint** | **Draft PR [#32](https://github.com/perielad2-netizen/FashionRise/pull/32)** — production acceptance **BLOCKED**; **STOP for Technical PM review** |
+| **Hotfix: fill autosave fingerprint** | **MERGED** PR #32 @ `c21fee6b` · **backend deployed** |
+| **WEB-V4D Studio UX + models** | **Draft** `cursor/web-v4d-studio-ux-77c6` — croquis library, tabbed materials, focus mode; **STOP for PM review** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status — do not auto-merge). |
@@ -289,10 +290,10 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM review + approve merge of fill-autosave fingerprint hotfix [PR #32](https://github.com/perielad2-netizen/FashionRise/pull/32), then authorize a **backend-only** production roll-forward of that SHA (Alembic stays **`005`** — no migration). After deploy: operator keeps the open Studio tab / IndexedDB draft, chooses **Keep this device**, confirm Saved, reopen cloud draft and verify fills.
-2. Until hotfix is live: **do not** select Use cloud draft, clear browser storage/IndexedDB, delete designs, or click Magic.
-3. After fill-autosave acceptance PASS: **one operator paid Magic browser test**. Cursor must not spend OpenAI credits.
-4. **Do not auto-merge** unrelated draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation status docs).
+1. **Exact next action:** Technical PM review of **WEB-V4D** draft PR (Studio UX + model library). Merge only when accepted; deploy is a **frontend-only** release (no Alembic / no API change). Do **not** auto-deploy.
+2. If operator still has a pre-hotfix local conflict: choose **Keep this device** once (do not clear IndexedDB) and confirm Saved.
+3. After V4D acceptance + deploy: **one operator paid Magic browser test**. Cursor must not spend OpenAI credits.
+4. **Do not auto-merge** unrelated docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#33](https://github.com/perielad2-netizen/FashionRise/pull/33).
 5. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
 6. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10.
 
@@ -439,10 +440,27 @@ FashionRise/
 | Blocked | Merge, production deploy of hotfix, Magic click |
 | Next | **Technical PM review** → merge → backend-only deploy → operator Keep-this-device recovery |
 
+## WEB-V4D verification (draft — Studio UX + model library)
+
+| Gate | Result |
+|------|--------|
+| Scope | **Frontend-only** — no backend / migration / Nginx / worker / paid AI |
+| Models | 6 female + 4 male approved croquis; defaults `female`/`male` standing; **no Unavailable cards**; mapping in `web-ui/src/assets/MODEL_LIBRARY.md` |
+| Tools UI | Tabbed Colors / Fabrics / Gradients in `ColorAndMaterialsPanel` (wider materials column) |
+| Focus mode | Expand canvas; side panels hide; Models/Materials/Settings via focus quick bar or Esc |
+| FE tests | **272 / 272** |
+| Lint | Pass (pre-existing oxlint warnings only) |
+| Build + SW | Pass · `check:sw` **ok=true** |
+| OpenAI / paid Magic | **None** |
+| Production | **Not deployed** |
+| Next | **Technical PM review** → approve merge → separate FE deploy auth |
+
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-22 | **WEB-V4D Studio UX + model library (draft):** approved croquis replace built-ins; tabbed materials; focus canvas mode; unavailable placeholders removed; FE 272 tests; build/SW PASS; **no backend**; **STOP for Technical PM review** (no merge/deploy). |
+| 2026-10-22 | **Fill-autosave hotfix MERGED + backend deployed** PR #32 @ `c21fee6b` (FE still `d7e37b59`). |
 | 2026-10-22 | **URGENT fill-autosave hotfix (draft):** production `d7e37b59`/Alembic `005` acceptance BLOCKED; fingerprint now includes fills; Keep-device path covered by API tests; no FE change; no paid Magic; **STOP for Technical PM review** (do not merge/deploy). |
 | 2026-10-22 | **WEB-V4B+V4C production deploy** at `d7e37b59` / Alembic `005` (operator-authorized). Subsequent browser acceptance found fill-autosave defect. |
 | 2026-10-22 | **WEB-V4C PM corrections (draft PR #30):** private `private_fabrics/` storage; account-scoped caches; fashion base-tile scale; header dim reject; Nginx fabrics allowlist doc (verified missing live; not applied); FE 266 / BE fabric 6/6; multi-scale + privacy demo. **STOP for final Technical PM review.** |

@@ -1,12 +1,16 @@
-export type ModelChoice = 'female' | 'male' | 'custom' | 'blank'
-
-export type ModelCardKind = 'production' | 'placeholder'
+export type {
+  BuiltinModelId,
+  ModelChoice,
+  ModelGender,
+  UtilityModelId,
+} from '@/assets/modelLibrary'
 
 export type ModelLibraryCard = {
   id: string
   label: string
+  pose?: string
   src: string
   filter: 'all' | 'female' | 'male' | 'utility'
-  kind: ModelCardKind
-  choice?: ModelChoice
+  /** Every listed card is selectable — no unavailable placeholders. */
+  choice: import('@/assets/modelLibrary').ModelChoice
 }

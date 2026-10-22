@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UI_ASSETS } from '@/assets/uiAssets'
-import type { ModelChoice } from '@/shell/modelTypes'
+import { canvasSrcForModel, type ModelChoice } from '@/assets/modelLibrary'
 import {
   createEmptyDraftDocument,
   draftContentFingerprint,
@@ -51,8 +50,6 @@ import {
 import { useAuth } from '@/services/auth/AuthProvider'
 import type { MagicPhase } from '@/shell/components/MagicLookPanel'
 
-const FEMALE_URL = UI_ASSETS.canvas.female
-const MALE_URL = UI_ASSETS.canvas.male
 const MAGIC_NOTICE = 'AI enhancement will be available in a later milestone.'
 const AUTOSAVE_MS = 1600
 const CUSTOM_REF_BETA_NOTICE =
@@ -460,16 +457,9 @@ export function useStudioEditor() {
   const brushSize = BRUSH_SIZES[sizeId]
 
   const referenceUrl = useMemo(() => {
-    switch (model) {
-      case 'female':
-        return FEMALE_URL
-      case 'male':
-        return MALE_URL
-      case 'custom':
-        return blobUrl ?? customUrl
-      case 'blank':
-        return null
-    }
+    if (model === 'custom') return blobUrl ?? customUrl
+    if (model === 'blank') return null
+    return canvasSrcForModel(model)
   }, [model, customUrl, blobUrl])
 
   const referenceOpacity = dimmed ? 0.4 : 1
@@ -954,16 +944,9 @@ export function useStudioEditor() {
 
   const referenceUrlForDocument = useCallback(
     (doc: StudioDraftDocument): string | null => {
-      switch (doc.model) {
-        case 'female':
-          return FEMALE_URL
-        case 'male':
-          return MALE_URL
-        case 'custom':
-          return blobUrl ?? doc.customReferenceUrl
-        case 'blank':
-          return null
-      }
+      if (doc.model === 'custom') return blobUrl ?? doc.customReferenceUrl
+      if (doc.model === 'blank') return null
+      return canvasSrcForModel(doc.model)
     },
     [blobUrl],
   )

@@ -55,14 +55,25 @@ export function ColorAndMaterialsPanel({
   const [pendingPreview, setPendingPreview] = useState<string | null>(null)
   const [pendingName, setPendingName] = useState('')
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [tab, setTab] = useState<'colors' | 'fabrics' | 'gradients'>('colors')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const nameFieldId = useId()
   const scale =
     fillStyle.kind === 'uploaded-fabric' ? fillStyle.scale : UPLOADED_FABRIC_SCALE_DEFAULT
+  const inferredTab: 'colors' | 'fabrics' | 'gradients' =
+    fillStyle.kind === 'fabric' || fillStyle.kind === 'uploaded-fabric'
+      ? 'fabrics'
+      : fillStyle.kind === 'gradient'
+        ? 'gradients'
+        : 'colors'
 
   useEffect(() => {
     setHexDraft(color)
   }, [color])
+
+  useEffect(() => {
+    setTab(inferredTab)
+  }, [inferredTab])
 
   useEffect(() => {
     let cancelled = false
@@ -206,203 +217,230 @@ export function ColorAndMaterialsPanel({
 
   return (
     <div className={styles.stack} aria-label="Colors and materials">
-      <section className={styles.card}>
-        <div className={styles.head}>
-          <h3>Colors</h3>
-        </div>
-        <div className={styles.currentInk}>
-          <span className={styles.currentSwatch} style={{ background: color }} />
-          <span>Current color</span>
-        </div>
-        <div className={styles.swatches}>
-          {INK_SWATCHES.map((s) => (
+      <div className={styles.panelChrome}>
+        <div className={styles.materialTabs} role="tablist" aria-label="Material tools">
+          {(
+            [
+              ['colors', 'Colors'],
+              ['fabrics', 'Fabrics'],
+              ['gradients', 'Gradients'],
+            ] as const
+          ).map(([id, label]) => (
             <button
-              key={s.id}
+              key={id}
               type="button"
-              className={color.toLowerCase() === s.color.toLowerCase() ? styles.swatchActive : styles.swatch}
-              style={{ background: s.color }}
-              aria-label={s.label}
-              title={s.label}
-              onClick={() => selectSolid(s.color)}
-            />
+              role="tab"
+              aria-selected={tab === id}
+              className={tab === id ? styles.materialTabActive : styles.materialTab}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
           ))}
         </div>
-        <p className={styles.note}>Fashion palette</p>
-        <div className={styles.swatches}>
-          {FASHION_PALETTE.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={color.toLowerCase() === s.color.toLowerCase() ? styles.swatchActive : styles.swatch}
-              style={{ background: s.color }}
-              aria-label={s.label}
-              title={s.label}
-              onClick={() => selectSolid(s.color)}
-            />
-          ))}
-        </div>
-        <div className={styles.hexRow}>
-          <input
-            className={styles.hex}
-            value={hexDraft}
-            aria-label="Hex color"
-            onChange={(e) => setHexDraft(e.target.value)}
-            onBlur={commitHex}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitHex()
-            }}
-          />
-          <input
-            type="color"
-            className={styles.nativePicker}
-            value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : '#1C1C1E'}
-            aria-label="Color picker"
-            title="Pick a color"
-            onChange={(e) => selectSolid(e.target.value.toUpperCase())}
-          />
-          <button
-            type="button"
-            className={eyedropperActive ? styles.iconBtnActive : styles.iconBtn}
-            aria-label={eyedropperActive ? 'Eyedropper on' : 'Eyedropper'}
-            aria-pressed={eyedropperActive}
-            title="Sample a color from your sketch"
-            onClick={onToggleEyedropper}
-          >
-            <Pipette size={14} />
-          </button>
-        </div>
-      </section>
 
-      <section className={styles.card}>
-        <div className={styles.head}>
-          <h3>Fabrics</h3>
-          <button
-            type="button"
-            className={styles.addFabric}
-            onClick={openPicker}
-            disabled={uploading}
-          >
-            <Plus size={14} aria-hidden="true" />
-            Add Fabric
-          </button>
-        </div>
-        <p className={styles.note}>Select a fabric, then use Fill on a closed dress region.</p>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-          className={styles.hiddenFile}
-          aria-hidden="true"
-          tabIndex={-1}
-          onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
-        />
-        <div className={styles.fabrics}>
-          {FABRIC_PRESETS.map((fabric) => {
-            const active = fillStyle.kind === 'fabric' && fillStyle.fabricId === fabric.id
-            return (
-              <button
-                key={fabric.id}
-                type="button"
-                className={active ? styles.fabricActive : styles.fabric}
-                style={{ background: fabric.preview }}
-                aria-label={fabric.label}
-                aria-pressed={active}
-                title={fabric.label}
-                onClick={() => onFillStyle({ kind: 'fabric', fabricId: fabric.id })}
+        {tab === 'colors' ? (
+          <section className={styles.card} role="tabpanel" aria-label="Colors">
+            <div className={styles.currentInk}>
+              <span className={styles.currentSwatch} style={{ background: color }} />
+              <span>Current color</span>
+            </div>
+            <div className={styles.swatches}>
+              {INK_SWATCHES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={
+                    color.toLowerCase() === s.color.toLowerCase() ? styles.swatchActive : styles.swatch
+                  }
+                  style={{ background: s.color }}
+                  aria-label={s.label}
+                  title={s.label}
+                  onClick={() => selectSolid(s.color)}
+                />
+              ))}
+            </div>
+            <p className={styles.note}>Fashion palette</p>
+            <div className={styles.swatches}>
+              {FASHION_PALETTE.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={
+                    color.toLowerCase() === s.color.toLowerCase() ? styles.swatchActive : styles.swatch
+                  }
+                  style={{ background: s.color }}
+                  aria-label={s.label}
+                  title={s.label}
+                  onClick={() => selectSolid(s.color)}
+                />
+              ))}
+            </div>
+            <div className={styles.hexRow}>
+              <input
+                className={styles.hex}
+                value={hexDraft}
+                aria-label="Hex color"
+                onChange={(e) => setHexDraft(e.target.value)}
+                onBlur={commitHex}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitHex()
+                }}
               />
-            )
-          })}
-        </div>
+              <input
+                type="color"
+                className={styles.nativePicker}
+                value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : '#1C1C1E'}
+                aria-label="Color picker"
+                title="Pick a color"
+                onChange={(e) => selectSolid(e.target.value.toUpperCase())}
+              />
+              <button
+                type="button"
+                className={eyedropperActive ? styles.iconBtnActive : styles.iconBtn}
+                aria-label={eyedropperActive ? 'Eyedropper on' : 'Eyedropper'}
+                aria-pressed={eyedropperActive}
+                title="Sample a color from your sketch"
+                onClick={onToggleEyedropper}
+              >
+                <Pipette size={14} />
+              </button>
+            </div>
+          </section>
+        ) : null}
 
-        <p className={styles.note}>My Fabrics {libraryBusy ? '· loading…' : ''}</p>
-        {myFabrics.length === 0 ? (
-          <p className={styles.note}>Upload a JPG, PNG, or WebP to reuse across your designs.</p>
-        ) : (
-          <div className={styles.myFabrics}>
-            {myFabrics.map((fabric) => {
-              const active =
-                fillStyle.kind === 'uploaded-fabric' && fillStyle.assetId === fabric.id
-              return (
-                <div key={fabric.id} className={styles.myFabricRow}>
+        {tab === 'fabrics' ? (
+          <section className={styles.card} role="tabpanel" aria-label="Fabrics">
+            <div className={styles.head}>
+              <h3>Fabrics</h3>
+              <button
+                type="button"
+                className={styles.addFabric}
+                onClick={openPicker}
+                disabled={uploading}
+              >
+                <Plus size={14} aria-hidden="true" />
+                Add Fabric
+              </button>
+            </div>
+            <p className={styles.note}>Select a fabric, then use Fill on a closed dress region.</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+              className={styles.hiddenFile}
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
+            />
+            <div className={styles.fabrics}>
+              {FABRIC_PRESETS.map((fabric) => {
+                const active = fillStyle.kind === 'fabric' && fillStyle.fabricId === fabric.id
+                return (
                   <button
+                    key={fabric.id}
                     type="button"
                     className={active ? styles.fabricActive : styles.fabric}
-                    style={{
-                      backgroundImage: previews[fabric.id]
-                        ? `url(${previews[fabric.id]})`
-                        : undefined,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      backgroundColor: '#3f3340',
-                    }}
-                    aria-label={fabric.name}
+                    style={{ background: fabric.preview }}
+                    aria-label={fabric.label}
                     aria-pressed={active}
-                    title={fabric.name}
-                    onClick={() => selectUploaded(fabric)}
+                    title={fabric.label}
+                    onClick={() => onFillStyle({ kind: 'fabric', fabricId: fabric.id })}
                   />
-                  <div className={styles.myFabricMeta}>
-                    <span className={styles.myFabricName}>{fabric.name}</span>
-                    <button
-                      type="button"
-                      className={styles.removeFabric}
-                      onClick={() => void removeUploaded(fabric)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+                )
+              })}
+            </div>
 
-        {fillStyle.kind === 'uploaded-fabric' ? (
-          <label className={styles.scaleRow}>
-            <span>Pattern scale</span>
-            <input
-              type="range"
-              min={UPLOADED_FABRIC_SCALE_MIN}
-              max={UPLOADED_FABRIC_SCALE_MAX}
-              step={0.05}
-              value={scale}
-              aria-label="Uploaded fabric pattern scale"
-              onChange={(e) => onScaleChange(Number(e.target.value))}
-            />
-            <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
-          </label>
+            <p className={styles.note}>My Fabrics {libraryBusy ? '· loading…' : ''}</p>
+            {myFabrics.length === 0 ? (
+              <p className={styles.note}>Upload a JPG, PNG, or WebP to reuse across your designs.</p>
+            ) : (
+              <div className={styles.myFabrics}>
+                {myFabrics.map((fabric) => {
+                  const active =
+                    fillStyle.kind === 'uploaded-fabric' && fillStyle.assetId === fabric.id
+                  return (
+                    <div key={fabric.id} className={styles.myFabricRow}>
+                      <button
+                        type="button"
+                        className={active ? styles.fabricActive : styles.fabric}
+                        style={{
+                          backgroundImage: previews[fabric.id]
+                            ? `url(${previews[fabric.id]})`
+                            : undefined,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                          backgroundColor: '#3f3340',
+                        }}
+                        aria-label={fabric.name}
+                        aria-pressed={active}
+                        title={fabric.name}
+                        onClick={() => selectUploaded(fabric)}
+                      />
+                      <div className={styles.myFabricMeta}>
+                        <span className={styles.myFabricName}>{fabric.name}</span>
+                        <button
+                          type="button"
+                          className={styles.removeFabric}
+                          onClick={() => void removeUploaded(fabric)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {fillStyle.kind === 'uploaded-fabric' ? (
+              <label className={styles.scaleRow}>
+                <span>Pattern scale</span>
+                <input
+                  type="range"
+                  min={UPLOADED_FABRIC_SCALE_MIN}
+                  max={UPLOADED_FABRIC_SCALE_MAX}
+                  step={0.05}
+                  value={scale}
+                  aria-label="Uploaded fabric pattern scale"
+                  onChange={(e) => onScaleChange(Number(e.target.value))}
+                />
+                <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
+              </label>
+            ) : null}
+          </section>
         ) : null}
-      </section>
 
-      <section className={styles.card}>
-        <div className={styles.head}>
-          <h3>Gradients</h3>
-        </div>
-        <p className={styles.note}>Select a gradient, then Fill a closed region.</p>
-        <div className={styles.gradients}>
-          {GRADIENT_PRESETS.map((g) => {
-            const active = fillStyle.kind === 'gradient' && fillStyle.gradientId === g.id
-            return (
-              <button
-                key={g.id}
-                type="button"
-                className={active ? styles.gradientActive : styles.gradient}
-                style={{ background: g.preview }}
-                aria-label={g.label}
-                aria-pressed={active}
-                title={g.label}
-                onClick={() =>
-                  onFillStyle({
-                    kind: 'gradient',
-                    gradientId: g.id,
-                    colors: [...g.colors] as [string, string],
-                    angle: g.angle,
-                  })
-                }
-              />
-            )
-          })}
-        </div>
-      </section>
+        {tab === 'gradients' ? (
+          <section className={styles.card} role="tabpanel" aria-label="Gradients">
+            <p className={styles.note}>Select a gradient, then Fill a closed region.</p>
+            <div className={styles.gradients}>
+              {GRADIENT_PRESETS.map((g) => {
+                const active = fillStyle.kind === 'gradient' && fillStyle.gradientId === g.id
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    className={active ? styles.gradientActive : styles.gradient}
+                    style={{ background: g.preview }}
+                    aria-label={g.label}
+                    aria-pressed={active}
+                    title={g.label}
+                    onClick={() =>
+                      onFillStyle({
+                        kind: 'gradient',
+                        gradientId: g.id,
+                        colors: [...g.colors] as [string, string],
+                        angle: g.angle,
+                      })
+                    }
+                  />
+                )
+              })}
+            </div>
+          </section>
+        ) : null}
+      </div>
 
       {dialogOpen ? (
         <div className={styles.uploadScrim} role="presentation">
