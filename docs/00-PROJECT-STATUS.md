@@ -495,8 +495,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Gradients | Original 4 presets unchanged; library **16**; custom two-color designer |
 | Custom gradient fill | **PASS** — deterministic closed freehand loop + real `floodFillRegion`; FillOp `gradientId: "custom"` + exact colors/angle; H/V/45°/135° unit coverage; save/reopen/export/local Magic-capture retain identity; preview CSS angle matches canvas; Studio screenshot of painted region (not preview-only). Root cause of prior “open outline”: seed points used stride-2 `[x,y]` instead of freehand `[x,y,pressure]` — algorithm unchanged. |
 | Keyboard a11y | **PASS** — Escape cancels; focus enter/trap/restore; nested ProfessionalColorPicker Escape-first then designer; Studio shortcuts blocked behind modal; interaction tests in `CustomGradientDesigner.test.tsx` |
-| Frontend tests / lint / build / SW | Vitest / oxlint / `tsc -b` / production build / `check:sw` — see latest PR head report |
-| Browser QA | DEV `/_design/studio-layout`: desktop + iPad Mini portrait + tablet landscape + Focus + short-height; brush exact px + wheel; custom gradient fill seed; keyboard modal |
+| Frontend tests / lint / build / SW | **Vitest 317/317 PASS** · oxlint warnings-only (exit 0) · `tsc -b` PASS · production build PASS · `check:sw` PASS (`ok=true`, no NavigationRoute / HTML precache) |
+| Browser QA | DEV `/_design/studio-layout`: desktop 1440×900 · iPad Mini 768×1024 · tablet landscape 1180×820 · short-height 1180×600 · Focus enter/exit · brush **12.75** + wheel **13/12.75** · custom fill seed painted (mid-pixel pink) · Create gradient Escape close · **0 paid AI** |
 | Paid OpenAI | **0** |
 | Production | **Unchanged** (FE `1aa5dc5a` / BE+worker `2cbc1ad0`) |
 | Merge / deploy | **Blocked** — STOP for Technical PM final review |
