@@ -138,7 +138,8 @@ describe('custom gradient closed-region fill (WEB-V4G)', () => {
       {
         id: 'outline',
         tool: 'draw',
-        points: [220, 280, 420, 280, 420, 520, 220, 520, 220, 280],
+        // Freehand stride: [x, y, pressure, ...]
+        points: [220, 280, 0.5, 420, 280, 0.5, 420, 520, 0.5, 220, 520, 0.5, 220, 280, 0.5],
         color: '#111111',
         size: 6,
         opacity: 1,

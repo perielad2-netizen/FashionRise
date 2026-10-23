@@ -65,7 +65,7 @@
 
 **WEB-V4F:** **MERGED** PR #37 @ `1aa5dc5a` and **frontend-only deployed**. HSV picker + Magic contain + tablet Focus/materials. Backend/worker unchanged at `2cbc1ad0`. Operator authenticated acceptance **5/5 PASS**. Docs deploy record: draft PR [#38](https://github.com/perielad2-netizen/FashionRise/pull/38).
 
-**WEB-V4G (draft):** Frontend-only continuous brushes (0.5–40 px, wheel, live preview) + 16 gradient presets + custom two-color designer (angle, nested HSV picker, keyboard/focus). Self-contained `gradientId: "custom"` fills. Draft PR [#40](https://github.com/perielad2-netizen/FashionRise/pull/40) reconciled onto `main` `4819b951`. **No backend / Magic prompt changes** in this PR.
+**WEB-V4G (draft):** Frontend-only continuous brushes (0.5–40 px, wheel, live preview) + 16 gradient presets + custom two-color designer (angle, nested HSV picker, keyboard/focus). Self-contained `gradientId: "custom"` fills. Draft PR [#40](https://github.com/perielad2-netizen/FashionRise/pull/40) reconciled onto `main` `4819b951`. Closed-region custom-gradient flood-fill proven (fixture root cause was missing freehand pressure triples, not the mature flood-fill algorithm). **No backend / Magic prompt changes** in this PR.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -493,9 +493,10 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Wheel | Wheel over brush control; optional **Alt+wheel** on canvas with temporary size hint |
 | Persistence | Optional `brush.sizePx`; legacy `sizeId` retained; fingerprints normalize missing `sizePx` |
 | Gradients | Original 4 presets unchanged; library **16**; custom two-color designer |
-| Custom gradient fill | Closed-region fill verified (unit + browser); `gradientId: "custom"` + exact colors/angle; H/V/diag; save/reopen/export/Magic-capture retain identity; preview angle matches canvas |
-| Keyboard a11y | Escape cancels; focus enter/trap/restore; nested color picker Escape-first; Studio shortcuts blocked via `aria-modal` |
-| Frontend tests / lint / build / SW | see PR head amendment report |
+| Custom gradient fill | **PASS** — deterministic closed freehand loop + real `floodFillRegion`; FillOp `gradientId: "custom"` + exact colors/angle; H/V/45°/135° unit coverage; save/reopen/export/local Magic-capture retain identity; preview CSS angle matches canvas; Studio screenshot of painted region (not preview-only). Root cause of prior “open outline”: seed points used stride-2 `[x,y]` instead of freehand `[x,y,pressure]` — algorithm unchanged. |
+| Keyboard a11y | **PASS** — Escape cancels; focus enter/trap/restore; nested ProfessionalColorPicker Escape-first then designer; Studio shortcuts blocked behind modal; interaction tests in `CustomGradientDesigner.test.tsx` |
+| Frontend tests / lint / build / SW | Vitest / oxlint / `tsc -b` / production build / `check:sw` — see latest PR head report |
+| Browser QA | DEV `/_design/studio-layout`: desktop + iPad Mini portrait + tablet landscape + Focus + short-height; brush exact px + wheel; custom gradient fill seed; keyboard modal |
 | Paid OpenAI | **0** |
 | Production | **Unchanged** (FE `1aa5dc5a` / BE+worker `2cbc1ad0`) |
 | Merge / deploy | **Blocked** — STOP for Technical PM final review |
@@ -523,7 +524,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-23 | **WEB-V4G PR #40 amendment:** reconcile onto `main` `4819b951` (PR #41 merged/not deployed); custom-gradient closed fill verification + keyboard/focus a11y; status preserves V4F 5/5 + pose NOT accepted; **0 paid AI**; **STOP for final PM review**. |
+| 2026-10-23 | **WEB-V4G PR #40 amendment (final):** reconcile onto `main` `4819b951` (PR #41 merged/not deployed); closed custom-gradient flood-fill proven (pressure-triple fixture fix; algorithm unchanged); CustomGradientDesigner keyboard/focus a11y + tests; brush persistence compat preserved; status preserves V4F **5/5 PASS** + pose **NOT accepted**; production unchanged; **0 paid AI**; **STOP for final PM review**. |
 | 2026-10-23 | **Magic pose fidelity PR #41 MERGED** @ `4819b951` (not deployed). |
 | 2026-10-23 | **Magic pose fidelity PR #41 amendment:** priority pose-lock packing inside 3800-char budget (no mid-fact truncation); verbose vision regression tests; status doc corrects WEB-V4F **5/5 PASS** vs pose sample **NOT accepted**; full BE pytest/ruff/mypy reported; **0 paid AI**; **STOP for Technical PM final review**. |
 | 2026-10-23 | **Magic pose fidelity (Issue #39, draft):** structured `pose_lock` + edit-brief anti-repose rules; offline pose tests + human rubric; WEB-V4E polish retained; models/edit policy unchanged; **0 paid AI**; **STOP for Technical PM review** (no deploy/worker restart). |

@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
 import type { StudioEditor } from '@/hooks/useStudioEditor'
-import { solidStyle } from '@/lib/fills'
+import { customGradientStyle, solidStyle } from '@/lib/fills'
+import { floodFillRegion } from '@/lib/floodFill'
 import { DEFAULT_MODEL } from '@/assets/modelLibrary'
 import {
   BRUSH_SIZES,
@@ -16,6 +17,9 @@ import '@/shell/shellTokens.css'
 /**
  * DEV-only harness that mounts the real shell CreatorWorkspace + DrawingWorkspace
  * with a local mock editor (no auth / backend). Used for tablet Focus + materials QA.
+ *
+ * Query `?v4gCustomFill=1` seeds a deterministic closed outline + custom gradient fill
+ * for visual acceptance screenshots (no paid Magic).
  */
 export function StudioLayoutLabPage() {
   const editor = useLayoutLabEditor()
@@ -28,6 +32,37 @@ export function StudioLayoutLabPage() {
       <CreatorWorkspace editor={editor} />
     </div>
   )
+}
+
+/** Flattened freehand points: [x, y, pressure, ...] (stride 3 — required by strokeToSvgPath). */
+function denseEdge(x0: number, y0: number, x1: number, y1: number, steps = 64): number[] {
+  const pts: number[] = []
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps
+    pts.push(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, 0.5)
+  }
+  return pts
+}
+
+/**
+ * Deterministic closed rectangle far from paper edges (design 768×1024).
+ * One continuous freehand loop with start/end overlap seals perfect-freehand taper.
+ */
+function closedRectStrokes(): Stroke[] {
+  const x0 = 220
+  const y0 = 280
+  const x1 = 540
+  const y1 = 720
+  const ink = { color: '#1C1C1E', size: 6, opacity: 1 } as const
+  const loopPts = [
+    ...denseEdge(x0, y0, x1, y0, 80).slice(0, -3),
+    ...denseEdge(x1, y0, x1, y1, 80).slice(0, -3),
+    ...denseEdge(x1, y1, x0, y1, 80).slice(0, -3),
+    ...denseEdge(x0, y1, x0, y0, 80),
+    // Overlap past the start so freehand end taper does not open a corner leak.
+    ...denseEdge(x0, y0, x0 + 48, y0, 16).slice(3),
+  ]
+  return [{ id: 'v4g-closed-rect', tool: 'draw', points: loopPts, ...ink }]
 }
 
 function useLayoutLabEditor(): StudioEditor {
@@ -43,6 +78,34 @@ function useLayoutLabEditor(): StudioEditor {
   const [magicNotice, setMagicNotice] = useState<string | null>(null)
   const [studioNotice, setStudioNotice] = useState<string | null>(null)
   const [comingSoon, setComingSoon] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('v4gCustomFill') !== '1') return
+    const outline = closedRectStrokes()
+    const style = customGradientStyle(['#FF2D8A', '#0F172A'], 45)
+    if (!style) return
+    // Real Studio flood-fill against freehand ink (no contour stub). Prior failure was
+    // fixture points missing pressure triples — not the mature flood-fill algorithm.
+    const result = floodFillRegion({
+      strokes: outline,
+      x: 380,
+      y: 500,
+      style,
+      gapClose: 3,
+    })
+    setStrokes(outline)
+    setFillStyle(style)
+    setTool('fill')
+    if (result.ok) {
+      setFills([result.fill])
+      setStudioNotice(null)
+    } else {
+      setFills([])
+      setStudioNotice(`V4G custom-gradient seed flood-fill failed: ${result.message}`)
+    }
+  }, [])
 
   const sizeId = nearestBrushSizeId(brushSize)
 
