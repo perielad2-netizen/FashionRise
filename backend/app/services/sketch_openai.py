@@ -184,18 +184,27 @@ def _system_prompt(job_type: str) -> str:
         return (
             "You are a senior fashion design director. A young designer uploaded a rough fashion sketch. "
             "Your job is to extract the DESIGN CONCEPT for a professional fashion-illustration edit. "
-            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence, versus "
-            "(B) drawing imperfections that may be professionally refined (wobbly lines, uneven fill, crude shading). "
+            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence — including "
+            "the model's exact croquis pose/stance and garment silhouette — versus (B) drawing imperfections "
+            "that may be professionally refined (wobbly lines, uneven fill, crude shading). "
+            "Never invent anatomy, swap left/right, or normalize a dynamic stance into a generic runway pose. "
             "Respond ONLY with valid JSON using keys: "
             "summary (one short exciting sentence about the design concept, not the rough drawing), "
             "polish_bullets (array of 3–5 concise tips for the young designer), "
             "design_identity (object with evidence-backed fields; use null only when not visible: "
-            "garment_category, silhouette, pose, neckline, sleeve_type, sleeve_length, hemline, "
-            "main_colors, fabric_patterns, accessories, asymmetry_notes, distinctive_details), "
-            "refine_ok (array of short drawing imperfections that MAY be upgraded — never design decisions), "
-            "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes to preserve: "
-            "pose, hat/hair, neckline, sleeves, hem, main colors, fabric patterns, asymmetry, accessories, "
-            "distinctive details — invent nothing; do not describe amateur line quality or ask to keep a child sketch look)."
+            "garment_category, silhouette, pose (short free-text stance summary), neckline, sleeve_type, "
+            "sleeve_length, hemline, main_colors, fabric_patterns, accessories, asymmetry_notes, "
+            "distinctive_details, pose_lock (object of visible anatomical relationships only; null field "
+            "when occluded/uncertain — never invent measurements: torso_orientation, shoulder_alignment, "
+            "hip_alignment, supporting_leg, bent_or_lifted_leg, knee_positions, foot_placement, "
+            "arm_and_hand_positions, body_asymmetry_and_perspective)), "
+            "refine_ok (array of short drawing imperfections that MAY be upgraded — never design decisions "
+            "and never pose/stance changes), "
+            "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes "
+            "to preserve: concrete pose relationships from pose_lock, hat/hair, neckline, sleeves, hem, "
+            "main colors, fabric patterns, asymmetry, accessories, distinctive details — invent nothing; "
+            "do not describe amateur line quality or ask to keep a child sketch look; do not summarize pose "
+            "as a generic 'standing front view' when limbs are bent, lifted, crossed, or asymmetric)."
         )
     return (
         "You are a fashion stylist AI. Respond ONLY with valid JSON using keys: "
@@ -221,70 +230,311 @@ def _user_text(job: AIJob) -> str:
     return "\n\n".join(parts) if parts else "Infer from the attached sketch image only."
 
 
+# Critical pose relationships first (Issue #39). Order is packing priority.
+_POSE_LOCK_FIELD_ORDER = (
+    "supporting_leg",
+    "bent_or_lifted_leg",
+    "foot_placement",
+    "knee_positions",
+    "arm_and_hand_positions",
+    "shoulder_alignment",
+    "hip_alignment",
+    "torso_orientation",
+    "body_asymmetry_and_perspective",
+)
+
+_GARMENT_IDENTITY_FIELD_ORDER = (
+    "garment_category",
+    "silhouette",
+    "pose",
+    "neckline",
+    "sleeve_type",
+    "sleeve_length",
+    "hemline",
+    "main_colors",
+    "fabric_patterns",
+    "accessories",
+    "asymmetry_notes",
+    "distinctive_details",
+)
+
+_GENERIC_POSE_PHRASES = frozenset(
+    {
+        "standing",
+        "standing front view",
+        "front view",
+        "front-facing",
+        "upright",
+        "neutral stance",
+        "fashion pose",
+        "elegant fashion pose",
+        "runway pose",
+        "model pose",
+    }
+)
+
+# images.edit prompt budget. Evidence is packed as whole facts — never sliced mid-fact.
+IMAGE_PROMPT_MAX_CHARS = 3800
+_POSE_LOCK_FACT_MAX_CHARS = 220
+_GARMENT_FACT_MAX_CHARS = 160
+_EVIDENCE_CHUNK_MAX_CHARS = 280
+
+
+def _is_usable_identity_text(val: Any) -> bool:
+    if val is None:
+        return False
+    text = str(val).strip()
+    return bool(text) and text.lower() not in {"null", "none", "n/a", "unknown"}
+
+
+def _bound_fact(text: str, max_chars: int) -> str:
+    """Bound one fact to max_chars without cutting mid-word / mid-sentence fragment."""
+    cleaned = " ".join(str(text).split())
+    if len(cleaned) <= max_chars:
+        return cleaned
+    window = cleaned[:max_chars]
+    for sep in (". ", "; ", ", ", " "):
+        idx = window.rfind(sep)
+        if idx >= max(24, max_chars // 3):
+            return window[: idx + (0 if sep == " " else 1)].rstrip()
+    # Last resort: last whitespace in the window (still not mid-word).
+    idx = window.rfind(" ")
+    if idx > 0:
+        return window[:idx].rstrip()
+    return window.rstrip()
+
+
+def _pack_segments(segments: list[str], budget: int) -> str:
+    """Join complete segments in order until budget is exhausted.
+
+    Never truncate a segment mid-text. Oversized single segments are skipped so a
+    later shorter critical fact can still pack; once a in-budget segment does not
+    fit, packing stops so lower-priority trailing prose cannot displace earlier facts.
+    """
+    if budget <= 0:
+        return ""
+    out: list[str] = []
+    used = 0
+    for seg in segments:
+        text = (seg or "").strip()
+        if not text:
+            continue
+        # Drop a single oversized fact rather than slicing mid-sentence.
+        if len(text) > budget:
+            continue
+        need = len(text) + (1 if out else 0)
+        if used + need > budget:
+            break
+        out.append(text)
+        used += need
+    return " ".join(out)
+
+
+def _pack_labeled_facts(label: str, facts: list[str], budget: int) -> str:
+    """Pack a label only when at least one fact fits (avoids orphan headers)."""
+    if not facts or budget <= 0:
+        return ""
+    label_text = label.strip()
+    # Reserve label + space; if label alone cannot fit with one fact, omit group.
+    if len(label_text) + 1 >= budget:
+        return _pack_segments(facts, budget)
+    remaining_after_label = budget - len(label_text) - 1
+    packed_facts = _pack_segments(facts, remaining_after_label)
+    if not packed_facts:
+        return ""
+    return f"{label_text} {packed_facts}"
+
+
+def _pose_lock_facts(identity: dict[str, Any]) -> list[str]:
+    """Visible pose_lock facts only — never invent anatomy when fields are null/missing."""
+    pose_lock = identity.get("pose_lock")
+    if not isinstance(pose_lock, dict) or not pose_lock:
+        return []
+    facts: list[str] = []
+    for key in _POSE_LOCK_FIELD_ORDER:
+        val = pose_lock.get(key)
+        if not _is_usable_identity_text(val):
+            continue
+        label = key.replace("_", " ")
+        body = _bound_fact(str(val).strip(), _POSE_LOCK_FACT_MAX_CHARS)
+        if body:
+            facts.append(f"{label}: {body}")
+    return facts
+
+
+def _pose_lock_clause(identity: dict[str, Any]) -> str:
+    """Format structured pose_lock relationships for the edit brief."""
+    facts = _pose_lock_facts(identity)
+    if not facts:
+        return ""
+    return (
+        "POSE LOCK (preserve these visible anatomical relationships exactly; do not normalize): "
+        + "; ".join(facts)
+        + "."
+    )
+
+
+def _garment_identity_facts(identity: dict[str, Any]) -> list[str]:
+    """Garment/design identity facts (pose_lock handled separately for priority packing)."""
+    facts: list[str] = []
+    has_pose_lock = isinstance(identity.get("pose_lock"), dict) and bool(identity.get("pose_lock"))
+    for key in _GARMENT_IDENTITY_FIELD_ORDER:
+        val = identity.get(key)
+        if not _is_usable_identity_text(val):
+            continue
+        text = str(val).strip()
+        # Prefer structured pose_lock over a generic free-text pose summary.
+        if key == "pose" and has_pose_lock and text.lower() in _GENERIC_POSE_PHRASES:
+            continue
+        body = _bound_fact(text, _GARMENT_FACT_MAX_CHARS)
+        if body:
+            facts.append(f"{key.replace('_', ' ')}: {body}")
+    return facts
+
+
 def _design_identity_clause(structured: dict[str, Any]) -> str:
     """Fold vision design_identity fields into the edit brief when present."""
     identity = structured.get("design_identity")
     if not isinstance(identity, dict) or not identity:
         return ""
-    order = (
-        "garment_category",
-        "silhouette",
-        "pose",
-        "neckline",
-        "sleeve_type",
-        "sleeve_length",
-        "hemline",
-        "main_colors",
-        "fabric_patterns",
-        "accessories",
-        "asymmetry_notes",
-        "distinctive_details",
-    )
-    bits: list[str] = []
-    for key in order:
-        val = identity.get(key)
-        if val is None:
-            continue
-        text = str(val).strip()
-        if text and text.lower() not in {"null", "none", "n/a", "unknown"}:
-            bits.append(f"{key.replace('_', ' ')}: {text}")
+    bits = _garment_identity_facts(identity)
+    pose_clause = _pose_lock_clause(identity)
+    if pose_clause:
+        bits.append(pose_clause)
     if not bits:
         return ""
     return "Preserve these design attributes: " + "; ".join(bits) + "."
 
 
-def _build_image_prompt(structured: Any, summary: str) -> str:
-    """Build a professional fashion-illustration edit brief (not a pale wash / child-sketch retain)."""
+def _evidence_chunks(structured: Any, summary: str) -> list[str]:
+    """Lower-priority free-text evidence chunks (whole sentences when possible)."""
     evidence = ""
-    identity_clause = ""
     if isinstance(structured, dict):
         evidence = str(structured.get("image_prompt") or "").strip()
-        identity_clause = _design_identity_clause(structured)
         if not evidence:
             bullets = structured.get("polish_bullets") or structured.get("cleanup_bullets") or []
             if isinstance(bullets, list) and bullets:
-                joined = "; ".join(str(b).strip() for b in bullets if str(b).strip())[:600]
-                evidence = f"{summary}. Design details: {joined}"
+                joined = "; ".join(str(b).strip() for b in bullets if str(b).strip())
+                evidence = f"{summary}. Design details: {joined}".strip()
     if not evidence:
-        evidence = summary or "Professional fashion illustration of this sketch"
-    detail_parts = [p for p in (identity_clause, evidence) if p]
-    detail = " ".join(detail_parts)
-    return (
+        evidence = (summary or "Professional fashion illustration of this sketch").strip()
+    evidence = " ".join(evidence.split())
+    if not evidence:
+        return []
+    # Split on sentence boundaries when long; each chunk is packed whole or skipped.
+    if len(evidence) <= _EVIDENCE_CHUNK_MAX_CHARS:
+        return [evidence]
+    chunks: list[str] = []
+    rest = evidence
+    while rest:
+        if len(rest) <= _EVIDENCE_CHUNK_MAX_CHARS:
+            chunks.append(rest)
+            break
+        window = rest[:_EVIDENCE_CHUNK_MAX_CHARS]
+        cut = -1
+        for sep in (". ", "; ", ", "):
+            idx = window.rfind(sep)
+            if idx >= _EVIDENCE_CHUNK_MAX_CHARS // 3:
+                cut = idx + len(sep)
+                break
+        if cut < 0:
+            cut = window.rfind(" ")
+        if cut < 0:
+            # Pathological no-whitespace blob: skip rather than mid-token slice into the prompt.
+            break
+        piece = rest[:cut].strip()
+        if piece:
+            chunks.append(piece)
+        rest = rest[cut:].strip()
+    return chunks
+
+
+def _build_image_prompt(structured: Any, summary: str) -> str:
+    """Build a professional fashion-illustration edit brief (not a pale wash / child-sketch retain).
+
+    Assembles a fixed instruction frame plus prioritized evidence. Critical pose_lock facts are
+    packed before lower-priority garment prose and free-text image_prompt chunks. The budget is
+    enforced by omitting whole trailing segments — never by slicing mid-fact.
+    """
+    identity: dict[str, Any] = {}
+    if isinstance(structured, dict):
+        raw_identity = structured.get("design_identity")
+        if isinstance(raw_identity, dict):
+            identity = raw_identity
+
+    pose_facts = _pose_lock_facts(identity)
+    garment_facts = _garment_identity_facts(identity)
+    evidence_parts = _evidence_chunks(structured, summary)
+
+    lead = (
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
-        "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
-        "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
-        "sleeve type and length, hemline, main colors, fabric/textile patterns, asymmetry, accessories "
-        "(such as hats), and distinctive design details. "
-        "UPGRADE construction and presentation: strong clean garment contours; sophisticated tailoring "
-        "and garment construction; visible fabric folds, draping, and texture; richer but faithful colors; "
-        "crisp repeating textile patterns; clearly defined necklines, sleeves, seams, and hems; attractive "
-        "fashion-presentation quality; clean full-body composition on a clean light presentation background. "
+        "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent "
+        "AND for the model's croquis pose, stance, limb positions, and body proportions. "
+    )
+    pose_rules = (
+        "CRITICAL POSE RULES — professional refinement is NOT a pose rewrite: do NOT straighten bent "
+        "limbs; do NOT lower a lifted foot or plant both boots when one foot was raised/angled; do NOT "
+        "uncross or newly cross the legs; do NOT change weight distribution or supporting leg; do NOT "
+        "reorient the torso, shoulders, or hips; do NOT swap left/right hands or move a hand-on-hip; "
+        "do NOT replace the original stance with a generic upright runway pose. "
+    )
+    preserve = (
+        "PRESERVE exactly from visible evidence: garment category, original silhouette, the original "
+        "model pose/stance, neckline, sleeve type and length, hemline, main colors, fabric/textile "
+        "patterns, asymmetry, accessories (such as hats), and distinctive design details. "
+    )
+    upgrade = (
+        "UPGRADE construction and presentation only: strong clean garment contours; sophisticated "
+        "tailoring and garment construction; visible fabric folds, draping, and texture; richer but "
+        "faithful colors; crisp repeating textile patterns; clearly defined necklines, sleeves, seams, "
+        "and hems; attractive fashion-presentation quality; clean full-body composition on a clean light "
+        "presentation background — while keeping the same full-body framing and croquis proportions. "
+    )
+    bans = (
         "Do NOT retain rough/amateur drawing imperfections. Do NOT apply only a faint watercolor or light "
         "color wash. Do NOT invent a different garment, change the designer's colors, alter the silhouette, "
         "add unnecessary accessories, or make every design look like the same generic fashion outfit. "
-        f"Design evidence: {detail} "
-        "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark."
-    )[:3800]
+    )
+    suffix = "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark."
+
+    # Fixed instruction frame (without trailing avoid-line) is reserved first so polish/safety
+    # language cannot be crowded out by verbose vision text. Pose rules sit immediately after
+    # the lead so anti-repose bans are never budget-optional. Evidence packs next by priority;
+    # the photorealism avoid-line is always last when budget allows.
+    fixed_core = f"{lead}{pose_rules}{preserve}{upgrade}{bans}"
+    suffix_budget = len(suffix) + 1  # leading space before suffix
+    evidence_budget = max(0, IMAGE_PROMPT_MAX_CHARS - len(fixed_core) - suffix_budget)
+
+    # Priority: pose_lock → garment identity → free-text vision evidence.
+    groups = [
+        (
+            "POSE LOCK (preserve these visible anatomical relationships exactly; do not normalize):",
+            pose_facts,
+        ),
+        ("Garment attributes to preserve:", garment_facts),
+        ("Design evidence:", evidence_parts),
+    ]
+    packed_groups: list[str] = []
+    used = 0
+    for label, facts in groups:
+        room = evidence_budget - used - (1 if packed_groups else 0)
+        group_text = _pack_labeled_facts(label, facts, room)
+        if not group_text:
+            # Try next lower-priority group only if this group had no usable facts.
+            if facts:
+                # Facts existed but none fit — stop so we do not skip ahead past priority.
+                break
+            continue
+        packed_groups.append(group_text)
+        used += len(group_text) + (1 if len(packed_groups) > 1 else 0)
+
+    packed_evidence = " ".join(packed_groups)
+    parts = [fixed_core.rstrip()]
+    if packed_evidence:
+        parts.append(packed_evidence)
+    # Always keep the avoid-line when the reserved suffix budget remains (it was reserved above).
+    parts.append(suffix)
+    return " ".join(parts)
 
 
 def _extract_image_bytes(item: Any) -> bytes | None:

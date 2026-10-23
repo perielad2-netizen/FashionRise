@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   customGradientStyle,
@@ -24,6 +24,9 @@ const QUICK_ANGLES: { label: string; angle: number }[] = [
   { label: 'Diagonal', angle: 135 },
 ]
 
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 /**
  * Contained custom two-color gradient designer.
  * Endpoint color picks reuse ProfessionalColorPicker and never mutate pencil ink.
@@ -31,6 +34,8 @@ const QUICK_ANGLES: { label: string; angle: number }[] = [
 export function CustomGradientDesigner({ open, initial, onApply, onCancel }: Props) {
   const titleId = useId()
   const angleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
   const [c0, setC0] = useState('#D63384')
   const [c1, setC1] = useState('#7C3AED')
   const [angle, setAngle] = useState(135)
@@ -48,6 +53,58 @@ export function CustomGradientDesigner({ open, initial, onApply, onCancel }: Pro
     setAngleDraft(String(nextAngle))
     setPicking(null)
   }, [open, initial])
+
+  useEffect(() => {
+    if (!open) return
+    restoreFocusRef.current = document.activeElement as HTMLElement | null
+    const node = dialogRef.current
+    const preferred =
+      node?.querySelector<HTMLButtonElement>('button[data-action="apply"]') ??
+      node?.querySelector<HTMLElement>(FOCUSABLE)
+    ;(preferred ?? node)?.focus()
+    return () => {
+      const previous = restoreFocusRef.current
+      if (previous && document.contains(previous)) previous.focus()
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        // Nested ProfessionalColorPicker owns the first Escape.
+        if (picking !== null) return
+        event.preventDefault()
+        event.stopPropagation()
+        onCancel()
+        return
+      }
+      if (event.key !== 'Tab' || picking !== null) return
+      const root = dialogRef.current
+      if (!root) return
+      const nodes = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+        if (el.getAttribute('aria-hidden') === 'true') return false
+        // jsdom often reports offsetParent=null; still include visible-ish controls.
+        const style = window.getComputedStyle(el)
+        return style.display !== 'none' && style.visibility !== 'hidden'
+      })
+      if (nodes.length === 0) return
+      const first = nodes[0]!
+      const last = nodes[nodes.length - 1]!
+      const active = document.activeElement as HTMLElement | null
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+      } else if (active === last || !root.contains(active)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open, onCancel, picking])
 
   if (!open) return null
 
@@ -68,10 +125,12 @@ export function CustomGradientDesigner({ open, initial, onApply, onCancel }: Pro
   return createPortal(
     <div className={styles.scrim} role="presentation">
       <div
+        ref={dialogRef}
         className={styles.dialog}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
       >
         <header className={styles.head}>
           <h2 id={titleId}>Create gradient</h2>
@@ -172,7 +231,12 @@ export function CustomGradientDesigner({ open, initial, onApply, onCancel }: Pro
           <button type="button" className={styles.ghost} onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className={styles.primary} onClick={apply}>
+          <button
+            type="button"
+            className={styles.primary}
+            data-action="apply"
+            onClick={apply}
+          >
             Use gradient
           </button>
         </div>
