@@ -72,14 +72,23 @@
   opacity: 0.4;
 }
 
+/* Mid-width tablets: allow a larger paper than the old 380px hard cap when
+   height is available; keep short browser windows from overflowing. */
 @media (max-width: 1200px) {
   .wrap {
-    --paper-max-w: 380px;
+    --paper-max-w: 480px;
+  }
+}
+
+@media (max-width: 1200px) and (min-height: 1100px) {
+  .wrap {
+    --paper-max-w: 620px;
   }
 }
 
 @media (min-width: 821px) and (max-height: 760px) {
   .wrap {
+    --paper-max-w: min(420px, 70vh);
     padding: 4px;
   }
 
@@ -103,7 +112,13 @@
 
 @media (max-width: 820px) {
   .wrap {
-    --paper-max-w: 320px;
+    --paper-max-w: min(420px, 92vw);
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 820px) and (min-height: 960px) {
+  .wrap {
+    --paper-max-w: min(480px, 94vw);
   }
 }

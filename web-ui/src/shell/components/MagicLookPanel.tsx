@@ -35,6 +35,7 @@ export function MagicLookPanel({
   onBackToSketch,
 }: Props) {
   const [compareSketch, setCompareSketch] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   if (!open) return null
 
@@ -42,6 +43,7 @@ export function MagicLookPanel({
   const comparing = phase === 'ready' && compareSketch
   const showLook = phase === 'ready' && lookObjectUrl && !comparing
   const showSketchCompare = comparing && Boolean(sketchObjectUrl)
+  const hasDetails = Boolean(result?.summary || result?.bullets?.length)
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Your Look">
@@ -102,13 +104,29 @@ export function MagicLookPanel({
 
         {error && phase !== 'failed' ? <p className={styles.error}>{error}</p> : null}
 
-        {result?.summary && phase === 'ready' ? <p className={styles.summary}>{result.summary}</p> : null}
-        {result?.bullets?.length ? (
-          <ul className={styles.bullets}>
-            {result.bullets.slice(0, 6).map((b) => (
-              <li key={b}>{b}</li>
-            ))}
-          </ul>
+        {hasDetails && phase === 'ready' ? (
+          <div className={styles.details}>
+            <button
+              type="button"
+              className={styles.detailsToggle}
+              aria-expanded={detailsOpen}
+              onClick={() => setDetailsOpen((v) => !v)}
+            >
+              {detailsOpen ? 'Hide look notes' : 'Show look notes'}
+            </button>
+            {detailsOpen ? (
+              <>
+                {result?.summary ? <p className={styles.summary}>{result.summary}</p> : null}
+                {result?.bullets?.length ? (
+                  <ul className={styles.bullets}>
+                    {result.bullets.slice(0, 6).map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            ) : null}
+          </div>
         ) : null}
 
         <div className={styles.actions}>
