@@ -9,9 +9,12 @@ import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { paintFillOps } from '@/lib/paintFills'
 import { sampleArtworkPixel } from '@/lib/sampleArtworkPixel'
 import {
+  BRUSH_SIZE_STEP_PX,
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
   createStrokeId,
+  formatBrushSizePx,
+  snapBrushSizePx,
   type Stroke,
   type ToolKind,
 } from '@/lib/strokes'
@@ -33,6 +36,8 @@ type Props = {
   onFillComplete?: (fill: FillOp) => void
   onFillError?: (message: string) => void
   onEyedropperSample?: (color: string) => void
+  /** Optional: Alt + mouse wheel adjusts brush size without drawing. */
+  onBrushSize?: (px: number) => void
   /** When false, host fills its parent frame (shell drawing workspace). */
   framed?: boolean
 }
@@ -69,17 +74,27 @@ export function DrawingCanvas({
   onFillComplete,
   onFillError,
   onEyedropperSample,
+  onBrushSize,
   framed = true,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: DESIGN_WIDTH, h: DESIGN_HEIGHT })
   const [draft, setDraft] = useState<Stroke | null>(null)
   const [refImage, setRefImage] = useState<HTMLImageElement | null>(null)
   const [fillsImage, setFillsImage] = useState<HTMLImageElement | null>(null)
+  const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
+  const [wheelHint, setWheelHint] = useState(false)
   const drawing = useRef(false)
   const activePointerId = useRef<number | null>(null)
   const stageRef = useRef<Konva.Stage | null>(null)
   const draftRef = useRef<Stroke | null>(null)
+  const wheelHintTimer = useRef<number | null>(null)
+  const brushSizeRef = useRef(brushSize)
+
+  useEffect(() => {
+    brushSizeRef.current = brushSize
+  }, [brushSize])
 
   useEffect(() => {
     const host = hostRef.current
@@ -388,9 +403,35 @@ export function DrawingCanvas({
     [finish, session],
   )
 
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host || !onBrushSize) return
+    const onWheel = (evt: WheelEvent) => {
+      if (!evt.altKey) return
+      // Alt+wheel: brush size only — never hijack ordinary scroll / pinch / zoom.
+      evt.preventDefault()
+      evt.stopPropagation()
+      const dir = evt.deltaY < 0 ? 1 : evt.deltaY > 0 ? -1 : 0
+      if (!dir) return
+      onBrushSize(snapBrushSizePx(brushSizeRef.current + dir * BRUSH_SIZE_STEP_PX))
+      setWheelHint(true)
+      if (wheelHintTimer.current) window.clearTimeout(wheelHintTimer.current)
+      wheelHintTimer.current = window.setTimeout(() => setWheelHint(false), 700)
+    }
+    host.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      host.removeEventListener('wheel', onWheel)
+      if (wheelHintTimer.current) window.clearTimeout(wheelHintTimer.current)
+    }
+  }, [onBrushSize])
+
   const all = draft ? [...strokes, draft] : strokes
+  const inkTool = activeTool === 'draw' || activeTool === 'erase'
   const cursor =
-    activeTool === 'fill' ? 'cell' : activeTool === 'eyedropper' ? 'crosshair' : 'crosshair'
+    activeTool === 'fill' ? 'cell' : activeTool === 'eyedropper' ? 'crosshair' : 'none'
+  const tipScreen = Math.max(2, brushSize * scale)
+  // Hide the hover ring while a draft stroke is in progress (use draft state, not refs).
+  const showBrushCursor = inkTool && hover && !draft
 
   return (
     <div
@@ -398,7 +439,20 @@ export function DrawingCanvas({
       className={`${framed ? styles.host : styles.hostFlush} studio-draw-surface`}
       style={{ cursor }}
     >
-      <div className={framed ? styles.frame : styles.frameFlush} style={{ width: size.w, height: size.h }}>
+      <div
+        ref={frameRef}
+        className={framed ? styles.frame : styles.frameFlush}
+        style={{ width: size.w, height: size.h }}
+        onPointerMove={(e) => {
+          if (e.pointerType !== 'mouse') {
+            setHover(null)
+            return
+          }
+          const rect = e.currentTarget.getBoundingClientRect()
+          setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+        }}
+        onPointerLeave={() => setHover(null)}
+      >
         <Stage
           width={size.w}
           height={size.h}
@@ -444,6 +498,28 @@ export function DrawingCanvas({
             })}
           </Layer>
         </Stage>
+        {showBrushCursor ? (
+          <div
+            className={styles.brushCursor}
+            style={{
+              left: hover.x,
+              top: hover.y,
+              width: tipScreen,
+              height: tipScreen,
+              borderColor: activeTool === 'erase' ? 'rgba(107,114,128,0.95)' : 'rgba(214,51,132,0.9)',
+            }}
+            aria-hidden
+          />
+        ) : null}
+        {wheelHint && hover ? (
+          <div
+            className={styles.sizeHint}
+            style={{ left: hover.x + 14, top: hover.y + 14 }}
+            aria-live="polite"
+          >
+            {formatBrushSizePx(brushSize)} px
+          </div>
+        ) : null}
       </div>
     </div>
   )

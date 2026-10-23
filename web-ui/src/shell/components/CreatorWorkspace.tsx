@@ -254,6 +254,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               onFillComplete={editor.onFillComplete}
               onFillError={editor.onFillError}
               onEyedropperSample={editor.onEyedropperSample}
+              onBrushSize={editor.setBrushSizePx}
             />
             <button
               type="button"
@@ -347,12 +348,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               </div>
               <div className={styles.sheetBody}>
                 <SettingsInspector
-                  sizeId={editor.sizeId}
+                  tool={editor.tool}
                   brushSize={editor.brushSize}
                   opacity={editor.opacity}
                   dimmed={editor.dimmed}
                   toolLabel={toolLabel}
-                  onSize={editor.setSizeId}
                   onBrushSize={editor.setBrushSizePx}
                   onOpacity={editor.setBrushOpacity}
                   onToggleDim={() => editor.setDimmed((v) => !v)}
@@ -362,12 +362,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
             </>
           ) : (
             <SettingsInspector
-              sizeId={editor.sizeId}
+              tool={editor.tool}
               brushSize={editor.brushSize}
               opacity={editor.opacity}
               dimmed={editor.dimmed}
               toolLabel={toolLabel}
-              onSize={editor.setSizeId}
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
               onToggleDim={() => editor.setDimmed((v) => !v)}

@@ -117,7 +117,12 @@ describe('saved design envelope format', () => {
     expect(parsed).not.toBeNull()
     expect(parsed!.snapshot.strokes).toEqual(source.strokes)
     expect(parsed!.snapshot.model).toBe('male')
-    expect(parsed!.snapshot.brush).toEqual({ sizeId: 'thick', opacity: 0.6, color: '#1E3A8A' })
+    expect(parsed!.snapshot.brush).toEqual({
+      sizeId: 'thick',
+      sizePx: 7,
+      opacity: 0.6,
+      color: '#1E3A8A',
+    })
     expect(parsed!.snapshot.dimmed).toBe(true)
     expect(parsed!.saveRequestId).toBe('req-saved-1')
   })

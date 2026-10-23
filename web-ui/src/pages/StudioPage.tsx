@@ -49,7 +49,12 @@ export function StudioPage() {
               strokes: editor.strokes,
               model: editor.model,
               dimmed: editor.dimmed,
-              brush: { sizeId: editor.sizeId, opacity: editor.opacity, color: editor.color },
+              brush: {
+                sizeId: editor.sizeId,
+                sizePx: editor.brushSize,
+                opacity: editor.opacity,
+                color: editor.color,
+              },
               saveStatus: editor.saveStatus,
               saveStatusLabel: editor.saveStatusLabel,
             }}

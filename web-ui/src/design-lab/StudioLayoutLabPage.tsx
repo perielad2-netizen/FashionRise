@@ -6,7 +6,8 @@ import { DEFAULT_MODEL } from '@/assets/modelLibrary'
 import {
   BRUSH_SIZES,
   INK_SWATCHES,
-  type BrushSizeId,
+  nearestBrushSizeId,
+  snapBrushSizePx,
   type Stroke,
   type ToolKind,
 } from '@/lib/strokes'
@@ -33,7 +34,7 @@ function useLayoutLabEditor(): StudioEditor {
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [fills, setFills] = useState<StudioEditor['fills']>([])
   const [tool, setTool] = useState<ToolKind>('draw')
-  const [sizeId, setSizeId] = useState<BrushSizeId>('medium')
+  const [brushSize, setBrushSize] = useState(BRUSH_SIZES.medium)
   const [opacity, setOpacity] = useState(0.92)
   const [color, setColor] = useState<string>(INK_SWATCHES[0]!.color)
   const [fillStyle, setFillStyle] = useState(solidStyle(INK_SWATCHES[0]!.color))
@@ -43,7 +44,7 @@ function useLayoutLabEditor(): StudioEditor {
   const [studioNotice, setStudioNotice] = useState<string | null>(null)
   const [comingSoon, setComingSoon] = useState<string | null>(null)
 
-  const brushSize = BRUSH_SIZES[sizeId]
+  const sizeId = nearestBrushSizeId(brushSize)
 
   return useMemo(() => {
     const noop = () => undefined
@@ -55,14 +56,11 @@ function useLayoutLabEditor(): StudioEditor {
       tool,
       setTool,
       sizeId,
-      setSizeId,
+      setSizeId: (id: keyof typeof BRUSH_SIZES) => setBrushSize(BRUSH_SIZES[id]),
       brushSize,
-      setBrushSizePx: (px: number) => {
-        const nearest = (Object.entries(BRUSH_SIZES) as [BrushSizeId, number][]).reduce(
-          (best, cur) => (Math.abs(cur[1] - px) < Math.abs(best[1] - px) ? cur : best),
-        )
-        setSizeId(nearest[0])
-      },
+      setBrushSizePx: (px: number) => setBrushSize(snapBrushSizePx(px)),
+      nudgeBrushSizePx: (steps: number) =>
+        setBrushSize((prev) => snapBrushSizePx(prev + steps * 0.25)),
       opacity,
       setBrushOpacity: setOpacity,
       color,
