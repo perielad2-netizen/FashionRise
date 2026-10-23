@@ -30,7 +30,7 @@ Cursor agent paid OpenAI calls during this implementation: **0**.
 |------|--------|
 | Vision system prompt (`sketch_polish`) | Requires structured `design_identity.pose_lock` (torso, shoulders, hips, supporting leg, bent/lifted leg, knees, feet, arms/hands, asymmetry/perspective); forbids inventing anatomy; rejects generic “standing front view” summaries when limbs are dynamic |
 | `_design_identity_clause` / `_pose_lock_clause` | Emits an explicit **POSE LOCK** block; skips generic free-text `pose` when `pose_lock` is present |
-| `_build_image_prompt` | Keeps WEB-V4E professional polish language; adds CRITICAL POSE RULES forbidding straighten/plant/uncross/reweight/reorient/swap-hands/generic runway replacement |
+| `_build_image_prompt` | Keeps WEB-V4E professional polish language; adds CRITICAL POSE RULES; **priority-packs** pose_lock facts (supporting/bent leg, feet, knees, arms/hands, shoulder/hip) before garment fluff and free-text `image_prompt`; per-fact bounds; whole-segment budget — **no** `[:3800]` mid-fact truncation |
 | Models / edit policy | **Unchanged** (`gpt-6-luna` / `gpt-image-1`, edit-only, high fidelity, one attempt, `max_retries=0`) |
 | Auth / storage / recovery | Untouched |
 
@@ -63,7 +63,7 @@ Automated prompt tests **do not** assert image quality. After separate merge + d
 cd backend && .venv/bin/pytest tests/test_magic_pose_fidelity_prompts.py tests/test_magic_quality_prompts.py -q
 ```
 
-Coverage includes bent-leg, crossed-leg, hand-on-hip, asymmetric stance, checked textile language, generic-pose suppression, and retention of WEB-V4E polish bans. **0 paid calls.**
+Coverage includes bent-leg, crossed-leg, hand-on-hip, asymmetric stance, checked textile language, generic-pose suppression, verbose vision truncation regression (critical pose tokens retained inside budget), and retention of WEB-V4E polish bans. **0 paid calls.**
 
 ## Intentionally not done
 

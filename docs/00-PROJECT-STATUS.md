@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-10-23. **GitHub `main` tip includes** WEB-V4F @ `1aa5dc5a` (PR #37 merged). **Production frontend:** **`1aa5dc5a`**. **Production backend + AI worker:** still **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Post-deploy Magic sample (earlier):** visual **PASS** for professionalism (textile fidelity imperfect). **New regression (Issue #39):** Magic can change the original croquis **pose/stance** while keeping professional polish — **NOT accepted**. **Active drafts:** Magic pose-fidelity maintenance (this run) + WEB-V4G PR [#40](https://github.com/perielad2-netizen/FashionRise/pull/40) (brushes/gradients; separate; do not mix). Cursor paid AI calls this run: **0**.
 
-**Phase:** Protected family beta. WEB-V4D + WEB-V4E backend/worker remain at `2cbc1ad0`. WEB-V4F frontend-only deploy at `1aa5dc5a` (operator Studio/tablet acceptance still outstanding). Magic pose fidelity is active backend maintenance separate from WEB-V4G.
+**Phase:** Protected family beta. WEB-V4D + WEB-V4E backend/worker remain at `2cbc1ad0`. WEB-V4F frontend-only deploy at `1aa5dc5a` — operator authenticated Studio acceptance **5/5 PASS** (recorded on docs PR [#38](https://github.com/perielad2-netizen/FashionRise/pull/38)). Magic pose-fidelity bug (Issue #39) remains **open / NOT visually accepted**. Pose-fidelity draft is active backend maintenance separate from WEB-V4G.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -63,7 +63,7 @@
 
 **Magic pose regression (Issue [#39](https://github.com/perielad2-netizen/FashionRise/issues/39), 2026-10-23):** Second sample — original asymmetric bent/lifted-leg croquis stance was reposed by Magic into a more conventional upright stance with both boots lowered. Professional WEB-V4E polish kept; **pose fidelity NOT accepted**. Active draft maintenance strengthens vision `pose_lock` + edit-brief bans; models/edit policy unchanged. Detail: `docs/WEB-V4E-MAGIC-POSE-FIDELITY.md`.
 
-**WEB-V4F:** **MERGED** PR #37 @ `1aa5dc5a` and **frontend-only deployed**. HSV picker + Magic contain + tablet Focus/materials. Backend/worker unchanged at `2cbc1ad0`. Docs deploy record: draft PR [#38](https://github.com/perielad2-netizen/FashionRise/pull/38).
+**WEB-V4F:** **MERGED** PR #37 @ `1aa5dc5a` and **frontend-only deployed**. HSV picker + Magic contain + tablet Focus/materials. Backend/worker unchanged at `2cbc1ad0`. Operator authenticated acceptance **5/5 PASS**. Docs deploy record: draft PR [#38](https://github.com/perielad2-netizen/FashionRise/pull/38).
 
 **WEB-V4G (draft, separate):** Numeric brush sizes + custom gradients — draft PR [#40](https://github.com/perielad2-netizen/FashionRise/pull/40). Do not mix with pose-fidelity work.
 
@@ -304,10 +304,10 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM review of **Magic pose-fidelity draft** (Issue #39 / `docs/WEB-V4E-MAGIC-POSE-FIDELITY.md`). **Do not merge, deploy, restart worker, or run paid Magic** until authorized.
-2. Parallel/separate: Technical PM review of **WEB-V4G draft PR #40** (brushes/gradients) — do not mix branches with pose work.
-3. Operator signed-in Studio / tablet acceptance of WEB-V4F FE @ `1aa5dc5a` (still outstanding).
-4. After authorized pose-fidelity backend/worker deploy: **one** paid operator Magic retest against the Issue #39 sample using the human rubric (unit tests ≠ visual PASS).
+1. **Exact next action:** Technical PM final review of **Magic pose-fidelity draft PR #41** (Issue #39 / `docs/WEB-V4E-MAGIC-POSE-FIDELITY.md`). **Do not merge, deploy, restart worker, or run paid Magic** until authorized.
+2. Parallel/separate: Technical PM review of **WEB-V4G draft PR #40** (brushes/gradients) — do not mix branches with pose work. Reconcile `docs/00-PROJECT-STATUS.md` after whichever merges first.
+3. WEB-V4F FE @ `1aa5dc5a`: operator authenticated acceptance **5/5 PASS** (done). Pose sample remains **NOT accepted**.
+4. After authorized pose-fidelity backend/worker deploy: **one** paid operator Magic retest against the Issue #39 sample using the human rubric (unit tests ≠ visual PASS). Attach the exact original sketch + Magic result pair directly to Cursor for visual comparison (do not publish private images on GitHub).
 5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38).
 6. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
 
@@ -475,19 +475,22 @@ FashionRise/
 
 Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRise/pull/36).
 
-## Magic pose fidelity verification (Issue #39 — draft)
+## Magic pose fidelity verification (Issue #39 — draft PR #41)
 
 | Gate | Result |
 |------|--------|
 | Scope | Backend Magic vision + edit-brief only; **not** WEB-V4G; models/edit policy unchanged |
-| Base | `main` @ `1aa5dc5a` |
-| Root cause | Generative `images.edit` + weak/generic pose brief (`standing front view`); PRESERVE pose wording was instructional, not geometric |
-| Fix | Structured `design_identity.pose_lock` + CRITICAL POSE RULES in `_build_image_prompt`; keep WEB-V4E polish language |
+| Production SHAs (unchanged by this PR) | FE **`1aa5dc5a`** · BE/worker **`2cbc1ad0`** · Alembic **`005`** |
+| WEB-V4F operator acceptance | **5/5 PASS** (authenticated Studio); separate from pose bug |
+| Root cause | Generative `images.edit` + weak/generic pose brief; later also hard `[:3800]` truncation risk on verbose vision evidence |
+| Fix | Structured `pose_lock` + CRITICAL POSE RULES + **priority packing** (pose facts before garment fluff / image_prompt; whole-fact budget; no mid-fact slice) |
 | Capture note | React Magic still 768×1024 cream + dimmed reference (opacity 0.4); may reduce pose salience — not changed in this PR |
-| Offline tests | `test_magic_pose_fidelity_prompts.py` + `test_magic_quality_prompts.py` (mocked; **0 paid calls**) |
-| Visual acceptance | **Not claimed** — human rubric in `docs/WEB-V4E-MAGIC-POSE-FIDELITY.md`; unit tests ≠ image PASS |
+| Offline tests | Focused pose+quality **29 passed**; full backend pytest **265 passed / 1 failed** (unrelated branch-guard `test_cli_default_is_dry_run`); ruff/mypy pre-existing findings recorded; **0 paid calls** |
+| Visual acceptance | **NOT accepted** for Issue #39 pose sample — human rubric in `docs/WEB-V4E-MAGIC-POSE-FIDELITY.md`; unit tests ≠ image PASS |
+| Visual evidence gap | Exact operator sketch/result pair not in Cursor workspace; do not treat unrelated croquis as fidelity proof |
 | Remaining uncertainty | Prompt + `input_fidelity=high` cannot guarantee exact limb geometry; authorized paid retest required after deploy |
-| Merge / deploy / worker restart / paid Magic | **Blocked** — STOP for Technical PM review |
+| Disabled actions | No merge/deploy/worker restart/paid Magic/Nginx/DB until PM authorizes |
+| Merge / deploy / worker restart / paid Magic | **Blocked** — STOP for Technical PM final review |
 
 ## WEB-V4F verification (PR #37 — color picker + Magic preview + tablet layout; FE deployed)
 
@@ -504,13 +507,15 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | CreatorWorkspace browser QA | DEV `/_design/studio-layout`: Focus + materials + measured thumb rects (Mini 4×64px gradients; mobile/desktop 2×64px; fabrics maxH 100) |
 | Frontend tests | see latest PR head |
 | Paid OpenAI during implementation | **0** |
-| Merge / deploy | **Blocked** — STOP for Technical PM review |
-| Outstanding | Production signed-in Studio acceptance after authorized FE deploy; WEB-V4G (extra/custom gradients, numeric brush) deferred |
+| Operator authenticated acceptance | **5/5 PASS** |
+| Merge / deploy | FE **deployed** @ `1aa5dc5a` (backend/worker unchanged) |
+| Outstanding | WEB-V4G (extra/custom gradients, numeric brush) separate draft PR #40; Magic pose fidelity Issue #39 still open |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-23 | **Magic pose fidelity PR #41 amendment:** priority pose-lock packing inside 3800-char budget (no mid-fact truncation); verbose vision regression tests; status doc corrects WEB-V4F **5/5 PASS** vs pose sample **NOT accepted**; full BE pytest/ruff/mypy reported; **0 paid AI**; **STOP for Technical PM final review**. |
 | 2026-10-23 | **Magic pose fidelity (Issue #39, draft):** structured `pose_lock` + edit-brief anti-repose rules; offline pose tests + human rubric; WEB-V4E polish retained; models/edit policy unchanged; **0 paid AI**; **STOP for Technical PM review** (no deploy/worker restart). |
 | 2026-10-23 | **WEB-V4F FE deploy recorded** @ `1aa5dc5a` (docs PR #38); backend/worker remain `2cbc1ad0`. |
 | 2026-10-23 | **WEB-V4F PR #37 amendment:** compact gradient/fabric thumbnails via materials container queries (4-up on tablet sheet, 2-up narrow); measured CreatorWorkspace QA; **STOP for Technical PM review**. |

@@ -244,3 +244,114 @@ def test_build_sketch_chat_request_advertises_pose_lock(monkeypatch):
     system = req["messages"][0]["content"]
     assert "pose_lock" in system
     assert "supporting_leg" in system
+
+
+def _verbose_realistic_vision_structured() -> dict[str, Any]:
+    """Verbose vision JSON that would push a naive append-then-slice past the budget."""
+    fluff = (
+        "Extended atelier mood language about runway lighting, editorial draping metaphors, "
+        "and decorative storytelling that must not crowd out concrete pose relationships. "
+    ) * 35
+    return {
+        "summary": "A bold pink checked jumpsuit with wide-brim hat in a dynamic asymmetric stance",
+        "polish_bullets": ["Keep the croquis stance", "Deepen V contrast", "Preserve checked textile"],
+        "design_identity": {
+            "garment_category": "jumpsuit",
+            "silhouette": "flowing full-length jumpsuit with soft flare through the legs",
+            "pose": "standing front view",
+            "neckline": "deep V neckline",
+            "sleeve_type": "flowing",
+            "sleeve_length": "long",
+            "hemline": "full length",
+            "main_colors": "hot pink with lighter pink highlights",
+            "fabric_patterns": "checked pink textile UNIQUE_CHECK_TOKEN",
+            "accessories": "wide-brimmed hat",
+            "asymmetry_notes": "asymmetric hem interest on the free-leg side",
+            "distinctive_details": fluff + " UNIQUE_GARMENT_FLUFF_TAIL",
+            "pose_lock": {
+                "supporting_leg": (
+                    "UNIQUE_SUPPORTING_LEG viewer's-left leg planted as the weight-bearing support"
+                ),
+                "bent_or_lifted_leg": (
+                    "UNIQUE_BENT_LEG viewer's-right leg bent at the knee and angled away/back "
+                    "from the supporting leg"
+                ),
+                "foot_placement": (
+                    "UNIQUE_FOOT_PLACEMENT supporting boot fully planted; free boot heel lifted "
+                    "or angled — not both boots flat on the floor"
+                ),
+                "knee_positions": (
+                    "UNIQUE_KNEE_REL free knee bent and outward; supporting knee straighter"
+                ),
+                "arm_and_hand_positions": (
+                    "UNIQUE_HAND_ON_HIP left hand resting firmly on the hip; other arm follows sketch"
+                ),
+                "shoulder_alignment": "UNIQUE_SHOULDER_TILT shoulders angled with the stance, not square runway",
+                "hip_alignment": "UNIQUE_HIP_SHIFT hips shifted toward the supporting side",
+                "torso_orientation": "slight fashion tilt following the hip line",
+                "body_asymmetry_and_perspective": "clear left/right asymmetry; keep original perspective",
+                # Occluded / unknown — must not be invented into the prompt.
+                "occluded_hidden_limb": None,
+            },
+        },
+        "refine_ok": ["wobbly outlines", "uneven fill", "crude shading"],
+        "image_prompt": fluff
+        + (
+            " Standing figure narrative that is lower priority than pose_lock. "
+            "UNIQUE_IMAGE_PROMPT_TAIL mentions a generic upright stance that must not override pose_lock."
+        ),
+    }
+
+
+def test_verbose_vision_keeps_critical_pose_lock_inside_budget():
+    structured = _verbose_realistic_vision_structured()
+    prompt = sketch_openai._build_image_prompt(structured, structured["summary"])
+    assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+
+    # Critical Issue #39 relations must survive verbose garment/image_prompt fluff.
+    for token in (
+        "UNIQUE_SUPPORTING_LEG",
+        "UNIQUE_BENT_LEG",
+        "UNIQUE_FOOT_PLACEMENT",
+        "UNIQUE_KNEE_REL",
+        "UNIQUE_HAND_ON_HIP",
+        "UNIQUE_SHOULDER_TILT",
+        "UNIQUE_HIP_SHIFT",
+    ):
+        assert token in prompt, f"missing critical pose token {token}"
+
+    lower = prompt.lower()
+    assert "pose lock" in lower
+    assert "critical pose rules" in lower
+    assert "professionally refine" in lower
+    assert "source of truth" in lower
+    assert "do not straighten bent" in lower
+    assert "do not apply only a faint watercolor or light color wash" in lower
+    assert "generic fashion outfit" in lower
+    assert "avoid photorealism" in lower
+    # Generic free-text pose must not displace structured pose_lock.
+    assert "pose: standing front view" not in lower
+    # Must not invent anatomy for null/absent fields.
+    assert "occluded_hidden_limb" not in lower
+    assert "occluded hidden limb" not in lower
+
+
+def test_verbose_prompt_never_hard_slices_mid_fact():
+    structured = _verbose_realistic_vision_structured()
+    prompt = sketch_openai._build_image_prompt(structured, structured["summary"])
+    # Old bug was prompt[:3800] after appending evidence — that can end mid-token.
+    # Packed assembly should end on a clean boundary (punctuation/word), not a torn UNIQUE_ token.
+    assert not prompt.rstrip().endswith(("UNIQUE_", "UNIQUE_G", "UNIQUE_I", "UNIQUE_B"))
+    # If garment fluff is omitted under budget pressure, that is acceptable; pose tokens are not.
+    assert "UNIQUE_SUPPORTING_LEG" in prompt
+    assert "UNIQUE_FOOT_PLACEMENT" in prompt
+
+
+def test_bound_fact_does_not_cut_mid_word():
+    long = "supporting planted boot " + ("angled fashion stance detail " * 20) + "finale"
+    bounded = sketch_openai._bound_fact(long, 80)
+    assert len(bounded) <= 80
+    assert " " not in bounded[-1:]
+    # No partial trailing word fragment without whitespace boundary handling.
+    assert not bounded.endswith("deta")
+    assert not bounded.endswith("stan")
