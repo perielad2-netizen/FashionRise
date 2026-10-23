@@ -522,7 +522,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Paid OpenAI during implementation | **0** |
 | Operator authenticated acceptance | **5/5 PASS** |
 | Merge / deploy | FE **deployed** @ `1aa5dc5a` (backend/worker unchanged) |
-| Outstanding | WEB-V4G (extra/custom gradients, numeric brush) separate draft PR #40; Magic pose fidelity Issue #39 still open |
+| Outstanding | WEB-V4G FE now deployed @ `350a3b7e` (operator Studio acceptance PENDING); Magic pose fidelity Issue #39 still open / PR #41 not deployed; Issues #42/#43 backlog |
 
 ## Changelog (handoff doc only)
 
