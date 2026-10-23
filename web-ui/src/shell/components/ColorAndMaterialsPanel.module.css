@@ -249,6 +249,24 @@
   gap: 8px;
 }
 
+.createGradient {
+  width: 100%;
+  min-height: 36px;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 51, 132, 0.45);
+  background: rgba(214, 51, 132, 0.18);
+  color: #ffe4f0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.createGradient:hover {
+  background: rgba(214, 51, 132, 0.28);
+}
+
 .gradients {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

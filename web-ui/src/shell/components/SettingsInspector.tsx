@@ -1,14 +1,14 @@
 import { Sparkles } from 'lucide-react'
-import { BRUSH_SIZES, type BrushSizeId } from '@/lib/strokes'
+import type { ToolKind } from '@/lib/strokes'
+import { BrushSizeControl } from '@/shell/components/BrushSizeControl'
 import styles from './SettingsInspector.module.css'
 
 type Props = {
-  sizeId: BrushSizeId
+  tool: ToolKind
   brushSize: number
   opacity: number
   dimmed: boolean
   toolLabel: string
-  onSize: (id: BrushSizeId) => void
   onBrushSize: (px: number) => void
   onOpacity: (value: number) => void
   onToggleDim: () => void
@@ -16,12 +16,11 @@ type Props = {
 }
 
 export function SettingsInspector({
-  sizeId,
+  tool,
   brushSize,
   opacity,
   dimmed,
   toolLabel,
-  onSize,
   onBrushSize,
   onOpacity,
   onToggleDim,
@@ -66,31 +65,12 @@ export function SettingsInspector({
           <span>Tool</span>
           <strong>{toolLabel}</strong>
         </div>
-        <div className={styles.row}>
-          <span>Size</span>
-          <strong>{brushSize} px</strong>
-        </div>
-        <div className={styles.sizes}>
-          {(Object.keys(BRUSH_SIZES) as BrushSizeId[]).map((id) => (
-            <button
-              key={id}
-              type="button"
-              className={sizeId === id ? styles.sizeActive : styles.size}
-              onClick={() => onSize(id)}
-            >
-              {id}
-            </button>
-          ))}
-        </div>
-        <input
-          className={styles.slider}
-          type="range"
-          min={BRUSH_SIZES.thin}
-          max={BRUSH_SIZES.bold}
-          step={0.25}
-          value={brushSize}
-          aria-label="Brush size"
-          onChange={(e) => onBrushSize(Number(e.target.value))}
+        <BrushSizeControl
+          tool={tool === 'erase' ? 'erase' : 'draw'}
+          brushSize={brushSize}
+          opacity={opacity}
+          onBrushSize={onBrushSize}
+          tone="dark"
         />
         <div className={styles.row}>
           <span>Opacity</span>
@@ -104,6 +84,7 @@ export function SettingsInspector({
           step={1}
           value={Math.round(opacity * 100)}
           aria-label="Brush opacity"
+          disabled={tool === 'erase'}
           onChange={(e) => onOpacity(Number(e.target.value) / 100)}
         />
         <div className={styles.row}>
@@ -137,6 +118,10 @@ export function SettingsInspector({
           <div className={styles.shortcut}>
             <span>Eyedropper</span>
             <span className={styles.kbd}>I</span>
+          </div>
+          <div className={styles.shortcut}>
+            <span>Brush size</span>
+            <span className={styles.kbd}>Alt + wheel</span>
           </div>
           <div className={styles.shortcut}>
             <span>Undo</span>

@@ -40,6 +40,32 @@
   touch-action: none;
 }
 
+.brushCursor {
+  position: absolute;
+  border-radius: 999px;
+  border: 1.5px solid rgba(214, 51, 132, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 3;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.sizeHint {
+  position: absolute;
+  pointer-events: none;
+  z-index: 4;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(18, 24, 40, 0.88);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
 .frame::after {
   content: '';
   position: absolute;

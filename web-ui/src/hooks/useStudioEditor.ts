@@ -41,8 +41,12 @@ import { toMagicLookResult, type MagicLookResult } from '@/services/ai/aiJobType
 import { StrokeHistory } from '@/lib/history'
 import { validateReferenceImageFile } from '@/lib/referenceFile'
 import {
+  BRUSH_SIZE_DEFAULT_PX,
   BRUSH_SIZES,
   INK_SWATCHES,
+  nearestBrushSizeId,
+  resolveBrushSizePx,
+  snapBrushSizePx,
   type BrushSizeId,
   type Stroke,
   type ToolKind,
@@ -55,19 +59,7 @@ const AUTOSAVE_MS = 1600
 const CUSTOM_REF_BETA_NOTICE =
   'Custom reference images stay on this device for the session only in private beta. They are not uploaded to the server (uploads are not owner-private yet).'
 
-export function nearestBrushSizeId(px: number): BrushSizeId {
-  const entries = Object.entries(BRUSH_SIZES) as [BrushSizeId, number][]
-  let best: BrushSizeId = 'medium'
-  let bestDist = Number.POSITIVE_INFINITY
-  for (const [id, size] of entries) {
-    const dist = Math.abs(size - px)
-    if (dist < bestDist) {
-      best = id
-      bestDist = dist
-    }
-  }
-  return best
-}
+export { nearestBrushSizeId }
 
 export type ModelSwitchPrompt = {
   next: ModelChoice
@@ -137,7 +129,7 @@ export function useStudioEditor() {
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [fills, setFills] = useState<FillOp[]>([])
   const [tool, setTool] = useState<ToolKind>('draw')
-  const [sizeId, setSizeId] = useState<BrushSizeId>('thin')
+  const [brushSizePx, setBrushSizePxState] = useState(BRUSH_SIZE_DEFAULT_PX)
   const [opacity, setOpacity] = useState(1)
   const [color, setColor] = useState<string>(INK_SWATCHES[0]!.color)
   const [fillStyle, setFillStyle] = useState<FillStyle>(() => solidStyle(INK_SWATCHES[0]!.color))
@@ -197,12 +189,14 @@ export function useStudioEditor() {
     authoritativeDocRef.current = doc
     designIdRef.current = designId
     history.current = new StrokeHistory()
+    // Avoid a spurious revision bump when React state mirrors an already-committed doc.
+    skipNextAutosaveRef.current = true
     setStrokes(doc.strokes)
     setFills(doc.fills ?? [])
     setModelState(doc.model)
     setCustomUrl(doc.customReferenceUrl)
     setCustomKey(doc.customReferenceKey)
-    setSizeId(doc.brush.sizeId)
+    setBrushSizePxState(resolveBrushSizePx(doc.brush))
     setOpacity(doc.brush.opacity)
     setColor(doc.brush.color)
     setFillStyle(solidStyle(doc.brush.color))
@@ -349,11 +343,18 @@ export function useStudioEditor() {
       customReferenceUrl?: string | null
       customReferenceKey?: string | null
       sizeId?: BrushSizeId
+      sizePx?: number
       opacity?: number
       color?: string
       dimmed?: boolean
     }) => {
       const prev = authoritativeDocRef.current
+      const sizePx =
+        typeof patch.sizePx === 'number'
+          ? snapBrushSizePx(patch.sizePx)
+          : patch.sizeId
+            ? BRUSH_SIZES[patch.sizeId]
+            : resolveBrushSizePx(prev.brush)
       const next = documentFromEditorState({
         prev,
         strokes: patch.strokes ?? prev.strokes,
@@ -363,7 +364,8 @@ export function useStudioEditor() {
           patch.customReferenceUrl !== undefined ? patch.customReferenceUrl : prev.customReferenceUrl,
         customReferenceKey:
           patch.customReferenceKey !== undefined ? patch.customReferenceKey : prev.customReferenceKey,
-        sizeId: patch.sizeId ?? prev.brush.sizeId,
+        sizeId: nearestBrushSizeId(sizePx),
+        sizePx,
         opacity: patch.opacity ?? prev.brush.opacity,
         color: patch.color ?? prev.brush.color,
         dimmed: patch.dimmed ?? prev.dimmed,
@@ -439,14 +441,15 @@ export function useStudioEditor() {
       model,
       customReferenceUrl: customUrl,
       customReferenceKey: customKey,
-      sizeId,
+      sizeId: nearestBrushSizeId(brushSizePx),
+      sizePx: brushSizePx,
       opacity,
       color,
       dimmed,
     })
     if (draftContentFingerprint(prev) === draftContentFingerprint(next)) return
     void commitDocument(next)
-  }, [strokes, fills, model, customUrl, customKey, sizeId, opacity, color, dimmed, ready, commitDocument])
+  }, [strokes, fills, model, customUrl, customKey, brushSizePx, opacity, color, dimmed, ready, commitDocument])
 
   useEffect(() => {
     return () => {
@@ -454,7 +457,8 @@ export function useStudioEditor() {
     }
   }, [])
 
-  const brushSize = BRUSH_SIZES[sizeId]
+  const brushSize = brushSizePx
+  const sizeId = nearestBrushSizeId(brushSizePx)
 
   const referenceUrl = useMemo(() => {
     if (model === 'custom') return blobUrl ?? customUrl
@@ -827,7 +831,15 @@ export function useStudioEditor() {
   }, [flushCloudSave, logout, navigate, saveStatus])
 
   const setBrushSizePx = useCallback((px: number) => {
-    setSizeId(nearestBrushSizeId(px))
+    setBrushSizePxState(snapBrushSizePx(px))
+  }, [])
+
+  const setSizeId = useCallback((id: BrushSizeId) => {
+    setBrushSizePxState(BRUSH_SIZES[id])
+  }, [])
+
+  const nudgeBrushSizePx = useCallback((deltaSteps: number) => {
+    setBrushSizePxState((prev) => snapBrushSizePx(prev + deltaSteps * 0.25))
   }, [])
 
   const setBrushOpacity = useCallback((value: number) => {
@@ -1319,6 +1331,7 @@ export function useStudioEditor() {
     setSizeId,
     brushSize,
     setBrushSizePx,
+    nudgeBrushSizePx,
     opacity,
     setBrushOpacity,
     color,

@@ -49,6 +49,7 @@ function mockEditor(overrides: Partial<StudioEditor> = {}): StudioEditor {
     setSizeId: vi.fn(),
     brushSize: BRUSH_SIZES.medium,
     setBrushSizePx: vi.fn(),
+    nudgeBrushSizePx: vi.fn(),
     opacity: 0.9,
     setBrushOpacity: vi.fn(),
     color: INK_SWATCHES[0]!.color,

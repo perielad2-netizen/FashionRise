@@ -17,6 +17,7 @@ type Props = {
   onFillComplete: (fill: FillOp) => void
   onFillError: (message: string) => void
   onEyedropperSample: (color: string) => void
+  onBrushSize?: (px: number) => void
 }
 
 export function DrawingWorkspace({
@@ -33,6 +34,7 @@ export function DrawingWorkspace({
   onFillComplete,
   onFillError,
   onEyedropperSample,
+  onBrushSize,
 }: Props) {
   return (
     <div className={styles.wrap} data-studio-paper="true">
@@ -51,6 +53,7 @@ export function DrawingWorkspace({
           onFillComplete={onFillComplete}
           onFillError={onFillError}
           onEyedropperSample={onEyedropperSample}
+          onBrushSize={onBrushSize}
           framed={false}
         />
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Plus, Pipette } from 'lucide-react'
 import {
+  CUSTOM_GRADIENT_ID,
   FABRIC_PRESETS,
   FASHION_PALETTE,
   GRADIENT_PRESETS,
@@ -8,7 +9,9 @@ import {
   UPLOADED_FABRIC_SCALE_MAX,
   UPLOADED_FABRIC_SCALE_MIN,
   clampUploadedFabricScale,
+  gradientPreviewCss,
   type FillStyle,
+  type GradientFillStyle,
   uploadedFabricStyle,
 } from '@/lib/fills'
 import { INK_SWATCHES } from '@/lib/strokes'
@@ -20,6 +23,7 @@ import {
 } from '@/services/fabricAssetsApi'
 import { ApiError } from '@/services/api/client'
 import { loadFabricAssetImage } from '@/lib/fabricAssetCache'
+import { CustomGradientDesigner } from '@/shell/components/CustomGradientDesigner'
 import { ProfessionalColorPicker } from '@/shell/components/ProfessionalColorPicker'
 import styles from './ColorAndMaterialsPanel.module.css'
 
@@ -58,6 +62,7 @@ export function ColorAndMaterialsPanel({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [tab, setTab] = useState<'colors' | 'fabrics' | 'gradients'>('colors')
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
+  const [gradientDesignerOpen, setGradientDesignerOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const nameFieldId = useId()
   const scale =
@@ -433,6 +438,31 @@ export function ColorAndMaterialsPanel({
         {tab === 'gradients' ? (
           <section className={styles.card} role="tabpanel" aria-label="Gradients">
             <p className={styles.note}>Select a gradient, then Fill a closed region.</p>
+            <button
+              type="button"
+              className={styles.createGradient}
+              onClick={() => setGradientDesignerOpen(true)}
+            >
+              Create gradient
+            </button>
+            {fillStyle.kind === 'gradient' && fillStyle.gradientId === CUSTOM_GRADIENT_ID ? (
+              <button
+                type="button"
+                className={styles.gradientActive}
+                style={{
+                  background: gradientPreviewCss(fillStyle.colors, fillStyle.angle),
+                  marginBottom: 8,
+                }}
+                aria-label="Custom gradient selected"
+                aria-pressed
+                title="Custom gradient"
+                onClick={() => setGradientDesignerOpen(true)}
+              >
+                <span className={styles.gradientLabel}>
+                  Custom · {Math.round(fillStyle.angle)}°
+                </span>
+              </button>
+            ) : null}
             <div className={styles.gradients}>
               {GRADIENT_PRESETS.map((g) => {
                 const active = fillStyle.kind === 'gradient' && fillStyle.gradientId === g.id
@@ -520,6 +550,20 @@ export function ColorAndMaterialsPanel({
           setColorPickerOpen(false)
         }}
         onCancel={() => setColorPickerOpen(false)}
+      />
+
+      <CustomGradientDesigner
+        open={gradientDesignerOpen}
+        initial={
+          fillStyle.kind === 'gradient' && fillStyle.gradientId === CUSTOM_GRADIENT_ID
+            ? (fillStyle as GradientFillStyle)
+            : null
+        }
+        onCancel={() => setGradientDesignerOpen(false)}
+        onApply={(style) => {
+          onFillStyle(style)
+          setGradientDesignerOpen(false)
+        }}
       />
     </div>
   )

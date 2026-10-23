@@ -6,10 +6,16 @@ import {
 import { cloneFills, parseFillOp, type FillOp } from '@/lib/fills'
 import {
   BRUSH_SIZES,
+  resolveBrushSizePx,
+  snapBrushSizePx,
   type BrushSizeId,
   type Stroke,
 } from '@/lib/strokes'
-import type { StudioBrushState, StudioDraftDocument } from '@/lib/draftDocument'
+import {
+  normalizeStudioBrush,
+  type StudioBrushState,
+  type StudioDraftDocument,
+} from '@/lib/draftDocument'
 
 /**
  * Named, immutable design snapshots ("Save as design").
@@ -122,7 +128,7 @@ export function snapshotFromDocument(doc: StudioDraftDocument): SavedDesignSnaps
     strokes: doc.strokes.map(canonicalStroke),
     fills: cloneFills(doc.fills ?? []),
     model: doc.model,
-    brush: { sizeId: doc.brush.sizeId, opacity: doc.brush.opacity, color: doc.brush.color },
+    brush: normalizeStudioBrush(doc.brush),
     dimmed: doc.dimmed,
   }
 }
@@ -133,11 +139,7 @@ export function snapshotFingerprint(snapshot: SavedDesignSnapshot): string {
     strokes: snapshot.strokes.map(canonicalStroke),
     fills: snapshot.fills ?? [],
     model: snapshot.model,
-    brush: {
-      sizeId: snapshot.brush.sizeId,
-      opacity: snapshot.brush.opacity,
-      color: snapshot.brush.color,
-    },
+    brush: normalizeStudioBrush(snapshot.brush),
     dimmed: snapshot.dimmed,
   })
 }
@@ -217,6 +219,14 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
   if (!SIZE_IDS.includes(brush.sizeId as BrushSizeId)) return null
   if (!isFiniteNumber(brush.opacity) || brush.opacity < 0.05 || brush.opacity > 1) return null
   if (typeof brush.color !== 'string' || !HEX_COLOR.test(brush.color)) return null
+  // Optional sizePx: reject only when present but invalid; legacy snapshots omit it.
+  let sizePx: number | undefined
+  if (brush.sizePx !== undefined) {
+    if (!isFiniteNumber(brush.sizePx) || brush.sizePx <= 0 || brush.sizePx > 200) return null
+    sizePx = snapBrushSizePx(brush.sizePx)
+  } else {
+    sizePx = resolveBrushSizePx({ sizeId: brush.sizeId as BrushSizeId })
+  }
   if (!Array.isArray(s.strokes) || s.strokes.length > MAX_SNAPSHOT_STROKES) return null
   const strokes: Stroke[] = []
   let points = 0
@@ -243,6 +253,7 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
     model,
     brush: {
       sizeId: brush.sizeId as BrushSizeId,
+      sizePx,
       opacity: brush.opacity,
       color: brush.color,
     },
