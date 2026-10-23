@@ -453,7 +453,9 @@ export function ColorAndMaterialsPanel({
                         angle: g.angle,
                       })
                     }
-                  />
+                  >
+                    <span className={styles.gradientLabel}>{g.label}</span>
+                  </button>
                 )
               })}
             </div>

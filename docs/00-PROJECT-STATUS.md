@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-23. **GitHub `main`:** `2cbc1ad0` (PR #35 WEB-V4E merged; includes WEB-V4D). **Production backend + frontend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Post-deploy Magic sample:** operator visual acceptance **PASS** (textile-pattern fidelity not exact). **Active draft:** WEB-V4F PR #37 — color picker + Magic contain + tablet Focus/materials layout fixes — **STOP for Technical PM review** (do not merge/deploy). Cursor paid AI calls: **0**.
+**Last updated:** 2026-10-23. **GitHub `main`:** `2cbc1ad0` (PR #35 WEB-V4E merged; includes WEB-V4D). **Production backend + frontend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Post-deploy Magic sample:** operator visual acceptance **PASS** (textile-pattern fidelity not exact). **Active draft:** WEB-V4F PR #37 — color picker + Magic contain + tablet Focus/materials sheet + compact gradient/fabric thumbs — **STOP for Technical PM review** (do not merge/deploy). Cursor paid AI calls: **0**.
 
 **Phase:** Protected family beta. WEB-V4D + WEB-V4E are **deployed** at `2cbc1ad0`. Operator Magic visual sample accepted. WEB-V4F amends Studio UX (picker, Magic preview, tablet Focus + materials sheet). Broader signed-in Studio acceptance remains outstanding.
 
@@ -479,17 +479,19 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Magic modal | Full-image `object-fit: contain`; notes collapsible; actions remain accessible |
 | Tablet Focus bug (768×1024) | **Fixed** — `.focusMode .center` no longer overrides narrow one-column/two-row grid; paper keeps nonzero 3:4 box; single Exit Focus via dock |
 | Tablet materials sheet | **Fixed** — fixed `min(48vh,420px)` sheet for Colors/Fabrics/Gradients; Done + opaque scrim; tab heights stable (420/420/420) |
+| Compact thumbs | Gradients **64px** high (56–72 clamp), **4/row** on Mini sheet (≈744px panel); **2/row** in narrow panels/phones; fabrics capped **≤100px**; container-query density |
 | Tall-tablet paper | Raised mid-width `--paper-max-w` (was 380px); iPad Pro 13 portrait paper ~524×699 (3:4) |
-| CreatorWorkspace browser QA | DEV `/_design/studio-layout` (real shell CreatorWorkspace): Mini/Pro13/landscape/mobile/short-height Focus + materials + picker-in-focus + scrim |
-| Frontend tests | **290/290** |
+| CreatorWorkspace browser QA | DEV `/_design/studio-layout`: Focus + materials + measured thumb rects (Mini 4×64px gradients; mobile/desktop 2×64px; fabrics maxH 100) |
+| Frontend tests | see latest PR head |
 | Paid OpenAI during implementation | **0** |
 | Merge / deploy | **Blocked** — STOP for Technical PM review |
-| Outstanding | Production signed-in Studio acceptance after authorized FE deploy; WEB-V4G deferred |
+| Outstanding | Production signed-in Studio acceptance after authorized FE deploy; WEB-V4G (extra/custom gradients, numeric brush) deferred |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-23 | **WEB-V4F PR #37 amendment:** compact gradient/fabric thumbnails via materials container queries (4-up on tablet sheet, 2-up narrow); measured CreatorWorkspace QA; **STOP for Technical PM review**. |
 | 2026-10-23 | **WEB-V4F PR #37 amendment:** tablet Focus paper collapse + materials sheet height/scrim/Done + tall-tablet paper sizing; CreatorWorkspace layout QA; picker/Magic contain preserved; **STOP for Technical PM review**. |
 | 2026-10-22 | **WEB-V4F draft:** professional color picker + Magic “Your Look” uncropped preview; status records V4D+V4E deploy @ `2cbc1ad0` and operator Magic visual PASS (textile fidelity imperfect); **STOP for Technical PM review** (no merge/deploy). |
 | 2026-10-22 | **WEB-V4D+V4E production deploy SUCCESS** at `2cbc1ad0` (FE+BE+worker); Alembic `005`; backup `v4de-deploy-20261022T204254Z`; 0 deploy paid AI. Deploy record in draft PR #36. |

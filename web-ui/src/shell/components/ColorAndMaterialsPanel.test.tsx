@@ -61,7 +61,9 @@ describe('ColorAndMaterialsPanel', () => {
     expect(screen.getByText(/My Fabrics/i)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Gradients' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Rose violet' }))
+    const rose = screen.getByRole('button', { name: 'Rose violet' })
+    expect(rose.textContent).toMatch(/Rose violet/i)
+    fireEvent.click(rose)
     expect(onFillStyle).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'gradient', gradientId: 'rose-violet' }),
     )
