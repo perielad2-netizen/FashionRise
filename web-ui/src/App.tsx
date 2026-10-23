@@ -23,6 +23,14 @@ const V4fUiLabPage = import.meta.env.DEV
     )
   : null
 
+const StudioLayoutLabPage = import.meta.env.DEV
+  ? lazy(() =>
+      import('@/design-lab/StudioLayoutLabPage').then((m) => ({
+        default: m.StudioLayoutLabPage,
+      })),
+    )
+  : null
+
 function RootRedirect() {
   const { isAuthenticated, bootstrapping } = useAuth()
   if (bootstrapping) return null
@@ -81,6 +89,20 @@ export default function App() {
                   }
                 >
                   <V4fUiLabPage />
+                </Suspense>
+              }
+            />
+          ) : null}
+          {import.meta.env.DEV && StudioLayoutLabPage ? (
+            <Route
+              path="/_design/studio-layout"
+              element={
+                <Suspense
+                  fallback={
+                    <div style={{ padding: 24, color: '#f8f4f0' }}>Loading Studio layout lab…</div>
+                  }
+                >
+                  <StudioLayoutLabPage />
                 </Suspense>
               }
             />

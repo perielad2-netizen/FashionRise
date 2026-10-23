@@ -95,12 +95,14 @@
   cursor: pointer;
 }
 
-.focusQuick button:hover {
+.focusQuick button:hover,
+.focusQuick button[aria-pressed='true'] {
   background: rgba(214, 51, 132, 0.28);
 }
 
 .focusMode .body {
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .focusMode .modelsSlot,
@@ -111,11 +113,13 @@
 
 .focusMode .center {
   grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   padding: 8px;
 }
 
 .focusMode .canvasStage {
   min-height: 0;
+  height: 100%;
 }
 
 .focusMode .canvasStage [data-studio-paper='true'] {
@@ -125,11 +129,15 @@
 .focusMode .modelsSlot.slotOpen,
 .focusMode .settingsSlot.slotOpen,
 .focusMode .materialsSlot.slotOpen {
-  display: block !important;
+  display: flex !important;
+  flex-direction: column;
   position: absolute;
   z-index: 24;
-  overflow: auto;
+  overflow: hidden;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  background: #121a2c;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
 }
 
 .focusMode .modelsSlot.slotOpen {
@@ -137,7 +145,6 @@
   top: 10px;
   bottom: 10px;
   width: min(280px, 84vw);
-  display: block !important;
 }
 
 .focusMode .settingsSlot.slotOpen {
@@ -145,7 +152,6 @@
   top: 10px;
   bottom: 10px;
   width: min(280px, 84vw);
-  display: block !important;
 }
 
 .focusMode .materialsSlot.slotOpen {
@@ -153,7 +159,6 @@
   top: 10px;
   bottom: 10px;
   width: min(320px, 88vw);
-  display: block !important;
 }
 
 .modelsSlot,
@@ -173,8 +178,65 @@
   display: block;
 }
 
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--fr-text);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sheetBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 12px;
+}
+
+.sheetBody > * {
+  height: 100%;
+  min-height: 0;
+}
+
+.sheetClose {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fr-text);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.panelScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  border: 0;
+  background: rgba(4, 6, 12, 0.52);
+  cursor: pointer;
+}
+
 .mobileDock {
   display: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px 0;
+  flex-shrink: 0;
+}
+
+.mobileDockVisible {
+  display: flex;
 }
 
 .dockBtn,
@@ -267,6 +329,7 @@
 
   .center {
     grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .materialsSlot {
@@ -274,14 +337,19 @@
   }
 
   .materialsSlot.slotOpen {
-    display: block;
+    display: flex;
+    flex-direction: column;
     position: absolute;
     right: 10px;
     top: 10px;
     bottom: 10px;
     width: min(300px, 88vw);
-    z-index: 20;
-    overflow: auto;
+    z-index: 24;
+    overflow: hidden;
+    background: #121a2c;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -295,7 +363,8 @@
   }
 
   .settingsSlot.slotOpen {
-    display: block;
+    display: flex;
+    flex-direction: column;
     position: absolute;
     right: 0;
     top: 48px;
@@ -304,13 +373,15 @@
     z-index: 24;
     background: #101827;
     box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
-    overflow: auto;
+    overflow: hidden;
+    border-radius: 0;
+    border: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  .mobileDock {
-    display: flex;
-    gap: 8px;
-    padding: 8px 12px 0;
+  /* Dock already exposes Focus / Exit focus — avoid a second overlapping control. */
+  .focusToggle {
+    display: none;
   }
 }
 
@@ -360,25 +431,70 @@
     padding: 8px;
   }
 
+  .canvasStage {
+    grid-row: 2;
+    min-height: 0;
+  }
+
   .modelsSlot {
     display: none;
   }
 
   .modelsSlot.slotOpen {
-    display: block;
+    display: flex;
+    flex-direction: column;
     max-height: 220px;
-    overflow: auto;
+    overflow: hidden;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: #121a2c;
+  }
+
+  /*
+   * Focus must not keep the desktop two-column center template here — that places
+   * the canvas into the auto row and collapses paper height on tablet portrait.
+   */
+  .focusMode .body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .focusMode .center {
+    grid-row: 1;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .focusMode .canvasStage {
+    grid-row: 2;
+    min-height: 0;
+    height: auto;
+  }
+
+  .focusMode .canvasStage [data-studio-paper='true'] {
+    --paper-max-w: min(520px, 94vw);
   }
 
   .materialsSlot.slotOpen,
-  .settingsSlot.slotOpen {
+  .settingsSlot.slotOpen,
+  .focusMode .materialsSlot.slotOpen,
+  .focusMode .settingsSlot.slotOpen,
+  .focusMode .modelsSlot.slotOpen {
     top: auto;
     bottom: 0;
     left: 0;
     right: 0;
     width: 100%;
-    max-height: 55vh;
+    height: min(48vh, 420px);
+    max-height: min(48vh, 420px);
     border-radius: 18px 18px 0 0;
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  .focusMode .modelsSlot.slotOpen {
+    /* Models sheet shares the same bounded bottom sheet as materials/settings. */
+    max-height: min(48vh, 420px);
+    height: min(48vh, 420px);
   }
 }

@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-22. **GitHub `main`:** `2cbc1ad0` (PR #35 WEB-V4E merged; includes WEB-V4D). **Production backend + frontend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Post-deploy Magic sample:** operator visual acceptance **PASS** (main creative concept preserved; textile-pattern fidelity not exact). **Active draft:** WEB-V4F frontend-only color picker + Magic preview fix — **STOP for Technical PM review** (do not merge/deploy). Cursor paid AI calls during V4F implementation: **0**.
+**Last updated:** 2026-10-23. **GitHub `main`:** `2cbc1ad0` (PR #35 WEB-V4E merged; includes WEB-V4D). **Production backend + frontend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Post-deploy Magic sample:** operator visual acceptance **PASS** (textile-pattern fidelity not exact). **Active draft:** WEB-V4F PR #37 — color picker + Magic contain + tablet Focus/materials layout fixes — **STOP for Technical PM review** (do not merge/deploy). Cursor paid AI calls: **0**.
 
-**Phase:** Protected family beta. WEB-V4D + WEB-V4E are **deployed** at `2cbc1ad0`. Magic visual quality for the tested design is accepted. Remaining work is Studio UX polish (WEB-V4F draft) plus broader signed-in Studio browser acceptance items.
+**Phase:** Protected family beta. WEB-V4D + WEB-V4E are **deployed** at `2cbc1ad0`. Operator Magic visual sample accepted. WEB-V4F amends Studio UX (picker, Magic preview, tablet Focus + materials sheet). Broader signed-in Studio acceptance remains outstanding.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -103,7 +103,7 @@
 | **Hotfix: fill autosave fingerprint** | **MERGED** PR #32 · included in `2cbc1ad0` |
 | **WEB-V4D Studio UX + models** | **MERGED** PR #34 · **DEPLOYED** @ `2cbc1ad0` |
 | **WEB-V4E Magic quality** | **MERGED** PR #35 · **DEPLOYED** @ `2cbc1ad0` (edit `max_retries=0`; no generate fallback) |
-| **WEB-V4F color picker + Magic preview** | **Draft** — frontend-only; professional HSV picker; Magic modal contain fit; **STOP for PM** |
+| **WEB-V4F color picker + Magic preview** | **Draft PR #37** — HSV picker + Magic contain + tablet Focus/materials layout fixes; **STOP for PM** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — do not auto-merge). |
@@ -298,12 +298,12 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM review of **WEB-V4F** draft PR (professional color picker + Magic preview contain). **Do not merge or deploy** until authorized.
-2. After WEB-V4F acceptance + authorized **frontend-only** deploy: operator Studio browser acceptance of color picker + Magic modal full-image preview (desktop / tablet / mobile / short-height).
-3. Remaining Studio browser acceptance at `2cbc1ad0` (independent of V4F): 10 croquis, legacy geometry, tabs/focus/fills/save/export, eyedropper, custom fabrics — still outstanding where not already covered by the Magic sample.
-4. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36).
-5. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
-6. Later milestones: save dedupe, rename/delete, INFRA-2 PR #10. No further paid Magic unless separately authorized.
+1. **Exact next action:** Technical PM re-review of **WEB-V4F draft PR #37** after tablet Focus + materials sheet amendments. **Do not merge or deploy** until authorized.
+2. After WEB-V4F acceptance + authorized **frontend-only** deploy: operator Studio acceptance of picker, Magic contain, Focus, and materials sheet on real tablets.
+3. **Defer WEB-V4G** (numeric brush px, wheel brush size, extra/custom gradients) until after V4F finishes.
+4. Remaining Studio browser acceptance at `2cbc1ad0`: 10 croquis, legacy geometry, fills/save/export, eyedropper, custom fabrics — still outstanding where not already covered.
+5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36).
+6. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
 
 ---
 
@@ -469,27 +469,28 @@ FashionRise/
 
 Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRise/pull/36).
 
-## WEB-V4F verification (draft — color picker + Magic preview)
+## WEB-V4F verification (draft PR #37 — color picker + Magic preview + tablet layout)
 
 | Gate | Result |
 |------|--------|
-| Scope | Frontend-only; no backend / worker / Nginx / AI / Magic prompts |
+| Scope | Frontend-only; no backend / worker / Nginx / AI / Magic prompts; **no WEB-V4G** brush/gradient features |
 | Base | `main` @ `2cbc1ad0` (production baseline) |
 | Color picker | Built-in HSV professional picker (SV square, hue, HEX/RGB sync, Apply/Cancel, portal modal) |
 | Magic modal | Full-image `object-fit: contain`; notes collapsible; actions remain accessible |
-| Frontend tests | **287/287** |
-| Lint | oxlint warnings only (no errors); unused-import cleaned in new tests |
-| TypeScript / production build | `tsc -b` + vite build **PASS** |
-| SW safety | `check:sw` **ok=true** (no NavigationRoute / HTML precache) |
-| Browser QA (DEV `/_design/v4f`) | Desktop / tablet / mobile / short-height / ~125% zoom: picker HEX↔RGB, black/white, Apply/Cancel/Esc; Magic full portrait (HAT+SHOES) + actions accessible |
+| Tablet Focus bug (768×1024) | **Fixed** — `.focusMode .center` no longer overrides narrow one-column/two-row grid; paper keeps nonzero 3:4 box; single Exit Focus via dock |
+| Tablet materials sheet | **Fixed** — fixed `min(48vh,420px)` sheet for Colors/Fabrics/Gradients; Done + opaque scrim; tab heights stable (420/420/420) |
+| Tall-tablet paper | Raised mid-width `--paper-max-w` (was 380px); iPad Pro 13 portrait paper ~524×699 (3:4) |
+| CreatorWorkspace browser QA | DEV `/_design/studio-layout` (real shell CreatorWorkspace): Mini/Pro13/landscape/mobile/short-height Focus + materials + picker-in-focus + scrim |
+| Frontend tests | **290/290** |
 | Paid OpenAI during implementation | **0** |
 | Merge / deploy | **Blocked** — STOP for Technical PM review |
-| Outstanding Studio acceptance | Broader signed-in Studio (croquis/fills/save/export/focus) still operator-pending on production |
+| Outstanding | Production signed-in Studio acceptance after authorized FE deploy; WEB-V4G deferred |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-23 | **WEB-V4F PR #37 amendment:** tablet Focus paper collapse + materials sheet height/scrim/Done + tall-tablet paper sizing; CreatorWorkspace layout QA; picker/Magic contain preserved; **STOP for Technical PM review**. |
 | 2026-10-22 | **WEB-V4F draft:** professional color picker + Magic “Your Look” uncropped preview; status records V4D+V4E deploy @ `2cbc1ad0` and operator Magic visual PASS (textile fidelity imperfect); **STOP for Technical PM review** (no merge/deploy). |
 | 2026-10-22 | **WEB-V4D+V4E production deploy SUCCESS** at `2cbc1ad0` (FE+BE+worker); Alembic `005`; backup `v4de-deploy-20261022T204254Z`; 0 deploy paid AI. Deploy record in draft PR #36. |
 | 2026-10-22 | **WEB-V4E MERGED** PR #35 @ `2cbc1ad0` (includes SDK `max_retries=0` image-edit). |

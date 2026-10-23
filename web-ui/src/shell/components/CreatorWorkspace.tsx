@@ -90,6 +90,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           ? 'Eyedropper'
           : 'Pencil'
   const brushOverlay = dock === 'brush' && tablet
+  const panelScrim =
+    (dock === 'materials' || dock === 'settings' || dock === 'models') && (tablet || narrow || focusMode)
   const betaNotice = editor.magicNotice
     ? { message: editor.magicNotice, dismiss: () => editor.setMagicNotice(null) }
     : editor.comingSoon
@@ -144,7 +146,10 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         onBackToSketch={editor.backToSketchFromMagic}
       />
 
-      <div className={styles.mobileDock} aria-label="Studio panels">
+      <div
+        className={`${styles.mobileDock} ${tablet ? styles.mobileDockVisible : ''}`}
+        aria-label="Studio panels"
+      >
         <button
           type="button"
           className={dock === 'models' ? styles.dockActive : styles.dockBtn}
@@ -186,14 +191,42 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </button>
       </div>
 
+      {panelScrim ? (
+        <button
+          type="button"
+          className={styles.panelScrim}
+          aria-label="Close panel"
+          onClick={() => setDock(null)}
+        />
+      ) : null}
+
       <div className={styles.body}>
         <div className={`${styles.modelsSlot} ${dock === 'models' ? styles.slotOpen : ''}`}>
-          <ModelLibraryPanel
-            selected={editor.model}
-            customPreviewUrl={editor.customUrl}
-            onSelect={editor.setModel}
-            onCustomFile={editor.onCustomFile}
-          />
+          {(narrow || focusMode) && dock === 'models' ? (
+            <>
+              <div className={styles.sheetHead}>
+                <strong>Models</strong>
+                <button type="button" className={styles.sheetClose} onClick={() => setDock(null)}>
+                  Done
+                </button>
+              </div>
+              <div className={styles.sheetBody}>
+                <ModelLibraryPanel
+                  selected={editor.model}
+                  customPreviewUrl={editor.customUrl}
+                  onSelect={editor.setModel}
+                  onCustomFile={editor.onCustomFile}
+                />
+              </div>
+            </>
+          ) : (
+            <ModelLibraryPanel
+              selected={editor.model}
+              customPreviewUrl={editor.customUrl}
+              onSelect={editor.setModel}
+              onCustomFile={editor.onCustomFile}
+            />
+          )}
         </div>
 
         <div className={styles.center}>
@@ -236,49 +269,111 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               <span>{focusMode ? 'Exit focus' : 'Focus'}</span>
             </button>
-            {focusMode ? (
+            {focusMode && !tablet ? (
               <div className={styles.focusQuick} aria-label="Focus mode panels">
-                <button type="button" onClick={() => setDock('models')}>
+                <button
+                  type="button"
+                  aria-pressed={dock === 'models'}
+                  onClick={() => setDock(dock === 'models' ? null : 'models')}
+                >
                   Models
                 </button>
-                <button type="button" onClick={() => setDock('materials')}>
+                <button
+                  type="button"
+                  aria-pressed={dock === 'materials'}
+                  onClick={() => setDock(dock === 'materials' ? null : 'materials')}
+                >
                   Materials
                 </button>
-                <button type="button" onClick={() => setDock('settings')}>
+                <button
+                  type="button"
+                  aria-pressed={dock === 'settings'}
+                  onClick={() => setDock(dock === 'settings' ? null : 'settings')}
+                >
                   Settings
                 </button>
               </div>
             ) : null}
           </div>
           <div className={`${styles.materialsSlot} ${dock === 'materials' ? styles.slotOpen : ''}`}>
-            <ColorAndMaterialsPanel
-              color={editor.color}
-              onColor={editor.setColor}
-              onColorHex={editor.setColorHex}
-              fillStyle={editor.fillStyle}
-              onFillStyle={editor.setFillStyle}
-              eyedropperActive={editor.tool === 'eyedropper'}
-              onToggleEyedropper={() =>
-                editor.setTool(editor.tool === 'eyedropper' ? 'draw' : 'eyedropper')
-              }
-              onNotice={editor.publishStudioNotice}
-            />
+            {(tablet || narrow || focusMode) && dock === 'materials' ? (
+              <>
+                <div className={styles.sheetHead}>
+                  <strong>Materials</strong>
+                  <button type="button" className={styles.sheetClose} onClick={() => setDock(null)}>
+                    Done
+                  </button>
+                </div>
+                <div className={styles.sheetBody}>
+                  <ColorAndMaterialsPanel
+                    color={editor.color}
+                    onColor={editor.setColor}
+                    onColorHex={editor.setColorHex}
+                    fillStyle={editor.fillStyle}
+                    onFillStyle={editor.setFillStyle}
+                    eyedropperActive={editor.tool === 'eyedropper'}
+                    onToggleEyedropper={() =>
+                      editor.setTool(editor.tool === 'eyedropper' ? 'draw' : 'eyedropper')
+                    }
+                    onNotice={editor.publishStudioNotice}
+                  />
+                </div>
+              </>
+            ) : (
+              <ColorAndMaterialsPanel
+                color={editor.color}
+                onColor={editor.setColor}
+                onColorHex={editor.setColorHex}
+                fillStyle={editor.fillStyle}
+                onFillStyle={editor.setFillStyle}
+                eyedropperActive={editor.tool === 'eyedropper'}
+                onToggleEyedropper={() =>
+                  editor.setTool(editor.tool === 'eyedropper' ? 'draw' : 'eyedropper')
+                }
+                onNotice={editor.publishStudioNotice}
+              />
+            )}
           </div>
         </div>
 
         <div className={`${styles.settingsSlot} ${dock === 'settings' ? styles.slotOpen : ''}`}>
-          <SettingsInspector
-            sizeId={editor.sizeId}
-            brushSize={editor.brushSize}
-            opacity={editor.opacity}
-            dimmed={editor.dimmed}
-            toolLabel={toolLabel}
-            onSize={editor.setSizeId}
-            onBrushSize={editor.setBrushSizePx}
-            onOpacity={editor.setBrushOpacity}
-            onToggleDim={() => editor.setDimmed((v) => !v)}
-            onMagic={editor.onMagic}
-          />
+          {(tablet || narrow || focusMode) && dock === 'settings' ? (
+            <>
+              <div className={styles.sheetHead}>
+                <strong>Settings</strong>
+                <button type="button" className={styles.sheetClose} onClick={() => setDock(null)}>
+                  Done
+                </button>
+              </div>
+              <div className={styles.sheetBody}>
+                <SettingsInspector
+                  sizeId={editor.sizeId}
+                  brushSize={editor.brushSize}
+                  opacity={editor.opacity}
+                  dimmed={editor.dimmed}
+                  toolLabel={toolLabel}
+                  onSize={editor.setSizeId}
+                  onBrushSize={editor.setBrushSizePx}
+                  onOpacity={editor.setBrushOpacity}
+                  onToggleDim={() => editor.setDimmed((v) => !v)}
+                  onMagic={editor.onMagic}
+                />
+              </div>
+            </>
+          ) : (
+            <SettingsInspector
+              sizeId={editor.sizeId}
+              brushSize={editor.brushSize}
+              opacity={editor.opacity}
+              dimmed={editor.dimmed}
+              toolLabel={toolLabel}
+              onSize={editor.setSizeId}
+              onBrushSize={editor.setBrushSizePx}
+              onOpacity={editor.setBrushOpacity}
+              onToggleDim={() => editor.setDimmed((v) => !v)}
+              onMagic={editor.onMagic}
+            />
+          )}
         </div>
       </div>
 
