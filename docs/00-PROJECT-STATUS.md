@@ -3,19 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-23. **GitHub `main`:** `2cbc1ad0` (PR #35 WEB-V4E merged; includes WEB-V4D). **Production backend + frontend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **Post-deploy Magic sample:** operator visual acceptance **PASS** (textile-pattern fidelity not exact). **Active draft:** WEB-V4F PR #37 — color picker + Magic contain + tablet Focus/materials sheet + compact gradient/fabric thumbs — **STOP for Technical PM review** (do not merge/deploy). Cursor paid AI calls: **0**.
+**Last updated:** 2026-10-23. **GitHub `main`:** `1aa5dc5a` (PR #37 WEB-V4F merged; includes WEB-V4D+V4E). **Production frontend:** **`1aa5dc5a`** · **Production backend + AI worker:** **`2cbc1ad0`** (unchanged) · Alembic **`005`** (unchanged) · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **WEB-V4F FE-only deploy:** SUCCESS. Signed-in Studio / tablet acceptance **outstanding**. Cursor paid AI calls: **0**.
 
-**Phase:** Protected family beta. WEB-V4D + WEB-V4E are **deployed** at `2cbc1ad0`. Operator Magic visual sample accepted. WEB-V4F amends Studio UX (picker, Magic preview, tablet Focus + materials sheet). Broader signed-in Studio acceptance remains outstanding.
+**Phase:** Protected family beta. WEB-V4F frontend is **deployed** at `1aa5dc5a` (HSV picker, Magic contain, tablet Focus/materials sheet, compact thumbs). Backend/worker remain `2cbc1ad0`. Next engineering action: **WEB-V4G** (after operator authenticated tablet acceptance of V4F).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`2cbc1ad0…`** — Nginx root `/var/www/fashionrise/releases/2cbc1ad0`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Legacy + library croquis present. |
-| Backend (FastAPI + PostgreSQL) | **`2cbc1ad0`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone) |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`2cbc1ad0`** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` · edit `max_retries=0` |
-| Database | `fashionrise_beta` — Alembic **`005`** (unchanged; no migration in this deploy) |
-| Deploy backup | `/var/backups/fashionrise/v4de-deploy-20261022T204254Z` (+ prior Magic activation backup) |
+| Frontend (`web-ui`) | **`1aa5dc5a…`** — Nginx root `/var/www/fashionrise/releases/1aa5dc5a`. Built with `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Legacy + library croquis (10) present. |
+| Backend (FastAPI + PostgreSQL) | **`2cbc1ad0`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone); **not restarted** for V4F |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`2cbc1ad0`** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` · edit `max_retries=0`; **not restarted** for V4F |
+| Database | `fashionrise_beta` — Alembic **`005`** (unchanged; no migration in V4F deploy) |
+| Deploy backup | `/var/backups/fashionrise/v4f-fe-deploy-20261023T060542Z` (FE rollback to `2cbc1ad0`) · prior stack backup `v4de-deploy-20261022T204254Z` |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -61,7 +61,7 @@
 
 **Post-deploy Magic operator sample:** Visual acceptance **PASS** for the tested design (professional fashion illustration; creative concept preserved). Textile / fabric-pattern fidelity was **not exact**. No Magic prompts or AI configuration changes in WEB-V4F.
 
-**WEB-V4F (draft):** Frontend-only professional HSV color picker + Magic “Your Look” modal uncropped preview (`object-fit: contain`). No backend / worker / Nginx / AI changes.
+**WEB-V4F production deploy (2026-10-23):** Operator-authorized **frontend-only** rollout of merged PR [#37](https://github.com/perielad2-netizen/FashionRise/pull/37) at exact `main` SHA **`1aa5dc5a96ea23843cb2042eef9ae62f8d6e828b`**. Immutable release `/var/www/fashionrise/releases/1aa5dc5a`; FashionRise Nginx `root` switched only; `nginx -t` + reload OK. Backend, worker, Alembic, Access/AOP, and neighbor apps **unchanged**. **0** paid OpenAI / Magic generation during deploy. Docs checkpoint: draft PR for this deploy record — do not auto-merge as a deploy artifact. Prior V4D+V4E deploy docs remain in draft PR [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (historical; FE SHA there is superseded by this V4F FE root).
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -89,8 +89,8 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub `main` | **`2cbc1ad0`** — PR #35 WEB-V4E merge (includes WEB-V4D + fill hotfix) |
-| Production frontend / backend / worker | **`2cbc1ad0` / `2cbc1ad0` / `2cbc1ad0`** · Alembic **`005`** |
+| GitHub `main` | **`1aa5dc5a`** — PR #37 WEB-V4F merge (on top of WEB-V4E @ `2cbc1ad0`) |
+| Production frontend / backend / worker | **`1aa5dc5a` / `2cbc1ad0` / `2cbc1ad0`** · Alembic **`005`** |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
@@ -103,10 +103,10 @@
 | **Hotfix: fill autosave fingerprint** | **MERGED** PR #32 · included in `2cbc1ad0` |
 | **WEB-V4D Studio UX + models** | **MERGED** PR #34 · **DEPLOYED** @ `2cbc1ad0` |
 | **WEB-V4E Magic quality** | **MERGED** PR #35 · **DEPLOYED** @ `2cbc1ad0` (edit `max_retries=0`; no generate fallback) |
-| **WEB-V4F color picker + Magic preview** | **Draft PR #37** — HSV picker + Magic contain + tablet Focus/materials layout fixes; **STOP for PM** |
+| **WEB-V4F color picker + Magic preview** | **MERGED** PR #37 @ `1aa5dc5a` · **FE-ONLY DEPLOYED** |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
-| Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — do not auto-merge). |
+| Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — historical; FE root superseded by V4F), plus V4F deploy-status docs draft — **do not auto-merge**. |
 | INFRA-2 docs | Separate draft PR #10. |
 | Paid OpenAI | Pre-V4E Magic test quality FAILED; **post-deploy V4E sample visually accepted** (textile fidelity imperfect). Cursor V4F implementation paid calls: **0** |
 | Safety flags (prod) | Registration **on** (invite-gated). Magic AI allowlisted (polish + job/image only). Uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
@@ -298,12 +298,11 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM re-review of **WEB-V4F draft PR #37** after tablet Focus + materials sheet amendments. **Do not merge or deploy** until authorized.
-2. After WEB-V4F acceptance + authorized **frontend-only** deploy: operator Studio acceptance of picker, Magic contain, Focus, and materials sheet on real tablets.
-3. **Defer WEB-V4G** (numeric brush px, wheel brush size, extra/custom gradients) until after V4F finishes.
-4. Remaining Studio browser acceptance at `2cbc1ad0`: 10 croquis, legacy geometry, fills/save/export, eyedropper, custom fabrics — still outstanding where not already covered.
-5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36).
-6. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
+1. **Exact next engineering action:** **WEB-V4G** (numeric brush px, wheel brush size, extra/custom gradients) — only after operator authenticated tablet acceptance of WEB-V4F on production.
+2. **Outstanding authenticated acceptance (not claimed by Cursor):** login/registration, Studio croquis, professional color picker, tablet portrait Focus + Exit Focus, Colors/Fabrics/Gradients materials sheet + compact thumbs, Magic result modal full-image using an **existing** result only (no new paid generation), autosave/save/reopen/export, saved-design geometry.
+3. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36) or the V4F deploy-status docs draft. PR #36 remains a valid V4D+V4E stack record; production **frontend** SHA is now `1aa5dc5a`.
+4. **Operator residual:** CF AOP dashboard binding + expired Access session test (still PENDING).
+5. FE-only rollback if needed: restore Nginx root to `/var/www/fashionrise/releases/2cbc1ad0` per `/var/backups/fashionrise/v4f-fe-deploy-20261023T060542Z/ROLLBACK.md` — do not restart API/worker or touch DB.
 
 ---
 
@@ -469,12 +468,12 @@ FashionRise/
 
 Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRise/pull/36).
 
-## WEB-V4F verification (draft PR #37 — color picker + Magic preview + tablet layout)
+## WEB-V4F verification (merged PR #37 — color picker + Magic preview + tablet layout)
 
 | Gate | Result |
 |------|--------|
-| Scope | Frontend-only; no backend / worker / Nginx / AI / Magic prompts; **no WEB-V4G** brush/gradient features |
-| Base | `main` @ `2cbc1ad0` (production baseline) |
+| Scope | Frontend-only; no backend / worker / AI / Magic prompts; **no WEB-V4G** brush/gradient features |
+| Merge | PR #37 **MERGED** → `main` **`1aa5dc5a96ea23843cb2042eef9ae62f8d6e828b`** |
 | Color picker | Built-in HSV professional picker (SV square, hue, HEX/RGB sync, Apply/Cancel, portal modal) |
 | Magic modal | Full-image `object-fit: contain`; notes collapsible; actions remain accessible |
 | Tablet Focus bug (768×1024) | **Fixed** — `.focusMode .center` no longer overrides narrow one-column/two-row grid; paper keeps nonzero 3:4 box; single Exit Focus via dock |
@@ -482,15 +481,35 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Compact thumbs | Gradients **64px** high (56–72 clamp), **4/row** on Mini sheet (≈744px panel); **2/row** in narrow panels/phones; fabrics capped **≤100px**; container-query density |
 | Tall-tablet paper | Raised mid-width `--paper-max-w` (was 380px); iPad Pro 13 portrait paper ~524×699 (3:4) |
 | CreatorWorkspace browser QA | DEV `/_design/studio-layout`: Focus + materials + measured thumb rects (Mini 4×64px gradients; mobile/desktop 2×64px; fabrics maxH 100) |
-| Frontend tests | see latest PR head |
-| Paid OpenAI during implementation | **0** |
-| Merge / deploy | **Blocked** — STOP for Technical PM review |
-| Outstanding | Production signed-in Studio acceptance after authorized FE deploy; WEB-V4G (extra/custom gradients, numeric brush) deferred |
+| Frontend tests (pre-deploy build) | **290/290** · lint warnings only · `tsc -b` + vite build · `check:sw` **ok=true** |
+| Paid OpenAI during implementation / deploy | **0** |
+| Production FE deploy | **SUCCESS** — see section below |
+| Outstanding | Authenticated Studio + real-tablet acceptance (Cursor did **not** perform signed-in browser tests) |
+
+## WEB-V4F frontend-only production deploy verification (`1aa5dc5a`)
+
+| Gate | Result |
+|------|--------|
+| Authorization | Operator comment on merged PR #37 (2026-10-23) — exact SHA `1aa5dc5a96ea23843cb2042eef9ae62f8d6e828b` |
+| Preflight | Prior live FE/BE/worker `2cbc1ad0`; Alembic `005`; Access 302 + AOP mTLS unchanged; neighbor nginx sites untouched |
+| Backup | `/var/backups/fashionrise/v4f-fe-deploy-20261023T060542Z` (nginx conf, prior root `2cbc1ad0`, SW hashes, `ROLLBACK.md`) |
+| Build env | `VITE_API_BASE_URL=/api/v1` · `VITE_REGISTRATION_UI_ENABLED=true` · `VITE_MAGIC_UI_ENABLED=true` (bundle hash matches flag-on rebuild) |
+| Release path | `/var/www/fashionrise/releases/1aa5dc5a` · `RELEASE_SHA.txt` = full SHA · 10 library + 3 legacy croquis · `sw.js` present |
+| Nginx | FashionRise `root` → `1aa5dc5a` only; `nginx -t` OK; reload OK; `curecompass` / `kehilabapark.app` / `pickwise` untouched |
+| Backend / worker | Still `2cbc1ad0`; ActiveEnterTimestamp unchanged (2026-10-22); **no restart**; health/ready **200** |
+| Alembic | **`005`** via `alembic_version` — **no migration** |
+| Service worker | `check:sw` **ok=true** (no NavigationRoute / no HTML precache); live SW sha256 differs from prior as expected |
+| Infra probes | Public `/` → Cloudflare Access **302**; origin HTTPS without client cert → AOP **400**; deploy-window worker journal **empty** (no AI activity) |
+| Signed-in Studio / tablet acceptance | **NOT performed by Cursor** — outstanding for operator |
+| Paid Magic / OpenAI | **0** (no polish/edit/generation initiated) |
+| Rollback | FE-only: set nginx root back to `/var/www/fashionrise/releases/2cbc1ad0`, `nginx -t`, reload — see backup `ROLLBACK.md` |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-23 | **WEB-V4F FE-only production deploy SUCCESS** at `1aa5dc5a`; BE/worker remain `2cbc1ad0`; Alembic `005`; backup `v4f-fe-deploy-20261023T060542Z`; 0 paid AI; authenticated tablet acceptance outstanding; next eng action **WEB-V4G**. |
+| 2026-10-23 | **WEB-V4F PR #37 MERGED** @ `1aa5dc5a` after operator authorization. |
 | 2026-10-23 | **WEB-V4F PR #37 amendment:** compact gradient/fabric thumbnails via materials container queries (4-up on tablet sheet, 2-up narrow); measured CreatorWorkspace QA; **STOP for Technical PM review**. |
 | 2026-10-23 | **WEB-V4F PR #37 amendment:** tablet Focus paper collapse + materials sheet height/scrim/Done + tall-tablet paper sizing; CreatorWorkspace layout QA; picker/Magic contain preserved; **STOP for Technical PM review**. |
 | 2026-10-22 | **WEB-V4F draft:** professional color picker + Magic “Your Look” uncropped preview; status records V4D+V4E deploy @ `2cbc1ad0` and operator Magic visual PASS (textile fidelity imperfect); **STOP for Technical PM review** (no merge/deploy). |
