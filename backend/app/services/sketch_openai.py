@@ -184,18 +184,27 @@ def _system_prompt(job_type: str) -> str:
         return (
             "You are a senior fashion design director. A young designer uploaded a rough fashion sketch. "
             "Your job is to extract the DESIGN CONCEPT for a professional fashion-illustration edit. "
-            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence, versus "
-            "(B) drawing imperfections that may be professionally refined (wobbly lines, uneven fill, crude shading). "
+            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence — including "
+            "the model's exact croquis pose/stance and garment silhouette — versus (B) drawing imperfections "
+            "that may be professionally refined (wobbly lines, uneven fill, crude shading). "
+            "Never invent anatomy, swap left/right, or normalize a dynamic stance into a generic runway pose. "
             "Respond ONLY with valid JSON using keys: "
             "summary (one short exciting sentence about the design concept, not the rough drawing), "
             "polish_bullets (array of 3–5 concise tips for the young designer), "
             "design_identity (object with evidence-backed fields; use null only when not visible: "
-            "garment_category, silhouette, pose, neckline, sleeve_type, sleeve_length, hemline, "
-            "main_colors, fabric_patterns, accessories, asymmetry_notes, distinctive_details), "
-            "refine_ok (array of short drawing imperfections that MAY be upgraded — never design decisions), "
-            "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes to preserve: "
-            "pose, hat/hair, neckline, sleeves, hem, main colors, fabric patterns, asymmetry, accessories, "
-            "distinctive details — invent nothing; do not describe amateur line quality or ask to keep a child sketch look)."
+            "garment_category, silhouette, pose (short free-text stance summary), neckline, sleeve_type, "
+            "sleeve_length, hemline, main_colors, fabric_patterns, accessories, asymmetry_notes, "
+            "distinctive_details, pose_lock (object of visible anatomical relationships only; null field "
+            "when occluded/uncertain — never invent measurements: torso_orientation, shoulder_alignment, "
+            "hip_alignment, supporting_leg, bent_or_lifted_leg, knee_positions, foot_placement, "
+            "arm_and_hand_positions, body_asymmetry_and_perspective)), "
+            "refine_ok (array of short drawing imperfections that MAY be upgraded — never design decisions "
+            "and never pose/stance changes), "
+            "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes "
+            "to preserve: concrete pose relationships from pose_lock, hat/hair, neckline, sleeves, hem, "
+            "main colors, fabric patterns, asymmetry, accessories, distinctive details — invent nothing; "
+            "do not describe amateur line quality or ask to keep a child sketch look; do not summarize pose "
+            "as a generic 'standing front view' when limbs are bent, lifted, crossed, or asymmetric)."
         )
     return (
         "You are a fashion stylist AI. Respond ONLY with valid JSON using keys: "
@@ -221,6 +230,61 @@ def _user_text(job: AIJob) -> str:
     return "\n\n".join(parts) if parts else "Infer from the attached sketch image only."
 
 
+_POSE_LOCK_FIELD_ORDER = (
+    "torso_orientation",
+    "shoulder_alignment",
+    "hip_alignment",
+    "supporting_leg",
+    "bent_or_lifted_leg",
+    "knee_positions",
+    "foot_placement",
+    "arm_and_hand_positions",
+    "body_asymmetry_and_perspective",
+)
+
+_GENERIC_POSE_PHRASES = frozenset(
+    {
+        "standing",
+        "standing front view",
+        "front view",
+        "front-facing",
+        "upright",
+        "neutral stance",
+        "fashion pose",
+        "elegant fashion pose",
+        "runway pose",
+        "model pose",
+    }
+)
+
+
+def _is_usable_identity_text(val: Any) -> bool:
+    if val is None:
+        return False
+    text = str(val).strip()
+    return bool(text) and text.lower() not in {"null", "none", "n/a", "unknown"}
+
+
+def _pose_lock_clause(identity: dict[str, Any]) -> str:
+    """Format structured pose_lock relationships for the edit brief."""
+    pose_lock = identity.get("pose_lock")
+    if not isinstance(pose_lock, dict) or not pose_lock:
+        return ""
+    bits: list[str] = []
+    for key in _POSE_LOCK_FIELD_ORDER:
+        val = pose_lock.get(key)
+        if not _is_usable_identity_text(val):
+            continue
+        bits.append(f"{key.replace('_', ' ')}: {str(val).strip()}")
+    if not bits:
+        return ""
+    return (
+        "POSE LOCK (preserve these visible anatomical relationships exactly; do not normalize): "
+        + "; ".join(bits)
+        + "."
+    )
+
+
 def _design_identity_clause(structured: dict[str, Any]) -> str:
     """Fold vision design_identity fields into the edit brief when present."""
     identity = structured.get("design_identity")
@@ -243,11 +307,17 @@ def _design_identity_clause(structured: dict[str, Any]) -> str:
     bits: list[str] = []
     for key in order:
         val = identity.get(key)
-        if val is None:
+        if not _is_usable_identity_text(val):
             continue
         text = str(val).strip()
-        if text and text.lower() not in {"null", "none", "n/a", "unknown"}:
-            bits.append(f"{key.replace('_', ' ')}: {text}")
+        # Prefer structured pose_lock over a generic free-text pose summary.
+        if key == "pose" and isinstance(identity.get("pose_lock"), dict):
+            if text.lower() in _GENERIC_POSE_PHRASES:
+                continue
+        bits.append(f"{key.replace('_', ' ')}: {text}")
+    pose_clause = _pose_lock_clause(identity)
+    if pose_clause:
+        bits.append(pose_clause)
     if not bits:
         return ""
     return "Preserve these design attributes: " + "; ".join(bits) + "."
@@ -271,17 +341,27 @@ def _build_image_prompt(structured: Any, summary: str) -> str:
     detail = " ".join(detail_parts)
     return (
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
-        "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
-        "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
-        "sleeve type and length, hemline, main colors, fabric/textile patterns, asymmetry, accessories "
-        "(such as hats), and distinctive design details. "
-        "UPGRADE construction and presentation: strong clean garment contours; sophisticated tailoring "
-        "and garment construction; visible fabric folds, draping, and texture; richer but faithful colors; "
-        "crisp repeating textile patterns; clearly defined necklines, sleeves, seams, and hems; attractive "
-        "fashion-presentation quality; clean full-body composition on a clean light presentation background. "
+        "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent "
+        "AND for the model's croquis pose, stance, limb positions, and body proportions. "
+        "PRESERVE exactly from visible evidence: garment category, original silhouette, the original "
+        "model pose/stance (torso orientation, shoulder and hip alignment, supporting leg, any bent or "
+        "lifted leg, knee positions, foot placement including planted vs lifted heels/toes, arm and hand "
+        "positions, body asymmetry and perspective), neckline, sleeve type and length, hemline, main "
+        "colors, fabric/textile patterns, asymmetry, accessories (such as hats), and distinctive design "
+        "details. "
+        "UPGRADE construction and presentation only: strong clean garment contours; sophisticated "
+        "tailoring and garment construction; visible fabric folds, draping, and texture; richer but "
+        "faithful colors; crisp repeating textile patterns; clearly defined necklines, sleeves, seams, "
+        "and hems; attractive fashion-presentation quality; clean full-body composition on a clean light "
+        "presentation background — while keeping the same full-body framing and croquis proportions. "
         "Do NOT retain rough/amateur drawing imperfections. Do NOT apply only a faint watercolor or light "
         "color wash. Do NOT invent a different garment, change the designer's colors, alter the silhouette, "
         "add unnecessary accessories, or make every design look like the same generic fashion outfit. "
+        "CRITICAL POSE RULES — professional refinement is NOT a pose rewrite: do NOT straighten bent "
+        "limbs; do NOT lower a lifted foot or plant both boots when one foot was raised/angled; do NOT "
+        "uncross or newly cross the legs; do NOT change weight distribution or supporting leg; do NOT "
+        "reorient the torso, shoulders, or hips; do NOT swap left/right hands or move a hand-on-hip; "
+        "do NOT replace the original stance with a generic upright runway pose. "
         f"Design evidence: {detail} "
         "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark."
     )[:3800]

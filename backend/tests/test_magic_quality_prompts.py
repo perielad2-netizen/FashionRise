@@ -59,7 +59,10 @@ def _operator_sample_structured() -> dict[str, Any]:
         "design_identity": {
             "garment_category": "jumpsuit",
             "silhouette": "flowing full-length jumpsuit",
-            "pose": "standing front view",
+            "pose": (
+                "asymmetric fashion stance with one bent leg angled away from the "
+                "supporting leg and one hand on the hip"
+            ),
             "neckline": "deep V neckline",
             "sleeve_type": "flowing",
             "sleeve_length": "long",
@@ -69,11 +72,29 @@ def _operator_sample_structured() -> dict[str, Any]:
             "accessories": "wide-brimmed hat",
             "asymmetry_notes": "asymmetric leg design",
             "distinctive_details": "wide-brim hat, deep V, flowing sleeves",
+            "pose_lock": {
+                "torso_orientation": "slight three-quarter fashion tilt following the hip line",
+                "shoulder_alignment": "shoulders angled with the body, not square-to-camera runway",
+                "hip_alignment": "hips shifted with weight on the supporting leg",
+                "supporting_leg": "one leg planted as the standing support",
+                "bent_or_lifted_leg": (
+                    "opposite leg bent at the knee and angled away/back from the supporting leg"
+                ),
+                "knee_positions": "free-leg knee bent and outward; supporting knee straighter",
+                "foot_placement": (
+                    "supporting boot planted; free boot not both-feet-flat runway; "
+                    "lifted or angled heel/toe relationship preserved"
+                ),
+                "arm_and_hand_positions": "one hand resting at the waist/hip; other arm follows the sketch",
+                "body_asymmetry_and_perspective": (
+                    "clear left/right asymmetry in legs and hips; keep original perspective"
+                ),
+            },
         },
         "refine_ok": ["wobbly outlines", "uneven fill"],
         "image_prompt": (
-            "Standing figure in a pink patterned jumpsuit with deep V neckline, "
-            "flowing long sleeves, asymmetric leg design, and a wide-brimmed hat."
+            "Figure in a pink patterned jumpsuit with deep V neckline, flowing long sleeves, "
+            "asymmetric bent-leg stance with one hand on the hip, and a wide-brimmed hat."
         ),
     }
 
