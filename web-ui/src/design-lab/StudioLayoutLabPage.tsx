@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
 import type { StudioEditor } from '@/hooks/useStudioEditor'
-import { customGradientStyle, solidStyle } from '@/lib/fills'
+import { customGradientStyle, solidStyle, type FillStyle } from '@/lib/fills'
 import { floodFillRegion } from '@/lib/floodFill'
 import { DEFAULT_MODEL } from '@/assets/modelLibrary'
 import {
@@ -72,7 +72,7 @@ function useLayoutLabEditor(): StudioEditor {
   const [brushSize, setBrushSize] = useState(BRUSH_SIZES.medium)
   const [opacity, setOpacity] = useState(0.92)
   const [color, setColor] = useState<string>(INK_SWATCHES[0]!.color)
-  const [fillStyle, setFillStyle] = useState(solidStyle(INK_SWATCHES[0]!.color))
+  const [fillStyle, setFillStyle] = useState<FillStyle>(solidStyle(INK_SWATCHES[0]!.color))
   const [model, setModel] = useState(DEFAULT_MODEL)
   const [dimmed, setDimmed] = useState(false)
   const [magicNotice, setMagicNotice] = useState<string | null>(null)
