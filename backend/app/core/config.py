@@ -60,9 +60,12 @@ class Settings(BaseSettings):
     # reasoning tokens. 1400 covers summary + bullets + optional image_prompt.
     openai_max_completion_tokens: int = 1400
     # sketch_polish look image (images.edit). Set OPENAI_IMAGE_MODEL=off to disable.
-    openai_image_model: str = "gpt-image-1"
+    # Default: gpt-image-2.5-sunburst (gpt-image-1 shut down 2026-10-23).
+    openai_image_model: str = "gpt-image-2.5-sunburst"
     openai_image_size: str = "1024x1536"
-    openai_image_quality: str = "standard"
+    # FashionRise default quality is high. Legacy "standard" maps to high in code.
+    # Explicit xhigh/max (and unknown values) fail closed before any paid images.edit.
+    openai_image_quality: str = "high"
 
     max_upload_size_mb: int = 25
     allowed_upload_image_types: str = "image/jpeg,image/png,image/webp"

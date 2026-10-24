@@ -86,7 +86,7 @@ python -m app.ai_worker
 
 Single batch (e.g. cron smoke): `python -m app.ai_worker --once`. Poll interval and batch size use the same **`AI_WORKER_*`** variables as the embedded loop.
 
-Sketch jobs use **Chat Completions** (`OPENAI_MODEL`, default **`gpt-6-luna`**) when `OPENAI_API_KEY` is set; otherwise the worker stores a stub result. Look-image edit stays on **`OPENAI_IMAGE_MODEL`** (`gpt-image-1`). See `docs/OPENAI_MODEL_MIGRATION.md`.
+Sketch jobs use **Chat Completions** (`OPENAI_MODEL`, default **`gpt-6-luna`**) when `OPENAI_API_KEY` is set; otherwise the worker stores a stub result. Look-image edit uses **`OPENAI_IMAGE_MODEL`** (default **`gpt-image-2.5-sunburst`**; retired `gpt-image-1` is rejected before any paid edit). See `docs/OPENAI_MODEL_MIGRATION.md` and `docs/incidents/P1-54-MAGIC-IMAGE-SUNBURST-MIGRATION.md`.
 
 Bounded model-compat eval (default **dry-run**, zero network):
 

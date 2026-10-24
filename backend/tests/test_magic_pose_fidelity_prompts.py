@@ -227,7 +227,7 @@ def test_build_sketch_chat_request_advertises_pose_lock(monkeypatch):
         openai_model="gpt-6-luna",
         openai_reasoning_effort="none",
         openai_max_completion_tokens=1400,
-        openai_image_model="gpt-image-1",
+        openai_image_model="gpt-image-2.5-sunburst",
         openai_image_size="1024x1536",
         openai_timeout_seconds=180.0,
         openai_http_timeout_seconds=60.0,

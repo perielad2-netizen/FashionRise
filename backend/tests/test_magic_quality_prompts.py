@@ -32,8 +32,9 @@ def _settings(**env) -> Settings:
         "openai_model": "gpt-6-luna",
         "openai_reasoning_effort": "none",
         "openai_max_completion_tokens": 1400,
-        "openai_image_model": "gpt-image-1",
+        "openai_image_model": "gpt-image-2.5-sunburst",
         "openai_image_size": "1024x1536",
+        "openai_image_quality": "high",
         "openai_timeout_seconds": 180.0,
         "openai_http_timeout_seconds": 60.0,
         "openai_base_url": None,
@@ -225,10 +226,12 @@ def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, setti
 
     assert url.startswith("http://127.0.0.1:8001/static/uploads/ai/")
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
-    assert captured["model"] == "gpt-image-1"
-    assert captured["input_fidelity"] == "high"
+    assert captured["model"] == "gpt-image-2.5-sunburst"
+    assert "input_fidelity" not in captured
+    assert captured["quality"] == "high"
+    assert captured["output_format"] == "png"
     assert captured["n"] == 1
     assert captured["size"] == "1024x1536"
     assert "only clean the linework and add a light color wash" not in captured["prompt"].lower()
@@ -252,7 +255,7 @@ def test_edit_failure_exactly_one_edit_no_generate_or_mini(monkeypatch, settings
             client, job, _operator_sample_structured(), "summary"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
@@ -267,12 +270,12 @@ def test_empty_edit_response_exactly_one_edit_no_generate(monkeypatch, settings)
             client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
 def test_configured_image_model_used_once_never_downgraded(monkeypatch):
-    s = _settings(openai_image_model="gpt-image-1")
+    s = _settings(openai_image_model="gpt-image-2.5-sunburst")
     monkeypatch.setattr(sketch_openai, "get_settings", lambda: s)
 
     def on_edit(**kwargs):
@@ -285,8 +288,9 @@ def test_configured_image_model_used_once_never_downgraded(monkeypatch):
             client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert "gpt-image-1-mini" not in client.edit_models
+    assert "gpt-image-2.5-flare" not in client.edit_models
     assert client.generate_calls == 0
 
 
@@ -416,7 +420,7 @@ def test_complete_polish_propagates_edit_failure(monkeypatch, settings):
             _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
