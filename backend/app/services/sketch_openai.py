@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
@@ -46,7 +47,85 @@ class SketchConfigError(ValueError):
 
 
 class SketchCompletionError(RuntimeError):
-    """Sanitized completion failure. Worker marks the job failed. No payloads."""
+    """Sanitized completion failure. Worker marks the job failed. No payloads.
+
+    Optional ``safe_meta`` carries allowlisted diagnostic fields only
+    (exception class, HTTP status, short provider code, request id, stage).
+    Never attach prompts, images, raw provider bodies, or credentials.
+    """
+
+    def __init__(self, message: str, *, safe_meta: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.safe_meta = dict(safe_meta or {})
+
+
+# Strict allowlists for persisted/logged diagnostics (never free-form provider text).
+_SAFE_PROVIDER_CODES = frozenset(
+    {
+        "content_policy_violation",
+        "moderation_blocked",
+        "invalid_image",
+        "invalid_image_format",
+        "invalid_image_size",
+        "image_too_large",
+        "image_parse_error",
+        "billing_hard_limit_reached",
+        "insufficient_quota",
+        "rate_limit_exceeded",
+        "model_not_found",
+        "unsupported_value",
+        "invalid_value",
+        "missing_required_parameter",
+    }
+)
+
+_SAFE_ERROR_CATEGORIES = frozenset(
+    {
+        "provider_content_policy",
+        "provider_quota",
+        "provider_rate_limit",
+        "provider_auth",
+        "provider_unavailable",
+        "provider_model_unavailable",
+        "provider_bad_request",
+        "empty_edit_response",
+        "image_edit_failed",
+        "sketch_completion_failed",
+        "no_sketch_image",
+        "retired_image_model",
+        "unsupported_image_model",
+    }
+)
+
+_SAFE_STAGES = frozenset({"images.edit", "chat.completions", "config"})
+
+_SAFE_ERROR_TYPES = frozenset(
+    {
+        "BadRequestError",
+        "AuthenticationError",
+        "PermissionDeniedError",
+        "NotFoundError",
+        "RateLimitError",
+        "InternalServerError",
+        "APIConnectionError",
+        "APITimeoutError",
+        "APIStatusError",
+        "APIError",
+        "EmptyEditResponse",
+        "ImageModelNotEligible",
+        "NoSketchImage",
+        "RetiredImageModel",
+        "UnsupportedImageModel",
+        "RuntimeError",
+        "ValueError",
+        "TimeoutError",
+        "ProviderError",
+    }
+)
+
+_CONTENT_POLICY_CODES = frozenset({"content_policy_violation", "moderation_blocked"})
+_QUOTA_CODES = frozenset({"billing_hard_limit_reached", "insufficient_quota"})
+_MODEL_UNAVAILABLE_CODES = frozenset({"model_not_found"})
 
 
 def is_configured() -> bool:
@@ -299,13 +378,378 @@ def _extract_image_bytes(item: Any) -> bytes | None:
 
 
 def _sanitize_provider_error(exc: BaseException) -> str:
-    """Bounded log token: exception class only. Never the provider body (may hold image/secrets)."""
-    return type(exc).__name__[:80]
+    """Bounded log token: allowlisted exception class only. Never the provider body."""
+    name = type(exc).__name__[:80]
+    if name in _SAFE_ERROR_TYPES:
+        return name
+    return "ProviderError"
 
 
-def _supports_input_fidelity(model: str) -> bool:
+def _safe_provider_code(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    code = raw.strip()[:64]
+    if not code or code not in _SAFE_PROVIDER_CODES:
+        return None
+    return code
+
+
+def _safe_request_id(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    rid = raw.strip()[:128]
+    if not rid or len(rid) < 8 or len(rid) > 128:
+        return None
+    # Correlation ids are typically alnum / hyphen / underscore (OpenAI req_* style).
+    if not all(ch.isalnum() or ch in "-_" for ch in rid):
+        return None
+    return rid
+
+
+def _safe_error_type_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    name = raw.strip()[:80]
+    if name in _SAFE_ERROR_TYPES:
+        return name
+    return None
+
+
+def _safe_stage_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    stage = raw.strip()[:64]
+    if stage in _SAFE_STAGES:
+        return stage
+    return None
+
+
+def _safe_error_category_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    category = raw.strip()[:64]
+    if category in _SAFE_ERROR_CATEGORIES:
+        return category
+    return None
+
+
+def _safe_provider_error_fields(exc: BaseException) -> dict[str, Any]:
+    """Allowlisted provider diagnostics. Never includes message/body/prompt/image bytes."""
+    fields: dict[str, Any] = {"error_type": _sanitize_provider_error(exc)}
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int) and 100 <= status <= 599:
+        fields["http_status"] = status
+    code = _safe_provider_code(getattr(exc, "code", None))
+    if code:
+        fields["provider_code"] = code
+    request_id = _safe_request_id(getattr(exc, "request_id", None))
+    if request_id:
+        fields["request_id"] = request_id
+    return fields
+
+
+def normalize_failure_meta(meta: Any) -> dict[str, Any]:
+    """Return only allowlisted diagnostic fields suitable for DB/API/logs."""
+    if not isinstance(meta, dict) or not meta:
+        return {}
+    out: dict[str, Any] = {}
+    category = _safe_error_category_token(meta.get("error_category"))
+    if category:
+        out["error_category"] = category
+    error_type = _safe_error_type_token(meta.get("error_type"))
+    if error_type:
+        out["error_type"] = error_type
+    status = meta.get("http_status")
+    if isinstance(status, int) and 100 <= status <= 599:
+        out["http_status"] = status
+    code = _safe_provider_code(meta.get("provider_code"))
+    if code:
+        out["provider_code"] = code
+    request_id = _safe_request_id(meta.get("request_id"))
+    if request_id:
+        out["request_id"] = request_id
+    stage = _safe_stage_token(meta.get("stage"))
+    if stage:
+        out["stage"] = stage
+    for bool_key in ("image_edit_attempted", "image_bytes_returned"):
+        if bool_key in meta and isinstance(meta[bool_key], bool):
+            out[bool_key] = meta[bool_key]
+    return out
+
+
+def failure_result_for_storage(meta: Any) -> dict[str, Any] | None:
+    """Worker persistence shape: ``{\"error\": {allowlisted…}}`` or None."""
+    cleaned = normalize_failure_meta(meta)
+    return {"error": cleaned} if cleaned else None
+
+
+def _classify_edit_failure(meta: dict[str, Any]) -> str:
+    """Map allowlisted fields to a stable error category for UI/ops (not a provider body).
+
+    Ordinary HTTP 400 without a confirmed safety code is never treated as content policy.
+    """
+    cleaned = normalize_failure_meta(meta)
+    if cleaned.get("error_category") in _SAFE_ERROR_CATEGORIES:
+        return cleaned["error_category"]  # type: ignore[return-value]
+    code = cleaned.get("provider_code")
+    status = cleaned.get("http_status")
+    error_type = cleaned.get("error_type")
+    if code in _CONTENT_POLICY_CODES:
+        return "provider_content_policy"
+    if code in _QUOTA_CODES:
+        return "provider_quota"
+    if code in _MODEL_UNAVAILABLE_CODES:
+        return "provider_model_unavailable"
+    if code == "rate_limit_exceeded" or status == 429 or error_type == "RateLimitError":
+        return "provider_rate_limit"
+    if status in {401, 403} or error_type in {"AuthenticationError", "PermissionDeniedError"}:
+        return "provider_auth"
+    if status in {500, 502, 503, 504} or error_type == "InternalServerError":
+        return "provider_unavailable"
+    if error_type == "EmptyEditResponse":
+        return "empty_edit_response"
+    if error_type in {"RetiredImageModel", "UnsupportedImageModel", "ImageModelNotEligible"}:
+        if error_type == "RetiredImageModel":
+            return "retired_image_model"
+        return "unsupported_image_model"
+    if isinstance(status, int) and 400 <= status < 500:
+        return "provider_bad_request"
+    if cleaned.get("image_edit_attempted"):
+        return "image_edit_failed"
+    return "sketch_completion_failed"
+
+
+def _user_message_for_edit_failure(category: str) -> str:
+    """Short, safe user-facing copy. Original sketch is never modified by these failures."""
+    if category == "provider_content_policy":
+        return (
+            "Magic could not edit this sketch under the image provider's safety rules. "
+            "Your original design is unchanged."
+        )
+    if category == "provider_rate_limit":
+        return "Magic is temporarily busy. Your original design is unchanged — try again shortly."
+    if category == "provider_quota":
+        return "Magic is temporarily unavailable (provider quota). Your original design is unchanged."
+    if category == "provider_auth":
+        return "Magic is temporarily unavailable. Your original design is unchanged."
+    if category in {"provider_unavailable", "provider_model_unavailable"}:
+        return "Magic is temporarily unavailable. Your original design is unchanged — try again shortly."
+    if category == "retired_image_model":
+        return (
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
+    if category == "unsupported_image_model":
+        return (
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
+    # Keep the historical generic string for unclassified edit failures (compat + ops grep).
+    return "sketch image edit failed"
+
+
+
+# Explicit per-model edit capabilities (do not infer from string prefixes alone).
+# Sources: OpenAI Images edit API + GPT Image 2.5 / deprecation docs (2026-10).
+@dataclass(frozen=True)
+class ImageEditCapabilities:
+    model_id: str
+    status: str  # supported | retired | unsupported
+    sizes: frozenset[str]
+    qualities: frozenset[str]
+    default_quality: str
+    output_formats: frozenset[str]
+    supports_input_fidelity: bool
+    input_fidelity_values: frozenset[str]
+    max_n: int
+
+
+_DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"
+_DEFAULT_IMAGE_SIZE = "1024x1536"
+
+_IMAGE_EDIT_CAPABILITIES: dict[str, ImageEditCapabilities] = {
+    "gpt-image-2.5-sunburst": ImageEditCapabilities(
+        model_id="gpt-image-2.5-sunburst",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "xhigh", "max", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-2.5-flare": ImageEditCapabilities(
+        model_id="gpt-image-2.5-flare",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "xhigh", "max", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-2": ImageEditCapabilities(
+        model_id="gpt-image-2",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        # Official docs: omit input_fidelity for gpt-image-2 (always high fidelity).
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-1.5": ImageEditCapabilities(
+        model_id="gpt-image-1.5",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"high", "low"}),
+        max_n=10,
+    ),
+    # Retired 2026-10-23 — never issue a paid edit against these ids.
+    "gpt-image-1": ImageEditCapabilities(
+        model_id="gpt-image-1",
+        status="retired",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"high", "low"}),
+        max_n=10,
+    ),
+    "gpt-image-1-mini": ImageEditCapabilities(
+        model_id="gpt-image-1-mini",
+        status="retired",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"low"}),
+        max_n=10,
+    ),
+}
+
+
+def image_edit_capabilities(model: str) -> ImageEditCapabilities | None:
+    """Return the capability row for an exact model id (or known snapshot alias)."""
     m = (model or "").strip()
-    return m == "gpt-image-1" or m.startswith("gpt-image-1.") or m in {"gpt-image-1.5", "gpt-image-2"}
+    if not m:
+        return None
+    if m in _IMAGE_EDIT_CAPABILITIES:
+        return _IMAGE_EDIT_CAPABILITIES[m]
+    # Snapshot aliases documented for Sunburst / Flare.
+    if m.startswith("gpt-image-2.5-sunburst-"):
+        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2.5-sunburst"]
+    if m.startswith("gpt-image-2.5-flare-"):
+        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2.5-flare"]
+    if m.startswith("gpt-image-2-") and m != "gpt-image-2.5-sunburst" and not m.startswith(
+        "gpt-image-2.5-"
+    ):
+        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2"]
+    return None
+
+
+def resolve_image_edit_quality(caps: ImageEditCapabilities, configured: str | None) -> str:
+    """Pick a supported quality; never silently escalate to xhigh/max."""
+    raw = (configured or "").strip().lower() or caps.default_quality
+    if raw == "standard":
+        raw = "high" if "high" in caps.qualities else caps.default_quality
+    if raw in {"xhigh", "max"}:
+        # Cost guard: FashionRise defaults must not silently select premium tiers.
+        raw = "high" if "high" in caps.qualities else caps.default_quality
+    if raw not in caps.qualities:
+        return caps.default_quality
+    return raw
+
+
+def assert_image_model_editable(model: str) -> ImageEditCapabilities:
+    """Fail closed before any paid images.edit when the model is retired/unknown."""
+    caps = image_edit_capabilities(model)
+    if caps is None:
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged.",
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "config",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "unsupported_image_model",
+                    "error_type": "UnsupportedImageModel",
+                }
+            ),
+        )
+    if caps.status == "retired":
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged.",
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "config",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "retired_image_model",
+                    "error_type": "RetiredImageModel",
+                }
+            ),
+        )
+    if caps.status != "supported":
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged.",
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "config",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "unsupported_image_model",
+                    "error_type": "UnsupportedImageModel",
+                }
+            ),
+        )
+    return caps
+
+
+def build_image_edit_kwargs(
+    *,
+    model: str,
+    prompt: str,
+    sketch: tuple[bytes, str],
+    size: str,
+    quality: str | None,
+) -> dict[str, Any]:
+    """Construct a single images.edit kwargs dict from the model capability table."""
+    caps = assert_image_model_editable(model)
+    sketch_bytes, mime = sketch
+    ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
+    size_value = size if size in caps.sizes else _DEFAULT_IMAGE_SIZE
+    if size_value not in caps.sizes:
+        size_value = "1024x1536" if "1024x1536" in caps.sizes else next(iter(sorted(caps.sizes)))
+    img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
+    kwargs: dict[str, Any] = {
+        "model": caps.model_id if model in _IMAGE_EDIT_CAPABILITIES else model,
+        "image": img,
+        "prompt": prompt,
+        "size": size_value,
+        "n": 1,
+    }
+    q = resolve_image_edit_quality(caps, quality)
+    kwargs["quality"] = q
+    if "png" in caps.output_formats:
+        kwargs["output_format"] = "png"
+    # Only set input_fidelity when the capability table explicitly allows it.
+    if caps.supports_input_fidelity and "high" in caps.input_fidelity_values:
+        kwargs["input_fidelity"] = "high"
+    return kwargs
 
 
 def _try_edit_look_from_sketch(
@@ -316,50 +760,72 @@ def _try_edit_look_from_sketch(
     size: str,
     *,
     sketch: tuple[bytes, str],
-) -> tuple[bytes | None, str]:
+    quality: str | None = None,
+) -> tuple[bytes | None, str, dict[str, Any]]:
     """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0)."""
-    sketch_bytes, mime = sketch
     model = (model or "").strip()
-    if not model.startswith("gpt-image"):
-        logger.warning("OpenAI job %s: image model not eligible for edit", job.id)
-        return None, ""
-
-    ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
-    size_value = size if size in {"1024x1024", "1024x1536", "1536x1024", "auto"} else "1024x1536"
     try:
-        img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
-        logger.info(
-            "OpenAI job %s: editing sketch with %s size=%s (input_fidelity=%s)",
-            job.id,
-            model,
-            size_value,
-            "high" if _supports_input_fidelity(model) else "omit",
+        kwargs = build_image_edit_kwargs(
+            model=model,
+            prompt=prompt,
+            sketch=sketch,
+            size=size,
+            quality=quality,
         )
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "image": img,
-            "prompt": prompt,
-            "size": size_value,
-            "n": 1,
+    except SketchCompletionError:
+        raise
+    except Exception:
+        logger.warning("OpenAI job %s: image model not eligible for edit", job.id)
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": False,
+            "image_bytes_returned": False,
+            "error_type": "ImageModelNotEligible",
         }
-        if _supports_input_fidelity(model):
-            kwargs["input_fidelity"] = "high"
+
+    fidelity = kwargs.get("input_fidelity", "omit")
+    try:
+        logger.info(
+            "OpenAI job %s: editing sketch with %s size=%s quality=%s output_format=%s input_fidelity=%s",
+            job.id,
+            kwargs.get("model"),
+            kwargs.get("size"),
+            kwargs.get("quality"),
+            kwargs.get("output_format"),
+            fidelity,
+        )
         # Disable OpenAI SDK automatic retries for this paid image call only.
         # Chat Completions (vision) keeps the client default retry policy.
         result = client.with_options(max_retries=0).images.edit(**kwargs)
         data = getattr(result, "data", None) or []
         raw = _extract_image_bytes(data[0]) if data else None
         if raw:
-            return raw, model
+            return raw, str(kwargs.get("model") or model), {}
         logger.warning("OpenAI job %s: edit returned no image bytes", job.id)
-        return None, ""
-    except Exception as e:
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            "error_type": "EmptyEditResponse",
+        }
+    except SketchCompletionError:
+        raise
+    except Exception as exc:
+        fields = _safe_provider_error_fields(exc)
         logger.warning(
-            "OpenAI job %s: image edit failed type=%s",
+            "OpenAI job %s: image edit failed type=%s status=%s code=%s request_id=%s",
             job.id,
-            _sanitize_provider_error(e),
+            fields.get("error_type"),
+            fields.get("http_status"),
+            fields.get("provider_code"),
+            fields.get("request_id"),
         )
-        return None, ""
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            **fields,
+        }
 
 
 def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, summary: str) -> str | None:
@@ -368,25 +834,44 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     Uses SDK max_retries=0 for the edit call only. When the image model is disabled, returns None.
     When editing is enabled but the sketch is missing or the single edit fails, raises
     SketchCompletionError so the worker reports a genuine failure. Never calls images.generate
-    or a secondary edit model.
+    or a secondary edit model. Retired models fail closed before any paid edit HTTP call.
     """
     settings = get_settings()
-    model = (getattr(settings, "openai_image_model", None) or "gpt-image-1").strip()
+    model = (getattr(settings, "openai_image_model", None) or _DEFAULT_IMAGE_MODEL).strip()
     if model.lower() in {"", "none", "off", "false", "0"}:
         return None
 
+    # Fail closed before sketch decode work when the configured model cannot be edited.
+    assert_image_model_editable(model)
+
     sketch = _raw_sketch_bytes(job)
     if sketch is None:
-        raise SketchCompletionError("no sketch image for edit")
+        raise SketchCompletionError(
+            "no sketch image for edit",
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "images.edit",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "no_sketch_image",
+                    "error_type": "NoSketchImage",
+                }
+            ),
+        )
 
     prompt = _build_image_prompt(structured, summary)
-    size = (getattr(settings, "openai_image_size", None) or "1024x1536").strip()
+    size = (getattr(settings, "openai_image_size", None) or _DEFAULT_IMAGE_SIZE).strip()
+    quality = getattr(settings, "openai_image_quality", None)
 
-    raw, used_model = _try_edit_look_from_sketch(
-        client, job, prompt, model, size, sketch=sketch
+    raw, used_model, fail_meta = _try_edit_look_from_sketch(
+        client, job, prompt, model, size, sketch=sketch, quality=quality
     )
     if not raw:
-        raise SketchCompletionError("sketch image edit failed")
+        category = _classify_edit_failure(fail_meta)
+        raise SketchCompletionError(
+            _user_message_for_edit_failure(category),
+            safe_meta=normalize_failure_meta({**fail_meta, "error_category": category}),
+        )
 
     key = f"ai/{job.id.hex if hasattr(job.id, 'hex') else str(job.id).replace('-', '')}_{uuid.uuid4().hex[:10]}.png"
     storage = LocalStorageBackend()

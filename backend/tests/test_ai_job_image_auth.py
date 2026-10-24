@@ -143,3 +143,65 @@ def test_polish_and_status_omit_image_base64_but_preserve_db_input(client, db_se
     assert polled["input_data"].get("has_sketch_image") is True
     assert polled["job_type"] == "sketch_polish"
     assert polled["status"] in {"queued", "running", "completed", "failed"}
+
+
+def test_failed_job_api_exposes_only_allowlisted_error_meta(client, db_session):
+    tokens = register_with_invite(client, db_session, "errmeta@example.com", "errmeta_user")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    tiny = base64.b64encode(_png_bytes()).decode("ascii")
+    job = AIJob(
+        user_id=uuid.UUID(me["id"]),
+        design_id=None,
+        job_type="sketch_polish",
+        status="failed",
+        input_data={"notes": "x", "image_base64": f"data:image/png;base64,{tiny}"},
+        result_data={
+            "error": {
+                "error_category": "provider_bad_request",
+                "error_type": "BadRequestError",
+                "http_status": 400,
+                "provider_code": "invalid_image",
+                "request_id": "req_api_safe_meta01",
+                "stage": "images.edit",
+                "image_edit_attempted": True,
+                "image_bytes_returned": False,
+                "raw_body": "SECRET_PROVIDER_BODY",
+                "prompt": "SECRET_PROMPT",
+                "moderation_details": {"SECRET": True},
+            },
+            "prompt": "SECRET_TOP_LEVEL_PROMPT",
+            "image_base64": "SECRET_B64",
+        },
+        error_message="sketch image edit failed",
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+
+    other = register_with_invite(client, db_session, "errmeta_b@example.com", "errmeta_b")
+    denied = client.get(f"/api/v1/ai/jobs/{job.id}", headers=_auth(other))
+    assert denied.status_code == 404
+
+    ok = client.get(f"/api/v1/ai/jobs/{job.id}", headers=_auth(tokens))
+    assert ok.status_code == 200, ok.text
+    body = ok.json()
+    assert body["status"] == "failed"
+    assert body["error_message"] == "sketch image edit failed"
+    assert "image_base64" not in body["input_data"]
+    assert body["input_data"].get("has_sketch_image") is True
+    assert body["result_data"] == {
+        "error": {
+            "error_category": "provider_bad_request",
+            "error_type": "BadRequestError",
+            "http_status": 400,
+            "provider_code": "invalid_image",
+            "request_id": "req_api_safe_meta01",
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+        }
+    }
+    dumped = ok.text
+    assert "SECRET" not in dumped
+    assert "moderation_details" not in dumped
+    assert "prompt" not in body["result_data"]

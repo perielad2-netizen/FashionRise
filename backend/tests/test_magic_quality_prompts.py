@@ -32,8 +32,9 @@ def _settings(**env) -> Settings:
         "openai_model": "gpt-6-luna",
         "openai_reasoning_effort": "none",
         "openai_max_completion_tokens": 1400,
-        "openai_image_model": "gpt-image-1",
+        "openai_image_model": "gpt-image-2.5-sunburst",
         "openai_image_size": "1024x1536",
+        "openai_image_quality": "high",
         "openai_timeout_seconds": 180.0,
         "openai_http_timeout_seconds": 60.0,
         "openai_base_url": None,
@@ -59,7 +60,10 @@ def _operator_sample_structured() -> dict[str, Any]:
         "design_identity": {
             "garment_category": "jumpsuit",
             "silhouette": "flowing full-length jumpsuit",
-            "pose": "standing front view",
+            "pose": (
+                "asymmetric fashion stance with one bent leg angled away from the "
+                "supporting leg and one hand on the hip"
+            ),
             "neckline": "deep V neckline",
             "sleeve_type": "flowing",
             "sleeve_length": "long",
@@ -69,11 +73,29 @@ def _operator_sample_structured() -> dict[str, Any]:
             "accessories": "wide-brimmed hat",
             "asymmetry_notes": "asymmetric leg design",
             "distinctive_details": "wide-brim hat, deep V, flowing sleeves",
+            "pose_lock": {
+                "torso_orientation": "slight three-quarter fashion tilt following the hip line",
+                "shoulder_alignment": "shoulders angled with the body, not square-to-camera runway",
+                "hip_alignment": "hips shifted with weight on the supporting leg",
+                "supporting_leg": "one leg planted as the standing support",
+                "bent_or_lifted_leg": (
+                    "opposite leg bent at the knee and angled away/back from the supporting leg"
+                ),
+                "knee_positions": "free-leg knee bent and outward; supporting knee straighter",
+                "foot_placement": (
+                    "supporting boot planted; free boot not both-feet-flat runway; "
+                    "lifted or angled heel/toe relationship preserved"
+                ),
+                "arm_and_hand_positions": "one hand resting at the waist/hip; other arm follows the sketch",
+                "body_asymmetry_and_perspective": (
+                    "clear left/right asymmetry in legs and hips; keep original perspective"
+                ),
+            },
         },
         "refine_ok": ["wobbly outlines", "uneven fill"],
         "image_prompt": (
-            "Standing figure in a pink patterned jumpsuit with deep V neckline, "
-            "flowing long sleeves, asymmetric leg design, and a wide-brimmed hat."
+            "Figure in a pink patterned jumpsuit with deep V neckline, flowing long sleeves, "
+            "asymmetric bent-leg stance with one hand on the hip, and a wide-brimmed hat."
         ),
     }
 
@@ -204,10 +226,12 @@ def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, setti
 
     assert url.startswith("http://127.0.0.1:8001/static/uploads/ai/")
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
-    assert captured["model"] == "gpt-image-1"
-    assert captured["input_fidelity"] == "high"
+    assert captured["model"] == "gpt-image-2.5-sunburst"
+    assert "input_fidelity" not in captured
+    assert captured["quality"] == "high"
+    assert captured["output_format"] == "png"
     assert captured["n"] == 1
     assert captured["size"] == "1024x1536"
     assert "only clean the linework and add a light color wash" not in captured["prompt"].lower()
@@ -231,7 +255,7 @@ def test_edit_failure_exactly_one_edit_no_generate_or_mini(monkeypatch, settings
             client, job, _operator_sample_structured(), "summary"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
@@ -246,12 +270,12 @@ def test_empty_edit_response_exactly_one_edit_no_generate(monkeypatch, settings)
             client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
 def test_configured_image_model_used_once_never_downgraded(monkeypatch):
-    s = _settings(openai_image_model="gpt-image-1")
+    s = _settings(openai_image_model="gpt-image-2.5-sunburst")
     monkeypatch.setattr(sketch_openai, "get_settings", lambda: s)
 
     def on_edit(**kwargs):
@@ -264,8 +288,9 @@ def test_configured_image_model_used_once_never_downgraded(monkeypatch):
             client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert "gpt-image-1-mini" not in client.edit_models
+    assert "gpt-image-2.5-flare" not in client.edit_models
     assert client.generate_calls == 0
 
 
@@ -395,7 +420,7 @@ def test_complete_polish_propagates_edit_failure(monkeypatch, settings):
             _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
@@ -457,6 +482,140 @@ def test_edit_path_decodes_sketch_once(monkeypatch, settings):
     )
     assert decode_calls["n"] == 1
     assert client.option_calls == [{"max_retries": 0}]
+
+
+def test_edit_bad_request_safe_meta_no_body_leak(monkeypatch, settings, caplog):
+    """Issue #54 observability: persist allowlisted fields only; never raw provider bodies."""
+
+    class _FakeBadRequest(Exception):
+        def __init__(self):
+            super().__init__('{"error":{"message":"SECRET_BODY_SHOULD_NOT_LEAK","code":"invalid_image"}}')
+            self.status_code = 400
+            self.code = "invalid_image"
+            self.request_id = "req_test_observability_001"
+            self.body = {"error": {"message": "SECRET_BODY_SHOULD_NOT_LEAK", "code": "invalid_image"}}
+
+    def on_edit(**kwargs):
+        raise _FakeBadRequest()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with (
+        caplog.at_level(logging.WARNING),
+        pytest.raises(sketch_openai.SketchCompletionError) as excinfo,
+    ):
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    err = excinfo.value
+    assert str(err) == "sketch image edit failed"
+    assert err.safe_meta["error_category"] == "provider_bad_request"
+    assert err.safe_meta["http_status"] == 400
+    assert err.safe_meta["provider_code"] == "invalid_image"
+    assert err.safe_meta["request_id"] == "req_test_observability_001"
+    assert err.safe_meta["stage"] == "images.edit"
+    assert err.safe_meta["image_edit_attempted"] is True
+    assert err.safe_meta["image_bytes_returned"] is False
+    assert "SECRET_BODY" not in str(err)
+    assert "SECRET_BODY" not in json.dumps(err.safe_meta)
+    joined = "\n".join(r.getMessage() for r in caplog.records)
+    assert "SECRET_BODY" not in joined
+    assert "status=400" in joined
+    assert "code=invalid_image" in joined
+    assert "request_id=req_test_observability_001" in joined
+
+
+
+def test_moderation_blocked_maps_to_content_policy_not_bad_request(monkeypatch, settings):
+    class _FakeModeration(Exception):
+        def __init__(self):
+            super().__init__(
+                '{"error":{"code":"moderation_blocked","moderation_details":{"SECRET":true}}}'
+            )
+            self.status_code = 400
+            self.code = "moderation_blocked"
+            self.request_id = "req_moderation_abc123"
+            self.body = {"error": {"code": "moderation_blocked", "moderation_details": {"SECRET": True}}}
+
+    def on_edit(**kwargs):
+        raise _FakeModeration()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "two-piece swimsuit"}, "x"
+        )
+    meta = excinfo.value.safe_meta
+    assert meta["error_category"] == "provider_content_policy"
+    assert meta["provider_code"] == "moderation_blocked"
+    assert meta["http_status"] == 400
+    assert "SECRET" not in json.dumps(meta)
+    assert "moderation_details" not in meta
+    assert "safety rules" in str(excinfo.value).lower()
+
+
+
+def test_http_400_without_safety_code_is_not_content_policy(monkeypatch, settings):
+    class _FakeBadRequest(Exception):
+        def __init__(self):
+            super().__init__("bad")
+            self.status_code = 400
+            self.code = None
+            self.request_id = "req_plain400_zzzz99"
+
+    def on_edit(**kwargs):
+        raise _FakeBadRequest()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    assert excinfo.value.safe_meta["error_category"] == "provider_bad_request"
+    assert str(excinfo.value) == "sketch image edit failed"
+
+
+
+def test_normalize_failure_meta_drops_unknown_fields():
+    kept = sketch_openai.normalize_failure_meta(
+        {
+            "error_category": "provider_bad_request",
+            "error_type": "BadRequestError",
+            "http_status": 400,
+            "provider_code": "invalid_image",
+            "request_id": "req_ok_normalize01",
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            "raw_body": "SECRET",
+            "prompt": "SECRET",
+        }
+    )
+    assert kept == {
+        "error_category": "provider_bad_request",
+        "error_type": "BadRequestError",
+        "http_status": 400,
+        "provider_code": "invalid_image",
+        "request_id": "req_ok_normalize01",
+        "stage": "images.edit",
+        "image_edit_attempted": True,
+        "image_bytes_returned": False,
+    }
+    dropped = sketch_openai.normalize_failure_meta(
+        {
+            "error_category": "not_a_real_category",
+            "error_type": "EvilClassName",
+            "http_status": 400,
+            "provider_code": "not_allowlisted_code",
+            "request_id": "bad id with spaces!",
+            "stage": "images.hack",
+            "raw_body": "SECRET",
+        }
+    )
+    assert dropped == {"http_status": 400}
+
 
 
 def test_build_sketch_chat_request_polish_uses_new_system_prompt(settings):
