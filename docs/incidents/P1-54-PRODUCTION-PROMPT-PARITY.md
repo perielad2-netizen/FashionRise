@@ -38,7 +38,7 @@ No speculative artistic retune was applied because of the photoreal harness resu
 
 ## Pre-existing production note (not introduced by Sunburst)
 
-Production / #57 still use a hard `[:3800]` slice on the assembled prompt. Extremely verbose vision text can theoretically truncate the trailing avoid-line. Migration/`main` packing reserves the avoid-line first (pose-fidelity era). **PR #41 packing is not ported into #57.**
+Production / #57 still use a hard `[:3800]` slice on the assembled prompt. Pathological verbose vision text can truncate the trailing avoid-line (confirmed offline on production/maint). Migration/`main` packing reserves the avoid-line first (pose-fidelity era). **PR #41 packing is not ported into #57.**
 
 ## Pose-fidelity PR #41
 
