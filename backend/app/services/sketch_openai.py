@@ -58,10 +58,11 @@ class SketchCompletionError(RuntimeError):
         self.safe_meta = dict(safe_meta or {})
 
 
-# Provider error ``code`` values safe to persist/log (short, non-sensitive).
+# Strict allowlists for persisted/logged diagnostics (never free-form provider text).
 _SAFE_PROVIDER_CODES = frozenset(
     {
         "content_policy_violation",
+        "moderation_blocked",
         "invalid_image",
         "invalid_image_format",
         "invalid_image_size",
@@ -76,6 +77,54 @@ _SAFE_PROVIDER_CODES = frozenset(
         "missing_required_parameter",
     }
 )
+
+_SAFE_ERROR_CATEGORIES = frozenset(
+    {
+        "provider_content_policy",
+        "provider_quota",
+        "provider_rate_limit",
+        "provider_auth",
+        "provider_unavailable",
+        "provider_model_unavailable",
+        "provider_bad_request",
+        "empty_edit_response",
+        "image_edit_failed",
+        "sketch_completion_failed",
+        "no_sketch_image",
+        "retired_image_model",
+        "unsupported_image_model",
+    }
+)
+
+_SAFE_STAGES = frozenset({"images.edit", "chat.completions", "config"})
+
+_SAFE_ERROR_TYPES = frozenset(
+    {
+        "BadRequestError",
+        "AuthenticationError",
+        "PermissionDeniedError",
+        "NotFoundError",
+        "RateLimitError",
+        "InternalServerError",
+        "APIConnectionError",
+        "APITimeoutError",
+        "APIStatusError",
+        "APIError",
+        "EmptyEditResponse",
+        "ImageModelNotEligible",
+        "NoSketchImage",
+        "RetiredImageModel",
+        "UnsupportedImageModel",
+        "RuntimeError",
+        "ValueError",
+        "TimeoutError",
+        "ProviderError",
+    }
+)
+
+_CONTENT_POLICY_CODES = frozenset({"content_policy_violation", "moderation_blocked"})
+_QUOTA_CODES = frozenset({"billing_hard_limit_reached", "insufficient_quota"})
+_MODEL_UNAVAILABLE_CODES = frozenset({"model_not_found"})
 
 
 def is_configured() -> bool:
@@ -578,8 +627,11 @@ def _extract_image_bytes(item: Any) -> bytes | None:
 
 
 def _sanitize_provider_error(exc: BaseException) -> str:
-    """Bounded log token: exception class only. Never the provider body (may hold image/secrets)."""
-    return type(exc).__name__[:80]
+    """Bounded log token: allowlisted exception class only. Never the provider body."""
+    name = type(exc).__name__[:80]
+    if name in _SAFE_ERROR_TYPES:
+        return name
+    return "ProviderError"
 
 
 def _safe_provider_code(raw: Any) -> str | None:
@@ -595,12 +647,39 @@ def _safe_request_id(raw: Any) -> str | None:
     if not isinstance(raw, str):
         return None
     rid = raw.strip()[:128]
-    if not rid or len(rid) < 8:
+    if not rid or len(rid) < 8 or len(rid) > 128:
         return None
-    # Correlation ids are typically alnum / hyphen / underscore.
+    # Correlation ids are typically alnum / hyphen / underscore (OpenAI req_* style).
     if not all(ch.isalnum() or ch in "-_" for ch in rid):
         return None
     return rid
+
+
+def _safe_error_type_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    name = raw.strip()[:80]
+    if name in _SAFE_ERROR_TYPES:
+        return name
+    return None
+
+
+def _safe_stage_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    stage = raw.strip()[:64]
+    if stage in _SAFE_STAGES:
+        return stage
+    return None
+
+
+def _safe_error_category_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    category = raw.strip()[:64]
+    if category in _SAFE_ERROR_CATEGORIES:
+        return category
+    return None
 
 
 def _safe_provider_error_fields(exc: BaseException) -> dict[str, Any]:
@@ -618,25 +697,73 @@ def _safe_provider_error_fields(exc: BaseException) -> dict[str, Any]:
     return fields
 
 
-def _classify_edit_failure(meta: dict[str, Any]) -> str:
-    """Map allowlisted fields to a stable error category for UI/ops (not a provider body)."""
-    code = meta.get("provider_code")
+def normalize_failure_meta(meta: Any) -> dict[str, Any]:
+    """Return only allowlisted diagnostic fields suitable for DB/API/logs."""
+    if not isinstance(meta, dict) or not meta:
+        return {}
+    out: dict[str, Any] = {}
+    category = _safe_error_category_token(meta.get("error_category"))
+    if category:
+        out["error_category"] = category
+    error_type = _safe_error_type_token(meta.get("error_type"))
+    if error_type:
+        out["error_type"] = error_type
     status = meta.get("http_status")
-    if code == "content_policy_violation":
+    if isinstance(status, int) and 100 <= status <= 599:
+        out["http_status"] = status
+    code = _safe_provider_code(meta.get("provider_code"))
+    if code:
+        out["provider_code"] = code
+    request_id = _safe_request_id(meta.get("request_id"))
+    if request_id:
+        out["request_id"] = request_id
+    stage = _safe_stage_token(meta.get("stage"))
+    if stage:
+        out["stage"] = stage
+    for bool_key in ("image_edit_attempted", "image_bytes_returned"):
+        if bool_key in meta and isinstance(meta[bool_key], bool):
+            out[bool_key] = meta[bool_key]
+    return out
+
+
+def failure_result_for_storage(meta: Any) -> dict[str, Any] | None:
+    """Worker persistence shape: ``{\"error\": {allowlisted…}}`` or None."""
+    cleaned = normalize_failure_meta(meta)
+    return {"error": cleaned} if cleaned else None
+
+
+def _classify_edit_failure(meta: dict[str, Any]) -> str:
+    """Map allowlisted fields to a stable error category for UI/ops (not a provider body).
+
+    Ordinary HTTP 400 without a confirmed safety code is never treated as content policy.
+    """
+    cleaned = normalize_failure_meta(meta)
+    if cleaned.get("error_category") in _SAFE_ERROR_CATEGORIES:
+        return cleaned["error_category"]  # type: ignore[return-value]
+    code = cleaned.get("provider_code")
+    status = cleaned.get("http_status")
+    error_type = cleaned.get("error_type")
+    if code in _CONTENT_POLICY_CODES:
         return "provider_content_policy"
-    if code in {"billing_hard_limit_reached", "insufficient_quota"}:
+    if code in _QUOTA_CODES:
         return "provider_quota"
-    if code == "rate_limit_exceeded" or status == 429:
+    if code in _MODEL_UNAVAILABLE_CODES:
+        return "provider_model_unavailable"
+    if code == "rate_limit_exceeded" or status == 429 or error_type == "RateLimitError":
         return "provider_rate_limit"
-    if status in {401, 403}:
+    if status in {401, 403} or error_type in {"AuthenticationError", "PermissionDeniedError"}:
         return "provider_auth"
-    if status in {500, 502, 503, 504}:
+    if status in {500, 502, 503, 504} or error_type == "InternalServerError":
         return "provider_unavailable"
-    if meta.get("error_type") == "EmptyEditResponse":
+    if error_type == "EmptyEditResponse":
         return "empty_edit_response"
+    if error_type in {"RetiredImageModel", "UnsupportedImageModel", "ImageModelNotEligible"}:
+        if error_type == "RetiredImageModel":
+            return "retired_image_model"
+        return "unsupported_image_model"
     if isinstance(status, int) and 400 <= status < 500:
         return "provider_bad_request"
-    if meta.get("image_edit_attempted"):
+    if cleaned.get("image_edit_attempted"):
         return "image_edit_failed"
     return "sketch_completion_failed"
 
@@ -654,8 +781,18 @@ def _user_message_for_edit_failure(category: str) -> str:
         return "Magic is temporarily unavailable (provider quota). Your original design is unchanged."
     if category == "provider_auth":
         return "Magic is temporarily unavailable. Your original design is unchanged."
-    if category == "provider_unavailable":
+    if category in {"provider_unavailable", "provider_model_unavailable"}:
         return "Magic is temporarily unavailable. Your original design is unchanged — try again shortly."
+    if category == "retired_image_model":
+        return (
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
+    if category == "unsupported_image_model":
+        return (
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
     # Keep the historical generic string for unclassified edit failures (compat + ops grep).
     return "sketch image edit failed"
 
@@ -758,13 +895,15 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     if sketch is None:
         raise SketchCompletionError(
             "no sketch image for edit",
-            safe_meta={
-                "stage": "images.edit",
-                "image_edit_attempted": False,
-                "image_bytes_returned": False,
-                "error_category": "no_sketch_image",
-                "error_type": "NoSketchImage",
-            },
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "images.edit",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "no_sketch_image",
+                    "error_type": "NoSketchImage",
+                }
+            ),
         )
 
     prompt = _build_image_prompt(structured, summary)
@@ -775,10 +914,7 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     )
     if not raw:
         category = _classify_edit_failure(fail_meta)
-        safe_meta = {
-            **fail_meta,
-            "error_category": category,
-        }
+        safe_meta = normalize_failure_meta({**fail_meta, "error_category": category})
         raise SketchCompletionError(
             _user_message_for_edit_failure(category),
             safe_meta=safe_meta,

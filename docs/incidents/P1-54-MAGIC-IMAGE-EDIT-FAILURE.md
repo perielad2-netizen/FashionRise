@@ -1,9 +1,25 @@
 # P1 #54 — Magic image-edit failure investigation
 
 **Issue:** [#54](https://github.com/perielad2-netizen/FashionRise/issues/54)  
-**Investigation branch:** `cursor/magic-edit-failure-54-77c6`  
-**Scope:** Read-only forensic triage + proposed observability hotfix (not deployed).  
+**Observability draft PR:** [#55](https://github.com/perielad2-netizen/FashionRise/pull/55) (`cursor/magic-edit-failure-54-77c6`)  
+**Model migration:** separate draft PR (not mixed into #55)  
 **Paid OpenAI / live Magic retries this run:** **0**
+
+## Leading root-cause explanation (PM-confirmed docs)
+
+Official OpenAI documentation states **`gpt-image-1` was shut down on October 23, 2026**:
+
+- https://developers.openai.com/api/docs/deprecations (October 23, 2026 shutdown table; replacement: `gpt-image-2.5-sunburst` or `gpt-image-2.5-flare`)
+- https://developers.openai.com/api/docs/models/gpt-image-1 (status: Shut down)
+- https://developers.openai.com/api/reference/python/resources/images/methods/edit
+
+**Production AI worker is still configured with `OPENAI_IMAGE_MODEL=gpt-image-1`.**
+
+Three operator Magic failures on **2026-10-24 22:33–22:37 UTC** (Oct 25 Asia/Jerusalem local) match: chat/completions **200** → images/edits **400** `BadRequestError`. Earlier same-day/prior successes on Oct 23 fit the shutdown timeline.
+
+**Model retirement is the leading, high-confidence operational explanation.** Historical per-request provider `error.code` values were **not recorded** on deployed `2cbc1ad0`, so exact per-request attribution remains unavailable. **Do not claim proven per-job codes. Do not run another paid probe against the retired model.**
+
+Swimwear / garment category has **not** been established as a content-policy refusal.
 
 ## Safety restrictions observed
 
@@ -11,6 +27,7 @@
 - No live OpenAI calls; no paid test jobs; operator failed sketches not retried.
 - PR #41 Magic pose-fidelity **not** deployed as part of this work.
 - Open docs PR [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) and Front/Back architecture PR [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) left untouched (not merged, not overwritten).
+- Issue [#51](https://github.com/perielad2-netizen/FashionRise/issues/51) remains closed / operator-accepted **5/5**.
 - Reports use redacted job id prefixes only; no images, base64, prompts, tokens, PII, or raw provider bodies.
 
 ## 1. Production versions verified (read-only)
@@ -23,14 +40,12 @@
 | AI worker | same SHA; PID **35740** since `2026-10-24 06:36:33 UTC` | systemd |
 | API | PID **35739** since `2026-10-24 06:36:33 UTC` | systemd |
 | Alembic | **005** | `alembic current` + `alembic_version` |
-| Models (names only) | `OPENAI_MODEL=gpt-6-luna`, `OPENAI_IMAGE_MODEL=gpt-image-1` | `.env` key names/values for model ids only |
+| Models (names only) | `OPENAI_MODEL=gpt-6-luna`, `OPENAI_IMAGE_MODEL=gpt-image-1` (**retired**) | `.env` model ids only |
 | Edit size (observed) | `1024x1536`, `input_fidelity=high` | worker journal |
 
-**Confirmed:** GitHub tip with merged PR #41 pose-fidelity source is **not** what production BE/worker runs.
+**Confirmed:** GitHub tip with merged PR #41 pose-fidelity source is **not** what production BE/worker runs. Deploying entire `main` BE/worker for this incident is **not** authorized.
 
 ## 2. Three failed jobs (operator account only)
-
-Window: operator screenshots ~01:34–01:36 Asia/Jerusalem on 2026-10-25 → **2026-10-24 22:33–22:37 UTC**.
 
 | Redacted job id | created_at (UTC) | journal failure (UTC) | type | status | error_message | result_data |
 |-----------------|------------------|------------------------|------|--------|---------------|-------------|
@@ -38,86 +53,55 @@ Window: operator screenshots ~01:34–01:36 Asia/Jerusalem on 2026-10-25 → **2
 | `22b60b16` | 22:34:16 | 22:34:24 | `sketch_polish` | `failed` | `sketch image edit failed` | JSON `null` |
 | `17bc3bb7` | 22:36:51 | 22:36:57 | `sketch_polish` | `failed` | `sketch image edit failed` | JSON `null` |
 
-Notes:
-
-- Schema has `updated_at` (near create time on claim) — **not** a reliable completion timestamp. Journal times above are the failure times.
-- No `error_category` column exists on deployed schema.
-- Original sketches remained saved in Studio (operator report + no look image written).
-
-### Per-attempt pipeline
-
-| Check | Job 1 | Job 2 | Job 3 |
-|-------|-------|-------|-------|
-| Text/vision (`chat/completions`) | HTTP **200** | HTTP **200** | HTTP **200** |
-| `images.edit` attempted | Yes (`gpt-image-1`, 1024×1536, `input_fidelity=high`) | Yes | Yes |
-| `images/edits` HTTP | **400** | **400** | **400** |
-| Logged exception class | `BadRequestError` | `BadRequestError` | `BadRequestError` |
-| Image bytes returned | No | No | No |
-| Look image saved | No | No | No |
-| Provider `code` / `request_id` persisted | **No** (deployed sanitizer logs class only) | No | No |
-
-Same error class for all three. October worker journal count of `image edit failed type=BadRequestError`: **3** (these only).
+All three: vision/chat **200** → `images.edit` attempted with retired `gpt-image-1` → HTTP **400** / `BadRequestError` → no image bytes → no look saved. Provider `code` / `request_id` **not** persisted on deployed sanitizer.
 
 ## 3. Failure category — verified vs unknown
 
 ### Verified
 
-1. Failures occur **after** successful vision/chat completion, on the single `images.edit` call (`max_retries=0`).
-2. Provider returns **HTTP 400 Bad Request**; SDK surfaces `BadRequestError`.
-3. Deployed code maps any missing edit bytes / edit exception to `SketchCompletionError("sketch image edit failed")`, so the UI string alone cannot distinguish causes.
-4. Not a global Magic outage: same operator had multiple **completed** `sketch_polish` jobs with `image_provenance=images.edit` on **2026-10-23** (models `gpt-6-luna`).
-5. Operator 45-day status counts (same account): **12 completed / 3 failed** — the three failures are exactly this incident cluster.
-6. Swimwear / orange outfit clothing category is **not** evidence of content-policy refusal by itself.
+1. Failures after successful vision/chat, on single `images.edit` (`max_retries=0`).
+2. HTTP 400 + `BadRequestError` for all three.
+3. Production still points at shut-down `gpt-image-1` (official retirement 2026-10-23).
+4. Not a global Magic outage before shutdown window (prior completed `images.edit` jobs).
+5. Swimwear is a legitimate FashionRise product requirement — not proven as policy refusal.
 
-### Not verified (missing evidence)
+### Not verified
 
-- Exact provider `error.code` / `param` / refusal reason (raw bodies intentionally not logged on `2cbc1ad0`).
-- Whether 400 was `content_policy_violation`, `invalid_image*`, unsupported parameter, or another bad-request class.
-- Auth / quota / billing as the cause: no 401/403/429 strings in the failure window; no usage API pull performed.
-- Any contribution from undeployed PR #41 (not running in prod).
-
-### Ruled out as primary class (for these three)
-
-- Rate limit (would typically be 429).
-- Missing sketch decode before edit (edit was attempted with the configured model).
-- Empty successful edit response (exception path, not empty-bytes path).
+- Exact historical provider `error.code` per job (unavailable).
+- Whether any individual 400 also carried an unrelated invalid-parameter code.
+- Edit-call billing for HTTP 400 responses.
 
 ## 4. Billing assessment
 
 | Stage | Reached? | Billable? |
 |-------|----------|-----------|
-| Chat Completions (vision) | Yes (HTTP 200, all three) | **Likely yes** — request completed successfully; exact usage cents **not** pulled |
-| `images.edit` | Attempted; HTTP 400 | **Unknown** — failed requests may or may not appear on the provider invoice |
-| Stored look image | No | N/A |
+| Chat Completions | Yes (200) | Likely yes — cents not pulled |
+| `images.edit` | Attempted; 400 | Unknown |
+| Stored look | No | N/A |
 
-No refunds, usage API mutations, or extra paid calls were initiated.
+## 5. PR #55 observability scope (this PR only)
 
-## 5. Product requirements (compliant handling)
+Hardening (not deployed):
 
-FashionRise must support legitimate apparel including bikinis, two-piece and one-piece swimwear, swim shorts, beachwear, sportswear. Investigation **must not** treat garment type as proof of policy rejection, and **must not** attempt to circumvent genuine provider safety systems.
+- Strict allowlists for `error_category`, `stage`, `error_type`, `provider_code`.
+- Recognized safety codes include `moderation_blocked` and `content_policy_violation`.
+- Ordinary HTTP 400 **without** a confirmed safety code → `provider_bad_request` (never content-policy).
+- Model-unavailable (`model_not_found`) distinguished from policy / quota / rate-limit / auth.
+- Validated `request_id`; never persist raw bodies, moderation_details, prompts, images, credentials.
+- API `AIJobRead` re-normalizes `result_data.error` through the same allowlists; owner-only job access preserved.
+- Mock tests cover moderation refusal, plain 400, unknown codes, quota, model_not_found, API leakage, sensitive redaction.
 
-Recommended product behavior when a true provider safety refusal is later proven via allowlisted `provider_code`:
+**PR #55 does not change the production image model.** Model migration is a separate draft PR.
 
-- Keep the original sketch intact (already true today).
-- Show a clear, non-blaming message that the edit could not proceed under provider safety rules.
-- Offer retry / redesign guidance without implying FashionRise bans swimwear.
+## 6. Proposed supported replacement (separate PR)
 
-For technical 400s (invalid image/params/etc.), show a distinct technical failure message once `provider_code` / category is known.
-
-## 6. Proposed observability hotfix (in this PR — **do not deploy yet**)
-
-Focused code change (mock-tested; 0 paid AI):
-
-- Extract allowlisted fields from provider exceptions: exception class, HTTP status, approved short `provider_code`, `request_id`, pipeline stage, edit attempted / bytes returned.
-- Log those fields; never log/persist raw bodies, prompts, images, or credentials.
-- Attach `safe_meta` on `SketchCompletionError`; worker stores only allowlisted keys under `result_data.error` on failure.
-- Map known codes (e.g. `content_policy_violation`, rate limit, quota) to clearer user-facing `error_message` strings; keep historical `sketch image edit failed` for unclassified edit failures.
-
-**Deploy caution:** GitHub `main` also contains undeployed PR #41 pose-fidelity edits in `sketch_openai.py`. Any production BE/worker rollout of this hotfix must be **cherry-picked onto `2cbc1ad0`** (or otherwise exclude #41) unless Technical PM separately authorizes pose-fidelity deploy.
+Preferred: **`gpt-image-2.5-sunburst`** (precision editing). Alternative for later eval: `gpt-image-2.5-flare`.  
+See the migration PR for capability table, parameter choices (`input_fidelity` omitted for Sunburst), cost estimate, and production isolation plan off `2cbc1ad0`.
 
 ## 7. Exact next Technical PM decision
 
-1. Accept this investigation report.
-2. Authorize (or reject) a **BE/worker-only** deploy of the observability hotfix **without** PR #41.
-3. After observability is live, decide whether one **new** controlled Magic attempt (not a silent retry of the failed blobs) is warranted to capture `provider_code`.
-4. Keep PRs [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) and [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) on their own tracks — do not merge them via this incident PR.
+1. Re-review amended PR #55 (observability only) — still **no merge/deploy** until authorized.
+2. Review separate Sunburst migration draft PR + offline maintenance isolation branch based on `2cbc1ad0`.
+3. Later authorize a bounded maintenance release (observability + model migration only; **exclude** undeployed PR #41) and optionally one budget-bounded production Magic validation on the supported model.
+
+**STOP** — no production changes from this documentation/code track alone.
