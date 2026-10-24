@@ -71,3 +71,14 @@ These files were inspected only. They were **not** edited, re-uploaded, or regen
 1. Inspect the **private** Sunburst test image (local agent artifact; not in GitHub).  
 2. Decide whether illustration language is acceptable **or** require production-prompt-path validation under a **new** paid authorization.  
 3. Keep drafts #55 / #56 / #57 unmerged until quality gate clears.
+
+## Production prompt parity (offline; after readiness)
+
+See `docs/incidents/P1-54-PRODUCTION-PROMPT-PARITY.md`.
+
+- Maintenance PR #57 `_build_image_prompt` is **identical** to production `2cbc1ad0` — professional illustration PRESERVE/UPGRADE/Avoid-photorealism language is **not** regressed by the Sunburst model swap.
+- Migration PR #56 (from `main`) adds pose_lock packing from undeployed PR #41; style anchors still present. **#41 is not in the production maintenance candidate.**
+- The consumed one-shot used a **non-production** short harness brief → photoreal result does **not** prove production Magic aesthetic failure or success.
+- Automated offline scenario suite: `backend/tests/test_production_prompt_parity.py` (mocked; 0 paid calls).
+- **Operator visual acceptance of the private one-shot image: still PENDING.** No claim of Magic recovery complete.
+
