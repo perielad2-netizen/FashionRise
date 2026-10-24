@@ -41,6 +41,8 @@ type Props = {
   customPreviewUrl: string | null
   onSelect: (choice: ModelChoice) => void
   onCustomFile: (file: File) => void
+  /** Overlay gallery on tablet/immersive; sidebar on desktop. */
+  variant?: 'sidebar' | 'gallery'
 }
 
 export function ModelLibraryPanel({
@@ -48,6 +50,7 @@ export function ModelLibraryPanel({
   customPreviewUrl,
   onSelect,
   onCustomFile,
+  variant = 'sidebar',
 }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -58,7 +61,11 @@ export function ModelLibraryPanel({
   }, [filter])
 
   return (
-    <aside className={styles.panel} aria-label="Model library">
+    <aside
+      className={`${styles.panel} ${variant === 'gallery' ? styles.gallery : ''}`}
+      aria-label="Model library"
+      data-variant={variant}
+    >
       <div className={styles.tabs}>
         <button type="button" className={styles.tabActive} aria-current="page">
           Models

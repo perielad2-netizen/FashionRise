@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Expand, Maximize2, Minimize2 } from 'lucide-react'
+import { Expand } from 'lucide-react'
 import { modelLabel } from '@/assets/modelLibrary'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
 import {
@@ -33,8 +33,22 @@ type Props = {
   onOpenLibrary?: () => void
 }
 
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** True when a blocking dialog (save/confirm/color/magic) owns Escape — not dock overlays. */
 function modalOpen(): boolean {
-  return document.querySelector('[aria-modal="true"]') !== null
+  return (
+    document.querySelector('[aria-modal="true"]:not([data-dock-overlay="true"])') !== null
+  )
+}
+
+function focusableWithin(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+    if (el.getAttribute('aria-hidden') === 'true') return false
+    const style = window.getComputedStyle(el)
+    return style.display !== 'none' && style.visibility !== 'hidden'
+  })
 }
 
 function fullscreenElement(): Element | null {
@@ -44,7 +58,6 @@ function fullscreenElement(): Element | null {
 
 export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   const [dock, setDock] = useState<Dock>(null)
-  const [focusMode, setFocusMode] = useState(false)
   const [immersive, setImmersive] = useState(false)
   const [nativeFullscreen, setNativeFullscreen] = useState(false)
   const [panTool, setPanTool] = useState(false)
@@ -54,8 +67,21 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   const [narrow, setNarrow] = useState(false)
   const [tablet, setTablet] = useState(false)
   const workspaceRef = useRef<HTMLElement | null>(null)
+  const modelsDialogRef = useRef<HTMLDivElement | null>(null)
+  const modelsTriggerRef = useRef<HTMLElement | null>(null)
   const immersiveTool: ImmersiveTool = panTool ? 'pan' : editor.tool
   const preImmersiveTool = useRef(editor.tool)
+
+  const closeDock = useCallback(() => setDock(null), [])
+
+  const toggleModels = useCallback(() => {
+    setDock((current) => {
+      if (current === 'models') return null
+      const active = document.activeElement
+      if (active instanceof HTMLElement) modelsTriggerRef.current = active
+      return 'models'
+    })
+  }, [])
 
   useEffect(() => {
     const n = window.matchMedia('(max-width: 820px)')
@@ -74,6 +100,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   }, [])
 
   const { setTool, undo, redo } = editor
+  /** Tablet / phone / immersive: panels open as overlays (do not shrink the canvas). */
+  const overlayPanels = tablet || narrow || immersive
 
   const exitNativeFullscreen = useCallback(async () => {
     const doc = document as Document & {
@@ -161,28 +189,77 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   }, [immersive, panTool, redo, setTool, undo])
 
   useEffect(() => {
-    if (!dock && !focusMode && !immersive) return
+    if (!dock && !immersive) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      // 1) Topmost modal / color picker
+      // 1) Topmost modal / color picker / model-switch confirm
       if (modalOpen()) return
       // 2) Open dock / sheet
       if (dock) {
         setDock(null)
         return
       }
-      // 3) Exit immersive / native fullscreen
+      // 3) Exit immersive / native fullscreen → normal Studio
       if (immersive) {
         event.preventDefault()
         exitImmersive()
-        return
       }
-      // 4) Exit Focus
-      if (focusMode) setFocusMode(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dock, exitImmersive, focusMode, immersive])
+  }, [dock, exitImmersive, immersive])
+
+  /** Models gallery a11y: initial focus, Tab trap, restore Models trigger on close. */
+  useEffect(() => {
+    const open = overlayPanels && dock === 'models'
+    if (!open) return
+    const node = modelsDialogRef.current
+    if (!node) return
+
+    // Model-switch / save / color modals keep ownership while they are open.
+    if (!modalOpen()) {
+      const done = Array.from(node.querySelectorAll('button')).find(
+        (btn) => btn.textContent?.trim() === 'Done',
+      )
+      const selected = node.querySelector<HTMLElement>('button[aria-pressed="true"]')
+      ;(done ?? selected ?? node).focus()
+    }
+
+    return () => {
+      // Blocking dialogs own focus restoration while open.
+      if (modalOpen()) return
+      const previous = modelsTriggerRef.current
+      modelsTriggerRef.current = null
+      if (previous && document.contains(previous)) previous.focus()
+    }
+  }, [dock, overlayPanels])
+
+  useEffect(() => {
+    if (!(overlayPanels && dock === 'models')) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      // Confirm / save / color modals take precedence over the Models trap.
+      if (modalOpen()) return
+      const root = modelsDialogRef.current
+      if (!root) return
+      const nodes = focusableWithin(root)
+      if (nodes.length === 0) return
+      const first = nodes[0]!
+      const last = nodes[nodes.length - 1]!
+      const active = document.activeElement as HTMLElement | null
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+      } else if (active === last || !root.contains(active)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [dock, overlayPanels])
 
   const toolLabel =
     editor.tool === 'erase'
@@ -194,8 +271,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           : 'Pencil'
   const brushOverlay = dock === 'brush' && (tablet || immersive)
   const panelScrim =
-    (dock === 'materials' || dock === 'settings' || dock === 'models') &&
-    (tablet || narrow || focusMode || immersive)
+    (dock === 'materials' || dock === 'settings' || dock === 'models') && overlayPanels
   const betaNotice = editor.magicNotice
     ? { message: editor.magicNotice, dismiss: () => editor.setMagicNotice(null) }
     : editor.comingSoon
@@ -226,10 +302,20 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
     )
   }
 
+  const modelsPanel = (
+    <ModelLibraryPanel
+      selected={editor.model}
+      customPreviewUrl={editor.customUrl}
+      onSelect={editor.setModel}
+      onCustomFile={editor.onCustomFile}
+      variant={overlayPanels ? 'gallery' : 'sidebar'}
+    />
+  )
+
   return (
     <section
       ref={workspaceRef}
-      className={`${styles.workspace} ${focusMode ? styles.focusMode : ''} ${immersive ? styles.immersiveMode : ''}`}
+      className={`${styles.workspace} ${immersive ? styles.immersiveMode : ''}`}
       aria-label="Creator workspace"
       data-immersive={immersive ? 'true' : 'false'}
       data-native-fullscreen={nativeFullscreen ? 'true' : 'false'}
@@ -284,7 +370,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         <button
           type="button"
           className={dock === 'models' ? styles.dockActive : styles.dockBtn}
-          onClick={() => setDock(dock === 'models' ? null : 'models')}
+          onClick={toggleModels}
         >
           Models
         </button>
@@ -311,17 +397,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </button>
         <button
           type="button"
-          className={focusMode ? styles.dockActive : styles.dockBtn}
-          aria-pressed={focusMode}
-          onClick={() => {
-            setFocusMode((v) => !v)
-            setDock(null)
-          }}
-        >
-          {focusMode ? 'Exit focus' : 'Focus'}
-        </button>
-        <button
-          type="button"
           className={styles.dockBtn}
           onClick={() => {
             void enterImmersive()
@@ -336,36 +411,35 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           type="button"
           className={styles.panelScrim}
           aria-label="Close panel"
-          onClick={() => setDock(null)}
+          onClick={closeDock}
         />
       ) : null}
 
       <div className={styles.body}>
-        <div className={`${styles.modelsSlot} ${dock === 'models' ? styles.slotOpen : ''}`}>
-          {(narrow || focusMode || immersive) && dock === 'models' ? (
-            <>
+        <div
+          className={`${styles.modelsSlot} ${dock === 'models' ? styles.slotOpen : ''}`}
+          data-testid="models-slot"
+        >
+          {overlayPanels && dock === 'models' ? (
+            <div
+              ref={modelsDialogRef}
+              className={styles.modelsSheet}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Models gallery"
+              data-dock-overlay="true"
+              tabIndex={-1}
+            >
               <div className={styles.sheetHead}>
                 <strong>Models</strong>
-                <button type="button" className={styles.sheetClose} onClick={() => setDock(null)}>
+                <button type="button" className={styles.sheetClose} onClick={closeDock}>
                   Done
                 </button>
               </div>
-              <div className={styles.sheetBody}>
-                <ModelLibraryPanel
-                  selected={editor.model}
-                  customPreviewUrl={editor.customUrl}
-                  onSelect={editor.setModel}
-                  onCustomFile={editor.onCustomFile}
-                />
-              </div>
-            </>
+              <div className={styles.sheetBody}>{modelsPanel}</div>
+            </div>
           ) : (
-            <ModelLibraryPanel
-              selected={editor.model}
-              customPreviewUrl={editor.customUrl}
-              onSelect={editor.setModel}
-              onCustomFile={editor.onCustomFile}
-            />
+            modelsPanel
           )}
         </div>
 
@@ -406,24 +480,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               <div className={styles.canvasActions}>
                 <button
                   type="button"
-                  className={styles.focusToggle}
-                  aria-pressed={focusMode}
-                  aria-label={focusMode ? 'Exit focused sketch mode' : 'Enter focused sketch mode'}
-                  title={
-                    focusMode
-                      ? 'Exit focus mode (Esc) — fewer panels, standard paper fit'
-                      : 'Focus — fewer panels, standard paper fit'
-                  }
-                  onClick={() => {
-                    setFocusMode((v) => !v)
-                    setDock(null)
-                  }}
-                >
-                  {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                  <span>{focusMode ? 'Exit focus' : 'Focus'}</span>
-                </button>
-                <button
-                  type="button"
                   className={styles.immersiveToggle}
                   aria-label="Enter full screen drawing"
                   title="Full screen drawing — nearly the whole device, with zoom and pan"
@@ -431,31 +487,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 >
                   <Expand size={16} />
                   <span>Full screen</span>
-                </button>
-              </div>
-            ) : null}
-            {focusMode && !tablet && !immersive ? (
-              <div className={styles.focusQuick} aria-label="Focus mode panels">
-                <button
-                  type="button"
-                  aria-pressed={dock === 'models'}
-                  onClick={() => setDock(dock === 'models' ? null : 'models')}
-                >
-                  Models
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={dock === 'materials'}
-                  onClick={() => setDock(dock === 'materials' ? null : 'materials')}
-                >
-                  Materials
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={dock === 'settings'}
-                  onClick={() => setDock(dock === 'settings' ? null : 'settings')}
-                >
-                  Settings
                 </button>
               </div>
             ) : null}
@@ -506,7 +537,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 }
                 onOpenMaterials={() => setDock(dock === 'materials' ? null : 'materials')}
                 onOpenBrush={() => setDock(dock === 'brush' ? null : 'brush')}
-                onOpenModels={() => setDock(dock === 'models' ? null : 'models')}
+                onOpenModels={toggleModels}
                 onSave={editor.beginSaveDesign}
                 onExport={() => void editor.exportPng()}
                 onExit={exitImmersive}
@@ -515,7 +546,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
             ) : null}
           </div>
           <div className={`${styles.materialsSlot} ${dock === 'materials' ? styles.slotOpen : ''}`}>
-            {(tablet || narrow || focusMode || immersive) && dock === 'materials' ? (
+            {overlayPanels && dock === 'materials' ? (
               <>
                 <div className={styles.sheetHead}>
                   <strong>Materials</strong>
@@ -556,7 +587,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </div>
 
         <div className={`${styles.settingsSlot} ${dock === 'settings' ? styles.slotOpen : ''}`}>
-          {(tablet || narrow || focusMode || immersive) && dock === 'settings' ? (
+          {overlayPanels && dock === 'settings' ? (
             <>
               <div className={styles.sheetHead}>
                 <strong>Settings</strong>
@@ -574,7 +605,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                   onBrushSize={editor.setBrushSizePx}
                   onOpacity={editor.setBrushOpacity}
                   onToggleDim={() => editor.setDimmed((v) => !v)}
-                  onMagic={editor.onMagic}
                 />
               </div>
             </>
@@ -588,7 +618,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
               onToggleDim={() => editor.setDimmed((v) => !v)}
-              onMagic={editor.onMagic}
             />
           )}
         </div>

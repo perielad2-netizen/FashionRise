@@ -305,17 +305,22 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     [1180, 600],
     [1440, 900],
   ] as const) {
-    it(`Generate with AI stays unavailable and shows the beta notice at ${width}×${height}`, async () => {
+    it(`Settings has no Generate with AI footer; header Magic Soon still works at ${width}×${height}`, async () => {
       mockViewport(width, height)
       await openStudio()
 
-      const generate = within(settingsInspector()).getByRole('button', {
-        name: /Generate with AI/i,
-        hidden: true,
-      })
-      expect(generate).toHaveTextContent(/Soon/i)
-      expect(generate).toHaveAttribute('title', expect.stringMatching(/not available/i))
-      fireEvent.click(generate)
+      // WEB-V4I: obsolete Settings "Generate with AI — Soon" footer removed.
+      expect(
+        within(settingsInspector()).queryByRole('button', {
+          name: /Generate with AI/i,
+          hidden: true,
+        }),
+      ).toBeNull()
+
+      // Real Magic entry remains in the Studio header (Soon when magic UI is disabled).
+      const magic = screen.getByRole('button', { name: /^Magic/i })
+      expect(magic).toHaveTextContent(/Soon/i)
+      fireEvent.click(magic)
       const notice = noticeFor(/later milestone/i)
       expect(notice).toBeVisible()
       expect(settingsInspector().contains(notice)).toBe(false)
