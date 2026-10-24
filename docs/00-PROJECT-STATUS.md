@@ -115,7 +115,7 @@
 | **Magic pose fidelity (Issue #39)** | **MERGED** PR #41 @ `4819b951` — **not deployed**; visual pose **NOT accepted**; no paid validation |
 | **WEB-V4G brushes + gradients** | **MERGED** PR #40 @ `350a3b7e` · **FE deployed** · operator **5/5 PASS** |
 | **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
-| **WEB-V4I tablet UX polish (Issue #47)** | **Draft PR #48** — croquis fit + Models gallery + Focus retired + Settings Soon footer removed; **STOP for Technical PM final review** |
+| **WEB-V4I tablet UX polish (Issue #47)** | **Draft PR #48** — croquis fit + Models gallery + Focus retired + Settings Soon footer removed + Models a11y focus trap; visual A–D approved @ `aef499b6`; **STOP for Technical PM final merge review** |
 | **Issue #42 rear croquis / Front-Back** | **OPEN** — backlog; do not combine with WEB-V4I |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
