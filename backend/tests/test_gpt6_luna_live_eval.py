@@ -412,7 +412,12 @@ def test_unreviewed_integration_changes_block_live(ev, monkeypatch):
     assert opened == []
 
 
-def test_cli_default_is_dry_run(ev, capsys):
+def test_cli_default_is_dry_run(ev, capsys, monkeypatch):
+    monkeypatch.setattr(
+        ev,
+        "verify_repo_state",
+        lambda: {"branch": "test-branch", "head": "0" * 40, "baseline_ancestor": True},
+    )
     code = ev.main([])
     assert code == 0
     out = capsys.readouterr().out
