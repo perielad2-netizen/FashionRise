@@ -490,6 +490,64 @@ def test_worker_marks_failed_when_openai_raises(monkeypatch):
     assert job.result_data is None
 
 
+def test_worker_persists_allowlisted_failure_meta_only(monkeypatch):
+    job = SimpleNamespace(
+        id=uuid4(),
+        job_type="sketch_polish",
+        input_data={},
+        result_data=None,
+        error_message=None,
+        status="queued",
+    )
+
+    def _boom(*_a, **_k):
+        raise sketch_openai.SketchCompletionError(
+            "sketch image edit failed",
+            safe_meta={
+                "error_category": "provider_bad_request",
+                "error_type": "BadRequestError",
+                "http_status": 400,
+                "provider_code": "invalid_image",
+                "request_id": "req_worker_meta_001",
+                "stage": "images.edit",
+                "image_edit_attempted": True,
+                "image_bytes_returned": False,
+                "raw_body": "SECRET_MUST_NOT_PERSIST",
+                "prompt": "SECRET_PROMPT",
+            },
+        )
+
+    monkeypatch.setattr(sketch_openai, "is_configured", lambda: True)
+    monkeypatch.setattr(sketch_openai, "complete_sketch_job", _boom)
+
+    class _Db:
+        def scalar(self, _stmt):
+            return job if job.status == "queued" else None
+
+        def commit(self):
+            pass
+
+    processed = ai_worker.run_worker_tick(_Db(), limit=1)
+    assert processed == 1
+    assert job.status == "failed"
+    assert job.error_message == "sketch image edit failed"
+    assert job.result_data == {
+        "error": {
+            "error_category": "provider_bad_request",
+            "error_type": "BadRequestError",
+            "http_status": 400,
+            "provider_code": "invalid_image",
+            "request_id": "req_worker_meta_001",
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+        }
+    }
+    dumped = json.dumps(job.result_data)
+    assert "SECRET" not in dumped
+    assert "prompt" not in dumped
+
+
 def test_api_key_is_not_logged(monkeypatch, settings, caplog):
     client = _CapturingClient(_completion('{"summary":"ok","cleanup_bullets":["a"]}'))
     monkeypatch.setattr(sketch_openai, "OpenAI", lambda **kw: client)

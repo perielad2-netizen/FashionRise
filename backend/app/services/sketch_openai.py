@@ -46,7 +46,36 @@ class SketchConfigError(ValueError):
 
 
 class SketchCompletionError(RuntimeError):
-    """Sanitized completion failure. Worker marks the job failed. No payloads."""
+    """Sanitized completion failure. Worker marks the job failed. No payloads.
+
+    Optional ``safe_meta`` carries allowlisted diagnostic fields only
+    (exception class, HTTP status, short provider code, request id, stage).
+    Never attach prompts, images, raw provider bodies, or credentials.
+    """
+
+    def __init__(self, message: str, *, safe_meta: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.safe_meta = dict(safe_meta or {})
+
+
+# Provider error ``code`` values safe to persist/log (short, non-sensitive).
+_SAFE_PROVIDER_CODES = frozenset(
+    {
+        "content_policy_violation",
+        "invalid_image",
+        "invalid_image_format",
+        "invalid_image_size",
+        "image_too_large",
+        "image_parse_error",
+        "billing_hard_limit_reached",
+        "insufficient_quota",
+        "rate_limit_exceeded",
+        "model_not_found",
+        "unsupported_value",
+        "invalid_value",
+        "missing_required_parameter",
+    }
+)
 
 
 def is_configured() -> bool:
@@ -553,6 +582,84 @@ def _sanitize_provider_error(exc: BaseException) -> str:
     return type(exc).__name__[:80]
 
 
+def _safe_provider_code(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    code = raw.strip()[:64]
+    if not code or code not in _SAFE_PROVIDER_CODES:
+        return None
+    return code
+
+
+def _safe_request_id(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    rid = raw.strip()[:128]
+    if not rid or len(rid) < 8:
+        return None
+    # Correlation ids are typically alnum / hyphen / underscore.
+    if not all(ch.isalnum() or ch in "-_" for ch in rid):
+        return None
+    return rid
+
+
+def _safe_provider_error_fields(exc: BaseException) -> dict[str, Any]:
+    """Allowlisted provider diagnostics. Never includes message/body/prompt/image bytes."""
+    fields: dict[str, Any] = {"error_type": _sanitize_provider_error(exc)}
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int) and 100 <= status <= 599:
+        fields["http_status"] = status
+    code = _safe_provider_code(getattr(exc, "code", None))
+    if code:
+        fields["provider_code"] = code
+    request_id = _safe_request_id(getattr(exc, "request_id", None))
+    if request_id:
+        fields["request_id"] = request_id
+    return fields
+
+
+def _classify_edit_failure(meta: dict[str, Any]) -> str:
+    """Map allowlisted fields to a stable error category for UI/ops (not a provider body)."""
+    code = meta.get("provider_code")
+    status = meta.get("http_status")
+    if code == "content_policy_violation":
+        return "provider_content_policy"
+    if code in {"billing_hard_limit_reached", "insufficient_quota"}:
+        return "provider_quota"
+    if code == "rate_limit_exceeded" or status == 429:
+        return "provider_rate_limit"
+    if status in {401, 403}:
+        return "provider_auth"
+    if status in {500, 502, 503, 504}:
+        return "provider_unavailable"
+    if meta.get("error_type") == "EmptyEditResponse":
+        return "empty_edit_response"
+    if isinstance(status, int) and 400 <= status < 500:
+        return "provider_bad_request"
+    if meta.get("image_edit_attempted"):
+        return "image_edit_failed"
+    return "sketch_completion_failed"
+
+
+def _user_message_for_edit_failure(category: str) -> str:
+    """Short, safe user-facing copy. Original sketch is never modified by these failures."""
+    if category == "provider_content_policy":
+        return (
+            "Magic could not edit this sketch under the image provider's safety rules. "
+            "Your original design is unchanged."
+        )
+    if category == "provider_rate_limit":
+        return "Magic is temporarily busy. Your original design is unchanged — try again shortly."
+    if category == "provider_quota":
+        return "Magic is temporarily unavailable (provider quota). Your original design is unchanged."
+    if category == "provider_auth":
+        return "Magic is temporarily unavailable. Your original design is unchanged."
+    if category == "provider_unavailable":
+        return "Magic is temporarily unavailable. Your original design is unchanged — try again shortly."
+    # Keep the historical generic string for unclassified edit failures (compat + ops grep).
+    return "sketch image edit failed"
+
+
 def _supports_input_fidelity(model: str) -> bool:
     m = (model or "").strip()
     return m == "gpt-image-1" or m.startswith("gpt-image-1.") or m in {"gpt-image-1.5", "gpt-image-2"}
@@ -566,13 +673,21 @@ def _try_edit_look_from_sketch(
     size: str,
     *,
     sketch: tuple[bytes, str],
-) -> tuple[bytes | None, str]:
-    """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0)."""
+) -> tuple[bytes | None, str, dict[str, Any]]:
+    """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0).
+
+    Returns ``(image_bytes|None, model_used, failure_meta)``. ``failure_meta`` is empty on success.
+    """
     sketch_bytes, mime = sketch
     model = (model or "").strip()
     if not model.startswith("gpt-image"):
         logger.warning("OpenAI job %s: image model not eligible for edit", job.id)
-        return None, ""
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": False,
+            "image_bytes_returned": False,
+            "error_type": "ImageModelNotEligible",
+        }
 
     ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
     size_value = size if size in {"1024x1024", "1024x1536", "1536x1024", "auto"} else "1024x1536"
@@ -600,16 +715,30 @@ def _try_edit_look_from_sketch(
         data = getattr(result, "data", None) or []
         raw = _extract_image_bytes(data[0]) if data else None
         if raw:
-            return raw, model
+            return raw, model, {}
         logger.warning("OpenAI job %s: edit returned no image bytes", job.id)
-        return None, ""
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            "error_type": "EmptyEditResponse",
+        }
     except Exception as e:
+        fields = _safe_provider_error_fields(e)
         logger.warning(
-            "OpenAI job %s: image edit failed type=%s",
+            "OpenAI job %s: image edit failed type=%s status=%s code=%s request_id=%s",
             job.id,
-            _sanitize_provider_error(e),
+            fields.get("error_type"),
+            fields.get("http_status"),
+            fields.get("provider_code"),
+            fields.get("request_id"),
         )
-        return None, ""
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            **fields,
+        }
 
 
 def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, summary: str) -> str | None:
@@ -627,16 +756,33 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
 
     sketch = _raw_sketch_bytes(job)
     if sketch is None:
-        raise SketchCompletionError("no sketch image for edit")
+        raise SketchCompletionError(
+            "no sketch image for edit",
+            safe_meta={
+                "stage": "images.edit",
+                "image_edit_attempted": False,
+                "image_bytes_returned": False,
+                "error_category": "no_sketch_image",
+                "error_type": "NoSketchImage",
+            },
+        )
 
     prompt = _build_image_prompt(structured, summary)
     size = (getattr(settings, "openai_image_size", None) or "1024x1536").strip()
 
-    raw, used_model = _try_edit_look_from_sketch(
+    raw, used_model, fail_meta = _try_edit_look_from_sketch(
         client, job, prompt, model, size, sketch=sketch
     )
     if not raw:
-        raise SketchCompletionError("sketch image edit failed")
+        category = _classify_edit_failure(fail_meta)
+        safe_meta = {
+            **fail_meta,
+            "error_category": category,
+        }
+        raise SketchCompletionError(
+            _user_message_for_edit_failure(category),
+            safe_meta=safe_meta,
+        )
 
     key = f"ai/{job.id.hex if hasattr(job.id, 'hex') else str(job.id).replace('-', '')}_{uuid.uuid4().hex[:10]}.png"
     storage = LocalStorageBackend()

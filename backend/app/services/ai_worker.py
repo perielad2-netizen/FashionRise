@@ -20,6 +20,39 @@ def _stub_result(job: AIJob) -> dict[str, Any]:
     }
 
 
+_SAFE_FAILURE_KEYS = frozenset(
+    {
+        "error_category",
+        "error_type",
+        "http_status",
+        "provider_code",
+        "request_id",
+        "stage",
+        "image_edit_attempted",
+        "image_bytes_returned",
+    }
+)
+
+
+def _safe_failure_result(meta: Any) -> dict[str, Any] | None:
+    """Persist allowlisted failure diagnostics only. Never prompts, images, or raw bodies."""
+    if not isinstance(meta, dict) or not meta:
+        return None
+    out: dict[str, Any] = {}
+    for key in _SAFE_FAILURE_KEYS:
+        if key not in meta:
+            continue
+        value = meta[key]
+        if key in {"image_edit_attempted", "image_bytes_returned"} and isinstance(value, bool):
+            out[key] = value
+        elif key == "http_status" and isinstance(value, int) and 100 <= value <= 599:
+            out[key] = value
+        elif key in {"error_category", "error_type", "provider_code", "request_id", "stage"}:
+            if isinstance(value, str) and value.strip():
+                out[key] = value.strip()[:128]
+    return {"error": out} if out else None
+
+
 def run_worker_tick(db: Session, *, limit: int = 12) -> int:
     """Claim up to *limit* queued jobs (SKIP LOCKED), complete with stub *result_data* or mark failed."""
     processed = 0
@@ -44,7 +77,7 @@ def run_worker_tick(db: Session, *, limit: int = 12) -> int:
             logger.exception("AI job %s failed in worker", job.id)
             job.status = "failed"
             job.error_message = (str(e) or "worker error")[:2000]
-            job.result_data = None
+            job.result_data = _safe_failure_result(getattr(e, "safe_meta", None))
         db.commit()
         processed += 1
     return processed
