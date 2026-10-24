@@ -74,7 +74,7 @@ This one-shot used a **synthetic stick-figure croquis** + a **short harness brie
 | PR | Role | Head |
 |----|------|------|
 | [#55](https://github.com/perielad2-netizen/FashionRise/pull/55) | Observability (draft) | `9b86aca88faf4707f537524b064ad07bfae3182c` |
-| [#56](https://github.com/perielad2-netizen/FashionRise/pull/56) | Sunburst migration (draft) | `f36578e1065d6a62f44bcbc5ca97c6956f36b985` *(docs update may advance tip)* |
+| [#56](https://github.com/perielad2-netizen/FashionRise/pull/56) | Sunburst migration (draft) | `d14f401662142461a25fa75eef5f2402a8c3e7b8` |
 | [#57](https://github.com/perielad2-netizen/FashionRise/pull/57) | Offline maint off `2cbc1ad0` (draft, not for deploy) | `40f4d2fda201544a8bc969f99e99a107122812d5` |
 
 ## Exact next release action (PM)
