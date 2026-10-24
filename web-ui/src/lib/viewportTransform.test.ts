@@ -10,6 +10,7 @@ import {
   fitWidth,
   fitWidthScale,
   hundredPercent,
+  pinchPan,
   pinchScaleFactor,
   safeViewport,
   scaleLimits,
@@ -96,6 +97,20 @@ describe('viewportTransform', () => {
     const designAfter = screenToDesign(mid.x, mid.y, after)
     expect(designAfter.x).toBeCloseTo(designBefore.x, 5)
     expect(designAfter.y).toBeCloseTo(designBefore.y, 5)
+  })
+
+  it('pinchPan follows previous midpoint design point to the new midpoint', () => {
+    // Wide viewport + modest scale change so clampPan does not absorb the pan delta.
+    const box = { width: 1400, height: 1100 }
+    const before = fitPage(box)
+    const prevMid = { x: 700, y: 550 }
+    const nextMid = { x: 760, y: 590 }
+    const design = screenToDesign(prevMid.x, prevMid.y, before)
+    const after = pinchPan(before, box, before.scale * 1.25, prevMid.x, prevMid.y, nextMid.x, nextMid.y)
+    const screen = designToScreen(design.x, design.y, after)
+    expect(screen.x).toBeCloseTo(nextMid.x, 4)
+    expect(screen.y).toBeCloseTo(nextMid.y, 4)
+    expect(after.scale).toBeGreaterThan(before.scale)
   })
 
   it('clamps pan so the page cannot be lost off-screen', () => {

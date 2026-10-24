@@ -24,6 +24,7 @@ import {
   fitPage,
   midpoint,
   panBy,
+  pinchPan,
   safeViewport,
   screenToDesign,
   type ViewportState,
@@ -123,8 +124,16 @@ export function DrawingCanvas({
   const panLast = useRef<{ x: number; y: number } | null>(null)
   const gestureMode = useRef(false)
   const gestureCooldown = useRef(false)
+  const gestureCooldownTimer = useRef<number | null>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pinchPrev = useRef<{ dist: number; midX: number; midY: number } | null>(null)
+  /** Touch fill/eyedropper: commit on confirmed single-pointer up (not on first down). */
+  const pendingTap = useRef<{
+    pointerId: number
+    x: number
+    y: number
+    tool: 'fill' | 'eyedropper'
+  } | null>(null)
   const viewportRef = useRef<ViewportState>(viewport ?? fitPage({ width: DESIGN_WIDTH, height: DESIGN_HEIGHT }))
   const onViewportChangeRef = useRef(onViewportChange)
 
@@ -236,13 +245,44 @@ export function DrawingCanvas({
     [],
   )
 
+  const releaseCapture = useCallback((pointerId?: number | null) => {
+    const stage = stageRef.current
+    if (!stage || pointerId === undefined || pointerId === null) return
+    try {
+      stage.content.releasePointerCapture(pointerId)
+    } catch {
+      /* already released */
+    }
+  }, [])
+
   const cancelDraft = useCallback(() => {
+    const captured = activePointerId.current
     drawing.current = false
     activePointerId.current = null
     draftRef.current = null
     setDraft(null)
     panning.current = false
     panLast.current = null
+    pendingTap.current = null
+    releaseCapture(captured)
+  }, [releaseCapture])
+
+  const armGestureCooldown = useCallback(() => {
+    gestureCooldown.current = true
+    if (gestureCooldownTimer.current !== null) {
+      window.clearTimeout(gestureCooldownTimer.current)
+      gestureCooldownTimer.current = null
+    }
+    // Never clear cooldown while an old gesture pointer is still down.
+    const tick = () => {
+      if (pointers.current.size > 0) {
+        gestureCooldownTimer.current = window.setTimeout(tick, 80)
+        return
+      }
+      gestureCooldown.current = false
+      gestureCooldownTimer.current = null
+    }
+    gestureCooldownTimer.current = window.setTimeout(tick, 80)
   }, [])
 
   const finish = useCallback(
@@ -256,21 +296,15 @@ export function DrawingCanvas({
         return
       }
       drawing.current = false
+      const captured = activePointerId.current
       activePointerId.current = null
-      const stage = stageRef.current
-      if (stage && pointerId !== undefined) {
-        try {
-          stage.content.releasePointerCapture(pointerId)
-        } catch {
-          /* already released */
-        }
-      }
+      releaseCapture(pointerId ?? captured)
       const prev = draftRef.current
       draftRef.current = null
       setDraft(null)
       if (prev && prev.points.length >= 3) onStrokeComplete(prev)
     },
-    [onStrokeComplete],
+    [onStrokeComplete, releaseCapture],
   )
 
   const pointFrom = useCallback(
@@ -317,8 +351,70 @@ export function DrawingCanvas({
   }, [size.h, size.w])
 
   useEffect(() => {
+    const endTrackedPointer = (pointerId: number) => {
+      pointers.current.delete(pointerId)
+      if (pendingTap.current?.pointerId === pointerId) {
+        pendingTap.current = null
+      }
+      if (gestureMode.current && pointers.current.size < 2) {
+        gestureMode.current = false
+        pinchPrev.current = null
+        armGestureCooldown()
+      }
+      if (pointers.current.size === 0 && gestureCooldown.current) {
+        armGestureCooldown()
+      }
+    }
+
     const onWindowPointer = (evt: PointerEvent) => {
-      if (gestureMode.current) return
+      // Immersive multitouch: always clear / update tracked pointers even when
+      // releases happen outside the Konva Stage (otherwise gesture mode sticks).
+      if (immersive) {
+        const ending =
+          evt.type === 'pointerup' ||
+          evt.type === 'pointercancel' ||
+          evt.type === 'lostpointercapture'
+        if (ending && pointers.current.has(evt.pointerId)) {
+          endTrackedPointer(evt.pointerId)
+          if (gestureMode.current || pointers.current.size > 0) {
+            // Still in / finishing a gesture — do not resume stroke handling.
+            return
+          }
+        } else if (evt.type === 'pointermove' && pointers.current.has(evt.pointerId)) {
+          const host = hostRef.current
+          if (host) {
+            const rect = host.getBoundingClientRect()
+            pointers.current.set(evt.pointerId, {
+              x: evt.clientX - rect.left,
+              y: evt.clientY - rect.top,
+            })
+          }
+          if (gestureMode.current && pointers.current.size >= 2) {
+            const pts = [...pointers.current.values()]
+            const mid = midpoint(pts[0]!, pts[1]!)
+            const dist = distance(pts[0]!, pts[1]!)
+            const prev = pinchPrev.current
+            if (prev && prev.dist > 0) {
+              const factor = dist / prev.dist
+              updateViewport(
+                pinchPan(
+                  viewportRef.current,
+                  { width: size.w, height: size.h },
+                  viewportRef.current.scale * factor,
+                  prev.midX,
+                  prev.midY,
+                  mid.x,
+                  mid.y,
+                ),
+              )
+            }
+            pinchPrev.current = { dist, midX: mid.x, midY: mid.y }
+            return
+          }
+        }
+        if (gestureMode.current) return
+      }
+
       if (panning.current && (evt.type === 'pointermove' || evt.type === 'pointerup' || evt.type === 'pointercancel')) {
         if (evt.type === 'pointermove' && panLast.current && immersive) {
           const dx = evt.clientX - panLast.current.x
@@ -376,17 +472,49 @@ export function DrawingCanvas({
       extendDraft(point)
     }
 
+    const onBlurOrHide = () => {
+      pointers.current.clear()
+      pendingTap.current = null
+      if (gestureMode.current) {
+        gestureMode.current = false
+        pinchPrev.current = null
+        armGestureCooldown()
+      }
+      if (drawing.current) cancelDraft()
+      panning.current = false
+      panLast.current = null
+    }
+
     window.addEventListener('pointermove', onWindowPointer)
     window.addEventListener('pointerup', onWindowPointer)
     window.addEventListener('pointercancel', onWindowPointer)
     window.addEventListener('lostpointercapture', onWindowPointer)
+    window.addEventListener('blur', onBlurOrHide)
+    document.addEventListener('visibilitychange', onBlurOrHide)
     return () => {
       window.removeEventListener('pointermove', onWindowPointer)
       window.removeEventListener('pointerup', onWindowPointer)
       window.removeEventListener('pointercancel', onWindowPointer)
       window.removeEventListener('lostpointercapture', onWindowPointer)
+      window.removeEventListener('blur', onBlurOrHide)
+      document.removeEventListener('visibilitychange', onBlurOrHide)
+      if (gestureCooldownTimer.current !== null) {
+        window.clearTimeout(gestureCooldownTimer.current)
+        gestureCooldownTimer.current = null
+      }
     }
-  }, [extendDraft, finish, immersive, pointFrom, session, size.h, size.w, updateViewport])
+  }, [
+    armGestureCooldown,
+    cancelDraft,
+    extendDraft,
+    finish,
+    immersive,
+    pointFrom,
+    session,
+    size.h,
+    size.w,
+    updateViewport,
+  ])
 
   useEffect(() => {
     if (!immersive) return
@@ -444,6 +572,7 @@ export function DrawingCanvas({
     const pts = [...pointers.current.values()]
     if (pts.length < 2) return
     cancelDraft()
+    pendingTap.current = null
     gestureMode.current = true
     gestureCooldown.current = true
     const mid = midpoint(pts[0]!, pts[1]!)
@@ -495,12 +624,25 @@ export function DrawingCanvas({
       const point = pointFrom(stage, evt)
       if (!point) return
 
-      if (activeTool === 'fill') {
-        applyFillAt(point.x, point.y)
-        return
-      }
-      if (activeTool === 'eyedropper') {
-        sampleAt(point.x, point.y)
+      if (activeTool === 'fill' || activeTool === 'eyedropper') {
+        // Touch: defer until pointer-up confirms a single-pointer tap so the
+        // first finger of an intended pinch cannot flood-fill / sample.
+        if (evt.pointerType === 'touch') {
+          pendingTap.current = {
+            pointerId: evt.pointerId,
+            x: point.x,
+            y: point.y,
+            tool: activeTool,
+          }
+          try {
+            stage.content.setPointerCapture(evt.pointerId)
+          } catch {
+            /* optional */
+          }
+          return
+        }
+        if (activeTool === 'fill') applyFillAt(point.x, point.y)
+        else sampleAt(point.x, point.y)
         return
       }
 
@@ -555,17 +697,17 @@ export function DrawingCanvas({
         const prev = pinchPrev.current
         if (prev && prev.dist > 0) {
           const factor = dist / prev.dist
-          const nextScale = viewportRef.current.scale * factor
-          let next = zoomAt(
-            viewportRef.current,
-            { width: size.w, height: size.h },
-            nextScale,
-            mid.x,
-            mid.y,
+          updateViewport(
+            pinchPan(
+              viewportRef.current,
+              { width: size.w, height: size.h },
+              viewportRef.current.scale * factor,
+              prev.midX,
+              prev.midY,
+              mid.x,
+              mid.y,
+            ),
           )
-          // Two-finger pan: move with midpoint delta.
-          next = panBy(next, { width: size.w, height: size.h }, mid.x - prev.midX, mid.y - prev.midY)
-          updateViewport(next)
         }
         pinchPrev.current = { dist, midX: mid.x, midY: mid.y }
         evt.preventDefault()
@@ -579,6 +721,8 @@ export function DrawingCanvas({
         updateViewport(panBy(viewportRef.current, { width: size.w, height: size.h }, dx, dy))
         return
       }
+
+      if (pendingTap.current) return
 
       const decision = decidePointer(session(), {
         type: 'move',
@@ -608,11 +752,9 @@ export function DrawingCanvas({
         if (pointers.current.size < 2) {
           gestureMode.current = false
           pinchPrev.current = null
-          // Require a fresh pointer-down before the next stroke.
-          gestureCooldown.current = true
-          window.setTimeout(() => {
-            gestureCooldown.current = false
-          }, 80)
+          pendingTap.current = null
+          // Require a fresh pointer-down; keep cooldown while residual pointers remain.
+          armGestureCooldown()
         }
         return
       }
@@ -620,6 +762,23 @@ export function DrawingCanvas({
       if (panning.current) {
         panning.current = false
         panLast.current = null
+        return
+      }
+
+      const tap = pendingTap.current
+      if (tap && tap.pointerId === evt.pointerId) {
+        pendingTap.current = null
+        releaseCapture(evt.pointerId)
+        // Only commit when this was a confirmed single-pointer interaction.
+        if (
+          e.type !== 'pointercancel' &&
+          pointers.current.size === 0 &&
+          !gestureMode.current &&
+          !gestureCooldown.current
+        ) {
+          if (tap.tool === 'fill') applyFillAt(tap.x, tap.y)
+          else sampleAt(tap.x, tap.y)
+        }
         return
       }
 
@@ -632,7 +791,7 @@ export function DrawingCanvas({
       })
       if (decision === 'end') finish(evt.pointerId)
     },
-    [finish, session],
+    [applyFillAt, armGestureCooldown, finish, releaseCapture, sampleAt, session],
   )
 
   useEffect(() => {

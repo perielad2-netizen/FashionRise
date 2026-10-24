@@ -587,4 +587,66 @@
     max-height: min(48vh, 420px);
     height: min(48vh, 420px);
   }
+
+  /*
+   * Immersive entered FROM Focus: both .focusMode and .immersiveMode apply.
+   * Narrow Focus rules above must not win — reassert full-viewport immersive layout.
+   */
+  .immersiveMode .body {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+  }
+
+  .immersiveMode .center {
+    grid-row: auto !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    padding: 0;
+    gap: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .immersiveMode .canvasStage {
+    grid-row: auto !important;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .immersiveMode .canvasStage [data-studio-paper='true'] {
+    --paper-max-w: none;
+  }
+}
+
+/*
+ * Immersive always wins over Focus at every viewport size (classes coexist when
+ * the operator opens Full Screen Drawing from Focus).
+ */
+.immersiveMode.focusMode .body,
+.immersiveMode .body {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+}
+
+.immersiveMode.focusMode .center,
+.immersiveMode .center {
+  grid-row: auto !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+.immersiveMode.focusMode .canvasStage,
+.immersiveMode .canvasStage {
+  grid-row: auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+.immersiveMode.focusMode .canvasStage [data-studio-paper='true'],
+.immersiveMode .canvasStage [data-studio-paper='true'] {
+  --paper-max-w: none;
 }

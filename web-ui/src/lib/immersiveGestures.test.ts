@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { decidePointer } from '@/lib/pointerSession'
 import {
+  designToScreen,
   distance,
   midpoint,
+  pinchPan,
   pinchScaleFactor,
   screenToDesign,
   zoomAt,
@@ -73,5 +75,39 @@ describe('immersive gesture safety helpers', () => {
     const hit = screenToDesign(screenX, screenY, vp)
     expect(hit.x).toBeCloseTo(sleeve.x, 6)
     expect(hit.y).toBeCloseTo(sleeve.y, 6)
+  })
+
+  it('combined pinch+pan keeps the garment point under the previous midpoint following to the new midpoint', () => {
+    const box = { width: 1024, height: 768 }
+    const before = fitPage(box)
+    const prevA = { x: 380, y: 280 }
+    const prevB = { x: 520, y: 360 }
+    const prevMid = midpoint(prevA, prevB)
+    const garment = screenToDesign(prevMid.x, prevMid.y, before)
+
+    // Both distance and midpoint change in the same step.
+    const nextA = { x: 300, y: 220 }
+    const nextB = { x: 620, y: 420 }
+    const nextMid = midpoint(nextA, nextB)
+    const factor = pinchScaleFactor(distance(prevA, prevB), distance(nextA, nextB))
+    const after = pinchPan(
+      before,
+      box,
+      before.scale * factor,
+      prevMid.x,
+      prevMid.y,
+      nextMid.x,
+      nextMid.y,
+    )
+
+    const projected = designToScreen(garment.x, garment.y, after)
+    expect(projected.x).toBeCloseTo(nextMid.x, 4)
+    expect(projected.y).toBeCloseTo(nextMid.y, 4)
+
+    // Wrong zoomAt(newMid)+panBy(delta) must NOT be considered correct here —
+    // pinchPan is the regression lock for simultaneous scale + translate.
+    const again = screenToDesign(nextMid.x, nextMid.y, after)
+    expect(again.x).toBeCloseTo(garment.x, 4)
+    expect(again.y).toBeCloseTo(garment.y, 4)
   })
 })

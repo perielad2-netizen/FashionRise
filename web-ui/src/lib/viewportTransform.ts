@@ -149,6 +149,29 @@ export function zoomAt(
   return clampPan({ scale, panX, panY }, viewport)
 }
 
+/**
+ * Combined pinch (scale) + two-finger pan in one step.
+ *
+ * The design point under the *previous* gesture midpoint must map to the
+ * *new* midpoint after the step. Using zoomAt(newMid) then panBy(delta) is
+ * incorrect when distance and midpoint both change in the same frame.
+ */
+export function pinchPan(
+  state: ViewportState,
+  viewport: ViewportSize,
+  nextScale: number,
+  prevMidX: number,
+  prevMidY: number,
+  nextMidX: number,
+  nextMidY: number,
+): ViewportState {
+  const design = screenToDesign(prevMidX, prevMidY, state)
+  const scale = clampScale(nextScale, viewport)
+  const panX = nextMidX - design.x * scale
+  const panY = nextMidY - design.y * scale
+  return clampPan({ scale, panX, panY }, viewport)
+}
+
 export function panBy(state: ViewportState, viewport: ViewportSize, dx: number, dy: number): ViewportState {
   return clampPan({ scale: state.scale, panX: state.panX + dx, panY: state.panY + dy }, viewport)
 }

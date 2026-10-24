@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-24. **GitHub `main`:** **`350a3b7e`** (WEB-V4G PR #40 merged; includes PR #41 pose fidelity source **not deployed**). **Production frontend:** **`350a3b7e`**. **Production backend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **WEB-V4F operator acceptance:** **5/5 PASS**. **WEB-V4G operator authenticated acceptance:** **5/5 PASS**. **Active draft:** **WEB-V4H** immersive full-screen drawing (Issue [#43](https://github.com/perielad2-netizen/FashionRise/issues/43)). **Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42)** Front/Back croquis: backlog after V4H. **Magic pose fidelity (Issue #39 / PR #41):** on `main`, production BE/worker unchanged, visual pose **NOT accepted**. Docs deploy checkpoint draft PR [#44](https://github.com/perielad2-netizen/FashionRise/pull/44) remains open — **do not auto-merge**. Cursor paid AI calls this run: **0**.
+**Last updated:** 2026-10-24. **GitHub `main`:** **`350a3b7e`** (WEB-V4G PR #40 merged; includes PR #41 pose fidelity source **not deployed**). **Production frontend:** **`350a3b7e`**. **Production backend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **WEB-V4F operator acceptance:** **5/5 PASS**. **WEB-V4G operator authenticated acceptance:** **5/5 PASS**. **Active draft:** **WEB-V4H** immersive drawing draft PR [#45](https://github.com/perielad2-netizen/FashionRise/pull/45) — PM hardening amendment (toolbar / Focus precedence / multitouch / artwork QA). **Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42)** Front/Back croquis: backlog after V4H. **Magic pose fidelity (Issue #39 / PR #41):** on `main`, production BE/worker unchanged, visual pose **NOT accepted**. Docs deploy checkpoint draft PR [#44](https://github.com/perielad2-netizen/FashionRise/pull/44) remains open — **do not auto-merge**. Cursor paid AI calls this run: **0**.
 
 **Phase:** Protected family beta. WEB-V4G FE deployed + operator-accepted. Active engineering track is WEB-V4H immersive drawing (frontend-only draft). Magic pose-fidelity PR #41 remains GitHub-only.
 
@@ -67,7 +67,7 @@
 
 **WEB-V4G:** **MERGED** PR [#40](https://github.com/perielad2-netizen/FashionRise/pull/40) @ `350a3b7e` and **frontend-only deployed**. Operator authenticated acceptance **5/5 PASS** (numeric brushes + wheel, 16 gradients + custom designer, interactive closed custom-gradient fill, save/reopen/export, tablet Focus/materials/undo + legacy designs). Docs checkpoint: draft PR [#44](https://github.com/perielad2-netizen/FashionRise/pull/44).
 
-**WEB-V4H (draft — Issue #43):** Immersive full-screen drawing with real zoom/pan (Konva Layer transform + inverse pointer mapping), Fit Page / Fit Width / 100%, native Fullscreen API + fixed-viewport fallback, pinch / two-finger pan, Space+drag + Hand tool, Ctrl/Cmd+wheel zoom (Alt+wheel remains V4G brush size). Existing Focus mode preserved. Frontend-only; no production changes in this PR.
+**WEB-V4H (draft PR #45 — Issue #43):** Immersive full-screen drawing with real zoom/pan (Konva Layer transform + inverse pointer mapping), Fit Page / Fit Width / 100%, native Fullscreen API + fixed-viewport fallback, pinch / two-finger pan, Space+drag + Hand tool, Ctrl/Cmd+wheel zoom (Alt+wheel remains V4G brush size). Existing Focus mode preserved. **PM hardening amendment:** compact safe-area immersive toolbar (no horizontal clip; Exit always reachable; ≥44px tablet targets); immersive CSS wins over Focus at every breakpoint; real DrawingCanvas multitouch lifecycle + combined `pinchPan` anchor; touch Fill/Eyedropper commit on confirmed single-pointer up; artwork/paper QA with croquis. Frontend-only; no production changes in this PR.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -112,7 +112,7 @@
 | **WEB-V4F color picker + Magic preview** | **MERGED** PR #37 · **FE deployed** @ `1aa5dc5a` |
 | **Magic pose fidelity (Issue #39)** | **MERGED** PR #41 @ `4819b951` — **not deployed**; visual pose **NOT accepted**; no paid validation |
 | **WEB-V4G brushes + gradients** | **MERGED** PR #40 @ `350a3b7e` · **FE deployed** · operator **5/5 PASS** |
-| **WEB-V4H immersive drawing (Issue #43)** | **Draft PR** — FE-only zoom/pan fullscreen studio; **STOP for PM review** |
+| **WEB-V4H immersive drawing (Issue #43)** | **Draft PR #45** — FE-only zoom/pan fullscreen + PM hardening amendment; **STOP for Technical PM final review** |
 | **Issue #42 rear croquis / Front-Back** | **OPEN** — scheduled after V4H |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
@@ -308,12 +308,12 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM review of **WEB-V4H immersive drawing** draft PR (Issue #43). **Do not merge or deploy** until authorized.
-2. WEB-V4G production FE @ `350a3b7e`: operator authenticated acceptance **5/5 PASS** (done).
-3. After V4H acceptance: scope Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42) Front/Back croquis as a separate draft PR.
+1. **Exact next action:** Technical PM **final review** of WEB-V4H draft PR [#45](https://github.com/perielad2-netizen/FashionRise/pull/45) hardening amendment (Issue #43). **Do not merge or deploy** until authorized.
+2. WEB-V4G production FE @ `350a3b7e`: operator authenticated acceptance **5/5 PASS** (done; unchanged).
+3. After V4H acceptance: scope Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42) Front/Back croquis as a separate draft PR (not in #45).
 4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. After separate authorize: deploy BE/worker → one paid Magic retest on Issue #39 sample.
 5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44).
-6. **Operator residual:** expired Access session test (still PENDING). Physical tablet/stylus validation for V4H pinch/pressure still outstanding when no hardware is available.
+6. **Operator residual:** expired Access session test (still PENDING). Physical tablet / Apple Pencil multitouch+pressure validation for V4H still outstanding — emulated PointerEvents do **not** prove real Pencil behavior.
 
 ---
 
@@ -497,27 +497,30 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Operator authenticated acceptance | **5/5 PASS** |
 | Docs checkpoint | Draft PR [#44](https://github.com/perielad2-netizen/FashionRise/pull/44) — do not auto-merge |
 
-## WEB-V4H verification (Issue #43 — immersive drawing draft)
+## WEB-V4H verification (Issue #43 — immersive drawing draft PR #45)
 
 | Gate | Result |
 |------|--------|
 | Scope | Frontend-only; no backend / worker / Nginx / Cloudflare / migrations / paid AI / production deploy |
-| Base | `main` @ `350a3b7e` |
+| Base | `main` @ `350a3b7e` (WEB-V4G operator **5/5 PASS** on production FE) |
 | Viewport architecture | Shared `viewportTransform` (absolute CSS-px/design-px scale + pan); Konva Stage fills host; content Layer applies scale/pan; `screenToDesign` inverse for all pointers |
 | 100% | Absolute 1 design px = 1 CSS px |
 | Fit modes | Fit Page · Fit Width (top-aligned when taller) · Center/Reset · Zoom ± · clamp limits keep Fit Width/100% attainable |
 | Fullscreen | Native Fullscreen API from user gesture when available; fixed immersive CSS fallback otherwise; `fullscreenchange` tracked |
-| Gestures | Pinch zoom + two-finger pan; second touch cancels uncommitted draft; cooldown before next stroke; Space+drag + Hand tool; Ctrl/Cmd+wheel zoom; **Alt+wheel reserved for V4G brush size** |
+| Gestures (hardened) | Combined `pinchPan` (prev-mid design → next mid); second touch cancels draft + releases capture; window `pointerup/cancel/lostpointercapture` clears outside-stage pointers; cooldown never clears while residual pointers remain; touch Fill/Eyedropper commit on confirmed single-pointer up; Space+drag + Hand; Ctrl/Cmd+wheel zoom; **Alt+wheel reserved for V4G brush size** |
 | Escape precedence | Modal → dock/sheet → immersive exit → Focus exit |
-| Focus mode | Preserved (lighter panel hide + paper max-width); immersive is separate |
-| Export / Magic capture | Viewport-only — design-space strokes/fills unchanged (no paid Magic invoked) |
-| Frontend tests / lint / build / SW | Vitest **338/338** · oxlint warnings-only · `tsc -b` · production build · `check:sw` ok=true |
-| Browser QA | DEV CreatorWorkspace lab: desktop 1440×900 · short 1180×600 · iPad Mini 768×1024 / 1024×768 · iPad Pro 13 1032×1376 · tablet 1180×820 · Android 800×1280 · mobile 390×844. Immersive host fills viewport; measured host-area vs Focus paper ≈ **2.2–3.9×** larger (desktop ~3.6×). Screenshots under `/opt/cursor/artifacts/screenshots/v4h-*` |
-| Physical stylus | **Not available in this environment** — recorded as outstanding |
-| Issue #42 | Backlog after V4H |
+| Focus + immersive CSS | Immersive layout reasserted after narrow Focus `@media (max-width:820px)` and via trailing `.immersiveMode` / `.immersiveMode.focusMode` rules — Focus→Fullscreen→exit restores Focus |
+| Toolbar (hardened) | Full-bleed safe-area two-row bar; Exit pinned; Pencil/Eraser/Fill/Hand/Undo/Redo + Zoom/Fit always reachable; measured **0 buttons outside viewport** at 768×1024 / 1024×768 / 390×844 / iPad Pro / short desktop; tablet targets **44px** (short-height desktop densifies to 40px) |
+| Export / Magic capture | Viewport-only — design space remains **768×1024**; strokes/fills unchanged (no paid Magic invoked) |
+| Frontend tests / lint / build / SW | Vitest **347/347** · oxlint warnings-only · `tsc -b` · production build · `check:sw` ok=true |
+| Browser QA (new SHA) | DEV `/_design/studio-layout?v4gCustomFill=1` with real croquis + closed custom-gradient fill. Screenshots `/opt/cursor/artifacts/screenshots/v4h2-*`. Toolbar + Exit inside viewport on all tested sizes. Paper bounds: Mini portrait Fit Page ≈ **768×1024 @ 100%** (gain vs Focus paper ≈ **1.25×**); Mini landscape Fit Page **576×768 @ 75%**, Fit Width **133%**, zoom **≥200%** (311%). Pencil/eraser/eyedropper under zoom exercised. Focus preserved after immersive exit. |
+| Physical stylus | **Not available** — emulated PointerEvents / Playwright touch flags do **not** prove Apple Pencil pressure or real device multitouch |
+| Issue #42 | Backlog after V4H — **not** implemented in #45 |
 | Paid OpenAI | **0** |
-| Production | **Unchanged** (FE `350a3b7e` / BE+worker `2cbc1ad0`) |
-| Merge / deploy | **Blocked** — STOP for Technical PM review |
+| Production | **Unchanged** — FE **`350a3b7e`** · BE+worker **`2cbc1ad0`** · Alembic **`005`** |
+| Magic pose PR #41 | Merged on `main`, **not deployed**; visual pose **NOT accepted** |
+| Docs PR #44 | Remains draft |
+| Merge / deploy | **Blocked** — STOP for Technical PM **final** review |
 
 ## WEB-V4F verification (PR #37 — color picker + Magic preview + tablet layout; FE deployed)
 
@@ -542,6 +545,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-24 | **WEB-V4H PR #45 PM hardening amendment:** tablet-safe immersive toolbar (measured inside viewport); immersive CSS precedence over Focus; DrawingCanvas multitouch lifecycle + `pinchPan`; touch Fill/Eyedropper deferral; croquis/paper artwork QA; Vitest **347**; **0 paid AI**; production unchanged (FE `350a3b7e` / BE+worker `2cbc1ad0`); WEB-V4G **5/5 PASS** recorded; **STOP for Technical PM final review**. |
 | 2026-10-24 | **WEB-V4H draft (Issue #43):** immersive fullscreen drawing with shared viewport transform, Fit Page/Width/100%, pinch/pan, Fullscreen API + fallback; Focus preserved; Vitest 338; **0 paid AI**; production unchanged; **STOP for Technical PM review**. |
 | 2026-10-23 | **WEB-V4G operator acceptance 5/5 PASS** + FE production @ `350a3b7e` (docs draft PR #44). |
 | 2026-10-23 | **WEB-V4G PR #40 amendment (final):** reconcile onto `main` `4819b951` (PR #41 merged/not deployed); closed custom-gradient flood-fill proven (pressure-triple fixture fix; algorithm unchanged); CustomGradientDesigner keyboard/focus a11y + tests; brush persistence compat preserved; status preserves V4F **5/5 PASS** + pose **NOT accepted**; **0 paid AI**. |

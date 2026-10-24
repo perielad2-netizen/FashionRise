@@ -190,4 +190,25 @@ describe('WEB-V4H immersive mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hand pan' }))
     expect(screen.getByTestId('drawing-canvas').getAttribute('data-pan')).toBe('true')
   })
+
+  it('entering immersive from Focus keeps both modes; exit immersive restores Focus', () => {
+    mockMatchMedia(768)
+    render(<CreatorWorkspace editor={mockEditor()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Enter focused sketch mode' }))
+    const workspace = screen.getByLabelText('Creator workspace')
+    expect(workspace.className).toMatch(/focusMode/)
+    expect(workspace.getAttribute('data-immersive')).toBe('false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enter full screen drawing' }))
+    expect(workspace.getAttribute('data-immersive')).toBe('true')
+    expect(workspace.className).toMatch(/focusMode/)
+    expect(workspace.className).toMatch(/immersiveMode/)
+    expect(screen.getByTestId('immersive-toolbar')).toBeTruthy()
+    expect(screen.getByTestId('drawing-canvas').getAttribute('data-immersive')).toBe('true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit immersive drawing' }))
+    expect(workspace.getAttribute('data-immersive')).toBe('false')
+    expect(workspace.className).toMatch(/focusMode/)
+    expect(workspace.className).not.toMatch(/immersiveMode/)
+  })
 })

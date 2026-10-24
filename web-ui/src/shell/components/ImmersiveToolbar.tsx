@@ -68,86 +68,88 @@ export function ImmersiveToolbar({
   saveLabel = 'Save',
 }: Props) {
   return (
-    <div className={styles.bar} role="toolbar" aria-label="Immersive drawing toolbar">
-      <div className={styles.group} role="group" aria-label="Drawing tools">
-        <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
-          <Pencil size={18} strokeWidth={1.75} />
-        </ToolBtn>
-        <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
-          <Eraser size={18} strokeWidth={1.75} />
-        </ToolBtn>
-        <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
-          <PaintBucket size={18} strokeWidth={1.75} />
-        </ToolBtn>
-        <ToolBtn active={tool === 'eyedropper'} label="Eyedropper" onClick={() => onTool('eyedropper')}>
-          <Pipette size={18} strokeWidth={1.75} />
-        </ToolBtn>
-        <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
-          <Hand size={18} strokeWidth={1.75} />
-        </ToolBtn>
+    <div className={styles.bar} role="toolbar" aria-label="Immersive drawing toolbar" data-testid="immersive-toolbar">
+      <div className={`${styles.row} ${styles.rowPrimary}`}>
+        <div className={styles.cluster} role="group" aria-label="Drawing tools">
+          <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
+            <Pencil size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
+            <Eraser size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
+            <PaintBucket size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={tool === 'eyedropper'} label="Eyedropper" onClick={() => onTool('eyedropper')}>
+            <Pipette size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
+            <Hand size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={false} label="Undo" disabled={!canUndo} onClick={onUndo}>
+            <Undo2 size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
+            <Redo2 size={18} strokeWidth={1.75} />
+          </ToolBtn>
+        </div>
+
+        <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Exit">
+          <button
+            type="button"
+            className={styles.exitBtn}
+            onClick={onExit}
+            aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
+            data-testid="immersive-exit"
+          >
+            {nativeFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            <span>Exit</span>
+          </button>
+        </div>
       </div>
 
-      <div className={styles.group} role="group" aria-label="History">
-        <ToolBtn active={false} label="Undo" disabled={!canUndo} onClick={onUndo}>
-          <Undo2 size={18} strokeWidth={1.75} />
-        </ToolBtn>
-        <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
-          <Redo2 size={18} strokeWidth={1.75} />
-        </ToolBtn>
-      </div>
+      <div className={`${styles.row} ${styles.rowSecondary}`}>
+        <div className={styles.cluster} role="group" aria-label="Zoom">
+          <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
+            <ZoomOut size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <span className={styles.zoomReadout} aria-live="polite">
+            {zoomPercent}%
+          </span>
+          <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
+            <ZoomIn size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <button type="button" className={styles.textBtn} onClick={onFitPage}>
+            Fit page
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onFitWidth}>
+            Fit width
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onHundred}>
+            100%
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onCenter}>
+            Center
+          </button>
+        </div>
 
-      <div className={styles.group} role="group" aria-label="Brush">
-        <button type="button" className={styles.textBtn} onClick={onOpenBrush} aria-label="Brush settings">
-          {formatBrushSizePx(brushSize)} px
-        </button>
-        <button type="button" className={styles.textBtn} onClick={onOpenMaterials}>
-          Materials
-        </button>
-        <button type="button" className={styles.textBtn} onClick={onOpenModels}>
-          Models
-        </button>
-      </div>
-
-      <div className={styles.group} role="group" aria-label="Zoom">
-        <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
-          <ZoomOut size={18} strokeWidth={1.75} />
-        </ToolBtn>
-        <span className={styles.zoomReadout} aria-live="polite">
-          {zoomPercent}%
-        </span>
-        <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
-          <ZoomIn size={18} strokeWidth={1.75} />
-        </ToolBtn>
-        <button type="button" className={styles.textBtn} onClick={onFitPage}>
-          Fit page
-        </button>
-        <button type="button" className={styles.textBtn} onClick={onFitWidth}>
-          Fit width
-        </button>
-        <button type="button" className={styles.textBtn} onClick={onHundred}>
-          100%
-        </button>
-        <button type="button" className={styles.textBtn} onClick={onCenter}>
-          Center
-        </button>
-      </div>
-
-      <div className={styles.group} role="group" aria-label="Studio actions">
-        <button type="button" className={styles.textBtn} onClick={onSave}>
-          {saveLabel}
-        </button>
-        <button type="button" className={styles.textBtn} onClick={onExport}>
-          Export PNG
-        </button>
-        <button
-          type="button"
-          className={styles.exitBtn}
-          onClick={onExit}
-          aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
-        >
-          {nativeFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          <span>Exit</span>
-        </button>
+        <div className={styles.cluster} role="group" aria-label="Studio actions">
+          <button type="button" className={styles.textBtn} onClick={onOpenBrush} aria-label="Brush settings">
+            {formatBrushSizePx(brushSize)} px
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onOpenMaterials}>
+            Materials
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onOpenModels}>
+            Models
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onSave}>
+            {saveLabel}
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onExport}>
+            Export PNG
+          </button>
+        </div>
       </div>
     </div>
   )

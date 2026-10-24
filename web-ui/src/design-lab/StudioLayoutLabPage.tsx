@@ -3,7 +3,7 @@ import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
 import type { StudioEditor } from '@/hooks/useStudioEditor'
 import { customGradientStyle, solidStyle, type FillStyle } from '@/lib/fills'
 import { floodFillRegion } from '@/lib/floodFill'
-import { DEFAULT_MODEL } from '@/assets/modelLibrary'
+import { canvasSrcForModel, DEFAULT_MODEL } from '@/assets/modelLibrary'
 import {
   BRUSH_SIZES,
   INK_SWATCHES,
@@ -150,7 +150,8 @@ function useLayoutLabEditor(): StudioEditor {
       onCustomFile: noop,
       dimmed,
       setDimmed,
-      referenceUrl: null,
+      // Real croquis artwork for immersive paper/garment measurement QA (mocked editor; no AI).
+      referenceUrl: canvasSrcForModel(model),
       referenceOpacity: dimmed ? 0.35 : 0.55,
       onStrokeComplete: (stroke: Stroke) => setStrokes((prev) => [...prev, stroke]),
       onFillComplete: (fill: (typeof fills)[number]) => setFills((prev) => [...prev, fill]),
