@@ -32,7 +32,9 @@ describe('WEB-V2.3 responsive layout contract', () => {
   it('sizes the 3:4 paper from available width and height', () => {
     const frame = rule(drawingCss, '.canvasFrame')
     expect(frame).toContain('aspect-ratio: 768 / 1024')
-    expect(frame).toContain('width: min(100cqw, var(--paper-max-w), 75cqh)')
+    // WEB-V4I: fit full page via cqh (width ≤ height × 3/4), not the old 75cqh heuristic.
+    expect(frame).toContain('width: min(100cqw, var(--paper-max-w), calc(100cqh * 768 / 1024))')
+    expect(frame).toContain('max-height: min(100cqh')
     expect(rule(drawingCss, '.wrap')).toContain('container-type: size')
   })
 
@@ -58,9 +60,23 @@ describe('WEB-V2.3 responsive layout contract', () => {
     expect(rule(modelCss, '.grid')).toContain('grid-auto-rows: max-content')
   })
 
-  it('pins Generate with AI inside the scrolling Settings panel on one line', () => {
-    expect(rule(settingsCss, '.footer')).toContain('position: sticky')
-    expect(rule(settingsCss, '.generateSoon')).toContain('white-space: nowrap')
+  it('removes the obsolete Settings Generate with AI Soon footer (WEB-V4I)', () => {
+    expect(settingsCss).not.toContain('.generateSoon')
+    expect(settingsCss).not.toContain('.footer {')
+  })
+
+  it('fits the 3:4 paper inside available width and height on tablets', async () => {
+    const { default: drawingCss } = await import(
+      '@/shell/components/DrawingWorkspace.module.css?raw'
+    )
+    expect(rule(drawingCss, '.canvasFrame')).toContain('768 / 1024')
+    expect(rule(drawingCss, '.canvasFrame')).toContain('100cqh')
+  })
+
+  it('opens Models as a tall overlay gallery on tablets, not a 220px inline strip', () => {
+    expect(creatorCss).not.toContain('max-height: 220px')
+    expect(creatorCss).toContain('modelsSlot.slotOpen')
+    expect(modelCss).toContain('.gallery')
   })
 })
 

@@ -51,7 +51,6 @@
   max-width: calc(100% - 20px);
 }
 
-.focusToggle,
 .immersiveToggle {
   display: inline-flex;
   align-items: center;
@@ -59,26 +58,14 @@
   min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(28, 28, 30, 0.12);
-  background: rgba(255, 250, 245, 0.92);
-  color: #1c1c1e;
+  border: 1px solid rgba(214, 51, 132, 0.35);
+  background: rgba(214, 51, 132, 0.16);
+  color: #9d174d;
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.03em;
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
-}
-
-.focusToggle[aria-pressed='true'] {
-  border-color: rgba(214, 51, 132, 0.45);
-  background: rgba(214, 51, 132, 0.14);
-  color: #9d174d;
-}
-
-.immersiveToggle {
-  border-color: rgba(214, 51, 132, 0.35);
-  background: rgba(214, 51, 132, 0.16);
-  color: #9d174d;
 }
 
 .immersiveMode {
@@ -138,6 +125,7 @@
   --paper-max-w: none;
 }
 
+/* Immersive overlays: side drawer so the toolbar stays clear. */
 .immersiveMode .modelsSlot.slotOpen,
 .immersiveMode .settingsSlot.slotOpen,
 .immersiveMode .materialsSlot.slotOpen {
@@ -152,103 +140,12 @@
   border-radius: 16px;
   left: max(10px, env(safe-area-inset-left, 0px));
   top: max(10px, env(safe-area-inset-top, 0px));
-  bottom: max(72px, env(safe-area-inset-bottom, 0px));
-  width: min(320px, 88vw);
+  bottom: max(96px, env(safe-area-inset-bottom, 0px));
+  width: min(360px, 90vw);
 }
 
-.focusQuick {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  z-index: 5;
-  display: inline-flex;
-  gap: 6px;
-  padding: 4px;
-  border-radius: 999px;
-  background: rgba(15, 22, 38, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-}
-
-.focusQuick button {
-  min-height: 30px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.86);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.focusQuick button:hover,
-.focusQuick button[aria-pressed='true'] {
-  background: rgba(214, 51, 132, 0.28);
-}
-
-.focusMode .body {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.focusMode .modelsSlot,
-.focusMode .settingsSlot,
-.focusMode .materialsSlot {
-  display: none !important;
-}
-
-.focusMode .center {
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  padding: 8px;
-}
-
-.focusMode .canvasStage {
-  min-height: 0;
-  height: 100%;
-}
-
-.focusMode .canvasStage [data-studio-paper='true'] {
-  --paper-max-w: 720px;
-}
-
-.focusMode .modelsSlot.slotOpen,
-.focusMode .settingsSlot.slotOpen,
-.focusMode .materialsSlot.slotOpen {
-  display: flex !important;
-  flex-direction: column;
-  position: absolute;
-  z-index: 24;
-  overflow: hidden;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
-  background: #121a2c;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-}
-
-.focusMode .modelsSlot.slotOpen {
-  left: 10px;
-  top: 10px;
-  bottom: 10px;
-  width: min(280px, 84vw);
-}
-
-.focusMode .settingsSlot.slotOpen {
-  right: 10px;
-  top: 10px;
-  bottom: 10px;
-  width: min(280px, 84vw);
-}
-
-.focusMode .materialsSlot.slotOpen {
-  right: 10px;
-  top: 10px;
-  bottom: 10px;
-  width: min(320px, 88vw);
+.immersiveMode .modelsSlot.slotOpen {
+  width: min(420px, 92vw);
 }
 
 .modelsSlot,
@@ -266,6 +163,14 @@
 .materialsSlot {
   min-height: 0;
   display: block;
+}
+
+.modelsSheet {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .sheetHead {
@@ -295,14 +200,15 @@
 }
 
 .sheetClose {
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: var(--fr-text);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0.02em;
@@ -443,9 +349,39 @@
   }
 }
 
+/*
+ * Tablets (≤1024): Models are an overlay gallery — never an inline strip that
+ * steals drawing height. Body is a single canvas column; dock opens overlays.
+ */
 @media (max-width: 1024px) {
   .body {
-    grid-template-columns: 180px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .modelsSlot {
+    display: none;
+  }
+
+  .modelsSlot.slotOpen {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    z-index: 26;
+    left: max(0px, env(safe-area-inset-left, 0px));
+    right: max(0px, env(safe-area-inset-right, 0px));
+    bottom: 0;
+    top: auto;
+    width: auto;
+    height: min(72vh, 640px);
+    max-height: calc(100% - 48px);
+    overflow: hidden;
+    background: #121a2c;
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.45);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .settingsSlot {
@@ -468,15 +404,27 @@
     border: 0;
     border-left: 1px solid rgba(255, 255, 255, 0.08);
   }
+}
 
-  /* Dock already exposes Focus / Exit focus — avoid a second overlapping control. */
-  .focusToggle {
-    display: none;
+/* Short landscape tablets: Models as a wide side drawer for larger croquis cards. */
+@media (max-width: 1024px) and (max-height: 760px) and (orientation: landscape) {
+  .modelsSlot.slotOpen {
+    left: auto;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: min(480px, 56vw);
+    height: auto;
+    max-height: none;
+    border-radius: 16px 0 0 16px;
+    border: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+    padding-bottom: 0;
   }
 }
 
-/* Landscape tablets and short browser windows: browser tabs and the address bar
-   leave far less height than the device screen, so tighten chrome around the paper. */
+/* Landscape tablets and short browser windows: tighten chrome around the paper. */
 @media (min-width: 821px) and (max-height: 760px) {
   .center {
     gap: 8px;
@@ -511,14 +459,14 @@
 @media (max-width: 820px) {
   .body {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .center {
-    grid-row: 2;
+    grid-row: 1;
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
-    padding: 8px;
+    padding: 6px 8px 8px;
   }
 
   .canvasStage {
@@ -526,49 +474,8 @@
     min-height: 0;
   }
 
-  .modelsSlot {
-    display: none;
-  }
-
-  .modelsSlot.slotOpen {
-    display: flex;
-    flex-direction: column;
-    max-height: 220px;
-    overflow: hidden;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    background: #121a2c;
-  }
-
-  /*
-   * Focus must not keep the desktop two-column center template here — that places
-   * the canvas into the auto row and collapses paper height on tablet portrait.
-   */
-  .focusMode .body {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr);
-  }
-
-  .focusMode .center {
-    grid-row: 1;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .focusMode .canvasStage {
-    grid-row: 2;
-    min-height: 0;
-    height: auto;
-  }
-
-  .focusMode .canvasStage [data-studio-paper='true'] {
-    --paper-max-w: min(520px, 94vw);
-  }
-
   .materialsSlot.slotOpen,
-  .settingsSlot.slotOpen,
-  .focusMode .materialsSlot.slotOpen,
-  .focusMode .settingsSlot.slotOpen,
-  .focusMode .modelsSlot.slotOpen {
+  .settingsSlot.slotOpen {
     top: auto;
     bottom: 0;
     left: 0;
@@ -582,53 +489,19 @@
     box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.4);
   }
 
-  .focusMode .modelsSlot.slotOpen {
-    /* Models sheet shares the same bounded bottom sheet as materials/settings. */
-    max-height: min(48vh, 420px);
-    height: min(48vh, 420px);
-  }
-
-  /*
-   * Immersive entered FROM Focus: both .focusMode and .immersiveMode apply.
-   * Narrow Focus rules above must not win — reassert full-viewport immersive layout.
-   */
-  .immersiveMode .body {
-    grid-template-columns: minmax(0, 1fr) !important;
-    grid-template-rows: minmax(0, 1fr) !important;
-  }
-
-  .immersiveMode .center {
-    grid-row: auto !important;
-    grid-template-columns: minmax(0, 1fr) !important;
-    grid-template-rows: minmax(0, 1fr) !important;
-    padding: 0;
-    gap: 0;
-    min-height: 0;
-    height: 100%;
-  }
-
-  .immersiveMode .canvasStage {
-    grid-row: auto !important;
-    min-height: 0;
-    height: 100%;
-  }
-
-  .immersiveMode .canvasStage [data-studio-paper='true'] {
-    --paper-max-w: none;
+  /* Models stay taller than Materials — croquis need readable cards. */
+  .modelsSlot.slotOpen {
+    height: min(70vh, 620px);
+    max-height: calc(100% - 40px);
   }
 }
 
-/*
- * Immersive always wins over Focus at every viewport size (classes coexist when
- * the operator opens Full Screen Drawing from Focus).
- */
-.immersiveMode.focusMode .body,
+/* Immersive always wins layout at every viewport size. */
 .immersiveMode .body {
   grid-template-columns: minmax(0, 1fr) !important;
   grid-template-rows: minmax(0, 1fr) !important;
 }
 
-.immersiveMode.focusMode .center,
 .immersiveMode .center {
   grid-row: auto !important;
   grid-template-columns: minmax(0, 1fr) !important;
@@ -639,14 +512,12 @@
   height: 100% !important;
 }
 
-.immersiveMode.focusMode .canvasStage,
 .immersiveMode .canvasStage {
   grid-row: auto !important;
   min-height: 0 !important;
   height: 100% !important;
 }
 
-.immersiveMode.focusMode .canvasStage [data-studio-paper='true'],
 .immersiveMode .canvasStage [data-studio-paper='true'] {
   --paper-max-w: none;
 }

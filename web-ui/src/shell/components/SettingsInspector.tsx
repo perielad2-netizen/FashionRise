@@ -1,4 +1,3 @@
-import { Sparkles } from 'lucide-react'
 import type { ToolKind } from '@/lib/strokes'
 import { BrushSizeControl } from '@/shell/components/BrushSizeControl'
 import styles from './SettingsInspector.module.css'
@@ -12,7 +11,6 @@ type Props = {
   onBrushSize: (px: number) => void
   onOpacity: (value: number) => void
   onToggleDim: () => void
-  onMagic: () => void
 }
 
 export function SettingsInspector({
@@ -24,7 +22,6 @@ export function SettingsInspector({
   onBrushSize,
   onOpacity,
   onToggleDim,
-  onMagic,
 }: Props) {
   return (
     <aside className={styles.panel} aria-label="Settings inspector">
@@ -133,19 +130,6 @@ export function SettingsInspector({
           </div>
         </div>
       </section>
-
-      <div className={styles.footer}>
-        <button
-          type="button"
-          className={styles.generateSoon}
-          onClick={onMagic}
-          title="AI generation is not available in this beta"
-        >
-          <Sparkles size={15} aria-hidden />
-          <span className={styles.generateLabel}>Generate with AI</span>
-          <span className={styles.soon}>Soon</span>
-        </button>
-      </div>
     </aside>
   )
 }

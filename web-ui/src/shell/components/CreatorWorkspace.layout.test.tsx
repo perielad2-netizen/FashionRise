@@ -78,7 +78,7 @@ function mockEditor(overrides: Partial<StudioEditor> = {}): StudioEditor {
     onLogout: vi.fn(),
     magicNotice: null,
     setMagicNotice: vi.fn(),
-    magicEnabled: false,
+    magicEnabled: true,
     magicOpen: false,
     magicPhase: 'idle',
     magicBusy: false,
@@ -126,26 +126,34 @@ function mockEditor(overrides: Partial<StudioEditor> = {}): StudioEditor {
   return { ...base, ...overrides } as unknown as StudioEditor
 }
 
-describe('CreatorWorkspace tablet layout controls', () => {
+describe('CreatorWorkspace tablet layout controls (WEB-V4I)', () => {
   beforeEach(() => {
     mockMatchMedia(768)
   })
 
-  it('enters focus mode, exposes panel shortcuts, and exits via dock control', () => {
-    const { container } = render(<CreatorWorkspace editor={mockEditor()} />)
+  it('does not expose Focus entry points; Full screen remains available', () => {
+    render(<CreatorWorkspace editor={mockEditor()} />)
     const workspace = screen.getByLabelText('Creator workspace')
     const dock = within(screen.getByLabelText('Studio panels'))
     expect(workspace.className).not.toMatch(/focusMode/)
+    expect(screen.queryByRole('button', { name: /Focus|Exit focus|focused sketch/i })).toBeNull()
+    expect(dock.getByRole('button', { name: 'Full screen' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Enter full screen drawing' })).toBeTruthy()
+  })
 
-    fireEvent.click(dock.getByRole('button', { name: 'Focus' }))
-    expect(workspace.className).toMatch(/focusMode/)
-    // Tablet dock already exposes Models/Materials/Settings — avoid a second toolbar.
-    expect(screen.queryByLabelText('Focus mode panels')).toBeNull()
-    expect(dock.getByRole('button', { name: 'Materials' })).toBeTruthy()
-    expect(container.querySelector('[data-studio-paper="true"]')).toBeTruthy()
-
-    fireEvent.click(dock.getByRole('button', { name: 'Exit focus' }))
-    expect(workspace.className).not.toMatch(/focusMode/)
+  it('opens Models as an overlay gallery with Done/scrim (does not rely on Focus)', () => {
+    render(<CreatorWorkspace editor={mockEditor()} />)
+    const dock = within(screen.getByLabelText('Studio panels'))
+    fireEvent.click(dock.getByRole('button', { name: 'Models' }))
+    expect(screen.getByRole('dialog', { name: 'Models gallery' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy()
+    expect(screen.getByLabelText('Close panel')).toBeTruthy()
+    const library = screen.getByLabelText('Model library')
+    expect(library.getAttribute('data-variant')).toBe('gallery')
+    expect(within(library).getByRole('tab', { name: 'Female' })).toBeTruthy()
+    expect(within(library).getByRole('tab', { name: 'Male' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.queryByRole('dialog', { name: 'Models gallery' })).toBeNull()
   })
 
   it('opens a bounded materials sheet with Done and keeps tabs switchable', async () => {
@@ -167,22 +175,22 @@ describe('CreatorWorkspace tablet layout controls', () => {
     expect(screen.queryByLabelText('Close panel')).toBeNull()
   })
 
-  it('Escape closes the materials sheet before exiting focus', () => {
+  it('Escape closes the materials sheet before exiting immersive', () => {
     render(<CreatorWorkspace editor={mockEditor()} />)
     const dock = within(screen.getByLabelText('Studio panels'))
-    fireEvent.click(dock.getByRole('button', { name: 'Focus' }))
-    fireEvent.click(dock.getByRole('button', { name: 'Materials' }))
+    fireEvent.click(dock.getByRole('button', { name: 'Full screen' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Materials' }))
     expect(screen.getByLabelText('Close panel')).toBeTruthy()
 
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByLabelText('Close panel')).toBeNull()
-    expect(screen.getByLabelText('Creator workspace').className).toMatch(/focusMode/)
+    expect(screen.getByLabelText('Creator workspace').getAttribute('data-immersive')).toBe('true')
 
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.getByLabelText('Creator workspace').className).not.toMatch(/focusMode/)
+    expect(screen.getByLabelText('Creator workspace').getAttribute('data-immersive')).toBe('false')
   })
 
-  it('enters immersive drawing, keeps focus as a separate mode, and exits via Escape', async () => {
+  it('enters immersive drawing from normal Studio and exits via Escape', async () => {
     const editor = mockEditor()
     render(<CreatorWorkspace editor={editor} />)
     const workspace = screen.getByLabelText('Creator workspace')
@@ -191,19 +199,30 @@ describe('CreatorWorkspace tablet layout controls', () => {
     fireEvent.click(dock.getByRole('button', { name: 'Full screen' }))
     expect(workspace.getAttribute('data-immersive')).toBe('true')
     expect(workspace.className).toMatch(/immersiveMode/)
+    expect(workspace.className).not.toMatch(/focusMode/)
     expect(screen.getByRole('toolbar', { name: 'Immersive drawing toolbar' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Fit width' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Hand pan' })).toBeTruthy()
 
-    // Sheet closes before immersive exit.
-    fireEvent.click(screen.getByRole('button', { name: 'Materials' }))
-    expect(screen.getByLabelText('Close panel')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Models' }))
+    expect(screen.getByRole('dialog', { name: 'Models gallery' })).toBeTruthy()
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByLabelText('Close panel')).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Models gallery' })).toBeNull()
     expect(workspace.getAttribute('data-immersive')).toBe('true')
 
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(workspace.getAttribute('data-immersive')).toBe('false')
     expect(workspace.className).not.toMatch(/immersiveMode/)
+  })
+
+  it('Settings does not show obsolete Generate with AI Soon footer', () => {
+    render(<CreatorWorkspace editor={mockEditor()} />)
+    const dock = within(screen.getByLabelText('Studio panels'))
+    fireEvent.click(dock.getByRole('button', { name: 'Settings' }))
+    const settings = screen.getByLabelText(/settings inspector/i)
+    expect(within(settings).queryByText('Generate with AI')).toBeNull()
+    expect(within(settings).queryByText('Soon')).toBeNull()
+    // Real Magic remains in the Studio header (Soon badge there is separate / env-gated).
+    expect(screen.getByRole('button', { name: /Magic/i })).toBeTruthy()
   })
 })
