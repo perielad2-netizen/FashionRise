@@ -1,0 +1,116 @@
+.bar {
+  position: absolute;
+  left: 50%;
+  bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: min(1100px, calc(100% - 16px));
+  padding: 6px 8px;
+  border-radius: 18px;
+  background: rgba(12, 16, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.btn,
+.btnActive {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btnActive {
+  background: rgba(214, 51, 132, 0.28);
+  color: #ffd0e6;
+}
+
+.textBtn,
+.exitBtn {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.textBtn:hover,
+.exitBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.exitBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(214, 51, 132, 0.22);
+  color: #ffd6e8;
+}
+
+.zoomReadout {
+  min-width: 52px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 820px) {
+  .bar {
+    left: max(8px, env(safe-area-inset-left, 0px));
+    right: max(8px, env(safe-area-inset-right, 0px));
+    width: auto;
+    max-width: none;
+    transform: none;
+    justify-content: flex-start;
+  }
+
+  .btn,
+  .btnActive,
+  .textBtn,
+  .exitBtn {
+    min-height: 44px;
+  }
+
+  .btn,
+  .btnActive {
+    width: 44px;
+  }
+}

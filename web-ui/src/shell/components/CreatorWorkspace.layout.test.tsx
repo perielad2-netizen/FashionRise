@@ -181,4 +181,29 @@ describe('CreatorWorkspace tablet layout controls', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.getByLabelText('Creator workspace').className).not.toMatch(/focusMode/)
   })
+
+  it('enters immersive drawing, keeps focus as a separate mode, and exits via Escape', async () => {
+    const editor = mockEditor()
+    render(<CreatorWorkspace editor={editor} />)
+    const workspace = screen.getByLabelText('Creator workspace')
+    const dock = within(screen.getByLabelText('Studio panels'))
+
+    fireEvent.click(dock.getByRole('button', { name: 'Full screen' }))
+    expect(workspace.getAttribute('data-immersive')).toBe('true')
+    expect(workspace.className).toMatch(/immersiveMode/)
+    expect(screen.getByRole('toolbar', { name: 'Immersive drawing toolbar' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Fit width' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Hand pan' })).toBeTruthy()
+
+    // Sheet closes before immersive exit.
+    fireEvent.click(screen.getByRole('button', { name: 'Materials' }))
+    expect(screen.getByLabelText('Close panel')).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByLabelText('Close panel')).toBeNull()
+    expect(workspace.getAttribute('data-immersive')).toBe('true')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(workspace.getAttribute('data-immersive')).toBe('false')
+    expect(workspace.className).not.toMatch(/immersiveMode/)
+  })
 })
