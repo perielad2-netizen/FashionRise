@@ -1,13 +1,23 @@
-import { useEffect, useState } from 'react'
-import { Maximize2, Minimize2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Expand, Maximize2, Minimize2 } from 'lucide-react'
 import { modelLabel } from '@/assets/modelLibrary'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
+import {
+  centerPan,
+  fitPage,
+  fitWidth,
+  hundredPercent,
+  type ViewportState,
+  zoomAt,
+  zoomPercent,
+} from '@/lib/viewportTransform'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { BrushControls } from '@/shell/components/BrushControls'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
+import { ImmersiveToolbar, type ImmersiveTool } from '@/shell/components/ImmersiveToolbar'
 import { ModelLibraryPanel } from '@/shell/components/ModelLibraryPanel'
 import { BetaNotice } from '@/shell/components/BetaNotice'
 import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
@@ -27,11 +37,25 @@ function modalOpen(): boolean {
   return document.querySelector('[aria-modal="true"]') !== null
 }
 
+function fullscreenElement(): Element | null {
+  const doc = document as Document & { webkitFullscreenElement?: Element | null }
+  return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null
+}
+
 export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   const [dock, setDock] = useState<Dock>(null)
   const [focusMode, setFocusMode] = useState(false)
+  const [immersive, setImmersive] = useState(false)
+  const [nativeFullscreen, setNativeFullscreen] = useState(false)
+  const [panTool, setPanTool] = useState(false)
+  const [viewport, setViewport] = useState<ViewportState>(() =>
+    fitPage({ width: 800, height: 1000 }),
+  )
   const [narrow, setNarrow] = useState(false)
   const [tablet, setTablet] = useState(false)
+  const workspaceRef = useRef<HTMLElement | null>(null)
+  const immersiveTool: ImmersiveTool = panTool ? 'pan' : editor.tool
+  const preImmersiveTool = useRef(editor.tool)
 
   useEffect(() => {
     const n = window.matchMedia('(max-width: 820px)')
@@ -51,35 +75,114 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
 
   const { setTool, undo, redo } = editor
 
+  const exitNativeFullscreen = useCallback(async () => {
+    const doc = document as Document & {
+      webkitExitFullscreen?: () => Promise<void> | void
+    }
+    if (!fullscreenElement()) return
+    try {
+      if (document.exitFullscreen) await document.exitFullscreen()
+      else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen()
+    } catch {
+      /* browser may reject; immersive CSS fallback still exits */
+    }
+  }, [])
+
+  const exitImmersive = useCallback(() => {
+    // Clear immersive UI immediately; fullscreen exit may reject or lag on some browsers.
+    setImmersive(false)
+    setNativeFullscreen(false)
+    setPanTool(false)
+    setDock(null)
+    // Restore last drawing tool if Hand was active (editor.tool is unchanged while panning).
+    setTool(preImmersiveTool.current)
+    void exitNativeFullscreen()
+  }, [exitNativeFullscreen, setTool])
+
+  const enterImmersive = useCallback(async () => {
+    preImmersiveTool.current = editor.tool
+    setDock(null)
+    setPanTool(false)
+    setImmersive(true)
+    setViewport(fitPage({ width: window.innerWidth, height: window.innerHeight }))
+    const el = workspaceRef.current
+    if (!el) return
+    const req =
+      el.requestFullscreen?.bind(el) ??
+      (el as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen?.bind(
+        el,
+      )
+    if (!req) return
+    try {
+      await req()
+      setNativeFullscreen(true)
+    } catch {
+      setNativeFullscreen(false)
+    }
+  }, [editor.tool])
+
+  useEffect(() => {
+    const onFs = () => {
+      const active = !!fullscreenElement()
+      setNativeFullscreen(active)
+      // Browser exited fullscreen independently — keep immersive CSS fallback until user exits.
+    }
+    document.addEventListener('fullscreenchange', onFs)
+    document.addEventListener('webkitfullscreenchange', onFs as EventListener)
+    return () => {
+      document.removeEventListener('fullscreenchange', onFs)
+      document.removeEventListener('webkitfullscreenchange', onFs as EventListener)
+    }
+  }, [])
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const action = matchStudioShortcut(event)
       if (!action || modalOpen()) return
+      if (immersive && panTool) return
       event.preventDefault()
-      if (action === 'draw') setTool('draw')
-      else if (action === 'erase') setTool('erase')
-      else if (action === 'fill') setTool('fill')
-      else if (action === 'eyedropper') setTool('eyedropper')
-      else if (action === 'undo') undo()
+      if (action === 'draw') {
+        setPanTool(false)
+        setTool('draw')
+      } else if (action === 'erase') {
+        setPanTool(false)
+        setTool('erase')
+      } else if (action === 'fill') {
+        setPanTool(false)
+        setTool('fill')
+      } else if (action === 'eyedropper') {
+        setPanTool(false)
+        setTool('eyedropper')
+      } else if (action === 'undo') undo()
       else redo()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [setTool, undo, redo])
+  }, [immersive, panTool, redo, setTool, undo])
 
   useEffect(() => {
-    if (!dock && !focusMode) return
+    if (!dock && !focusMode && !immersive) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || modalOpen()) return
+      if (event.key !== 'Escape') return
+      // 1) Topmost modal / color picker
+      if (modalOpen()) return
+      // 2) Open dock / sheet
       if (dock) {
         setDock(null)
         return
       }
+      // 3) Exit immersive / native fullscreen
+      if (immersive) {
+        event.preventDefault()
+        exitImmersive()
+        return
+      }
+      // 4) Exit Focus
       if (focusMode) setFocusMode(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dock, focusMode])
+  }, [dock, exitImmersive, focusMode, immersive])
 
   const toolLabel =
     editor.tool === 'erase'
@@ -89,9 +192,10 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         : editor.tool === 'eyedropper'
           ? 'Eyedropper'
           : 'Pencil'
-  const brushOverlay = dock === 'brush' && tablet
+  const brushOverlay = dock === 'brush' && (tablet || immersive)
   const panelScrim =
-    (dock === 'materials' || dock === 'settings' || dock === 'models') && (tablet || narrow || focusMode)
+    (dock === 'materials' || dock === 'settings' || dock === 'models') &&
+    (tablet || narrow || focusMode || immersive)
   const betaNotice = editor.magicNotice
     ? { message: editor.magicNotice, dismiss: () => editor.setMagicNotice(null) }
     : editor.comingSoon
@@ -100,32 +204,59 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         ? { message: editor.studioNotice, dismiss: () => editor.setStudioNotice(null) }
         : null
 
+  const applyImmersiveTool = (next: ImmersiveTool) => {
+    if (next === 'pan') {
+      setPanTool(true)
+      return
+    }
+    setPanTool(false)
+    setTool(next)
+  }
+
+  const zoomStep = (dir: 1 | -1) => {
+    const host = workspaceRef.current?.querySelector('[data-testid="drawing-canvas-host"]')
+    const rect = host?.getBoundingClientRect()
+    const box = {
+      width: rect?.width || window.innerWidth,
+      height: rect?.height || window.innerHeight,
+    }
+    const factor = dir > 0 ? 1.12 : 1 / 1.12
+    setViewport(
+      zoomAt(viewport, box, viewport.scale * factor, box.width / 2, box.height / 2),
+    )
+  }
+
   return (
     <section
-      className={`${styles.workspace} ${focusMode ? styles.focusMode : ''}`}
+      ref={workspaceRef}
+      className={`${styles.workspace} ${focusMode ? styles.focusMode : ''} ${immersive ? styles.immersiveMode : ''}`}
       aria-label="Creator workspace"
+      data-immersive={immersive ? 'true' : 'false'}
+      data-native-fullscreen={nativeFullscreen ? 'true' : 'false'}
     >
-      <WorkspaceHeader
-        canUndo={editor.canUndo}
-        canRedo={editor.canRedo}
-        onUndo={editor.undo}
-        onRedo={editor.redo}
-        onClear={editor.clear}
-        onMagic={editor.onMagic}
-        magicEnabled={editor.magicEnabled}
-        magicBusy={editor.magicBusy}
-        canRecoverLastMagic={editor.magicCanRecover}
-        onRecoverLastMagic={editor.recoverLastMagic}
-        onComingSoon={editor.showComingSoon}
-        saveStatus={editor.saveStatus}
-        saveStatusLabel={editor.saveStatusLabel}
-        saveError={editor.saveError}
-        onRetrySave={editor.retrySave}
-        onSaveDesign={editor.beginSaveDesign}
-        onExportPng={() => void editor.exportPng()}
-        exporting={editor.exporting}
-        onOpenLibrary={onOpenLibrary}
-      />
+      {!immersive ? (
+        <WorkspaceHeader
+          canUndo={editor.canUndo}
+          canRedo={editor.canRedo}
+          onUndo={editor.undo}
+          onRedo={editor.redo}
+          onClear={editor.clear}
+          onMagic={editor.onMagic}
+          magicEnabled={editor.magicEnabled}
+          magicBusy={editor.magicBusy}
+          canRecoverLastMagic={editor.magicCanRecover}
+          onRecoverLastMagic={editor.recoverLastMagic}
+          onComingSoon={editor.showComingSoon}
+          saveStatus={editor.saveStatus}
+          saveStatusLabel={editor.saveStatusLabel}
+          saveError={editor.saveError}
+          onRetrySave={editor.retrySave}
+          onSaveDesign={editor.beginSaveDesign}
+          onExportPng={() => void editor.exportPng()}
+          exporting={editor.exporting}
+          onOpenLibrary={onOpenLibrary}
+        />
+      ) : null}
 
       {betaNotice ? (
         <BetaNotice message={betaNotice.message} onDismiss={betaNotice.dismiss} />
@@ -147,7 +278,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
       />
 
       <div
-        className={`${styles.mobileDock} ${tablet ? styles.mobileDockVisible : ''}`}
+        className={`${styles.mobileDock} ${tablet && !immersive ? styles.mobileDockVisible : ''}`}
         aria-label="Studio panels"
       >
         <button
@@ -189,6 +320,15 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         >
           {focusMode ? 'Exit focus' : 'Focus'}
         </button>
+        <button
+          type="button"
+          className={styles.dockBtn}
+          onClick={() => {
+            void enterImmersive()
+          }}
+        >
+          Full screen
+        </button>
       </div>
 
       {panelScrim ? (
@@ -202,7 +342,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
 
       <div className={styles.body}>
         <div className={`${styles.modelsSlot} ${dock === 'models' ? styles.slotOpen : ''}`}>
-          {(narrow || focusMode) && dock === 'models' ? (
+          {(narrow || focusMode || immersive) && dock === 'models' ? (
             <>
               <div className={styles.sheetHead}>
                 <strong>Models</strong>
@@ -230,15 +370,17 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </div>
 
         <div className={styles.center}>
-          <FloatingToolRail
-            tool={editor.tool}
-            canUndo={editor.canUndo}
-            canRedo={editor.canRedo}
-            onTool={editor.setTool}
-            onUndo={editor.undo}
-            onRedo={editor.redo}
-            orientation={narrow ? 'horizontal' : 'vertical'}
-          />
+          {!immersive ? (
+            <FloatingToolRail
+              tool={editor.tool}
+              canUndo={editor.canUndo}
+              canRedo={editor.canRedo}
+              onTool={editor.setTool}
+              onUndo={editor.undo}
+              onRedo={editor.redo}
+              orientation={narrow ? 'horizontal' : 'vertical'}
+            />
+          ) : null}
           <div className={styles.canvasStage}>
             <DrawingWorkspace
               strokes={editor.strokes}
@@ -255,22 +397,44 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               onFillError={editor.onFillError}
               onEyedropperSample={editor.onEyedropperSample}
               onBrushSize={editor.setBrushSizePx}
+              immersive={immersive}
+              panTool={panTool}
+              viewport={immersive ? viewport : undefined}
+              onViewportChange={immersive ? setViewport : undefined}
             />
-            <button
-              type="button"
-              className={styles.focusToggle}
-              aria-pressed={focusMode}
-              aria-label={focusMode ? 'Exit focused sketch mode' : 'Enter focused sketch mode'}
-              title={focusMode ? 'Exit focus mode (Esc)' : 'Expand canvas'}
-              onClick={() => {
-                setFocusMode((v) => !v)
-                setDock(null)
-              }}
-            >
-              {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-              <span>{focusMode ? 'Exit focus' : 'Focus'}</span>
-            </button>
-            {focusMode && !tablet ? (
+            {!immersive ? (
+              <div className={styles.canvasActions}>
+                <button
+                  type="button"
+                  className={styles.focusToggle}
+                  aria-pressed={focusMode}
+                  aria-label={focusMode ? 'Exit focused sketch mode' : 'Enter focused sketch mode'}
+                  title={
+                    focusMode
+                      ? 'Exit focus mode (Esc) — fewer panels, standard paper fit'
+                      : 'Focus — fewer panels, standard paper fit'
+                  }
+                  onClick={() => {
+                    setFocusMode((v) => !v)
+                    setDock(null)
+                  }}
+                >
+                  {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  <span>{focusMode ? 'Exit focus' : 'Focus'}</span>
+                </button>
+                <button
+                  type="button"
+                  className={styles.immersiveToggle}
+                  aria-label="Enter full screen drawing"
+                  title="Full screen drawing — nearly the whole device, with zoom and pan"
+                  onClick={() => void enterImmersive()}
+                >
+                  <Expand size={16} />
+                  <span>Full screen</span>
+                </button>
+              </div>
+            ) : null}
+            {focusMode && !tablet && !immersive ? (
               <div className={styles.focusQuick} aria-label="Focus mode panels">
                 <button
                   type="button"
@@ -295,9 +459,63 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 </button>
               </div>
             ) : null}
+            {immersive ? (
+              <ImmersiveToolbar
+                tool={immersiveTool}
+                canUndo={editor.canUndo}
+                canRedo={editor.canRedo}
+                brushSize={editor.brushSize}
+                zoomPercent={zoomPercent(viewport.scale)}
+                nativeFullscreen={nativeFullscreen}
+                onTool={applyImmersiveTool}
+                onUndo={editor.undo}
+                onRedo={editor.redo}
+                onZoomIn={() => zoomStep(1)}
+                onZoomOut={() => zoomStep(-1)}
+                onFitPage={() =>
+                  setViewport(
+                    fitPage({
+                      width: workspaceRef.current?.clientWidth || window.innerWidth,
+                      height: workspaceRef.current?.clientHeight || window.innerHeight,
+                    }),
+                  )
+                }
+                onFitWidth={() =>
+                  setViewport(
+                    fitWidth({
+                      width: workspaceRef.current?.clientWidth || window.innerWidth,
+                      height: workspaceRef.current?.clientHeight || window.innerHeight,
+                    }),
+                  )
+                }
+                onHundred={() =>
+                  setViewport(
+                    hundredPercent({
+                      width: workspaceRef.current?.clientWidth || window.innerWidth,
+                      height: workspaceRef.current?.clientHeight || window.innerHeight,
+                    }),
+                  )
+                }
+                onCenter={() =>
+                  setViewport(
+                    centerPan(viewport.scale, {
+                      width: workspaceRef.current?.clientWidth || window.innerWidth,
+                      height: workspaceRef.current?.clientHeight || window.innerHeight,
+                    }),
+                  )
+                }
+                onOpenMaterials={() => setDock(dock === 'materials' ? null : 'materials')}
+                onOpenBrush={() => setDock(dock === 'brush' ? null : 'brush')}
+                onOpenModels={() => setDock(dock === 'models' ? null : 'models')}
+                onSave={editor.beginSaveDesign}
+                onExport={() => void editor.exportPng()}
+                onExit={exitImmersive}
+                saveLabel={editor.saveStatusLabel || 'Save'}
+              />
+            ) : null}
           </div>
           <div className={`${styles.materialsSlot} ${dock === 'materials' ? styles.slotOpen : ''}`}>
-            {(tablet || narrow || focusMode) && dock === 'materials' ? (
+            {(tablet || narrow || focusMode || immersive) && dock === 'materials' ? (
               <>
                 <div className={styles.sheetHead}>
                   <strong>Materials</strong>
@@ -338,7 +556,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </div>
 
         <div className={`${styles.settingsSlot} ${dock === 'settings' ? styles.slotOpen : ''}`}>
-          {(tablet || narrow || focusMode) && dock === 'settings' ? (
+          {(tablet || narrow || focusMode || immersive) && dock === 'settings' ? (
             <>
               <div className={styles.sheetHead}>
                 <strong>Settings</strong>

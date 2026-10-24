@@ -12,6 +12,27 @@
   container-type: size;
 }
 
+.wrapImmersive {
+  --paper-max-w: none;
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+  container-type: size;
+}
+
+.canvasFrameImmersive {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+  flex: 1 1 auto;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+  background: #0b1020;
+}
+
 .canvasFrame {
   position: relative;
   /* Fallback for browsers without container query units. */

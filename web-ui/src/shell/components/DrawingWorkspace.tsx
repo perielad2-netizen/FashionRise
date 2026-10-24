@@ -1,6 +1,7 @@
 import { DrawingCanvas } from '@/components/studio/DrawingCanvas'
 import type { FillOp, FillStyle } from '@/lib/fills'
 import type { Stroke, ToolKind } from '@/lib/strokes'
+import type { ViewportState } from '@/lib/viewportTransform'
 import styles from './DrawingWorkspace.module.css'
 
 type Props = {
@@ -18,6 +19,10 @@ type Props = {
   onFillError: (message: string) => void
   onEyedropperSample: (color: string) => void
   onBrushSize?: (px: number) => void
+  immersive?: boolean
+  panTool?: boolean
+  viewport?: ViewportState
+  onViewportChange?: (next: ViewportState) => void
 }
 
 export function DrawingWorkspace({
@@ -35,10 +40,21 @@ export function DrawingWorkspace({
   onFillError,
   onEyedropperSample,
   onBrushSize,
+  immersive = false,
+  panTool = false,
+  viewport,
+  onViewportChange,
 }: Props) {
   return (
-    <div className={styles.wrap} data-studio-paper="true">
-      <div className={styles.canvasFrame} data-testid="paper-frame">
+    <div
+      className={`${styles.wrap}${immersive ? ` ${styles.wrapImmersive}` : ''}`}
+      data-studio-paper="true"
+      data-immersive={immersive ? 'true' : 'false'}
+    >
+      <div
+        className={`${styles.canvasFrame}${immersive ? ` ${styles.canvasFrameImmersive}` : ''}`}
+        data-testid="paper-frame"
+      >
         <DrawingCanvas
           strokes={strokes}
           fills={fills}
@@ -55,6 +71,10 @@ export function DrawingWorkspace({
           onEyedropperSample={onEyedropperSample}
           onBrushSize={onBrushSize}
           framed={false}
+          immersive={immersive}
+          panTool={panTool}
+          viewport={viewport}
+          onViewportChange={onViewportChange}
         />
       </div>
     </div>
