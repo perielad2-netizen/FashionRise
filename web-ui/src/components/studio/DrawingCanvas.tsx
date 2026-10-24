@@ -136,10 +136,26 @@ export function DrawingCanvas({
   } | null>(null)
   const viewportRef = useRef<ViewportState>(viewport ?? fitPage({ width: DESIGN_WIDTH, height: DESIGN_HEIGHT }))
   const onViewportChangeRef = useRef(onViewportChange)
+  const sizeRef = useRef(size)
+  /** Latest handlers for the long-lived window pointer listeners (must not remount on pan/zoom). */
+  const windowPointerApiRef = useRef({
+    armGestureCooldown: () => {},
+    cancelDraft: () => {},
+    extendDraft: (_point: { x: number; y: number; pressure: number }) => {},
+    finish: (_pointerId?: number) => {},
+    pointFrom: (_stage: Konva.Stage, _evt: PointerEvent) =>
+      null as { x: number; y: number; pressure: number } | null,
+    session: () => ({ drawing: false, activePointerId: null as number | null }),
+    updateViewport: (_next: ViewportState) => {},
+  })
 
   useEffect(() => {
     brushSizeRef.current = brushSize
   }, [brushSize])
+
+  useEffect(() => {
+    sizeRef.current = size
+  }, [size])
 
   useEffect(() => {
     if (viewport) viewportRef.current = viewport
@@ -148,6 +164,23 @@ export function DrawingCanvas({
   useEffect(() => {
     onViewportChangeRef.current = onViewportChange
   }, [onViewportChange])
+
+  // Leaving Hand must drop pan capture state so Pencil can begin immediately.
+  useEffect(() => {
+    if (panTool) return
+    panning.current = false
+    panLast.current = null
+  }, [panTool])
+
+  // Cooldown timer is owned by gesture lifecycle, not by listener effect identity.
+  useEffect(() => {
+    return () => {
+      if (gestureCooldownTimer.current !== null) {
+        window.clearTimeout(gestureCooldownTimer.current)
+        gestureCooldownTimer.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const host = hostRef.current
@@ -351,22 +384,45 @@ export function DrawingCanvas({
   }, [size.h, size.w])
 
   useEffect(() => {
+    windowPointerApiRef.current = {
+      armGestureCooldown,
+      cancelDraft,
+      extendDraft,
+      finish,
+      pointFrom,
+      session,
+      updateViewport,
+    }
+  }, [
+    armGestureCooldown,
+    cancelDraft,
+    extendDraft,
+    finish,
+    pointFrom,
+    session,
+    updateViewport,
+  ])
+
+  useEffect(() => {
     const endTrackedPointer = (pointerId: number) => {
       pointers.current.delete(pointerId)
       if (pendingTap.current?.pointerId === pointerId) {
         pendingTap.current = null
       }
+      const api = windowPointerApiRef.current
       if (gestureMode.current && pointers.current.size < 2) {
         gestureMode.current = false
         pinchPrev.current = null
-        armGestureCooldown()
+        api.armGestureCooldown()
       }
       if (pointers.current.size === 0 && gestureCooldown.current) {
-        armGestureCooldown()
+        api.armGestureCooldown()
       }
     }
 
     const onWindowPointer = (evt: PointerEvent) => {
+      const api = windowPointerApiRef.current
+      const box = sizeRef.current
       // Immersive multitouch: always clear / update tracked pointers even when
       // releases happen outside the Konva Stage (otherwise gesture mode sticks).
       if (immersive) {
@@ -396,10 +452,10 @@ export function DrawingCanvas({
             const prev = pinchPrev.current
             if (prev && prev.dist > 0) {
               const factor = dist / prev.dist
-              updateViewport(
+              api.updateViewport(
                 pinchPan(
                   viewportRef.current,
-                  { width: size.w, height: size.h },
+                  { width: box.w, height: box.h },
                   viewportRef.current.scale * factor,
                   prev.midX,
                   prev.midY,
@@ -420,7 +476,7 @@ export function DrawingCanvas({
           const dx = evt.clientX - panLast.current.x
           const dy = evt.clientY - panLast.current.y
           panLast.current = { x: evt.clientX, y: evt.clientY }
-          updateViewport(panBy(viewportRef.current, { width: size.w, height: size.h }, dx, dy))
+          api.updateViewport(panBy(viewportRef.current, { width: box.w, height: box.h }, dx, dy))
           return
         }
         if (evt.type !== 'pointermove') {
@@ -440,13 +496,13 @@ export function DrawingCanvas({
         evt.type === 'pointercancel' ||
         evt.type === 'lostpointercapture'
       ) {
-        finish(evt.pointerId)
+        api.finish(evt.pointerId)
         return
       }
 
       if (evt.type !== 'pointermove') return
 
-      const decision = decidePointer(session(), {
+      const decision = decidePointer(api.session(), {
         type: 'move',
         pointerId: evt.pointerId,
         pointerType: evt.pointerType,
@@ -454,7 +510,7 @@ export function DrawingCanvas({
         buttons: evt.buttons,
       })
       if (decision === 'end') {
-        finish(evt.pointerId)
+        api.finish(evt.pointerId)
         return
       }
       if (decision !== 'append') return
@@ -467,20 +523,21 @@ export function DrawingCanvas({
         (evt.target === content || content.contains(evt.target))
       if (onSurface || !stage) return
 
-      const point = pointFrom(stage, evt)
+      const point = api.pointFrom(stage, evt)
       if (!point) return
-      extendDraft(point)
+      api.extendDraft(point)
     }
 
     const onBlurOrHide = () => {
+      const api = windowPointerApiRef.current
       pointers.current.clear()
       pendingTap.current = null
       if (gestureMode.current) {
         gestureMode.current = false
         pinchPrev.current = null
-        armGestureCooldown()
+        api.armGestureCooldown()
       }
-      if (drawing.current) cancelDraft()
+      if (drawing.current) api.cancelDraft()
       panning.current = false
       panLast.current = null
     }
@@ -492,29 +549,17 @@ export function DrawingCanvas({
     window.addEventListener('blur', onBlurOrHide)
     document.addEventListener('visibilitychange', onBlurOrHide)
     return () => {
+      // Listener identity only — never clear gestureCooldownTimer here.
+      // Viewport-driven remounts used to cancel the timer while leaving
+      // gestureCooldown.current true, permanently blocking Pencil (P1 #51).
       window.removeEventListener('pointermove', onWindowPointer)
       window.removeEventListener('pointerup', onWindowPointer)
       window.removeEventListener('pointercancel', onWindowPointer)
       window.removeEventListener('lostpointercapture', onWindowPointer)
       window.removeEventListener('blur', onBlurOrHide)
       document.removeEventListener('visibilitychange', onBlurOrHide)
-      if (gestureCooldownTimer.current !== null) {
-        window.clearTimeout(gestureCooldownTimer.current)
-        gestureCooldownTimer.current = null
-      }
     }
-  }, [
-    armGestureCooldown,
-    cancelDraft,
-    extendDraft,
-    finish,
-    immersive,
-    pointFrom,
-    session,
-    size.h,
-    size.w,
-    updateViewport,
-  ])
+  }, [immersive])
 
   useEffect(() => {
     if (!immersive) return
