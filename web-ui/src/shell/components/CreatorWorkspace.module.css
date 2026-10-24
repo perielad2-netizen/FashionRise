@@ -406,8 +406,9 @@
   }
 }
 
-/* Short landscape tablets: Models as a wide side drawer for larger croquis cards. */
-@media (max-width: 1024px) and (max-height: 760px) and (orientation: landscape) {
+/* Tablet landscape: Models as a wide side drawer for larger croquis cards
+ * (includes iPad Mini 1024×768; keep portrait on the tall bottom sheet above). */
+@media (max-width: 1024px) and (orientation: landscape) {
   .modelsSlot.slotOpen {
     left: auto;
     right: 0;

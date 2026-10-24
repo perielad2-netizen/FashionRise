@@ -16,7 +16,7 @@ import '@/shell/shellTokens.css'
 
 /**
  * DEV-only harness that mounts the real shell CreatorWorkspace + DrawingWorkspace
- * with a local mock editor (no auth / backend). Used for tablet Focus + materials QA.
+ * with a local mock editor (no auth / backend). Used for tablet layout + materials QA.
  *
  * Query `?v4gCustomFill=1` seeds a deterministic closed outline + custom gradient fill
  * for visual acceptance screenshots (no paid Magic).
