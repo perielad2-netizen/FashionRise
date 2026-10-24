@@ -79,6 +79,10 @@ This one-shot used a **synthetic stick-figure croquis** + a **short harness brie
 | [#56](https://github.com/perielad2-netizen/FashionRise/pull/56) | Sunburst migration (draft) | tip of `cursor/magic-image-sunburst-54-77c6` (includes this validation doc; verify with `gh pr view 56 --json headRefOid`) |
 | [#57](https://github.com/perielad2-netizen/FashionRise/pull/57) | Offline maint off `2cbc1ad0` (draft, not for deploy) | `40f4d2fda201544a8bc969f99e99a107122812d5` |
 
+## Readiness amendments (after this call)
+
+PR #56 later hardened env-example de-dupe, exact snapshot allowlisting, and fail-closed `xhigh`/`max` quality. **No second paid call** was run after those amendments (single-use authorization already consumed). Offline gates on the amended tip: full backend pytest green.
+
 ## Exact next release action (PM)
 
 1. Human visual review of private Sunburst result vs prior Magic illustration quality.  
