@@ -225,4 +225,86 @@ describe('CreatorWorkspace tablet layout controls (WEB-V4I)', () => {
     // Real Magic remains in the Studio header (Soon badge there is separate / env-gated).
     expect(screen.getByRole('button', { name: /Magic/i })).toBeTruthy()
   })
+
+  it('moves keyboard focus into Models gallery and restores the Models button on Done / Escape / scrim', () => {
+    render(<CreatorWorkspace editor={mockEditor()} />)
+    const modelsBtn = within(screen.getByLabelText('Studio panels')).getByRole('button', {
+      name: 'Models',
+    })
+    modelsBtn.focus()
+    fireEvent.click(modelsBtn)
+
+    const dialog = screen.getByRole('dialog', { name: 'Models gallery' })
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Done' }))
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }))
+    expect(screen.queryByRole('dialog', { name: 'Models gallery' })).toBeNull()
+    expect(document.activeElement).toBe(modelsBtn)
+
+    modelsBtn.focus()
+    fireEvent.click(modelsBtn)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: 'Models gallery' })).toBeNull()
+    expect(document.activeElement).toBe(modelsBtn)
+
+    modelsBtn.focus()
+    fireEvent.click(modelsBtn)
+    fireEvent.click(screen.getByLabelText('Close panel'))
+    expect(screen.queryByRole('dialog', { name: 'Models gallery' })).toBeNull()
+    expect(document.activeElement).toBe(modelsBtn)
+  })
+
+  it('keeps Tab / Shift+Tab cycling inside the open Models gallery', () => {
+    render(<CreatorWorkspace editor={mockEditor()} />)
+    fireEvent.click(
+      within(screen.getByLabelText('Studio panels')).getByRole('button', { name: 'Models' }),
+    )
+    const dialog = screen.getByRole('dialog', { name: 'Models gallery' })
+    const first = within(dialog).getByRole('button', { name: 'Done' })
+    const cards = within(dialog).getAllByRole('button', { name: /Select .+ reference/i })
+    const last = cards[cards.length - 1]!
+
+    first.focus()
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+
+    last.focus()
+    fireEvent.keyDown(window, { key: 'Tab' })
+    expect(document.activeElement).toBe(first)
+  })
+
+  it('gives model-switch confirmation precedence for focus and Escape over Models gallery', () => {
+    const { rerender } = render(<CreatorWorkspace editor={mockEditor()} />)
+    const modelsBtn = within(screen.getByLabelText('Studio panels')).getByRole('button', {
+      name: 'Models',
+    })
+    modelsBtn.focus()
+    fireEvent.click(modelsBtn)
+    expect(screen.getByRole('dialog', { name: 'Models gallery' })).toBeTruthy()
+    expect(document.activeElement).toBe(
+      within(screen.getByRole('dialog', { name: 'Models gallery' })).getByRole('button', {
+        name: 'Done',
+      }),
+    )
+
+    rerender(
+      <CreatorWorkspace
+        editor={mockEditor({
+          modelSwitchPrompt: { next: 'blank' },
+        })}
+      />,
+    )
+
+    const confirm = screen.getByRole('dialog', { name: 'Change reference model?' })
+    expect(confirm.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement).toBe(
+      within(confirm).getByRole('button', { name: 'Keep strokes' }),
+    )
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    // Confirm has no onEscape — Escape must not dismiss Models underneath.
+    expect(screen.getByRole('dialog', { name: 'Models gallery' })).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Change reference model?' })).toBeTruthy()
+  })
 })

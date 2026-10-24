@@ -33,11 +33,22 @@ type Props = {
   onOpenLibrary?: () => void
 }
 
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 /** True when a blocking dialog (save/confirm/color/magic) owns Escape — not dock overlays. */
 function modalOpen(): boolean {
   return (
     document.querySelector('[aria-modal="true"]:not([data-dock-overlay="true"])') !== null
   )
+}
+
+function focusableWithin(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+    if (el.getAttribute('aria-hidden') === 'true') return false
+    const style = window.getComputedStyle(el)
+    return style.display !== 'none' && style.visibility !== 'hidden'
+  })
 }
 
 function fullscreenElement(): Element | null {
@@ -56,8 +67,21 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   const [narrow, setNarrow] = useState(false)
   const [tablet, setTablet] = useState(false)
   const workspaceRef = useRef<HTMLElement | null>(null)
+  const modelsDialogRef = useRef<HTMLDivElement | null>(null)
+  const modelsTriggerRef = useRef<HTMLElement | null>(null)
   const immersiveTool: ImmersiveTool = panTool ? 'pan' : editor.tool
   const preImmersiveTool = useRef(editor.tool)
+
+  const closeDock = useCallback(() => setDock(null), [])
+
+  const toggleModels = useCallback(() => {
+    setDock((current) => {
+      if (current === 'models') return null
+      const active = document.activeElement
+      if (active instanceof HTMLElement) modelsTriggerRef.current = active
+      return 'models'
+    })
+  }, [])
 
   useEffect(() => {
     const n = window.matchMedia('(max-width: 820px)')
@@ -168,7 +192,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
     if (!dock && !immersive) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      // 1) Topmost modal / color picker
+      // 1) Topmost modal / color picker / model-switch confirm
       if (modalOpen()) return
       // 2) Open dock / sheet
       if (dock) {
@@ -184,6 +208,58 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [dock, exitImmersive, immersive])
+
+  /** Models gallery a11y: initial focus, Tab trap, restore Models trigger on close. */
+  useEffect(() => {
+    const open = overlayPanels && dock === 'models'
+    if (!open) return
+    const node = modelsDialogRef.current
+    if (!node) return
+
+    // Model-switch / save / color modals keep ownership while they are open.
+    if (!modalOpen()) {
+      const done = Array.from(node.querySelectorAll('button')).find(
+        (btn) => btn.textContent?.trim() === 'Done',
+      )
+      const selected = node.querySelector<HTMLElement>('button[aria-pressed="true"]')
+      ;(done ?? selected ?? node).focus()
+    }
+
+    return () => {
+      // Blocking dialogs own focus restoration while open.
+      if (modalOpen()) return
+      const previous = modelsTriggerRef.current
+      modelsTriggerRef.current = null
+      if (previous && document.contains(previous)) previous.focus()
+    }
+  }, [dock, overlayPanels])
+
+  useEffect(() => {
+    if (!(overlayPanels && dock === 'models')) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      // Confirm / save / color modals take precedence over the Models trap.
+      if (modalOpen()) return
+      const root = modelsDialogRef.current
+      if (!root) return
+      const nodes = focusableWithin(root)
+      if (nodes.length === 0) return
+      const first = nodes[0]!
+      const last = nodes[nodes.length - 1]!
+      const active = document.activeElement as HTMLElement | null
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+      } else if (active === last || !root.contains(active)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [dock, overlayPanels])
 
   const toolLabel =
     editor.tool === 'erase'
@@ -294,7 +370,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         <button
           type="button"
           className={dock === 'models' ? styles.dockActive : styles.dockBtn}
-          onClick={() => setDock(dock === 'models' ? null : 'models')}
+          onClick={toggleModels}
         >
           Models
         </button>
@@ -335,7 +411,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           type="button"
           className={styles.panelScrim}
           aria-label="Close panel"
-          onClick={() => setDock(null)}
+          onClick={closeDock}
         />
       ) : null}
 
@@ -346,15 +422,17 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         >
           {overlayPanels && dock === 'models' ? (
             <div
+              ref={modelsDialogRef}
               className={styles.modelsSheet}
               role="dialog"
               aria-modal="true"
               aria-label="Models gallery"
               data-dock-overlay="true"
+              tabIndex={-1}
             >
               <div className={styles.sheetHead}>
                 <strong>Models</strong>
-                <button type="button" className={styles.sheetClose} onClick={() => setDock(null)}>
+                <button type="button" className={styles.sheetClose} onClick={closeDock}>
                   Done
                 </button>
               </div>
@@ -459,7 +537,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 }
                 onOpenMaterials={() => setDock(dock === 'materials' ? null : 'materials')}
                 onOpenBrush={() => setDock(dock === 'brush' ? null : 'brush')}
-                onOpenModels={() => setDock(dock === 'models' ? null : 'models')}
+                onOpenModels={toggleModels}
                 onSave={editor.beginSaveDesign}
                 onExport={() => void editor.exportPng()}
                 onExit={exitImmersive}
