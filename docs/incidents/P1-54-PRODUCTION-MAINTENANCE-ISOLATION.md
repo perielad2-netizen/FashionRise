@@ -70,9 +70,17 @@ onto the **currently deployed** backend/worker revision — **without** undeploy
 - Sunburst model id is passed as `str` (SDK accepts it).  
 - No DB schema change.
 
+## GitHub PR hazard
+
+PR [#57](https://github.com/perielad2-netizen/FashionRise/pull/57) currently **targets `main`**. The git parent of the maintenance tip is production `2cbc1ad0`, **not** `main`. **Do not merge this PR into `main`** (would distort history / risk pose-fidelity interactions). Treat the branch tip as an offline deploy candidate only under separate PM authorization.
+
+## Live validation (does not authorize deploy)
+
+One authorized isolated Sunburst `images.edit` completed **SUCCESS** (est. ~$0.048) on a private harness — see `P1-54-LIVE-SUNBURST-VALIDATION.md`. Authorization was **single-use**; **no second paid call**. Visual quality vs prior Magic: **HOLD** (`P1-54-SUNBURST-QUALITY-ASSESSMENT.md`).
+
 ## STOP
 
-This document and any offline maintenance branch are **not** a deploy approval. Next PM decision selects exact commits, authorizes config change, and optionally one budgeted Magic validation.
+This document and the offline maintenance branch are **not** a deploy approval. Next PM decision: quality accept → authorize config (`OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst`, `OPENAI_IMAGE_QUALITY=high`) + code rollout of this tip **without** merging into `main`.
 
 
 ## Offline validation snapshot (this agent run)
@@ -81,9 +89,10 @@ This document and any offline maintenance branch are **not** a deploy approval. 
 |-------|--------|
 | Base SHA | `2cbc1ad04e5bfc01d1d356c92398e26e3014afe9` |
 | Branch | `cursor/magic-maint-2cbc1ad0-54-77c6` |
+| Readiness amendments | env de-dupe · exact snapshot allowlist · quality fail-closed (ported from #56) |
 | `pose_lock` in `sketch_openai.py` | **0** (PR #41 not included) |
 | Diff paths | config, sketch_openai, ai_worker, ai_service, schemas/ai, related tests, env examples, incident docs only |
-| Backend pytest | **273 passed** (mocked; suite on this older base lacks pose-fidelity test module) |
-| Paid OpenAI | **0** |
+| Backend pytest | re-run on tip after port (see STOP report) |
+| Schema migrations | **none** (Alembic stays `005`) |
 | Deploy | **not performed** |
 
