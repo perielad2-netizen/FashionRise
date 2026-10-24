@@ -42,15 +42,17 @@ Generated test image kept **private** under local `/tmp` (mode 600). **Not** upl
 
 ## Quality assessment (preliminary — not production Magic)
 
-Operator-approved prior Magic looks are **stylized fashion illustrations** (clean outline, elongated croquis proportions, garment-forward polish).
+**Full matrix:** `docs/incidents/P1-54-SUNBURST-QUALITY-ASSESSMENT.md` (Technical PM quality-preservation requirement).
 
-This one-shot used a **synthetic stick-figure croquis** + a **short harness brief**, not the production `sketch_polish` prompt path or a real designer sketch. Returned image:
+Operator-approved prior Magic looks are **stylized fashion illustrations** (clean outline, elongated croquis proportions, garment-forward polish). Saved references were **not** modified or regenerated.
+
+This one-shot used a **synthetic stick-figure croquis** + a **short harness brief**, not production `_build_image_prompt` (which still includes pose/garment/textile preservation and **“Avoid photorealism…”**). Returned image:
 
 - Preserved upright pose and navy shorts with white waistband stripe.
-- Rendered as a **polished, near-photoreal fashion figure / template**, not the same stylized illustration language as prior GPT Image 1 Magic samples.
-- **Significant style gap vs operator-loved Magic illustration look** under these harness conditions.
+- Rendered as a **polished, near-photoreal fashion figure**, not the stylized illustration language of prior GPT Image 1 Magic samples.
+- **Significant style gap** → **HOLD** for deploy. Textile/pattern fidelity **not** validated (input too simple).
 
-**API compatibility alone must not green-light production.** No additional paid A/B authorized.
+**API / HTTP 200 / cost alone must not green-light production.** No additional paid A/B authorized.
 
 ## What this does **not** prove
 
