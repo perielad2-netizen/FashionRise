@@ -572,6 +572,16 @@ class ImageEditCapabilities:
 _DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"
 _DEFAULT_IMAGE_SIZE = "1024x1536"
 
+# Exact documented snapshot aliases only (OpenAI model pages). No prefix wildcards.
+# Unknown suffix / future IDs fail closed before any billable images.edit.
+_IMAGE_EDIT_SNAPSHOT_ALIASES: dict[str, str] = {
+    "gpt-image-2.5-sunburst-2026-09-08": "gpt-image-2.5-sunburst",
+}
+
+# Qualities FashionRise may send on a paid edit. xhigh/max are API-legal for Sunburst
+# but rejected here as a cost/config guard (fail closed, 0 HTTP).
+_FASHIONRISE_EDIT_QUALITIES: frozenset[str] = frozenset({"low", "medium", "high", "auto"})
+
 _IMAGE_EDIT_CAPABILITIES: dict[str, ImageEditCapabilities] = {
     "gpt-image-2.5-sunburst": ImageEditCapabilities(
         model_id="gpt-image-2.5-sunburst",
@@ -645,34 +655,39 @@ _IMAGE_EDIT_CAPABILITIES: dict[str, ImageEditCapabilities] = {
 
 
 def image_edit_capabilities(model: str) -> ImageEditCapabilities | None:
-    """Return the capability row for an exact model id (or known snapshot alias)."""
+    """Return the capability row for an exact model id or documented snapshot alias only."""
     m = (model or "").strip()
     if not m:
         return None
     if m in _IMAGE_EDIT_CAPABILITIES:
         return _IMAGE_EDIT_CAPABILITIES[m]
-    # Snapshot aliases documented for Sunburst / Flare.
-    if m.startswith("gpt-image-2.5-sunburst-"):
-        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2.5-sunburst"]
-    if m.startswith("gpt-image-2.5-flare-"):
-        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2.5-flare"]
-    if m.startswith("gpt-image-2-") and m != "gpt-image-2.5-sunburst" and not m.startswith(
-        "gpt-image-2.5-"
-    ):
-        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2"]
+    canonical = _IMAGE_EDIT_SNAPSHOT_ALIASES.get(m)
+    if canonical is not None:
+        return _IMAGE_EDIT_CAPABILITIES.get(canonical)
     return None
 
 
 def resolve_image_edit_quality(caps: ImageEditCapabilities, configured: str | None) -> str:
-    """Pick a supported quality; never silently escalate to xhigh/max."""
+    """Resolve FashionRise-allowed edit quality.
+
+    Legacy ``standard`` maps to ``high``. Explicit ``xhigh`` / ``max`` and other
+    unexpected values raise before any paid HTTP (no silent premium upgrade, no
+    silent fallback to default for unknown strings).
+    """
     raw = (configured or "").strip().lower() or caps.default_quality
     if raw == "standard":
-        raw = "high" if "high" in caps.qualities else caps.default_quality
+        # Documented legacy compatibility (older GPT Image envs used "standard").
+        raw = "high"
     if raw in {"xhigh", "max"}:
-        # Cost guard: FashionRise defaults must not silently select premium tiers.
-        raw = "high" if "high" in caps.qualities else caps.default_quality
-    if raw not in caps.qualities:
-        return caps.default_quality
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image quality configuration). "
+            "Your original design is unchanged."
+        )
+    if raw not in _FASHIONRISE_EDIT_QUALITIES or raw not in caps.qualities:
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image quality configuration). "
+            "Your original design is unchanged."
+        )
     return raw
 
 
@@ -706,15 +721,17 @@ def build_image_edit_kwargs(
     quality: str | None,
 ) -> dict[str, Any]:
     """Construct a single images.edit kwargs dict from the model capability table."""
-    caps = assert_image_model_editable(model)
+    configured = (model or "").strip()
+    caps = assert_image_model_editable(configured)
     sketch_bytes, mime = sketch
     ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
     size_value = size if size in caps.sizes else _DEFAULT_IMAGE_SIZE
     if size_value not in caps.sizes:
         size_value = "1024x1536" if "1024x1536" in caps.sizes else next(iter(sorted(caps.sizes)))
     img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
+    # Forward the exact allowlisted model id (canonical or documented snapshot).
     kwargs: dict[str, Any] = {
-        "model": caps.model_id if model in _IMAGE_EDIT_CAPABILITIES else model,
+        "model": configured,
         "image": img,
         "prompt": prompt,
         "size": size_value,
