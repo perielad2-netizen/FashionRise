@@ -22,7 +22,7 @@ def _settings(**env) -> Settings:
         "openai_model": "gpt-6-luna",
         "openai_reasoning_effort": "none",
         "openai_max_completion_tokens": 1400,
-        "openai_image_model": "gpt-image-1",
+        "openai_image_model": "gpt-image-2.5-sunburst",
         "openai_timeout_seconds": 180.0,
         "openai_http_timeout_seconds": 60.0,
         "openai_base_url": None,
@@ -78,7 +78,10 @@ def test_default_chat_model_is_gpt_6_luna(monkeypatch):
     monkeypatch.delenv("OPENAI_REASONING_EFFORT", raising=False)
     monkeypatch.delenv("OPENAI_MAX_COMPLETION_TOKENS", raising=False)
     monkeypatch.delenv("OPENAI_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_IMAGE_QUALITY", raising=False)
+    # Ignore backend/.env so this asserts code defaults, not a local developer pin.
     s = Settings(
+        _env_file=None,
         testing=True,
         environment="development",
         openai_api_key=None,
@@ -86,7 +89,8 @@ def test_default_chat_model_is_gpt_6_luna(monkeypatch):
     assert s.openai_model == "gpt-6-luna"
     assert s.openai_reasoning_effort == "none"
     assert s.openai_max_completion_tokens == 1400
-    assert s.openai_image_model == "gpt-image-1"
+    assert s.openai_image_model == "gpt-image-2.5-sunburst"
+    assert s.openai_image_quality == "high"
 
 
 def test_environment_override_still_selects_the_model(monkeypatch):

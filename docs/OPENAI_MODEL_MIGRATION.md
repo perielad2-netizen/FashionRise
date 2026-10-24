@@ -21,7 +21,7 @@ Sources (official):
 | Role | Before | After |
 |------|--------|--------|
 | Sketch Chat Completions (`sketch_clean`, `sketch_polish`, `style_suggest`) | `gpt-4o-mini` | `gpt-6-luna` |
-| Look image edit / generate | `gpt-image-1` (unchanged) | `gpt-image-1` |
+| Look image edit / generate | `gpt-image-1` (shut down 2026-10-23) | `gpt-image-2.5-sunburst` (see P1 #54 migration doc) |
 | Embeddings | not used | not used |
 
 Override remains `OPENAI_MODEL`. Production hosts that pin the old name in `.env` must change that variable; the code default alone does not rewrite an existing env file.
@@ -54,7 +54,7 @@ FashionRise already uses **Chat Completions**, not the Responses API. Official L
 | Older override | If `OPENAI_MODEL` is still `gpt-4o-*`, omit `reasoning_effort` so a rollback env keeps working. |
 | Token budget | Keep **1400** `max_completion_tokens`. With `effort=none` that budget is visible JSON only. |
 | Incomplete / invalid | `finish_reason=length`, refusals, empty content, and non-object / invalid JSON raise `SketchCompletionError`. The worker stores `failed` + a short sanitized `error_message`. **No look image is generated.** |
-| Image pipeline | `OPENAI_IMAGE_MODEL=gpt-image-1` untouched — Luna does **not** support `/v1/images/edits`. Only a complete JSON object may call **one** `images.edit` with the configured model via `with_options(max_retries=0)`. WEB-V4E removes `images.generate` and silent mini-model fanout; Chat Completions retries stay default. |
+| Image pipeline | Default `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` (retired `gpt-image-1` fail-closed). Luna does **not** support `/v1/images/edits`. Only a complete JSON object may call **one** `images.edit` via `with_options(max_retries=0)`. No `images.generate` fallback; no silent model fanout. |
 | Stub | Empty `OPENAI_API_KEY` still completes jobs with the local stub. |
 | SDK | **`openai>=1.109.1,<2.0.0`**. `reasoning_effort` first appeared in 1.58.0; this repo validated the keyword on **1.109.1**. That version’s typed alias is `minimal\|low\|medium\|high`; Luna’s documented `none` is still sent as the Chat Completions string. |
 

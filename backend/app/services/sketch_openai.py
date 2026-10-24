@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
@@ -553,9 +554,180 @@ def _sanitize_provider_error(exc: BaseException) -> str:
     return type(exc).__name__[:80]
 
 
-def _supports_input_fidelity(model: str) -> bool:
+# Explicit per-model edit capabilities (do not infer from string prefixes alone).
+# Sources: OpenAI Images edit API + GPT Image 2.5 / deprecation docs (2026-10).
+@dataclass(frozen=True)
+class ImageEditCapabilities:
+    model_id: str
+    status: str  # supported | retired | unsupported
+    sizes: frozenset[str]
+    qualities: frozenset[str]
+    default_quality: str
+    output_formats: frozenset[str]
+    supports_input_fidelity: bool
+    input_fidelity_values: frozenset[str]
+    max_n: int
+
+
+_DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"
+_DEFAULT_IMAGE_SIZE = "1024x1536"
+
+_IMAGE_EDIT_CAPABILITIES: dict[str, ImageEditCapabilities] = {
+    "gpt-image-2.5-sunburst": ImageEditCapabilities(
+        model_id="gpt-image-2.5-sunburst",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "xhigh", "max", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-2.5-flare": ImageEditCapabilities(
+        model_id="gpt-image-2.5-flare",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "xhigh", "max", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-2": ImageEditCapabilities(
+        model_id="gpt-image-2",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        # Official docs: omit input_fidelity for gpt-image-2 (always high fidelity).
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-1.5": ImageEditCapabilities(
+        model_id="gpt-image-1.5",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"high", "low"}),
+        max_n=10,
+    ),
+    # Retired 2026-10-23 — never issue a paid edit against these ids.
+    "gpt-image-1": ImageEditCapabilities(
+        model_id="gpt-image-1",
+        status="retired",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"high", "low"}),
+        max_n=10,
+    ),
+    "gpt-image-1-mini": ImageEditCapabilities(
+        model_id="gpt-image-1-mini",
+        status="retired",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"low"}),
+        max_n=10,
+    ),
+}
+
+
+def image_edit_capabilities(model: str) -> ImageEditCapabilities | None:
+    """Return the capability row for an exact model id (or known snapshot alias)."""
     m = (model or "").strip()
-    return m == "gpt-image-1" or m.startswith("gpt-image-1.") or m in {"gpt-image-1.5", "gpt-image-2"}
+    if not m:
+        return None
+    if m in _IMAGE_EDIT_CAPABILITIES:
+        return _IMAGE_EDIT_CAPABILITIES[m]
+    # Snapshot aliases documented for Sunburst / Flare.
+    if m.startswith("gpt-image-2.5-sunburst-"):
+        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2.5-sunburst"]
+    if m.startswith("gpt-image-2.5-flare-"):
+        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2.5-flare"]
+    if m.startswith("gpt-image-2-") and m != "gpt-image-2.5-sunburst" and not m.startswith(
+        "gpt-image-2.5-"
+    ):
+        return _IMAGE_EDIT_CAPABILITIES["gpt-image-2"]
+    return None
+
+
+def resolve_image_edit_quality(caps: ImageEditCapabilities, configured: str | None) -> str:
+    """Pick a supported quality; never silently escalate to xhigh/max."""
+    raw = (configured or "").strip().lower() or caps.default_quality
+    if raw == "standard":
+        raw = "high" if "high" in caps.qualities else caps.default_quality
+    if raw in {"xhigh", "max"}:
+        # Cost guard: FashionRise defaults must not silently select premium tiers.
+        raw = "high" if "high" in caps.qualities else caps.default_quality
+    if raw not in caps.qualities:
+        return caps.default_quality
+    return raw
+
+
+def assert_image_model_editable(model: str) -> ImageEditCapabilities:
+    """Fail closed before any paid images.edit when the model is retired/unknown."""
+    caps = image_edit_capabilities(model)
+    if caps is None:
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
+    if caps.status == "retired":
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
+    if caps.status != "supported":
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
+    return caps
+
+
+def build_image_edit_kwargs(
+    *,
+    model: str,
+    prompt: str,
+    sketch: tuple[bytes, str],
+    size: str,
+    quality: str | None,
+) -> dict[str, Any]:
+    """Construct a single images.edit kwargs dict from the model capability table."""
+    caps = assert_image_model_editable(model)
+    sketch_bytes, mime = sketch
+    ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
+    size_value = size if size in caps.sizes else _DEFAULT_IMAGE_SIZE
+    if size_value not in caps.sizes:
+        size_value = "1024x1536" if "1024x1536" in caps.sizes else next(iter(sorted(caps.sizes)))
+    img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
+    kwargs: dict[str, Any] = {
+        "model": caps.model_id if model in _IMAGE_EDIT_CAPABILITIES else model,
+        "image": img,
+        "prompt": prompt,
+        "size": size_value,
+        "n": 1,
+    }
+    q = resolve_image_edit_quality(caps, quality)
+    kwargs["quality"] = q
+    if "png" in caps.output_formats:
+        kwargs["output_format"] = "png"
+    # Only set input_fidelity when the capability table explicitly allows it.
+    if caps.supports_input_fidelity and "high" in caps.input_fidelity_values:
+        kwargs["input_fidelity"] = "high"
+    return kwargs
 
 
 def _try_edit_look_from_sketch(
@@ -566,48 +738,51 @@ def _try_edit_look_from_sketch(
     size: str,
     *,
     sketch: tuple[bytes, str],
+    quality: str | None = None,
 ) -> tuple[bytes | None, str]:
     """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0)."""
-    sketch_bytes, mime = sketch
     model = (model or "").strip()
-    if not model.startswith("gpt-image"):
+    try:
+        kwargs = build_image_edit_kwargs(
+            model=model,
+            prompt=prompt,
+            sketch=sketch,
+            size=size,
+            quality=quality,
+        )
+    except SketchCompletionError:
+        raise
+    except Exception:
         logger.warning("OpenAI job %s: image model not eligible for edit", job.id)
         return None, ""
 
-    ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
-    size_value = size if size in {"1024x1024", "1024x1536", "1536x1024", "auto"} else "1024x1536"
+    fidelity = kwargs.get("input_fidelity", "omit")
     try:
-        img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
         logger.info(
-            "OpenAI job %s: editing sketch with %s size=%s (input_fidelity=%s)",
+            "OpenAI job %s: editing sketch with %s size=%s quality=%s output_format=%s input_fidelity=%s",
             job.id,
-            model,
-            size_value,
-            "high" if _supports_input_fidelity(model) else "omit",
+            kwargs.get("model"),
+            kwargs.get("size"),
+            kwargs.get("quality"),
+            kwargs.get("output_format"),
+            fidelity,
         )
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "image": img,
-            "prompt": prompt,
-            "size": size_value,
-            "n": 1,
-        }
-        if _supports_input_fidelity(model):
-            kwargs["input_fidelity"] = "high"
         # Disable OpenAI SDK automatic retries for this paid image call only.
         # Chat Completions (vision) keeps the client default retry policy.
         result = client.with_options(max_retries=0).images.edit(**kwargs)
         data = getattr(result, "data", None) or []
         raw = _extract_image_bytes(data[0]) if data else None
         if raw:
-            return raw, model
+            return raw, str(kwargs.get("model") or model)
         logger.warning("OpenAI job %s: edit returned no image bytes", job.id)
         return None, ""
-    except Exception as e:
+    except SketchCompletionError:
+        raise
+    except Exception as exc:
         logger.warning(
             "OpenAI job %s: image edit failed type=%s",
             job.id,
-            _sanitize_provider_error(e),
+            _sanitize_provider_error(exc),
         )
         return None, ""
 
@@ -618,22 +793,26 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     Uses SDK max_retries=0 for the edit call only. When the image model is disabled, returns None.
     When editing is enabled but the sketch is missing or the single edit fails, raises
     SketchCompletionError so the worker reports a genuine failure. Never calls images.generate
-    or a secondary edit model.
+    or a secondary edit model. Retired models fail closed before any paid edit HTTP call.
     """
     settings = get_settings()
-    model = (getattr(settings, "openai_image_model", None) or "gpt-image-1").strip()
+    model = (getattr(settings, "openai_image_model", None) or _DEFAULT_IMAGE_MODEL).strip()
     if model.lower() in {"", "none", "off", "false", "0"}:
         return None
+
+    # Fail closed before sketch decode work when the configured model cannot be edited.
+    assert_image_model_editable(model)
 
     sketch = _raw_sketch_bytes(job)
     if sketch is None:
         raise SketchCompletionError("no sketch image for edit")
 
     prompt = _build_image_prompt(structured, summary)
-    size = (getattr(settings, "openai_image_size", None) or "1024x1536").strip()
+    size = (getattr(settings, "openai_image_size", None) or _DEFAULT_IMAGE_SIZE).strip()
+    quality = getattr(settings, "openai_image_quality", None)
 
     raw, used_model = _try_edit_look_from_sketch(
-        client, job, prompt, model, size, sketch=sketch
+        client, job, prompt, model, size, sketch=sketch, quality=quality
     )
     if not raw:
         raise SketchCompletionError("sketch image edit failed")

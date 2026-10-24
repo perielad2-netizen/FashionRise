@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-24. **GitHub `main`:** **`dfcaa609`** (WEB-V4I PR [#48](https://github.com/perielad2-netizen/FashionRise/pull/48) merged; includes WEB-V4H + PR #41 pose fidelity source **not deployed**). **Production frontend:** **`dfcaa609`**. **Production backend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **WEB-V4F / V4G operator acceptance:** **5/5 PASS**. **WEB-V4H real-tablet operator acceptance:** **7/7 PASS**. **P1 active:** Issue [#51](https://github.com/perielad2-netizen/FashionRise/issues/51) Fullscreen Hand→Pencil drawing stops until refresh — **hotfix draft** (takes priority over WEB-V4J / Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42)). **WEB-V4J-A** architecture draft PR [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) remains open — **suspended until #51 ships**. **Magic pose fidelity (Issue #39 / PR #41):** on `main`, production BE/worker unchanged, visual pose **NOT accepted**. Docs drafts [#44](https://github.com/perielad2-netizen/FashionRise/pull/44) / [#46](https://github.com/perielad2-netizen/FashionRise/pull/46) / [#49](https://github.com/perielad2-netizen/FashionRise/pull/49) — **do not auto-merge**. Cursor paid AI calls this run: **0**.
+**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`**. **Production FE:** **`c6fc1eb8`**. **Production BE+worker:** **`2cbc1ad0`** · Alembic **`005`** · still configured `OPENAI_IMAGE_MODEL=gpt-image-1` (**retired 2026-10-23**). **P1 #51:** fixed + operator-accepted **5/5**. **P1 #54 ACTIVE:** Magic edit failures; observability draft PR [#55](https://github.com/perielad2-netizen/FashionRise/pull/55); **this PR** = Sunburst image-model migration (draft, not deployed). **Do not deploy `main` BE** (contains undeployed PR #41). Docs PR [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) / architecture PR [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) remain separate. Cursor paid AI this run: **0**.
 
-**Phase:** Protected family beta. Production FE @ `dfcaa609` (WEB-V4I). **Active P1:** fullscreen Hand→Pencil gesture regression (#51). WEB-V4J Front/Back deferred. Magic pose-fidelity PR #41 remains GitHub-only.
+**Phase:** Protected family beta. **Active P1:** #54 Magic recovery (retired image model → `gpt-image-2.5-sunburst`). Pose-fidelity PR #41 remains GitHub-only / not auto-deployed.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -13,7 +13,7 @@
 |---|---|
 | Frontend (`web-ui`) | **`dfcaa609…`** — Nginx root `/var/www/fashionrise/releases/dfcaa609`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Legacy + 10 library croquis present. WEB-V4I Studio + WEB-V4H immersive drawing live. **Known P1:** Immersive Hand→Pencil may stop drawing until refresh (Issue #51 — hotfix draft, not deployed). |
 | Backend (FastAPI + PostgreSQL) | **`2cbc1ad0`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone) |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`2cbc1ad0`** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` · edit `max_retries=0` |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`2cbc1ad0`** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` (**retired**; migration draft proposes `gpt-image-2.5-sunburst`) · edit `max_retries=0` |
 | Database | `fashionrise_beta` — Alembic **`005`** (unchanged) |
 | Deploy backup | `/var/backups/fashionrise/v4h-fe-deploy-*` (+ prior `v4g-fe-deploy-20261023T140541Z`) |
 
@@ -314,7 +314,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P1 #51 Hand→Pencil hotfix draft (Issue [#51](https://github.com/perielad2-netizen/FashionRise/issues/51)). After merge, authorize **frontend-only** deploy of the hotfix SHA, then require **operator real mobile/tablet acceptance** of Hand→Pencil recovery. **Do not merge or deploy** until authorized. WEB-V4J / Issue #42 remains suspended until #51 is closed.
+1. **Exact next action:** Technical PM **review** of P1 #54 deliverables — observability PR [#55](https://github.com/perielad2-netizen/FashionRise/pull/55) + this Sunburst migration PR + offline maintenance isolation off `2cbc1ad0` (`docs/incidents/P1-54-PRODUCTION-MAINTENANCE-ISOLATION.md`). **No merge/deploy/paid Magic** until a later authorized maintenance release.
 2. Production FE @ `4f332a62` (WEB-V4H): real-tablet operator acceptance **7/7 PASS** (done). Backend/worker remain `2cbc1ad0`.
 3. After V4I acceptance + FE deploy: scope Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42) Front/Back croquis as a separate draft PR (not in #48).
 4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. After separate authorize: deploy BE/worker → one paid Magic retest on Issue #39 sample.
