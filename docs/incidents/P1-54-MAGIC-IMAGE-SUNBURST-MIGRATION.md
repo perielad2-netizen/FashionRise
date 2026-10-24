@@ -21,11 +21,14 @@ Preferred replacement: **`gpt-image-2.5-sunburst`** (precision editing). Alterna
 
 ## Model capability table (code)
 
+Exact model ids only, plus **documented** snapshot alias `gpt-image-2.5-sunburst-2026-09-08`.  
+Arbitrary `gpt-image-2.5-sunburst-*` / `flare-*` / `gpt-image-2-*` prefixes are **rejected** (fail closed, 0 paid edits).
+
 | Model | Status | `input_fidelity` | Qualities used | `output_format` | Sizes |
 |-------|--------|------------------|----------------|-----------------|-------|
-| `gpt-image-2.5-sunburst` | supported (default) | **omit** | `high` default; never silent `xhigh`/`max` | `png` | `1024x1536` preserved |
+| `gpt-image-2.5-sunburst` | supported (default) | **omit** | `high` default; legacy `standard`→`high`; `xhigh`/`max`/unknown **fail closed** | `png` | `1024x1536` preserved |
 | `gpt-image-2.5-flare` | supported (optional) | **omit** | same guardrails | `png` | same |
-| `gpt-image-2` | supported | **omit** (docs) | up to `high` | `png` | same |
+| `gpt-image-2` | supported | **omit** (docs) | up to `high` (FashionRise allowlist) | `png` | same |
 | `gpt-image-1.5` | supported | may set `high` | up to `high` | `png` | same |
 | `gpt-image-1` / `gpt-image-1-mini` | **retired** | n/a | n/a | n/a | **fail closed before HTTP** |
 
@@ -46,21 +49,23 @@ Vision/text model remains **`gpt-6-luna`**.
 
 ## Cost estimate (official rates; not authorization to spend)
 
-Sunburst / Flare Images API token rates (Standard):
+Sunburst Images API token rates (Standard):
 
 | Token class | Price |
 |-------------|-------|
 | Text input | $5 / 1M |
-| Text cached input | $1.25 / 1M |
 | Image input | $8 / 1M |
 | Image output | $30 / 1M |
 
 Notes:
 
+- Official docs: GPT Image 2 calculator **does not** predict GPT Image 2.5 token consumption.
 - Direct `/v1/images/edits` does **not** use cached image-input pricing.
-- Exact tokens for FashionRise sketch + `1024x1536` + `quality=high` **are not measured here** (no live probe). Older GPT Image high-portrait output was on the order of ~6k image output tokens (~$0.19 at $30/1M) **plus** image/text input — Sunburst token counts can differ; treat **~$0.20–$0.60 per successful edit** as a planning band until a later authorized single live measurement.
-- Chat Completions (`gpt-6-luna`) costs remain separate per Magic job.
-- Choosing `high` (not `xhigh`/`max`) is an intentional cost/quality tradeoff.
+- Third-party measured ~$0.05 for a short-prompt 1024×1536 high edit is **not** a FashionRise guarantee.
+- Isolated one-shot (synthetic croquis, short harness brief): usage-based est. **~$0.048** — see `P1-54-LIVE-SUNBURST-VALIDATION.md`.
+- Production Magic also incurs separate Chat Completions (`gpt-6-luna`) vision cost — **not** included in the image-edit figure.
+- The operator $1 ceiling is a **planning** limit, not a provider-enforced cap.
+- Choosing `high` (rejecting `xhigh`/`max` in config) is an intentional cost/quality tradeoff.
 
 ## Product behavior preserved
 
