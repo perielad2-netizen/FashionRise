@@ -512,7 +512,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Focus mode | Preserved (lighter panel hide + paper max-width); immersive is separate |
 | Export / Magic capture | Viewport-only — design-space strokes/fills unchanged (no paid Magic invoked) |
 | Frontend tests / lint / build / SW | Vitest **338/338** · oxlint warnings-only · `tsc -b` · production build · `check:sw` ok=true |
-| Browser QA | DEV CreatorWorkspace lab across desktop/short/iPad Mini/Pro/landscape/mobile; paper rect measurements Focus vs immersive |
+| Browser QA | DEV CreatorWorkspace lab: desktop 1440×900 · short 1180×600 · iPad Mini 768×1024 / 1024×768 · iPad Pro 13 1032×1376 · tablet 1180×820 · Android 800×1280 · mobile 390×844. Immersive host fills viewport; measured host-area vs Focus paper ≈ **2.2–3.9×** larger (desktop ~3.6×). Screenshots under `/opt/cursor/artifacts/screenshots/v4h-*` |
 | Physical stylus | **Not available in this environment** — recorded as outstanding |
 | Issue #42 | Backlog after V4H |
 | Paid OpenAI | **0** |
