@@ -59,9 +59,10 @@ onto the **currently deployed** backend/worker revision — **without** undeploy
 ## Rollback
 
 1. Restore previous backend/worker executable tree / git checkout at `2cbc1ad0` (or prior release tarball under `/var/backups/fashionrise/`).  
-2. Restore previous `OPENAI_IMAGE_MODEL` / quality env values from the pre-change env backup.  
-3. Restart only `fashionrise-api` + `fashionrise-ai-worker` if a future authorized deploy had restarted them.  
-4. Confirm `/health` + `/ready`; no FE switch required for BE-only rollback.
+2. Restore previous image env values from the pre-change env backup **together with the code**.  
+3. Prefer a **safe disabled** state (`OPENAI_IMAGE_MODEL=off`) over restoring retired `gpt-image-1`: restoring `gpt-image-1` returns Magic to the **known-broken** retired-model failure mode, not a working edit service.  
+4. Restart only `fashionrise-api` + `fashionrise-ai-worker` if a future authorized deploy had restarted them.  
+5. Confirm `/health` + `/ready`; no FE switch required for BE-only rollback. Zero Alembic migrations in this candidate.
 
 ## Dependency compatibility
 
