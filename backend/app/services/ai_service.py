@@ -97,6 +97,42 @@ def sanitize_job_input_for_response(input_data: dict | None) -> dict:
     return raw
 
 
+_RESULT_STRIP_KEYS = frozenset(
+    {
+        "image_base64",
+        "imageBase64",
+        "b64_json",
+        "prompt",
+        "image_prompt",
+        "moderation_details",
+        "raw_error",
+        "provider_body",
+        "body",
+    }
+)
+
+
+def sanitize_job_result_for_response(result_data: dict | None) -> dict | None:
+    """Expose only safe result fields; re-normalize failure diagnostics via allowlists."""
+    if result_data is None:
+        return None
+    if not isinstance(result_data, dict):
+        return None
+    from app.services import sketch_openai
+
+    out: dict = {}
+    for key, value in result_data.items():
+        if key in _RESULT_STRIP_KEYS:
+            continue
+        if key == "error":
+            cleaned = sketch_openai.normalize_failure_meta(value if isinstance(value, dict) else {})
+            if cleaned:
+                out["error"] = cleaned
+            continue
+        out[key] = value
+    return out
+
+
 def extract_result_image_url(result_data: dict | None) -> str | None:
     if not isinstance(result_data, dict):
         return None

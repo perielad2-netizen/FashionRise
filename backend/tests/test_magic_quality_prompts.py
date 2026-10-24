@@ -480,6 +480,222 @@ def test_edit_path_decodes_sketch_once(monkeypatch, settings):
     assert client.option_calls == [{"max_retries": 0}]
 
 
+def test_edit_bad_request_safe_meta_no_body_leak(monkeypatch, settings, caplog):
+    """Issue #54 observability: persist allowlisted fields only; never raw provider bodies."""
+
+    class _FakeBadRequest(Exception):
+        def __init__(self):
+            super().__init__('{"error":{"message":"SECRET_BODY_SHOULD_NOT_LEAK","code":"invalid_image"}}')
+            self.status_code = 400
+            self.code = "invalid_image"
+            self.request_id = "req_test_observability_001"
+            self.body = {"error": {"message": "SECRET_BODY_SHOULD_NOT_LEAK", "code": "invalid_image"}}
+
+    def on_edit(**kwargs):
+        raise _FakeBadRequest()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with (
+        caplog.at_level(logging.WARNING),
+        pytest.raises(sketch_openai.SketchCompletionError) as excinfo,
+    ):
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    err = excinfo.value
+    assert str(err) == "sketch image edit failed"
+    assert err.safe_meta["error_category"] == "provider_bad_request"
+    assert err.safe_meta["http_status"] == 400
+    assert err.safe_meta["provider_code"] == "invalid_image"
+    assert err.safe_meta["request_id"] == "req_test_observability_001"
+    assert err.safe_meta["stage"] == "images.edit"
+    assert err.safe_meta["image_edit_attempted"] is True
+    assert err.safe_meta["image_bytes_returned"] is False
+    assert "SECRET_BODY" not in str(err)
+    assert "SECRET_BODY" not in json.dumps(err.safe_meta)
+    joined = "\n".join(r.getMessage() for r in caplog.records)
+    assert "SECRET_BODY" not in joined
+    assert "status=400" in joined
+    assert "code=invalid_image" in joined
+    assert "request_id=req_test_observability_001" in joined
+
+
+def test_edit_unknown_provider_code_not_persisted(monkeypatch, settings):
+    class _FakeBadRequest(Exception):
+        def __init__(self):
+            super().__init__("bad")
+            self.status_code = 400
+            self.code = "totally_unknown_internal_detail"
+            self.request_id = "req_ok_12345678"
+
+    def on_edit(**kwargs):
+        raise _FakeBadRequest()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    meta = excinfo.value.safe_meta
+    assert "provider_code" not in meta
+    assert meta["http_status"] == 400
+    assert meta["request_id"] == "req_ok_12345678"
+    assert meta["error_category"] == "provider_bad_request"
+
+
+def test_content_policy_code_maps_to_user_safe_message(monkeypatch, settings):
+    class _FakePolicy(Exception):
+        def __init__(self):
+            super().__init__("policy")
+            self.status_code = 400
+            self.code = "content_policy_violation"
+            self.request_id = "req_policy_abcdef12"
+
+    def on_edit(**kwargs):
+        raise _FakePolicy()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "bikini"}, "x"
+        )
+    assert excinfo.value.safe_meta["error_category"] == "provider_content_policy"
+    assert "safety rules" in str(excinfo.value).lower()
+    assert "bikini" not in str(excinfo.value).lower()
+
+
+def test_moderation_blocked_maps_to_content_policy_not_bad_request(monkeypatch, settings):
+    class _FakeModeration(Exception):
+        def __init__(self):
+            super().__init__(
+                '{"error":{"code":"moderation_blocked","moderation_details":{"SECRET":true}}}'
+            )
+            self.status_code = 400
+            self.code = "moderation_blocked"
+            self.request_id = "req_moderation_abc123"
+            self.body = {"error": {"code": "moderation_blocked", "moderation_details": {"SECRET": True}}}
+
+    def on_edit(**kwargs):
+        raise _FakeModeration()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "two-piece swimsuit"}, "x"
+        )
+    meta = excinfo.value.safe_meta
+    assert meta["error_category"] == "provider_content_policy"
+    assert meta["provider_code"] == "moderation_blocked"
+    assert meta["http_status"] == 400
+    assert "SECRET" not in json.dumps(meta)
+    assert "moderation_details" not in meta
+    assert "safety rules" in str(excinfo.value).lower()
+
+
+def test_http_400_without_safety_code_is_not_content_policy(monkeypatch, settings):
+    class _FakeBadRequest(Exception):
+        def __init__(self):
+            super().__init__("bad")
+            self.status_code = 400
+            self.code = None
+            self.request_id = "req_plain400_zzzz99"
+
+    def on_edit(**kwargs):
+        raise _FakeBadRequest()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    assert excinfo.value.safe_meta["error_category"] == "provider_bad_request"
+    assert str(excinfo.value) == "sketch image edit failed"
+
+
+def test_model_not_found_code_is_model_unavailable(monkeypatch, settings):
+    class _FakeMissing(Exception):
+        def __init__(self):
+            super().__init__("missing")
+            self.status_code = 404
+            self.code = "model_not_found"
+            self.request_id = "req_model_missing01"
+
+    def on_edit(**kwargs):
+        raise _FakeMissing()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    assert excinfo.value.safe_meta["error_category"] == "provider_model_unavailable"
+
+
+def test_quota_error_category(monkeypatch, settings):
+    class _FakeQuota(Exception):
+        def __init__(self):
+            super().__init__("quota")
+            self.status_code = 429
+            self.code = "insufficient_quota"
+            self.request_id = "req_quota_abcd1234"
+
+    def on_edit(**kwargs):
+        raise _FakeQuota()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    assert excinfo.value.safe_meta["error_category"] == "provider_quota"
+
+
+def test_normalize_failure_meta_drops_unknown_fields():
+    kept = sketch_openai.normalize_failure_meta(
+        {
+            "error_category": "provider_bad_request",
+            "error_type": "BadRequestError",
+            "http_status": 400,
+            "provider_code": "invalid_image",
+            "request_id": "req_ok_normalize01",
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            "raw_body": "SECRET",
+            "prompt": "SECRET",
+        }
+    )
+    assert kept == {
+        "error_category": "provider_bad_request",
+        "error_type": "BadRequestError",
+        "http_status": 400,
+        "provider_code": "invalid_image",
+        "request_id": "req_ok_normalize01",
+        "stage": "images.edit",
+        "image_edit_attempted": True,
+        "image_bytes_returned": False,
+    }
+    dropped = sketch_openai.normalize_failure_meta(
+        {
+            "error_category": "not_a_real_category",
+            "error_type": "EvilClassName",
+            "http_status": 400,
+            "provider_code": "not_allowlisted_code",
+            "request_id": "bad id with spaces!",
+            "stage": "images.hack",
+            "raw_body": "SECRET",
+        }
+    )
+    assert dropped == {"http_status": 400}
+
+
 def test_build_sketch_chat_request_polish_uses_new_system_prompt(settings):
     job = _job(notes="pink jumpsuit")
     req = sketch_openai.build_sketch_chat_request(

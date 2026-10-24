@@ -3,19 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-24. **GitHub `main`:** **`dfcaa609`** (WEB-V4I PR [#48](https://github.com/perielad2-netizen/FashionRise/pull/48) merged; includes WEB-V4H + PR #41 pose fidelity source **not deployed**). **Production frontend:** **`dfcaa609`**. **Production backend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **WEB-V4F / V4G operator acceptance:** **5/5 PASS**. **WEB-V4H real-tablet operator acceptance:** **7/7 PASS**. **P1 active:** Issue [#51](https://github.com/perielad2-netizen/FashionRise/issues/51) Fullscreen Hand→Pencil drawing stops until refresh — **hotfix draft** (takes priority over WEB-V4J / Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42)). **WEB-V4J-A** architecture draft PR [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) remains open — **suspended until #51 ships**. **Magic pose fidelity (Issue #39 / PR #41):** on `main`, production BE/worker unchanged, visual pose **NOT accepted**. Docs drafts [#44](https://github.com/perielad2-netizen/FashionRise/pull/44) / [#46](https://github.com/perielad2-netizen/FashionRise/pull/46) / [#49](https://github.com/perielad2-netizen/FashionRise/pull/49) — **do not auto-merge**. Cursor paid AI calls this run: **0**.
+**Last updated:** 2026-10-25 (Asia/Jerusalem). **GitHub `main`:** **`c6fc1eb8`** (P1 #51 hotfix PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52) merged). **Production frontend:** **`c6fc1eb8`**. **Production backend + AI worker:** **`2cbc1ad0`** · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF**. **P1 #51:** fixed, FE deployed @ `c6fc1eb8`, **operator-accepted 5/5**. **P1 active:** Issue [#54](https://github.com/perielad2-netizen/FashionRise/issues/54) Magic image-edit failures (three operator attempts → generic `sketch image edit failed`). **WEB-V4J-A** architecture draft PR [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) and P1 #51 FE deploy-record draft PR [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) remain **separately open** — do not auto-merge / do not overwrite via #54. **Magic pose fidelity (Issue #39 / PR #41):** on `main`, **not deployed** to BE/worker, visual pose **NOT accepted**. Cursor paid AI calls this investigation: **0**.
 
-**Phase:** Protected family beta. Production FE @ `dfcaa609` (WEB-V4I). **Active P1:** fullscreen Hand→Pencil gesture regression (#51). WEB-V4J Front/Back deferred. Magic pose-fidelity PR #41 remains GitHub-only.
+**Phase:** Protected family beta. Production FE @ `c6fc1eb8`. **Active P1:** Magic `images.edit` HTTP 400 cluster (#54). WEB-V4J Front/Back remains a separate track (PR #50). Magic pose-fidelity PR #41 remains GitHub-only.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`dfcaa609…`** — Nginx root `/var/www/fashionrise/releases/dfcaa609`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Legacy + 10 library croquis present. WEB-V4I Studio + WEB-V4H immersive drawing live. **Known P1:** Immersive Hand→Pencil may stop drawing until refresh (Issue #51 — hotfix draft, not deployed). |
-| Backend (FastAPI + PostgreSQL) | **`2cbc1ad0`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone) |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`2cbc1ad0`** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` · edit `max_retries=0` |
+| Frontend (`web-ui`) | **`c6fc1eb8…`** — Nginx root `/var/www/fashionrise/releases/c6fc1eb8`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Legacy + 10 library croquis present. WEB-V4I Studio + WEB-V4H immersive drawing + P1 #51 Hand→Pencil hotfix live (**operator 5/5**). |
+| Backend (FastAPI + PostgreSQL) | **`2cbc1ad0`** — `fashionrise-api` on `127.0.0.1:8010`; PID **35739** (since 2026-10-24 06:36:33 UTC); `AI_WORKER_ENABLED=false` (worker is standalone) |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`2cbc1ad0`** · PID **35740** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` · edit `max_retries=0` |
 | Database | `fashionrise_beta` — Alembic **`005`** (unchanged) |
-| Deploy backup | `/var/backups/fashionrise/v4h-fe-deploy-*` (+ prior `v4g-fe-deploy-20261023T140541Z`) |
+| Deploy backup | `/var/backups/fashionrise/p1-51-fe-deploy-20261024T221527Z` (+ prior `v4i-fe-deploy-*`) |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -71,7 +71,9 @@
 
 **WEB-V4I (MERGED PR #48 — Issue #47):** Frontend-only tablet UX polish: fit intact 3:4 paper via cqh; Models overlay gallery; Focus removed; Settings Magic Soon footer removed; Models a11y focus trap. **MERGED + FE deployed** @ `dfcaa609`.
 
-**P1 #51 — Fullscreen Hand→Pencil (ACTIVE HOTFIX):** After Full Screen Drawing → Hand pan/pinch-zoom → Pencil, fresh strokes are ignored until page refresh. **Root cause (proven):** `DrawingCanvas` window-pointer `useEffect` depended on `pointFrom`→`viewport`; pan/zoom rerenders remounted listeners and **cleared `gestureCooldownTimer` while leaving `gestureCooldown.current === true`**, so `onPointerDown` returned forever. **Fix:** long-lived window listeners via handler refs (deps: `immersive` only); cooldown timer cleared only on component unmount; clear pan state when leaving Hand. Regression Vitest suite added (controlled viewport React state). **No merge/deploy** until Technical PM review + post-deploy operator mobile/tablet acceptance.
+**P1 #51 — Fullscreen Hand→Pencil (FIXED + ACCEPTED):** After Full Screen Drawing → Hand pan/pinch-zoom → Pencil, fresh strokes were ignored until page refresh. **Root cause:** `DrawingCanvas` window-pointer `useEffect` remounted on viewport changes and cleared `gestureCooldownTimer` while leaving `gestureCooldown.current === true`. **Fix merged** PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52) and **FE-only deployed** @ `c6fc1eb8`. **Operator acceptance: 5/5 PASS.** Deploy-record draft PR [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) remains open separately (do not auto-merge).
+
+**P1 #54 — Magic image-edit failure (ACTIVE RECOVERY):** Three operator Magic attempts (2026-10-24 ~22:33–22:37 UTC) returned “sketch image edit failed”; sketches preserved. **Leading cause:** production still uses **`OPENAI_IMAGE_MODEL=gpt-image-1`**, officially **shut down 2026-10-23** (OpenAI deprecations). Observed path: chat **200** → `images.edit` **400** / `BadRequestError`. Historical provider codes unavailable. Swimwear is a product requirement — **not** proven policy refusal. **PR [#55](https://github.com/perielad2-netizen/FashionRise/pull/55):** observability hardening only (draft, not merged). **Separate** Sunburst model-migration draft PR + offline maintenance isolation off `2cbc1ad0` (exclude undeployed PR #41). Detail: `docs/incidents/P1-54-MAGIC-IMAGE-EDIT-FAILURE.md`. **0 paid AI** this track; **no deploy**.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -99,8 +101,8 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub `main` | **`dfcaa609`** — WEB-V4I merged (PR #41 pose fidelity source present, BE not deployed) |
-| Production frontend / backend / worker | **`dfcaa609` / `2cbc1ad0` / `2cbc1ad0`** · Alembic **`005`** |
+| GitHub `main` | **`c6fc1eb8`** — P1 #51 merged (PR #41 pose fidelity source present, BE not deployed) |
+| Production frontend / backend / worker | **`c6fc1eb8` / `2cbc1ad0` / `2cbc1ad0`** · Alembic **`005`** |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
@@ -117,14 +119,15 @@
 | **Magic pose fidelity (Issue #39)** | **MERGED** PR #41 @ `4819b951` — **not deployed**; visual pose **NOT accepted**; no paid validation |
 | **WEB-V4G brushes + gradients** | **MERGED** PR #40 @ `350a3b7e` · **FE deployed** · operator **5/5 PASS** |
 | **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
-| **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
-| **P1 #51 Hand→Pencil immersive** | **Draft PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52)** — gesture cooldown stuck after viewport remount; FE-only; **STOP for PM** (priority over #42) |
-| **Issue #42 / WEB-V4J Front-Back** | **OPEN** — suspended until #51 fixed; architecture draft PR #50 |
+| **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** (superseded by `c6fc1eb8` FE) |
+| **P1 #51 Hand→Pencil immersive** | **MERGED** PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52) · **FE deployed** @ `c6fc1eb8` · **operator 5/5 PASS**; deploy-record draft PR [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) open separately |
+| **P1 #54 Magic image-edit failure** | **ACTIVE** — investigation + proposed observability hotfix draft (this PR); prod BE/worker still `2cbc1ad0`; **STOP for Technical PM** |
+| **Issue #42 / WEB-V4J Front-Back** | **OPEN** — architecture draft PR [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) remains separate; do not merge/overwrite via #54 |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — do not auto-merge). |
 | INFRA-2 docs | Separate draft PR #10. |
-| Paid OpenAI | Post-deploy V4E sample visually accepted (textile imperfect). **Issue #39 pose sample NOT accepted.** PR #41 + V4G Cursor paid calls: **0** |
+| Paid OpenAI | Post-deploy V4E sample visually accepted (textile imperfect). **Issue #39 pose sample NOT accepted.** **Issue #54:** three failed prod edits (chat likely billed; edit-400 unknown). This investigation Cursor paid calls: **0** |
 | Safety flags (prod) | Registration **on** (invite-gated). Magic AI allowlisted (polish + job/image only). Uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
 
 ---
@@ -314,12 +317,12 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P1 #51 Hand→Pencil hotfix draft (Issue [#51](https://github.com/perielad2-netizen/FashionRise/issues/51)). After merge, authorize **frontend-only** deploy of the hotfix SHA, then require **operator real mobile/tablet acceptance** of Hand→Pencil recovery. **Do not merge or deploy** until authorized. WEB-V4J / Issue #42 remains suspended until #51 is closed.
-2. Production FE @ `4f332a62` (WEB-V4H): real-tablet operator acceptance **7/7 PASS** (done). Backend/worker remain `2cbc1ad0`.
-3. After V4I acceptance + FE deploy: scope Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42) Front/Back croquis as a separate draft PR (not in #48).
-4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. After separate authorize: deploy BE/worker → one paid Magic retest on Issue #39 sample.
-5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46).
-6. **Operator residual:** expired Access session test (still PENDING). WEB-V4I emulated viewport QA is recorded; physical tablet confirmation of croquis fit + Models gallery remains for operator after merge/deploy.
+1. **Exact next action:** Technical PM **re-review** of amended observability PR [#55](https://github.com/perielad2-netizen/FashionRise/pull/55) and the **separate** Sunburst image-model migration draft PR + offline `2cbc1ad0` maintenance isolation plan (Issue [#54](https://github.com/perielad2-netizen/FashionRise/issues/54)). **Do not merge/deploy/restart** until a later authorized maintenance release. No paid Magic / no retired-model probes.
+2. Keep draft PRs [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) (WEB-V4J-A) and [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) (P1 #51 deploy record) on separate tracks — reconcile references only; do not auto-merge.
+3. P1 #51 is **closed for product acceptance** (5/5). WEB-V4J / Issue #42 may resume only after PM prioritization vs #54.
+4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. Do not bundle with #54 observability.
+5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46)/[#49](https://github.com/perielad2-netizen/FashionRise/pull/49)/[#53](https://github.com/perielad2-netizen/FashionRise/pull/53).
+6. **Operator residual:** expired Access session test (still PENDING).
 
 ---
 
@@ -540,9 +543,10 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Scope | Frontend-only; no BE/worker/Nginx/Cloudflare/migrations/schema/artwork/paid AI; no WEB-V4J Front/Back |
 | Frontend gates | Vitest **362** · oxlint warnings-only · `tsc -b` · production build · `check:sw` ok (no HTML precache / NavigationRoute) |
 | Browser QA | Playwright on DEV `/_design/studio-layout`: **Android 390×844 PASS** (Path 1→2 after Hand/pinch/zoom→Pencil; 2→3 after Eraser/Fill/Eyedropper hop); **iPad 1024×768 PASS** (same). Shots: `/opt/cursor/artifacts/screenshots/p1-51-{android,ipad}-*.png`. No real multitouch hardware / no production Access session. |
-| Production | **Unchanged** — still FE **`dfcaa609`** until authorized FE-only rollout |
-| Next action | Technical PM review → merge → authorize FE-only deploy → **operator real mobile/tablet acceptance** of Hand→Pencil recovery → then resume WEB-V4J |
-| Merge / deploy | **Blocked** — STOP for Technical PM review |
+| Production | FE **`c6fc1eb8`** (FE-only hotfix deploy SUCCESS); BE+worker **`2cbc1ad0`** unchanged |
+| Operator acceptance | **5/5 PASS** |
+| Deploy-record PR | Draft [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) — open separately; do not auto-merge |
+| Status | **FIXED + ACCEPTED** — active P1 moved to Issue [#54](https://github.com/perielad2-netizen/FashionRise/issues/54) |
 
 ## WEB-V4I verification (Issue #47 — MERGED PR #48 @ `dfcaa609`)
 
@@ -587,6 +591,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-25 | **P1 #54 Magic image-edit investigation (draft):** prod verified FE `c6fc1eb8` / BE+worker `2cbc1ad0` / Alembic `005`; three operator jobs (`ad2379e2` / `22b60b16` / `17bc3bb7`) chat **200** → `images/edits` **400** `BadRequestError`; sketches preserved; swimwear ≠ proven policy; billing unknown beyond likely chat; observability hotfix mock-tested (not deployed; exclude PR #41); PRs #50/#53 left separate; **0 paid AI**; **STOP for Technical PM**. |
+| 2026-10-24 | **P1 #51 Hand→Pencil:** hotfix merged PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52), FE deployed @ `c6fc1eb8`, **operator-accepted 5/5**. Deploy-record draft PR [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) open separately. |
 | 2026-10-24 | **P1 #51 Hand→Pencil hotfix draft PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52):** root cause = viewport remount cleared gesture cooldown timer while flag stayed true; stable window listeners + unmount-only timer cleanup; Vitest **362** (8 new controlled-viewport regressions); Playwright Android/iPad PASS; lint/tsc/build/check:sw PASS; **0 paid AI**; production unchanged (`dfcaa609` / `2cbc1ad0` / `005`); **STOP for Technical PM review — no merge/deploy**. |
 | 2026-10-24 | **WEB-V4I PR #48 MERGED + FE deployed** @ `dfcaa609`. |
 | 2026-10-24 | **WEB-V4I PR #48 a11y amendment:** Models gallery focus-in (Done), Tab trap, restore Models trigger on Done/Escape/scrim; model-switch confirm precedence; Vitest a11y cases; visual Tasks A–D remain approved at `aef499b6`; **0 paid AI**; (superseded by merge/deploy above). |

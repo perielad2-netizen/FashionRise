@@ -20,6 +20,11 @@ def _stub_result(job: AIJob) -> dict[str, Any]:
     }
 
 
+def _safe_failure_result(meta: Any) -> dict[str, Any] | None:
+    """Persist allowlisted failure diagnostics only. Never prompts, images, or raw bodies."""
+    return sketch_openai.failure_result_for_storage(meta)
+
+
 def run_worker_tick(db: Session, *, limit: int = 12) -> int:
     """Claim up to *limit* queued jobs (SKIP LOCKED), complete with stub *result_data* or mark failed."""
     processed = 0
@@ -43,8 +48,16 @@ def run_worker_tick(db: Session, *, limit: int = 12) -> int:
         except Exception as e:  # pragma: no cover — defensive
             logger.exception("AI job %s failed in worker", job.id)
             job.status = "failed"
-            job.error_message = (str(e) or "worker error")[:2000]
-            job.result_data = None
+            # Bound user-visible error text; never echo raw provider bodies.
+            raw_msg = str(e) or "worker error"
+            if len(raw_msg) > 240 or any(
+                token in raw_msg.lower()
+                for token in ("traceback", "sk-", "bearer ", "data:image", "base64")
+            ):
+                job.error_message = "Magic could not finish this look."
+            else:
+                job.error_message = raw_msg[:240]
+            job.result_data = _safe_failure_result(getattr(e, "safe_meta", None))
         db.commit()
         processed += 1
     return processed

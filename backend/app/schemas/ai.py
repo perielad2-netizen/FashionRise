@@ -34,8 +34,15 @@ class AIJobRead(BaseModel):
 
     @classmethod
     def from_job(cls, job: Any) -> "AIJobRead":
-        """Build a response DTO with sketch base64 stripped from input_data."""
-        from app.services.ai_service import sanitize_job_input_for_response
+        """Build a response DTO with sketch base64 stripped and failure meta allowlisted."""
+        from app.services.ai_service import (
+            sanitize_job_input_for_response,
+            sanitize_job_result_for_response,
+        )
+
+        err = job.error_message if isinstance(job.error_message, str) else None
+        if err is not None:
+            err = err.strip()[:240] or None
 
         return cls(
             id=job.id,
@@ -46,8 +53,10 @@ class AIJobRead(BaseModel):
             input_data=sanitize_job_input_for_response(
                 job.input_data if isinstance(job.input_data, dict) else {}
             ),
-            result_data=job.result_data,
-            error_message=job.error_message,
+            result_data=sanitize_job_result_for_response(
+                job.result_data if isinstance(job.result_data, dict) else None
+            ),
+            error_message=err,
             created_at=job.created_at,
             updated_at=job.updated_at,
         )
