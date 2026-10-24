@@ -69,6 +69,11 @@ onto the **currently deployed** backend/worker revision — **without** undeploy
 - Sunburst model id is passed as `str` (SDK accepts it).  
 - No DB schema change.
 
+## Live validation status (does not authorize deploy)
+
+One authorized isolated Sunburst `images.edit` completed **SUCCESS** (est. ~$0.048). Full record: `docs/incidents/P1-54-LIVE-SUNBURST-VALIDATION.md`.  
+Preliminary **illustration-quality HOLD** vs prior GPT Image 1 Magic look. Maintenance branch head at time of validation: `40f4d2fda201544a8bc969f99e99a107122812d5` (PR #57).
+
 ## STOP
 
-This document and any offline maintenance branch are **not** a deploy approval. Next PM decision selects exact commits, authorizes config change, and optionally one budgeted Magic validation.
+This document and the offline maintenance branch are **not** a deploy approval. Next PM decision: quality accept/reject → then select exact commits, authorize config change (`OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst`, `OPENAI_IMAGE_QUALITY=high`), and a separately authorized maintenance deploy.

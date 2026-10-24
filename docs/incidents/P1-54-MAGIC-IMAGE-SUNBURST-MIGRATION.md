@@ -79,6 +79,22 @@ See `docs/incidents/P1-54-PRODUCTION-MAINTENANCE-ISOLATION.md` for the offline m
 Code default + `.env.example`: `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst`, `OPENAI_IMAGE_QUALITY=high`.  
 **This PR does not modify production `.env`.**
 
+## One-shot live validation (authorized; completed)
+
+Operator authorization: Issue #54 comment `6390781248`. Isolated harness (not production). Exactly **1** `images.edit`.
+
+| Result | Detail |
+|--------|--------|
+| Outcome | **SUCCESS** (provider integration) |
+| Model / params | `gpt-image-2.5-sunburst` · `high` · `1024x1536` · `n=1` · `png` · `max_retries=0` · no `input_fidelity` · no generate |
+| HTTP / image | **200** · image present **1024×1536** · latency **23013 ms** |
+| Usage / cost | input 937 (text 73 + image 864) · output 1372 · est. **~$0.048** (cap $1) |
+| Quality | Preliminary **HOLD** vs prior stylized Magic illustration — see `P1-54-LIVE-SUNBURST-VALIDATION.md` |
+| Production | **Unchanged** (FE `c6fc1eb8` · BE/worker `2cbc1ad0` · Alembic `005` · still `gpt-image-1`) |
+
 ## Exact next Technical PM action
 
-Review this migration PR + isolation plan + observability PR #55. Later authorize a bounded maintenance release and optional single budgeted Magic validation on Sunburst. **No deploy from this task.**
+1. Review private Sunburst visual vs operator-approved Magic illustration quality.  
+2. Keep drafts unmerged: #55 (obs) · this migration · #57 maint off `2cbc1ad0`.  
+3. Authorize a **separate** maintenance deploy only after quality acceptance — never full `main` BE (excludes #41).  
+4. **No additional paid calls** without new authorization. **No deploy from this task.**

@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`**. **Production FE:** **`c6fc1eb8`**. **Production BE+worker:** **`2cbc1ad0`** · Alembic **`005`** · still configured `OPENAI_IMAGE_MODEL=gpt-image-1` (**retired 2026-10-23**). **P1 #51:** fixed + operator-accepted **5/5**. **P1 #54 ACTIVE:** Magic edit failures; observability draft PR [#55](https://github.com/perielad2-netizen/FashionRise/pull/55); **this PR** = Sunburst image-model migration (draft, not deployed). **Do not deploy `main` BE** (contains undeployed PR #41). Docs PR [#53](https://github.com/perielad2-netizen/FashionRise/pull/53) / architecture PR [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) remain separate. Cursor paid AI this run: **0**.
+**Last updated:** 2026-10-25 (Asia/Jerusalem). **GitHub `main`:** **`c6fc1eb8`**. **Production FE:** **`c6fc1eb8`**. **Production BE+worker:** **`2cbc1ad0`** · Alembic **`005`** · still configured `OPENAI_IMAGE_MODEL=gpt-image-1` (**retired 2026-10-23** — **unchanged in production**). **P1 #51:** fixed + operator-accepted **5/5**. **P1 #54 ACTIVE:** Magic recovery — observability draft [#55](https://github.com/perielad2-netizen/FashionRise/pull/55) @ `9b86aca8`; Sunburst migration draft [#56](https://github.com/perielad2-netizen/FashionRise/pull/56); offline maint candidate draft [#57](https://github.com/perielad2-netizen/FashionRise/pull/57) off `2cbc1ad0` (**not for deploy**). **Authorized one-shot live Sunburst `images.edit`: SUCCESS** (HTTP 200, image 1024×1536, usage-based est. **~$0.048**, latency ~23s) — see `docs/incidents/P1-54-LIVE-SUNBURST-VALIDATION.md`. **Quality vs prior Magic illustration: HOLD** (photoreal harness result ≠ stylized GPT Image 1 Magic look; synthetic input + non-production prompt). **Do not deploy `main` BE** (contains undeployed PR #41). **No production deploy/merge this turn.**
 
 **Phase:** Protected family beta. **Active P1:** #54 Magic recovery (retired image model → `gpt-image-2.5-sunburst`). Pose-fidelity PR #41 remains GitHub-only / not auto-deployed.
 
@@ -124,7 +124,7 @@
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — do not auto-merge). |
 | INFRA-2 docs | Separate draft PR #10. |
-| Paid OpenAI | Post-deploy V4E sample visually accepted (textile imperfect). **Issue #39 pose sample NOT accepted.** PR #41 + V4G Cursor paid calls: **0** |
+| Paid OpenAI | Post-deploy V4E sample visually accepted (textile imperfect). **Issue #39 pose sample NOT accepted.** **P1 #54:** exactly **1** authorized isolated Sunburst `images.edit` (SUCCESS, est. ~$0.048); quality **HOLD** for prod. No further paid calls authorized. |
 | Safety flags (prod) | Registration **on** (invite-gated). Magic AI allowlisted (polish + job/image only). Uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
 
 ---
@@ -314,7 +314,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P1 #54 deliverables — observability PR [#55](https://github.com/perielad2-netizen/FashionRise/pull/55) + this Sunburst migration PR + offline maintenance isolation off `2cbc1ad0` (`docs/incidents/P1-54-PRODUCTION-MAINTENANCE-ISOLATION.md`). **No merge/deploy/paid Magic** until a later authorized maintenance release.
+1. **Exact next action (P1 #54):** Technical PM review of live Sunburst validation + quality HOLD — `docs/incidents/P1-54-LIVE-SUNBURST-VALIDATION.md`. API path verified; **do not** authorize production maintenance deploy until illustration-quality acceptance (or explicit accept of current style). Drafts to keep open/unmerged: observability [#55](https://github.com/perielad2-netizen/FashionRise/pull/55) @ `9b86aca8`, migration [#56](https://github.com/perielad2-netizen/FashionRise/pull/56), maint [#57](https://github.com/perielad2-netizen/FashionRise/pull/57) off `2cbc1ad0`. **No further paid AI** without new authorization. **No merge/deploy** from this report.
 2. Production FE @ `4f332a62` (WEB-V4H): real-tablet operator acceptance **7/7 PASS** (done). Backend/worker remain `2cbc1ad0`.
 3. After V4I acceptance + FE deploy: scope Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42) Front/Back croquis as a separate draft PR (not in #48).
 4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. After separate authorize: deploy BE/worker → one paid Magic retest on Issue #39 sample.
