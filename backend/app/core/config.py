@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     # Default: gpt-image-2.5-sunburst (gpt-image-1 shut down 2026-10-23).
     openai_image_model: str = "gpt-image-2.5-sunburst"
     openai_image_size: str = "1024x1536"
-    # GPT Image 2.5 qualities: low|medium|high|xhigh|max|auto. FashionRise default
-    # is high (quality-oriented; not xhigh/max). Legacy "standard" maps to high.
+    # FashionRise default quality is high. Legacy "standard" maps to high in code.
+    # Explicit xhigh/max (and unknown values) fail closed before any paid images.edit.
     openai_image_quality: str = "high"
 
     max_upload_size_mb: int = 25

@@ -143,13 +143,65 @@ def test_sunburst_edit_request_shape_and_storage(monkeypatch, settings):
     assert client.generate_calls == 0
 
 
-def test_quality_xhigh_max_downgraded_to_high():
+def test_quality_legacy_standard_maps_to_high_xhigh_max_fail_closed():
     caps = sketch_openai.image_edit_capabilities("gpt-image-2.5-sunburst")
     assert caps is not None
-    assert sketch_openai.resolve_image_edit_quality(caps, "xhigh") == "high"
-    assert sketch_openai.resolve_image_edit_quality(caps, "max") == "high"
     assert sketch_openai.resolve_image_edit_quality(caps, "standard") == "high"
+    assert sketch_openai.resolve_image_edit_quality(caps, "high") == "high"
     assert sketch_openai.resolve_image_edit_quality(caps, "medium") == "medium"
+    with pytest.raises(sketch_openai.SketchCompletionError, match="image quality configuration"):
+        sketch_openai.resolve_image_edit_quality(caps, "xhigh")
+    with pytest.raises(sketch_openai.SketchCompletionError, match="image quality configuration"):
+        sketch_openai.resolve_image_edit_quality(caps, "max")
+    with pytest.raises(sketch_openai.SketchCompletionError, match="image quality configuration"):
+        sketch_openai.resolve_image_edit_quality(caps, "not-a-quality")
+
+
+def test_unknown_snapshot_suffix_fails_closed_without_paid_edit(monkeypatch):
+    """Arbitrary gpt-image-2.5-sunburst-* suffixes must not be accepted."""
+    s = _settings(openai_image_model="gpt-image-2.5-sunburst-unverified-future")
+    monkeypatch.setattr(sketch_openai, "get_settings", lambda: s)
+    client = _EditTrackingClient(on_edit=lambda **kw: (_ for _ in ()).throw(AssertionError("no edit")))
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError, match="image model configuration"):
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    assert client.edit_models == []
+    assert client.option_calls == []
+    assert client.generate_calls == 0
+    assert sketch_openai.image_edit_capabilities("gpt-image-2.5-sunburst-unverified-future") is None
+    assert sketch_openai.image_edit_capabilities("gpt-image-2.5-flare-unverified") is None
+    assert sketch_openai.image_edit_capabilities("gpt-image-2-unverified") is None
+
+
+def test_documented_sunburst_snapshot_alias_allowed():
+    caps = sketch_openai.image_edit_capabilities("gpt-image-2.5-sunburst-2026-09-08")
+    assert caps is not None
+    assert caps.model_id == "gpt-image-2.5-sunburst"
+    kwargs = sketch_openai.build_image_edit_kwargs(
+        model="gpt-image-2.5-sunburst-2026-09-08",
+        prompt="professionally refine the fashion sketch",
+        sketch=(_TINY_PNG, "image/png"),
+        size="1024x1536",
+        quality="high",
+    )
+    assert kwargs["model"] == "gpt-image-2.5-sunburst-2026-09-08"
+    assert kwargs["quality"] == "high"
+    assert "input_fidelity" not in kwargs
+
+
+def test_xhigh_quality_setting_fails_before_paid_edit(monkeypatch):
+    s = _settings(openai_image_quality="xhigh")
+    monkeypatch.setattr(sketch_openai, "get_settings", lambda: s)
+    client = _EditTrackingClient(on_edit=lambda **kw: (_ for _ in ()).throw(AssertionError("no edit")))
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError, match="image quality configuration"):
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    assert client.edit_models == []
+    assert client.generate_calls == 0
 
 
 def test_invalid_parameter_mock_does_not_call_generate(monkeypatch, settings):
