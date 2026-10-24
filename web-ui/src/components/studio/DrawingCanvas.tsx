@@ -383,7 +383,17 @@ export function DrawingCanvas({
     onViewportChangeRef.current?.(clamped)
   }, [size.h, size.w])
 
-  windowPointerApiRef.current = {
+  useEffect(() => {
+    windowPointerApiRef.current = {
+      armGestureCooldown,
+      cancelDraft,
+      extendDraft,
+      finish,
+      pointFrom,
+      session,
+      updateViewport,
+    }
+  }, [
     armGestureCooldown,
     cancelDraft,
     extendDraft,
@@ -391,7 +401,7 @@ export function DrawingCanvas({
     pointFrom,
     session,
     updateViewport,
-  }
+  ])
 
   useEffect(() => {
     const endTrackedPointer = (pointerId: number) => {
