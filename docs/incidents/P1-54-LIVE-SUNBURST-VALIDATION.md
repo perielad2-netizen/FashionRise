@@ -42,6 +42,8 @@ Generated test image kept **private** under local `/tmp` (mode 600). **Not** upl
 
 ## Quality assessment (preliminary — not production Magic)
 
+**This one-shot is not a representative FashionRise quality test** (stick-figure croquis + shortened non-production harness prompt). It validates provider/API compatibility and cost only. Full production-prompt parity is audited offline in `P1-54-PRODUCTION-PROMPT-PARITY.md`.
+
 **Full matrix:** `docs/incidents/P1-54-SUNBURST-QUALITY-ASSESSMENT.md` (Technical PM quality-preservation requirement).
 
 Operator-approved prior Magic looks are **stylized fashion illustrations** (clean outline, elongated croquis proportions, garment-forward polish). Saved references were **not** modified or regenerated.
