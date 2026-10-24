@@ -4,7 +4,7 @@
 **Forbidden:** horizontal flip/mirror of the front, procedural silhouette inversion, or presenting the front as a rear.  
 **Required:** genuine back anatomy (scapulae, spine furrow, glutes, popliteal folds, nape) in the **same** premium blank-face fashion-croquis language as the fronts: clean black outline, light interior construction lines, solid light fill, **transparent** background (not solid black mats).
 
-Operator front masters (source of truth for pose) live in `docs/web-v4j-a/front-refs/<modelId>.front-ref.png`.
+**Provenance:** Operator front masters are the pose source of truth but are **not published** in this public repository (redistribution rights unconfirmed). Identify each master via `modelId` + `sha256` in `front-ref-match-report.json`. Brief ChatGPT from operator-held local copies and/or shipped library fronts — do not require binaries from this PR.
 
 Shipped Studio canvas targets (must match for drop-in later):
 
@@ -31,7 +31,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `female-straight.front-ref.png` |
+| Front master (private) | `female-straight.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `80f8e22f-3b41-4438-9402-df10553880fb` |
 | Target canvas | **656×1199** |
 | Content bbox (front ref) | (209, 26)–(526, 1173) · 318×1148 |
@@ -54,7 +54,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `female-hand-hip.front-ref.png` |
+| Front master (private) | `female-hand-hip.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `46294290-d3f2-479c-8729-ae0793613c05` |
 | Target canvas | **656×1199** |
 | Content bbox | (50, 31)–(494, 1173) · 445×1143 |
@@ -76,7 +76,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `female-contrapposto.front-ref.png` |
+| Front master (private) | `female-contrapposto.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `97d36898-c87f-4a5d-a9cd-e4d1830a38de` |
 | Target canvas | **900×1200** (master briefing 1086×1448) |
 | Content bbox (master) | (310, 15)–(752, 1435) · 443×1421 |
@@ -97,7 +97,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `female-cross-ankle.front-ref.png` |
+| Front master (private) | `female-cross-ankle.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `ff660483-1351-4c2d-b02e-cf5bc6e8b445` |
 | Target canvas | **900×1200** (master 1086×1448) |
 | Content bbox (master) | (391, 26)–(728, 1425) · 338×1400 |
@@ -117,7 +117,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `female-atelier.front-ref.png` |
+| Front master (private) | `female-atelier.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `44f151fe-f5bb-48ce-849e-3a79963bf6e5` |
 | Target canvas | **900×1200** (master 1086×1448) |
 | Content bbox (master) | (334, 27)–(788, 1428) · 455×1402 |
@@ -138,7 +138,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `female-cross-leg.front-ref.png` |
+| Front master (private) | `female-cross-leg.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `80663d57-43b8-4005-8f64-c75c0e7883c7` |
 | Target canvas | **900×1200** (master 1086×1448) |
 | Content bbox (master) | (370, 25)–(747, 1422) · 378×1398 |
@@ -158,7 +158,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `male-straight.front-ref.png` |
+| Front master (private) | `male-straight.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `d02c0b5e-5882-4786-8861-8ba3ddce1ea7` |
 | Target canvas | **900×1200** (master 1086×1448) |
 | Content bbox (master) | (356, 12)–(729, 1433) · 374×1422 |
@@ -178,7 +178,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `male-step.front-ref.png` |
+| Front master (private) | `male-step.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `118c5f39-563c-4598-b266-4ee419320c66` |
 | Target canvas | **900×1200** (master 1086×1448) |
 | Content bbox (master) | (347, 14)–(752, 1434) · 406×1421 |
@@ -198,7 +198,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `male-walk.front-ref.png` |
+| Front master (private) | `male-walk.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `1ef9f89e-f778-48ae-823c-99d9fc4d3a0d` |
 | Target canvas | **900×1200** (master 1086×1448) |
 | Content bbox (master) | (348, 13)–(738, 1436) · 391×1424 |
@@ -218,7 +218,7 @@ When generating, prefer outputting exactly the **shipped canvas size** with the 
 
 | Field | Value |
 |-------|-------|
-| Front ref | `male-contrapposto.front-ref.png` |
+| Front master (private) | `male-contrapposto.front-ref.png` (see manifest sha256; binary not in repo) |
 | Upload id | `32fc6040-4c26-4a1d-9802-1f5c860b82e1` |
 | Target canvas | **900×1200** (master 1086×1448) |
 | Content bbox (master) | (370, 15)–(784, 1437) · 415×1423 |

@@ -1,8 +1,12 @@
 # WEB-V4J-A — Front/Back croquis architecture & persistence audit
 
 **Issue:** [#42](https://github.com/perielad2-netizen/FashionRise/issues/42)  
-**Phase:** Architecture / artwork briefing only — **no production asset changes**, **no paid AI**, **no merge/deploy**.  
-**Base:** `main` @ `dfcaa609` (WEB-V4I FE deployed). Backend/worker remain `2cbc1ad0` · Alembic `005`.
+**PR:** [#50](https://github.com/perielad2-netizen/FashionRise/pull/50) (draft)  
+**Phase:** Architecture / artwork briefing only — **no production code**, **no paid AI**, **no merge/deploy**.  
+**Base:** `main` @ `dfcaa609` (WEB-V4I FE deployed; operator tablet acceptance **6/6 PASS**). Backend/worker remain `2cbc1ad0` · Alembic `005`.  
+**Priority:** **WEB-V4J implementation and rear art generation are PAUSED** until P1 Issue [#51](https://github.com/perielad2-netizen/FashionRise/issues/51) (Fullscreen Hand→Pencil) is resolved and deployed. This document only amends the architecture pack.
+
+**Amendment (PM review of `165865d8`):** Corrects unsafe “additive V1 is enough” claims; specifies versioned schema + server reject-on-downgrade; separates working drafts vs named saved designs; documents required backend fingerprint/OCC changes; records public-repo asset provenance policy; adds a compatibility test matrix.
 
 ---
 
@@ -13,6 +17,7 @@
 - Front and back garment artwork (strokes, fills, materials) are **independently editable** and must not overwrite each other when switching sides.
 - Legacy drafts/saved designs reopen with **identical** front model IDs, geometry, strokes and fills.
 - Magic, when later authorized, acts on the **active side only**.
+- **Older clients must never silently delete Back artwork** during save, restore, conflict, or retry.
 
 ---
 
@@ -27,90 +32,236 @@
 
 **Rear companions today:** **none**. Do not ship mirrored fronts.
 
-**Operator front masters (this pack):** preserved under `docs/web-v4j-a/front-refs/` after ID matching. These are **source-of-truth for rear briefing**, not replacements for shipped library files in this phase. Eight masters are higher-resolution (1086×1448) than shipped 900×1200; two (`female-straight`, `female-hand-hip`) share 656×1199 canvas size with the library (identical silhouette IoU 1.0, different file bytes).
+### 2.1 Operator front masters — provenance (public repo)
+
+This GitHub repository is **PUBLIC**. Operator-supplied front PNG masters were used privately for ID matching. **No redistribution / license attestation** is recorded for publishing those binaries.
+
+**Policy for this PR (amended):**
+
+- **Do not publish** the ten original reference PNGs under `docs/web-v4j-a/front-refs/`.
+- Retain only the non-sensitive **manifest** `docs/web-v4j-a/front-ref-match-report.json` (dimensions, transparency, content bbox, SHA-256 of the private masters and of shipped library files, IoU metrics) and the rear artwork briefs.
+- Masters remain operator-held / offline for ChatGPT briefing until the operator explicitly confirms redistribution rights (or supplies cleared substitutes).
+- Do **not** label assets commercially cleared. No generated backs are approved yet.
+
+Matching table (upload order ignored; silhouette IoU ≥ 0.98):
+
+| `modelId` | Pose label | Ref size | Lib size | Silhouette IoU |
+|-----------|------------|----------|----------|----------------|
+| `female-straight` | Standing | 656×1199 | 656×1199 | 1.000 |
+| `female-hand-hip` | Hand on hip | 656×1199 | 656×1199 | 1.000 |
+| `female-contrapposto` | Contrapposto | 1086×1448 | 900×1200 | 0.990 |
+| `female-cross-ankle` | Crossed ankles | 1086×1448 | 900×1200 | 0.990 |
+| `female-atelier` | Atelier | 1086×1448 | 900×1200 | 0.988 |
+| `female-cross-leg` | Crossed leg | 1086×1448 | 900×1200 | 0.988 |
+| `male-straight` | Standing | 1086×1448 | 900×1200 | 0.988 |
+| `male-step` | Step | 1086×1448 | 900×1200 | 0.981 |
+| `male-walk` | Walk | 1086×1448 | 900×1200 | 0.989 |
+| `male-contrapposto` | Contrapposto | 1086×1448 | 900×1200 | 0.992 |
+
+Full metrics: `docs/web-v4j-a/front-ref-match-report.json`. IoU / pixel claims are Cursor-reported from the matching run, not independently reprocessed by PM.
+
+**Constraint for rear generation:** output PNG must target the **same pixel canvas as the shipped library front** for that ID (656×1199 or 900×1200). Higher-res private masters are briefing references only.
 
 ---
 
-## 3. Model ID matching (uploads → library)
+## 3. Why “additive optional `back` on V1” is NOT safe
 
-Matching used alpha-cropped silhouette IoU + average-hash Hamming distance against shipped library PNGs. Upload order was ignored.
+### 3.1 Current client behavior (today on `main`)
 
-| `modelId` | Pose label | Upload (original name) | Ref size | Lib size | Silhouette IoU |
-|-----------|------------|------------------------|----------|----------|----------------|
-| `female-straight` | Standing | `80f8e22f-…png` | 656×1199 | 656×1199 | 1.000 |
-| `female-hand-hip` | Hand on hip | `46294290-…png` | 656×1199 | 656×1199 | 1.000 |
-| `female-contrapposto` | Contrapposto | `97d36898-…png` | 1086×1448 | 900×1200 | 0.990 |
-| `female-cross-ankle` | Crossed ankles | `ff660483-…png` | 1086×1448 | 900×1200 | 0.990 |
-| `female-atelier` | Atelier | `44f151fe-…png` | 1086×1448 | 900×1200 | 0.988 |
-| `female-cross-leg` | Crossed leg | `80663d57-…png` | 1086×1448 | 900×1200 | 0.988 |
-| `male-straight` | Standing | `d02c0b5e-…png` | 1086×1448 | 900×1200 | 0.988 |
-| `male-step` | Step | `118c5f39-…png` | 1086×1448 | 900×1200 | 0.981 |
-| `male-walk` | Walk | `1ef9f89e-…png` | 1086×1448 | 900×1200 | 0.989 |
-| `male-contrapposto` | Contrapposto | `32fc6040-…png` | 1086×1448 | 900×1200 | 0.992 |
+- Working drafts: `fashionrise.studio.draft.v1` via `parseStudioDraftDocument` — rebuilds a **known-field** object (`strokes`, `fills`, `model`, brush, dimmed, revisions). **Unknown keys are dropped** on parse.
+- Fingerprint (`draftContentFingerprint`) hashes only front strokes/fills/model/brush/dimmed/custom refs — **not** `back` / `activeSide`.
+- Named saves: **separate** envelope `fashionrise.saved_design.v1` with nested `SavedDesignSnapshot` (no draft `schema` / `clientRevision` inside the snapshot). `parseSavedDesignSnapshot` likewise rebuilds known fields only.
+- Backend `design_service._studio_content_fingerprint` enumerates the same front-only keys. Create idempotency and OCC “same content” short-circuits use that fingerprint.
 
-Full metrics: `docs/web-v4j-a/front-ref-match-report.json`.
+### 3.2 Failure mode if we only add optional `back` on V1
 
-**Constraint for rear generation:** output PNG must target the **same pixel canvas as the shipped library front** for that ID (656×1199 or 900×1200), transparent background, figure scale/vertical placement matching the front content bbox when both are normalized to that canvas. Masters at 1086×1448 are briefing references only unless a later asset PR deliberately reships higher-res fronts (out of scope for V4J-A).
+1. New client saves a two-sided V1 doc with `back: { strokes, fills }`.
+2. Old PWA (still on production FE until upgrade) restores the draft, parses with `parseStudioDraftDocument`, **strips `back`**, and may autosave / conflict-retry / Keep-device.
+3. Backend fingerprint (front-only) treats the stripped payload as **identical** to a front-only document if front ink matches → **idempotent no-op or accepted overwrite** that permanently drops Back.
+4. Conflict UI may present “equal” fingerprints and auto-accept truncation as intentional.
+
+**Conclusion:** Optional fields the old parser ignores are **not** backward-compatible for a shared mutable working draft. Fail closed.
 
 ---
 
-## 4. Document model (backward compatible)
+## 4. Chosen document strategy — versioned schema + dual-reader + server reject-on-downgrade
 
-### 4.1 Current schema (must keep loading)
+### 4.1 Evaluation summary
 
-`fashionrise.studio.draft.v1` (`StudioDraftDocument` in `web-ui/src/lib/draftDocument.ts`):
+| Option | Verdict |
+|--------|---------|
+| A. Keep `draft.v1` + optional `back`; hope old clients ignore | **Rejected** — old clients rewrite and strip; BE fingerprint cannot see back |
+| B. `draft.v2` when two-sided / Front–Back capable; dual-reader on new FE; **server rejects downgrade** | **Chosen** |
+| C. Separate DB rows per side | Rejected — splits one garment; breaks My Designs |
+| D. Force every client to v2 immediately with a migration job | Unnecessary; front-only v1 remains valid forever |
 
-- `strokes[]`, optional `fills[]`
-- `model: ModelChoice` (includes legacy `female`/`male`)
-- brush, dimmed, `clientRevision`, `updatedAt`, custom reference fields
+### 4.2 Working draft schemas
 
-Saved designs embed the same draft document shape.
-
-### 4.2 Recommended additive shape (no forced schema rename)
-
-Keep `schema: "fashionrise.studio.draft.v1"`. Add **optional** fields only:
+| Schema | Meaning |
+|--------|---------|
+| `fashionrise.studio.draft.v1` | Front-only working draft (all legacy + any front-only new saves). **No `back` key.** |
+| `fashionrise.studio.draft.v2` | Front/Back-capable working draft. Top-level `strokes`/`fills` = **front**. Optional `activeSide`. Optional `back: { strokes, fills }`. |
 
 ```ts
 type GarmentSide = 'front' | 'back'
 
-type StudioDraftDocumentV4J = StudioDraftDocument & {
-  /** Which side the editor is showing. Default / missing => 'front'. */
-  activeSide?: GarmentSide
+type StudioDraftDocumentV2 = {
+  schema: 'fashionrise.studio.draft.v2'
+  strokes: Stroke[]          // FRONT
+  fills: FillOp[]            // FRONT
+  activeSide?: GarmentSide   // missing => 'front'
   /**
-   * Back-side artwork. Absent => design is front-only (all legacy docs).
-   * Never auto-create on load.
+   * Back artwork bag.
+   * - key ABSENT: front-only v2 (allowed briefly during upgrade) — prefer omitting v2 until back exists
+   * - key PRESENT with empty arrays: intentional empty back side (user opened Back)
+   * These two states MUST fingerprint differently from each other and from v1.
    */
-  back?: {
-    strokes: Stroke[]
-    fills: FillOp[]
-  }
+  back?: { strokes: Stroke[]; fills: FillOp[] }
+  model: ModelChoice
+  // …brush, dimmed, customReference*, clientRevision, updatedAt (same as v1)
 }
 ```
 
-**Compatibility rules:**
+**Normalization rules (FE + BE must agree):**
 
-1. **Read path:** If `back` absent → behave exactly as today; `activeSide` forced to `front`.  
-2. **Write path:** Top-level `strokes` / `fills` remain the **front** side always (legacy readers keep working).  
-3. **Fingerprint / OCC:** Include `activeSide` + `back` in `draftContentFingerprint` when present so conflicts detect back edits.  
-4. **No DB migration** required — JSON document blob stays schemaless at the API.  
-5. **Never** invent `back` for legacy reopen; never copy front strokes into `back` on load.  
-6. **Model switch:** Changing `model` keeps front artwork (existing confirm dialog); clear or confirm-clear `back` if the new model has no approved rear (or keep orphaned back disabled in UI until a rear exists — product choice for V4J-B; recommend **disable Back** rather than deleting silently).
+1. **Absent `back` key** ≠ **`back: { strokes: [], fills: [] }`**. Fingerprint uses a sentinel, e.g. `"back": null` vs `"back": { strokes: [], fills: [] }`.
+2. Never invent `back` on legacy reopen. Never copy front ink into `back`.
+3. New FE dual-reader: parse v1 and v2; write **v1** while the document is front-only and the Front/Back feature is unused; **upgrade to v2** the first time the user enables Back or any back ink/fill is created; **never downgrade** v2 → v1 on the client.
+4. Old FE: continues to parse only v1. A v2 draft is **not** silently opened as empty front — restore must fail closed (show recovery / “update app” / keep server copy), never parse-strip-save.
 
-### 4.3 Rejected alternatives (for this product)
+### 4.3 Server-side downgrade protection (required before any FE enablement)
 
-| Idea | Why not |
-|------|---------|
-| Flip/mirror front PNG as rear | Explicitly forbidden by Issue #42 / operator |
-| Separate design rows per side | Splits one garment; breaks My Designs mental model |
-| New schema `draft.v2` required for all saves | Forces migration of every client; unnecessary if additive fields parse safely |
-| Remap legacy `female`/`male` onto new IDs | Geometry drift / data loss |
+Backend must treat schema + back bag as part of content identity and write authorization.
+
+**Reject (HTTP 409 Conflict, fail closed)** when any of:
+
+- Stored working draft is `draft.v2` (or has a present `back` key) and the incoming payload is `draft.v1`, or omits `back` while stored has `back`.
+- Incoming fingerprint would drop previously present back strokes/fills without an explicit, authenticated “clear back” intent flag (default: **no silent clear**; clearing back requires v2 payload with `back` present and empty/new content under OCC).
+- Client capability header/metadata claims `studioSides < 2` while attempting to overwrite a two-sided draft (defense in depth for old PWAs).
+
+**Allow:**
+
+- v1 → v1 front edits (today).
+- v1 → v2 upgrade with same front fingerprint + new/empty back (feature onboarding).
+- v2 → v2 edits including back-only changes (must change fingerprint).
+- Idempotent retries with **byte-equivalent normalized fingerprint** (including back sentinel).
+
+**Never** store partial side data or accept a body that truncates the inactive side.
+
+### 4.4 Rollout order (mandatory)
+
+1. **Backend** fingerprint + reject-on-downgrade + tests (no FE UI yet).  
+2. **Frontend** dual-reader / v2 writer behind a flag; still no Back UI.  
+3. Deploy BE → deploy FE readers → then enable Front/Back UI + rear assets (WEB-V4J-B).  
+4. Old PWAs that never upgrade cannot open v2 drafts for edit; they must not be able to PUT a stripped body successfully.
+
+Feature flag / old-PWA safeguard: Back control hidden until `supportsStudioDraftV2` and server advertises side-aware fingerprint (e.g. `/health` or designs API capability bit). Cached old SW builds remain blocked by server reject even if a buggy client ships.
 
 ---
 
-## 5. Library / runtime wiring (later implementation — not this PR)
+## 5. Required backend changes (explicit)
+
+File today: `backend/app/services/design_service.py`.
+
+### 5.1 `_studio_content_fingerprint`
+
+Must include (normalized, `sort_keys=True`):
+
+| Field | Normalization |
+|-------|----------------|
+| `schema` | `draft.v1` / `draft.v2` (and reject unknown for studio drafts) |
+| `strokes` / `fills` | Front; missing fills ≡ `[]` (existing rule) |
+| `model`, `customReferenceUrl`, `customReferenceKey`, `brush`, `dimmed` | As today |
+| `activeSide` | Default `"front"` when absent |
+| `back` | Sentinel: JSON `null` if key absent; else `{ strokes, fills }` with fills missing≡`[]` |
+
+Back-only edits **must** change the fingerprint so create-idempotency and OCC “same content” paths cannot no-op them.
+
+### 5.2 Idempotent draft creation (`create_design` studio branch)
+
+Existing behavior: advisory lock → if working draft exists and fingerprints match → return existing; if incoming revision &lt; current → return existing; else conflict.
+
+**Additions:**
+
+- Fingerprint comparison uses §5.1 (includes back).
+- If existing is two-sided / v2 and incoming is v1 or stripped → **ConflictError** (`studio_schema_downgrade` / `back_stripped`), never return existing as “success” that hides data loss.
+- Lost POST retries with identical v2 body remain idempotent.
+
+### 5.3 Optimistic concurrency (`update_design` studio branch)
+
+- Keep required `expected_revision` for studio working drafts.
+- Before applying: if revision matches but fingerprint indicates downgrade/strip → **409** with payload explaining downgrade (do not apply).
+- If revision matches and fingerprint equal (including back) → idempotent success (retry after lost response).
+- If revision matches and fingerprint differs legally → apply update, bump stored revision from payload.
+
+### 5.4 Conflict reconciliation
+
+- FE `resolveDraftConflict` / Keep device / Use cloud remain **document-level** and must fingerprint both sides.
+- “Equal” is only true when §5.1 fingerprints match (so a stripped local copy is **not** equal to a two-sided server copy).
+- Keep device on a new client rebases full v2 document (front + back). Old client must not be offered a path that PUTs v1 over v2 (server rejects).
+
+### 5.5 Back-only updates
+
+- A save that changes only `back.strokes` / `back.fills` / `activeSide` must: advance `clientRevision`, change fingerprint, pass OCC, persist full document (both sides).
+- Partial PATCH of one side is **out of scope** — always write the full `design_data` blob.
+
+### 5.6 Alembic / Nginx / Cloudflare
+
+No migration required for JSON blob shape. No Nginx/Cloudflare changes for V4J-A/B document work. Backend deploy of fingerprint/downgrade guards is a **separate authorized BE release** before FE enablement.
+
+---
+
+## 6. Named saved designs (separate from working drafts)
+
+### 6.1 Today
+
+- Envelope schema: `fashionrise.saved_design.v1`.
+- Nested `SavedDesignSnapshot`: `{ strokes, fills?, model, brush, dimmed }` — **not** a `StudioDraftDocument`.
+- Rows are excluded from working-draft reconciliation (`draftKind` absent; top-level schema ≠ studio draft).
+- Immutable after create; reopen copies snapshot into the singleton working draft via `workingDocumentFromSnapshot`.
+- Idempotent save recovery uses `saveRequestId` + content fingerprint of the snapshot.
+
+### 6.2 Two-sided saved designs
+
+| Envelope | Snapshot |
+|----------|----------|
+| `fashionrise.saved_design.v1` | Front-only snapshots (legacy + front-only new saves). **No `back` key.** |
+| `fashionrise.saved_design.v2` | May include `activeSide` + `back` bag with the same absent-vs-empty sentinel rules. Front ink remains `strokes`/`fills`. |
+
+**Strict validation:**
+
+- `parseSavedDesign` / `parseSavedDesignSnapshot` for v2: reject the whole row if `back` is present but malformed (do not drop back and open front-only).
+- Old clients that only recognize `saved_design.v1`: two-sided rows appear as **non-openable / damaged or unknown**, never as a successfully opened front-only design that can be re-saved stripped.
+- New clients: dual-read v1 + v2; write v1 for front-only saves; write v2 when back bag is present.
+
+**Fingerprint / idempotent save:**
+
+- Extend `snapshotFingerprint` with schema version + back sentinel.
+- Backend saved-design create idempotency (by `saveRequestId` / content) must use the same fields so a lost response retry does not create a second row or a stripped row.
+
+**Reopen:**
+
+- v1 snapshot → working `draft.v1` (front only).
+- v2 snapshot → working `draft.v2` with front + back (+ `activeSide` default front unless product chooses restore-last-side).
+
+**Library preview:**
+
+- Thumbnail / card always renders **front** (top-level strokes/fills) unless a later explicit “show back” UI is added.
+
+**Export:**
+
+- Default: active side (usually front).
+- Dual export is WEB-V4J-C.
+
+**Immutability:**
+
+- Named saves are never updated in place to strip sides. Correction = new save. Server rejects any update path that would rewrite a v2 saved envelope as v1.
+
+---
+
+## 7. Library / runtime wiring (later — WEB-V4J-B)
 
 ```ts
-// Conceptual extension — do not ship until rears approved
 type BuiltinModelDef = {
   // ...existing fields
   rearCanvasSrc?: string // e.g. '/models/library/<id>-back.png'
@@ -119,58 +270,75 @@ type BuiltinModelDef = {
 
 - `canvasSrcForModel(id, side)` returns front today; rear only when `rearCanvasSrc` set.  
 - Custom / blank / legacy without rear: Back control **disabled** with honest copy.  
-- Design paper stays **768×1024**; croquis still letterboxed inside paper as today.
+- Design paper stays **768×1024**.
 
 ---
 
-## 6. Editor / undo / autosave ownership
+## 8. Editor / undo / autosave ownership
 
 | Concern | Proposal |
 |---------|----------|
-| Undo stacks | Per-side stacks **or** single stack with side-tagged entries; switching sides must not pop the other side’s history. Prefer **side-tagged single history** so one Undo bar remains. |
-| Autosave | Persist both sides in one draft document; status label unchanged. |
-| Conflict dialog | Fingerprint includes both sides; Keep device / Use cloud stays document-level. |
-| Immersive / zoom | Side toggle available in normal Studio and immersive toolbar; viewport transform shared. |
+| Undo stacks | Side-tagged single history so one Undo bar remains; switching sides must not pop the other side. |
+| Autosave | Persist full v2 document (both sides); status label unchanged. |
+| Conflict dialog | Fingerprint includes both sides; Keep device / Use cloud stays document-level; stripped local ≠ server. |
+| Immersive / zoom | Side toggle in normal + immersive; viewport transform shared. |
 | Dim reference | Applies to the active side’s croquis. |
+| Model switch | Keep front artwork (existing confirm); disable Back if new model has no rear — **do not silently delete** back bag (orphan preserved offline or confirm-clear). |
 
 ---
 
-## 7. Export & Magic boundaries
+## 9. Export & Magic boundaries
 
-- **Export default:** active side PNG (current behavior = front).  
-- **Optional later:** “Export both” → two files or labeled combined sheet (V4J-C).  
-- **Magic:** only authorized active side; never send the inactive side; no paid calls in V4J-A.  
-- **Pose fidelity (PR #41):** remains undeployed; V4J-A does not touch worker prompts.
+- **Export default:** active side PNG.  
+- **Optional later:** Export both (V4J-C).  
+- **Magic:** active side only; no paid calls in V4J-A.  
+- **Pose fidelity (PR #41):** undeployed; V4J-A does not touch worker prompts.
 
 ---
 
-## 8. Data-loss protection checklist
+## 10. Data-loss protection checklist
 
 - [x] Legacy model IDs still resolve to original geometry paths.  
-- [x] Additive JSON fields only; old clients ignore `back` / `activeSide`.  
 - [x] Front strokes/fills stay at top-level keys.  
-- [x] No production library PNG replacement in this PR.  
+- [x] Additive-only V1 optional `back` **rejected** as insufficient.  
+- [x] Versioned `draft.v2` / `saved_design.v2` + dual-reader specified.  
+- [x] Server reject-on-downgrade + fingerprint includes `back` / `activeSide` / schema.  
+- [x] Absent `back` ≠ empty `back` in fingerprints.  
+- [x] Named saved designs treated separately from working drafts.  
+- [x] Public PR does **not** publish uncleared operator front master PNGs.  
 - [x] No mirrored rear proposed as shippable asset.  
-- [ ] Operator approves generated rears before any FE asset PR.  
-- [ ] Implementation PR adds parser tests: legacy doc round-trip bitwise-equal on front fields; doc with `back` round-trips; missing `back` does not synthesize strokes.
+- [ ] Backend fingerprint/OCC implementation + tests (future BE PR).  
+- [ ] FE dual-reader / flag (future FE PR).  
+- [ ] Operator confirms rear art + (if needed) master redistribution rights.  
+- [ ] P1 #51 resolved before any V4J implementation work.
 
 ---
 
-## 9. Delivery phases
+## 11. Delivery phases (priority-aware)
 
 | Phase | Scope | Status |
 |-------|--------|--------|
-| **WEB-V4J-A** (this) | Match fronts, preserve masters, rear artwork specs, persistence audit, docs | **Draft PR — STOP for PM** |
-| **Artwork gate** | ChatGPT/operator produces rears from specs; operator accepts | Pending |
-| **WEB-V4J-B** | Ship approved `-back.png`, library fields, Front/Back UI, side-aware undo/save | Not started |
+| **P1 #51** Hand→Pencil hotfix | Gesture lifecycle; FE-only | **Active — blocks V4J implementation** (draft PR #52) |
+| **WEB-V4J-A** (this) | Match fronts (manifest), rear specs, **safe** persistence architecture | **Draft PR #50 — STOP for PM re-review** |
+| **Artwork gate** | Produce rears from specs using operator-held masters; operator accepts | **Paused** until #51 + architecture approval |
+| **BE side-aware fingerprint** | §5 before any FE Back enablement | Not started |
+| **WEB-V4J-B** | Approved `-back.png`, library fields, Front/Back UI, v2 writers | Not started |
 | **WEB-V4J-C** | Dual export / polish | Not started |
 
 ---
 
-## 10. Out of scope / safety
+## 12. Out of scope / safety (this PR)
 
-- No backend, worker, Alembic, Nginx, or Cloudflare changes.  
+- No backend, worker, Alembic, Nginx, or Cloudflare **code** changes in PR #50.  
 - No paid OpenAI calls.  
 - No production deploy.  
-- No Issue #42 implementation UI in this PR.  
-- Do not auto-merge docs PRs #44 / #46 / #49.
+- No Front/Back Studio UI.  
+- No rear PNG generation or shipping.  
+- No uncleared front master binaries in the public tree.  
+- Do not auto-merge docs PRs #44 / #46 / #49 / #50.
+
+---
+
+## 13. Compatibility test matrix
+
+See `docs/web-v4j-a/COMPATIBILITY-TEST-MATRIX.md` for the full client × document × draft/saved × offline/conflict matrix required before WEB-V4J-B enablement.
