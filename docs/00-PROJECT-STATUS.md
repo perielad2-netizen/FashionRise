@@ -103,7 +103,7 @@
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
 | GitHub `main` | **`c6fc1eb8`** — P1 #51 FE hotfix merged; PR #41 pose fidelity source present, **not** on prod BE |
 | Production frontend / backend / worker | **`c6fc1eb8` / `b800e53d` / `b800e53d`** · Alembic **`005`** · Sunburst high |
-| **P1 #59 croquis identity** | **Draft** — FE→BE `reference_model_id` + vision/edit precedence; offline tests only; release plan `docs/deploy/P1-59-CROQUIS-IDENTITY-RELEASE.md`; **Issue #59 OPEN** until operator visual acceptance |
+| **P1 #59 croquis identity** | **Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)** — FE→BE `reference_model_id` + vision/edit precedence; offline tests only; release plan `docs/deploy/P1-59-CROQUIS-IDENTITY-RELEASE.md`; **Issue #59 OPEN** until operator visual acceptance |
 | **P1 #54 Magic Sunburst** | Maint tip **`b800e53d`** on prod BE/worker; PR #57 **not** for merge to `main`; deploy record PR #58 |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
