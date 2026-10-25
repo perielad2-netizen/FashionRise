@@ -11,7 +11,7 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`c6fc1eb8`** — release matching verified main tip. Registration + Magic UI on. **Known P1 #60:** narrow closed garment regions (hourglass neck / straps / tiny panels) can fail or leave white under fixed `gapClose=2` + `count < 24` (draft fix not deployed). |
+| Frontend (`web-ui`) | **`c6fc1eb8`** — release matching verified main tip. Registration + Magic UI on. **Known P1 #60:** narrow closed garment regions can fail under fixed `gapClose=2` + `count < 24`; draft PR #62 (not deployed) also addresses internal-seam spill. |
 | Backend (FastAPI + PostgreSQL) | **`b800e53d`** — unchanged by #60 (FE-only) |
 | AI worker | Standalone @ **`b800e53d`** · Sunburst high · edit `max_retries=0` — **not modified** |
 | Database | `fashionrise_beta` — Alembic **`005`** (unchanged) |
