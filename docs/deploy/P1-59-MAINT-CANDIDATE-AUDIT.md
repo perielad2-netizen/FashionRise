@@ -2,6 +2,7 @@
 
 **Branch:** `cursor/p1-59-maint-b800e53d-77c6`  
 **Base:** `b800e53d25dcdf2481f377470543b323798796a7` (exact production BE/worker tip)  
+**Head:** `ba2e87ab49992b3d5398f8acc238b329ddcf6e1a`  
 **Purpose:** Offline, auditable API/worker patch for Issue #59 **without** undeployed PR #41 pose packing.
 
 ## Provenance checks
