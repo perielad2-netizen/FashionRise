@@ -590,7 +590,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-25 | **P1 #60 narrow closed-shape Fill (draft):** operator hourglass/strap evidence; root causes = fixed `gapClose=2` sealing 1–4px necks + `count < 24` + rigid RDP; adaptive undilated-first fill; synthetic regressions (1–10px necks, tiny pockets, open U-shape, neighbor seam, zoom independence); FE-only; **0 paid AI**; production unchanged (`c6fc1eb8` / `b800e53d` / `005`); **STOP for Technical PM review — no merge/deploy**. |
+| 2026-10-25 | **P1 #60 narrow closed-shape Fill (draft):** operator hourglass/strap evidence; root causes = fixed `gapClose=2` sealing 1–4px necks + `count < 24` + rigid RDP; adaptive undilated-first fill; synthetic regressions (1–10px necks, tiny pockets, open U-shape, neighbor seam, zoom independence); Vitest **396**; lint/tsc/build/check:sw PASS; FE-only; **0 paid AI**; production unchanged (`c6fc1eb8` / `b800e53d` / `005`); **STOP for Technical PM review — no merge/deploy**. |
 | 2026-10-24 | **P1 #51 Hand→Pencil hotfix** merged to `main` @ `c6fc1eb8` (draft path PR #52). |
 | 2026-10-24 | **P1 #51 Hand→Pencil hotfix draft PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52):** root cause = viewport remount cleared gesture cooldown timer while flag stayed true; stable window listeners + unmount-only timer cleanup; Vitest **362** (8 new controlled-viewport regressions); Playwright Android/iPad PASS; lint/tsc/build/check:sw PASS; **0 paid AI**; production unchanged (`dfcaa609` / `2cbc1ad0` / `005`); **STOP for Technical PM review — no merge/deploy**. |
 | 2026-10-24 | **WEB-V4I PR #48 MERGED + FE deployed** @ `dfcaa609`. |
