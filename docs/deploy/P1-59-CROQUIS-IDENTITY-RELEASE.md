@@ -24,7 +24,7 @@
 | Artifact | Base | Purpose |
 |---|---|---|
 | Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) | `main` @ `c6fc1eb8` | Development / review of FE + full identity contract (may sit atop main pose packing) |
-| Maint candidate branch `cursor/p1-59-maint-b800e53d-77c6` | **exactly** `b800e53d` | Audited production-compatible API/worker (+ matching FE if needed) **without** undeployed PR #41 pose packing |
+| Maint candidate branch `cursor/p1-59-maint-b800e53d-77c6` @ `1450b5a1` | **exactly** `b800e53d` | Audited production-compatible API/worker **without** undeployed PR #41 pose packing |
 
 Only the maint candidate is eligible for a future production BE/worker deploy.
 
