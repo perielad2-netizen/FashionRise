@@ -24,6 +24,9 @@ _COVERAGE_TOKENS = (
     "modesty insert",
     "intentionally drawn white or pale fabric",
     "do not invent bare-skin regions",
+    "COLOR FIDELITY",
+    "applied garment fill",
+    "outline strokes are linework",
 )
 
 _STYLE_STILL_REQUIRED = (

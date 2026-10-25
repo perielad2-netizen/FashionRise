@@ -54,6 +54,15 @@ _COVERAGE_PRESERVATION_CONTRACT = (
     "Keep the professional fashion-illustration finish."
 )
 
+# Applied-fill color authority — outlines must not become fabric (Dual Magic color fix).
+_COLOR_FIDELITY_CONTRACT = (
+    "COLOR FIDELITY: Follow applied garment fill/fabric colors from the sketch and any "
+    "shared garment-spec main_colors. Black or dark outline strokes are linework, not "
+    "fabric fill — do not replace pink, fuchsia, coral, or other applied fill colors with "
+    "black unless black fabric was actually drawn as a filled garment region. Keep Front "
+    "and Back material colors, straps, cut-outs, and silhouette consistent with the sketch."
+)
+
 # Illustration-style restriction — equal priority with coverage; must not be truncated
 # away by verbose vision evidence (Issue #64 PM amendment).
 _ILLUSTRATION_STYLE_CONTRACT = (
@@ -359,10 +368,11 @@ def _studio_side_vision_clause(side: str | None) -> str:
         )
     if side == "back":
         return (
-            "STUDIO VIEW: REAR / BACK of the garment. This upload is the back sketch only — use rear "
-            "fashion-illustration anatomy language (dorsal silhouette, back neckline, back straps, "
-            "rear closures, center-back seams, rear hem). Do NOT claim this is the front view or "
-            "invent front-only details that are not visible from behind."
+            "STUDIO VIEW: REAR / BACK of the garment. This upload is the back sketch only — use neutral "
+            "professional fashion-illustration language for adult swimwear and rear garment construction "
+            "(dorsal silhouette, back neckline, back straps or ties, rear closures, center-back seams, "
+            "rear hem, coverage panels as drawn). Do NOT claim this is the front view, invent front-only "
+            "details, or add coverage that is not drawn."
         )
     return ""
 
@@ -375,9 +385,10 @@ def _studio_side_edit_clause(side: str | None) -> str:
         )
     if side == "back":
         return (
-            "VIEW: rear/back fashion illustration — show the garment from behind with accurate "
-            "back necklines, straps, dorsal seams, and rear hem; never describe this upload as "
-            "a front-facing sketch. "
+            "VIEW: rear/back fashion illustration of adult swimwear or similar rear garment "
+            "construction — show the garment from behind with accurate back necklines, straps or "
+            "ties, dorsal seams, and rear hem as drawn; use neutral technical fashion language; "
+            "never describe this upload as a front-facing sketch. "
         )
     return ""
 
@@ -670,6 +681,7 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         f"{reference_clause}"
         f"{side_clause}"
         f"{_COVERAGE_PRESERVATION_CONTRACT} "
+        f"{_COLOR_FIDELITY_CONTRACT} "
         "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
         "sleeve type and length, hemline, main colors, fabric/textile patterns, asymmetry, accessories "
         "(such as hats), distinctive design details, and the exact garment coverage map (panels vs "
@@ -859,7 +871,8 @@ def _user_message_for_edit_failure(category: str) -> str:
     if category == "provider_content_policy":
         return (
             "Magic could not edit this sketch under the image provider's safety rules. "
-            "Your original design is unchanged."
+            "Your original design is unchanged. Edit the sketch, then start a new Magic "
+            "operation — identical retries are not sent automatically."
         )
     if category == "provider_rate_limit":
         return "Magic is temporarily busy. Your original design is unchanged — try again shortly."
