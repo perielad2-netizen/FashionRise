@@ -123,7 +123,7 @@
 | **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
 | **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
 | **P1 #51 Hand→Pencil immersive** | On `main` @ `c6fc1eb8` (FE); confirm operator tablet acceptance if still open |
-| **P1 #59 croquis identity** | **Draft** — selected `reference_model_id` through Magic; offline verified; **no deploy**; Issue #59 OPEN for visual gate |
+| **P1 #59 croquis identity** | **Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)** — selected `reference_model_id` through Magic; offline verified; **no deploy**; Issue #59 OPEN for visual gate |
 | **Issue #42 / WEB-V4J Front-Back** | **OPEN** — architecture draft PR #50; prioritize after Magic identity acceptance |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
@@ -319,7 +319,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P1 #59 croquis-identity draft PR (Issue [#59](https://github.com/perielad2-netizen/FashionRise/issues/59)). **Do not merge/deploy/paid-AI** until authorized. After approve: follow `docs/deploy/P1-59-CROQUIS-IDENTITY-RELEASE.md` — cherry-pick BE onto prod maint tip `b800e53d`, deploy FE from `c6fc1eb8` lineage, then **operator visual acceptance** that the selected male (and female) croquis remains recognizable. Keep Issue #59 open until that gate.
+1. **Exact next action:** Technical PM **review** of P1 #59 croquis-identity **draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)** (Issue [#59](https://github.com/perielad2-netizen/FashionRise/issues/59)). **Do not merge/deploy/paid-AI** until authorized. After approve: follow `docs/deploy/P1-59-CROQUIS-IDENTITY-RELEASE.md` — cherry-pick BE onto prod maint tip `b800e53d`, deploy FE from `c6fc1eb8` lineage, then **operator visual acceptance** that the selected male (and female) croquis remains recognizable. Keep Issue #59 open until that gate.
 2. Production remains FE `c6fc1eb8` / BE+worker `b800e53d` / Alembic `005` / Sunburst high until an authorized release.
 3. **Do not merge PR [#57](https://github.com/perielad2-netizen/FashionRise/pull/57)** into `main`. Do not deploy undeployed PR #41 pose packing as a silent side-effect of #59.
 4. Magic pose fidelity (Issue #39 / PR #41) remains a separate track after croquis-identity acceptance.
