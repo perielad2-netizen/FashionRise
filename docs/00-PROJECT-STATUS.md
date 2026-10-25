@@ -3,19 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`** (includes Hand→Pencil #51 + prior Studio work; **PR #41 pose fidelity source still not deployed**). **Production frontend:** **`a740a9b7`** (combined P1 #59 Magic identity + P1 #60 narrow fill). **Production backend + AI worker:** **`74537077`** (P1 #59 maint tip on Sunburst baseline `b800e53d`) · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` / `high` / `1024x1536`. **Issue #51:** **CLOSED**. **Issue #60:** **CLOSED** (operator real-device 3/3 PASS). **Issue #59:** **OPEN** — Magic croquis identity acceptance pending. **Issue #64:** **OPEN** — coverage fidelity draft PR [#65](https://github.com/perielad2-netizen/FashionRise/pull/65) amendment awaiting Technical PM review (not deployed). **Magic pose fidelity (Issue #39 / PR #41):** on `main` only — **never deploy `main` BE/worker**. Cursor paid AI calls this run: **0**.
+**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`**. **Production FE:** **`a740a9b7`**. **Production BE/worker:** **`12f7acdf…`** (maint tip: Sunburst + #59 identity + #64 coverage; **never deploy undeployed `main`/PR #41 packing**). Alembic **`005`**. **Closed / operator-accepted:** #39, #51, #59, #60, #64. **Issue #42 OPEN.** **WEB-V4J Stage A:** architecture PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) **ACCEPTED** (DRAFT, not merge-authorized); prior PR #50 closed unmerged/superseded. **WEB-V4J Stage B:** draft PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) @ `6b253cb5` on immutable base `cursor/maint-base-12f7acdf-77c6` — fingerprint + reject-on-downgrade + `clearBackIntent` + bidirectional kind-lock + saved advisory lock + unknown-schema family 422 + full saved fingerprint; Technical PM **source ACCEPT**; offline verified (**32** / **389**); **not merged / not deployed**. Release plan (read-only): `docs/deploy/WEB-V4J-B-RELEASE-PLAN.md`. Stage C rear artwork **not generated/approved**. Stage D Front/Back UI **not implemented**. Cursor paid AI: **0**.
 
-**Phase:** Protected family beta. Production FE @ `a740a9b7` (identity+fill). #59 Magic identity acceptance still open. #64 coverage amendment awaiting PM. WEB-V4J Front/Back deferred. Magic pose-fidelity PR #41 remains GitHub-only.
+**Phase:** Protected family beta. WEB-V4J Stage B **code accepted** for controlled release planning — **HOLD** merge/deploy/ready-for-review until separate operator authorization. No FE Back UI. No rear PNG. **Exact next decision:** authorize (or HOLD) the SHA-pinned BE maint cutover at `6b253cb5` per the release plan (still no Stage C/D).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`a740a9b7`** — Nginx root `/var/www/fashionrise/releases/a740a9b7`. Combined Release B: PR #61 identity FE `c30dbc93` + PR #62 `floodFill*` from `b1018b46`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Release A checkpoint `c30dbc93` + original `c6fc1eb8` retained. |
-| Backend (FastAPI + PostgreSQL) | **`74537077`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone); croquis `reference_model_id` identity path live |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`74537077`** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` · quality `high` · size `1024x1536` |
-| Database | `fashionrise_beta` — Alembic **`005`** (unchanged) |
-| Deploy backup | `/root/fashionrise-backups/p1-59-60-coord-20261025T081941Z` (+ `/var/backups/fashionrise/…` symlink) |
+| Frontend (`web-ui`) | **`a740a9b7`** — Nginx root `/var/www/fashionrise/releases/a740a9b7`. Combined #51+#59+#60. `VITE_API_BASE_URL=/api/v1`, registration/Magic UI on. Permanent Workbox SW. |
+| Backend (FastAPI + PostgreSQL) | **`12f7acdf…`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker standalone). Maint lineage only. |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`12f7acdf…`** · Sunburst high · `1024x1536` · edit `max_retries=0` |
+| Database | `fashionrise_beta` — Alembic **`005`** (V4J Stage B needs **no** migration) |
+| Deploy backup | `/root/fashionrise-backups/p2-64-coverage-deploy-*` (+ prior #59/#60 coord backup) |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -323,11 +323,11 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P2 [#64](https://github.com/perielad2-netizen/FashionRise/issues/64) / draft PR [#65](https://github.com/perielad2-netizen/FashionRise/pull/65) coverage amendment (protected prompt packing + two-stage mocks). **Do not merge/deploy** until authorized.
-2. **#59 Magic (paid):** confirm selected male/female croquis identity preserved with professional polish quality.
-3. After #64 PM approval: authorize **backend/worker-only** maint fast-forward from live `74537077` (FE stays `a740a9b7`). Then one controlled paid swimwear/lingerie acceptance under a separate cost cap. Keep #64 OPEN until that acceptance.
-4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. **Never deploy GitHub `main` BE/worker** while undeployed pose packing is on that tip without a separate maint pin.
-5. **Do not auto-merge** feature PRs [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)/[#62](https://github.com/perielad2-netizen/FashionRise/pull/62)/[#65](https://github.com/perielad2-netizen/FashionRise/pull/65) without explicit authorization.
+1. **Exact next action:** Separate operator/PM decision on the SHA-pinned Stage B **BE maint release plan** (`docs/deploy/WEB-V4J-B-RELEASE-PLAN.md`) for candidate `6b253cb5` — authorize cutover or HOLD. **Do not merge/deploy/mark ready** without that GO. Readiness note: `docs/deploy/WEB-V4J-B-PERSISTENCE-READY.md`.
+2. After authorized BE deploy of `6b253cb5` (FE stays `a740a9b7`, Alembic `005`): begin **Stage C** rear croquis artwork from accepted specs (operator-held fronts; no shippable binaries until approval).
+3. **Stage D** Front/Back Studio UI only after B deployed and C approved.
+4. Stage A PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) and Stage B PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) remain **DRAFT** (source-accepted; not merge-authorized). **Never deploy GitHub `main` BE/worker** for V4J.
+5. **Do not auto-merge** maint/feature docs PRs without explicit authorization.
 6. **Operator residual:** expired Access session test (still PENDING).
 
 ---
@@ -598,6 +598,10 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-25 | **WEB-V4J Stage B PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) Technical PM source ACCEPT** @ `6b253cb5`; SHA-pinned read-only release plan `docs/deploy/WEB-V4J-B-RELEASE-PLAN.md` prepared; **HOLD merge/deploy/ready** pending separate operator cutover authorization; Alembic `005`; **0 paid AI**; Stage C/D still gated. |
+| 2026-10-25 | **WEB-V4J Stage B PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) kind-integrity amendment:** reject Studio metadata `designKind=saved_design` poisoning (409) and mixed-kind create (422); subsequent two-sided Studio edits still succeed; suite **32** + full BE pytest updated; Alembic `005`; **0 paid AI**; **STOP for re-review — no merge/deploy**. |
+| 2026-10-25 | **WEB-V4J Stage B PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) PM amendment:** stored saved-kind protection (no studio hijack); owner advisory lock on saved create; unknown `draft.*`/`saved_design.*` family versions → 422; full saved envelope fingerprint (`sourceRevision`/etc.); suite **30** + full BE pytest **387**; Alembic `005`; **0 paid AI**. |
+| 2026-10-25 | **WEB-V4J Stage B draft PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68):** immutable base `cursor/maint-base-12f7acdf-77c6` @ `12f7acdf`; `design_service` v2 fingerprint + reject-on-downgrade + `clearBackIntent`; initial suite **23** / pytest **380**; Stage A PR #67 accepted; PR #50 closed unmerged; **0 paid AI**. |
 | 2026-10-25 | **P2 #64 PR #65 amendment:** protect coverage + non-photoreal illustration instructions from evidence truncation (bound lower-priority vision prose only); incomplete/null/unknown/contradictory coverage mocks; two-stage `build_sketch_chat_request`→`images.edit` handoff for male/female; **0 paid AI**; production unchanged; **STOP for Technical PM review**. |
 | 2026-10-25 | **P2 #64 coverage fidelity draft (maint tip):** vision + edit garment-coverage contract (`COVERAGE FIDELITY` + coverage `design_identity` fields); initial mocked regressions; full BE pytest **342**; **0 paid AI**; production unchanged (`a740a9b7` / `74537077` / `005`). Issue #60 **CLOSED** (operator 3/3 PASS). |
 | 2026-10-25 | **Coordinated P1 #59+#60 production deploy SUCCESS:** BE/worker `74537077` (maint on `b800e53d`); FE Release A `c30dbc93` then Release B `a740a9b7` (identity+narrow fill); Alembic `005`; Sunburst high unchanged; Vitest A **379** / B **436**; BE pytest **331**; AI queue **0** non-terminal; **0** paid AI / **0** jobs created; backup `p1-59-60-coord-20261025T081941Z`. Report: `docs/deploy/P1-59-60-COORDINATED-PRODUCTION-DEPLOY.md`. |
