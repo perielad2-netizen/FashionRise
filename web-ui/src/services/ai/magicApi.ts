@@ -38,10 +38,15 @@ export type PolishSketchInput = {
   imageBase64: string
   notes?: string
   designId?: string | null
-  /** WEB-V4J dual-sided polish grouping (mock-friendly; server may ignore until wired). */
+  /** WEB-V4J dual-sided polish grouping. */
   magic_operation_id?: string
   studio_side?: 'front' | 'back'
   reference_model_id?: string
+  /** Required for linked Front/Back attempts (incl. failed-side retry). */
+  idempotency_key?: string
+  shared_garment_spec?: SharedGarmentSpec
+  source_revision?: number
+  content_fingerprint?: string
   signal?: AbortSignal
 }
 
@@ -85,6 +90,10 @@ export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJ
         magic_operation_id: input.magic_operation_id,
         studio_side: input.studio_side,
         reference_model_id: input.reference_model_id,
+        idempotency_key: input.idempotency_key,
+        shared_garment_spec: input.shared_garment_spec,
+        source_revision: input.source_revision,
+        content_fingerprint: input.content_fingerprint,
       },
     },
     signal: input.signal,

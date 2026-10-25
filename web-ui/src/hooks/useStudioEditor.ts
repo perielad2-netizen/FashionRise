@@ -54,7 +54,12 @@ import {
 } from '@/lib/savedDesign'
 import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
 import { ApiError } from '@/services/api/client'
-import { enqueueSketchPolish, fetchJobImageBlob } from '@/services/ai/magicApi'
+import {
+  enqueueSketchPolish,
+  fetchJobImageBlob,
+  fetchMagicOperationJobs,
+  mapMagicOperationJobsBySide,
+} from '@/services/ai/magicApi'
 import {
   DualPolishUnavailableError,
   enqueueDualPolish,
@@ -62,6 +67,7 @@ import {
 import { buildSharedGarmentSpec } from '@/services/ai/magicGarmentSpec'
 import { settleMagicJobWithImage } from '@/services/ai/magicPipelineHelpers'
 import {
+  allocateMagicRetryIdempotencyKey,
   patchMagicOperationJob,
   persistMagicJobId,
   persistMagicOperation,
@@ -1017,10 +1023,17 @@ export function useStudioEditor() {
         const frontIdempotencyKey = `${operationId}:front`
         const backIdempotencyKey = `${operationId}:back`
         const garmentSpec = buildSharedGarmentSpec(doc, 'polish concept')
+        const contentFingerprint = draftContentFingerprint(doc)
+        const sourceRevision = doc.clientRevision
         persistMagicOperation(user.id, {
           operationId,
           frontIdempotencyKey,
           backIdempotencyKey,
+          designId,
+          sourceRevision,
+          contentFingerprint,
+          referenceModelId: modelId,
+          sharedGarmentSpec: garmentSpec,
           updatedAt: new Date().toISOString(),
         })
         const enqueued = await enqueueDualPolish({
@@ -1029,8 +1042,8 @@ export function useStudioEditor() {
           reference_model_id: modelId,
           notes: 'polish concept',
           shared_garment_spec: garmentSpec,
-          source_revision: doc.clientRevision,
-          content_fingerprint: draftContentFingerprint(doc),
+          source_revision: sourceRevision,
+          content_fingerprint: contentFingerprint,
           front: {
             image_base64: frontCap.dataUrl,
             notes: 'polish concept (front)',
@@ -1049,6 +1062,11 @@ export function useStudioEditor() {
           backJobId: enqueued.back_job_id,
           frontIdempotencyKey,
           backIdempotencyKey,
+          designId,
+          sourceRevision,
+          contentFingerprint,
+          referenceModelId: modelId,
+          sharedGarmentSpec: garmentSpec,
           updatedAt: new Date().toISOString(),
         })
         setMagicJobId(enqueued.front_job_id)
@@ -1336,11 +1354,38 @@ export function useStudioEditor() {
   const retryMagicSide = useCallback(
     (side: StudioPaperSide) => {
       if (!user?.id || magicInFlightRef.current) return
-      const operationId = magicOperationId ?? readMagicOperation(user.id)?.operationId
-      if (!operationId) {
+      if (!dualMagicEnabled) {
+        setComingSoon(FRONT_BACK_MAGIC_COMING_SOON)
+        return
+      }
+      const stored = readMagicOperation(user.id)
+      const operationId = magicOperationId ?? stored?.operationId
+      if (!operationId || !stored) {
         setMagicError('No Magic operation to retry.')
         return
       }
+      const doc = authoritativeDocRef.current
+      const liveFingerprint = draftContentFingerprint(doc)
+      if (
+        typeof stored.contentFingerprint === 'string' &&
+        stored.contentFingerprint &&
+        liveFingerprint !== stored.contentFingerprint
+      ) {
+        setMagicError('Sketch changed since Magic started — start a new Front/Back Magic instead of retrying.')
+        return
+      }
+      if (
+        typeof stored.sourceRevision === 'number' &&
+        doc.clientRevision !== stored.sourceRevision
+      ) {
+        setMagicError('Sketch changed since Magic started — start a new Front/Back Magic instead of retrying.')
+        return
+      }
+      if (!stored.sharedGarmentSpec) {
+        setMagicError('Missing garment identity for retry. Recover the last result or run Magic again.')
+        return
+      }
+
       magicInFlightRef.current = true
       setMagicError(null)
       setMagicOpen(true)
@@ -1354,7 +1399,6 @@ export function useStudioEditor() {
 
       void (async () => {
         try {
-          const doc = authoritativeDocRef.current
           const bag =
             side === 'front'
               ? { strokes: doc.strokes, fills: doc.fills ?? [] }
@@ -1365,17 +1409,48 @@ export function useStudioEditor() {
             referenceUrl: referenceUrlForDocument(doc, side),
             referenceOpacity: doc.dimmed ? 0.4 : 1,
           })
-          const job = await enqueueSketchPolish({
-            imageBase64: cap.dataUrl,
-            notes: `polish concept (${side}) retry`,
-            designId: designIdRef.current,
-            magic_operation_id: operationId,
-            studio_side: side,
-            reference_model_id: doc.model,
-            signal: controller.signal,
-          })
-          patchMagicOperationJob(user.id, side, job.id)
-          const settled = await settleMagicJobWithImage(job.id, controller.signal)
+
+          // Persist a new per-attempt key before POST so lost responses can replay.
+          const idempotencyKey = allocateMagicRetryIdempotencyKey(user.id, side)
+          if (!idempotencyKey) {
+            throw new Error('Could not allocate a retry idempotency key.')
+          }
+
+          let jobId: string
+          try {
+            const job = await enqueueSketchPolish({
+              imageBase64: cap.dataUrl,
+              notes: `polish concept (${side}) retry`,
+              designId: stored.designId ?? designIdRef.current,
+              magic_operation_id: operationId,
+              studio_side: side,
+              reference_model_id: stored.referenceModelId ?? doc.model,
+              idempotency_key: idempotencyKey,
+              shared_garment_spec: stored.sharedGarmentSpec,
+              source_revision: stored.sourceRevision,
+              content_fingerprint: stored.contentFingerprint,
+              signal: controller.signal,
+            })
+            jobId = job.id
+            patchMagicOperationJob(user.id, side, job.id, idempotencyKey)
+          } catch (err) {
+            // Uncertain / lost response: recover latest job for this side — never mint a new key.
+            if (
+              err instanceof ApiError &&
+              (err.status === 0 || err.status >= 500 || err.status === 409)
+            ) {
+              const listed = await fetchMagicOperationJobs(operationId, controller.signal)
+              const mapped = mapMagicOperationJobsBySide(listed.jobs ?? [])
+              const recoveredId = side === 'front' ? mapped.frontJobId : mapped.backJobId
+              if (!recoveredId) throw err
+              jobId = recoveredId
+              patchMagicOperationJob(user.id, side, recoveredId, idempotencyKey)
+            } else {
+              throw err
+            }
+          }
+
+          const settled = await settleMagicJobWithImage(jobId, controller.signal)
           const failed = settled.look.status === 'failed'
           if (magicSideLookUrlsRef.current[side]) {
             URL.revokeObjectURL(magicSideLookUrlsRef.current[side]!)
@@ -1414,7 +1489,7 @@ export function useStudioEditor() {
         }
       })()
     },
-    [magicDualViewSide, magicOperationId, referenceUrlForDocument, user?.id],
+    [dualMagicEnabled, magicDualViewSide, magicOperationId, referenceUrlForDocument, user?.id],
   )
 
   const backToSketchFromMagic = useCallback(() => {
