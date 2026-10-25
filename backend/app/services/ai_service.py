@@ -178,6 +178,101 @@ def _identity_tuple(
     )
 
 
+def _is_linked_dual_attempt(input_data: dict) -> bool:
+    """True when /polish carries both operation id and studio side (Front/Back link)."""
+    op = input_data.get("magic_operation_id")
+    side = input_data.get("studio_side")
+    if not isinstance(op, str) or not op.strip():
+        return False
+    if not isinstance(side, str):
+        return False
+    return side.strip().lower() in STUDIO_SIDES
+
+
+def _require_linked_attempt_fields(input_data: dict) -> None:
+    if _normalize_idempotency_key(input_data.get("idempotency_key")) is None:
+        raise ValidationAppError(
+            "Linked Front/Back Magic requires a stable idempotency_key per attempt."
+        )
+    rev = input_data.get("source_revision")
+    fp = input_data.get("content_fingerprint")
+    has_rev = isinstance(rev, int)
+    has_fp = isinstance(fp, str) and bool(fp.strip())
+    if not has_rev and not has_fp:
+        raise ValidationAppError(
+            "Linked Front/Back Magic requires source_revision or content_fingerprint."
+        )
+
+
+def _garment_identity_fingerprint(input_data: dict) -> str | None:
+    """Garment/model brief only — excludes per-side notes that may differ on retry."""
+    payload = {
+        "shared_garment_spec": input_data.get("shared_garment_spec"),
+        "reference_model_id": input_data.get("reference_model_id"),
+    }
+    if all(v is None or v == "" for v in payload.values()):
+        return None
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _operation_identity_tuple(
+    *,
+    magic_operation_id: str,
+    design_id: uuid.UUID | None,
+    input_data: dict,
+) -> tuple[Any, ...]:
+    """Immutable operation identity for retries — excludes per-attempt raster hash.
+
+    A deliberate re-capture of the same Studio document may change image bytes;
+    design id + revision/fingerprint + garment/model brief must stay identical.
+    Per-side ``notes`` are not part of this tuple.
+    """
+    rev = input_data.get("source_revision")
+    fp = input_data.get("content_fingerprint")
+    content_fp = fp.strip() if isinstance(fp, str) else None
+    design = _design_id_str(design_id) or _input_design_id_str(input_data)
+    garment_fp = _garment_identity_fingerprint(input_data)
+    return (
+        (magic_operation_id or "").strip() or None,
+        design,
+        rev if isinstance(rev, int) else None,
+        content_fp or None,
+        garment_fp,
+    )
+
+
+def _assert_operation_identity_unchanged(
+    existing: AIJob,
+    *,
+    magic_operation_id: str,
+    design_id: uuid.UUID | None,
+    prepared_input: dict,
+) -> None:
+    stored = existing.input_data if isinstance(existing.input_data, dict) else {}
+    expected = _operation_identity_tuple(
+        magic_operation_id=magic_operation_id,
+        design_id=design_id,
+        input_data=prepared_input,
+    )
+    actual = _operation_identity_tuple(
+        magic_operation_id=stored.get("magic_operation_id")
+        if isinstance(stored.get("magic_operation_id"), str)
+        else magic_operation_id,
+        design_id=existing.design_id,
+        input_data=stored,
+    )
+    if expected != actual:
+        raise ConflictError(
+            "Cannot retry Magic — the underlying design identity changed.",
+            payload={
+                "reason": "operation_identity_mismatch",
+                "job_id": str(existing.id),
+                "status": existing.status,
+            },
+        )
+
+
 def _assert_idempotency_identity(
     existing: AIJob,
     *,
@@ -304,8 +399,38 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
             source_revision=source_revision,
             content_fingerprint=content_fingerprint,
         )
+        linked = _is_linked_dual_attempt(input_data)
+        if linked:
+            # Linked Front/Back attempts always use the dual reconcile path:
+            # require key + identity, owner lock, one active attempt per side,
+            # same-key replay (incl. failed), new key only after explicit failure.
+            _require_linked_attempt_fields(input_data)
+            side_raw = input_data.get("studio_side")
+            side = side_raw.strip().lower() if isinstance(side_raw, str) else ""
+            op_raw = input_data.get("magic_operation_id")
+            op_str = op_raw.strip() if isinstance(op_raw, str) else ""
+            idem = input_data.get("idempotency_key")
+            assert isinstance(idem, str) and idem  # enforced above
+            reference_from_job_input(input_data)
+            db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _dual_magic_lock_key(user.id)})
+            existing = find_sketch_polish_by_idempotency(db, user.id, idem)
+            job, is_new = _reconcile_or_prepare_job(
+                db,
+                user,
+                existing,
+                side=side,
+                prepared_input=input_data,
+                design_id=data.design_id,
+                operation_id=op_str,
+            )
+            if is_new:
+                db.add(job)
+                db.commit()
+                db.refresh(job)
+            return job
+
         idem = input_data.get("idempotency_key")
-        # Owner lock covers concurrent identical /polish retries (incl. failed-side).
+        # Ordinary single-side Magic: optional key with identity-bound replay.
         if isinstance(idem, str) and idem:
             db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _dual_magic_lock_key(user.id)})
             existing = find_sketch_polish_by_idempotency(db, user.id, idem)
@@ -440,7 +565,13 @@ def _reconcile_or_prepare_job(
                     "status": latest.status,
                 },
             )
-        # latest failed + new key → explicit retry attempt allowed below.
+        # latest failed + new key → explicit retry; garment/design identity must match.
+        _assert_operation_identity_unchanged(
+            latest,
+            magic_operation_id=operation_id,
+            design_id=design_id,
+            prepared_input=prepared_input,
+        )
 
     job = AIJob(
         user_id=user.id,

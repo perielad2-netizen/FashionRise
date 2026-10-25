@@ -3,19 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25 (FAST TRACK ship prep — Stage D FE PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) source-approved `b19c9d4c`; Stage B persistence tip `6b253cb5` in PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68)/#70 lineage; Dual Magic BE PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) tip `4c04c7b2` durable failed-key + one-active-attempt; local E2E Front/Back draw+save+reopen **PASS**, Dual Magic UI enqueue **PASS** with no paid AI; **production Dual Magic remains OFF** until authorize; Front/Back drawing ready for Stage B+FE deploy path).
+**Last updated:** 2026-10-25 (Dual Magic implementation complete for controlled release — BE PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) linked `/polish` retry guards + mocked e2e **PASS**; companion FE PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) `retryMagicSide` persisted per-attempt idempotency. **Not deployed.** Production Dual Magic remains **OFF**. Paid AI: **0**.)
 
-**Phase:** Protected family beta. WEB-V4J Stage B amended for Studio↔saved metadata kind integrity — awaiting Technical PM re-review. No FE Back UI. No rear PNG. No deploy. **Exact next PM decision:** re-review PR #68 → GO/HOLD merge&deploy (still no Stage C/D).
+**Phase:** Protected family beta. **Front/Back drawing LIVE** in production; Dual Magic BE+FE **implementation ready**, awaiting separate activate authorize. Do not deploy undeployed GitHub `main`.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`a740a9b7`** — Nginx root `/var/www/fashionrise/releases/a740a9b7`. Combined #51+#59+#60. `VITE_API_BASE_URL=/api/v1`, registration/Magic UI on. Permanent Workbox SW. |
-| Backend (FastAPI + PostgreSQL) | **`12f7acdf…`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker standalone). Maint lineage only. |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`12f7acdf…`** · Sunburst high · `1024x1536` · edit `max_retries=0` |
-| Database | `fashionrise_beta` — Alembic **`005`** (V4J Stage B needs **no** migration) |
-| Deploy backup | `/root/fashionrise-backups/p2-64-coverage-deploy-*` (+ prior #59/#60 coord backup) |
+| Frontend (`web-ui`) | **`4589a62d`** — Front/Back LIVE; `VITE_STUDIO_DUAL_MAGIC_ENABLED=false`; Magic UI on. |
+| Backend (FastAPI + PostgreSQL) | **`6b253cb5`** — Stage B V2 persistence (maint). Dual Magic BE **not** live. |
+| AI worker | Standalone @ **`6b253cb5`** |
+| Database | `fashionrise_beta` — Alembic **`005`** |
+| Deploy backup | `/var/backups/fashionrise/v4j-frontback-deploy-20261025T174543Z` |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -128,7 +128,7 @@
 | **P1 #59 Magic croquis identity** | **DEPLOYED** BE/worker `74537077` + FE Release B; PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) open; **operator acceptance PENDING** |
 | **P1 #60 Narrow fill** | **CLOSED** — operator real-device acceptance **3/3 PASS** on FE `a740a9b7` |
 | **P2 #64 Swimwear/lingerie coverage** | **Draft PR [#65](https://github.com/perielad2-netizen/FashionRise/pull/65)** on maint tip — protected coverage + illustration contracts; **STOP for PM**; not deployed |
-| **Issue #42 / WEB-V4J Front-Back** | **OPEN** — deferred; architecture draft PR #50 |
+| **Issue #42 / WEB-V4J Front-Back + Dual Magic** | Drawing **LIVE** in prod. Dual Magic BE PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) + FE retry on [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) **implementation ready** — not activated. |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — do not auto-merge). |

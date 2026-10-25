@@ -323,6 +323,216 @@ def test_sequential_enqueue_linked_by_operation_id(client, db_session):
     assert back.json()["input_data"]["magic_operation_id"] == op
 
 
+def test_linked_polish_requires_idempotency_key(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_nokey@example.com", "dual_nokey")
+    r = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "back",
+                "magic_operation_id": str(uuid4()),
+                "source_revision": 1,
+                "shared_garment_spec": {"silhouette": "dress"},
+            }
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_linked_polish_back_retry_one_new_job_preserves_front(client, db_session):
+    """FE-style path: dual enqueue → Back fails → POST /polish retry with new key."""
+    tokens = register_with_invite(client, db_session, "dual_retry_polish@example.com", "dual_rp")
+    op = str(uuid4())
+    front_key = "rp-front"
+    back_fail_key = "rp-back-fail"
+    body = _dual_payload(
+        magic_operation_id=op,
+        content_fingerprint="fp-stable-1",
+        front={"image_base64": _DATA_URL, "idempotency_key": front_key},
+        back={"image_base64": _DATA_URL, "idempotency_key": back_fail_key},
+    )
+    created = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert created.status_code == 201
+    front_id = created.json()["front_job"]["id"]
+    back_id = created.json()["back_job"]["id"]
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+
+    front_row = db_session.get(AIJob, UUID(front_id))
+    back_row = db_session.get(AIJob, UUID(back_id))
+    front_row.status = "completed"
+    back_row.status = "failed"
+    db_session.commit()
+
+    shared = body["shared_garment_spec"]
+    # Same failed key via /polish → zero new jobs (identity must match original).
+    replay = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "back",
+                "magic_operation_id": op,
+                "idempotency_key": back_fail_key,
+                "source_revision": body["source_revision"],
+                "content_fingerprint": "fp-stable-1",
+                "shared_garment_spec": shared,
+                "reference_model_id": body["reference_model_id"],
+                "notes": body["notes"],
+            }
+        },
+    )
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["id"] == back_id
+    assert replay.json()["status"] == "failed"
+
+    retry_key = "rp-back-retry-1"
+    retry = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "back",
+                "magic_operation_id": op,
+                "idempotency_key": retry_key,
+                "source_revision": body["source_revision"],
+                "content_fingerprint": "fp-stable-1",
+                "shared_garment_spec": shared,
+                "reference_model_id": body["reference_model_id"],
+                "notes": "polish concept (back) retry",
+            }
+        },
+    )
+    assert retry.status_code == 201
+    assert retry.json()["id"] != back_id
+    assert retry.json()["status"] == "queued"
+    assert retry.json()["input_data"]["studio_side"] == "back"
+
+    # Replay retry key → same job (must match attempt identity incl. notes).
+    retry_again = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "back",
+                "magic_operation_id": op,
+                "idempotency_key": retry_key,
+                "source_revision": body["source_revision"],
+                "content_fingerprint": "fp-stable-1",
+                "shared_garment_spec": shared,
+                "reference_model_id": body["reference_model_id"],
+                "notes": "polish concept (back) retry",
+            }
+        },
+    )
+    assert retry_again.status_code == 201, retry_again.text
+    assert retry_again.json()["id"] == retry.json()["id"]
+
+    # Changed design fingerprint → reject new attempt key.
+    drift = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "back",
+                "magic_operation_id": op,
+                "idempotency_key": "rp-back-retry-2",
+                "source_revision": body["source_revision"],
+                "content_fingerprint": "fp-CHANGED",
+                "shared_garment_spec": shared,
+                "reference_model_id": body["reference_model_id"],
+            }
+        },
+    )
+    # Latest back is queued (active) — blocked before identity, OR if we mark failed first...
+    assert drift.status_code == 409
+
+    # Mark retry failed, then drift fingerprint must 409 for operation identity.
+    retry_row = db_session.get(AIJob, UUID(retry.json()["id"]))
+    retry_row.status = "failed"
+    db_session.commit()
+    drift2 = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "back",
+                "magic_operation_id": op,
+                "idempotency_key": "rp-back-retry-2",
+                "source_revision": body["source_revision"],
+                "content_fingerprint": "fp-CHANGED",
+                "shared_garment_spec": shared,
+                "reference_model_id": body["reference_model_id"],
+            }
+        },
+    )
+    assert drift2.status_code == 409
+    assert drift2.json()["detail"]["payload"]["reason"] == "operation_identity_mismatch"
+
+    # Front remains the original completed job — never regenerated.
+    listed = client.get(f"/api/v1/ai/magic-operations/{op}/jobs", headers=_auth(tokens))
+    assert listed.status_code == 200
+    fronts = [j for j in listed.json()["jobs"] if j["input_data"].get("studio_side") == "front"]
+    assert len(fronts) == 1
+    assert fronts[0]["id"] == front_id
+    assert fronts[0]["status"] == "completed"
+
+    count = (
+        db_session.query(AIJob)
+        .filter(AIJob.user_id == UUID(me["id"]), AIJob.job_type == "sketch_polish")
+        .count()
+    )
+    assert count == 3  # front + failed back + one retry back
+
+
+def test_linked_polish_rejects_new_key_while_side_active(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_link_active@example.com", "dual_la")
+    op = str(uuid4())
+    first = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "front",
+                "magic_operation_id": op,
+                "idempotency_key": "la-front-1",
+                "source_revision": 1,
+                "shared_garment_spec": {"silhouette": "coat"},
+            }
+        },
+    )
+    assert first.status_code == 201
+    clash = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "front",
+                "magic_operation_id": op,
+                "idempotency_key": "la-front-2",
+                "source_revision": 1,
+                "shared_garment_spec": {"silhouette": "coat"},
+            }
+        },
+    )
+    assert clash.status_code == 409
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    count = (
+        db_session.query(AIJob)
+        .filter(AIJob.user_id == UUID(me["id"]), AIJob.job_type == "sketch_polish")
+        .count()
+    )
+    assert count == 1
+
+
 def test_dual_missing_shared_garment_spec_422(client, db_session):
     tokens = register_with_invite(client, db_session, "dual_miss@example.com", "dual_miss")
     body = _dual_payload()
@@ -498,3 +708,125 @@ def test_dual_side_payload_requires_image(path: str, client, db_session):
     body[path] = {"idempotency_key": f"missing-img-{path}", "notes": "no image"}
     r = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
     assert r.status_code == 422
+
+
+def test_dual_magic_mocked_e2e_complete_retry_recover(client, db_session, monkeypatch):
+    """Integrated Dual Magic path with mocked OpenAI: 2 jobs → Back fail → 1 Back retry."""
+    tokens = register_with_invite(client, db_session, "dual_e2e@example.com", "dual_e2e")
+    op = str(uuid4())
+    body = _dual_payload(
+        magic_operation_id=op,
+        content_fingerprint="e2e-fp-1",
+        front={"image_base64": _DATA_URL, "idempotency_key": f"{op}:front"},
+        back={"image_base64": _DATA_URL, "idempotency_key": f"{op}:back"},
+    )
+    created = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert created.status_code == 201
+    front_id = created.json()["front_job"]["id"]
+    back_id = created.json()["back_job"]["id"]
+
+    def _fake_complete(job: AIJob) -> dict:
+        side = (job.input_data or {}).get("studio_side")
+        if side == "back" and str(job.id) == back_id:
+            raise sketch_openai.SketchCompletionError("mock back failure")
+        return {
+            "summary": f"{side} look",
+            "image_url": f"http://127.0.0.1:8001/static/uploads/ai/{job.id}.png",
+            "image_provenance": "images.edit",
+        }
+
+    monkeypatch.setattr(sketch_openai, "complete_sketch_job", _fake_complete)
+
+    # Simulate worker completing Front and failing Back.
+    front_row = db_session.get(AIJob, UUID(front_id))
+    back_row = db_session.get(AIJob, UUID(back_id))
+    try:
+        front_row.result_data = sketch_openai.complete_sketch_job(front_row)
+        front_row.status = "completed"
+    except sketch_openai.SketchCompletionError as exc:
+        front_row.status = "failed"
+        front_row.error_message = str(exc)
+    try:
+        back_row.result_data = sketch_openai.complete_sketch_job(back_row)
+        back_row.status = "completed"
+    except sketch_openai.SketchCompletionError as exc:
+        back_row.status = "failed"
+        back_row.error_message = str(exc)
+    db_session.commit()
+
+    assert db_session.get(AIJob, UUID(front_id)).status == "completed"
+    assert db_session.get(AIJob, UUID(back_id)).status == "failed"
+
+    retry_key = f"{op}:back:retry:e2e1"
+    retry = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "back",
+                "magic_operation_id": op,
+                "idempotency_key": retry_key,
+                "source_revision": body["source_revision"],
+                "content_fingerprint": "e2e-fp-1",
+                "shared_garment_spec": body["shared_garment_spec"],
+                "reference_model_id": body["reference_model_id"],
+            }
+        },
+    )
+    assert retry.status_code == 201
+    retry_id = retry.json()["id"]
+    assert retry_id != back_id
+
+    # Replay / lost-response: zero duplicates.
+    replay = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "image_base64": _DATA_URL,
+                "studio_side": "back",
+                "magic_operation_id": op,
+                "idempotency_key": retry_key,
+                "source_revision": body["source_revision"],
+                "content_fingerprint": "e2e-fp-1",
+                "shared_garment_spec": body["shared_garment_spec"],
+                "reference_model_id": body["reference_model_id"],
+            }
+        },
+    )
+    assert replay.status_code == 201
+    assert replay.json()["id"] == retry_id
+
+    retry_row = db_session.get(AIJob, UUID(retry_id))
+    retry_row.result_data = {
+        "summary": "back look retry",
+        "image_url": f"http://127.0.0.1:8001/static/uploads/ai/{retry_id}.png",
+        "image_provenance": "images.edit",
+    }
+    retry_row.status = "completed"
+    db_session.commit()
+
+    listed = client.get(f"/api/v1/ai/magic-operations/{op}/jobs", headers=_auth(tokens))
+    assert listed.status_code == 200
+    jobs = listed.json()["jobs"]
+    assert len(jobs) == 3
+    by_side: dict[str, list] = {"front": [], "back": []}
+    for j in jobs:
+        by_side[j["input_data"]["studio_side"]].append(j)
+    assert len(by_side["front"]) == 1
+    assert by_side["front"][0]["id"] == front_id
+    assert by_side["front"][0]["status"] == "completed"
+    assert len(by_side["back"]) == 2
+    back_ids = {j["id"] for j in by_side["back"]}
+    assert back_ids == {back_id, retry_id}
+    assert next(j for j in by_side["back"] if j["id"] == retry_id)["status"] == "completed"
+    assert next(j for j in by_side["back"] if j["id"] == back_id)["status"] == "failed"
+
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    count = (
+        db_session.query(AIJob)
+        .filter(AIJob.user_id == UUID(me["id"]), AIJob.job_type == "sketch_polish")
+        .count()
+    )
+    assert count == 3

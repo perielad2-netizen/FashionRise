@@ -2,43 +2,44 @@
 
 **Issue:** [#42](https://github.com/perielad2-netizen/FashionRise/issues/42) · **Draft PR:** [#70](https://github.com/perielad2-netizen/FashionRise/pull/70)  
 **Base:** Stage B approved tip `6b253cb52beb9524f976ba805049bf3de2506985` on `cursor/web-v4j-c-dual-magic-77c6` (descendant of `12f7acdf…`, **not** `main`).  
-**Scope:** Backend Magic orchestration — `POST /ai/sketch/polish-dual`, sketch_polish `input_data` fields (`studio_side`, `magic_operation_id`, per-side `idempotency_key`, `source_revision` / `content_fingerprint`, `image_fingerprint`, `shared_garment_spec`, `reference_model_id`), owner-scoped `pg_advisory_xact_lock` + JSONB idempotency lookup, identity-bound recovery (`409` on mismatch), `GET /ai/magic-operations/{id}/jobs`, side-aware `sketch_openai` prompts **without** PR #41 `pose_lock` packing.  
-**Explicit non-scope:** no deploy, no Nginx allowlist change, no FE Back UI, no rear croquis PNG artwork, no paid OpenAI, no Alembic migration, no `design_data` raster reads, no `design_service` Stage B edits.
+**Companion FE:** PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) — Front/Back editor + Dual Magic client gate + linked `/polish` retry with persisted per-attempt idempotency keys.  
+**Scope:** Backend Magic orchestration — `POST /ai/sketch/polish-dual`, linked `POST /ai/sketch/polish` (when `magic_operation_id` + `studio_side` present), sketch_polish identity fields, owner-scoped `pg_advisory_xact_lock`, `GET /ai/magic-operations/{id}/jobs`, side-aware `sketch_openai` prompts **without** PR #41 `pose_lock` packing.  
+**Explicit non-scope:** no production deploy, no Dual Magic flag-on, no Nginx allowlist change, no paid OpenAI, no Alembic migration, no undeployed `main` / PR #41 pose packing.
 
 ## API summary
 
 | Endpoint | Behavior |
 |----------|----------|
-| `POST /api/v1/ai/sketch/polish` | One-sided enqueue; optional `idempotency_key` with identity binding (`studio_side`, `magic_operation_id`, `design_id`, revision/fingerprint, `image_fingerprint`) when key present. |
-| `POST /api/v1/ai/sketch/polish-dual` | **Requires** client `magic_operation_id`, per-side non-empty `idempotency_key` (front ≠ back), `shared_garment_spec` (bounded object), and `source_revision` **or** `content_fingerprint`. Returns `magic_operation_id`, `front_job`, `back_job`. Failed jobs are **not** idempotent hits — retry failed side with a **new** back/front key. |
-| `GET /api/v1/ai/magic-operations/{magic_operation_id}/jobs` | Owner-scoped recovery list for one coordinated run (`queued` / `completed`; worker has no separate `processing` state today). |
-
-### Job status vocabulary
-
-Worker transitions: `queued` → `completed` or `failed`. There is no persisted `processing` status in the current worker; clients should poll `GET /jobs/{id}` or the magic-operation list until `completed` or `failed`.
+| `POST /api/v1/ai/sketch/polish` | Ordinary one-sided enqueue unchanged when unlinked. **Linked** attempts (`magic_operation_id` + `studio_side`) **require** `idempotency_key` and `source_revision` or `content_fingerprint`; use owner advisory lock + one-active-attempt-per-side reconcile; same key returns original job (incl. **failed**); new key allowed only after prior failure with matching garment/design identity (raster re-capture of the same document is allowed). |
+| `POST /api/v1/ai/sketch/polish-dual` | **Requires** client `magic_operation_id`, per-side non-empty `idempotency_key` (front ≠ back), `shared_garment_spec`, and `source_revision` **or** `content_fingerprint`. Returns `magic_operation_id`, `front_job`, `back_job`. |
+| `GET /api/v1/ai/magic-operations/{magic_operation_id}/jobs` | Owner-scoped recovery list (oldest-first). Clients select **latest** attempt per side. |
 
 ### Idempotency design (no new DB index)
 
-1. Per-owner `pg_advisory_xact_lock` serializes dual enqueue (distinct key from Studio/saved locks).  
-2. Under lock, lookup existing `sketch_polish` rows by `input_data.idempotency_key` for statuses `queued` \| `completed` only.  
-3. On hit, compare stored identity tuple: `studio_side`, `magic_operation_id`, `design_id`, `source_revision` / `content_fingerprint`, `image_fingerprint` (SHA-256 of raster bytes or image URL). Mismatch → **409**. Cross-side key reuse → **422** at parse time or **409** at reconcile.  
-4. Lost-response recovery: repeat the same keys + matching identity → same job ids (dual POST or GET by `magic_operation_id`).
+1. Per-owner `pg_advisory_xact_lock` serializes dual enqueue and linked `/polish` attempts.  
+2. Lookup existing `sketch_polish` by `input_data.idempotency_key` for statuses `queued` \| `running` \| `completed` \| `failed`.  
+3. Same-key hit → compare full attempt identity (side, operation, design, revision/fingerprint, image hash, prompt). Mismatch → **409**.  
+4. New key while side is queued/running/completed → **409** (`operation_side_active`).  
+5. New key after failed side → allowed only if garment/design identity matches (excludes per-side notes and allows new raster of the same Studio document).  
+6. Lost-response recovery: repeat the same key + matching identity, or `GET` operation jobs — never invent a new key automatically.
 
 ## Verification (offline)
 
 | Gate | Result |
 |------|--------|
-| Focused suite | `tests/test_dual_magic_orchestration.py` — **19 passed** |
-| Full backend pytest | **408 passed** (`DATABASE_URL_TEST` disposable DB) |
-| Ruff (touched) | Clean on changed modules; pre-existing `B008` on FastAPI `Depends` in `ai_routes.py` |
-| Mypy (touched modules) | No new errors in changed files; pre-existing `app/storage/local.py` remains |
+| Focused suite | `tests/test_dual_magic_orchestration.py` — **26 passed** (incl. linked `/polish` retry + mocked e2e complete/retry/recover) |
+| Companion FE | PR #69 focused Vitest for linked retry fields + `retryMagicSide` idempotency + Dual Magic gate |
 | Alembic | Head **`005`** — no new revision |
+| Paid OpenAI | **0** |
 
-## Proposed later production plan (NOT authorized now)
+## Production activation (NOT authorized now)
 
-1. Technical PM review after Stage B deploy path is settled.  
-2. Authorized BE+worker deploy from maint lineage only (never undeployed `main` / PR #41 pose packing).  
-3. Extend Nginx AI allowlist for `POST /api/v1/ai/sketch/polish-dual` and `GET /api/v1/ai/magic-operations/*` when FE Stage D ships.  
-4. Operator dual-side Magic acceptance with paid generation (separate authorization).  
+Production baseline to preserve until separate authorize:
 
-**STOP:** This readiness note does not authorize merge or deploy.
+- FE `4589a62d…` (Front/Back LIVE, `VITE_STUDIO_DUAL_MAGIC_ENABLED=false`)
+- BE Stage B `6b253cb5…`
+- Alembic `005`
+
+When authorized later: deploy this PR tip (maint lineage only) + FE with Dual Magic flag ON; extend Nginx allowlist for `polish-dual` + magic-operations GET; no paid smoke without explicit approval.
+
+**STOP:** Ready for controlled release review. Do **not** deploy or enable the Dual Magic flag from this document alone.
