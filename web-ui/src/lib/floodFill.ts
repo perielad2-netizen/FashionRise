@@ -24,16 +24,14 @@ export const MIN_FILL_PIXELS = 1
 export const DEFAULT_MAX_GAP_CLOSE = 2
 
 /**
- * Compact gate clusters at or below this size are treated as accidental seam
- * punch-throughs (prefer the dilated panel-local fill). Elongated corridors
- * (hourglass necks) are kept as intentional connections.
+ * Compact dilated bridges (max dimension ≤5, ≤16 sealed path pixels) are treated
+ * as accidental seam punch-throughs (prefer panel-local fill). Elongated
+ * corridors (hourglass necks, maxDim ≥6 with aspect ≥3:1) stay connected.
  *
- * Remaining limitation: intentional corridors shorter than ~3px along their
+ * Remaining limitation: intentional corridors shorter than ~3–5px along their
  * long axis may be treated conservatively as punch-throughs (prefer panel
  * isolation over silent merge). Perfect automatic intent recognition is not claimed.
  */
-const ACCIDENTAL_GATE_MAX_DIM = 3
-const ACCIDENTAL_GATE_MAX_PIXELS = 8
 
 type FloodExploreOk = {
   ok: true
