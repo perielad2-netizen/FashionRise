@@ -619,8 +619,11 @@ def test_unknown_saved_schema_family_rejected_without_metadata(client, db_sessio
 
 def test_saved_design_kind_switch_to_studio_rejected(client, db_session):
     from app.models.garment_design import GarmentDesign
-    from app.services.design_service import _is_studio_working_draft, find_studio_working_draft
     from app.models.user import User
+    from app.services.design_service import (
+        _is_studio_working_draft,
+        find_studio_working_draft,
+    )
 
     tokens = _register(client, db_session, "v4jb_kind@example.com", "v4jb_kind")
     headers = _auth(tokens["access_token"])
@@ -720,6 +723,94 @@ def test_saved_unknown_back_key_rejected(client, db_session):
     payload["design_data"]["snapshot"]["back"]["extra"] = "nope"
     resp = client.post("/api/v1/designs", headers=headers, json=payload)
     assert resp.status_code == 422, resp.text
+
+
+def test_studio_metadata_saved_kind_poisoning_rejected(client, db_session):
+    """Metadata-only designKind=saved_design must not reclassify a Studio draft."""
+    from app.models.garment_design import GarmentDesign
+    from app.models.user import User
+    from app.services.design_service import (
+        _is_saved_design_row,
+        _is_studio_working_draft,
+        find_studio_working_draft,
+    )
+
+    tokens = _register(client, db_session, "v4jb_poison@example.com", "v4jb_poison")
+    headers = _auth(tokens["access_token"])
+    created = client.post(
+        "/api/v1/designs",
+        headers=headers,
+        json=_studio_v2_payload(
+            1,
+            front_stroke_id="front-keep",
+            back={"strokes": [_stroke("back-keep")], "fills": []},
+        ),
+    )
+    assert created.status_code == 201, created.text
+    design_id = created.json()["id"]
+    before = client.get(f"/api/v1/designs/{design_id}", headers=headers).json()
+
+    poison = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={
+            "expected_revision": 1,
+            "metadata": {"designKind": "saved_design"},
+        },
+    )
+    assert poison.status_code == 409, poison.text
+    assert poison.json()["detail"]["payload"]["reason"] == "studio_kind_conversion"
+
+    after = client.get(f"/api/v1/designs/{design_id}", headers=headers).json()
+    assert after["design_data"] == before["design_data"]
+    assert after["metadata"] == before["metadata"]
+    assert after["design_data"]["back"]["strokes"][0]["id"] == "back-keep"
+
+    # Subsequent legitimate Studio edits of both sides must still work.
+    ok = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={
+            **_studio_v2_payload(
+                2,
+                front_stroke_id="front-2",
+                back={"strokes": [_stroke("back-2")], "fills": []},
+                active_side="back",
+            ),
+            "expected_revision": 1,
+        },
+    )
+    assert ok.status_code == 200, ok.text
+    body = ok.json()["design_data"]
+    assert body["clientRevision"] == 2
+    assert body["strokes"][0]["id"] == "front-2"
+    assert body["back"]["strokes"][0]["id"] == "back-2"
+
+    user = db_session.query(User).filter(User.email == "v4jb_poison@example.com").one()
+    found = find_studio_working_draft(db_session, user)
+    assert found is not None and str(found.id) == design_id
+    row = db_session.get(GarmentDesign, design_id)
+    assert row is not None
+    assert _is_studio_working_draft(row) is True
+    assert _is_saved_design_row(row) is False
+
+
+def test_mixed_kind_studio_create_rejected(client, db_session):
+    tokens = _register(client, db_session, "v4jb_mix@example.com", "v4jb_mix")
+    headers = _auth(tokens["access_token"])
+    payload = _studio_v2_payload(
+        1,
+        front_stroke_id="f",
+        back={"strokes": [_stroke("b")], "fills": []},
+    )
+    payload["metadata"]["designKind"] = "saved_design"
+    resp = client.post("/api/v1/designs", headers=headers, json=payload)
+    assert resp.status_code == 422, resp.text
+
+    # No poisoned row should exist for this user.
+    mine = client.get("/api/v1/designs/my", headers=headers)
+    assert mine.status_code == 200
+    assert mine.json() == []
 
 
 def test_concurrent_saved_creates_single_row(engine):

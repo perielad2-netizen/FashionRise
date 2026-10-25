@@ -16,6 +16,7 @@
 | Update/OCC | Same guards before idempotent short-circuit; back-only edits advance fingerprint + revision |
 | Clear Back | Non-empty → empty Back requires `clearBackIntent=true` (metadata or design_data) + valid OCC; accidental empty payload → 409 |
 | Saved designs | Strict envelope/snapshot/`back` keys; full-envelope fingerprint; `saveRequestId` idempotent create under owner advisory lock; stored-kind immutability (no studio hijack via PUT) |
+| Kind integrity | Bidirectional: saved→studio and studio→saved (incl. metadata-only `designKind`) rejected; mixed-kind create → 422 |
 | Unknown schemas | `fashionrise.studio.draft.*` / `fashionrise.saved_design.*` unknown versions → 422 even without kind metadata |
 | Migration | None — Alembic head remains `005` |
 
@@ -23,8 +24,8 @@
 
 | Gate | Result |
 |------|--------|
-| Focused Stage B suite | `tests/test_studio_draft_v2_persistence.py` — **30 passed** |
-| Full backend pytest | **387 passed** |
+| Focused Stage B suite | `tests/test_studio_draft_v2_persistence.py` — **32 passed** |
+| Full backend pytest | **389 passed** |
 | Ruff (new findings) | None on Stage B logic; **pre-existing** UP017/UP012 in handoff PDF helpers only |
 | Mypy `design_service.py` | No new errors; pre-existing `app/storage/local.py` Path/`None` remain |
 | Alembic heads | `005 (head)` — no new revision |

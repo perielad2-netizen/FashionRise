@@ -108,6 +108,43 @@ def _is_saved_design_row(design: GarmentDesign) -> bool:
     return _is_saved_design_payload(design.metadata_ or {}, design.design_data or {})
 
 
+def _has_studio_kind_signals(meta: dict[str, Any] | None, design_data: dict[str, Any] | None) -> bool:
+    meta = meta or {}
+    design_data = design_data or {}
+    return meta.get("draftKind") == STUDIO_DRAFT_KIND or _is_studio_schema(design_data.get("schema"))
+
+
+def _has_saved_kind_signals(meta: dict[str, Any] | None, design_data: dict[str, Any] | None) -> bool:
+    meta = meta or {}
+    design_data = design_data or {}
+    envelope = meta.get("envelope")
+    return (
+        meta.get("designKind") == SAVED_DESIGN_KIND
+        or _is_saved_schema(design_data.get("schema"))
+        or (isinstance(envelope, str) and envelope.startswith(SAVED_SCHEMA_FAMILY_PREFIX))
+    )
+
+
+def _reject_contradictory_kind_claims(
+    meta: dict[str, Any] | None, design_data: dict[str, Any] | None
+) -> None:
+    """Fail closed when a payload asserts both Studio and saved-design kinds."""
+    if _has_studio_kind_signals(meta, design_data) and _has_saved_kind_signals(meta, design_data):
+        raise ValidationAppError("Studio and saved design kind claims cannot be combined")
+
+
+def _raise_studio_kind_conversion(
+    design: GarmentDesign, expected_revision: int | None
+) -> None:
+    raise ConflictError(
+        "Cannot convert a Studio working draft into a saved design.",
+        payload={
+            **_conflict_payload(design, expected_revision),
+            "reason": "studio_kind_conversion",
+        },
+    )
+
+
 def _normalize_fill_list(fills: Any) -> list[Any]:
     if fills is None:
         return []
@@ -497,6 +534,7 @@ def create_design(db: Session, user: User, data: DesignCreate) -> GarmentDesign:
     design_data = data.design_data or {}
     # Reject unknown versioned family schemas even when metadata kind is absent.
     _reject_unknown_versioned_schema(design_data)
+    _reject_contradictory_kind_claims(meta, design_data)
     is_studio = _is_studio_payload(meta, design_data)
     is_saved = _is_saved_design_payload(meta, design_data)
 
@@ -664,15 +702,13 @@ def update_design(db: Session, design_id: uuid.UUID, user: User, data: DesignUpd
             apply_metadata = False
         # Title/description updates remain allowed for library labeling.
     elif stored_is_studio:
+        # Reject saved-kind metadata poisoning (including metadata-only PUTs) before any write.
+        if data.metadata is not None and _has_saved_kind_signals(data.metadata, d.design_data or {}):
+            _raise_studio_kind_conversion(d, data.expected_revision)
         if data.design_data is not None and _is_saved_schema(data.design_data.get("schema")):
-            raise ConflictError(
-                "Cannot convert a Studio working draft into a saved design envelope.",
-                payload={
-                    **_conflict_payload(d, data.expected_revision),
-                    "reason": "studio_kind_conversion",
-                },
-            )
+            _raise_studio_kind_conversion(d, data.expected_revision)
         if data.design_data is not None:
+            _reject_contradictory_kind_claims(incoming_meta, data.design_data)
             _validate_studio_design_data(data.design_data)
         if data.expected_revision is None:
             raise ConflictError(
