@@ -32,6 +32,24 @@ SKETCH_JOB_TYPES = frozenset({"sketch_clean", "sketch_polish", "style_suggest"})
 # (and polish's extra image_prompt) without a schema change.
 JSON_OBJECT_RESPONSE_FORMAT = {"type": "json_object"}
 
+# Hard budget for the images.edit brief (production maint slice). Coverage contract is
+# placed in the fixed prefix so it survives truncation of long vision evidence.
+IMAGE_PROMPT_MAX_CHARS = 3800
+
+# Fixed garment-coverage contract for adult, non-explicit fashion (Issue #64).
+# Distinguishes drawn fabric from exposed skin / croquis body / paper — does not
+# alter provider moderation settings or request explicit content.
+_COVERAGE_PRESERVATION_CONTRACT = (
+    "COVERAGE FIDELITY (adult fashion croquis): Distinguish actual drawn garment "
+    "material from exposed skin and from blank/light croquis-body or paper background. "
+    "Preserve two-piece and one-piece swimsuits, lingerie/underwear construction, "
+    "exposed midriff, cut-outs, straps, necklines, and leg openings exactly as drawn. "
+    "Never invent an extra bodysuit, white lining, modesty insert, or coverage panel. "
+    "Preserve intentionally drawn white or pale fabric only when garment material is "
+    "actually present in the sketch. Do not reinterpret bare skin or croquis body tone "
+    "as opaque fabric. Keep the professional fashion-illustration finish."
+)
+
 # Longest-prefix table from official GPT-6 docs. Unknown families fail closed.
 # gpt-4o / gpt-4.1 omit reasoning_effort (rollback). Luna/Sol accept "none".
 # Astra and GPT-6.1 Sol reject "none" (HTTP 400).
@@ -278,11 +296,15 @@ def _system_prompt(job_type: str) -> str:
             "polish_bullets (array of 3–5 concise tips for the young designer), "
             "design_identity (object with evidence-backed fields; use null only when not visible: "
             "garment_category, silhouette, pose, neckline, sleeve_type, sleeve_length, hemline, "
-            "main_colors, fabric_patterns, accessories, asymmetry_notes, distinctive_details), "
+            "main_colors, fabric_patterns, accessories, asymmetry_notes, distinctive_details, "
+            "skin_visible_regions, garment_panels, cutouts_and_openings, intended_pale_or_white_fabric), "
             "refine_ok (array of short drawing imperfections that MAY be upgraded — never design decisions), "
             "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes to preserve: "
             "pose, hat/hair, neckline, sleeves, hem, main colors, fabric patterns, asymmetry, accessories, "
-            "distinctive details — invent nothing; do not describe amateur line quality or ask to keep a child sketch look; "
+            "distinctive details, garment coverage boundaries, exposed skin/midriff/cut-outs, and any "
+            "intentionally drawn white/pale fabric — invent nothing; never invent bodysuits, linings, or "
+            "modesty panels; do not treat blank/light croquis body or paper as garment fabric; "
+            "do not describe amateur line quality or ask to keep a child sketch look; "
             "do not request a different croquis family than the SELECTED STUDIO REFERENCE)."
         )
     return (
@@ -414,6 +436,11 @@ def _design_identity_clause(structured: dict[str, Any]) -> str:
         "croquis_presentation",
         "garment_category",
         "silhouette",
+        # Coverage facts early so they remain when Design evidence is long.
+        "skin_visible_regions",
+        "garment_panels",
+        "cutouts_and_openings",
+        "intended_pale_or_white_fabric",
         "pose",
         "neckline",
         "sleeve_type",
@@ -473,19 +500,22 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
         "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
         f"{reference_clause}"
+        f"{_COVERAGE_PRESERVATION_CONTRACT} "
         "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
         "sleeve type and length, hemline, main colors, fabric/textile patterns, asymmetry, accessories "
-        "(such as hats), and distinctive design details. "
+        "(such as hats), distinctive design details, and the exact garment coverage map (panels vs "
+        "exposed skin, cut-outs, straps, openings). "
         "UPGRADE construction and presentation: strong clean garment contours; sophisticated tailoring "
         "and garment construction; visible fabric folds, draping, and texture; richer but faithful colors; "
         "crisp repeating textile patterns; clearly defined necklines, sleeves, seams, and hems; attractive "
         "fashion-presentation quality; clean full-body composition on a clean light presentation background. "
         "Do NOT retain rough/amateur drawing imperfections. Do NOT apply only a faint watercolor or light "
         "color wash. Do NOT invent a different garment, change the designer's colors, alter the silhouette, "
-        "add unnecessary accessories, or make every design look like the same generic fashion outfit. "
+        "add unnecessary accessories, invent white linings/bodysuits/modesty panels, or make every design "
+        "look like the same generic fashion outfit. "
         f"Design evidence: {detail} "
         "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark."
-    )[:3800]
+    )[:IMAGE_PROMPT_MAX_CHARS]
 
 
 def _extract_image_bytes(item: Any) -> bytes | None:
