@@ -124,9 +124,10 @@
 | **WEB-V4G brushes + gradients** | **MERGED** PR #40 @ `350a3b7e` · **FE deployed** · operator **5/5 PASS** |
 | **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
 | **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
-| **P1 #51 Hand→Pencil immersive** | On `main` @ `c6fc1eb8` (FE); confirm operator tablet acceptance if still open |
-| **P1 #59 croquis identity** | **Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)** — selected `reference_model_id` through Magic; offline verified; **no deploy**; Issue #59 OPEN for visual gate |
-| **Issue #42 / WEB-V4J Front-Back** | **OPEN** — architecture draft PR #50; prioritize after Magic identity acceptance |
+| **P1 #51 Hand→Pencil immersive** | **CLOSED** — operator **5/5 PASS** |
+| **P1 #59 croquis identity** | **Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)** + maint candidate off `b800e53d`; **no deploy**; Issue #59 OPEN |
+| **P1 #60 narrow Fill** | **OPEN** — separate FE track (not in PR #61) |
+| **Issue #42 / WEB-V4J Front-Back** | **OPEN** — architecture draft PR #50 |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — do not auto-merge). |
