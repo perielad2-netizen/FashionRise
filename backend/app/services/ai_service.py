@@ -1,6 +1,7 @@
 import base64
 import binascii
 import hashlib
+import json
 import re
 import uuid
 from pathlib import Path
@@ -23,7 +24,10 @@ from app.schemas.ai import STUDIO_SIDES, AIJobCreate, SketchPolishDualBody
 from app.services.reference_croquis import reference_from_job_input
 from app.storage.local import LocalStorageBackend
 
-_IDEMPOTENT_STATUSES = frozenset({"queued", "completed"})
+# Durable across all terminal/active states — a failed paid attempt must not
+# silently mint another job under the same idempotency key.
+_IDEMPOTENT_STATUSES = frozenset({"queued", "running", "completed", "failed"})
+_ACTIVE_ATTEMPT_STATUSES = frozenset({"queued", "running", "completed"})
 
 _DATA_URL_RE = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|webp));base64,(.+)$",
@@ -87,6 +91,20 @@ def _compute_image_fingerprint(input_data: dict) -> str | None:
     return None
 
 
+def _prompt_identity_fingerprint(input_data: dict) -> str | None:
+    """Canonical prompt/context identity so key reuse cannot return the wrong look."""
+    payload = {
+        "shared_garment_spec": input_data.get("shared_garment_spec"),
+        "reference_model_id": input_data.get("reference_model_id"),
+        "notes": input_data.get("notes"),
+        "mood_notes": input_data.get("mood_notes"),
+    }
+    if all(v is None or v == "" for v in payload.values()):
+        return None
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def find_sketch_polish_by_idempotency(
     db: Session, user_id: uuid.UUID, idempotency_key: str
 ) -> AIJob | None:
@@ -104,6 +122,23 @@ def find_sketch_polish_by_idempotency(
         .order_by(AIJob.created_at.desc())
         .first()
     )
+
+
+def _latest_operation_side_job(
+    db: Session, user_id: uuid.UUID, operation_id: str, side: str
+) -> AIJob | None:
+    rows = (
+        db.query(AIJob)
+        .filter(
+            AIJob.user_id == user_id,
+            AIJob.job_type == "sketch_polish",
+            AIJob.input_data["magic_operation_id"].astext == operation_id,
+            AIJob.input_data["studio_side"].astext == side,
+        )
+        .order_by(AIJob.created_at.desc())
+        .all()
+    )
+    return rows[0] if rows else None
 
 
 def _design_id_str(design_id: uuid.UUID | None) -> str | None:
@@ -129,6 +164,9 @@ def _identity_tuple(
     fp = input_data.get("content_fingerprint")
     content_fp = fp.strip() if isinstance(fp, str) else None
     design = _design_id_str(design_id) or _input_design_id_str(input_data)
+    prompt_fp = input_data.get("prompt_fingerprint")
+    if not isinstance(prompt_fp, str) or not prompt_fp.strip():
+        prompt_fp = _prompt_identity_fingerprint(input_data)
     return (
         (studio_side or "").strip().lower() or None,
         (magic_operation_id or "").strip() or None,
@@ -136,6 +174,7 @@ def _identity_tuple(
         rev,
         content_fp or None,
         image_fingerprint,
+        prompt_fp if isinstance(prompt_fp, str) and prompt_fp.strip() else None,
     )
 
 
@@ -238,6 +277,9 @@ def _prepare_sketch_polish_input(
     img_fp = _compute_image_fingerprint(raw)
     if img_fp:
         raw["image_fingerprint"] = img_fp
+    prompt_fp = _prompt_identity_fingerprint(raw)
+    if prompt_fp:
+        raw["prompt_fingerprint"] = prompt_fp
     return raw
 
 
@@ -263,7 +305,9 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
             content_fingerprint=content_fingerprint,
         )
         idem = input_data.get("idempotency_key")
+        # Owner lock covers concurrent identical /polish retries (incl. failed-side).
         if isinstance(idem, str) and idem:
+            db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _dual_magic_lock_key(user.id)})
             existing = find_sketch_polish_by_idempotency(db, user.id, idem)
             if existing is not None:
                 side = input_data.get("studio_side")
@@ -336,24 +380,69 @@ def _merge_dual_side_input(
 def _reconcile_or_prepare_job(
     db: Session,
     user: User,
-    existing: AIJob | None,
+    existing_by_key: AIJob | None,
     *,
     side: str,
     prepared_input: dict[str, Any],
     design_id: uuid.UUID | None,
     operation_id: str,
-) -> AIJob:
-    if existing is not None:
+) -> tuple[AIJob, bool]:
+    """Return (job, is_new). Retries require a new key only when latest side attempt failed."""
+    latest = _latest_operation_side_job(db, user.id, operation_id, side)
+    request_key = prepared_input.get("idempotency_key")
+    request_key = request_key.strip() if isinstance(request_key, str) else ""
+
+    if existing_by_key is not None:
         _assert_idempotency_identity(
-            existing,
+            existing_by_key,
             expected_side=side,
             magic_operation_id=operation_id,
             design_id=design_id,
             prepared_input=prepared_input,
             image_fingerprint=prepared_input.get("image_fingerprint"),
         )
-        return existing
-    return AIJob(
+        return existing_by_key, False
+
+    if latest is not None:
+        latest_key = ""
+        if isinstance(latest.input_data, dict):
+            raw_key = latest.input_data.get("idempotency_key")
+            latest_key = raw_key.strip() if isinstance(raw_key, str) else ""
+        if latest.status in _ACTIVE_ATTEMPT_STATUSES:
+            raise ConflictError(
+                "Magic operation already has an active attempt for this side. "
+                "Reuse the original idempotency key or wait for completion.",
+                payload={
+                    "reason": "operation_side_active",
+                    "studio_side": side,
+                    "job_id": str(latest.id),
+                    "status": latest.status,
+                },
+            )
+        if latest.status == "failed" and request_key and request_key == latest_key:
+            # Durable failed-key replay: return original, create zero new jobs.
+            _assert_idempotency_identity(
+                latest,
+                expected_side=side,
+                magic_operation_id=operation_id,
+                design_id=design_id,
+                prepared_input=prepared_input,
+                image_fingerprint=prepared_input.get("image_fingerprint"),
+            )
+            return latest, False
+        if latest.status != "failed":
+            raise ConflictError(
+                "Magic operation side cannot accept a new attempt in its current state.",
+                payload={
+                    "reason": "operation_side_blocked",
+                    "studio_side": side,
+                    "job_id": str(latest.id),
+                    "status": latest.status,
+                },
+            )
+        # latest failed + new key → explicit retry attempt allowed below.
+
+    job = AIJob(
         user_id=user.id,
         design_id=design_id,
         job_type="sketch_polish",
@@ -362,6 +451,7 @@ def _reconcile_or_prepare_job(
         result_data=None,
         error_message=None,
     )
+    return job, True
 
 
 def enqueue_dual_sketch_polish(
@@ -412,7 +502,7 @@ def enqueue_dual_sketch_polish(
     front_existing = find_sketch_polish_by_idempotency(db, user.id, front_idem)
     back_existing = find_sketch_polish_by_idempotency(db, user.id, back_idem)
 
-    front_job = _reconcile_or_prepare_job(
+    front_job, front_is_new = _reconcile_or_prepare_job(
         db,
         user,
         front_existing,
@@ -421,7 +511,7 @@ def enqueue_dual_sketch_polish(
         design_id=body.design_id,
         operation_id=op_str,
     )
-    back_job = _reconcile_or_prepare_job(
+    back_job, back_is_new = _reconcile_or_prepare_job(
         db,
         user,
         back_existing,
@@ -431,14 +521,14 @@ def enqueue_dual_sketch_polish(
         operation_id=op_str,
     )
 
-    if front_existing is None:
+    if front_is_new:
         db.add(front_job)
-    if back_existing is None:
+    if back_is_new:
         db.add(back_job)
     db.commit()
-    if front_existing is None:
+    if front_is_new:
         db.refresh(front_job)
-    if back_existing is None:
+    if back_is_new:
         db.refresh(back_job)
     return front_job, back_job, operation_id
 

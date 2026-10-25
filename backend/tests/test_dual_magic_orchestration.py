@@ -186,6 +186,13 @@ def test_partial_failure_retry_back_with_new_key(client, db_session):
     back_row.error_message = "sketch image edit failed"
     db_session.commit()
 
+    # Identical failed-key replay creates zero new jobs.
+    replay = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert replay.status_code == 201
+    assert replay.json()["front_job"]["id"] == front_id
+    assert replay.json()["back_job"]["id"] == back_id
+    assert replay.json()["back_job"]["status"] == "failed"
+
     retry_body = _dual_payload(
         magic_operation_id=op,
         front={"image_base64": _DATA_URL, "idempotency_key": front_key},
@@ -203,6 +210,80 @@ def test_partial_failure_retry_back_with_new_key(client, db_session):
         .count()
     )
     assert count == 3
+
+
+def test_dual_rejects_fresh_keys_while_side_still_active(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_active@example.com", "dual_active")
+    op = str(uuid4())
+    first = _dual_payload(
+        magic_operation_id=op,
+        front={"image_base64": _DATA_URL, "idempotency_key": "active-front"},
+        back={"image_base64": _DATA_URL, "idempotency_key": "active-back"},
+    )
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=first).status_code == 201
+    second = _dual_payload(
+        magic_operation_id=op,
+        front={"image_base64": _DATA_URL, "idempotency_key": "active-front-2"},
+        back={"image_base64": _DATA_URL, "idempotency_key": "active-back-2"},
+    )
+    clash = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=second)
+    assert clash.status_code == 409
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    count = (
+        db_session.query(AIJob)
+        .filter(AIJob.user_id == UUID(me["id"]), AIJob.job_type == "sketch_polish")
+        .count()
+    )
+    assert count == 2
+
+
+def test_dual_prompt_identity_mismatch_409(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_prompt@example.com", "dual_prompt")
+    op = str(uuid4())
+    body = _dual_payload(
+        magic_operation_id=op,
+        front={"image_base64": _DATA_URL, "idempotency_key": "prompt-front"},
+        back={"image_base64": _DATA_URL, "idempotency_key": "prompt-back"},
+        shared_garment_spec={"silhouette": "A-line dress"},
+    )
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body).status_code == 201
+    clash = _dual_payload(
+        magic_operation_id=op,
+        front={"image_base64": _DATA_URL, "idempotency_key": "prompt-front"},
+        back={"image_base64": _DATA_URL, "idempotency_key": "prompt-back"},
+        shared_garment_spec={"silhouette": "column gown"},
+    )
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=clash).status_code == 409
+
+
+def test_failed_single_polish_key_replay_creates_zero_jobs(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_fail_replay@example.com", "dual_fail_r")
+    payload = {
+        "input_data": {
+            "image_base64": _DATA_URL,
+            "idempotency_key": "fail-single-1",
+            "notes": "polish concept",
+        }
+    }
+    first = client.post("/api/v1/ai/sketch/polish", headers=_auth(tokens), json=payload)
+    assert first.status_code == 201
+    job_id = first.json()["id"]
+    row = db_session.get(AIJob, UUID(job_id))
+    row.status = "failed"
+    row.error_message = "provider failed"
+    db_session.commit()
+
+    second = client.post("/api/v1/ai/sketch/polish", headers=_auth(tokens), json=payload)
+    assert second.status_code == 201
+    assert second.json()["id"] == job_id
+    assert second.json()["status"] == "failed"
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    count = (
+        db_session.query(AIJob)
+        .filter(AIJob.user_id == UUID(me["id"]), AIJob.job_type == "sketch_polish")
+        .count()
+    )
+    assert count == 1
 
 
 def test_sequential_enqueue_linked_by_operation_id(client, db_session):
