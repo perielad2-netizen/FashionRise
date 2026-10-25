@@ -337,6 +337,9 @@ export async function ensureStudioDraft(
   expectedRevision: number | null,
   options: { createOnly?: boolean } = {},
 ): Promise<DesignRead> {
+  // Content compares use the serialized cloud shape. Wire create/update with the
+  // original document so transient clearBackIntent still reaches metadata
+  // (documentForCloud strips it — passing cloudDoc alone caused false 409s).
   const cloudDoc = documentForCloud(document)
   const createOnly = Boolean(options.createOnly)
 
@@ -352,7 +355,7 @@ export async function ensureStudioDraft(
         }
         token = serverDoc.clientRevision
       }
-      return await updateStudioDraft(preferredDesignId, cloudDoc, {
+      return await updateStudioDraft(preferredDesignId, document, {
         expectedRevision: token,
       })
     } catch (err) {
@@ -388,13 +391,13 @@ export async function ensureStudioDraft(
       )
     }
     writeStoredDesignId(userId, existing.id)
-    return updateStudioDraft(existing.id, cloudDoc, {
+    return updateStudioDraft(existing.id, document, {
       expectedRevision: serverRev,
     })
   }
 
   try {
-    const created = await createStudioDraft(cloudDoc)
+    const created = await createStudioDraft(document)
     writeStoredDesignId(userId, created.id)
     return created
   } catch (createErr) {
@@ -432,7 +435,7 @@ export async function ensureStudioDraft(
                 serverRev,
               )
         }
-        return updateStudioDraft(recovered.id, cloudDoc, {
+        return updateStudioDraft(recovered.id, document, {
           expectedRevision: serverRev,
         })
       }
@@ -498,9 +501,11 @@ export async function persistStudioDraft(args: {
   }
 
   try {
+    // Pass the original document (not cloudDoc) so clearBackIntent survives into
+    // createStudioDraft / updateStudioDraft → cloudDraftMetadata.
     const saved = await ensureStudioDraft(
       args.userId,
-      cloudDoc,
+      args.document,
       args.designId,
       args.expectedRevision,
       { createOnly: args.createOnly },

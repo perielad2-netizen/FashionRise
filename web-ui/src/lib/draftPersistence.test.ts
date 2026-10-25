@@ -69,7 +69,12 @@ const api = vi.hoisted(() => ({
   failCreateOnce: false,
   failUpdateStatus: null as number | null,
   createCalls: 0,
-  updateCalls: [] as Array<{ id: string; expected?: number | null }>,
+  updateCalls: [] as Array<{
+    id: string
+    expected?: number | null
+    clearBackIntent?: boolean
+    metadata?: Record<string, unknown>
+  }>,
   updateGate: null as Promise<void> | null,
   updateGateModel: null as string | null,
   /** Runs after list-empty and immediately before create — inject a raced draft here. */
@@ -213,7 +218,13 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
         const { ApiError } = await import('@/services/api/client')
         throw new ApiError(status === 503 ? 'server down' : 'error', status, null)
       }
-      api.updateCalls.push({ id: designId, expected: options?.expectedRevision })
+      const metadata = actual.cloudDraftMetadata(document)
+      api.updateCalls.push({
+        id: designId,
+        expected: options?.expectedRevision,
+        clearBackIntent: Boolean(document.clearBackIntent),
+        metadata,
+      })
       const existing = api.designs.get(designId)
       if (!existing) {
         const { ApiError } = await import('@/services/api/client')
@@ -251,7 +262,11 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
       }
       const cloud = actual.documentForCloud(document)
       existing.design_data = cloud
-      existing.metadata = { draftKind: 'studio_working_draft', clientRevision: cloud.clientRevision }
+      existing.metadata = {
+        ...metadata,
+        draftKind: 'studio_working_draft',
+        clientRevision: cloud.clientRevision,
+      }
       existing.updated_at = new Date().toISOString()
       return {
         id: designId,
@@ -610,7 +625,9 @@ describe('draftPersistence WEB-V2.1A/B', () => {
       expectedRevision: null,
     })
     expect(result.ok).toBe(true)
-    expect(api.updateCalls).toEqual([{ id: 'd1', expected: existing.clientRevision }])
+    expect(api.updateCalls).toHaveLength(1)
+    expect(api.updateCalls[0]?.id).toBe('d1')
+    expect(api.updateCalls[0]?.expected).toBe(existing.clientRevision)
     expect(api.designs.get('d1')!.design_data.model).toBe('male')
   })
 
@@ -774,5 +791,155 @@ describe('restoreStudioDraft damaged cloud V2 safety', () => {
     expect(restored.blockAutomaticCloudWrites).toBe(false)
     expect(restored.document.strokes).toHaveLength(1)
     expect(restored.notice).toMatch(/Syncing/i)
+  })
+
+  it('forwards clearBackIntent metadata through Front clear → Back clear save (no false conflict)', async () => {
+    // Seed cloud draft with Front + Back ink at revision 2.
+    let seed = createEmptyDraftDocument()
+    seed = bumpDraftDocument(seed, {
+      schema: 'fashionrise.studio.draft.v2',
+      activeSide: 'front',
+      strokes: [
+        {
+          id: 'f1',
+          tool: 'draw',
+          points: [10, 20, 0.5, 30, 40, 0.5],
+          color: '#1C1C1E',
+          size: 2,
+          opacity: 1,
+        },
+      ],
+      back: {
+        strokes: [
+          {
+            id: 'b1',
+            tool: 'draw',
+            points: [50, 60, 0.5, 70, 80, 0.5],
+            color: '#1C1C1E',
+            size: 2,
+            opacity: 1,
+          },
+        ],
+        fills: [],
+      },
+      model: 'female-straight',
+    })
+    api.designs.set('draft-1', {
+      id: 'draft-1',
+      design_data: documentForCloud(seed),
+      metadata: {
+        draftKind: 'studio_working_draft',
+        clientRevision: seed.clientRevision,
+        schema: 'fashionrise.studio.draft.v2',
+      },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    localStore.designIds.set('u1', 'draft-1')
+
+    // Clear Front (no clearBackIntent).
+    const frontCleared = bumpDraftDocument(seed, {
+      strokes: [],
+      fills: [],
+      activeSide: 'front',
+    })
+    const frontSave = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'draft-1',
+      document: frontCleared,
+      fingerprint: draftContentFingerprint(documentForCloud(frontCleared)),
+      lastSyncedFingerprint: draftContentFingerprint(documentForCloud(seed)),
+      expectedRevision: seed.clientRevision,
+    })
+    expect(frontSave.ok).toBe(true)
+    expect(api.updateCalls.at(-1)?.clearBackIntent).toBe(false)
+
+    // Clear Back with explicit intent — must reach metadata (regression for false 409).
+    const backCleared: StudioDraftDocument = {
+      ...bumpDraftDocument(frontCleared, {
+        activeSide: 'back',
+        back: { strokes: [], fills: [] },
+        clearBackIntent: true,
+      }),
+      clearBackIntent: true,
+    }
+    expect(backCleared.clearBackIntent).toBe(true)
+    expect(documentForCloud(backCleared).clearBackIntent).toBeUndefined()
+
+    const backSave = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'draft-1',
+      document: backCleared,
+      fingerprint: draftContentFingerprint(documentForCloud(backCleared)),
+      lastSyncedFingerprint: frontSave.ok ? frontSave.fingerprint : null,
+      expectedRevision: frontSave.ok ? frontSave.syncedRevision : null,
+    })
+    expect(backSave.ok).toBe(true)
+    expect(backSave.conflict).toBeFalsy()
+    const last = api.updateCalls.at(-1)
+    expect(last?.clearBackIntent).toBe(true)
+    expect(last?.metadata?.clearBackIntent).toBe(true)
+    expect(last?.expected).toBe(frontCleared.clientRevision)
+
+    const stored = api.designs.get('draft-1')!
+    const storedDoc = stored.design_data as StudioDraftDocument
+    expect(storedDoc.strokes).toEqual([])
+    expect(storedDoc.back?.strokes ?? []).toEqual([])
+    expect(stored.metadata.clearBackIntent).toBe(true)
+  })
+
+  it('still surfaces a real two-tab OCC conflict when revisions diverge', async () => {
+    const local = strokedDoc()
+    api.designs.set('draft-occ', {
+      id: 'draft-occ',
+      design_data: documentForCloud(local),
+      metadata: { draftKind: 'studio_working_draft', clientRevision: local.clientRevision },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    // Another tab already advanced the server revision.
+    const other = bumpDraftDocument(local, {
+      strokes: [
+        {
+          id: 'other',
+          tool: 'draw',
+          points: [1, 2, 0.5, 3, 4, 0.5],
+          color: '#FF0000',
+          size: 2,
+          opacity: 1,
+        },
+      ],
+    })
+    api.designs.set('draft-occ', {
+      id: 'draft-occ',
+      design_data: documentForCloud(other),
+      metadata: { draftKind: 'studio_working_draft', clientRevision: other.clientRevision },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+
+    const mine = bumpDraftDocument(local, {
+      strokes: [
+        {
+          id: 'mine',
+          tool: 'draw',
+          points: [9, 9, 0.5, 8, 8, 0.5],
+          color: '#00FF00',
+          size: 2,
+          opacity: 1,
+        },
+      ],
+    })
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'draft-occ',
+      document: mine,
+      fingerprint: draftContentFingerprint(documentForCloud(mine)),
+      lastSyncedFingerprint: draftContentFingerprint(documentForCloud(local)),
+      expectedRevision: local.clientRevision,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.conflict).toBeTruthy()
+    expect(result.conflict?.server.strokes[0]?.id).toBe('other')
   })
 })

@@ -78,7 +78,11 @@ import { resolveDualMagicJobIds } from '@/services/ai/magicOperationRecovery'
 import type { StudioPaperSide } from '@/lib/studioSideArtwork'
 import { sideHasInk } from '@/lib/studioSideArtwork'
 import { recoverMagicJob } from '@/services/ai/pollAiJob'
-import { toMagicLookResult, type MagicLookResult } from '@/services/ai/aiJobTypes'
+import {
+  isMagicSafetyRefusal,
+  toMagicLookResult,
+  type MagicLookResult,
+} from '@/services/ai/aiJobTypes'
 import { StrokeHistory } from '@/lib/history'
 import { validateReferenceImageFile } from '@/lib/referenceFile'
 import {
@@ -350,6 +354,12 @@ export function useStudioEditor() {
         // Record what the server acknowledged for this request's document (even if stale).
         syncedRevisionRef.current = result.syncedRevision
         syncedFingerprintRef.current = result.fingerprint
+        // clearBackIntent is session-only metadata — drop after a successful ACK so
+        // later autosaves do not keep replaying the transient clear flag.
+        if (stillCurrent && authoritativeDocRef.current.clearBackIntent) {
+          const { clearBackIntent: _ackIntent, ...acked } = authoritativeDocRef.current
+          authoritativeDocRef.current = acked
+        }
         if (stillCurrent && !cloudDirtyRef.current) {
           setSaveStatus('saved')
           setSaveError(null)
@@ -1083,6 +1093,7 @@ export function useStudioEditor() {
           settled: Awaited<ReturnType<typeof settleMagicJobWithImage>>,
         ): MagicSidePanelState => {
           const failed = settled.look.status === 'failed'
+          const safety = failed && isMagicSafetyRefusal(settled.look.summary)
           if (settled.lookObjectUrl) {
             magicSideLookUrlsRef.current[side] = settled.lookObjectUrl
           }
@@ -1092,7 +1103,8 @@ export function useStudioEditor() {
             lookObjectUrl: settled.lookObjectUrl,
             sketchObjectUrl: magicSideSketchUrlsRef.current[side],
             error: failed ? settled.look.summary : null,
-            canRetry: failed,
+            // Safety refusals must not auto-offer identical paid retries.
+            canRetry: failed && !safety,
           }
         }
         const nextFront = applySide('front', frontSettled)
@@ -1108,13 +1120,23 @@ export function useStudioEditor() {
         }
 
         const bothFailed = nextFront.phase === 'failed' && nextBack.phase === 'failed'
+        const safetyFail =
+          isMagicSafetyRefusal(nextFront.error) || isMagicSafetyRefusal(nextBack.error)
         if (bothFailed) {
           setMagicPhase('failed')
-          setMagicError('Front and Back Magic did not finish. Retry the failed side.')
+          setMagicError(
+            safetyFail
+              ? 'Magic could not finish under the image provider safety rules. Edit the sketch, then start a new Front/Back Magic.'
+              : 'Front and Back Magic did not finish. Retry the failed side.',
+          )
           return
         }
         if (nextFront.phase === 'failed' || nextBack.phase === 'failed') {
-          setMagicError('One side needs a retry — use Retry front/back below.')
+          setMagicError(
+            safetyFail
+              ? 'One side was refused by the image provider safety rules. Edit that side, then start a new Magic operation.'
+              : 'One side needs a retry — use Retry front/back below.',
+          )
         }
         setMagicPhase('ready')
         return
