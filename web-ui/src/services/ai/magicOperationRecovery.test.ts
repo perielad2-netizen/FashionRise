@@ -79,20 +79,58 @@ describe('resolveDualMagicJobIds lost-response recovery', () => {
     clearMagicJobId('user-1')
   })
 
-  it('uses local job ids without calling the operations API', async () => {
+  it('refreshes via GET even when both Front/Back ids are cached, preferring a newer Back retry', async () => {
     persistMagicOperation('user-1', {
-      operationId: 'op-local',
-      frontJobId: 'jf',
-      backJobId: 'jb',
+      operationId: 'op-stale-cache',
+      frontJobId: 'jf-old',
+      backJobId: 'jb-old-failed',
       updatedAt: '2026-10-25T00:00:00.000Z',
     })
-    const resolved = await resolveDualMagicJobIds('user-1')
-    expect(apiRequest).not.toHaveBeenCalled()
-    expect(resolved).toEqual({
-      operationId: 'op-local',
-      frontJobId: 'jf',
-      backJobId: 'jb',
+    const oldFront = {
+      ...job('jf-old', 'front', 'completed'),
+      created_at: '2026-10-25T00:00:00.000Z',
+    }
+    const oldBack = {
+      ...job('jb-old-failed', 'back', 'failed'),
+      created_at: '2026-10-25T00:00:01.000Z',
+    }
+    const retryBack = {
+      ...job('jb-retry', 'back', 'queued'),
+      created_at: '2026-10-25T00:00:30.000Z',
+    }
+    apiRequest.mockResolvedValueOnce({
+      magic_operation_id: 'op-stale-cache',
+      jobs: [oldFront, oldBack, retryBack],
     })
+
+    const resolved = await resolveDualMagicJobIds('user-1')
+    expect(apiRequest).toHaveBeenCalledTimes(1)
+    expect(apiRequest.mock.calls[0]?.[0]).toBe('/ai/magic-operations/op-stale-cache/jobs')
+    expect(apiRequest.mock.calls.some((c) => String(c[0]).includes('polish'))).toBe(false)
+    expect(resolved).toEqual({
+      operationId: 'op-stale-cache',
+      frontJobId: 'jf-old',
+      backJobId: 'jb-retry',
+    })
+    const stored = readMagicOperation('user-1')
+    expect(stored?.frontJobId).toBe('jf-old')
+    expect(stored?.backJobId).toBe('jb-retry')
+    expect(readMagicJobId('user-1')).toBe('jf-old')
+  })
+
+  it('does not return stale cached ids when the operations GET fails', async () => {
+    persistMagicOperation('user-1', {
+      operationId: 'op-get-fail',
+      frontJobId: 'jf-stale',
+      backJobId: 'jb-stale',
+      updatedAt: '2026-10-25T00:00:00.000Z',
+    })
+    apiRequest.mockRejectedValueOnce(new Error('network down'))
+    await expect(resolveDualMagicJobIds('user-1')).rejects.toThrow('network down')
+    const stored = readMagicOperation('user-1')
+    expect(stored?.frontJobId).toBe('jf-stale')
+    expect(stored?.backJobId).toBe('jb-stale')
+    expect(apiRequest.mock.calls.some((c) => String(c[0]).includes('polish'))).toBe(false)
   })
 
   it('recovers Front/Back jobs from operationId when response was lost (refresh path)', async () => {
