@@ -3,19 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25 (FAST TRACK — PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) tip `b19c9d4c` **source-approved / frozen**; local integrated E2E Front/Back draw→flip→save→reopen **PASS** against Stage B/C BE; Dual Magic UI reachable; production path = deploy Stage B BE + this FE with flag ON, keep Dual Magic OFF until PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) paid-job authorize).
+**Last updated:** 2026-10-25 (CONDITIONAL GO executed — Front/Back-only production release. FE PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) tip `4589a62d` with `VITE_STUDIO_DUAL_MAGIC_ENABLED=false`; Stage B BE `6b253cb5`; Dual Magic BE PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) **not** deployed. Production smoke Front/Back + save/reopen + nine Back models + Front Magic preserved + Dual Magic gated **PASS**. Paid AI during smoke: **0**.)
 
-**Phase:** Protected family beta. Production FE @ `dfcaa609` (WEB-V4I). **WEB-V4J Stage D (Front/Back Studio FE):** draft PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) on `cursor/web-v4j-d-front-back-editor-77c6` — paper-corner Flip UX **PM-accepted**; atomic V2 + Magic ops recovery + damaged-cloud restore safety amended; canonical `frontStrokes`/`backStrokes`; **9/9 PAIRS_09 Back PNGs**; atelier Back unpublished; flag default **off**; **not deployed**. Magic pose-fidelity PR #41 remains GitHub-only.
+**Phase:** Protected family beta. **WEB-V4J Front/Back drawing LIVE** (Dual Magic OFF). Production FE @ `4589a62d` (PR #69 + Dual Magic client gate). Production BE/worker @ Stage B maint tip `6b253cb5` (not GitHub `main`, not PR #70). Paper-corner Flip UX; **9/9 PAIRS_09 Back PNGs**; `female-atelier` Front-only; Alembic **`005`**. Magic pose-fidelity PR #41 remains GitHub-only / not on this BE tip.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`dfcaa609…`** — Nginx root `/var/www/fashionrise/releases/dfcaa609`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Legacy + 10 library croquis present. WEB-V4I Studio + WEB-V4H immersive drawing live. **Known P1:** Immersive Hand→Pencil may stop drawing until refresh (Issue #51 — hotfix draft, not deployed). |
-| Backend (FastAPI + PostgreSQL) | **`2cbc1ad0`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone) |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`2cbc1ad0`** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-1` · edit `max_retries=0` |
-| Database | `fashionrise_beta` — Alembic **`005`** (unchanged) |
-| Deploy backup | `/var/backups/fashionrise/v4h-fe-deploy-*` (+ prior `v4g-fe-deploy-20261023T140541Z`) |
+| Frontend (`web-ui`) | **`4589a62d`** — Nginx root `/var/www/fashionrise/releases/4589a62d`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`, **`VITE_STUDIO_FRONT_BACK_ENABLED=true`**, **`VITE_STUDIO_DUAL_MAGIC_ENABLED=false`**. Front/Back Flip + 9 rear croquis; Back ink shows “Front/Back Magic coming soon” (no `/ai/sketch/polish-dual`). Permanent Workbox SW (no HTML precache / NavigationRoute). |
+| Backend (FastAPI + PostgreSQL) | **`6b253cb52beb9524f976ba805049bf3de2506985`** — Stage B V2 persistence (maint lineage). `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker standalone). **No** Dual Magic polish-dual route. |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`6b253cb5`** (same tree) · `OPENAI_MODEL=gpt-6-luna` · image model unchanged from prior prod `.env` |
+| Database | `fashionrise_beta` — Alembic **`005`** (unchanged; no migrate) |
+| Deploy backup | `/var/backups/fashionrise/v4j-frontback-deploy-20261025T174543Z` → `/root/fashionrise-backups/v4j-frontback-deploy-20261025T174543Z` |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -100,7 +100,7 @@
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
 | GitHub `main` | **`dfcaa609`** — WEB-V4I merged (PR #41 pose fidelity source present, BE not deployed) |
-| Production frontend / backend / worker | **`dfcaa609` / `2cbc1ad0` / `2cbc1ad0`** · Alembic **`005`** |
+| Production frontend / backend / worker | **`4589a62d` / `6b253cb5` / `6b253cb5`** · Alembic **`005`** · Dual Magic BE **not** deployed |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
@@ -119,7 +119,7 @@
 | **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
 | **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
 | **P1 #51 Hand→Pencil immersive** | **Draft PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52)** — gesture cooldown stuck after viewport remount; FE-only; **STOP for PM** (priority over #42) |
-| **Issue #42 / WEB-V4J Front-Back** | **Draft PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69)** — Flip UX + damaged-cloud accepted; Dual Magic recover always refreshes ops jobs; **STOP for PM**; flag **OFF**; architecture draft PR #50 |
+| **Issue #42 / WEB-V4J Front-Back** | **DEPLOYED** FE PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) @ `4589a62d` (`FRONT_BACK=true`, `DUAL_MAGIC=false`) + Stage B BE `6b253cb5`. Prod smoke PASS. Dual Magic BE PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) **held**. |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
 | Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — do not auto-merge). |
@@ -314,7 +314,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P1 #51 Hand→Pencil hotfix draft (Issue [#51](https://github.com/perielad2-netizen/FashionRise/issues/51)). After merge, authorize **frontend-only** deploy of the hotfix SHA, then require **operator real mobile/tablet acceptance** of Hand→Pencil recovery. **Do not merge or deploy** until authorized. WEB-V4J / Issue #42 remains suspended until #51 is closed.
+1. **Exact next action:** Hold Dual Magic BE PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) until separately authorized. Keep `VITE_STUDIO_DUAL_MAGIC_ENABLED=false` in production. Operator family-beta exercise of Front/Back Flip + save/reopen on Access session.
 2. Production FE @ `4f332a62` (WEB-V4H): real-tablet operator acceptance **7/7 PASS** (done). Backend/worker remain `2cbc1ad0`.
 3. After V4I acceptance + FE deploy: scope Issue [#42](https://github.com/perielad2-netizen/FashionRise/issues/42) Front/Back croquis as a separate draft PR (not in #48).
 4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. After separate authorize: deploy BE/worker → one paid Magic retest on Issue #39 sample.
