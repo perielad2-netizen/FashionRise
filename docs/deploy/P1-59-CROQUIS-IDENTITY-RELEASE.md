@@ -9,7 +9,7 @@
 | Artifact | SHA |
 |---|---|
 | GitHub `main` | `c6fc1eb8b7eac4a2387dadd3b3e1c858d75a3b83` |
-| Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) head | see tip after latest docs/test commits (includes FE + BE on `main`) |
+| Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) head | `53cbaffc2b21d1898e1cd04d6079639b2db14ba4` (FE + BE on `main`; includes test-only branch-guard fix) |
 | Production FE (last reported) | `c6fc1eb8` |
 | Production BE/worker (last reported) | `b800e53d25dcdf2481f377470543b323798796a7` |
 | Maint candidate `cursor/p1-59-maint-b800e53d-77c6` | `1450b5a1d0b472058b47247d9d74133c7abd9c72` |
