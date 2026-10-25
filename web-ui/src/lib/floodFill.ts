@@ -1,6 +1,12 @@
 import { paintInkStrokes } from '@/lib/exportCanvas'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
-import { createFillId, type FillOp, type FillStyle } from '@/lib/fills'
+import {
+  checkPersistableFill,
+  createFillId,
+  MAX_FILL_CONTOUR_VALUES,
+  type FillOp,
+  type FillStyle,
+} from '@/lib/fills'
 
 export type FloodFillOk = { ok: true; fill: FillOp }
 export type FloodFillErr = {
@@ -446,22 +452,192 @@ function finalizeFlood(
     contour = [minX, minY, maxX + 1, minY, maxX + 1, maxY + 1, minX, maxY + 1]
   }
 
+  // Edge-based traces emit a vertex per unit edge. Collapse exact collinear
+  // runs first — topology-preserving and enough to keep 1px neck walls as
+  // parallel segments without forcing global RDP tolerance to 0.
+  contour = removeCollinearPoints(contour)
+
   const minSpan = minScanlineSpan(visited, minX, minY, maxX, maxY)
-  const tolerance =
+  const baseTol =
     simplifyTolerance ??
     contourSimplifyTolerance(count, maxX - minX + 1, maxY - minY + 1, minSpan)
 
-  const simplified = simplifyContour(contour, tolerance)
-  return {
-    ok: true,
-    fill: {
-      id: createFillId(),
-      contour: simplified,
-      style,
-      seedX,
-      seedY,
-    },
+  const thinSamples =
+    minSpan <= 2 ? collectThinCorridorSamples(visited, minX, minY, maxX, maxY, 24) : []
+
+  // Prefer the finest tolerance that still preserves thin corridors; then
+  // escalate only as needed to stay under MAX_FILL_CONTOUR_VALUES.
+  const candidates = uniqueAscending([
+    baseTol,
+    0.35,
+    0.75,
+    1.4,
+    2.0,
+    3.0,
+    4.5,
+  ])
+
+  let best: number[] | null = null
+  for (const tol of candidates) {
+    let simplified = removeCollinearPoints(simplifyContour(contour, tol))
+    if (simplified.length < 6) continue
+    if (thinSamples.length > 0 && !thinCorridorsPreserved(simplified, thinSamples)) {
+      continue
+    }
+    if (simplified.length > MAX_FILL_CONTOUR_VALUES) {
+      // Keep as last-resort candidate if nothing smaller preserves necks.
+      if (!best || simplified.length < best.length) best = simplified
+      continue
+    }
+    best = simplified
+    break
   }
+
+  // Fallback: collinear-only contour (already topology-preserving) when every
+  // RDP candidate failed thin-corridor checks but the collapsed ring fits.
+  if ((!best || best.length < 6) && contour.length >= 6 && contour.length <= MAX_FILL_CONTOUR_VALUES) {
+    best = contour
+  }
+
+  if (!best || best.length < 6) {
+    return {
+      ok: false,
+      reason: 'too_large',
+      message:
+        'That fill outline is too detailed to keep. Try a slightly simpler closed region.',
+    }
+  }
+  if (best.length > MAX_FILL_CONTOUR_VALUES) {
+    return {
+      ok: false,
+      reason: 'too_large',
+      message:
+        'That fill outline is too detailed to save. Try a slightly simpler closed region — nothing was added.',
+    }
+  }
+
+  const fill: FillOp = {
+    id: createFillId(),
+    contour: best,
+    style,
+    seedX,
+    seedY,
+  }
+  // Never report success for a contour that cannot round-trip through save.
+  const persist = checkPersistableFill(fill)
+  if (!persist.ok) {
+    return {
+      ok: false,
+      reason: 'too_large',
+      message: persist.message,
+    }
+  }
+  return { ok: true, fill: persist.fill }
+}
+
+function uniqueAscending(values: number[]): number[] {
+  const sorted = [...values].filter((v) => Number.isFinite(v) && v >= 0).sort((a, b) => a - b)
+  const out: number[] = []
+  for (const v of sorted) {
+    if (out.length === 0 || out[out.length - 1]! !== v) out.push(v)
+  }
+  return out
+}
+
+/**
+ * Sample centres of the narrowest interior scanline runs so simplification can
+ * be rejected when it would erase a thin neck / tip corridor.
+ */
+export function collectThinCorridorSamples(
+  visited: Uint8Array,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  maxSamples: number,
+): { x: number; y: number }[] {
+  const samples: { x: number; y: number }[] = []
+  const targetSpan = 2
+  for (let y = minY; y <= maxY && samples.length < maxSamples; y += 1) {
+    let run = 0
+    let runStart = minX
+    for (let x = minX; x <= maxX + 1; x += 1) {
+      const on = x <= maxX && !!visited[y * DESIGN_WIDTH + x]
+      if (on) {
+        if (run === 0) runStart = x
+        run += 1
+      } else if (run > 0) {
+        if (run <= targetSpan) {
+          samples.push({ x: runStart + Math.floor((run - 1) / 2), y })
+        }
+        run = 0
+      }
+    }
+  }
+  for (let x = minX; x <= maxX && samples.length < maxSamples; x += 1) {
+    let run = 0
+    let runStart = minY
+    for (let y = minY; y <= maxY + 1; y += 1) {
+      const on = y <= maxY && !!visited[y * DESIGN_WIDTH + x]
+      if (on) {
+        if (run === 0) runStart = y
+        run += 1
+      } else if (run > 0) {
+        if (run <= targetSpan) {
+          samples.push({ x, y: runStart + Math.floor((run - 1) / 2) })
+        }
+        run = 0
+      }
+    }
+  }
+  return samples
+}
+
+function thinCorridorsPreserved(
+  contour: number[],
+  samples: { x: number; y: number }[],
+): boolean {
+  for (const s of samples) {
+    if (!contourCoversPixel(contour, s.x, s.y)) return false
+  }
+  return true
+}
+
+/**
+ * Drop consecutive duplicate and strictly collinear vertices on a closed ring.
+ * Preserves corners and 1px-wide parallel neck walls (left/right remain distinct).
+ */
+export function removeCollinearPoints(contour: number[]): number[] {
+  if (contour.length < 8) return contour
+  const pts: { x: number; y: number }[] = []
+  for (let i = 0; i < contour.length; i += 2) {
+    const x = contour[i]!
+    const y = contour[i + 1]!
+    const prev = pts[pts.length - 1]
+    if (prev && prev.x === x && prev.y === y) continue
+    pts.push({ x, y })
+  }
+  if (pts.length >= 2) {
+    const first = pts[0]!
+    const last = pts[pts.length - 1]!
+    if (first.x === last.x && first.y === last.y) pts.pop()
+  }
+  const n = pts.length
+  if (n < 3) return contour
+
+  const keep: { x: number; y: number }[] = []
+  for (let i = 0; i < n; i += 1) {
+    const prev = pts[(i - 1 + n) % n]!
+    const cur = pts[i]!
+    const next = pts[(i + 1) % n]!
+    const cross = (cur.x - prev.x) * (next.y - cur.y) - (cur.y - prev.y) * (next.x - cur.x)
+    // Integer-grid edges: cross === 0 ⇒ exact collinear; drop the middle vertex.
+    if (cross !== 0) keep.push(cur)
+  }
+  if (keep.length < 3) return contour
+  const out: number[] = []
+  for (const p of keep) out.push(p.x, p.y)
+  return out
 }
 
 /** Narrowest contiguous horizontal/vertical run inside the filled region. */
@@ -546,9 +722,11 @@ export function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
 }
 
 /**
- * Lower RDP tolerance for small / narrow regions so thin necks survive.
- * `minInteriorSpan` is the narrowest scanline run (neck width) when known —
- * used even when the overall bbox is large (hourglass with fat lobes).
+ * Size-adaptive RDP tolerance. A single 1–2px tip on a *large* garment must not
+ * force tolerance 0 for the whole silhouette (that explodes edge-based contours
+ * past {@link MAX_FILL_CONTOUR_VALUES}). Thin corridors are protected by
+ * collinear collapse + sample checks in {@link finalizeFlood}, not by disabling
+ * simplification globally.
  */
 export function contourSimplifyTolerance(
   pixelCount: number,
@@ -557,12 +735,16 @@ export function contourSimplifyTolerance(
   minInteriorSpan?: number,
 ): number {
   const minDim = Math.min(bboxWidth, bboxHeight)
+  const maxDim = Math.max(bboxWidth, bboxHeight)
   const span = minInteriorSpan ?? minDim
-  // Thin corridor anywhere — keep every vertex (no RDP) so the neck stays
-  // a positive-area passage after edge-based contour tracing.
-  if (span <= 2) return 0
-  if (span <= 4 || pixelCount < 48 || minDim <= 6) return 0.35
-  if (minDim <= 12 || pixelCount < 220) return 0.75
+  const largeGarment = pixelCount >= 4_000 || maxDim >= 180
+
+  // Tiny / narrow overall regions — keep fine detail.
+  if (pixelCount < 48 || minDim <= 6) return 0.35
+  if (!largeGarment && (span <= 4 || minDim <= 12 || pixelCount < 220)) return 0.35
+  if (!largeGarment && (minDim <= 24 || pixelCount < 800)) return 0.75
+  // Large silhouettes: meaningful RDP even when a tip/neck is 1px wide.
+  if (largeGarment) return span <= 2 ? 0.75 : 1.4
   return 1.4
 }
 
@@ -588,6 +770,20 @@ export function pointInContour(contour: number[], x: number, y: number): boolean
  */
 export function contourCoversPixel(contour: number[], px: number, py: number): boolean {
   return pointInContour(contour, px + 0.5, py + 0.5)
+}
+
+/**
+ * Edge-based outer contour of a filled region (exported for large-contour
+ * regressions that measure uncompressed perimeter size).
+ */
+export function traceRegionContour(
+  mask: Uint8Array,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): number[] {
+  return traceContour(mask, minX, minY, maxX, maxY)
 }
 
 /**
@@ -690,32 +886,49 @@ function simplifyContour(contour: number[], tolerance: number): number[] {
   for (let i = 0; i < contour.length; i += 2) {
     pts.push({ x: contour[i]!, y: contour[i + 1]! })
   }
-  const keep = rdp(pts, tolerance)
+  // Iterative RDP — bounded stack, no deep recursion on large perimeters.
+  const keep = rdpIterative(pts, tolerance)
   const out: number[] = []
   for (const p of keep) out.push(Math.round(p.x), Math.round(p.y))
   if (out.length >= 6) return out
   return contour
 }
 
-function rdp(points: { x: number; y: number }[], epsilon: number): { x: number; y: number }[] {
-  if (points.length < 3) return points
-  let maxDist = 0
-  let index = 0
-  const first = points[0]!
-  const last = points[points.length - 1]!
-  for (let i = 1; i < points.length - 1; i += 1) {
-    const d = perpDist(points[i]!, first, last)
-    if (d > maxDist) {
-      maxDist = d
-      index = i
+function rdpIterative(
+  points: { x: number; y: number }[],
+  epsilon: number,
+): { x: number; y: number }[] {
+  const n = points.length
+  if (n < 3) return points
+  const keep = new Uint8Array(n)
+  keep[0] = 1
+  keep[n - 1] = 1
+  const stack: number[] = [0, n - 1]
+  // Worst-case O(n) stack frames for a polyline of n points.
+  while (stack.length >= 2) {
+    const end = stack.pop()!
+    const start = stack.pop()!
+    const first = points[start]!
+    const last = points[end]!
+    let maxDist = 0
+    let index = -1
+    for (let i = start + 1; i < end; i += 1) {
+      const d = perpDist(points[i]!, first, last)
+      if (d > maxDist) {
+        maxDist = d
+        index = i
+      }
+    }
+    if (index >= 0 && maxDist > epsilon) {
+      keep[index] = 1
+      stack.push(start, index, index, end)
     }
   }
-  if (maxDist > epsilon) {
-    const left = rdp(points.slice(0, index + 1), epsilon)
-    const right = rdp(points.slice(index), epsilon)
-    return left.slice(0, -1).concat(right)
+  const out: { x: number; y: number }[] = []
+  for (let i = 0; i < n; i += 1) {
+    if (keep[i]) out.push(points[i]!)
   }
-  return [first, last]
+  return out
 }
 
 function perpDist(

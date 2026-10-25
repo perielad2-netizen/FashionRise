@@ -13,11 +13,14 @@ import {
   isAccidentalPunchThrough,
   MAX_FILL_PIXELS,
   minScanlineSpan,
+  removeCollinearPoints,
+  traceRegionContour,
 } from '@/lib/floodFill'
 import {
   checkPersistableFill,
   fabricStyle,
   gradientStyleFromPreset,
+  MAX_FILL_CONTOUR_VALUES,
   parseFillOp,
   solidStyle,
   uploadedFabricStyle,
@@ -432,10 +435,11 @@ describe('P1 #60 narrow closed fills — hourglass / straps / pockets', () => {
         und.maxY - und.minY + 1,
         span,
       )
-      // Thin necks force low/zero tolerance even when lobes make a large bbox.
-      if (neckWidth <= 2) expect(tol).toBe(0)
-      else if (neckWidth <= 4) expect(tol).toBeLessThanOrEqual(0.35)
-      else expect(tol).toBeLessThanOrEqual(1.4)
+      // Large hourglass lobes are "large garments": tolerance stays finite so
+      // edge-based contours remain persistable; thin necks are protected by
+      // collinear collapse + corridor sample checks, not global tol=0.
+      expect(tol).toBeGreaterThan(0)
+      expect(tol).toBeLessThanOrEqual(1.4)
 
       const fromNeck = floodFillAdaptive({
         rawBarrier: barrier,
@@ -782,6 +786,250 @@ describe('P1 #60 real viewport transform + pinch (100% / 177% / 300%)', () => {
     })
     expect(contours[0]).toEqual(contours[1])
     expect(contours[1]).toEqual(contours[2])
+  })
+})
+
+describe('P1 #60 large-garment contour persistence', () => {
+  /** Long tapered dress: 1px shoulder tip → wide hem (triggers global minSpan=1). */
+  function taperedDressBarrier(): {
+    barrier: Uint8Array
+    seed: { x: number; y: number }
+    tip: { x: number; y: number }
+  } {
+    const b = emptyBarrier()
+    const topY = 80
+    const botY = 900
+    const tipX = 384
+    for (let y = topY; y <= botY; y += 1) {
+      const t = (y - topY) / (botY - topY)
+      const half = Math.max(0, Math.round(1 + t * 180))
+      setBarrier(b, tipX - half, y)
+      setBarrier(b, tipX + half, y)
+    }
+    hWall(b, botY, tipX - 180, tipX + 180)
+    setBarrier(b, tipX, topY)
+    return { barrier: b, seed: { x: tipX, y: 500 }, tip: { x: tipX, y: topY + 2 } }
+  }
+
+  /** Full-length trouser leg with irregular (hand-drawn) side walls. */
+  function irregularTrouserLeg(): {
+    barrier: Uint8Array
+    seed: { x: number; y: number }
+  } {
+    const b = emptyBarrier()
+    const y0 = 120
+    const y1 = 920
+    const mid = 360
+    let prevL = mid - 42
+    let prevR = mid + 42
+    for (let y = y0; y <= y1; y += 1) {
+      const wobble = Math.round(Math.sin(y / 17) * 8 + Math.sin(y / 9) * 4)
+      const half = 42 + wobble
+      const l = mid - half
+      const r = mid + half
+      // Seal horizontal steps so a freehand wobble cannot open the silhouette.
+      const l0 = Math.min(prevL, l)
+      const l1 = Math.max(prevL, l)
+      const r0 = Math.min(prevR, r)
+      const r1 = Math.max(prevR, r)
+      for (let x = l0; x <= l1; x += 1) setBarrier(b, x, y)
+      for (let x = r0; x <= r1; x += 1) setBarrier(b, x, y)
+      prevL = l
+      prevR = r
+    }
+    hWall(b, y0, mid - 42, mid + 42)
+    hWall(b, y1, Math.min(prevL, mid - 50), Math.max(prevR, mid + 50))
+    return { barrier: b, seed: { x: mid, y: 520 } }
+  }
+
+  /** Large curved panel (elliptical-ish closed outline). */
+  function largeCurvedPanel(): {
+    barrier: Uint8Array
+    seed: { x: number; y: number }
+  } {
+    const b = emptyBarrier()
+    const cx = 384
+    const cy = 512
+    const rx = 220
+    const ry = 340
+    let prevX = -1
+    let prevY = -1
+    for (let i = 0; i <= 720; i += 1) {
+      const a = (i / 720) * Math.PI * 2
+      const x = Math.round(cx + Math.cos(a) * rx)
+      const y = Math.round(cy + Math.sin(a) * ry)
+      setBarrier(b, x, y)
+      if (prevX >= 0) {
+        // Bresenham-lite seal between samples
+        const steps = Math.max(Math.abs(x - prevX), Math.abs(y - prevY))
+        for (let s = 1; s < steps; s += 1) {
+          const px = Math.round(prevX + ((x - prevX) * s) / steps)
+          const py = Math.round(prevY + ((y - prevY) * s) / steps)
+          setBarrier(b, px, py)
+        }
+      }
+      prevX = x
+      prevY = y
+    }
+    return { barrier: b, seed: { x: cx, y: cy } }
+  }
+
+  /** Jagged freehand-style closed outline with many stair-steps. */
+  function jaggedFreehandOutline(): {
+    barrier: Uint8Array
+    seed: { x: number; y: number }
+  } {
+    const b = emptyBarrier()
+    const y0 = 160
+    const y1 = 860
+    const left = 200
+    const right = 560
+    for (let y = y0; y <= y1; y += 1) {
+      const jL = ((y * 5) % 7) - 3
+      const jR = ((y * 3) % 9) - 4
+      setBarrier(b, left + jL, y)
+      setBarrier(b, right + jR, y)
+    }
+    for (let x = left - 3; x <= right + 4; x += 1) {
+      const jT = ((x * 2) % 5) - 2
+      const jB = ((x * 7) % 5) - 2
+      setBarrier(b, x, y0 + jT)
+      setBarrier(b, x, y1 + jB)
+    }
+    return { barrier: b, seed: { x: 380, y: 500 } }
+  }
+
+  function expectPersistableFill(
+    label: string,
+    barrier: Uint8Array,
+    seed: { x: number; y: number },
+    extras?: { cover?: { x: number; y: number }[]; maxMs?: number },
+  ) {
+    const t0 = performance.now()
+    const result = floodFillAdaptive({
+      rawBarrier: barrier,
+      ...seed,
+      style: solidStyle('#B91C1C'),
+      maxGap: 2,
+    })
+    const ms = performance.now() - t0
+    expect(result.ok, `${label} fill ok`).toBe(true)
+    if (!result.ok) return
+    expect(result.fill.contour.length, `${label} under contour cap`).toBeLessThanOrEqual(
+      MAX_FILL_CONTOUR_VALUES,
+    )
+    expect(result.fill.contour.length, `${label} has polygon`).toBeGreaterThanOrEqual(6)
+    const persist = checkPersistableFill(result.fill)
+    expect(persist.ok, `${label} persistable`).toBe(true)
+    if (!persist.ok) return
+    const roundTrip = parseFillOp(JSON.parse(JSON.stringify(persist.fill)))
+    expect(roundTrip).not.toBeNull()
+    expect(roundTrip!.contour).toEqual(persist.fill.contour)
+    expect(contourCoversPixel(roundTrip!.contour, seed.x, seed.y)).toBe(true)
+    for (const p of extras?.cover ?? []) {
+      expect(contourCoversPixel(roundTrip!.contour, p.x, p.y), `${label} cover ${p.x},${p.y}`).toBe(
+        true,
+      )
+    }
+    expect(ms, `${label} bounded runtime`).toBeLessThan(extras?.maxMs ?? 1500)
+    return { result, ms, contourLen: result.fill.contour.length }
+  }
+
+  it('BEFORE: uncompressed edge contour on tapered dress exceeds persistence cap', () => {
+    const { barrier, seed } = taperedDressBarrier()
+    const und = exploreFlood(barrier, seed.x, seed.y)
+    expect(und.ok).toBe(true)
+    if (!und.ok) return
+    expect(minScanlineSpan(und.visited, und.minX, und.minY, und.maxX, und.maxY)).toBe(1)
+    // Legacy hazard: minSpan≤2 → tol 0 → keep every edge vertex → over cap.
+    const raw = traceRegionContour(und.visited, und.minX, und.minY, und.maxX, und.maxY)
+    expect(raw.length).toBeGreaterThan(MAX_FILL_CONTOUR_VALUES)
+    expect(
+      checkPersistableFill({
+        id: 'fill_raw_oversize',
+        contour: raw,
+        style: solidStyle('#111111'),
+        seedX: seed.x,
+        seedY: seed.y,
+      }).ok,
+    ).toBe(false)
+    // Topology-preserving collinear collapse alone brings this dress under the cap.
+    expect(removeCollinearPoints(raw).length).toBeLessThanOrEqual(MAX_FILL_CONTOUR_VALUES)
+  })
+
+  it('AFTER: tapered dress with 1px tip fills and persists under the contour cap', () => {
+    const { barrier, seed, tip } = taperedDressBarrier()
+    const out = expectPersistableFill('tapered dress', barrier, seed, {
+      cover: [tip],
+      maxMs: 1500,
+    })
+    expect(out!.contourLen).toBeLessThanOrEqual(MAX_FILL_CONTOUR_VALUES)
+  })
+
+  it('AFTER: irregular full-length trouser leg persists', () => {
+    const { barrier, seed } = irregularTrouserLeg()
+    expectPersistableFill('trouser leg', barrier, seed)
+  })
+
+  it('AFTER: large curved garment panel persists', () => {
+    const { barrier, seed } = largeCurvedPanel()
+    expectPersistableFill('curved panel', barrier, seed)
+  })
+
+  it('AFTER: large hourglass (wide lobes + 1px neck) persists with neck coverage', () => {
+    const { barrier, upperSeed, neckSeed, lowerSeed } = hourglassBarrier(1)
+    expectPersistableFill('large hourglass', barrier, upperSeed, {
+      cover: [neckSeed, lowerSeed],
+    })
+  })
+
+  it('AFTER: jagged freehand outline persists', () => {
+    const { barrier, seed } = jaggedFreehandOutline()
+    expectPersistableFill('jagged freehand', barrier, seed)
+  })
+
+  it('AFTER: complex closed region below MAX_FILL_PIXELS stays persistable', () => {
+    // Comb-like closed silhouette: many vertical fins → long perimeter, still enclosed.
+    const b = emptyBarrier()
+    const x0 = 180
+    const x1 = 580
+    const y0 = 140
+    const y1 = 860
+    hWall(b, y0, x0, x1)
+    hWall(b, y1, x0, x1)
+    vWall(b, x0, y0, y1)
+    vWall(b, x1, y0, y1)
+    for (let x = x0 + 20; x < x1 - 20; x += 18) {
+      for (let y = y0 + 30; y < y1 - 30; y += 1) {
+        if ((y + x) % 40 < 22) setBarrier(b, x, y)
+      }
+    }
+    const und = exploreFlood(b, 300, 500)
+    expect(und.ok).toBe(true)
+    if (!und.ok) return
+    expect(und.count).toBeLessThanOrEqual(MAX_FILL_PIXELS)
+    expectPersistableFill('complex under max pixels', b, { x: 300, y: 500 }, { maxMs: 2500 })
+  })
+
+  it('adaptive fill success is always persistable (no fake ok)', () => {
+    const fixtures = [
+      taperedDressBarrier(),
+      irregularTrouserLeg(),
+      largeCurvedPanel(),
+      jaggedFreehandOutline(),
+      { barrier: hourglassBarrier(1).barrier, seed: hourglassBarrier(1).upperSeed },
+    ]
+    for (const f of fixtures) {
+      const r = floodFillAdaptive({
+        rawBarrier: f.barrier,
+        ...f.seed,
+        style: solidStyle('#0F766E'),
+        maxGap: 2,
+      })
+      expect(r.ok).toBe(true)
+      if (!r.ok) continue
+      expect(checkPersistableFill(r.fill).ok).toBe(true)
+    }
   })
 })
 

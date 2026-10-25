@@ -11,7 +11,7 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`c6fc1eb8`** — release matching verified main tip. Registration + Magic UI on. **Known P1 #60:** narrow closed garment regions can fail under fixed `gapClose=2` + `count < 24`; draft PR #62 (not deployed) also addresses internal-seam spill. |
+| Frontend (`web-ui`) | **`c6fc1eb8`** — release matching verified main tip. Registration + Magic UI on. **Known P1 #60:** narrow closed fills + internal-seam spill + large-contour persistence; draft PR #62 (not deployed). |
 | Backend (FastAPI + PostgreSQL) | **`b800e53d`** — unchanged by #60 (FE-only) |
 | AI worker | Standalone @ **`b800e53d`** · Sunburst high · edit `max_retries=0` — **not modified** |
 | Database | `fashionrise_beta` — Alembic **`005`** (unchanged) |
@@ -77,7 +77,11 @@
 
 **P1 #59 — Magic croquis identity:** **OPEN** — separate draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) (+ maint lineage). **Do not mix into #60.**
 
-**P1 #60 — Narrow closed-shape Fill (ACTIVE DRAFT):** Operator evidence 2026-10-25 ~07:18 Asia/Jerusalem — hourglass yellow fill at 177% zoom leaves a thin white neck; small-width closed regions report “closed shape not found.” **Verified causes at `c6fc1eb8`:** (A) fixed `gapClose=2` seals 1–4 px interiors; (B) `count < 24` rejects tiny pockets; (C) rigid RDP oversimplifies thin necks. **Draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** (FE-only): adaptive undilated-first fill + punch-through gate (compact internal seam holes → panel-local; elongated hourglass necks stay connected) + edge-based contours + neck-aware simplify (`minScanlineSpan`) + real `screenToDesign` viewport/pinch tests. **Limitation:** perfect automatic intent recognition for ambiguous tiny connections is not claimed — short accidental-looking bridges prefer panel isolation. **Issue #60 stays OPEN**. **No merge/deploy**.
+**P1 #51 — Fullscreen Hand→Pencil:** **CLOSED** — real-device **5/5 PASS**; FE on `main` @ `c6fc1eb8`.
+
+**P1 #59 — Magic croquis identity:** **OPEN** — separate draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61). Do not mix into #60.
+
+**P1 #60 — Narrow closed-shape Fill (ACTIVE DRAFT):** Operator evidence 2026-10-25 — hourglass white neck / “closed shape not found.” **Draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** (FE-only): adaptive undilated-first fill; punch-through seam safety; edge-based contours; **large-garment contour compression** (collinear collapse + size-aware RDP under `MAX_FILL_CONTOUR_VALUES=4000`, never silent truncate; `ok:true` only if persistable); real viewport 100/177/300% tests. **Limitation:** short ambiguous connections may be conservatively panel-isolated; perfect intent recognition not claimed. **Issue #60 OPEN** pending real-device acceptance. **No merge/deploy**.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
