@@ -993,8 +993,8 @@ export function useStudioEditor() {
           reference_model_id: modelId,
           notes: 'polish concept',
           shared_garment_spec: garmentSpec,
-          document_revision: doc.clientRevision,
-          document_fingerprint: draftContentFingerprint(doc),
+          source_revision: doc.clientRevision,
+          content_fingerprint: draftContentFingerprint(doc),
           front: {
             image_base64: frontCap.dataUrl,
             notes: 'polish concept (front)',

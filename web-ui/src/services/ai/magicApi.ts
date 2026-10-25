@@ -6,18 +6,23 @@ import type { SharedGarmentSpec } from '@/services/ai/magicGarmentSpec'
 export type PolishSidePayload = {
   image_base64: string
   notes?: string
-  idempotency_key?: string
+  /** Required for dual polish — unique per side within an operation. */
+  idempotency_key: string
 }
 
 export type PolishSketchDualInput = {
   design_id?: string | null
-  magic_operation_id?: string
+  /** Required — stable client operation UUID shared by both jobs. */
+  magic_operation_id: string
   reference_model_id?: string
   notes?: string
   mood_notes?: string
-  shared_garment_spec?: SharedGarmentSpec
-  document_revision?: number
-  document_fingerprint?: string
+  /** Required — bounded shared garment context for Front/Back coordination. */
+  shared_garment_spec: SharedGarmentSpec
+  /** Immutable document revision (maps to BE `source_revision`). */
+  source_revision?: number
+  /** Immutable content fingerprint (maps to BE `content_fingerprint`). */
+  content_fingerprint?: string
   front: PolishSidePayload
   back: PolishSidePayload
   signal?: AbortSignal
@@ -47,13 +52,13 @@ export async function enqueueSketchPolishDual(
     method: 'POST',
     body: {
       design_id: input.design_id ?? null,
-      magic_operation_id: input.magic_operation_id ?? null,
+      magic_operation_id: input.magic_operation_id,
       reference_model_id: input.reference_model_id ?? null,
       notes: input.notes ?? 'polish concept',
       mood_notes: input.mood_notes,
-      shared_garment_spec: input.shared_garment_spec ?? null,
-      document_revision: input.document_revision ?? null,
-      document_fingerprint: input.document_fingerprint ?? null,
+      shared_garment_spec: input.shared_garment_spec,
+      source_revision: input.source_revision ?? null,
+      content_fingerprint: input.content_fingerprint ?? null,
       front: {
         image_base64: input.front.image_base64,
         notes: input.front.notes,

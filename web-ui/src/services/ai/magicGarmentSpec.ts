@@ -6,17 +6,16 @@ import {
 } from '@/lib/draftDocument'
 import type { FillOp } from '@/lib/fills'
 
+/**
+ * Bounded garment context for dual Magic — keys must match backend
+ * `_SHARED_GARMENT_SPEC_KEYS` (PR #70). No invented garment details.
+ */
 export type SharedGarmentSpec = {
-  model_id: string
   notes?: string
-  palette: string[]
-  ink_summary: {
-    front_strokes: number
-    front_fills: number
-    back_strokes: number
-    back_fills: number
-  }
-  document_fingerprint: string
+  colors?: string[]
+  main_colors?: string[]
+  details?: string
+  garment_category?: string
 }
 
 function fillColors(fill: FillOp): string[] {
@@ -53,16 +52,20 @@ export function buildSharedGarmentSpec(
   const front = frontArtworkFromDoc(doc)
   const back = backArtworkFromDoc(doc)
   const trimmedNotes = notes?.trim()
+  const colors = paletteFromDoc(doc)
+  const fingerprint = draftContentFingerprint(doc)
+  const details = [
+    `model=${doc.model}`,
+    `front_strokes=${front.strokes.length}`,
+    `front_fills=${front.fills.length}`,
+    `back_strokes=${back.strokes.length}`,
+    `back_fills=${back.fills.length}`,
+    `fingerprint=${fingerprint.slice(0, 64)}`,
+  ].join('; ')
   return {
-    model_id: doc.model,
     ...(trimmedNotes ? { notes: trimmedNotes.slice(0, 500) } : {}),
-    palette: paletteFromDoc(doc),
-    ink_summary: {
-      front_strokes: front.strokes.length,
-      front_fills: front.fills.length,
-      back_strokes: back.strokes.length,
-      back_fills: back.fills.length,
-    },
-    document_fingerprint: draftContentFingerprint(doc),
+    ...(colors.length ? { colors, main_colors: colors.slice(0, 4) } : {}),
+    details: details.slice(0, 1000),
+    garment_category: 'studio',
   }
 }
