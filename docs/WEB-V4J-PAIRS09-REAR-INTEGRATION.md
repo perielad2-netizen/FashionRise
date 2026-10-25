@@ -43,6 +43,13 @@ All nine pairs passed automated acceptance. Alignment contact + overlay sheets f
 - `VITE_STUDIO_FRONT_BACK_ENABLED`: default **false** (production-safe).
 - Flip Paper / Back UI requires **both** the env flag and a published rear asset.
 
+## UX (PM product decision 2026-10-25)
+
+- Models library shows **one Front thumbnail per model** — never a separate Back tile.
+- Flip lives on the drawing paper (upper-right): rotate icon + FRONT/BACK label; tooltip “Flip to Back” / “Flip to Front”.
+- Header/immersive toolbar no longer host the Front/Back segmented control.
+- Unavailable Back (e.g. `female-atelier`) keeps the control but explains via tooltip + studio notice; does not open a blank Back.
+
 ## Out of scope this change
 
 - No production deploy / feature activation

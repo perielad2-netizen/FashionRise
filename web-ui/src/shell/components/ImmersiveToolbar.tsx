@@ -14,8 +14,6 @@ import {
 } from 'lucide-react'
 import type { ToolKind } from '@/lib/strokes'
 import { formatBrushSizePx } from '@/lib/strokes'
-import type { StudioPaperSide } from '@/lib/studioSideArtwork'
-import { FlipPaperControl } from '@/shell/components/FlipPaperControl'
 import styles from './ImmersiveToolbar.module.css'
 
 export type ImmersiveTool = ToolKind | 'pan'
@@ -43,10 +41,6 @@ type Props = {
   onExport: () => void
   onExit: () => void
   saveLabel?: string
-  frontBackEnabled?: boolean
-  activeSide?: StudioPaperSide
-  rearAvailable?: boolean
-  onSideChange?: (side: StudioPaperSide) => void
 }
 
 export function ImmersiveToolbar({
@@ -72,10 +66,6 @@ export function ImmersiveToolbar({
   onExport,
   onExit,
   saveLabel = 'Save',
-  frontBackEnabled = false,
-  activeSide = 'front',
-  rearAvailable = false,
-  onSideChange,
 }: Props) {
   return (
     <div className={styles.bar} role="toolbar" aria-label="Immersive drawing toolbar" data-testid="immersive-toolbar">
@@ -144,14 +134,6 @@ export function ImmersiveToolbar({
         </div>
 
         <div className={styles.cluster} role="group" aria-label="Studio actions">
-          {frontBackEnabled && onSideChange ? (
-            <FlipPaperControl
-              compact
-              activeSide={activeSide}
-              rearAvailable={rearAvailable}
-              onSideChange={onSideChange}
-            />
-          ) : null}
           <button type="button" className={styles.textBtn} onClick={onOpenBrush} aria-label="Brush settings">
             {formatBrushSizePx(brushSize)} px
           </button>

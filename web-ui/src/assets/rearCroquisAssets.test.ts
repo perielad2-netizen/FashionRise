@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createHash } from 'node:crypto'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   BUILTIN_MODELS,
   canvasSrcForModel,
@@ -38,8 +38,11 @@ function libraryFile(name: string): Buffer {
 }
 
 describe('operator PAIRS_09 rear croquis assets', () => {
-  it('keeps the production Front/Back feature flag OFF by default', () => {
+  it('keeps the production Front/Back feature flag OFF unless explicitly enabled', () => {
+    // Local operator .env may enable the flag for Studio QA; production builds omit it.
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', '')
     expect(isStudioFrontBackEnabled()).toBe(false)
+    vi.unstubAllEnvs()
   })
 
   it('publishes exactly the nine approved backs and leaves female-atelier unavailable', () => {

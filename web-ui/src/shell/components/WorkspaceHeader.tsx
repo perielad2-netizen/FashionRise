@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, BookmarkPlus, MoreHorizontal, Redo2, Sparkles, Undo2 } from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
-import type { StudioPaperSide } from '@/lib/studioSideArtwork'
-import { FlipPaperControl } from '@/shell/components/FlipPaperControl'
 import styles from './WorkspaceHeader.module.css'
 
 type Props = {
@@ -25,10 +23,8 @@ type Props = {
   onExportPng?: () => void
   exporting?: boolean
   onOpenLibrary?: () => void
+  /** When true, export menu offers front/back/sheet actions (flip lives on the paper). */
   frontBackEnabled?: boolean
-  activeSide?: StudioPaperSide
-  rearAvailable?: boolean
-  onSideChange?: (side: StudioPaperSide) => void
   onExportFront?: () => void
   onExportBack?: () => void
   onExportSheet?: () => void
@@ -56,9 +52,6 @@ export function WorkspaceHeader({
   exporting = false,
   onOpenLibrary,
   frontBackEnabled = false,
-  activeSide = 'front',
-  rearAvailable = false,
-  onSideChange,
   onExportFront,
   onExportBack,
   onExportSheet,
@@ -98,13 +91,6 @@ export function WorkspaceHeader({
           <ArrowLeft size={18} />
         </button>
         <h1 className={styles.title}>New Design</h1>
-        {frontBackEnabled && onSideChange ? (
-          <FlipPaperControl
-            activeSide={activeSide}
-            rearAvailable={rearAvailable}
-            onSideChange={onSideChange}
-          />
-        ) : null}
       </div>
       <div className={styles.right}>
         <span

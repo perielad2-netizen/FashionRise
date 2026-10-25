@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Expand } from 'lucide-react'
 import { modelLabel } from '@/assets/modelLibrary'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
+import { rearUnavailableReasonForModel } from '@/shell/rearUnavailableReason'
 import {
   centerPan,
   fitPage,
@@ -343,9 +344,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           onExportBack={() => void editor.exportSidePng('back')}
           onExportSheet={() => void editor.exportSidePng('sheet')}
           frontBackEnabled={editor.frontBackEnabled}
-          activeSide={editor.activeSide}
-          rearAvailable={editor.rearAvailable}
-          onSideChange={editor.changeActiveSide}
           hasBackInk={editor.hasBackInk}
           exporting={editor.exporting}
           onOpenLibrary={onOpenLibrary}
@@ -496,6 +494,12 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               panTool={panTool}
               viewport={immersive ? viewport : undefined}
               onViewportChange={immersive ? setViewport : undefined}
+              frontBackEnabled={editor.frontBackEnabled}
+              activeSide={editor.activeSide}
+              rearAvailable={editor.rearAvailable}
+              rearUnavailableReason={rearUnavailableReasonForModel(editor.model)}
+              onSideChange={editor.changeActiveSide}
+              onUnavailableFlip={(reason) => editor.publishStudioNotice(reason)}
             />
             {!immersive ? (
               <div className={styles.canvasActions}>
@@ -563,10 +567,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 onExport={() => void editor.exportPng()}
                 onExit={exitImmersive}
                 saveLabel={editor.saveStatusLabel || 'Save'}
-                frontBackEnabled={editor.frontBackEnabled}
-                activeSide={editor.activeSide}
-                rearAvailable={editor.rearAvailable}
-                onSideChange={editor.changeActiveSide}
               />
             ) : null}
           </div>
