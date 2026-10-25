@@ -7,7 +7,12 @@ from typing import Any
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, ForbiddenError, NotFoundError
+from app.core.errors import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationAppError,
+)
 from app.models.color_palette import ColorPalette
 from app.models.design_revision import DesignRevision
 from app.models.garment_design import GarmentDesign
@@ -21,6 +26,13 @@ from app.services import export_service
 from app.storage.local import LocalStorageBackend
 
 STUDIO_DRAFT_KIND = "studio_working_draft"
+STUDIO_DRAFT_V1 = "fashionrise.studio.draft.v1"
+STUDIO_DRAFT_V2 = "fashionrise.studio.draft.v2"
+STUDIO_DRAFT_SCHEMAS = frozenset({STUDIO_DRAFT_V1, STUDIO_DRAFT_V2})
+SAVED_DESIGN_KIND = "saved_design"
+SAVED_DESIGN_V1 = "fashionrise.saved_design.v1"
+SAVED_DESIGN_V2 = "fashionrise.saved_design.v2"
+SAVED_DESIGN_SCHEMAS = frozenset({SAVED_DESIGN_V1, SAVED_DESIGN_V2})
 
 
 def _assert_owner(design: GarmentDesign, user: User) -> None:
@@ -42,16 +54,42 @@ def _client_revision_from_payloads(*sources: dict[str, Any]) -> int:
     return 0
 
 
+def _is_studio_schema(schema: Any) -> bool:
+    return isinstance(schema, str) and schema in STUDIO_DRAFT_SCHEMAS
+
+
+def _is_saved_schema(schema: Any) -> bool:
+    return isinstance(schema, str) and schema in SAVED_DESIGN_SCHEMAS
+
+
 def _is_studio_working_draft(design: GarmentDesign) -> bool:
     meta = design.metadata_ or {}
     data = design.design_data or {}
-    return meta.get("draftKind") == STUDIO_DRAFT_KIND or data.get("schema") == "fashionrise.studio.draft.v1"
+    return meta.get("draftKind") == STUDIO_DRAFT_KIND or _is_studio_schema(data.get("schema"))
 
 
 def _is_studio_payload(meta: dict[str, Any] | None, design_data: dict[str, Any] | None) -> bool:
     meta = meta or {}
     design_data = design_data or {}
-    return meta.get("draftKind") == STUDIO_DRAFT_KIND or design_data.get("schema") == "fashionrise.studio.draft.v1"
+    return meta.get("draftKind") == STUDIO_DRAFT_KIND or _is_studio_schema(design_data.get("schema"))
+
+
+def _is_saved_design_payload(meta: dict[str, Any] | None, design_data: dict[str, Any] | None) -> bool:
+    meta = meta or {}
+    design_data = design_data or {}
+    return meta.get("designKind") == SAVED_DESIGN_KIND or _is_saved_schema(design_data.get("schema"))
+
+
+def _is_saved_design_row(design: GarmentDesign) -> bool:
+    return _is_saved_design_payload(design.metadata_ or {}, design.design_data or {})
+
+
+def _normalize_fill_list(fills: Any) -> list[Any]:
+    if fills is None:
+        return []
+    if not isinstance(fills, list):
+        return []
+    return fills
 
 
 def _normalize_studio_fills(design_data: dict[str, Any] | None) -> list[Any]:
@@ -61,17 +99,41 @@ def _normalize_studio_fills(design_data: dict[str, Any] | None) -> list[Any]:
     so legacy reopen/retry stays idempotent while fill-only edits still advance.
     """
     data = design_data or {}
-    fills = data.get("fills", [])
-    if fills is None:
-        return []
-    if not isinstance(fills, list):
-        return []
-    return fills
+    return _normalize_fill_list(data.get("fills", []))
+
+
+def _normalize_active_side(design_data: dict[str, Any] | None) -> str:
+    data = design_data or {}
+    side = data.get("activeSide")
+    if side in ("front", "back"):
+        return side
+    return "front"
+
+
+def _normalize_back_sentinel(design_data: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Absent `back` key → None; present bag → normalized strokes/fills.
+
+    Absent and intentionally empty bags MUST fingerprint differently.
+    """
+    data = design_data or {}
+    if "back" not in data:
+        return None
+    back = data.get("back")
+    if not isinstance(back, dict):
+        return {"strokes": [], "fills": []}
+    return {
+        "strokes": back.get("strokes") if isinstance(back.get("strokes"), list) else [],
+        "fills": _normalize_fill_list(back.get("fills", [])),
+    }
 
 
 def _studio_content_fingerprint(design_data: dict[str, Any] | None) -> str:
     data = design_data or {}
+    schema = data.get("schema")
+    if not _is_studio_schema(schema):
+        schema = STUDIO_DRAFT_V1 if schema is None else schema
     payload = {
+        "schema": schema,
         "strokes": data.get("strokes"),
         "fills": _normalize_studio_fills(data),
         "model": data.get("model"),
@@ -79,8 +141,128 @@ def _studio_content_fingerprint(design_data: dict[str, Any] | None) -> str:
         "customReferenceKey": data.get("customReferenceKey"),
         "brush": data.get("brush"),
         "dimmed": data.get("dimmed"),
+        "activeSide": _normalize_active_side(data),
+        "back": _normalize_back_sentinel(data),
     }
     return json.dumps(payload, sort_keys=True, default=str)
+
+
+def _saved_snapshot_fingerprint(design_data: dict[str, Any] | None) -> str:
+    data = design_data or {}
+    raw_snapshot = data.get("snapshot")
+    snapshot: dict[str, Any] = raw_snapshot if isinstance(raw_snapshot, dict) else {}
+    payload = {
+        "schema": data.get("schema"),
+        "saveRequestId": data.get("saveRequestId"),
+        "snapshot": {
+            "strokes": snapshot.get("strokes"),
+            "fills": _normalize_fill_list(snapshot.get("fills", [])),
+            "model": snapshot.get("model"),
+            "brush": snapshot.get("brush"),
+            "dimmed": snapshot.get("dimmed"),
+            "activeSide": _normalize_active_side(snapshot),
+            "back": _normalize_back_sentinel(snapshot),
+        },
+    }
+    return json.dumps(payload, sort_keys=True, default=str)
+
+
+def _has_back_key(design_data: dict[str, Any] | None) -> bool:
+    return isinstance(design_data, dict) and "back" in design_data
+
+
+def _is_two_sided_studio(design_data: dict[str, Any] | None) -> bool:
+    data = design_data or {}
+    return data.get("schema") == STUDIO_DRAFT_V2 or _has_back_key(data)
+
+
+def _validate_side_bag(bag: Any, *, field_name: str) -> None:
+    if not isinstance(bag, dict):
+        raise ValidationAppError(f"{field_name} must be an object")
+    if "strokes" in bag and not isinstance(bag.get("strokes"), list):
+        raise ValidationAppError(f"{field_name}.strokes must be an array")
+    if "fills" in bag and bag.get("fills") is not None and not isinstance(bag.get("fills"), list):
+        raise ValidationAppError(f"{field_name}.fills must be an array")
+
+
+def _validate_studio_design_data(design_data: dict[str, Any] | None) -> None:
+    data = design_data or {}
+    schema = data.get("schema")
+    if schema is None:
+        raise ValidationAppError("Studio draft schema is required")
+    if not _is_studio_schema(schema):
+        raise ValidationAppError("Unsupported Studio draft schema")
+    if "activeSide" in data and data.get("activeSide") not in ("front", "back"):
+        raise ValidationAppError("activeSide must be 'front' or 'back'")
+    if schema == STUDIO_DRAFT_V1 and _has_back_key(data):
+        raise ValidationAppError("fashionrise.studio.draft.v1 must not include a back key")
+    if schema == STUDIO_DRAFT_V2 and _has_back_key(data):
+        _validate_side_bag(data.get("back"), field_name="back")
+
+
+def _validate_saved_design_data(design_data: dict[str, Any] | None) -> None:
+    data = design_data or {}
+    schema = data.get("schema")
+    if not _is_saved_schema(schema):
+        raise ValidationAppError("Unsupported saved design schema")
+    snapshot = data.get("snapshot")
+    if not isinstance(snapshot, dict):
+        raise ValidationAppError("saved design snapshot must be an object")
+    if "activeSide" in snapshot and snapshot.get("activeSide") not in ("front", "back"):
+        raise ValidationAppError("snapshot.activeSide must be 'front' or 'back'")
+    if schema == SAVED_DESIGN_V1 and _has_back_key(snapshot):
+        raise ValidationAppError("fashionrise.saved_design.v1 snapshot must not include a back key")
+    if schema == SAVED_DESIGN_V2 and _has_back_key(snapshot):
+        _validate_side_bag(snapshot.get("back"), field_name="snapshot.back")
+
+
+def _studio_downgrade_reason(
+    stored: dict[str, Any] | None, incoming: dict[str, Any] | None
+) -> str | None:
+    """Return a stable reason code when incoming would strip/downgrade two-sided data."""
+    stored_data = stored or {}
+    incoming_data = incoming or {}
+    if stored_data.get("schema") == STUDIO_DRAFT_V2 and incoming_data.get("schema") == STUDIO_DRAFT_V1:
+        return "studio_schema_downgrade"
+    if _has_back_key(stored_data) and not _has_back_key(incoming_data):
+        return "back_stripped"
+    return None
+
+
+def _saved_downgrade_reason(
+    stored: dict[str, Any] | None, incoming: dict[str, Any] | None
+) -> str | None:
+    stored_data = stored or {}
+    incoming_data = incoming or {}
+    if stored_data.get("schema") == SAVED_DESIGN_V2 and incoming_data.get("schema") == SAVED_DESIGN_V1:
+        return "saved_schema_downgrade"
+    stored_snap = stored_data.get("snapshot") if isinstance(stored_data.get("snapshot"), dict) else {}
+    incoming_snap = incoming_data.get("snapshot") if isinstance(incoming_data.get("snapshot"), dict) else {}
+    if _has_back_key(stored_snap) and not _has_back_key(incoming_snap):
+        return "back_stripped"
+    return None
+
+
+def _capability_sides(meta: dict[str, Any] | None) -> int | None:
+    meta = meta or {}
+    raw = meta.get("studioSides")
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str) and raw.isdigit():
+        return int(raw)
+    return None
+
+
+def _save_request_id(meta: dict[str, Any] | None, design_data: dict[str, Any] | None) -> str | None:
+    meta = meta or {}
+    design_data = design_data or {}
+    for source in (design_data, meta):
+        raw = source.get("saveRequestId")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
 
 
 def _studio_lock_key(user_id: uuid.UUID) -> int:
@@ -94,6 +276,77 @@ def _conflict_payload(design: GarmentDesign, expected_revision: int | None) -> d
         "current_revision": _studio_client_revision(design),
         "design": DesignRead.model_validate(design).model_dump(mode="json", by_alias=True),
     }
+
+
+def _reject_capability_downgrade(
+    *,
+    stored: dict[str, Any] | None,
+    incoming: dict[str, Any] | None,
+    incoming_meta: dict[str, Any] | None,
+    conflict_design: GarmentDesign,
+    expected_revision: int | None,
+) -> None:
+    sides = _capability_sides(incoming_meta)
+    if sides is None:
+        return
+    if sides < 2 and (_is_two_sided_studio(stored) or _is_two_sided_studio(incoming)):
+        raise ConflictError(
+            "Client capability cannot overwrite a two-sided Studio draft.",
+            payload={
+                **_conflict_payload(conflict_design, expected_revision),
+                "reason": "studio_sides_insufficient",
+            },
+        )
+
+
+def _raise_studio_downgrade(
+    reason: str,
+    design: GarmentDesign,
+    expected_revision: int | None,
+) -> None:
+    messages = {
+        "studio_schema_downgrade": "Cannot downgrade a Studio draft.v2 document to draft.v1.",
+        "back_stripped": "Cannot strip Back artwork from a Studio working draft.",
+        "studio_sides_insufficient": "Client capability cannot overwrite a two-sided Studio draft.",
+    }
+    raise ConflictError(
+        messages.get(reason, "Studio draft downgrade rejected."),
+        payload={
+            **_conflict_payload(design, expected_revision),
+            "reason": reason,
+        },
+    )
+
+
+def _raise_saved_downgrade(reason: str, design: GarmentDesign) -> None:
+    messages = {
+        "saved_schema_downgrade": "Cannot rewrite a saved_design.v2 envelope as v1.",
+        "back_stripped": "Cannot strip Back artwork from a saved design.",
+    }
+    raise ConflictError(
+        messages.get(reason, "Saved design downgrade rejected."),
+        payload={
+            "reason": reason,
+            "design": DesignRead.model_validate(design).model_dump(mode="json", by_alias=True),
+        },
+    )
+
+
+def find_saved_design_by_request_id(db: Session, user: User, save_request_id: str) -> GarmentDesign | None:
+    rows = list(
+        db.scalars(
+            select(GarmentDesign)
+            .where(GarmentDesign.user_id == user.id, GarmentDesign.visibility == "private")
+            .order_by(GarmentDesign.created_at.desc())
+        ).all()
+    )
+    for row in rows:
+        if not _is_saved_design_row(row):
+            continue
+        existing_id = _save_request_id(row.metadata_ or {}, row.design_data or {})
+        if existing_id == save_request_id:
+            return row
+    return None
 
 
 def find_studio_working_draft(db: Session, user: User) -> GarmentDesign | None:
@@ -116,6 +369,13 @@ def create_design(db: Session, user: User, data: DesignCreate) -> GarmentDesign:
     meta = data.metadata or {}
     design_data = data.design_data or {}
     is_studio = _is_studio_payload(meta, design_data)
+    is_saved = _is_saved_design_payload(meta, design_data)
+
+    if is_studio:
+        _validate_studio_design_data(design_data)
+    elif is_saved:
+        _validate_saved_design_data(design_data)
+
     if is_studio and data.visibility == "private":
         # Serialize create/reconcile per owner so concurrent POSTs cannot insert duplicates.
         db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _studio_lock_key(user.id)})
@@ -123,6 +383,18 @@ def create_design(db: Session, user: User, data: DesignCreate) -> GarmentDesign:
         if existing:
             incoming_rev = _client_revision_from_payloads(meta, design_data)
             current_rev = _studio_client_revision(existing)
+            # Downgrade rejection MUST run before identical/stale shortcuts so an old PWA
+            # never receives a silent success that hides Back artwork loss.
+            reason = _studio_downgrade_reason(existing.design_data, design_data)
+            if reason:
+                _raise_studio_downgrade(reason, existing, incoming_rev)
+            _reject_capability_downgrade(
+                stored=existing.design_data,
+                incoming=design_data,
+                incoming_meta=meta,
+                conflict_design=existing,
+                expected_revision=incoming_rev,
+            )
             same_content = _studio_content_fingerprint(existing.design_data) == _studio_content_fingerprint(
                 design_data
             )
@@ -139,6 +411,27 @@ def create_design(db: Session, user: User, data: DesignCreate) -> GarmentDesign:
                 "Studio working draft already exists with different content.",
                 payload=_conflict_payload(existing, incoming_rev),
             )
+    elif is_saved and data.visibility == "private":
+        request_id = _save_request_id(meta, design_data)
+        if request_id:
+            existing_saved = find_saved_design_by_request_id(db, user, request_id)
+            if existing_saved:
+                reason = _saved_downgrade_reason(existing_saved.design_data, design_data)
+                if reason:
+                    _raise_saved_downgrade(reason, existing_saved)
+                if _saved_snapshot_fingerprint(existing_saved.design_data) == _saved_snapshot_fingerprint(
+                    design_data
+                ):
+                    return existing_saved
+                raise ConflictError(
+                    "Saved design saveRequestId already used with different content.",
+                    payload={
+                        "reason": "saved_request_conflict",
+                        "design": DesignRead.model_validate(existing_saved).model_dump(
+                            mode="json", by_alias=True
+                        ),
+                    },
+                )
 
     d = GarmentDesign(
         user_id=user.id,
@@ -193,8 +486,11 @@ def update_design(db: Session, design_id: uuid.UUID, user: User, data: DesignUpd
     incoming_meta = data.metadata if data.metadata is not None else (d.metadata_ or {})
     incoming_data = data.design_data if data.design_data is not None else (d.design_data or {})
     touches_studio = _is_studio_working_draft(d) or _is_studio_payload(incoming_meta, incoming_data)
+    touches_saved = _is_saved_design_row(d) or _is_saved_design_payload(incoming_meta, incoming_data)
 
     if touches_studio:
+        if data.design_data is not None:
+            _validate_studio_design_data(data.design_data)
         if data.expected_revision is None:
             raise ConflictError(
                 "expected_revision is required when updating a Studio working draft.",
@@ -202,12 +498,28 @@ def update_design(db: Session, design_id: uuid.UUID, user: User, data: DesignUpd
             )
         current_revision = _studio_client_revision(d)
         if current_revision != data.expected_revision:
+            # Still reject downgrade attempts even on stale expected_revision so clients
+            # never treat a conflict payload as permission to strip Back later.
+            if data.design_data is not None:
+                reason = _studio_downgrade_reason(d.design_data, data.design_data)
+                if reason:
+                    _raise_studio_downgrade(reason, d, data.expected_revision)
             raise ConflictError(
                 "Draft was updated elsewhere. Resolve the conflict before saving again.",
                 payload=_conflict_payload(d, data.expected_revision),
             )
         if data.design_data is not None:
             incoming_rev = _client_revision_from_payloads(incoming_meta, incoming_data)
+            reason = _studio_downgrade_reason(d.design_data, data.design_data)
+            if reason:
+                _raise_studio_downgrade(reason, d, data.expected_revision)
+            _reject_capability_downgrade(
+                stored=d.design_data,
+                incoming=data.design_data,
+                incoming_meta=incoming_meta,
+                conflict_design=d,
+                expected_revision=data.expected_revision,
+            )
             same_content = _studio_content_fingerprint(d.design_data) == _studio_content_fingerprint(
                 data.design_data
             )
@@ -224,6 +536,22 @@ def update_design(db: Session, design_id: uuid.UUID, user: User, data: DesignUpd
             if same_content:
                 # Idempotent retry — acknowledge without rewriting.
                 return d
+    elif touches_saved:
+        if data.design_data is not None:
+            _validate_saved_design_data(data.design_data)
+            reason = _saved_downgrade_reason(d.design_data, data.design_data)
+            if reason:
+                _raise_saved_downgrade(reason, d)
+            # Named saves are immutable for envelope/content identity; identical retries OK.
+            if _saved_snapshot_fingerprint(d.design_data) == _saved_snapshot_fingerprint(data.design_data):
+                return d
+            raise ConflictError(
+                "Saved designs are immutable; create a new save instead of rewriting content.",
+                payload={
+                    "reason": "saved_design_immutable",
+                    "design": DesignRead.model_validate(d).model_dump(mode="json", by_alias=True),
+                },
+            )
     elif data.expected_revision is not None:
         current_revision = _studio_client_revision(d)
         if current_revision != data.expected_revision:

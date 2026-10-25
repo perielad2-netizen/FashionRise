@@ -3,19 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`** (includes Hand→Pencil #51 + prior Studio work; **PR #41 pose fidelity source still not deployed**). **Production frontend:** **`a740a9b7`** (combined P1 #59 Magic identity + P1 #60 narrow fill). **Production backend + AI worker:** **`74537077`** (P1 #59 maint tip on Sunburst baseline `b800e53d`) · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` / `high` / `1024x1536`. **Issue #51:** **CLOSED**. **Issue #60:** **CLOSED** (operator real-device 3/3 PASS). **Issue #59:** **OPEN** — Magic croquis identity acceptance pending. **Issue #64:** **OPEN** — coverage fidelity draft PR [#65](https://github.com/perielad2-netizen/FashionRise/pull/65) amendment awaiting Technical PM review (not deployed). **Magic pose fidelity (Issue #39 / PR #41):** on `main` only — **never deploy `main` BE/worker**. Cursor paid AI calls this run: **0**.
+**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`**. **Production FE:** **`a740a9b7`**. **Production BE/worker:** **`12f7acdf…`** (maint tip: Sunburst + #59 identity + #64 coverage; **never deploy undeployed `main`/PR #41 packing**). Alembic **`005`**. **Closed / operator-accepted:** #39, #51, #59, #60, #64. **Issue #42 OPEN.** **WEB-V4J Stage A:** architecture PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) **ACCEPTED** (DRAFT, not merge-authorized); prior PR #50 closed superseded. **WEB-V4J Stage B:** draft maint-lineage persistence PR (from `12f7acdf`) — fingerprint + reject-on-downgrade implemented offline; **not deployed**. Rear artwork Stage C **not started**. Cursor paid AI: **0**.
 
-**Phase:** Protected family beta. Production FE @ `a740a9b7` (identity+fill). #59 Magic identity acceptance still open. #64 coverage amendment awaiting PM. WEB-V4J Front/Back deferred. Magic pose-fidelity PR #41 remains GitHub-only.
+**Phase:** Protected family beta. WEB-V4J Stage B (BE persistence safety) in draft review on maint tip. No FE Back UI. No rear PNG generation. No deploy from this Stage B stop.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`a740a9b7`** — Nginx root `/var/www/fashionrise/releases/a740a9b7`. Combined Release B: PR #61 identity FE `c30dbc93` + PR #62 `floodFill*` from `b1018b46`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`. Permanent Workbox SW (no HTML precache / NavigationRoute). Release A checkpoint `c30dbc93` + original `c6fc1eb8` retained. |
-| Backend (FastAPI + PostgreSQL) | **`74537077`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker is standalone); croquis `reference_model_id` identity path live |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`74537077`** · `OPENAI_MODEL=gpt-6-luna` · `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` · quality `high` · size `1024x1536` |
-| Database | `fashionrise_beta` — Alembic **`005`** (unchanged) |
-| Deploy backup | `/root/fashionrise-backups/p1-59-60-coord-20261025T081941Z` (+ `/var/backups/fashionrise/…` symlink) |
+| Frontend (`web-ui`) | **`a740a9b7`** — Nginx root `/var/www/fashionrise/releases/a740a9b7`. Combined #51+#59+#60. `VITE_API_BASE_URL=/api/v1`, registration/Magic UI on. Permanent Workbox SW. |
+| Backend (FastAPI + PostgreSQL) | **`12f7acdf…`** — `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker standalone). Maint lineage only. |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`12f7acdf…`** · Sunburst high · `1024x1536` · edit `max_retries=0` |
+| Database | `fashionrise_beta` — Alembic **`005`** (V4J Stage B needs **no** migration) |
+| Deploy backup | `/root/fashionrise-backups/p2-64-coverage-deploy-*` (+ prior #59/#60 coord backup) |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -323,11 +323,11 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P2 [#64](https://github.com/perielad2-netizen/FashionRise/issues/64) / draft PR [#65](https://github.com/perielad2-netizen/FashionRise/pull/65) coverage amendment (protected prompt packing + two-stage mocks). **Do not merge/deploy** until authorized.
-2. **#59 Magic (paid):** confirm selected male/female croquis identity preserved with professional polish quality.
-3. After #64 PM approval: authorize **backend/worker-only** maint fast-forward from live `74537077` (FE stays `a740a9b7`). Then one controlled paid swimwear/lingerie acceptance under a separate cost cap. Keep #64 OPEN until that acceptance.
-4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. **Never deploy GitHub `main` BE/worker** while undeployed pose packing is on that tip without a separate maint pin.
-5. **Do not auto-merge** feature PRs [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)/[#62](https://github.com/perielad2-netizen/FashionRise/pull/62)/[#65](https://github.com/perielad2-netizen/FashionRise/pull/65) without explicit authorization.
+1. **Exact next action:** Technical PM **review** of WEB-V4J **Stage B** maint-lineage draft PR (`design_service` v2 fingerprint + reject-on-downgrade). Base tip `12f7acdf…`. **Do not merge/deploy** until authorized. See `docs/deploy/WEB-V4J-B-PERSISTENCE-READY.md`.
+2. After Stage B accept + authorized BE deploy: begin **Stage C** rear croquis artwork from accepted specs (operator-held fronts; no shippable binaries until approval).
+3. **Stage D** Front/Back Studio UI only after B deployed and C approved.
+4. Stage A PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) remains DRAFT (accepted content; not merge-authorized by Stage A review). **Never deploy GitHub `main` BE/worker** for V4J.
+5. **Do not auto-merge** maint/feature docs PRs without explicit authorization.
 6. **Operator residual:** expired Access session test (still PENDING).
 
 ---
