@@ -206,6 +206,55 @@ export async function exportCompositePng(options: ExportOptions): Promise<Blob> 
 export type SketchPngResult = { blob: Blob; referenceIncluded: boolean }
 
 /** Customer-facing export: a reference that fails to load is omitted, never fatal. */
+export type FrontBackSheetOptions = {
+  front: ExportOptions
+  back: ExportOptions
+  gapPx?: number
+  labelHeightPx?: number
+}
+
+/** Side-by-side front + back sheet with simple labels (export helper). */
+export async function exportFrontBackSheetPng(
+  options: FrontBackSheetOptions,
+): Promise<SketchPngResult> {
+  const gap = options.gapPx ?? 24
+  const labelH = options.labelHeightPx ?? 28
+  const frontW = options.front.width ?? DESIGN_WIDTH
+  const frontH = options.front.height ?? DESIGN_HEIGHT
+  const backW = options.back.width ?? DESIGN_WIDTH
+  const backH = options.back.height ?? DESIGN_HEIGHT
+  const panelW = Math.max(frontW, backW)
+  const panelH = frontH + labelH + backH + labelH
+  const sheetW = panelW * 2 + gap
+  const sheetH = panelH
+
+  const [{ canvas: frontCanvas, referenceIncluded: frontRef }, { canvas: backCanvas, referenceIncluded: backRef }] =
+    await Promise.all([
+      renderSketchCanvas({ ...options.front, width: frontW, height: frontH, onReferenceError: 'skip' }),
+      renderSketchCanvas({ ...options.back, width: backW, height: backH, onReferenceError: 'skip' }),
+    ])
+
+  const sheet = document.createElement('canvas')
+  sheet.width = sheetW
+  sheet.height = sheetH
+  const ctx = sheet.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D unavailable')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, sheetW, sheetH)
+
+  const drawPanel = (x: number, label: string, canvas: HTMLCanvasElement) => {
+    ctx.fillStyle = '#3a3a3c'
+    ctx.font = '600 14px system-ui, sans-serif'
+    ctx.fillText(label, x + 8, 20)
+    const y = labelH
+    ctx.drawImage(canvas, x + (panelW - canvas.width) / 2, y)
+  }
+  drawPanel(0, 'Front', frontCanvas)
+  drawPanel(panelW + gap, 'Back', backCanvas)
+  const blob = await canvasToPngBlob(sheet)
+  return { blob, referenceIncluded: frontRef || backRef }
+}
+
 export async function exportSketchPng(options: RenderOptions): Promise<SketchPngResult> {
   const { canvas, referenceIncluded } = await renderSketchCanvas({
     ...options,

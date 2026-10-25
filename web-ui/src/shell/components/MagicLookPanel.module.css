@@ -63,6 +63,109 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+.dualTabs {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dualTab,
+.dualTabActive {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dualTabActive {
+  border-color: rgba(236, 72, 153, 0.45);
+  background: rgba(236, 72, 153, 0.12);
+}
+
+.dualTabLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dualTabStatus {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.dualStageGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.dualPane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.dualPaneActive {
+  border-color: rgba(236, 72, 153, 0.35);
+}
+
+.dualPaneHead {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dualImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  flex: 1;
+  min-height: 0;
+}
+
+.dualPaneError,
+.dualPanePending {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: rgba(244, 239, 232, 0.85);
+}
+
+.dualPaneError button {
+  font: inherit;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+}
+
 .stage {
   position: relative;
   flex: 1 1 auto;
