@@ -121,7 +121,7 @@
 | **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
 | **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
 | **P1 #51 Hand→Pencil immersive** | On `main` @ `c6fc1eb8` (FE) |
-| **P1 #60 narrow closed Fill** | **Draft** — adaptive gap-close + sub-24px interiors; FE-only; Issue #60 OPEN for visual gate |
+| **P1 #60 narrow closed Fill** | **Draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** — adaptive gap-close + sub-24px interiors; FE-only; Issue #60 OPEN for visual gate |
 | **Issue #42 / WEB-V4J Front-Back** | **OPEN** — architecture draft PR #50; keep separate from #60 |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
@@ -317,7 +317,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P1 #60 narrow-Fill draft PR (Issue [#60](https://github.com/perielad2-netizen/FashionRise/issues/60)). **Do not merge/deploy** until authorized. After approve: **frontend-only** deploy onto production FE lineage `c6fc1eb8` (BE/worker stay `b800e53d`). Then operator visual acceptance: hourglass neck + thin straps fill continuously without spill. Keep Issue #60 open until that gate.
+1. **Exact next action:** Technical PM **review** of P1 #60 narrow-Fill **draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** (Issue [#60](https://github.com/perielad2-netizen/FashionRise/issues/60)). **Do not merge/deploy** until authorized. After approve: **frontend-only** deploy onto production FE lineage `c6fc1eb8` (BE/worker stay `b800e53d`). Then operator visual acceptance: hourglass neck + thin straps fill continuously without spill. Keep Issue #60 open until that gate.
 2. Keep #60 isolated from Magic identity (#59), Sunburst (#54), and Front/Back (#42).
 3. Production remains FE `c6fc1eb8` / BE+worker `b800e53d` / Alembic `005` until an authorized FE release.
 4. Magic pose fidelity PR #41 remains on `main` but **not** on prod BE — separate track.
