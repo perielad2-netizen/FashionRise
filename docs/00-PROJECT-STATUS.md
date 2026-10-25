@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`** (includes Hand→Pencil #51 + prior Studio work; **PR #41 pose fidelity source still not deployed**). **Production frontend:** **`a740a9b7`** (combined P1 #59 Magic identity + P1 #60 narrow fill). **Production backend + AI worker:** **`74537077`** (P1 #59 maint tip on Sunburst baseline `b800e53d`) · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` / `high` / `1024x1536`. **P1 #60:** **CLOSED** (operator acceptance 3/3 PASS). **P1 #59:** OPEN pending Magic identity acceptance. **P2 #64:** adult swimwear/lingerie coverage fidelity — **draft PR, not deployed**. **Magic pose fidelity (Issue #39 / PR #41):** on `main` only — **never deploy `main` BE/worker**. Cursor paid AI calls this run: **0**.
+**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`** (includes Hand→Pencil #51 + prior Studio work; **PR #41 pose fidelity source still not deployed**). **Production frontend:** **`a740a9b7`** (combined P1 #59 Magic identity + P1 #60 narrow fill). **Production backend + AI worker:** **`74537077`** (P1 #59 maint tip on Sunburst baseline `b800e53d`) · Alembic **`005`** · registration / Magic UI **on** · Nginx AI + fabrics allowlist **on** · standalone `fashionrise-ai-worker` · Access JWT **OFF** · `TRUST_PROXY_HEADERS` **OFF** · `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` / `high` / `1024x1536`. **Issue #51:** **CLOSED**. **Issue #60:** **CLOSED** (operator real-device 3/3 PASS). **Issue #59:** **OPEN** — Magic croquis identity acceptance pending. **Issue #64:** **OPEN** — coverage fidelity draft PR [#65](https://github.com/perielad2-netizen/FashionRise/pull/65) amendment awaiting Technical PM review (not deployed). **Magic pose fidelity (Issue #39 / PR #41):** on `main` only — **never deploy `main` BE/worker**. Cursor paid AI calls this run: **0**.
 
-**Phase:** Protected family beta. Production FE @ `a740a9b7` (identity+fill). #59 Magic identity acceptance still open. #64 coverage draft awaiting Technical PM review. WEB-V4J Front/Back deferred. Magic pose-fidelity PR #41 remains GitHub-only.
+**Phase:** Protected family beta. Production FE @ `a740a9b7` (identity+fill). #59 Magic identity acceptance still open. #64 coverage amendment awaiting PM. WEB-V4J Front/Back deferred. Magic pose-fidelity PR #41 remains GitHub-only.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -71,13 +71,13 @@
 
 **WEB-V4I (MERGED PR #48 — Issue #47):** Frontend-only tablet UX polish: fit intact 3:4 paper via cqh; Models overlay gallery; Focus removed; Settings Magic Soon footer removed; Models a11y focus trap. **MERGED + FE deployed** @ `dfcaa609`.
 
-**P1 #51 — Fullscreen Hand→Pencil:** Fix is on GitHub `main` / production FE lineage (`c6fc1eb8` and later combined Release B). Prefer operator reconfirm after #59/#60 acceptance if any immersive gesture doubt remains.
+**P1 #51 — Fullscreen Hand→Pencil:** **CLOSED** on GitHub. Fix is on `main` / production FE lineage (`c6fc1eb8` → Release B `a740a9b7`). Historical hotfix verification table below remains a snapshot from the draft era.
 
 **P1 #59 — Magic croquis identity (DEPLOYED — acceptance PENDING):** Maint BE/worker `74537077` + FE Release A/B send/honor `input_data.reference_model_id`. Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) not merged. **Do not close** until operator Magic samples confirm male/female selection preserved.
 
-**P1 #60 — Narrow fill:** **CLOSED** — operator acceptance **3/3 PASS** on production FE Release B `a740a9b7`.
+**P1 #60 — Narrow fill:** **CLOSED** — operator real-device acceptance **3/3 PASS** on production FE Release B `a740a9b7`.
 
-**P2 #64 — Adult swimwear/lingerie coverage fidelity (DRAFT — not deployed):** Operator saw Magic invent unrequested white body-covering fabric on a covered adult swimwear sketch. Offline root cause: vision/edit prompts lacked a skin-vs-fabric coverage contract, while Magic capture composites the light croquis underlay (can be misread as opaque fabric). Maint-tip draft adds a fixed `COVERAGE FIDELITY` contract + coverage `design_identity` fields; pytest **342** (incl. coverage suite). **No paid visual proof.** Keep issue OPEN until operator acceptance after authorized deploy.
+**P2 #64 — Adult swimwear/lingerie coverage fidelity (DRAFT PR #65 — not deployed):** Operator saw Magic invent unrequested white body-covering fabric on a covered adult swimwear sketch. Offline root cause: vision/edit prompts lacked a skin-vs-fabric coverage contract, while Magic capture composites the light croquis underlay (can be misread as opaque fabric). Maint-tip draft adds protected `COVERAGE FIDELITY` + non-photoreal illustration contracts (survive evidence bounding), coverage `design_identity` fields, incomplete-vision handling, and mocked two-stage request construction. **No paid visual proof.** Keep issue OPEN until operator acceptance after authorized maint BE/worker deploy.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -105,8 +105,8 @@
 | PR #1 Magic Look | **MERGED** — `433b1b99` |
 | PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
 | PR #7 status docs | **MERGED** — `2fc4c1fa` |
-| GitHub `main` | **`dfcaa609`** — WEB-V4I merged (PR #41 pose fidelity source present, BE not deployed) |
-| Production frontend / backend / worker | **`dfcaa609` / `2cbc1ad0` / `2cbc1ad0`** · Alembic **`005`** |
+| GitHub `main` | **`c6fc1eb8`** — includes #51 Hand→Pencil + prior Studio work (PR #41 pose fidelity source present, **BE not deployed**) |
+| Production frontend / backend / worker | **`a740a9b7` / `74537077` / `74537077`** · Alembic **`005`** · Sunburst high |
 | Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
 | **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
 | **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
@@ -124,10 +124,10 @@
 | **WEB-V4G brushes + gradients** | **MERGED** PR #40 @ `350a3b7e` · **FE deployed** · operator **5/5 PASS** |
 | **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
 | **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
-| **P1 #51 Hand→Pencil immersive** | On production FE lineage (`c6fc1eb8`+); reconfirm during #59/#60 acceptance if needed |
+| **P1 #51 Hand→Pencil immersive** | **CLOSED** — on production FE lineage (`c6fc1eb8` → `a740a9b7`) |
 | **P1 #59 Magic croquis identity** | **DEPLOYED** BE/worker `74537077` + FE Release B; PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) open; **operator acceptance PENDING** |
-| **P1 #60 Narrow fill** | **CLOSED** — operator acceptance **3/3 PASS** on FE `a740a9b7` |
-| **P2 #64 Swimwear/lingerie coverage** | **Draft** on maint tip `74537077` — garment-coverage prompt contract; **STOP for PM**; not deployed |
+| **P1 #60 Narrow fill** | **CLOSED** — operator real-device acceptance **3/3 PASS** on FE `a740a9b7` |
+| **P2 #64 Swimwear/lingerie coverage** | **Draft PR [#65](https://github.com/perielad2-netizen/FashionRise/pull/65)** on maint tip — protected coverage + illustration contracts; **STOP for PM**; not deployed |
 | **Issue #42 / WEB-V4J Front-Back** | **OPEN** — deferred; architecture draft PR #50 |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
@@ -323,11 +323,11 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P2 [#64](https://github.com/perielad2-netizen/FashionRise/issues/64) coverage-fidelity draft (maint-tip BE/worker only). **Do not merge/deploy** until authorized. Separately: operator **#59** Magic identity acceptance remains open.
+1. **Exact next action:** Technical PM **review** of P2 [#64](https://github.com/perielad2-netizen/FashionRise/issues/64) / draft PR [#65](https://github.com/perielad2-netizen/FashionRise/pull/65) coverage amendment (protected prompt packing + two-stage mocks). **Do not merge/deploy** until authorized.
 2. **#59 Magic (paid):** confirm selected male/female croquis identity preserved with professional polish quality.
-3. After #64 PM approval: authorize maint BE/worker deploy of the coverage tip (not GitHub `main` / not PR #41). One controlled paid swimwear/lingerie acceptance may follow under a separate cost cap.
+3. After #64 PM approval: authorize **backend/worker-only** maint fast-forward from live `74537077` (FE stays `a740a9b7`). Then one controlled paid swimwear/lingerie acceptance under a separate cost cap. Keep #64 OPEN until that acceptance.
 4. Magic pose fidelity PR #41 remains on `main` but **not deployed**. **Never deploy GitHub `main` BE/worker** while undeployed pose packing is on that tip without a separate maint pin.
-5. **Do not auto-merge** feature PRs [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)/[#62](https://github.com/perielad2-netizen/FashionRise/pull/62) merely for docs.
+5. **Do not auto-merge** feature PRs [#61](https://github.com/perielad2-netizen/FashionRise/pull/61)/[#62](https://github.com/perielad2-netizen/FashionRise/pull/62)/[#65](https://github.com/perielad2-netizen/FashionRise/pull/65) without explicit authorization.
 6. **Operator residual:** expired Access session test (still PENDING).
 
 ---
@@ -536,6 +536,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 ## P1 #51 Hand→Pencil hotfix verification
 
+> **Historical snapshot** (draft/hotfix era). Issue #51 is now **CLOSED**; production FE is `a740a9b7` on the `c6fc1eb8` lineage. Rows below preserve the contemporaneous record.
+
 | Gate | Result |
 |------|--------|
 | Issue | [#51](https://github.com/perielad2-netizen/FashionRise/issues/51) — Fullscreen Hand→Pencil stops drawing until reload |
@@ -590,13 +592,14 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | Paid OpenAI during implementation | **0** |
 | Operator authenticated acceptance | **5/5 PASS** |
 | Merge / deploy | FE **deployed** @ `1aa5dc5a` (backend/worker unchanged) |
-| Outstanding | Production FE `dfcaa609`; **P1 #51 hotfix draft**; Issue #42 / V4J suspended; Magic pose Issue #39 / PR #41 not deployed |
+| Outstanding *(historical row)* | At write-time: Production FE `dfcaa609`; P1 #51 hotfix draft. **Current:** FE `a740a9b7`; #51/#60 CLOSED; #59/#64 OPEN; PR #41 not deployed |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
-| 2026-10-25 | **P2 #64 coverage fidelity draft (maint tip):** vision + edit garment-coverage contract (`COVERAGE FIDELITY` + `skin_visible_regions` / panels / cut-outs / intentional pale fabric); mocked regressions for bikini, one-piece, cut-out, lingerie, intentional white lining, skin/paper ambiguity + truncation; full BE pytest **342**; **0 paid AI**; production unchanged (`a740a9b7` / `74537077` / `005`); **STOP for Technical PM review — no merge/deploy**. Issue #60 **CLOSED** (operator 3/3 PASS). |
+| 2026-10-25 | **P2 #64 PR #65 amendment:** protect coverage + non-photoreal illustration instructions from evidence truncation (bound lower-priority vision prose only); incomplete/null/unknown/contradictory coverage mocks; two-stage `build_sketch_chat_request`→`images.edit` handoff for male/female; **0 paid AI**; production unchanged; **STOP for Technical PM review**. |
+| 2026-10-25 | **P2 #64 coverage fidelity draft (maint tip):** vision + edit garment-coverage contract (`COVERAGE FIDELITY` + coverage `design_identity` fields); initial mocked regressions; full BE pytest **342**; **0 paid AI**; production unchanged (`a740a9b7` / `74537077` / `005`). Issue #60 **CLOSED** (operator 3/3 PASS). |
 | 2026-10-25 | **Coordinated P1 #59+#60 production deploy SUCCESS:** BE/worker `74537077` (maint on `b800e53d`); FE Release A `c30dbc93` then Release B `a740a9b7` (identity+narrow fill); Alembic `005`; Sunburst high unchanged; Vitest A **379** / B **436**; BE pytest **331**; AI queue **0** non-terminal; **0** paid AI / **0** jobs created; backup `p1-59-60-coord-20261025T081941Z`. Report: `docs/deploy/P1-59-60-COORDINATED-PRODUCTION-DEPLOY.md`. |
 | 2026-10-24 | **P1 #51 Hand→Pencil hotfix draft PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52):** root cause = viewport remount cleared gesture cooldown timer while flag stayed true; stable window listeners + unmount-only timer cleanup; Vitest **362** (8 new controlled-viewport regressions); Playwright Android/iPad PASS; lint/tsc/build/check:sw PASS; **0 paid AI**; production unchanged (`dfcaa609` / `2cbc1ad0` / `005`); **STOP for Technical PM review — no merge/deploy**. |
 | 2026-10-24 | **WEB-V4I PR #48 MERGED + FE deployed** @ `dfcaa609`. |

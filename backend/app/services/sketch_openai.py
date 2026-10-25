@@ -32,8 +32,9 @@ SKETCH_JOB_TYPES = frozenset({"sketch_clean", "sketch_polish", "style_suggest"})
 # (and polish's extra image_prompt) without a schema change.
 JSON_OBJECT_RESPONSE_FORMAT = {"type": "json_object"}
 
-# Hard budget for the images.edit brief (production maint slice). Coverage contract is
-# placed in the fixed prefix so it survives truncation of long vision evidence.
+# Hard budget for the images.edit brief (production maint slice). Protected
+# instructions (coverage + non-photoreal illustration style) always fit inside
+# this budget; only lower-priority vision prose is bounded to fill the remainder.
 IMAGE_PROMPT_MAX_CHARS = 3800
 
 # Fixed garment-coverage contract for adult, non-explicit fashion (Issue #64).
@@ -47,7 +48,17 @@ _COVERAGE_PRESERVATION_CONTRACT = (
     "Never invent an extra bodysuit, white lining, modesty insert, or coverage panel. "
     "Preserve intentionally drawn white or pale fabric only when garment material is "
     "actually present in the sketch. Do not reinterpret bare skin or croquis body tone "
-    "as opaque fabric. Keep the professional fashion-illustration finish."
+    "as opaque fabric. When coverage fields are missing, null, unknown, or contradictory, "
+    "rely on the uploaded sketch only — do not invent bare-skin regions or extra fabric "
+    "panels, and do not automatically make the design more revealing or more covered. "
+    "Keep the professional fashion-illustration finish."
+)
+
+# Illustration-style restriction — equal priority with coverage; must not be truncated
+# away by verbose vision evidence (Issue #64 PM amendment).
+_ILLUSTRATION_STYLE_CONTRACT = (
+    "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark. "
+    "Deliver a polished non-photorealistic fashion illustration."
 )
 
 # Longest-prefix table from official GPT-6 docs. Unknown families fail closed.
@@ -427,16 +438,23 @@ def _apply_reference_precedence(structured: Any, job: AIJob | None) -> Any:
     return out
 
 
-def _design_identity_clause(structured: dict[str, Any]) -> str:
-    """Fold vision design_identity fields into the edit brief when present."""
+def _is_usable_identity_value(val: Any) -> bool:
+    if val is None:
+        return False
+    text = str(val).strip()
+    return bool(text) and text.lower() not in {"null", "none", "n/a", "unknown"}
+
+
+def _design_identity_bits(structured: dict[str, Any]) -> list[str]:
+    """Return ordered evidence-backed design_identity labels (skip null/unknown)."""
     identity = structured.get("design_identity")
     if not isinstance(identity, dict) or not identity:
-        return ""
+        return []
     order = (
         "croquis_presentation",
         "garment_category",
         "silhouette",
-        # Coverage facts early so they remain when Design evidence is long.
+        # Coverage facts early among evidence so they win budget over free-text prose.
         "skin_visible_regions",
         "garment_panels",
         "cutouts_and_openings",
@@ -455,21 +473,95 @@ def _design_identity_clause(structured: dict[str, Any]) -> str:
     bits: list[str] = []
     for key in order:
         val = identity.get(key)
-        if val is None:
+        if not _is_usable_identity_value(val):
             continue
-        text = str(val).strip()
-        if text and text.lower() not in {"null", "none", "n/a", "unknown"}:
-            bits.append(f"{key.replace('_', ' ')}: {text}")
+        bits.append(f"{key.replace('_', ' ')}: {str(val).strip()}")
+    return bits
+
+
+def _design_identity_clause(structured: dict[str, Any]) -> str:
+    """Fold vision design_identity fields into the edit brief when present."""
+    bits = _design_identity_bits(structured)
     if not bits:
         return ""
     return "Preserve these design attributes: " + "; ".join(bits) + "."
 
 
+def _bound_at_boundary(text: str, max_chars: int) -> str:
+    """Bound lower-priority prose without raising IMAGE_PROMPT_MAX_CHARS.
+
+    Prefers cutting at `;` / sentence / word boundaries. Does not invent content.
+    Empty when the budget is exhausted.
+    """
+    if max_chars <= 0:
+        return ""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    # Leave room for an ellipsis marker when we must cut.
+    hard = max_chars - 1 if max_chars > 1 else max_chars
+    window = text[:hard]
+    for sep in ("; ", ". ", ", ", " "):
+        idx = window.rfind(sep)
+        if idx >= max(24, hard // 4):
+            return window[: idx + len(sep.rstrip())].rstrip() + "…"
+    return window.rstrip() + ("…" if max_chars > 1 else "")
+
+
+def _assemble_design_evidence(
+    *,
+    identity_bits: list[str],
+    free_text: str,
+    budget: int,
+) -> str:
+    """Pack structured identity facts first, then free-text vision notes, within budget."""
+    if budget <= 0:
+        return ""
+    prefix = "Design evidence: "
+    remaining = budget - len(prefix)
+    if remaining <= 0:
+        return ""
+    parts: list[str] = []
+    if identity_bits:
+        identity_block = "Preserve these design attributes: " + "; ".join(identity_bits) + "."
+        if len(identity_block) <= remaining:
+            parts.append(identity_block)
+            remaining -= len(identity_block) + (1 if free_text.strip() else 0)
+        else:
+            # Keep as many leading fields as fit (field boundary), never inventing coverage.
+            kept: list[str] = []
+            head = "Preserve these design attributes: "
+            used = len(head) + 1  # trailing period
+            for bit in identity_bits:
+                add = len(bit) + (2 if kept else 0)  # "; " between bits
+                if used + add > remaining:
+                    break
+                kept.append(bit)
+                used += add
+            if kept:
+                parts.append(head + "; ".join(kept) + ".")
+                remaining = budget - len(prefix) - len(parts[0]) - (1 if free_text.strip() else 0)
+            else:
+                remaining = 0
+    prose = (free_text or "").strip()
+    if prose and remaining > 0:
+        bounded = _bound_at_boundary(prose, remaining)
+        if bounded:
+            parts.append(bounded)
+    if not parts:
+        return ""
+    return prefix + " ".join(parts)
+
+
 def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None) -> str:
     """Build a professional fashion-illustration edit brief (production maint prompt + identity).
 
-    Preserves the production Sunburst prompt frame from tip b800e53d. Adds selected-croquis
-    identity protection only — does not introduce undeployed PR #41 pose_lock packing.
+    Protected instructions (source-of-truth, selected croquis, coverage fidelity, and
+    non-photoreal illustration style) always remain intact. Only lower-priority vision
+    prose is bounded to fit ``IMAGE_PROMPT_MAX_CHARS``. Does not import undeployed
+    PR #41 pose_lock packing and does not raise the global character cap.
     """
     structured = _apply_reference_precedence(structured, job)
     summary_text = summary or ""
@@ -482,21 +574,22 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
                 summary_text = str(structured.get("summary") or summary_text)
 
     evidence = ""
-    identity_clause = ""
+    identity_bits: list[str] = []
     if isinstance(structured, dict):
         evidence = str(structured.get("image_prompt") or "").strip()
-        identity_clause = _design_identity_clause(structured)
+        if ref is not None and ref.family is not None and evidence:
+            evidence = _neutralize_opposite_subject_language(evidence, ref.family)
+        identity_bits = _design_identity_bits(structured)
         if not evidence:
             bullets = structured.get("polish_bullets") or structured.get("cleanup_bullets") or []
             if isinstance(bullets, list) and bullets:
                 joined = "; ".join(str(b).strip() for b in bullets if str(b).strip())[:600]
                 evidence = f"{summary_text}. Design details: {joined}"
-    if not evidence:
+    if not evidence and not identity_bits:
         evidence = summary_text or "Professional fashion illustration of this sketch"
-    detail_parts = [p for p in (identity_clause, evidence) if p]
-    detail = " ".join(detail_parts)
+
     reference_clause = edit_reference_instructions(ref) + " "
-    return (
+    protected = (
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
         "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
         f"{reference_clause}"
@@ -513,9 +606,23 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         "color wash. Do NOT invent a different garment, change the designer's colors, alter the silhouette, "
         "add unnecessary accessories, invent white linings/bodysuits/modesty panels, or make every design "
         "look like the same generic fashion outfit. "
-        f"Design evidence: {detail} "
-        "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark."
-    )[:IMAGE_PROMPT_MAX_CHARS]
+        f"{_ILLUSTRATION_STYLE_CONTRACT}"
+    )
+    # Reserve space for a separating space + design evidence block when budget allows.
+    evidence_budget = IMAGE_PROMPT_MAX_CHARS - len(protected) - 1
+    evidence_block = _assemble_design_evidence(
+        identity_bits=identity_bits,
+        free_text=evidence,
+        budget=evidence_budget,
+    )
+    if evidence_block:
+        prompt = f"{protected} {evidence_block}"
+    else:
+        prompt = protected
+    if len(prompt) > IMAGE_PROMPT_MAX_CHARS:
+        # Defensive: protected alone must fit; never slice mid-instruction.
+        prompt = protected[:IMAGE_PROMPT_MAX_CHARS]
+    return prompt
 
 
 def _extract_image_bytes(item: Any) -> bytes | None:
