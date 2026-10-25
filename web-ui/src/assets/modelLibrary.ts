@@ -43,9 +43,17 @@ export type BuiltinModelDef = {
   /** Short subtitle under the card. */
   pose: string
   canvasSrc: string
+  /** Rear croquis when published (`/models/library/<id>-back.png`). */
+  backCanvasSrc?: string
   cardSrc: string
   /** Default selection when switching into this gender filter. */
   defaultForGender: boolean
+}
+
+export type ModelCanvasSide = 'front' | 'back'
+
+function libraryBackSrc(id: SelectableBuiltinModelId): string {
+  return `/models/library/${id}-back.png`
 }
 
 /** Original pre-V4D canvas references — keep forever for reopen fidelity. */
@@ -54,10 +62,10 @@ export const LEGACY_MODEL_CANVAS: Readonly<Record<LegacyModelId, string>> = {
   male: '/models/male_model_display.png',
 }
 
-export const BUILTIN_MODELS: readonly BuiltinModelDef[] = [
+const BUILTIN_MODELS_BASE = [
   {
-    id: 'female-straight',
-    gender: 'female',
+    id: 'female-straight' as const,
+    gender: 'female' as const,
     label: 'Female',
     pose: 'Standing',
     canvasSrc: '/models/library/female-straight.png',
@@ -147,6 +155,11 @@ export const BUILTIN_MODELS: readonly BuiltinModelDef[] = [
   },
 ] as const
 
+export const BUILTIN_MODELS: readonly BuiltinModelDef[] = BUILTIN_MODELS_BASE.map((m) => ({
+  ...m,
+  backCanvasSrc: libraryBackSrc(m.id),
+}))
+
 const SELECTABLE_BY_ID = new Map(BUILTIN_MODELS.map((m) => [m.id, m]))
 
 export const DEFAULT_FEMALE_MODEL: SelectableBuiltinModelId = 'female-straight'
@@ -183,11 +196,18 @@ export function getBuiltinModel(id: ModelChoice): BuiltinModelDef | null {
   return SELECTABLE_BY_ID.get(id) ?? null
 }
 
-/** Resolve the exact canvas URL for a stored model choice. */
-export function canvasSrcForModel(id: ModelChoice): string | null {
+/** Resolve the exact canvas URL for a stored model choice and paper side. */
+export function canvasSrcForModel(id: ModelChoice, side: ModelCanvasSide = 'front'): string | null {
   if (id === 'custom' || id === 'blank') return null
-  if (isLegacyModelId(id)) return LEGACY_MODEL_CANVAS[id]
-  return SELECTABLE_BY_ID.get(id)?.canvasSrc ?? null
+  if (isLegacyModelId(id)) return side === 'back' ? null : LEGACY_MODEL_CANVAS[id]
+  const def = SELECTABLE_BY_ID.get(id)
+  if (!def) return null
+  if (side === 'back') return def.backCanvasSrc ?? libraryBackSrc(def.id)
+  return def.canvasSrc
+}
+
+export function modelHasRearAsset(id: ModelChoice): boolean {
+  return canvasSrcForModel(id, 'back') !== null
 }
 
 export function defaultModelForGender(gender: ModelGender): SelectableBuiltinModelId {

@@ -1,14 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DEFAULT_MODEL, canvasSrcForModel, type ModelChoice } from '@/assets/modelLibrary'
+import { DEFAULT_MODEL, type ModelChoice } from '@/assets/modelLibrary'
+import { isStudioFrontBackEnabled } from '@/config/studioFrontBack'
 import {
   createEmptyDraftDocument,
   draftContentFingerprint,
-  documentFromEditorState,
+  normalizeActiveSide,
   rebaseChosenLocalDraft,
   type SaveStatus,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
+import {
+  activeArtwork,
+  buildDocumentFromEditor,
+  documentHasAnyInk,
+  rearReferenceAvailable,
+  referenceUrlForModelSide,
+  sideStateFromDocument,
+  visibleInkForSide,
+  withVisibleInk,
+  type EditorSideState,
+} from '@/hooks/studioEditorSides'
 import {
   commitKeepDeviceChoice,
   commitUseCloudChoice,
@@ -18,7 +30,12 @@ import {
 } from '@/lib/draftPersistence'
 import { documentForCloud } from '@/services/designsApi'
 import { isMagicUiEnabled } from '@/config/magicUi'
-import { downloadBlob, exportFilename, exportSketchPng } from '@/lib/exportCanvas'
+import {
+  downloadBlob,
+  exportFilename,
+  exportFrontBackSheetPng,
+  exportSketchPng,
+} from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 import { checkPersistableFill, solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
 import { MAX_SNAPSHOT_FILLS } from '@/lib/savedDesign'
@@ -35,7 +52,14 @@ import {
 import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
 import { ApiError } from '@/services/api/client'
 import { enqueueSketchPolish, fetchJobImageBlob } from '@/services/ai/magicApi'
-import { persistMagicJobId, readMagicJobId } from '@/services/ai/magicJobStore'
+import {
+  patchMagicOperationJob,
+  persistMagicJobId,
+  persistMagicOperation,
+  readMagicJobId,
+} from '@/services/ai/magicJobStore'
+import type { StudioPaperSide } from '@/lib/studioSideArtwork'
+import { sideHasInk } from '@/lib/studioSideArtwork'
 import { pollAiJobUntilSettled, recoverMagicJob } from '@/services/ai/pollAiJob'
 import { toMagicLookResult, type MagicLookResult } from '@/services/ai/aiJobTypes'
 import { StrokeHistory } from '@/lib/history'
@@ -103,7 +127,9 @@ const OPEN_CUSTOM_REFERENCE_NOTE =
 export function useStudioEditor() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const history = useRef(new StrokeHistory())
+  const historyFront = useRef(new StrokeHistory())
+  const historyBack = useRef(new StrokeHistory())
+  const frontBackEnabled = isStudioFrontBackEnabled()
   /** Last committed document snapshot — never rebuild saves from uncommitted React state. */
   const authoritativeDocRef = useRef<StudioDraftDocument>(createEmptyDraftDocument())
   const designIdRef = useRef<string | null>(null)
@@ -126,6 +152,9 @@ export function useStudioEditor() {
   const exportingRef = useRef(false)
   const openRequestRef = useRef(0)
 
+  const [activeSide, setActiveSide] = useState<StudioPaperSide>('front')
+  const [backStrokes, setBackStrokes] = useState<Stroke[]>([])
+  const [backFills, setBackFills] = useState<FillOp[]>([])
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [fills, setFills] = useState<FillOp[]>([])
   const [tool, setTool] = useState<ToolKind>('draw')
@@ -180,19 +209,39 @@ export function useStudioEditor() {
     }
   }, [blobUrl])
 
+  const activeHistory = useCallback(() => {
+    return activeSide === 'back' ? historyBack.current : historyFront.current
+  }, [activeSide])
+
   const syncHistoryFlags = useCallback(() => {
-    setCanUndo(history.current.canUndo())
-    setCanRedo(history.current.canRedo())
-  }, [])
+    const h = activeHistory()
+    setCanUndo(h.canUndo())
+    setCanRedo(h.canRedo())
+  }, [activeHistory])
+
+  const editorSideState = useCallback((): EditorSideState => {
+    return {
+      activeSide,
+      strokes,
+      fills,
+      backStrokes,
+      backFills,
+    }
+  }, [activeSide, backFills, backStrokes, fills, strokes])
 
   const applyDocument = useCallback((doc: StudioDraftDocument, designId: string | null) => {
     authoritativeDocRef.current = doc
     designIdRef.current = designId
-    history.current = new StrokeHistory()
+    historyFront.current = new StrokeHistory()
+    historyBack.current = new StrokeHistory()
+    const sides = sideStateFromDocument(doc)
     // Avoid a spurious revision bump when React state mirrors an already-committed doc.
     skipNextAutosaveRef.current = true
-    setStrokes(doc.strokes)
-    setFills(doc.fills ?? [])
+    setActiveSide(sides.activeSide)
+    setStrokes(sides.strokes)
+    setFills(sides.fills)
+    setBackStrokes(sides.backStrokes)
+    setBackFills(sides.backFills)
     setModelState(doc.model)
     setCustomUrl(doc.customReferenceUrl)
     setCustomKey(doc.customReferenceKey)
@@ -339,6 +388,9 @@ export function useStudioEditor() {
     (patch: {
       strokes?: Stroke[]
       fills?: FillOp[]
+      backStrokes?: Stroke[]
+      backFills?: FillOp[]
+      activeSide?: StudioPaperSide
       model?: ModelChoice
       customReferenceUrl?: string | null
       customReferenceKey?: string | null
@@ -347,6 +399,7 @@ export function useStudioEditor() {
       opacity?: number
       color?: string
       dimmed?: boolean
+      clearBackIntent?: boolean
     }) => {
       const prev = authoritativeDocRef.current
       const sizePx =
@@ -355,10 +408,16 @@ export function useStudioEditor() {
           : patch.sizeId
             ? BRUSH_SIZES[patch.sizeId]
             : resolveBrushSizePx(prev.brush)
-      const next = documentFromEditorState({
+      const state: EditorSideState = {
+        activeSide: patch.activeSide ?? activeSide,
+        strokes: patch.strokes ?? strokes,
+        fills: patch.fills ?? fills,
+        backStrokes: patch.backStrokes ?? backStrokes,
+        backFills: patch.backFills ?? backFills,
+      }
+      const next = buildDocumentFromEditor({
         prev,
-        strokes: patch.strokes ?? prev.strokes,
-        fills: patch.fills ?? prev.fills ?? [],
+        state,
         model: patch.model ?? prev.model,
         customReferenceUrl:
           patch.customReferenceUrl !== undefined ? patch.customReferenceUrl : prev.customReferenceUrl,
@@ -369,11 +428,12 @@ export function useStudioEditor() {
         opacity: patch.opacity ?? prev.brush.opacity,
         color: patch.color ?? prev.brush.color,
         dimmed: patch.dimmed ?? prev.dimmed,
+        clearBackIntent: patch.clearBackIntent,
       })
       void commitDocument(next)
       return next
     },
-    [commitDocument],
+    [activeSide, backFills, backStrokes, commitDocument, fills, strokes],
   )
 
   useEffect(() => {
@@ -413,7 +473,7 @@ export function useStudioEditor() {
       const needsSync =
         restored.conflict === null &&
         (restored.designId === null
-          ? restored.document.strokes.length > 0 || (restored.document.fills?.length ?? 0) > 0
+          ? documentHasAnyInk(restored.document)
           : restored.notice?.includes('Syncing') === true)
       if (needsSync) {
         void flushCloudSave()
@@ -434,10 +494,9 @@ export function useStudioEditor() {
       return
     }
     const prev = authoritativeDocRef.current
-    const next = documentFromEditorState({
+    const next = buildDocumentFromEditor({
       prev,
-      strokes,
-      fills,
+      state: editorSideState(),
       model,
       customReferenceUrl: customUrl,
       customReferenceKey: customKey,
@@ -449,7 +508,23 @@ export function useStudioEditor() {
     })
     if (draftContentFingerprint(prev) === draftContentFingerprint(next)) return
     void commitDocument(next)
-  }, [strokes, fills, model, customUrl, customKey, brushSizePx, opacity, color, dimmed, ready, commitDocument])
+  }, [
+    strokes,
+    fills,
+    backStrokes,
+    backFills,
+    activeSide,
+    model,
+    customUrl,
+    customKey,
+    brushSizePx,
+    opacity,
+    color,
+    dimmed,
+    ready,
+    commitDocument,
+    editorSideState,
+  ])
 
   useEffect(() => {
     return () => {
@@ -460,28 +535,38 @@ export function useStudioEditor() {
   const brushSize = brushSizePx
   const sizeId = nearestBrushSizeId(brushSizePx)
 
+  const rearAvailable = rearReferenceAvailable(model)
   const referenceUrl = useMemo(() => {
-    if (model === 'custom') return blobUrl ?? customUrl
-    if (model === 'blank') return null
-    return canvasSrcForModel(model)
-  }, [model, customUrl, blobUrl])
+    return referenceUrlForModelSide(model, activeSide, blobUrl ?? customUrl)
+  }, [model, customUrl, blobUrl, activeSide])
 
   const referenceOpacity = dimmed ? 0.4 : 1
 
-  const artwork = useCallback(
-    () => ({ strokes, fills }),
-    [fills, strokes],
-  )
+  const artwork = useCallback(() => activeArtwork(editorSideState()), [editorSideState])
 
   const onStrokeComplete = useCallback(
     (stroke: Stroke) => {
-      history.current.push(artwork())
-      const nextStrokes = [...strokes, stroke]
-      setStrokes(nextStrokes)
+      activeHistory().push(artwork())
+      const ink = visibleInkForSide(editorSideState())
+      const nextStrokes = [...ink.strokes, stroke]
+      const patch = withVisibleInk(editorSideState(), nextStrokes, ink.fills)
+      if (patch.activeSide === 'back') {
+        setBackStrokes(patch.backStrokes)
+        setBackFills(patch.backFills)
+      } else {
+        setStrokes(patch.strokes)
+        setFills(patch.fills)
+      }
       syncHistoryFlags()
-      commitFromEditor({ strokes: nextStrokes, fills })
+      commitFromEditor({
+        strokes: patch.strokes,
+        fills: patch.fills,
+        backStrokes: patch.backStrokes,
+        backFills: patch.backFills,
+        activeSide: patch.activeSide,
+      })
     },
-    [artwork, commitFromEditor, fills, strokes, syncHistoryFlags],
+    [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags],
   )
 
   const onFillComplete = useCallback(
@@ -499,14 +584,27 @@ export function useStudioEditor() {
         publishStudioNotice(persistable.message)
         return
       }
-      history.current.push(artwork())
-      const nextFills = [...fills, persistable.fill]
-      setFills(nextFills)
+      activeHistory().push(artwork())
+      const ink = visibleInkForSide(editorSideState())
+      const nextFills = [...ink.fills, persistable.fill]
+      const patch = withVisibleInk(editorSideState(), ink.strokes, nextFills)
+      if (patch.activeSide === 'back') {
+        setBackStrokes(patch.backStrokes)
+        setBackFills(patch.backFills)
+      } else {
+        setStrokes(patch.strokes)
+        setFills(patch.fills)
+      }
       syncHistoryFlags()
-      commitFromEditor({ strokes, fills: nextFills })
+      commitFromEditor({
+        strokes: patch.strokes,
+        fills: patch.fills,
+        backStrokes: patch.backStrokes,
+        backFills: patch.backFills,
+      })
       publishStudioNotice('Region filled. Undo if you need to try again.')
     },
-    [artwork, commitFromEditor, fills, publishStudioNotice, strokes, syncHistoryFlags],
+    [activeHistory, artwork, commitFromEditor, editorSideState, publishStudioNotice, syncHistoryFlags],
   )
 
   const onFillError = useCallback(
@@ -527,59 +625,165 @@ export function useStudioEditor() {
   )
 
   const undo = useCallback(() => {
-    const prev = history.current.undo(artwork())
+    const prev = activeHistory().undo(artwork())
     if (!prev) return
-    setStrokes(prev.strokes)
-    setFills(prev.fills)
+    const patch = withVisibleInk(editorSideState(), prev.strokes, prev.fills)
+    if (patch.activeSide === 'back') {
+      setBackStrokes(patch.backStrokes)
+      setBackFills(patch.backFills)
+    } else {
+      setStrokes(patch.strokes)
+      setFills(patch.fills)
+    }
     syncHistoryFlags()
-    commitFromEditor({ strokes: prev.strokes, fills: prev.fills })
-  }, [artwork, commitFromEditor, syncHistoryFlags])
+    commitFromEditor({
+      strokes: patch.strokes,
+      fills: patch.fills,
+      backStrokes: patch.backStrokes,
+      backFills: patch.backFills,
+    })
+  }, [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags])
 
   const redo = useCallback(() => {
-    const next = history.current.redo(artwork())
+    const next = activeHistory().redo(artwork())
     if (!next) return
-    setStrokes(next.strokes)
-    setFills(next.fills)
+    const patch = withVisibleInk(editorSideState(), next.strokes, next.fills)
+    if (patch.activeSide === 'back') {
+      setBackStrokes(patch.backStrokes)
+      setBackFills(patch.backFills)
+    } else {
+      setStrokes(patch.strokes)
+      setFills(patch.fills)
+    }
     syncHistoryFlags()
-    commitFromEditor({ strokes: next.strokes, fills: next.fills })
-  }, [artwork, commitFromEditor, syncHistoryFlags])
+    commitFromEditor({
+      strokes: patch.strokes,
+      fills: patch.fills,
+      backStrokes: patch.backStrokes,
+      backFills: patch.backFills,
+    })
+  }, [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags])
 
   const clear = useCallback(() => {
-    if (strokes.length === 0 && fills.length === 0) return
-    history.current.push(artwork())
-    setStrokes([])
-    setFills([])
+    const ink = visibleInkForSide(editorSideState())
+    if (ink.strokes.length === 0 && ink.fills.length === 0) return
+    activeHistory().push(artwork())
+    const patch = withVisibleInk(editorSideState(), [], [])
+    const clearBackIntent =
+      frontBackEnabled && patch.activeSide === 'back' && sideHasInk({ strokes: backStrokes, fills: backFills })
+    if (patch.activeSide === 'back') {
+      setBackStrokes([])
+      setBackFills([])
+    } else {
+      setStrokes([])
+      setFills([])
+    }
     syncHistoryFlags()
-    commitFromEditor({ strokes: [], fills: [] })
-  }, [artwork, commitFromEditor, fills.length, strokes.length, syncHistoryFlags])
+    commitFromEditor({
+      strokes: patch.strokes,
+      fills: patch.fills,
+      backStrokes: patch.activeSide === 'back' ? [] : backStrokes,
+      backFills: patch.activeSide === 'back' ? [] : backFills,
+      clearBackIntent,
+    })
+  }, [
+    activeHistory,
+    artwork,
+    backFills,
+    backStrokes,
+    commitFromEditor,
+    editorSideState,
+    frontBackEnabled,
+    syncHistoryFlags,
+  ])
+
+  const designHasInk = useCallback(() => {
+    const doc = authoritativeDocRef.current
+    return documentHasAnyInk(doc)
+  }, [])
 
   const commitModelChange = useCallback(
     (next: ModelChoice, clearStrokes: boolean) => {
-      if (clearStrokes && (strokes.length > 0 || fills.length > 0)) {
-        history.current.push(artwork())
+      if (clearStrokes && designHasInk()) {
+        historyFront.current.push(artwork())
+        historyBack.current.push(artwork())
         setStrokes([])
         setFills([])
+        setBackStrokes([])
+        setBackFills([])
         syncHistoryFlags()
         setModelState(next)
-        commitFromEditor({ model: next, strokes: [], fills: [] })
+        if (!rearReferenceAvailable(next) && activeSide === 'back') setActiveSide('front')
+        commitFromEditor({
+          model: next,
+          strokes: [],
+          fills: [],
+          backStrokes: [],
+          backFills: [],
+          activeSide: rearReferenceAvailable(next) ? activeSide : 'front',
+        })
       } else {
         setModelState(next)
+        if (!rearReferenceAvailable(next) && activeSide === 'back') {
+          setActiveSide('front')
+          commitFromEditor({ model: next, activeSide: 'front' })
+        }
       }
       setModelSwitchPrompt(null)
     },
-    [artwork, commitFromEditor, fills.length, strokes.length, syncHistoryFlags],
+    [activeSide, artwork, commitFromEditor, designHasInk, syncHistoryFlags],
   )
 
   const requestModelChange = useCallback(
     (next: ModelChoice) => {
       if (next === model) return
-      if (strokes.length > 0 || fills.length > 0) {
+      if (designHasInk()) {
         setModelSwitchPrompt({ next })
         return
       }
       setModelState(next)
     },
-    [fills.length, model, strokes.length],
+    [designHasInk, model],
+  )
+
+  const changeActiveSide = useCallback(
+    (side: StudioPaperSide) => {
+      if (!frontBackEnabled) return
+      if (side === activeSide) return
+      if (side === 'back' && !rearReferenceAvailable(model)) return
+      skipNextAutosaveRef.current = true
+      const nextState: EditorSideState = {
+        activeSide: side,
+        strokes,
+        fills,
+        backStrokes,
+        backFills,
+      }
+      const visible = visibleInkForSide({ ...nextState, activeSide: side })
+      setActiveSide(side)
+      setStrokes(visible.strokes)
+      setFills(visible.fills)
+      syncHistoryFlags()
+      commitFromEditor({
+        activeSide: side,
+        strokes,
+        fills,
+        backStrokes,
+        backFills,
+      })
+    },
+    [
+      activeSide,
+      backFills,
+      backStrokes,
+      commitFromEditor,
+      editorSideState,
+      fills,
+      frontBackEnabled,
+      model,
+      strokes,
+      syncHistoryFlags,
+    ],
   )
 
   const onCustomFile = useCallback(
@@ -598,7 +802,7 @@ export function useStudioEditor() {
       setCustomKey(null)
       publishStudioNotice(CUSTOM_REF_BETA_NOTICE)
 
-      if (strokes.length > 0 || fills.length > 0) {
+      if (designHasInk()) {
         setModelSwitchPrompt({ next: 'custom' })
       } else {
         setModelState('custom')
@@ -609,7 +813,7 @@ export function useStudioEditor() {
         })
       }
     },
-    [blobUrl, commitFromEditor, fills.length, publishStudioNotice, strokes.length],
+    [blobUrl, commitFromEditor, designHasInk, publishStudioNotice],
   )
 
   const revokeMagicUrls = useCallback(() => {
@@ -658,6 +862,14 @@ export function useStudioEditor() {
     [user?.id],
   )
 
+  const referenceUrlForDocument = useCallback(
+    (doc: StudioDraftDocument, side: StudioPaperSide = 'front'): string | null => {
+      if (doc.model === 'custom') return blobUrl ?? doc.customReferenceUrl
+      return referenceUrlForModelSide(doc.model, side, blobUrl ?? doc.customReferenceUrl)
+    },
+    [blobUrl],
+  )
+
   const runMagicPipeline = useCallback(async () => {
     if (!user?.id) {
       setMagicNotice('Sign in to use Magic.')
@@ -682,9 +894,18 @@ export function useStudioEditor() {
     magicAbortRef.current = controller
 
     try {
+      const doc = authoritativeDocRef.current
+      const frontBag = { strokes: doc.strokes, fills: doc.fills ?? [] }
+      const backBag = doc.back ?? { strokes: [], fills: [] }
+      const dual =
+        frontBackEnabled &&
+        sideHasInk(frontBag) &&
+        sideHasInk(backBag) &&
+        rearReferenceAvailable(doc.model)
+
       const captured = await captureSketchForMagic({
-        strokes,
-        fills,
+        strokes: activeSide === 'back' ? backBag.strokes : frontBag.strokes,
+        fills: activeSide === 'back' ? backBag.fills : frontBag.fills,
         referenceUrl,
         referenceOpacity,
       })
@@ -694,20 +915,82 @@ export function useStudioEditor() {
       setMagicSketchUrl(sketchUrl)
 
       setMagicPhase('submitting')
-      const job = await enqueueSketchPolish({
+      const operationId =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `magic_op_${Date.now()}`
+      const designId = designIdRef.current
+      const modelId = doc.model
+
+      const submitSide = async (side: 'front' | 'back') => {
+        const bag = side === 'front' ? frontBag : backBag
+        const cap = await captureSketchForMagic({
+          strokes: bag.strokes,
+          fills: bag.fills,
+          referenceUrl: referenceUrlForDocument(doc, side),
+          referenceOpacity: doc.dimmed ? 0.4 : 1,
+        })
+        return enqueueSketchPolish({
+          imageBase64: cap.dataUrl,
+          notes: dual ? `polish concept (${side})` : 'polish concept',
+          designId,
+          magic_operation_id: dual ? operationId : undefined,
+          studio_side: dual ? side : undefined,
+          reference_model_id: typeof modelId === 'string' ? modelId : undefined,
+          signal: controller.signal,
+        })
+      }
+
+      if (dual) {
+        publishStudioNotice(
+          'Magic will polish Front and Back as two jobs (two credits when billing is enabled).',
+        )
+        persistMagicOperation(user.id, { operationId, updatedAt: new Date().toISOString() })
+      }
+
+      const job = dual ? await submitSide('front') : await enqueueSketchPolish({
         imageBase64: captured.dataUrl,
         notes: 'polish concept',
+        designId,
         signal: controller.signal,
       })
       setMagicJobId(job.id)
       persistMagicJobId(user.id, job.id)
+      if (dual) patchMagicOperationJob(user.id, 'front', job.id)
+
+      let backJobId: string | null = null
+      if (dual) {
+        const backJob = await submitSide('back')
+        backJobId = backJob.id
+        patchMagicOperationJob(user.id, 'back', backJob.id)
+      }
 
       setMagicPhase('polling')
       const settled = await pollAiJobUntilSettled({
         jobId: job.id,
         signal: controller.signal,
       })
-      const look = toMagicLookResult(settled)
+      let look = toMagicLookResult(settled)
+      if (dual && backJobId) {
+        try {
+          const backSettled = await pollAiJobUntilSettled({
+            jobId: backJobId,
+            signal: controller.signal,
+          })
+          const backLook = toMagicLookResult(backSettled)
+          if (backLook.status === 'failed' && look.status !== 'failed') {
+            look = {
+              ...look,
+              summary: `${look.summary} Back polish failed — retry from Magic when ready.`,
+            }
+          }
+        } catch {
+          look = {
+            ...look,
+            summary: `${look.summary} Back polish could not be confirmed.`,
+          }
+        }
+      }
       setMagicResult(look)
       if (look.status === 'failed') {
         setMagicPhase('failed')
@@ -739,7 +1022,16 @@ export function useStudioEditor() {
     } finally {
       magicInFlightRef.current = false
     }
-  }, [fills, referenceOpacity, referenceUrl, revokeMagicUrls, strokes, user?.id])
+  }, [
+    activeSide,
+    frontBackEnabled,
+    publishStudioNotice,
+    referenceOpacity,
+    referenceUrl,
+    referenceUrlForDocument,
+    revokeMagicUrls,
+    user?.id,
+  ])
 
   const onMagic = useCallback(() => {
     if (!magicEnabled) {
@@ -954,53 +1246,84 @@ export function useStudioEditor() {
     })()
   }, [applyDocument, draftConflict, user?.id])
 
-  const referenceUrlForDocument = useCallback(
-    (doc: StudioDraftDocument): string | null => {
-      if (doc.model === 'custom') return blobUrl ?? doc.customReferenceUrl
-      if (doc.model === 'blank') return null
-      return canvasSrcForModel(doc.model)
+  /** Export the authoritative document (plus any session-only custom reference) as PNG. */
+  const exportSidePng = useCallback(
+    async (side: StudioPaperSide | 'visible' | 'sheet') => {
+      if (exportingRef.current) return
+      exportingRef.current = true
+      setExporting(true)
+      const doc = authoritativeDocRef.current
+      const visibleSide = normalizeActiveSide(doc)
+      const targetSide = side === 'visible' ? visibleSide : side
+      try {
+        if (side === ('sheet' as const) && frontBackEnabled && documentHasAnyInk(doc)) {
+          const backBag = doc.back ?? { strokes: [], fills: [] }
+          const { blob, referenceIncluded } = await exportFrontBackSheetPng({
+            front: {
+              strokes: doc.strokes,
+              fills: doc.fills ?? [],
+              referenceUrl: referenceUrlForDocument(doc, 'front'),
+              referenceOpacity: doc.dimmed ? 0.4 : 1,
+            },
+            back: {
+              strokes: backBag.strokes,
+              fills: backBag.fills ?? [],
+              referenceUrl: referenceUrlForDocument(doc, 'back'),
+              referenceOpacity: doc.dimmed ? 0.4 : 1,
+            },
+          })
+          downloadBlob(blob, exportFilename(null).replace('.png', '-front-back.png'))
+          publishStudioNotice(
+            referenceIncluded
+              ? 'Front + back sheet exported. Check your downloads.'
+              : EXPORT_NO_REFERENCE,
+          )
+          return
+        }
+        const bag =
+          targetSide === 'back'
+            ? doc.back ?? { strokes: [], fills: [] }
+            : { strokes: doc.strokes, fills: doc.fills ?? [] }
+        const refSide: StudioPaperSide = targetSide === 'back' ? 'back' : 'front'
+        const { blob, referenceIncluded } = await exportSketchPng({
+          strokes: bag.strokes,
+          fills: bag.fills,
+          referenceUrl: referenceUrlForDocument(doc, refSide),
+          referenceOpacity: doc.dimmed ? 0.4 : 1,
+        })
+        const suffix =
+          side === 'back' ? '-back' : side === 'front' ? '-front' : ''
+        downloadBlob(blob, exportFilename(null).replace('.png', `${suffix}.png`))
+        const wantedReference = referenceUrlForDocument(doc, refSide) !== null
+        publishStudioNotice(
+          wantedReference && !referenceIncluded
+            ? EXPORT_NO_REFERENCE
+            : 'PNG exported (768 × 1024). Check your downloads.',
+        )
+      } catch (err) {
+        if (err instanceof FabricAssetLoadError) {
+          publishStudioNotice(
+            'A custom fabric in this sketch could not be loaded. Check your connection or re-upload the fabric, then export again.',
+          )
+        } else {
+          publishStudioNotice(EXPORT_FAILED)
+        }
+      } finally {
+        exportingRef.current = false
+        setExporting(false)
+      }
     },
-    [blobUrl],
+    [frontBackEnabled, publishStudioNotice, referenceUrlForDocument],
   )
 
-  /** Export the authoritative document (plus any session-only custom reference) as PNG. */
   const exportPng = useCallback(async () => {
-    if (exportingRef.current) return
-    exportingRef.current = true
-    setExporting(true)
-    const doc = authoritativeDocRef.current
-    try {
-      const { blob, referenceIncluded } = await exportSketchPng({
-        strokes: doc.strokes,
-        fills: doc.fills ?? [],
-        referenceUrl: referenceUrlForDocument(doc),
-        referenceOpacity: doc.dimmed ? 0.4 : 1,
-      })
-      downloadBlob(blob, exportFilename(null))
-      const wantedReference = referenceUrlForDocument(doc) !== null
-      publishStudioNotice(
-        wantedReference && !referenceIncluded
-          ? EXPORT_NO_REFERENCE
-          : 'PNG exported (768 × 1024). Check your downloads.',
-      )
-    } catch (err) {
-      if (err instanceof FabricAssetLoadError) {
-        publishStudioNotice(
-          'A custom fabric in this sketch could not be loaded. Check your connection or re-upload the fabric, then export again.',
-        )
-      } else {
-        publishStudioNotice(EXPORT_FAILED)
-      }
-    } finally {
-      exportingRef.current = false
-      setExporting(false)
-    }
-  }, [publishStudioNotice, referenceUrlForDocument])
+    await exportSidePng('visible')
+  }, [exportSidePng])
 
   const beginSaveDesign = useCallback(() => {
     if (!ready || saveInFlightRef.current) return
     const doc = authoritativeDocRef.current
-    if (doc.strokes.length === 0 && (doc.fills?.length ?? 0) === 0) {
+    if (!documentHasAnyInk(doc)) {
       publishStudioNotice('Draw something before saving a design.')
       return
     }
@@ -1071,9 +1394,7 @@ export function useStudioEditor() {
     if (cloudDirtyRef.current || cloudInFlightRef.current > 0) return 'unsynced'
     const doc = authoritativeDocRef.current
     if (designIdRef.current === null) {
-      return doc.strokes.length === 0 && (doc.fills?.length ?? 0) === 0
-        ? 'clean-empty'
-        : 'unsynced'
+      return documentHasAnyInk(doc) ? 'unsynced' : 'clean-empty'
     }
     if (syncedRevisionRef.current === null) return 'unsynced'
     return syncedFingerprintRef.current === draftContentFingerprint(documentForCloud(doc))
@@ -1237,8 +1558,7 @@ export function useStudioEditor() {
             : 'Your Studio sketch has changes that are not saved to your account yet.',
         })
       } else if (
-        authoritativeDocRef.current.strokes.length === 0 &&
-        (authoritativeDocRef.current.fills?.length ?? 0) === 0
+        !documentHasAnyInk(authoritativeDocRef.current)
       ) {
         performOpen(record)
       } else {
@@ -1323,6 +1643,10 @@ export function useStudioEditor() {
   return {
     user,
     ready,
+    frontBackEnabled,
+    activeSide,
+    rearAvailable,
+    changeActiveSide,
     strokes,
     fills,
     tool,
@@ -1396,6 +1720,8 @@ export function useStudioEditor() {
     resolveConflictUseServer,
     exporting,
     exportPng,
+    exportSidePng,
+    hasBackInk: sideHasInk({ strokes: backStrokes, fills: backFills }),
     saveDesignDialog,
     beginSaveDesign,
     confirmSaveDesign,

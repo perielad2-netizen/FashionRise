@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   MAX_SNAPSHOT_STROKES,
   SAVED_DESIGN_SCHEMA,
@@ -15,7 +15,9 @@ import {
 import {
   STUDIO_DRAFT_KIND,
   STUDIO_DRAFT_SCHEMA,
+  STUDIO_DRAFT_SCHEMA_V2,
   createEmptyDraftDocument,
+  upgradeDraftToV2,
   studioDraftMetadata,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
@@ -289,5 +291,32 @@ describe('workingDocumentFromSnapshot', () => {
     expect(next.model).toBe('female')
     expect(next.strokes).toEqual(snapshot.strokes)
     expect(next.strokes).not.toBe(snapshot.strokes)
+  })
+
+  it('restores v2 snapshots with back ink when Front/Back flag is on', () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const current = doc()
+    const base = upgradeDraftToV2(current)
+    const snapshot = snapshotFromDocument({
+      ...base,
+      back: {
+        strokes: [
+          {
+            id: 'b1',
+            tool: 'draw',
+            points: [2, 2, 0.5],
+            color: '#1C1C1E',
+            size: 2,
+            opacity: 1,
+          },
+        ],
+        fills: [],
+      },
+      activeSide: 'back',
+    })
+    const next = workingDocumentFromSnapshot({ current, serverRevision: 1, snapshot })
+    expect(next.schema).toBe(STUDIO_DRAFT_SCHEMA_V2)
+    expect(next.back?.strokes).toHaveLength(1)
+    expect(next.activeSide).toBe('back')
   })
 })

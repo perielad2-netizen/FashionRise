@@ -50,6 +50,13 @@ describe('modelLibrary', () => {
     expect(canvasSrcForModel('custom')).toBeNull()
   })
 
+  it('resolves rear library paths for selectables but not legacy/custom', () => {
+    expect(canvasSrcForModel('female-straight', 'back')).toBe('/models/library/female-straight-back.png')
+    expect(canvasSrcForModel('female', 'back')).toBeNull()
+    expect(canvasSrcForModel('custom', 'back')).toBeNull()
+    expect(canvasSrcForModel('blank', 'back')).toBeNull()
+  })
+
   it('preserves stored model ids without remapping legacy to new defaults', () => {
     expect(normalizeModelChoice('female')).toBe('female')
     expect(normalizeModelChoice('male')).toBe('male')

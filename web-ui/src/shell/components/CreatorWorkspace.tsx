@@ -339,6 +339,14 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           onRetrySave={editor.retrySave}
           onSaveDesign={editor.beginSaveDesign}
           onExportPng={() => void editor.exportPng()}
+          onExportFront={() => void editor.exportSidePng('front')}
+          onExportBack={() => void editor.exportSidePng('back')}
+          onExportSheet={() => void editor.exportSidePng('sheet')}
+          frontBackEnabled={editor.frontBackEnabled}
+          activeSide={editor.activeSide}
+          rearAvailable={editor.rearAvailable}
+          onSideChange={editor.changeActiveSide}
+          hasBackInk={editor.hasBackInk}
           exporting={editor.exporting}
           onOpenLibrary={onOpenLibrary}
         />

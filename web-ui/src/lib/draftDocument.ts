@@ -3,7 +3,16 @@ import {
   normalizeModelChoice,
   type ModelChoice,
 } from '@/assets/modelLibrary'
+import { isStudioFrontBackEnabled } from '@/config/studioFrontBack'
 import { cloneFills, parseFillOp, type FillOp } from '@/lib/fills'
+import {
+  cloneSideBag,
+  emptySideBag,
+  normalizeSideBag,
+  sideHasInk,
+  type StudioPaperSide,
+  type StudioSideBag,
+} from '@/lib/studioSideArtwork'
 import {
   BRUSH_SIZE_DEFAULT_PX,
   BRUSH_SIZES,
@@ -17,7 +26,12 @@ import {
 } from '@/lib/strokes'
 
 export const STUDIO_DRAFT_SCHEMA = 'fashionrise.studio.draft.v1' as const
+export const STUDIO_DRAFT_SCHEMA_V2 = 'fashionrise.studio.draft.v2' as const
 export const STUDIO_DRAFT_KIND = 'studio_working_draft' as const
+
+export type StudioDraftSchema =
+  | typeof STUDIO_DRAFT_SCHEMA
+  | typeof STUDIO_DRAFT_SCHEMA_V2
 
 export type StudioBrushState = {
   /** Legacy preset id kept for older clients / parsers. */
@@ -43,10 +57,20 @@ export function normalizeStudioBrush(brush: StudioBrushState): StudioBrushState 
 }
 
 export type StudioDraftDocument = {
-  schema: typeof STUDIO_DRAFT_SCHEMA
+  schema: StudioDraftSchema
+  /** Front-side ink (always authoritative for v1 and v2). */
   strokes: Stroke[]
   /** Optional garment fills; absent/empty on older V1 drafts. */
   fills: FillOp[]
+  /** v2 only — which side is active in Studio when reopened. */
+  activeSide?: StudioPaperSide
+  /** v2 only — rear artwork bag; absent key ≠ empty bag for fingerprints. */
+  back?: StudioSideBag
+  /**
+   * Transient: set when intentionally clearing non-empty Back before cloud write.
+   * Stripped from persisted local copies after enqueue.
+   */
+  clearBackIntent?: boolean
   model: ModelChoice
   customReferenceUrl: string | null
   customReferenceKey: string | null
@@ -88,14 +112,83 @@ export function createEmptyDraftDocument(now = new Date()): StudioDraftDocument 
   }
 }
 
+const STUDIO_SCHEMAS = new Set<string>([STUDIO_DRAFT_SCHEMA, STUDIO_DRAFT_SCHEMA_V2])
+
+export function isStudioDraftV2(doc: Pick<StudioDraftDocument, 'schema'>): boolean {
+  return doc.schema === STUDIO_DRAFT_SCHEMA_V2
+}
+
+export function normalizeActiveSide(doc: Pick<StudioDraftDocument, 'activeSide'>): StudioPaperSide {
+  const side = doc.activeSide
+  return side === 'back' ? 'back' : 'front'
+}
+
+/** Align with Stage B BE: absent `back` key → null; present → normalized bag. */
+export function normalizeBackSentinel(
+  doc: Pick<StudioDraftDocument, 'back'> & { back?: StudioSideBag },
+): StudioSideBag | null {
+  if (!('back' in doc)) return null
+  const bag = doc.back
+  if (!bag || typeof bag !== 'object') return { strokes: [], fills: [] }
+  return {
+    strokes: Array.isArray(bag.strokes) ? bag.strokes : [],
+    fills: _normalizeFillList(bag.fills),
+  }
+}
+
+function _normalizeFillList(fills: unknown): FillOp[] {
+  if (fills == null) return []
+  if (!Array.isArray(fills)) return []
+  return fills as FillOp[]
+}
+
+export function backArtworkFromDoc(doc: StudioDraftDocument): StudioSideBag {
+  const bag = normalizeBackSentinel(doc)
+  return bag ? cloneSideBag(bag) : emptySideBag()
+}
+
+export function frontArtworkFromDoc(doc: StudioDraftDocument): StudioSideBag {
+  return { strokes: doc.strokes, fills: doc.fills ?? [] }
+}
+
+export function documentHasBackInk(doc: StudioDraftDocument): boolean {
+  const bag = normalizeBackSentinel(doc)
+  return bag ? sideHasInk(bag) : false
+}
+
 export function isStudioDraftDocument(value: unknown): value is StudioDraftDocument {
   if (!value || typeof value !== 'object') return false
   const doc = value as Partial<StudioDraftDocument>
-  return doc.schema === STUDIO_DRAFT_SCHEMA && Array.isArray(doc.strokes)
+  return typeof doc.schema === 'string' && STUDIO_SCHEMAS.has(doc.schema) && Array.isArray(doc.strokes)
+}
+
+function parseSideStrokes(
+  rawList: unknown[],
+  fallbackColor: string,
+  sizePx: number,
+): Stroke[] {
+  const strokes: Stroke[] = []
+  for (const s of rawList) {
+    if (!s || typeof s !== 'object') continue
+    const tool = (s as Stroke).tool
+    if (tool !== 'draw' && tool !== 'erase') continue
+    if (!Array.isArray((s as Stroke).points)) continue
+    strokes.push({
+      id: String((s as Stroke).id || `stroke_${strokes.length}`),
+      tool: tool as ToolKind,
+      points: (s as Stroke).points.filter((n) => typeof n === 'number'),
+      color: typeof (s as Stroke).color === 'string' ? (s as Stroke).color : fallbackColor,
+      size: typeof (s as Stroke).size === 'number' ? (s as Stroke).size : sizePx,
+      opacity: typeof (s as Stroke).opacity === 'number' ? (s as Stroke).opacity : 1,
+    })
+  }
+  return strokes
 }
 
 export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | null {
   if (!isStudioDraftDocument(raw)) return null
+  const schema =
+    raw.schema === STUDIO_DRAFT_SCHEMA_V2 ? STUDIO_DRAFT_SCHEMA_V2 : STUDIO_DRAFT_SCHEMA
   const model = normalizeModelChoice(raw.model)
   const sizeId = SIZE_IDS.includes(raw.brush?.sizeId as BrushSizeId)
     ? (raw.brush.sizeId as BrushSizeId)
@@ -114,21 +207,7 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
       ? raw.brush.color.toUpperCase()
       : INK_SWATCHES[0]!.color
 
-  const strokes: Stroke[] = []
-  for (const s of raw.strokes) {
-    if (!s || typeof s !== 'object') continue
-    const tool = (s as Stroke).tool
-    if (tool !== 'draw' && tool !== 'erase') continue
-    if (!Array.isArray((s as Stroke).points)) continue
-    strokes.push({
-      id: String((s as Stroke).id || `stroke_${strokes.length}`),
-      tool: tool as ToolKind,
-      points: (s as Stroke).points.filter((n) => typeof n === 'number'),
-      color: typeof (s as Stroke).color === 'string' ? (s as Stroke).color : color,
-      size: typeof (s as Stroke).size === 'number' ? (s as Stroke).size : sizePx,
-      opacity: typeof (s as Stroke).opacity === 'number' ? (s as Stroke).opacity : 1,
-    })
-  }
+  const strokes = parseSideStrokes(raw.strokes, color, sizePx)
 
   const fills: FillOp[] = []
   const rawFills = (raw as { fills?: unknown }).fills
@@ -139,10 +218,36 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
     }
   }
 
+  let activeSide: StudioPaperSide | undefined
+  if (schema === STUDIO_DRAFT_SCHEMA_V2) {
+    const side = (raw as { activeSide?: unknown }).activeSide
+    activeSide = side === 'back' ? 'back' : 'front'
+  }
+
+  let back: StudioSideBag | undefined
+  if (schema === STUDIO_DRAFT_SCHEMA_V2 && 'back' in (raw as object)) {
+    const rawBack = (raw as { back?: unknown }).back
+    const parsedBag = normalizeSideBag(rawBack)
+    const backStrokes = parsedBag
+      ? parseSideStrokes(parsedBag.strokes, color, sizePx)
+      : parseSideStrokes([], color, sizePx)
+    const backFills: FillOp[] = []
+    const rawBackFills = parsedBag?.fills ?? []
+    if (Array.isArray(rawBackFills)) {
+      for (const item of rawBackFills) {
+        const fill = parseFillOp(item)
+        if (fill) backFills.push(fill)
+      }
+    }
+    back = { strokes: backStrokes, fills: backFills }
+  }
+
   return {
-    schema: STUDIO_DRAFT_SCHEMA,
+    schema,
     strokes,
     fills,
+    ...(activeSide ? { activeSide } : {}),
+    ...(back ? { back } : {}),
     model,
     customReferenceUrl:
       typeof raw.customReferenceUrl === 'string' && raw.customReferenceUrl
@@ -167,7 +272,7 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
 
 export function bumpDraftDocument(
   prev: StudioDraftDocument,
-  patch: Partial<Omit<StudioDraftDocument, 'schema' | 'clientRevision' | 'updatedAt'>>,
+  patch: Partial<Omit<StudioDraftDocument, 'clientRevision' | 'updatedAt'>>,
   now = new Date(),
 ): StudioDraftDocument {
   let brush = prev.brush
@@ -179,27 +284,78 @@ export function bumpDraftDocument(
     }
     brush = normalizeStudioBrush(merged)
   }
-  return {
+  const next: StudioDraftDocument = {
     ...prev,
     ...patch,
     brush,
-    schema: STUDIO_DRAFT_SCHEMA,
+    schema: patch.schema ?? prev.schema,
     clientRevision: prev.clientRevision + 1,
     updatedAt: now.toISOString(),
   }
+  if (!patch.clearBackIntent) delete next.clearBackIntent
+  return next
 }
 
+/** Stage B BE-aligned content fingerprint (sort_keys stable via ordered keys). */
 export function draftContentFingerprint(doc: StudioDraftDocument): string {
-  return JSON.stringify({
+  const payload: Record<string, unknown> = {
+    schema: doc.schema ?? STUDIO_DRAFT_SCHEMA,
     strokes: doc.strokes,
     fills: doc.fills ?? [],
     model: doc.model,
     customReferenceUrl: doc.customReferenceUrl,
     customReferenceKey: doc.customReferenceKey,
-    // Normalized sizePx so legacy docs (sizeId only) do not conflict with equivalents.
     brush: normalizeStudioBrush(doc.brush),
     dimmed: doc.dimmed,
-  })
+    activeSide: normalizeActiveSide(doc),
+    back: normalizeBackSentinel(doc),
+  }
+  const keys = Object.keys(payload).sort()
+  const sorted: Record<string, unknown> = {}
+  for (const k of keys) sorted[k] = payload[k]
+  return JSON.stringify(sorted)
+}
+
+export function upgradeDraftToV2(doc: StudioDraftDocument): StudioDraftDocument {
+  if (isStudioDraftV2(doc)) return doc
+  return {
+    ...doc,
+    schema: STUDIO_DRAFT_SCHEMA_V2,
+    activeSide: normalizeActiveSide(doc),
+    back: backArtworkFromDoc(doc),
+  }
+}
+
+/**
+ * Serialize for disk / API. When Front/Back flag is off, always v1 without side bags.
+ * When on, v2 documents always include `activeSide` + `back`.
+ */
+export function serializeStudioDraftDocument(
+  doc: StudioDraftDocument,
+  options?: { frontBackEnabled?: boolean },
+): StudioDraftDocument {
+  const frontBackEnabled = options?.frontBackEnabled ?? isStudioFrontBackEnabled()
+  const { clearBackIntent: _clearBackIntent, ...rest } = doc
+  if (!frontBackEnabled || !isStudioDraftV2(rest)) {
+    const v1: StudioDraftDocument = {
+      ...rest,
+      schema: STUDIO_DRAFT_SCHEMA,
+      strokes: rest.strokes,
+      fills: rest.fills ?? [],
+    }
+    delete (v1 as { activeSide?: unknown }).activeSide
+    delete (v1 as { back?: unknown }).back
+    return v1
+  }
+  const back = rest.back ?? emptySideBag()
+  return {
+    ...rest,
+    schema: STUDIO_DRAFT_SCHEMA_V2,
+    activeSide: normalizeActiveSide(rest),
+    strokes: rest.strokes,
+    fills: rest.fills ?? [],
+    back: cloneSideBag(back),
+  }
 }
 
 /**
@@ -216,13 +372,22 @@ export function resolveDraftConflict(
   return { equal: false, needsUserChoice: true }
 }
 
-export function studioDraftMetadata(doc: StudioDraftDocument) {
-  return {
+export function studioDraftMetadata(
+  doc: StudioDraftDocument,
+  extras?: { clearBackIntent?: boolean },
+) {
+  const serialized = serializeStudioDraftDocument(doc)
+  const meta: Record<string, unknown> = {
     draftKind: STUDIO_DRAFT_KIND,
-    schema: STUDIO_DRAFT_SCHEMA,
+    schema: serialized.schema,
     clientRevision: doc.clientRevision,
     updatedAt: doc.updatedAt,
   }
+  if (isStudioDraftV2(serialized) && isStudioFrontBackEnabled()) {
+    meta.studioSides = 2
+  }
+  if (extras?.clearBackIntent) meta.clearBackIntent = true
+  return meta
 }
 
 /**
@@ -239,7 +404,7 @@ export function rebaseChosenLocalDraft(
   now = new Date(),
 ): StudioDraftDocument {
   const floor = Number.isFinite(serverRevision) ? serverRevision : 0
-  return {
+  const rebased: StudioDraftDocument = {
     ...local,
     strokes: local.strokes.map((stroke) => ({ ...stroke, points: [...stroke.points] })),
     fills: cloneFills(local.fills ?? []),
@@ -247,12 +412,18 @@ export function rebaseChosenLocalDraft(
     clientRevision: Math.max(local.clientRevision, floor) + 1,
     updatedAt: now.toISOString(),
   }
+  if (local.back) rebased.back = cloneSideBag(local.back)
+  return rebased
 }
 
 export function documentFromEditorState(input: {
   prev: StudioDraftDocument
   strokes: StudioDraftDocument['strokes']
   fills?: StudioDraftDocument['fills']
+  back?: StudioSideBag
+  activeSide?: StudioPaperSide
+  clearBackIntent?: boolean
+  schema?: StudioDraftSchema
   model: StudioDraftDocument['model']
   customReferenceUrl: string | null
   customReferenceKey: string | null
@@ -267,19 +438,23 @@ export function documentFromEditorState(input: {
     typeof input.sizePx === 'number' && Number.isFinite(input.sizePx)
       ? snapBrushSizePx(input.sizePx)
       : BRUSH_SIZES[input.sizeId]
-  return bumpDraftDocument(input.prev, {
+  const patch: Partial<StudioDraftDocument> = {
     strokes: input.strokes,
     fills: input.fills ?? input.prev.fills ?? [],
     model: input.model,
     customReferenceUrl: input.customReferenceUrl,
     customReferenceKey: input.customReferenceKey,
     brush: {
-      // Keep an exact legacy id when the numeric size matches a preset; otherwise nearest.
       sizeId: BRUSH_SIZES[input.sizeId] === sizePx ? input.sizeId : nearestBrushSizeId(sizePx),
       sizePx,
       opacity: input.opacity,
       color: input.color,
     },
     dimmed: input.dimmed,
-  })
+  }
+  if (input.back !== undefined) patch.back = input.back
+  if (input.activeSide !== undefined) patch.activeSide = input.activeSide
+  if (input.schema !== undefined) patch.schema = input.schema
+  if (input.clearBackIntent) patch.clearBackIntent = true
+  return bumpDraftDocument(input.prev, patch)
 }

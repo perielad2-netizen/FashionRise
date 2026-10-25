@@ -11,11 +11,18 @@ import {
   type BrushSizeId,
   type Stroke,
 } from '@/lib/strokes'
+import { isStudioFrontBackEnabled } from '@/config/studioFrontBack'
 import {
+  documentHasBackInk,
+  isStudioDraftV2,
+  normalizeActiveSide,
+  normalizeBackSentinel,
   normalizeStudioBrush,
+  upgradeDraftToV2,
   type StudioBrushState,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
+import { cloneSideBag, emptySideBag, sideHasInk, type StudioSideBag } from '@/lib/studioSideArtwork'
 
 /**
  * Named, immutable design snapshots ("Save as design").
@@ -30,6 +37,7 @@ import {
  * The nested snapshot deliberately has no `schema` key and no `clientRevision`.
  */
 export const SAVED_DESIGN_SCHEMA = 'fashionrise.saved_design.v1' as const
+export const SAVED_DESIGN_SCHEMA_V2 = 'fashionrise.saved_design.v2' as const
 export const SAVED_DESIGN_KIND = 'saved_design' as const
 export const SAVED_DESIGN_CATEGORY = 'studio' as const
 
@@ -42,13 +50,15 @@ export type SavedDesignSnapshot = {
   strokes: Stroke[]
   /** Optional; omitted on pre-WEB-V4B snapshots. */
   fills?: FillOp[]
+  activeSide?: 'front' | 'back'
+  back?: StudioSideBag
   model: ModelChoice
   brush: StudioBrushState
   dimmed: boolean
 }
 
 export type SavedDesignEnvelope = {
-  schema: typeof SAVED_DESIGN_SCHEMA
+  schema: typeof SAVED_DESIGN_SCHEMA | typeof SAVED_DESIGN_SCHEMA_V2
   saveRequestId: string
   savedAt: string
   /** Working-draft revision the snapshot was taken from (informational only). */
@@ -124,24 +134,52 @@ function canonicalStroke(s: Stroke): Stroke {
 
 /** Deep copy of the authoritative document; session-only custom reference fields are dropped. */
 export function snapshotFromDocument(doc: StudioDraftDocument): SavedDesignSnapshot {
-  return {
+  const base: SavedDesignSnapshot = {
     strokes: doc.strokes.map(canonicalStroke),
     fills: cloneFills(doc.fills ?? []),
     model: doc.model,
     brush: normalizeStudioBrush(doc.brush),
     dimmed: doc.dimmed,
   }
+  if (!isStudioFrontBackEnabled() || !isStudioDraftV2(doc)) return base
+  const back = normalizeBackSentinel(doc) ?? emptySideBag()
+  return {
+    ...base,
+    activeSide: normalizeActiveSide(doc),
+    back: {
+      strokes: back.strokes.map(canonicalStroke),
+      fills: cloneFills(back.fills),
+    },
+  }
+}
+
+export function savedSnapshotHasBackInk(snapshot: SavedDesignSnapshot): boolean {
+  const bag = snapshot.back
+  return bag ? sideHasInk(bag) : false
 }
 
 /** Key-order independent: PostgreSQL JSONB does not preserve object key order. */
 export function snapshotFingerprint(snapshot: SavedDesignSnapshot): string {
-  return JSON.stringify({
+  const payload: Record<string, unknown> = {
     strokes: snapshot.strokes.map(canonicalStroke),
     fills: snapshot.fills ?? [],
     model: snapshot.model,
     brush: normalizeStudioBrush(snapshot.brush),
     dimmed: snapshot.dimmed,
-  })
+  }
+  if ('activeSide' in snapshot) {
+    payload.activeSide = snapshot.activeSide === 'back' ? 'back' : 'front'
+  }
+  if ('back' in snapshot) {
+    const bag = snapshot.back
+    payload.back = bag
+      ? { strokes: bag.strokes.map(canonicalStroke), fills: bag.fills ?? [] }
+      : { strokes: [], fills: [] }
+  }
+  const keys = Object.keys(payload).sort()
+  const sorted: Record<string, unknown> = {}
+  for (const k of keys) sorted[k] = payload[k]
+  return JSON.stringify(sorted)
 }
 
 export function buildSavedDesignPayload(args: {
@@ -152,8 +190,11 @@ export function buildSavedDesignPayload(args: {
   now?: Date
 }) {
   const savedAt = (args.now ?? new Date()).toISOString()
+  const useV2 =
+    isStudioFrontBackEnabled() &&
+    (Boolean(args.snapshot.back) || args.snapshot.activeSide === 'back' || savedSnapshotHasBackInk(args.snapshot))
   const envelope: SavedDesignEnvelope = {
-    schema: SAVED_DESIGN_SCHEMA,
+    schema: useV2 ? SAVED_DESIGN_SCHEMA_V2 : SAVED_DESIGN_SCHEMA,
     saveRequestId: args.saveRequestId,
     savedAt,
     sourceRevision: args.sourceRevision,
@@ -169,7 +210,7 @@ export function buildSavedDesignPayload(args: {
     design_data: envelope,
     metadata: {
       designKind: SAVED_DESIGN_KIND,
-      envelope: SAVED_DESIGN_SCHEMA,
+      envelope: useV2 ? SAVED_DESIGN_SCHEMA_V2 : SAVED_DESIGN_SCHEMA,
       saveRequestId: args.saveRequestId,
       savedAt,
       model: args.snapshot.model,
@@ -247,7 +288,7 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
       fills.push(fill)
     }
   }
-  return {
+  const snapshot: SavedDesignSnapshot = {
     strokes,
     ...(fills ? { fills } : {}),
     model,
@@ -259,10 +300,38 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
     },
     dimmed: s.dimmed,
   }
+  if (s.activeSide === 'front' || s.activeSide === 'back') {
+    snapshot.activeSide = s.activeSide
+  }
+  if ('back' in s) {
+    const rawBack = s.back
+    if (rawBack && typeof rawBack === 'object') {
+      const bag = rawBack as { strokes?: unknown; fills?: unknown }
+      if (Array.isArray(bag.strokes)) {
+        const backStrokes: Stroke[] = []
+        for (const rawStroke of bag.strokes) {
+          const stroke = parseStroke(rawStroke)
+          if (!stroke) return null
+          backStrokes.push(stroke)
+        }
+        const backFills: FillOp[] = []
+        if (Array.isArray(bag.fills)) {
+          for (const rawFill of bag.fills) {
+            const fill = parseFillOp(rawFill)
+            if (!fill) return null
+            backFills.push(fill)
+          }
+        }
+        snapshot.back = { strokes: backStrokes, fills: backFills }
+      }
+    }
+  }
+  return snapshot
 }
 
 export function isSavedDesignRow(row: Pick<DesignRowLike, 'design_data'>): boolean {
-  return (row.design_data ?? {})['schema'] === SAVED_DESIGN_SCHEMA
+  const schema = (row.design_data ?? {})['schema']
+  return schema === SAVED_DESIGN_SCHEMA || schema === SAVED_DESIGN_SCHEMA_V2
 }
 
 /**
@@ -273,7 +342,11 @@ export function parseSavedDesign(row: DesignRowLike, ownerId: string): SavedDesi
   if (row.user_id !== ownerId) return null
   if (row.visibility !== 'private') return null
   const data = row.design_data
-  if (!data || data.schema !== SAVED_DESIGN_SCHEMA) return null
+  if (
+    !data ||
+    (data.schema !== SAVED_DESIGN_SCHEMA && data.schema !== SAVED_DESIGN_SCHEMA_V2)
+  )
+    return null
   const meta = row.metadata ?? {}
   if ('draftKind' in meta) return null
   if (typeof data.saveRequestId !== 'string' || !data.saveRequestId) return null
@@ -323,7 +396,7 @@ export function workingDocumentFromSnapshot(args: {
   now?: Date
 }): StudioDraftDocument {
   const floor = Math.max(args.current.clientRevision, args.serverRevision ?? 0)
-  return {
+  let next: StudioDraftDocument = {
     ...args.current,
     strokes: args.snapshot.strokes.map(canonicalStroke),
     fills: cloneFills(args.snapshot.fills ?? []),
@@ -335,6 +408,20 @@ export function workingDocumentFromSnapshot(args: {
     clientRevision: floor + 1,
     updatedAt: (args.now ?? new Date()).toISOString(),
   }
+  if (isStudioFrontBackEnabled() && (args.snapshot.back || args.snapshot.activeSide)) {
+    next = upgradeDraftToV2(next)
+    next.activeSide = args.snapshot.activeSide === 'back' ? 'back' : 'front'
+    next.back = args.snapshot.back
+      ? cloneSideBag({
+          strokes: args.snapshot.back.strokes.map(canonicalStroke),
+          fills: cloneFills(args.snapshot.back.fills ?? []),
+        })
+      : emptySideBag()
+  } else if (documentHasBackInk(next) || args.snapshot.back) {
+    next = upgradeDraftToV2(next)
+    if (args.snapshot.back) next.back = cloneSideBag(args.snapshot.back)
+  }
+  return next
 }
 
 export function modelLabel(model: ModelChoice): string {

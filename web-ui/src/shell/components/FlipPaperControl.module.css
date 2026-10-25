@@ -1,0 +1,88 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.compact {
+  gap: 0.35rem;
+}
+
+.segmented {
+  display: inline-flex;
+  border-radius: 10px;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.seg,
+.segActive {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.65rem;
+  min-height: 36px;
+  min-width: 44px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #3a3a3c;
+  cursor: pointer;
+}
+
+.seg:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.segActive {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  color: #1c1c1e;
+}
+
+.flipBtn {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.55rem;
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  cursor: pointer;
+}
+
+.paperCue {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  pointer-events: none;
+}
+
+.paperFront,
+.paperBack {
+  display: block;
+}
+
+.animating .segmented {
+  animation: flipHint 420ms ease-out;
+}
+
+@keyframes flipHint {
+  0% {
+    transform: perspective(400px) rotateY(0deg);
+  }
+  45% {
+    transform: perspective(400px) rotateY(8deg);
+  }
+  100% {
+    transform: perspective(400px) rotateY(0deg);
+  }
+}

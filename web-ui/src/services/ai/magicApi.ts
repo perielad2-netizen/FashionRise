@@ -6,6 +6,10 @@ export type PolishSketchInput = {
   imageBase64: string
   notes?: string
   designId?: string | null
+  /** WEB-V4J dual-sided polish grouping (mock-friendly; server may ignore until wired). */
+  magic_operation_id?: string
+  studio_side?: 'front' | 'back'
+  reference_model_id?: string
   signal?: AbortSignal
 }
 
@@ -17,6 +21,9 @@ export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJ
       input_data: {
         notes: input.notes ?? 'polish concept',
         image_base64: input.imageBase64,
+        magic_operation_id: input.magic_operation_id,
+        studio_side: input.studio_side,
+        reference_model_id: input.reference_model_id,
       },
     },
     signal: input.signal,

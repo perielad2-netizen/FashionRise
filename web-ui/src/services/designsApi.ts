@@ -2,7 +2,9 @@ import { ApiError, apiRequest } from '@/services/api/client'
 import {
   STUDIO_DRAFT_KIND,
   STUDIO_DRAFT_SCHEMA,
+  STUDIO_DRAFT_SCHEMA_V2,
   parseStudioDraftDocument,
+  serializeStudioDraftDocument,
   studioDraftMetadata,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
@@ -27,14 +29,22 @@ export type DraftConflictPayload = {
   design: DesignRead
 }
 
-/** Strip session-only custom reference fields before cloud write (private beta). */
+/** Strip session-only fields and apply schema serialization before cloud write. */
 export function documentForCloud(document: StudioDraftDocument): StudioDraftDocument {
-  if (!document.customReferenceUrl && !document.customReferenceKey) return document
+  const { clearBackIntent: _intent, ...rest } = document
+  const serialized = serializeStudioDraftDocument(rest)
+  if (!serialized.customReferenceUrl && !serialized.customReferenceKey) return serialized
   return {
-    ...document,
+    ...serialized,
     customReferenceUrl: null,
     customReferenceKey: null,
   }
+}
+
+export function cloudDraftMetadata(document: StudioDraftDocument): Record<string, unknown> {
+  const clearBackIntent = Boolean(document.clearBackIntent)
+  const cloud = documentForCloud(document)
+  return studioDraftMetadata(cloud, clearBackIntent ? { clearBackIntent: true } : undefined)
 }
 
 export async function listMyDesigns(signal?: AbortSignal): Promise<DesignRead[]> {
@@ -61,7 +71,7 @@ export async function createStudioDraft(
       material_id: null,
       color_palette_id: null,
       design_data: cloudDoc,
-      metadata: studioDraftMetadata(cloudDoc),
+      metadata: cloudDraftMetadata(document),
       visibility: 'private',
       status: 'draft',
     },
@@ -76,7 +86,7 @@ export async function updateStudioDraft(
   const cloudDoc = documentForCloud(document)
   const body: Record<string, unknown> = {
     design_data: cloudDoc,
-    metadata: studioDraftMetadata(cloudDoc),
+    metadata: cloudDraftMetadata(document),
     visibility: 'private',
     status: 'draft',
   }
@@ -94,7 +104,11 @@ export function extractStudioDraft(design: DesignRead): StudioDraftDocument | nu
   const fromData = parseStudioDraftDocument(design.design_data)
   if (fromData) return fromData
   const meta = design.metadata ?? {}
-  if (meta.draftKind === STUDIO_DRAFT_KIND || meta.schema === STUDIO_DRAFT_SCHEMA) {
+  if (
+    meta.draftKind === STUDIO_DRAFT_KIND ||
+    meta.schema === STUDIO_DRAFT_SCHEMA ||
+    meta.schema === STUDIO_DRAFT_SCHEMA_V2
+  ) {
     return parseStudioDraftDocument(design.design_data)
   }
   return null

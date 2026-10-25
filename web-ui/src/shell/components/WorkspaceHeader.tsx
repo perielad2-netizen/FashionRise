@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, BookmarkPlus, MoreHorizontal, Redo2, Sparkles, Undo2 } from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
+import type { StudioPaperSide } from '@/lib/studioSideArtwork'
+import { FlipPaperControl } from '@/shell/components/FlipPaperControl'
 import styles from './WorkspaceHeader.module.css'
 
 type Props = {
@@ -23,6 +25,14 @@ type Props = {
   onExportPng?: () => void
   exporting?: boolean
   onOpenLibrary?: () => void
+  frontBackEnabled?: boolean
+  activeSide?: StudioPaperSide
+  rearAvailable?: boolean
+  onSideChange?: (side: StudioPaperSide) => void
+  onExportFront?: () => void
+  onExportBack?: () => void
+  onExportSheet?: () => void
+  hasBackInk?: boolean
 }
 
 export function WorkspaceHeader({
@@ -45,6 +55,14 @@ export function WorkspaceHeader({
   onExportPng,
   exporting = false,
   onOpenLibrary,
+  frontBackEnabled = false,
+  activeSide = 'front',
+  rearAvailable = false,
+  onSideChange,
+  onExportFront,
+  onExportBack,
+  onExportSheet,
+  hasBackInk = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -80,6 +98,13 @@ export function WorkspaceHeader({
           <ArrowLeft size={18} />
         </button>
         <h1 className={styles.title}>New Design</h1>
+        {frontBackEnabled && onSideChange ? (
+          <FlipPaperControl
+            activeSide={activeSide}
+            rearAvailable={rearAvailable}
+            onSideChange={onSideChange}
+          />
+        ) : null}
       </div>
       <div className={styles.right}>
         <span
@@ -179,7 +204,49 @@ export function WorkspaceHeader({
                     onExportPng()
                   }}
                 >
-                  {exporting ? 'Exporting PNG…' : 'Export PNG'}
+                  {exporting ? 'Exporting PNG…' : 'Export visible side'}
+                </button>
+              ) : null}
+              {frontBackEnabled && onExportFront ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  disabled={exporting}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onExportFront()
+                  }}
+                >
+                  Export front
+                </button>
+              ) : null}
+              {frontBackEnabled && hasBackInk && onExportBack ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  disabled={exporting}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onExportBack()
+                  }}
+                >
+                  Export back
+                </button>
+              ) : null}
+              {frontBackEnabled && hasBackInk && onExportSheet ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  disabled={exporting}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onExportSheet()
+                  }}
+                >
+                  Export front + back sheet
                 </button>
               ) : null}
               {onOpenLibrary ? (
