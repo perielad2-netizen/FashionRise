@@ -1,14 +1,21 @@
 import base64
 import binascii
+import hashlib
 import re
 import uuid
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import ForbiddenError, NotFoundError, ValidationAppError
+from app.core.errors import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationAppError,
+)
 from app.models.ai_job import AIJob
 from app.models.garment_design import GarmentDesign
 from app.models.user import User
@@ -22,6 +29,13 @@ _DATA_URL_RE = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|webp));base64,(.+)$",
     re.IGNORECASE | re.DOTALL,
 )
+
+
+def _dual_magic_lock_key(user_id: uuid.UUID) -> int:
+    """Owner-scoped advisory lock distinct from Studio/saved design locks."""
+    raw = bytearray(user_id.bytes[:8])
+    raw[0] ^= 0xC7
+    return int.from_bytes(raw, "big", signed=True)
 
 
 def _normalize_idempotency_key(raw: Any) -> str | None:
@@ -46,6 +60,33 @@ def _validate_studio_side(input_data: dict) -> None:
         raise ValidationAppError("studio_side must be 'front' or 'back'")
 
 
+def _decode_sketch_image_bytes(input_data: dict) -> bytes | None:
+    raw = input_data.get("image_base64")
+    if raw is None or raw == "":
+        return None
+    if not isinstance(raw, str):
+        raise ValidationAppError("image_base64 must be a string")
+    match = _DATA_URL_RE.match(raw.strip())
+    b64 = match.group(2) if match else raw.strip()
+    try:
+        decoded = base64.b64decode(b64, validate=False)
+    except (binascii.Error, ValueError) as exc:
+        raise ValidationAppError("Sketch image payload is not valid base64") from exc
+    return decoded
+
+
+def _compute_image_fingerprint(input_data: dict) -> str | None:
+    decoded = _decode_sketch_image_bytes(input_data)
+    if decoded:
+        if not decoded:
+            raise ValidationAppError("Sketch image payload is empty")
+        return hashlib.sha256(decoded).hexdigest()
+    url = input_data.get("image_url")
+    if isinstance(url, str) and url.strip():
+        return hashlib.sha256(url.strip().encode("utf-8")).hexdigest()
+    return None
+
+
 def find_sketch_polish_by_idempotency(
     db: Session, user_id: uuid.UUID, idempotency_key: str
 ) -> AIJob | None:
@@ -65,6 +106,86 @@ def find_sketch_polish_by_idempotency(
     )
 
 
+def _design_id_str(design_id: uuid.UUID | None) -> str | None:
+    return str(design_id) if design_id is not None else None
+
+
+def _input_design_id_str(input_data: dict) -> str | None:
+    raw = input_data.get("design_id")
+    if raw is None or raw == "":
+        return None
+    return str(raw).strip() or None
+
+
+def _identity_tuple(
+    *,
+    studio_side: str | None,
+    magic_operation_id: str | None,
+    design_id: uuid.UUID | None,
+    input_data: dict,
+    image_fingerprint: str | None,
+) -> tuple[Any, ...]:
+    rev = input_data.get("source_revision")
+    fp = input_data.get("content_fingerprint")
+    content_fp = fp.strip() if isinstance(fp, str) else None
+    design = _design_id_str(design_id) or _input_design_id_str(input_data)
+    return (
+        (studio_side or "").strip().lower() or None,
+        (magic_operation_id or "").strip() or None,
+        design,
+        rev,
+        content_fp or None,
+        image_fingerprint,
+    )
+
+
+def _assert_idempotency_identity(
+    existing: AIJob,
+    *,
+    expected_side: str | None,
+    magic_operation_id: str,
+    design_id: uuid.UUID | None,
+    prepared_input: dict,
+    image_fingerprint: str | None,
+) -> None:
+    stored = existing.input_data if isinstance(existing.input_data, dict) else {}
+    stored_fp = stored.get("image_fingerprint")
+    if not isinstance(stored_fp, str) or not stored_fp.strip():
+        stored_fp = _compute_image_fingerprint(stored)
+    expected = _identity_tuple(
+        studio_side=expected_side,
+        magic_operation_id=magic_operation_id,
+        design_id=design_id,
+        input_data=prepared_input,
+        image_fingerprint=image_fingerprint,
+    )
+    actual = _identity_tuple(
+        studio_side=stored.get("studio_side") if isinstance(stored.get("studio_side"), str) else None,
+        magic_operation_id=stored.get("magic_operation_id")
+        if isinstance(stored.get("magic_operation_id"), str)
+        else None,
+        design_id=existing.design_id,
+        input_data=stored,
+        image_fingerprint=stored_fp if isinstance(stored_fp, str) else None,
+    )
+    if expected != actual:
+        raise ConflictError(
+            "Idempotency key already used with different sketch identity.",
+            payload={
+                "reason": "idempotency_identity_mismatch",
+                "job_id": str(existing.id),
+                "status": existing.status,
+            },
+        )
+    if expected_side:
+        stored_side = stored.get("studio_side")
+        if isinstance(stored_side, str) and stored_side.strip().lower() != expected_side:
+            raise ConflictError(
+                "Idempotency key already used for the opposite studio side.",
+                payload={"reason": "idempotency_cross_side", "job_id": str(existing.id)},
+            )
+
+
 def _validate_sketch_image_payload(input_data: dict) -> None:
     """Bound vision payloads before enqueue (no OpenAI call)."""
     if not isinstance(input_data, dict):
@@ -78,20 +199,29 @@ def _validate_sketch_image_payload(input_data: dict) -> None:
     max_bytes = settings.max_upload_bytes
     match = _DATA_URL_RE.match(raw.strip())
     b64 = match.group(2) if match else raw.strip()
-    # Reject obviously oversized base64 before decoding (~4/3 expansion).
     if len(b64) > int(max_bytes * 1.4) + 64:
         raise ValidationAppError("Sketch image is too large")
-    try:
-        decoded = base64.b64decode(b64, validate=False)
-    except (binascii.Error, ValueError) as exc:
-        raise ValidationAppError("Sketch image payload is not valid base64") from exc
+    decoded = _decode_sketch_image_bytes(input_data)
     if not decoded:
         raise ValidationAppError("Sketch image payload is empty")
     if len(decoded) > max_bytes:
         raise ValidationAppError("Sketch image is too large")
 
 
-def _prepare_sketch_polish_input(input_data: dict | None) -> dict:
+def _stamp_revision_fields(raw: dict, source_revision: int | None, content_fingerprint: str | None) -> None:
+    if source_revision is not None:
+        raw["source_revision"] = source_revision
+    if isinstance(content_fingerprint, str) and content_fingerprint.strip():
+        raw["content_fingerprint"] = content_fingerprint.strip()
+
+
+def _prepare_sketch_polish_input(
+    input_data: dict | None,
+    *,
+    design_id: uuid.UUID | None = None,
+    source_revision: int | None = None,
+    content_fingerprint: str | None = None,
+) -> dict:
     raw = dict(input_data or {})
     _validate_studio_side(raw)
     idem = _normalize_idempotency_key(raw.get("idempotency_key"))
@@ -102,6 +232,12 @@ def _prepare_sketch_polish_input(input_data: dict | None) -> dict:
     op = raw.get("magic_operation_id")
     if isinstance(op, str) and op.strip():
         raw["magic_operation_id"] = op.strip()
+    if design_id is not None:
+        raw["design_id"] = str(design_id)
+    _stamp_revision_fields(raw, source_revision, content_fingerprint)
+    img_fp = _compute_image_fingerprint(raw)
+    if img_fp:
+        raw["image_fingerprint"] = img_fp
     return raw
 
 
@@ -116,11 +252,32 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
     if data.job_type in {"sketch_clean", "sketch_polish", "style_suggest"}:
         _validate_sketch_image_payload(input_data)
     if data.job_type == "sketch_polish":
-        input_data = _prepare_sketch_polish_input(input_data)
+        rev = input_data.get("source_revision")
+        source_revision = rev if isinstance(rev, int) else None
+        content_fp = input_data.get("content_fingerprint")
+        content_fingerprint = content_fp.strip() if isinstance(content_fp, str) else None
+        input_data = _prepare_sketch_polish_input(
+            input_data,
+            design_id=data.design_id,
+            source_revision=source_revision,
+            content_fingerprint=content_fingerprint,
+        )
         idem = input_data.get("idempotency_key")
         if isinstance(idem, str) and idem:
             existing = find_sketch_polish_by_idempotency(db, user.id, idem)
             if existing is not None:
+                side = input_data.get("studio_side")
+                expected_side = side.strip().lower() if isinstance(side, str) else None
+                op = input_data.get("magic_operation_id")
+                op_str = op.strip() if isinstance(op, str) else ""
+                _assert_idempotency_identity(
+                    existing,
+                    expected_side=expected_side,
+                    magic_operation_id=op_str,
+                    design_id=data.design_id,
+                    prepared_input=input_data,
+                    image_fingerprint=input_data.get("image_fingerprint"),
+                )
                 return existing
         reference_from_job_input(input_data)
         data = AIJobCreate(
@@ -144,15 +301,13 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
 
 
 def _dual_shared_fields(body: SketchPolishDualBody) -> dict[str, Any]:
-    shared: dict[str, Any] = {}
+    shared: dict[str, Any] = {"shared_garment_spec": body.shared_garment_spec}
     if body.notes:
         shared["notes"] = body.notes
     if body.mood_notes:
         shared["mood_notes"] = body.mood_notes
     if body.reference_model_id:
         shared["reference_model_id"] = body.reference_model_id
-    if body.shared_garment_spec is not None:
-        shared["shared_garment_spec"] = body.shared_garment_spec
     return shared
 
 
@@ -161,18 +316,58 @@ def _merge_dual_side_input(
     side_payload: dict[str, Any],
     shared: dict[str, Any],
     operation_id: str,
+    *,
+    design_id: uuid.UUID | None,
+    source_revision: int | None,
+    content_fingerprint: str | None,
 ) -> dict[str, Any]:
     merged = dict(shared)
     merged.update(side_payload)
     merged["studio_side"] = side
     merged["magic_operation_id"] = operation_id
-    return _prepare_sketch_polish_input(merged)
+    return _prepare_sketch_polish_input(
+        merged,
+        design_id=design_id,
+        source_revision=source_revision,
+        content_fingerprint=content_fingerprint,
+    )
+
+
+def _reconcile_or_prepare_job(
+    db: Session,
+    user: User,
+    existing: AIJob | None,
+    *,
+    side: str,
+    prepared_input: dict[str, Any],
+    design_id: uuid.UUID | None,
+    operation_id: str,
+) -> AIJob:
+    if existing is not None:
+        _assert_idempotency_identity(
+            existing,
+            expected_side=side,
+            magic_operation_id=operation_id,
+            design_id=design_id,
+            prepared_input=prepared_input,
+            image_fingerprint=prepared_input.get("image_fingerprint"),
+        )
+        return existing
+    return AIJob(
+        user_id=user.id,
+        design_id=design_id,
+        job_type="sketch_polish",
+        status="queued",
+        input_data=prepared_input,
+        result_data=None,
+        error_message=None,
+    )
 
 
 def enqueue_dual_sketch_polish(
     db: Session, user: User, body: SketchPolishDualBody
 ) -> tuple[AIJob, AIJob, uuid.UUID]:
-    """Enqueue coordinated front/back sketch_polish jobs (one transaction)."""
+    """Enqueue coordinated front/back sketch_polish jobs under an owner advisory lock."""
     if body.design_id:
         design = db.get(GarmentDesign, body.design_id)
         if not design:
@@ -180,53 +375,62 @@ def enqueue_dual_sketch_polish(
         if design.user_id != user.id:
             raise ForbiddenError("Not allowed for this design")
 
-    operation_id = body.magic_operation_id or uuid.uuid4()
+    operation_id = body.magic_operation_id
     op_str = str(operation_id)
     shared = _dual_shared_fields(body)
     front_payload = body.front.model_dump(exclude_none=True)
     back_payload = body.back.model_dump(exclude_none=True)
-    front_input = _merge_dual_side_input("front", front_payload, shared, op_str)
-    back_input = _merge_dual_side_input("back", back_payload, shared, op_str)
+    front_input = _merge_dual_side_input(
+        "front",
+        front_payload,
+        shared,
+        op_str,
+        design_id=body.design_id,
+        source_revision=body.source_revision,
+        content_fingerprint=body.content_fingerprint,
+    )
+    back_input = _merge_dual_side_input(
+        "back",
+        back_payload,
+        shared,
+        op_str,
+        design_id=body.design_id,
+        source_revision=body.source_revision,
+        content_fingerprint=body.content_fingerprint,
+    )
 
     _validate_sketch_image_payload(front_input)
     _validate_sketch_image_payload(back_input)
     reference_from_job_input(front_input)
     reference_from_job_input(back_input)
 
-    front_idem = front_input.get("idempotency_key")
-    back_idem = back_input.get("idempotency_key")
-    front_existing = (
-        find_sketch_polish_by_idempotency(db, user.id, front_idem)
-        if isinstance(front_idem, str) and front_idem
-        else None
+    front_idem = front_input["idempotency_key"]
+    back_idem = back_input["idempotency_key"]
+
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _dual_magic_lock_key(user.id)})
+
+    front_existing = find_sketch_polish_by_idempotency(db, user.id, front_idem)
+    back_existing = find_sketch_polish_by_idempotency(db, user.id, back_idem)
+
+    front_job = _reconcile_or_prepare_job(
+        db,
+        user,
+        front_existing,
+        side="front",
+        prepared_input=front_input,
+        design_id=body.design_id,
+        operation_id=op_str,
     )
-    back_existing = (
-        find_sketch_polish_by_idempotency(db, user.id, back_idem)
-        if isinstance(back_idem, str) and back_idem
-        else None
+    back_job = _reconcile_or_prepare_job(
+        db,
+        user,
+        back_existing,
+        side="back",
+        prepared_input=back_input,
+        design_id=body.design_id,
+        operation_id=op_str,
     )
 
-    if front_existing is not None and back_existing is not None:
-        return front_existing, back_existing, operation_id
-
-    front_job = front_existing or AIJob(
-        user_id=user.id,
-        design_id=body.design_id,
-        job_type="sketch_polish",
-        status="queued",
-        input_data=front_input,
-        result_data=None,
-        error_message=None,
-    )
-    back_job = back_existing or AIJob(
-        user_id=user.id,
-        design_id=body.design_id,
-        job_type="sketch_polish",
-        status="queued",
-        input_data=back_input,
-        result_data=None,
-        error_message=None,
-    )
     if front_existing is None:
         db.add(front_job)
     if back_existing is None:
@@ -237,6 +441,23 @@ def enqueue_dual_sketch_polish(
     if back_existing is None:
         db.refresh(back_job)
     return front_job, back_job, operation_id
+
+
+def list_jobs_for_magic_operation(
+    db: Session, user: User, operation_id: uuid.UUID
+) -> list[AIJob]:
+    op = str(operation_id)
+    rows = (
+        db.query(AIJob)
+        .filter(
+            AIJob.user_id == user.id,
+            AIJob.job_type == "sketch_polish",
+            AIJob.input_data["magic_operation_id"].astext == op,
+        )
+        .order_by(AIJob.created_at.asc())
+        .all()
+    )
+    return rows
 
 
 def get_job(db: Session, user: User, job_id: uuid.UUID) -> AIJob:

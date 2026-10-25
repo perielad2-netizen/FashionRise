@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.schemas.ai import (
     AIJobCreate,
     AIJobRead,
+    MagicOperationJobsRead,
     SketchPipelineBody,
     SketchPolishDualBody,
     SketchPolishDualRead,
@@ -73,6 +74,26 @@ def sketch_polish_dual(
         magic_operation_id=operation_id,
         front_job=AIJobRead.from_job(front_job),
         back_job=AIJobRead.from_job(back_job),
+    )
+
+
+@router.get(
+    "/magic-operations/{operation_id}/jobs",
+    response_model=MagicOperationJobsRead,
+)
+@limiter.limit("120/minute")
+def list_magic_operation_jobs(
+    request: Request,
+    operation_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> MagicOperationJobsRead:
+    """Recover front/back sketch_polish jobs for one coordinated Magic operation."""
+    _ = request.url
+    jobs = ai_service.list_jobs_for_magic_operation(db, user, operation_id)
+    return MagicOperationJobsRead(
+        magic_operation_id=operation_id,
+        jobs=[AIJobRead.from_job(j) for j in jobs],
     )
 
 

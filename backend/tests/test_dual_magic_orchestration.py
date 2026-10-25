@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import base64
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
+from app.core.security import hash_password
 from app.models.ai_job import AIJob
-from app.services import sketch_openai
+from app.models.user import User
+from app.schemas.ai import SketchPolishDualBody
+from app.services import ai_service, sketch_openai
 from tests.auth_test_helpers import register_with_invite
 
 _TINY_PNG = base64.b64encode(
@@ -25,6 +31,8 @@ def _auth(tokens: dict) -> dict:
 
 def _dual_payload(**overrides):
     body = {
+        "magic_operation_id": str(uuid4()),
+        "source_revision": 3,
         "front": {"image_base64": _DATA_URL, "idempotency_key": f"front-{uuid4().hex[:8]}"},
         "back": {"image_base64": _DATA_URL, "idempotency_key": f"back-{uuid4().hex[:8]}"},
         "shared_garment_spec": {"silhouette": "A-line dress", "main_colors": ["coral", "ivory"]},
@@ -52,6 +60,10 @@ def test_dual_enqueue_creates_two_jobs_same_operation(client, db_session):
     assert front["input_data"]["magic_operation_id"] == op
     assert back["input_data"]["magic_operation_id"] == op
     assert front["input_data"].get("shared_garment_spec") == body["shared_garment_spec"]
+    assert front["input_data"].get("source_revision") == 3
+    assert back["input_data"].get("source_revision") == 3
+    assert front["input_data"].get("image_fingerprint")
+    assert front["input_data"]["image_fingerprint"] == back["input_data"]["image_fingerprint"]
 
 
 def test_dual_idempotent_retry_does_not_duplicate(client, db_session):
@@ -70,6 +82,21 @@ def test_dual_idempotent_retry_does_not_duplicate(client, db_session):
         .count()
     )
     assert count == 2
+
+
+def test_recovery_get_magic_operation_jobs(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_rec@example.com", "dual_rec")
+    body = _dual_payload()
+    created = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert created.status_code == 201
+    op = created.json()["magic_operation_id"]
+    listed = client.get(f"/api/v1/ai/magic-operations/{op}/jobs", headers=_auth(tokens))
+    assert listed.status_code == 200
+    jobs = listed.json()["jobs"]
+    assert len(jobs) == 2
+    ids = {j["id"] for j in jobs}
+    assert created.json()["front_job"]["id"] in ids
+    assert created.json()["back_job"]["id"] in ids
 
 
 def test_one_sided_polish_unchanged(client, db_session):
@@ -98,6 +125,27 @@ def test_single_polish_idempotency_key(client, db_session):
     b = client.post("/api/v1/ai/sketch/polish", headers=_auth(tokens), json=payload)
     assert a.status_code == 201 and b.status_code == 201
     assert a.json()["id"] == b.json()["id"]
+
+
+def test_single_polish_idempotency_mismatch_image_409(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_d2@example.com", "dual_d2")
+    other_png = base64.b64encode(b"\x89PNG diff bytes").decode("ascii")
+    other_url = f"data:image/png;base64,{other_png}"
+    base = {
+        "input_data": {
+            "image_base64": _DATA_URL,
+            "idempotency_key": "idem-mismatch",
+            "magic_operation_id": str(uuid4()),
+            "source_revision": 1,
+        }
+    }
+    assert client.post("/api/v1/ai/sketch/polish", headers=_auth(tokens), json=base).status_code == 201
+    clash = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={**base, "input_data": {**base["input_data"], "image_base64": other_url}},
+    )
+    assert clash.status_code == 409
 
 
 def test_invalid_studio_side_rejected(client, db_session):
@@ -171,6 +219,7 @@ def test_sequential_enqueue_linked_by_operation_id(client, db_session):
                 "magic_operation_id": op,
                 "shared_garment_spec": shared,
                 "idempotency_key": "seq-front",
+                "source_revision": 2,
             }
         },
     )
@@ -184,12 +233,137 @@ def test_sequential_enqueue_linked_by_operation_id(client, db_session):
                 "magic_operation_id": op,
                 "shared_garment_spec": shared,
                 "idempotency_key": "seq-back",
+                "source_revision": 2,
             }
         },
     )
     assert front.status_code == 201 and back.status_code == 201
     assert front.json()["input_data"]["magic_operation_id"] == op
     assert back.json()["input_data"]["magic_operation_id"] == op
+
+
+def test_dual_missing_shared_garment_spec_422(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_miss@example.com", "dual_miss")
+    body = _dual_payload()
+    body.pop("shared_garment_spec")
+    r = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert r.status_code == 422
+
+
+def test_dual_missing_keys_422(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_keys@example.com", "dual_keys")
+    body = _dual_payload()
+    body.pop("magic_operation_id")
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body).status_code == 422
+    body = _dual_payload()
+    body.pop("source_revision")
+    body.pop("content_fingerprint", None)
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body).status_code == 422
+    body = _dual_payload()
+    body["front"] = {"image_base64": _DATA_URL}
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body).status_code == 422
+
+
+def test_dual_idempotency_identity_mismatch_409(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_409@example.com", "dual_409")
+    op = str(uuid4())
+    body = _dual_payload(
+        magic_operation_id=op,
+        front={"image_base64": _DATA_URL, "idempotency_key": "idem-front-x"},
+        back={"image_base64": _DATA_URL, "idempotency_key": "idem-back-x"},
+    )
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body).status_code == 201
+    clash = _dual_payload(
+        magic_operation_id=op,
+        source_revision=99,
+        front={"image_base64": _DATA_URL, "idempotency_key": "idem-front-x"},
+        back={"image_base64": _DATA_URL, "idempotency_key": "idem-back-x"},
+    )
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=clash).status_code == 409
+
+
+def test_dual_cross_side_key_reuse_422(client, db_session):
+    tokens = register_with_invite(client, db_session, "dual_xside@example.com", "dual_xside")
+    key = "same-key-both-sides"
+    body = _dual_payload(
+        front={"image_base64": _DATA_URL, "idempotency_key": key},
+        back={"image_base64": _DATA_URL, "idempotency_key": key},
+    )
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body).status_code == 422
+
+
+def test_concurrent_dual_enqueue_two_jobs_total(engine):
+    """Postgres advisory-lock coverage: parallel polish-dual cannot insert duplicate jobs."""
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    email = f"dual_conc_{uuid.uuid4().hex[:8]}@example.com"
+    username = f"dconc_{uuid.uuid4().hex[:8]}"
+
+    bootstrap = SessionLocal()
+    try:
+        user = User(
+            email=email,
+            username=username,
+            hashed_password=hash_password("StrongPass123!"),
+            is_active=True,
+            is_admin=False,
+        )
+        bootstrap.add(user)
+        bootstrap.commit()
+        bootstrap.refresh(user)
+        user_id = user.id
+    finally:
+        bootstrap.close()
+
+    op = uuid4()
+    front_key = "conc-front"
+    back_key = "conc-back"
+    body = SketchPolishDualBody.model_validate(
+        {
+            "magic_operation_id": str(op),
+            "source_revision": 1,
+            "front": {"image_base64": _DATA_URL, "idempotency_key": front_key},
+            "back": {"image_base64": _DATA_URL, "idempotency_key": back_key},
+            "shared_garment_spec": {"silhouette": "gown", "notes": "concurrent"},
+        }
+    )
+
+    def worker(_: int) -> tuple[str, str]:
+        session = SessionLocal()
+        try:
+            u = session.get(User, user_id)
+            assert u is not None
+            front_job, back_job, _ = ai_service.enqueue_dual_sketch_polish(session, u, body)
+            return str(front_job.id), str(back_job.id)
+        finally:
+            session.close()
+
+    pairs: list[tuple[str, str]] = []
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(worker, i) for i in range(8)]
+        for fut in as_completed(futures):
+            pairs.append(fut.result())
+
+    front_ids = {p[0] for p in pairs}
+    back_ids = {p[1] for p in pairs}
+    assert len(front_ids) == 1
+    assert len(back_ids) == 1
+
+    verify = SessionLocal()
+    try:
+        count = (
+            verify.query(AIJob)
+            .filter(AIJob.user_id == user_id, AIJob.job_type == "sketch_polish")
+            .count()
+        )
+        assert count == 2
+        for row in verify.query(AIJob).filter(AIJob.user_id == user_id).all():
+            verify.delete(row)
+        u = verify.get(User, user_id)
+        if u:
+            verify.delete(u)
+        verify.commit()
+    finally:
+        verify.close()
 
 
 def test_back_side_prompt_language():
@@ -239,7 +413,7 @@ def test_sketch_openai_has_no_pose_lock_packing():
 @pytest.mark.parametrize("path", ["front", "back"])
 def test_dual_side_payload_requires_image(path: str, client, db_session):
     tokens = register_with_invite(client, db_session, f"dual_bad_{path}@example.com", "dual_bad")
-    body = {"front": {"notes": "x"}, "back": {"notes": "y"}}
-    body[path] = {"notes": "no image"}
+    body = _dual_payload()
+    body[path] = {"idempotency_key": f"missing-img-{path}", "notes": "no image"}
     r = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
     assert r.status_code == 422
