@@ -12,7 +12,7 @@
 | Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) head | branch tip (includes test-only branch-guard fix + release-gate docs; FE + BE on `main`) |
 | Production FE (last reported) | `c6fc1eb8` |
 | Production BE/worker (last reported) | `b800e53d25dcdf2481f377470543b323798796a7` |
-| Maint candidate `cursor/p1-59-maint-b800e53d-77c6` | `dafe56513317a6f890e9045e8f32a228ad25f17a` (docs sync atop runtime `1450b5a1`) |
+| Maint candidate `cursor/p1-59-maint-b800e53d-77c6` | branch tip (docs sync); **runtime identity content** unchanged since `1450b5a1` |
 | Alembic | `005` (unchanged) |
 | Image model | `gpt-image-2.5-sunburst` high / 1024×1536 / n=1 / png / `max_retries=0` |
 
@@ -28,7 +28,7 @@
 | Artifact | Base | Purpose |
 |---|---|---|
 | Draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) | `main` @ `c6fc1eb8` | Development / review of FE + full identity contract (sits atop main, including undeployed PR #41 source) |
-| Maint candidate `cursor/p1-59-maint-b800e53d-77c6` @ `dafe5651` | **exactly** `b800e53d` | Production-compatible API/worker **without** PR #41 pose packing (docs tip; runtime identity since `1450b5a1`) |
+| Maint candidate `cursor/p1-59-maint-b800e53d-77c6` | **exactly** `b800e53d` | Production-compatible API/worker **without** PR #41 pose packing (runtime identity since `1450b5a1`; later commits docs-only) |
 
 Only the maint candidate is eligible for a future production BE/worker deploy. FE from PR #61 after BE is live.
 
@@ -56,7 +56,7 @@ Only the maint candidate is eligible for a future production BE/worker deploy. F
 | Surface | Result |
 |---|---|
 | PR #61 backend pytest | **310 passed** |
-| Maint `1450b5a1` / tip `dafe5651` backend pytest | **331 passed** (re-run at `1450b5a1` runtime tip; docs-only commit after) |
+| Maint runtime `1450b5a1` backend pytest | **331 passed** (later docs-only commits do not change Python) |
 | PR #61 frontend Vitest | **379 passed** (72 files) |
 | PR #61 `tsc -b` / oxlint / `build` / `check:sw` | **PASS** (`sw_access_safety ok=true`); oxlint warnings pre-existing |
 | Ruff / mypy | Baseline noise only (main ruff 107 / mypy 8; PR #61 same counts; scoped BLE001 on `sketch_openai` also on main) |
@@ -77,7 +77,7 @@ A production `POST /ai/sketch/polish` **enqueues a job that may trigger paid Sun
 
 1. **Preflight (read-only):** confirm live prod FE/BE/worker SHAs, Alembic `005`, `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst`, worker `max_retries=0`, AI queue has **0** non-terminal jobs.
 2. **Backup** production API/worker trees + env/unit files (and FE release directory).
-3. **Deploy BE/API + AI worker only** from maint tip `dafe5651` (runtime identity identical to `1450b5a1`; docs-only atop), after Technical PM authorization.
+3. **Deploy BE/API + AI worker only** from the authorized maint branch tip (runtime identity since `1450b5a1`; confirm SHA at deploy time), after Technical PM authorization.
 4. **Verify** `/health` + `/ready` (or project-equivalent) and that API/worker process revisions match the candidate tip.
 5. **Compatibility window (safe, no paid work):**
    - Old FE → new BE: safe (missing `reference_model_id` accepted).
