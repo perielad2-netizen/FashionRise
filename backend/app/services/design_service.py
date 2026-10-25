@@ -216,8 +216,26 @@ def _validate_saved_design_data(design_data: dict[str, Any] | None) -> None:
         _validate_side_bag(snapshot.get("back"), field_name="snapshot.back")
 
 
+def _back_has_artwork(design_data: dict[str, Any] | None) -> bool:
+    bag = _normalize_back_sentinel(design_data)
+    if bag is None:
+        return False
+    return bool(bag.get("strokes")) or bool(bag.get("fills"))
+
+
+def _has_clear_back_intent(meta: dict[str, Any] | None, design_data: dict[str, Any] | None) -> bool:
+    """Explicit authenticated clear intent (metadata or design_data flag)."""
+    for source in (meta or {}, design_data or {}):
+        if source.get("clearBackIntent") is True:
+            return True
+    return False
+
+
 def _studio_downgrade_reason(
-    stored: dict[str, Any] | None, incoming: dict[str, Any] | None
+    stored: dict[str, Any] | None,
+    incoming: dict[str, Any] | None,
+    *,
+    incoming_meta: dict[str, Any] | None = None,
 ) -> str | None:
     """Return a stable reason code when incoming would strip/downgrade two-sided data."""
     stored_data = stored or {}
@@ -226,6 +244,14 @@ def _studio_downgrade_reason(
         return "studio_schema_downgrade"
     if _has_back_key(stored_data) and not _has_back_key(incoming_data):
         return "back_stripped"
+    # Emptying previously present Back ink requires clearBackIntent=true + OCC.
+    if (
+        _back_has_artwork(stored_data)
+        and _has_back_key(incoming_data)
+        and not _back_has_artwork(incoming_data)
+        and not _has_clear_back_intent(incoming_meta, incoming_data)
+    ):
+        return "back_clear_requires_intent"
     return None
 
 
@@ -307,6 +333,9 @@ def _raise_studio_downgrade(
     messages = {
         "studio_schema_downgrade": "Cannot downgrade a Studio draft.v2 document to draft.v1.",
         "back_stripped": "Cannot strip Back artwork from a Studio working draft.",
+        "back_clear_requires_intent": (
+            "Clearing Back artwork requires clearBackIntent=true under optimistic concurrency."
+        ),
         "studio_sides_insufficient": "Client capability cannot overwrite a two-sided Studio draft.",
     }
     raise ConflictError(
@@ -385,7 +414,9 @@ def create_design(db: Session, user: User, data: DesignCreate) -> GarmentDesign:
             current_rev = _studio_client_revision(existing)
             # Downgrade rejection MUST run before identical/stale shortcuts so an old PWA
             # never receives a silent success that hides Back artwork loss.
-            reason = _studio_downgrade_reason(existing.design_data, design_data)
+            reason = _studio_downgrade_reason(
+                existing.design_data, design_data, incoming_meta=meta
+            )
             if reason:
                 _raise_studio_downgrade(reason, existing, incoming_rev)
             _reject_capability_downgrade(
@@ -501,7 +532,9 @@ def update_design(db: Session, design_id: uuid.UUID, user: User, data: DesignUpd
             # Still reject downgrade attempts even on stale expected_revision so clients
             # never treat a conflict payload as permission to strip Back later.
             if data.design_data is not None:
-                reason = _studio_downgrade_reason(d.design_data, data.design_data)
+                reason = _studio_downgrade_reason(
+                    d.design_data, data.design_data, incoming_meta=incoming_meta
+                )
                 if reason:
                     _raise_studio_downgrade(reason, d, data.expected_revision)
             raise ConflictError(
@@ -510,7 +543,9 @@ def update_design(db: Session, design_id: uuid.UUID, user: User, data: DesignUpd
             )
         if data.design_data is not None:
             incoming_rev = _client_revision_from_payloads(incoming_meta, incoming_data)
-            reason = _studio_downgrade_reason(d.design_data, data.design_data)
+            reason = _studio_downgrade_reason(
+                d.design_data, data.design_data, incoming_meta=incoming_meta
+            )
             if reason:
                 _raise_studio_downgrade(reason, d, data.expected_revision)
             _reject_capability_downgrade(

@@ -116,6 +116,14 @@ def test_downgrade_reason_codes():
             stored,
             {"schema": STUDIO_DRAFT_V2, "back": {"strokes": [], "fills": []}},
         )
+        == "back_clear_requires_intent"
+    )
+    assert (
+        _studio_downgrade_reason(
+            stored,
+            {"schema": STUDIO_DRAFT_V2, "back": {"strokes": [], "fills": []}},
+            incoming_meta={"clearBackIntent": True},
+        )
         is None
     )
 
@@ -433,6 +441,106 @@ def test_stale_create_downgrade_never_silent_success(client, db_session):
     assert stale_v1.json()["detail"]["payload"]["reason"] == "studio_schema_downgrade"
     got = client.get(f"/api/v1/designs/{design_id}", headers=headers).json()
     assert got["design_data"]["back"]["strokes"][0]["id"] == "secret"
+
+
+def test_emptying_back_without_intent_rejected(client, db_session):
+    tokens = _register(client, db_session, "v4jb_clear@example.com", "v4jb_clear")
+    headers = _auth(tokens["access_token"])
+    created = client.post(
+        "/api/v1/designs",
+        headers=headers,
+        json=_studio_v2_payload(
+            1,
+            front_stroke_id="f",
+            back={"strokes": [_stroke("keep")], "fills": []},
+        ),
+    )
+    assert created.status_code == 201, created.text
+    design_id = created.json()["id"]
+
+    accidental = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={
+            **_studio_v2_payload(
+                2,
+                front_stroke_id="f",
+                back={"strokes": [], "fills": []},
+            ),
+            "expected_revision": 1,
+        },
+    )
+    assert accidental.status_code == 409, accidental.text
+    assert accidental.json()["detail"]["payload"]["reason"] == "back_clear_requires_intent"
+    assert (
+        client.get(f"/api/v1/designs/{design_id}", headers=headers).json()["design_data"]["back"][
+            "strokes"
+        ][0]["id"]
+        == "keep"
+    )
+
+    payload = _studio_v2_payload(
+        2,
+        front_stroke_id="f",
+        back={"strokes": [], "fills": []},
+    )
+    payload["metadata"]["clearBackIntent"] = True
+    cleared = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={**payload, "expected_revision": 1},
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["design_data"]["back"] == {"strokes": [], "fills": []}
+    assert cleared.json()["design_data"]["clientRevision"] == 2
+
+
+def test_two_tab_conflict_preserves_full_v2_document(client, db_session):
+    tokens = _register(client, db_session, "v4jb_tabs@example.com", "v4jb_tabs")
+    headers = _auth(tokens["access_token"])
+    created = client.post(
+        "/api/v1/designs",
+        headers=headers,
+        json=_studio_v2_payload(
+            1,
+            front_stroke_id="front-a",
+            back={"strokes": [_stroke("back-a")], "fills": []},
+        ),
+    )
+    assert created.status_code == 201, created.text
+    design_id = created.json()["id"]
+
+    tab_b = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={
+            **_studio_v2_payload(
+                2,
+                front_stroke_id="front-b",
+                back={"strokes": [_stroke("back-b")], "fills": []},
+            ),
+            "expected_revision": 1,
+        },
+    )
+    assert tab_b.status_code == 200, tab_b.text
+
+    tab_a_stale = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={
+            **_studio_v2_payload(
+                3,
+                front_stroke_id="front-stale",
+                back={"strokes": [_stroke("back-stale")], "fills": []},
+            ),
+            "expected_revision": 1,
+        },
+    )
+    assert tab_a_stale.status_code == 409, tab_a_stale.text
+    server = client.get(f"/api/v1/designs/{design_id}", headers=headers).json()["design_data"]
+    assert server["clientRevision"] == 2
+    assert server["strokes"][0]["id"] == "front-b"
+    assert server["back"]["strokes"][0]["id"] == "back-b"
 
 
 def test_fingerprint_json_stable_sort_keys():
