@@ -95,6 +95,39 @@ export async function fetchAiJob(jobId: string, signal?: AbortSignal): Promise<A
   return apiRequest<AiJobRead>(`/ai/jobs/${jobId}`, { signal })
 }
 
+export type MagicOperationJobsRead = {
+  magic_operation_id: string
+  jobs: AiJobRead[]
+}
+
+/**
+ * Recover Front/Back jobs for a coordinated dual Magic operation without enqueueing.
+ * Backend: GET /ai/magic-operations/{operationId}/jobs (PR #70).
+ */
+export async function fetchMagicOperationJobs(
+  operationId: string,
+  signal?: AbortSignal,
+): Promise<MagicOperationJobsRead> {
+  return apiRequest<MagicOperationJobsRead>(`/ai/magic-operations/${operationId}/jobs`, {
+    signal,
+  })
+}
+
+/** Map operation job list → front/back ids using `input_data.studio_side`. */
+export function mapMagicOperationJobsBySide(jobs: AiJobRead[]): {
+  frontJobId: string | null
+  backJobId: string | null
+} {
+  let frontJobId: string | null = null
+  let backJobId: string | null = null
+  for (const job of jobs) {
+    const side = job.input_data?.studio_side
+    if (side === 'front' && !frontJobId) frontJobId = job.id
+    if (side === 'back' && !backJobId) backJobId = job.id
+  }
+  return { frontJobId, backJobId }
+}
+
 /** Authenticated look image (never relies on public /static/uploads). */
 export async function fetchJobImageBlob(jobId: string, signal?: AbortSignal): Promise<Blob> {
   const headers: Record<string, string> = { Accept: 'image/*,application/octet-stream' }

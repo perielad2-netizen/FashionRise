@@ -162,6 +162,7 @@ export function isStudioDraftDocument(value: unknown): value is StudioDraftDocum
   return typeof doc.schema === 'string' && STUDIO_SCHEMAS.has(doc.schema) && Array.isArray(doc.strokes)
 }
 
+/** Lenient Front / V1 stroke recovery — skips bad items rather than failing the document. */
 function parseSideStrokes(
   rawList: unknown[],
   fallbackColor: string,
@@ -183,6 +184,61 @@ function parseSideStrokes(
     })
   }
   return strokes
+}
+
+/**
+ * Atomic Back stroke parse: any malformed item rejects the whole list (and therefore V2).
+ * Does not invent ids/colors/sizes for damaged records.
+ */
+function parseStrictSideStrokes(rawList: unknown[]): Stroke[] | null {
+  const strokes: Stroke[] = []
+  for (const s of rawList) {
+    if (!s || typeof s !== 'object') return null
+    const tool = (s as Stroke).tool
+    if (tool !== 'draw' && tool !== 'erase') return null
+    if (typeof (s as Stroke).id !== 'string' || !(s as Stroke).id) return null
+    if (!Array.isArray((s as Stroke).points)) return null
+    if (!(s as Stroke).points.every((n) => typeof n === 'number' && Number.isFinite(n))) return null
+    if (typeof (s as Stroke).color !== 'string') return null
+    if (typeof (s as Stroke).size !== 'number' || !Number.isFinite((s as Stroke).size)) return null
+    if (typeof (s as Stroke).opacity !== 'number' || !Number.isFinite((s as Stroke).opacity)) {
+      return null
+    }
+    strokes.push({
+      id: (s as Stroke).id,
+      tool: tool as ToolKind,
+      points: [...(s as Stroke).points],
+      color: (s as Stroke).color,
+      size: (s as Stroke).size,
+      opacity: (s as Stroke).opacity,
+    })
+  }
+  return strokes
+}
+
+/** Atomic Back fill parse: any malformed item rejects the whole list. */
+function parseStrictSideFills(rawList: unknown[]): FillOp[] | null {
+  const fills: FillOp[] = []
+  for (const item of rawList) {
+    const fill = parseFillOp(item)
+    if (!fill) return null
+    fills.push(fill)
+  }
+  return fills
+}
+
+/**
+ * Parse a present V2 `back` bag. Returns `null` when the bag (or any item) is malformed —
+ * callers must fail the entire V2 document, never coerce to an empty bag.
+ */
+export function parseStrictV2BackBag(rawBack: unknown): StudioSideBag | null {
+  const structure = normalizeSideBag(rawBack)
+  if (!structure) return null
+  const strokes = parseStrictSideStrokes(structure.strokes)
+  if (!strokes) return null
+  const fills = parseStrictSideFills(structure.fills)
+  if (!fills) return null
+  return { strokes, fills }
 }
 
 export class StudioDraftSerializeError extends Error {
@@ -227,24 +283,21 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
 
   let activeSide: StudioPaperSide | undefined
   if (schema === STUDIO_DRAFT_SCHEMA_V2) {
-    const side = (raw as { activeSide?: unknown }).activeSide
-    activeSide = side === 'back' ? 'back' : 'front'
+    if ('activeSide' in (raw as object)) {
+      const side = (raw as { activeSide?: unknown }).activeSide
+      if (side !== 'front' && side !== 'back') return null
+      activeSide = side
+    } else {
+      activeSide = 'front'
+    }
   }
 
   let back: StudioSideBag | undefined
   if (schema === STUDIO_DRAFT_SCHEMA_V2 && 'back' in (raw as object)) {
-    const rawBack = (raw as { back?: unknown }).back
-    const parsedBag = normalizeSideBag(rawBack)
-    if (!parsedBag) return null
-    const backStrokes = parseSideStrokes(parsedBag.strokes, color, sizePx)
-    const backFills: FillOp[] = []
-    if (Array.isArray(parsedBag.fills)) {
-      for (const item of parsedBag.fills) {
-        const fill = parseFillOp(item)
-        if (fill) backFills.push(fill)
-      }
-    }
-    back = { strokes: backStrokes, fills: backFills }
+    // Present-but-malformed Back must reject the entire V2 document (no empty-bag coercion).
+    const parsedBack = parseStrictV2BackBag((raw as { back?: unknown }).back)
+    if (!parsedBack) return null
+    back = parsedBack
   }
 
   return {

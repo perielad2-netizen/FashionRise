@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   MAX_SNAPSHOT_STROKES,
   SAVED_DESIGN_SCHEMA,
+  SAVED_DESIGN_SCHEMA_V2,
   TITLE_MAX_LENGTH,
   buildSavedDesignPayload,
   parseSavedDesign,
+  parseSavedDesignSnapshot,
   partitionSavedDesigns,
   snapshotFingerprint,
   snapshotFromDocument,
@@ -260,6 +262,95 @@ describe('parseSavedDesign safety', () => {
   it('keeps hostile titles as plain data', () => {
     const r = savedRow('a', good, { title: '<img src=x onerror=alert(1)>' })
     expect(parseSavedDesign(r, OWNER)!.title).toBe('<img src=x onerror=alert(1)>')
+  })
+})
+
+describe('saved_design.v2 atomic Back parse', () => {
+  const frontStroke = {
+    id: 'f1',
+    tool: 'draw' as const,
+    points: [1, 2, 0.5],
+    color: '#1C1C1E',
+    size: 2,
+    opacity: 1,
+  }
+  const backStroke = {
+    id: 'b1',
+    tool: 'draw' as const,
+    points: [3, 4, 0.5],
+    color: '#222222',
+    size: 2,
+    opacity: 1,
+  }
+  const baseSnap = {
+    strokes: [frontStroke],
+    fills: [],
+    activeSide: 'front' as const,
+    model: 'female-straight' as const,
+    brush: { sizeId: 'thin' as const, opacity: 1, color: '#1C1C1E' },
+    dimmed: false,
+  }
+
+  it('accepts well-formed v2 Back ink', () => {
+    const snap = parseSavedDesignSnapshot({
+      ...baseSnap,
+      back: { strokes: [backStroke], fills: [] },
+    })
+    expect(snap?.back?.strokes).toHaveLength(1)
+  })
+
+  it.each([
+    ['back null', null],
+    ['back string', 'damaged'],
+    ['strokes missing', { fills: [] }],
+    ['fills wrong type', { strokes: [backStroke], fills: 'nope' }],
+    [
+      'malformed back stroke',
+      { strokes: [{ ...backStroke, tool: 'spray' }], fills: [] },
+    ],
+    [
+      'malformed back fill',
+      {
+        strokes: [backStroke],
+        fills: [{ id: 'x', contour: [1], style: { kind: 'solid', color: '#111111' }, seedX: 0, seedY: 0 }],
+      },
+    ],
+  ])('rejects whole snapshot when Back is malformed (%s)', (_label, back) => {
+    expect(parseSavedDesignSnapshot({ ...baseSnap, back })).toBeNull()
+  })
+
+  it('marks a saved_design.v2 row with malformed Back as damaged, not Front-only', () => {
+    const payload = buildSavedDesignPayload({
+      title: 'Two sided',
+      snapshot: {
+        ...baseSnap,
+        back: { strokes: [backStroke], fills: [] },
+      },
+      saveRequestId: 'req-v2',
+      sourceRevision: 3,
+    })
+    const designData = {
+      ...payload.design_data,
+      schema: SAVED_DESIGN_SCHEMA_V2,
+      snapshot: {
+        ...(payload.design_data.snapshot as object),
+        back: { strokes: 'broken', fills: [] },
+      },
+    }
+    const r = row({
+      id: 'v2-broken',
+      title: payload.title,
+      design_data: designData as unknown as Record<string, unknown>,
+      metadata: payload.metadata,
+    })
+    expect(parseSavedDesign(r, OWNER)).toBeNull()
+    const lib = partitionSavedDesigns([r], OWNER)
+    expect(lib.designs).toEqual([])
+    expect(lib.damaged.map((d) => d.id)).toEqual(['v2-broken'])
+  })
+
+  it('rejects invalid activeSide on snapshots', () => {
+    expect(parseSavedDesignSnapshot({ ...baseSnap, activeSide: 'middle' })).toBeNull()
   })
 })
 

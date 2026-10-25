@@ -300,31 +300,32 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
     },
     dimmed: s.dimmed,
   }
-  if (s.activeSide === 'front' || s.activeSide === 'back') {
+  if ('activeSide' in s) {
+    if (s.activeSide !== 'front' && s.activeSide !== 'back') return null
     snapshot.activeSide = s.activeSide
   }
   if ('back' in s) {
+    // Present Back must parse atomically — never omit a damaged bag and keep Front-only.
     const rawBack = s.back
-    if (rawBack && typeof rawBack === 'object') {
-      const bag = rawBack as { strokes?: unknown; fills?: unknown }
-      if (Array.isArray(bag.strokes)) {
-        const backStrokes: Stroke[] = []
-        for (const rawStroke of bag.strokes) {
-          const stroke = parseStroke(rawStroke)
-          if (!stroke) return null
-          backStrokes.push(stroke)
-        }
-        const backFills: FillOp[] = []
-        if (Array.isArray(bag.fills)) {
-          for (const rawFill of bag.fills) {
-            const fill = parseFillOp(rawFill)
-            if (!fill) return null
-            backFills.push(fill)
-          }
-        }
-        snapshot.back = { strokes: backStrokes, fills: backFills }
+    if (!rawBack || typeof rawBack !== 'object') return null
+    const bag = rawBack as { strokes?: unknown; fills?: unknown }
+    if (!Array.isArray(bag.strokes)) return null
+    if (bag.fills !== undefined && !Array.isArray(bag.fills)) return null
+    const backStrokes: Stroke[] = []
+    for (const rawStroke of bag.strokes) {
+      const stroke = parseStroke(rawStroke)
+      if (!stroke) return null
+      backStrokes.push(stroke)
+    }
+    const backFills: FillOp[] = []
+    if (Array.isArray(bag.fills)) {
+      for (const rawFill of bag.fills) {
+        const fill = parseFillOp(rawFill)
+        if (!fill) return null
+        backFills.push(fill)
       }
     }
+    snapshot.back = { strokes: backStrokes, fills: backFills }
   }
   return snapshot
 }

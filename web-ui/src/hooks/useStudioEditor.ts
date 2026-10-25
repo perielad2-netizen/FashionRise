@@ -65,6 +65,7 @@ import {
   readMagicJobId,
   readMagicOperation,
 } from '@/services/ai/magicJobStore'
+import { resolveDualMagicJobIds } from '@/services/ai/magicOperationRecovery'
 import type { StudioPaperSide } from '@/lib/studioSideArtwork'
 import { sideHasInk } from '@/lib/studioSideArtwork'
 import { recoverMagicJob } from '@/services/ai/pollAiJob'
@@ -1205,12 +1206,10 @@ export function useStudioEditor() {
       return
     }
     const storedOp = readMagicOperation(user.id)
-    const dualJobs =
-      storedOp?.frontJobId && storedOp.backJobId
-        ? { front: storedOp.frontJobId, back: storedOp.backJobId }
-        : null
-    const jobId = magicJobId || readMagicJobId(user.id)
-    if (!dualJobs && !jobId) {
+    const legacyJobId = magicJobId || readMagicJobId(user.id)
+    // Dual ops persist operationId before enqueue; job ids may be missing if the
+    // POST response was lost — still open recovery and resolve via operations API.
+    if (!storedOp?.operationId && !legacyJobId) {
       setMagicError('No previous Magic job to recover.')
       setMagicPhase('failed')
       setMagicOpen(true)
@@ -1227,9 +1226,25 @@ export function useStudioEditor() {
     const controller = new AbortController()
     magicAbortRef.current = controller
     if (storedOp) setMagicOperationId(storedOp.operationId)
-    const run = dualJobs
-      ? recoverDualMagicOperation(dualJobs.front, dualJobs.back, controller.signal)
-      : applySettledMagicJob(jobId!, controller.signal)
+
+    const run = (async () => {
+      if (storedOp?.operationId) {
+        const dual = await resolveDualMagicJobIds(user.id, controller.signal)
+        if (dual) {
+          setMagicOperationId(dual.operationId)
+          setMagicJobId(dual.frontJobId)
+          await recoverDualMagicOperation(dual.frontJobId, dual.backJobId, controller.signal)
+          return
+        }
+        // Operation known but jobs not listed yet (delayed) or incomplete — do not
+        // fall through to a misleading single-job recover or re-enqueue.
+        throw new Error(
+          'Magic jobs for this operation are not ready yet. Wait briefly and recover again — no new render was started.',
+        )
+      }
+      await applySettledMagicJob(legacyJobId!, controller.signal)
+    })()
+
     void run
       .catch((err) => {
         if (controller.signal.aborted) return
