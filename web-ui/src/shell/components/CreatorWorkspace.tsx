@@ -364,6 +364,19 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         sketchObjectUrl={editor.magicSketchUrl}
         error={editor.magicError}
         canRecover={editor.magicCanRecover}
+        dual={
+          editor.magicDualActive && editor.magicOperationId
+            ? {
+                operationId: editor.magicOperationId,
+                viewSide: editor.magicDualViewSide,
+                onViewSide: editor.setMagicDualViewSide,
+                front: editor.magicFront,
+                back: editor.magicBack,
+                onRetrySide: editor.retryMagicSide,
+                onDownloadSide: editor.downloadMagicSide,
+              }
+            : null
+        }
         onClose={editor.closeMagicPanel}
         onCancel={editor.cancelMagicWait}
         onDownload={editor.downloadMagicLook}
@@ -550,6 +563,10 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 onExport={() => void editor.exportPng()}
                 onExit={exitImmersive}
                 saveLabel={editor.saveStatusLabel || 'Save'}
+                frontBackEnabled={editor.frontBackEnabled}
+                activeSide={editor.activeSide}
+                rearAvailable={editor.rearAvailable}
+                onSideChange={editor.changeActiveSide}
               />
             ) : null}
           </div>

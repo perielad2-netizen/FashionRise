@@ -52,15 +52,18 @@ import {
 import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
 import { ApiError } from '@/services/api/client'
 import { enqueueSketchPolish, fetchJobImageBlob } from '@/services/ai/magicApi'
+import { enqueueDualOrSequentialPolish } from '@/services/ai/magicDualPolish'
+import { settleMagicJobWithImage } from '@/services/ai/magicPipelineHelpers'
 import {
   patchMagicOperationJob,
   persistMagicJobId,
   persistMagicOperation,
   readMagicJobId,
+  readMagicOperation,
 } from '@/services/ai/magicJobStore'
 import type { StudioPaperSide } from '@/lib/studioSideArtwork'
 import { sideHasInk } from '@/lib/studioSideArtwork'
-import { pollAiJobUntilSettled, recoverMagicJob } from '@/services/ai/pollAiJob'
+import { recoverMagicJob } from '@/services/ai/pollAiJob'
 import { toMagicLookResult, type MagicLookResult } from '@/services/ai/aiJobTypes'
 import { StrokeHistory } from '@/lib/history'
 import { validateReferenceImageFile } from '@/lib/referenceFile'
@@ -76,9 +79,20 @@ import {
   type ToolKind,
 } from '@/lib/strokes'
 import { useAuth } from '@/services/auth/AuthProvider'
-import type { MagicPhase } from '@/shell/components/MagicLookPanel'
+import type { MagicPhase, MagicSidePanelState } from '@/shell/components/MagicLookPanel'
 
 const MAGIC_NOTICE = 'AI enhancement will be available in a later milestone.'
+
+function emptyMagicSide(): MagicSidePanelState {
+  return {
+    phase: 'idle',
+    result: null,
+    lookObjectUrl: null,
+    sketchObjectUrl: null,
+    error: null,
+    canRetry: false,
+  }
+}
 const AUTOSAVE_MS = 1600
 const CUSTOM_REF_BETA_NOTICE =
   'Custom reference images stay on this device for the session only in private beta. They are not uploaded to the server (uploads are not owner-private yet).'
@@ -175,9 +189,22 @@ export function useStudioEditor() {
   const [magicLookUrl, setMagicLookUrl] = useState<string | null>(null)
   const [magicSketchUrl, setMagicSketchUrl] = useState<string | null>(null)
   const [magicJobId, setMagicJobId] = useState<string | null>(null)
+  const [magicDualActive, setMagicDualActive] = useState(false)
+  const [magicOperationId, setMagicOperationId] = useState<string | null>(null)
+  const [magicDualViewSide, setMagicDualViewSide] = useState<StudioPaperSide>('front')
+  const [magicFront, setMagicFront] = useState<MagicSidePanelState>(emptyMagicSide)
+  const [magicBack, setMagicBack] = useState<MagicSidePanelState>(emptyMagicSide)
   const magicAbortRef = useRef<AbortController | null>(null)
   const magicLookUrlRef = useRef<string | null>(null)
   const magicSketchUrlRef = useRef<string | null>(null)
+  const magicSideLookUrlsRef = useRef<{ front: string | null; back: string | null }>({
+    front: null,
+    back: null,
+  })
+  const magicSideSketchUrlsRef = useRef<{ front: string | null; back: string | null }>({
+    front: null,
+    back: null,
+  })
   const magicInFlightRef = useRef(false)
   const magicEnabled = isMagicUiEnabled()
   const magicBusy =
@@ -825,8 +852,20 @@ export function useStudioEditor() {
       URL.revokeObjectURL(magicSketchUrlRef.current)
       magicSketchUrlRef.current = null
     }
+    for (const side of ['front', 'back'] as const) {
+      const look = magicSideLookUrlsRef.current[side]
+      if (look) URL.revokeObjectURL(look)
+      magicSideLookUrlsRef.current[side] = null
+      const sketch = magicSideSketchUrlsRef.current[side]
+      if (sketch) URL.revokeObjectURL(sketch)
+      magicSideSketchUrlsRef.current[side] = null
+    }
     setMagicLookUrl(null)
     setMagicSketchUrl(null)
+    setMagicDualActive(false)
+    setMagicOperationId(null)
+    setMagicFront(emptyMagicSide())
+    setMagicBack(emptyMagicSide())
   }, [])
 
   const closeMagicPanel = useCallback(() => {
@@ -903,52 +942,129 @@ export function useStudioEditor() {
         sideHasInk(backBag) &&
         rearReferenceAvailable(doc.model)
 
-      const captured = await captureSketchForMagic({
-        strokes: activeSide === 'back' ? backBag.strokes : frontBag.strokes,
-        fills: activeSide === 'back' ? backBag.fills : frontBag.fills,
-        referenceUrl,
-        referenceOpacity,
-      })
+      const designId = designIdRef.current
+      const modelId = doc.model
+      const operationId =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `magic_op_${Date.now()}`
+
+      const captureSide = async (side: StudioPaperSide) => {
+        const bag = side === 'front' ? frontBag : backBag
+        return captureSketchForMagic({
+          strokes: bag.strokes,
+          fills: bag.fills,
+          referenceUrl: referenceUrlForDocument(doc, side),
+          referenceOpacity: doc.dimmed ? 0.4 : 1,
+        })
+      }
+
+      if (dual) {
+        const [frontCap, backCap] = await Promise.all([captureSide('front'), captureSide('back')])
+        if (controller.signal.aborted) return
+        const frontSketchUrl = URL.createObjectURL(frontCap.blob)
+        const backSketchUrl = URL.createObjectURL(backCap.blob)
+        magicSideSketchUrlsRef.current = { front: frontSketchUrl, back: backSketchUrl }
+        magicSketchUrlRef.current = activeSide === 'back' ? backSketchUrl : frontSketchUrl
+        setMagicSketchUrl(magicSketchUrlRef.current)
+        setMagicDualActive(true)
+        setMagicDualViewSide(activeSide)
+        setMagicOperationId(operationId)
+        setMagicFront({
+          phase: 'polling',
+          result: null,
+          lookObjectUrl: null,
+          sketchObjectUrl: frontSketchUrl,
+          error: null,
+          canRetry: false,
+        })
+        setMagicBack({
+          phase: 'polling',
+          result: null,
+          lookObjectUrl: null,
+          sketchObjectUrl: backSketchUrl,
+          error: null,
+          canRetry: false,
+        })
+
+        setMagicPhase('submitting')
+        publishStudioNotice(
+          'Magic will polish Front and Back (two credits when billing is enabled).',
+        )
+        const enqueued = await enqueueDualOrSequentialPolish({
+          design_id: designId,
+          magic_operation_id: operationId,
+          reference_model_id: modelId,
+          notes: 'polish concept',
+          front: { image_base64: frontCap.dataUrl, notes: 'polish concept (front)' },
+          back: { image_base64: backCap.dataUrl, notes: 'polish concept (back)' },
+          signal: controller.signal,
+        })
+        persistMagicOperation(user.id, {
+          operationId: enqueued.magic_operation_id,
+          frontJobId: enqueued.front_job_id,
+          backJobId: enqueued.back_job_id,
+          updatedAt: new Date().toISOString(),
+        })
+        setMagicJobId(enqueued.front_job_id)
+        persistMagicJobId(user.id, enqueued.front_job_id)
+
+        setMagicPhase('polling')
+        const [frontSettled, backSettled] = await Promise.all([
+          settleMagicJobWithImage(enqueued.front_job_id, controller.signal),
+          settleMagicJobWithImage(enqueued.back_job_id, controller.signal),
+        ])
+
+        const applySide = (
+          side: StudioPaperSide,
+          settled: Awaited<ReturnType<typeof settleMagicJobWithImage>>,
+        ): MagicSidePanelState => {
+          const failed = settled.look.status === 'failed'
+          if (settled.lookObjectUrl) {
+            magicSideLookUrlsRef.current[side] = settled.lookObjectUrl
+          }
+          return {
+            phase: failed ? 'failed' : 'ready',
+            result: settled.look,
+            lookObjectUrl: settled.lookObjectUrl,
+            sketchObjectUrl: magicSideSketchUrlsRef.current[side],
+            error: failed ? settled.look.summary : null,
+            canRetry: failed,
+          }
+        }
+        const nextFront = applySide('front', frontSettled)
+        const nextBack = applySide('back', backSettled)
+        setMagicFront(nextFront)
+        setMagicBack(nextBack)
+
+        const primary = activeSide === 'back' ? nextBack : nextFront
+        setMagicResult(primary.result)
+        if (primary.lookObjectUrl) {
+          magicLookUrlRef.current = primary.lookObjectUrl
+          setMagicLookUrl(primary.lookObjectUrl)
+        }
+
+        const bothFailed = nextFront.phase === 'failed' && nextBack.phase === 'failed'
+        if (bothFailed) {
+          setMagicPhase('failed')
+          setMagicError('Front and Back Magic did not finish. Retry the failed side.')
+          return
+        }
+        if (nextFront.phase === 'failed' || nextBack.phase === 'failed') {
+          setMagicError('One side needs a retry — use Retry front/back below.')
+        }
+        setMagicPhase('ready')
+        return
+      }
+
+      const captured = await captureSide(activeSide)
       if (controller.signal.aborted) return
       const sketchUrl = URL.createObjectURL(captured.blob)
       magicSketchUrlRef.current = sketchUrl
       setMagicSketchUrl(sketchUrl)
 
       setMagicPhase('submitting')
-      const operationId =
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `magic_op_${Date.now()}`
-      const designId = designIdRef.current
-      const modelId = doc.model
-
-      const submitSide = async (side: 'front' | 'back') => {
-        const bag = side === 'front' ? frontBag : backBag
-        const cap = await captureSketchForMagic({
-          strokes: bag.strokes,
-          fills: bag.fills,
-          referenceUrl: referenceUrlForDocument(doc, side),
-          referenceOpacity: doc.dimmed ? 0.4 : 1,
-        })
-        return enqueueSketchPolish({
-          imageBase64: cap.dataUrl,
-          notes: dual ? `polish concept (${side})` : 'polish concept',
-          designId,
-          magic_operation_id: dual ? operationId : undefined,
-          studio_side: dual ? side : undefined,
-          reference_model_id: typeof modelId === 'string' ? modelId : undefined,
-          signal: controller.signal,
-        })
-      }
-
-      if (dual) {
-        publishStudioNotice(
-          'Magic will polish Front and Back as two jobs (two credits when billing is enabled).',
-        )
-        persistMagicOperation(user.id, { operationId, updatedAt: new Date().toISOString() })
-      }
-
-      const job = dual ? await submitSide('front') : await enqueueSketchPolish({
+      const job = await enqueueSketchPolish({
         imageBase64: captured.dataUrl,
         notes: 'polish concept',
         designId,
@@ -956,53 +1072,19 @@ export function useStudioEditor() {
       })
       setMagicJobId(job.id)
       persistMagicJobId(user.id, job.id)
-      if (dual) patchMagicOperationJob(user.id, 'front', job.id)
-
-      let backJobId: string | null = null
-      if (dual) {
-        const backJob = await submitSide('back')
-        backJobId = backJob.id
-        patchMagicOperationJob(user.id, 'back', backJob.id)
-      }
 
       setMagicPhase('polling')
-      const settled = await pollAiJobUntilSettled({
-        jobId: job.id,
-        signal: controller.signal,
-      })
-      let look = toMagicLookResult(settled)
-      if (dual && backJobId) {
-        try {
-          const backSettled = await pollAiJobUntilSettled({
-            jobId: backJobId,
-            signal: controller.signal,
-          })
-          const backLook = toMagicLookResult(backSettled)
-          if (backLook.status === 'failed' && look.status !== 'failed') {
-            look = {
-              ...look,
-              summary: `${look.summary} Back polish failed — retry from Magic when ready.`,
-            }
-          }
-        } catch {
-          look = {
-            ...look,
-            summary: `${look.summary} Back polish could not be confirmed.`,
-          }
-        }
-      }
+      const settled = await settleMagicJobWithImage(job.id, controller.signal)
+      const look = settled.look
       setMagicResult(look)
       if (look.status === 'failed') {
         setMagicPhase('failed')
         setMagicError(look.summary)
         return
       }
-      if (look.hasImage) {
-        const blob = await fetchJobImageBlob(settled.id, controller.signal)
-        if (magicLookUrlRef.current) URL.revokeObjectURL(magicLookUrlRef.current)
-        const url = URL.createObjectURL(blob)
-        magicLookUrlRef.current = url
-        setMagicLookUrl(url)
+      if (settled.lookObjectUrl) {
+        magicLookUrlRef.current = settled.lookObjectUrl
+        setMagicLookUrl(settled.lookObjectUrl)
       }
       setMagicPhase('ready')
     } catch (err) {
@@ -1093,12 +1175,118 @@ export function useStudioEditor() {
   }, [])
 
   const downloadMagicLook = useCallback(() => {
+    if (magicDualActive) {
+      const side = magicDualViewSide
+      const url = magicSideLookUrlsRef.current[side]
+      if (!url) return
+      void fetch(url)
+        .then((r) => r.blob())
+        .then((blob) => downloadBlob(blob, exportFilename(`look-${side}`)))
+        .catch(() => setMagicError('Could not download the look image.'))
+      return
+    }
     if (!magicLookUrlRef.current) return
     void fetch(magicLookUrlRef.current)
       .then((r) => r.blob())
       .then((blob) => downloadBlob(blob, exportFilename('look')))
       .catch(() => setMagicError('Could not download the look image.'))
-  }, [])
+  }, [magicDualActive, magicDualViewSide])
+
+  const downloadMagicSide = useCallback(
+    (side: StudioPaperSide) => {
+      const url = magicSideLookUrlsRef.current[side]
+      if (!url) return
+      void fetch(url)
+        .then((r) => r.blob())
+        .then((blob) => downloadBlob(blob, exportFilename(`look-${side}`)))
+        .catch(() => setMagicError(`Could not download the ${side} look.`))
+    },
+    [],
+  )
+
+  const retryMagicSide = useCallback(
+    (side: StudioPaperSide) => {
+      if (!user?.id || magicInFlightRef.current) return
+      const operationId = magicOperationId ?? readMagicOperation(user.id)?.operationId
+      if (!operationId) {
+        setMagicError('No Magic operation to retry.')
+        return
+      }
+      magicInFlightRef.current = true
+      setMagicError(null)
+      setMagicOpen(true)
+      setMagicPhase('polling')
+      const setter = side === 'front' ? setMagicFront : setMagicBack
+      setter((prev) => ({ ...prev, phase: 'polling', error: null, canRetry: false }))
+
+      magicAbortRef.current?.abort()
+      const controller = new AbortController()
+      magicAbortRef.current = controller
+
+      void (async () => {
+        try {
+          const doc = authoritativeDocRef.current
+          const bag =
+            side === 'front'
+              ? { strokes: doc.strokes, fills: doc.fills ?? [] }
+              : doc.back ?? { strokes: [], fills: [] }
+          const cap = await captureSketchForMagic({
+            strokes: bag.strokes,
+            fills: bag.fills,
+            referenceUrl: referenceUrlForDocument(doc, side),
+            referenceOpacity: doc.dimmed ? 0.4 : 1,
+          })
+          const job = await enqueueSketchPolish({
+            imageBase64: cap.dataUrl,
+            notes: `polish concept (${side}) retry`,
+            designId: designIdRef.current,
+            magic_operation_id: operationId,
+            studio_side: side,
+            reference_model_id: doc.model,
+            signal: controller.signal,
+          })
+          patchMagicOperationJob(user.id, side, job.id)
+          const settled = await settleMagicJobWithImage(job.id, controller.signal)
+          const failed = settled.look.status === 'failed'
+          if (magicSideLookUrlsRef.current[side]) {
+            URL.revokeObjectURL(magicSideLookUrlsRef.current[side]!)
+          }
+          if (settled.lookObjectUrl) magicSideLookUrlsRef.current[side] = settled.lookObjectUrl
+          const next: MagicSidePanelState = {
+            phase: failed ? 'failed' : 'ready',
+            result: settled.look,
+            lookObjectUrl: settled.lookObjectUrl,
+            sketchObjectUrl: magicSideSketchUrlsRef.current[side],
+            error: failed ? settled.look.summary : null,
+            canRetry: failed,
+          }
+          setter(next)
+          if (magicDualViewSide === side) {
+            setMagicResult(settled.look)
+            if (settled.lookObjectUrl) {
+              magicLookUrlRef.current = settled.lookObjectUrl
+              setMagicLookUrl(settled.lookObjectUrl)
+            }
+          }
+          setMagicPhase('ready')
+        } catch (err) {
+          if (controller.signal.aborted) return
+          const message = err instanceof Error ? err.message : 'Retry failed.'
+          setter((prev) => ({
+            ...prev,
+            phase: 'failed',
+            error: message,
+            canRetry: true,
+          }))
+          setMagicError(message)
+          setMagicPhase('ready')
+        } finally {
+          magicInFlightRef.current = false
+        }
+      })()
+    },
+    [magicDualViewSide, magicOperationId, referenceUrlForDocument, user?.id],
+  )
 
   const backToSketchFromMagic = useCallback(() => {
     closeMagicPanel()
@@ -1697,6 +1885,14 @@ export function useStudioEditor() {
     cancelMagicWait,
     recoverLastMagic,
     downloadMagicLook,
+    downloadMagicSide,
+    magicDualActive,
+    magicOperationId,
+    magicDualViewSide,
+    setMagicDualViewSide,
+    magicFront,
+    magicBack,
+    retryMagicSide,
     backToSketchFromMagic,
     studioNotice,
     setStudioNotice,

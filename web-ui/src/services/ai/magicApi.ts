@@ -2,6 +2,29 @@ import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 import type { AiJobRead } from '@/services/ai/aiJobTypes'
 
+export type PolishSidePayload = {
+  image_base64: string
+  notes?: string
+  idempotency_key?: string
+}
+
+export type PolishSketchDualInput = {
+  design_id?: string | null
+  magic_operation_id?: string
+  reference_model_id?: string
+  notes?: string
+  mood_notes?: string
+  front: PolishSidePayload
+  back: PolishSidePayload
+  signal?: AbortSignal
+}
+
+export type SketchPolishDualRead = {
+  magic_operation_id: string
+  front_job: AiJobRead
+  back_job: AiJobRead
+}
+
 export type PolishSketchInput = {
   imageBase64: string
   notes?: string
@@ -11,6 +34,32 @@ export type PolishSketchInput = {
   studio_side?: 'front' | 'back'
   reference_model_id?: string
   signal?: AbortSignal
+}
+
+export async function enqueueSketchPolishDual(
+  input: PolishSketchDualInput,
+): Promise<SketchPolishDualRead> {
+  return apiRequest<SketchPolishDualRead>('/ai/sketch/polish-dual', {
+    method: 'POST',
+    body: {
+      design_id: input.design_id ?? null,
+      magic_operation_id: input.magic_operation_id ?? null,
+      reference_model_id: input.reference_model_id ?? null,
+      notes: input.notes ?? 'polish concept',
+      mood_notes: input.mood_notes,
+      front: {
+        image_base64: input.front.image_base64,
+        notes: input.front.notes,
+        idempotency_key: input.front.idempotency_key,
+      },
+      back: {
+        image_base64: input.back.image_base64,
+        notes: input.back.notes,
+        idempotency_key: input.back.idempotency_key,
+      },
+    },
+    signal: input.signal,
+  })
 }
 
 export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJobRead> {
