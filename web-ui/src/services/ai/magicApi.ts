@@ -113,19 +113,37 @@ export async function fetchMagicOperationJobs(
   })
 }
 
-/** Map operation job list → front/back ids using `input_data.studio_side`. */
+/**
+ * Map operation job list → current Front/Back job ids using `input_data.studio_side`.
+ *
+ * PR #70 lists jobs oldest-first and retries a failed side with a new job id under the
+ * same operation. Recovery must select the **latest** attempt per side (not the first /
+ * oldest), so a failed-side retry is what we resume — never re-enqueue here.
+ */
 export function mapMagicOperationJobsBySide(jobs: AiJobRead[]): {
   frontJobId: string | null
   backJobId: string | null
 } {
-  let frontJobId: string | null = null
-  let backJobId: string | null = null
+  let front: AiJobRead | null = null
+  let back: AiJobRead | null = null
   for (const job of jobs) {
     const side = job.input_data?.studio_side
-    if (side === 'front' && !frontJobId) frontJobId = job.id
-    if (side === 'back' && !backJobId) backJobId = job.id
+    if (side === 'front') front = preferCurrentMagicJob(front, job)
+    if (side === 'back') back = preferCurrentMagicJob(back, job)
   }
-  return { frontJobId, backJobId }
+  return { frontJobId: front?.id ?? null, backJobId: back?.id ?? null }
+}
+
+function preferCurrentMagicJob(prev: AiJobRead | null, next: AiJobRead): AiJobRead {
+  if (!prev) return next
+  const prevTs = Date.parse(prev.created_at)
+  const nextTs = Date.parse(next.created_at)
+  if (Number.isFinite(prevTs) && Number.isFinite(nextTs)) {
+    if (nextTs > prevTs) return next
+    if (nextTs < prevTs) return prev
+  }
+  // Timestamps equal/missing: prefer later list order (matches #70 oldest-first listing).
+  return next
 }
 
 /** Authenticated look image (never relies on public /static/uploads). */

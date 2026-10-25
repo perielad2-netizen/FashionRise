@@ -722,7 +722,46 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </ConfirmDialog>
       ) : null}
 
-      {editor.saveDesignDialog && !editor.draftConflict && !editor.modelSwitchPrompt ? (
+      {editor.damagedCloud && editor.damagedCloudDialogOpen ? (
+        <ConfirmDialog
+          title="Damaged cloud draft"
+          actions={[
+            {
+              label: 'Continue on this device only',
+              onClick: editor.resolveDamagedCloudContinueLocal,
+              variant: 'ghost',
+            },
+            ...(editor.damagedCloud.hasLocalRecovery || editor.hasBackInk || editor.strokes.length > 0
+              ? [
+                  {
+                    label: 'Replace cloud with this device',
+                    onClick: editor.resolveDamagedCloudReplaceCloud,
+                    variant: 'danger' as const,
+                  },
+                ]
+              : []),
+          ]}
+        >
+          <p>
+            Your private cloud Studio draft exists but could not be read safely. The original cloud
+            row was left unchanged. Automatic sync is paused. Choose recovery deliberately — nothing
+            is overwritten until you confirm.
+          </p>
+        </ConfirmDialog>
+      ) : null}
+
+      {editor.damagedCloud && !editor.damagedCloudDialogOpen ? (
+        <div className={styles.damagedCloudBanner} role="alert">
+          <p>
+            Cloud draft recovery is still paused. The damaged private copy was not changed.
+          </p>
+          <button type="button" className={styles.damagedCloudBannerButton} onClick={editor.reopenDamagedCloudRecovery}>
+            Review recovery options
+          </button>
+        </div>
+      ) : null}
+
+      {editor.saveDesignDialog && !editor.draftConflict && !editor.damagedCloudDialogOpen && !editor.modelSwitchPrompt ? (
         <SaveDesignDialog
           defaultTitle={editor.saveDesignDialog.defaultTitle}
           saving={editor.saveDesignDialog.saving}

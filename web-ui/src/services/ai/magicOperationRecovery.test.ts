@@ -35,10 +35,22 @@ function job(id: string, side: 'front' | 'back', status: string = 'completed'): 
 }
 
 describe('mapMagicOperationJobsBySide', () => {
-  it('maps front and back from input_data.studio_side', () => {
+  it('maps the latest Front/Back attempt (PR #70 oldest-first list + retry)', () => {
+    const olderFront = job('jf', 'front')
+    const newerFront = {
+      ...job('jf2', 'front'),
+      created_at: '2026-10-25T00:01:00.000Z',
+    }
+    const olderBack = job('jb', 'back')
+    const retryBack = {
+      ...job('jb-retry', 'back'),
+      created_at: '2026-10-25T00:02:00.000Z',
+      status: 'queued',
+    }
+    // Oldest-first order as returned by GET /ai/magic-operations/{id}/jobs
     expect(
-      mapMagicOperationJobsBySide([job('jb', 'back'), job('jf', 'front'), job('jf2', 'front')]),
-    ).toEqual({ frontJobId: 'jf', backJobId: 'jb' })
+      mapMagicOperationJobsBySide([olderFront, olderBack, newerFront, retryBack]),
+    ).toEqual({ frontJobId: 'jf2', backJobId: 'jb-retry' })
   })
 })
 

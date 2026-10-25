@@ -23,10 +23,12 @@ import {
 } from '@/hooks/studioEditorSides'
 import {
   commitKeepDeviceChoice,
+  commitReplaceDamagedCloudDraft,
   commitUseCloudChoice,
   persistLocalRecovery,
   persistStudioDraft,
   restoreStudioDraft,
+  type DamagedCloudDraft,
 } from '@/lib/draftPersistence'
 import { documentForCloud } from '@/services/designsApi'
 import { isMagicUiEnabled } from '@/config/magicUi'
@@ -114,6 +116,8 @@ export type DraftConflictPrompt = {
   designId: string
 }
 
+export type DamagedCloudDraftPrompt = DamagedCloudDraft
+
 export type SaveDesignDialogState = {
   defaultTitle: string
   saving: boolean
@@ -163,6 +167,8 @@ export function useStudioEditor() {
   const scheduleCloudSaveRef = useRef<() => void>(() => {})
   /** Blocks automatic cloud writes until the operator resolves a conflict. */
   const conflictOpenRef = useRef(false)
+  /** Blocks automatic cloud writes while a damaged cloud draft awaits explicit recovery. */
+  const damagedCloudBlockRef = useRef(false)
   /** Blocks automatic cloud writes while a saved design replaces the working-draft content. */
   const openingRef = useRef(false)
   const cloudInFlightRef = useRef(0)
@@ -228,6 +234,8 @@ export function useStudioEditor() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [modelSwitchPrompt, setModelSwitchPrompt] = useState<ModelSwitchPrompt | null>(null)
   const [draftConflict, setDraftConflict] = useState<DraftConflictPrompt | null>(null)
+  const [damagedCloud, setDamagedCloud] = useState<DamagedCloudDraftPrompt | null>(null)
+  const [damagedCloudDialogOpen, setDamagedCloudDialogOpen] = useState(false)
   const [ready, setReady] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [saveDesignDialog, setSaveDesignDialog] = useState<SaveDesignDialogState | null>(null)
@@ -295,7 +303,7 @@ export function useStudioEditor() {
 
   const flushCloudSave = useCallback(async () => {
     if (!user?.id || !bootedRef.current) return
-    if (conflictOpenRef.current) return
+    if (conflictOpenRef.current || damagedCloudBlockRef.current) return
     const doc = authoritativeDocRef.current
     const fingerprint = draftContentFingerprint(documentForCloud(doc))
     cloudDirtyRef.current = false
@@ -303,7 +311,7 @@ export function useStudioEditor() {
     const run = async () => {
       // A save queued behind an in-flight request must not run after that
       // request opens a conflict. Check at execution time, before any API call.
-      if (conflictOpenRef.current || openingRef.current) {
+      if (conflictOpenRef.current || damagedCloudBlockRef.current || openingRef.current) {
         return
       }
       setSaveStatus((prev) => (prev === 'pending' ? 'pending' : 'saving'))
@@ -374,7 +382,7 @@ export function useStudioEditor() {
 
   const scheduleCloudSave = useCallback(() => {
     if (!bootedRef.current || !user?.id) return
-    if (conflictOpenRef.current || openingRef.current) return
+    if (conflictOpenRef.current || damagedCloudBlockRef.current || openingRef.current) return
     cloudDirtyRef.current = true
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = window.setTimeout(() => {
@@ -491,12 +499,21 @@ export function useStudioEditor() {
         )
       }
 
-      if (restored.conflict) {
+      if (restored.damagedCloud || restored.blockAutomaticCloudWrites) {
+        damagedCloudBlockRef.current = true
+        setDamagedCloud(restored.damagedCloud)
+        setDamagedCloudDialogOpen(Boolean(restored.damagedCloud))
+        applyDocument(restored.document, restored.designId)
+        setSaveStatus(restored.damagedCloud?.hasLocalRecovery ? 'local-only' : 'idle')
+      } else if (restored.conflict) {
         conflictOpenRef.current = true
         setDraftConflict(restored.conflict)
         applyDocument(restored.conflict.local, restored.conflict.designId)
         setSaveStatus('local-only')
       } else {
+        damagedCloudBlockRef.current = false
+        setDamagedCloud(null)
+        setDamagedCloudDialogOpen(false)
         applyDocument(restored.document, restored.designId)
         setSaveStatus(restored.designId ? 'saved' : 'idle')
       }
@@ -507,6 +524,8 @@ export function useStudioEditor() {
 
       const needsSync =
         restored.conflict === null &&
+        !restored.blockAutomaticCloudWrites &&
+        !restored.damagedCloud &&
         (restored.designId === null
           ? documentHasAnyInk(restored.document)
           : restored.notice?.includes('Syncing') === true)
@@ -1527,6 +1546,68 @@ export function useStudioEditor() {
     })()
   }, [applyDocument, draftConflict, user?.id])
 
+  const resolveDamagedCloudContinueLocal = useCallback(() => {
+    if (!damagedCloud) return
+    damagedCloudBlockRef.current = true
+    setDamagedCloudDialogOpen(false)
+    setSaveStatus(damagedCloud.hasLocalRecovery ? 'local-only' : 'idle')
+    publishStudioNotice(
+      'Automatic cloud sync remains paused. The damaged private draft was not changed. Open recovery again when you are ready to replace it deliberately.',
+    )
+  }, [damagedCloud, publishStudioNotice])
+
+  const reopenDamagedCloudRecovery = useCallback(() => {
+    if (!damagedCloud) return
+    setDamagedCloudDialogOpen(true)
+  }, [damagedCloud])
+
+  const resolveDamagedCloudReplaceCloud = useCallback(() => {
+    if (!damagedCloud || !user?.id) return
+    const localDoc = authoritativeDocRef.current
+    if (!documentHasAnyInk(localDoc) && !damagedCloud.hasLocalRecovery) {
+      setSaveError('Add or restore a sketch on this device before replacing the damaged cloud draft.')
+      return
+    }
+    const expectedRevision = damagedCloud.expectedRevision
+    if (expectedRevision == null) {
+      setSaveError(
+        'Could not determine the cloud draft revision for a safe replace. The damaged cloud copy was left unchanged.',
+      )
+      return
+    }
+    damagedCloudBlockRef.current = true
+    void (async () => {
+      setSaveStatus('saving')
+      setSaveError(null)
+      const result = await commitReplaceDamagedCloudDraft({
+        userId: user.id,
+        designId: damagedCloud.designId,
+        local: localDoc,
+        expectedRevision,
+      })
+      if (result.ok) {
+        damagedCloudBlockRef.current = false
+        setDamagedCloud(null)
+        setDamagedCloudDialogOpen(false)
+        authoritativeDocRef.current = result.document
+        designIdRef.current = result.designId
+        syncedRevisionRef.current = result.syncedRevision
+        syncedFingerprintRef.current = result.fingerprint
+        applyDocument(result.document, result.designId)
+        setSaveStatus('saved')
+        publishStudioNotice('Damaged cloud draft was replaced with this device’s copy after your confirmation.')
+        return
+      }
+      damagedCloudBlockRef.current = true
+      setSaveError(result.error)
+      setSaveStatus(result.localPersisted ? 'local-only' : 'error')
+      if (result.conflict) {
+        conflictOpenRef.current = true
+        setDraftConflict(result.conflict)
+      }
+    })()
+  }, [applyDocument, damagedCloud, publishStudioNotice, user?.id])
+
   /** Export the authoritative document (plus any session-only custom reference) as PNG. */
   const exportSidePng = useCallback(
     async (side: StudioPaperSide | 'visible' | 'sheet') => {
@@ -1670,7 +1751,7 @@ export function useStudioEditor() {
 
   /** The working copy matches the last server-acknowledged revision, with nothing queued. */
   const workingCopyState = useCallback((): 'clean' | 'clean-empty' | 'unsynced' | 'conflict' => {
-    if (conflictOpenRef.current) return 'conflict'
+    if (conflictOpenRef.current || damagedCloudBlockRef.current) return 'conflict'
     if (!bootedRef.current) return 'unsynced'
     if (cloudDirtyRef.current || cloudInFlightRef.current > 0) return 'unsynced'
     const doc = authoritativeDocRef.current
@@ -1973,7 +2054,11 @@ export function useStudioEditor() {
     magicError,
     magicLookUrl,
     magicSketchUrl,
-    magicCanRecover: Boolean(magicJobId || (user?.id && readMagicJobId(user.id))),
+    magicCanRecover: Boolean(
+      magicJobId ||
+        (user?.id &&
+          (readMagicJobId(user.id) || Boolean(readMagicOperation(user.id)?.operationId))),
+    ),
     closeMagicPanel,
     cancelMagicWait,
     recoverLastMagic,
@@ -2007,6 +2092,11 @@ export function useStudioEditor() {
     draftConflict,
     resolveConflictKeepLocal,
     resolveConflictUseServer,
+    damagedCloud,
+    damagedCloudDialogOpen,
+    resolveDamagedCloudContinueLocal,
+    resolveDamagedCloudReplaceCloud,
+    reopenDamagedCloudRecovery,
     exporting,
     exportPng,
     exportSidePng,

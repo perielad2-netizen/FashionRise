@@ -100,6 +100,38 @@ export async function updateStudioDraft(
   })
 }
 
+/**
+ * True when a private designs row claims to be the Studio working draft, even if
+ * `design_data` fails strict parse (e.g. damaged V2 Back). Used to distinguish
+ * "missing cloud draft" from "present but unreadable".
+ */
+export function isStudioWorkingDraftClaim(
+  design: Pick<DesignRead, 'design_data' | 'metadata' | 'visibility'>,
+): boolean {
+  if (design.visibility !== 'private') return false
+  const schema = design.design_data?.['schema']
+  if (schema === STUDIO_DRAFT_SCHEMA || schema === STUDIO_DRAFT_SCHEMA_V2) return true
+  const meta = design.metadata ?? {}
+  return (
+    meta.draftKind === STUDIO_DRAFT_KIND ||
+    meta.schema === STUDIO_DRAFT_SCHEMA ||
+    meta.schema === STUDIO_DRAFT_SCHEMA_V2
+  )
+}
+
+/** Best-effort revision token from an unreadable Studio row (OCC / recovery). */
+export function studioDraftRevisionHint(design: DesignRead): number | null {
+  const dataRev = design.design_data?.['clientRevision']
+  if (typeof dataRev === 'number' && Number.isFinite(dataRev) && dataRev > 0) {
+    return Math.floor(dataRev)
+  }
+  const metaRev = design.metadata?.['clientRevision']
+  if (typeof metaRev === 'number' && Number.isFinite(metaRev) && metaRev > 0) {
+    return Math.floor(metaRev)
+  }
+  return null
+}
+
 export function extractStudioDraft(design: DesignRead): StudioDraftDocument | null {
   const fromData = parseStudioDraftDocument(design.design_data)
   if (fromData) return fromData
@@ -119,15 +151,14 @@ export function pickLatestStudioDraft(designs: DesignRead[]): DesignRead | null 
   const matches = designs.filter((d) => {
     if (d.visibility !== 'private') return false
     if (extractStudioDraft(d)) return true
-    const meta = d.metadata ?? {}
-    return meta.draftKind === STUDIO_DRAFT_KIND
+    return isStudioWorkingDraftClaim(d)
   })
   if (matches.length === 0) return null
   return matches.sort((a, b) => {
     const aDoc = extractStudioDraft(a)
     const bDoc = extractStudioDraft(b)
-    const aRev = aDoc?.clientRevision ?? 0
-    const bRev = bDoc?.clientRevision ?? 0
+    const aRev = aDoc?.clientRevision ?? studioDraftRevisionHint(a) ?? 0
+    const bRev = bDoc?.clientRevision ?? studioDraftRevisionHint(b) ?? 0
     if (aRev !== bRev) return bRev - aRev
     return String(b.updated_at).localeCompare(String(a.updated_at))
   })[0]!
