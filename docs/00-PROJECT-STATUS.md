@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`**. **Production FE:** **`a740a9b7`**. **Production BE/worker:** **`12f7acdf…`** (maint tip: Sunburst + #59 identity + #64 coverage; **never deploy undeployed `main`/PR #41 packing**). Alembic **`005`**. **Closed / operator-accepted:** #39, #51, #59, #60, #64. **Issue #42 OPEN.** **WEB-V4J Stage A:** architecture PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) **ACCEPTED** (DRAFT, not merge-authorized); prior PR #50 closed unmerged/superseded. **WEB-V4J Stage B:** draft PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) on immutable base `cursor/maint-base-12f7acdf-77c6` — fingerprint + reject-on-downgrade + `clearBackIntent` + PM amendments (bidirectional kind-lock, saved advisory lock, unknown-schema family 422, full saved fingerprint); offline verified; **not deployed**. Stage C rear artwork **not generated/approved**. Stage D Front/Back UI **not implemented**. Cursor paid AI: **0**.
+**Last updated:** 2026-10-25. **GitHub `main`:** **`c6fc1eb8`**. **Production FE:** **`a740a9b7`**. **Production BE/worker:** **`12f7acdf…`** (maint tip: Sunburst + #59 identity + #64 coverage; **never deploy undeployed `main`/PR #41 packing**). Alembic **`005`**. **Closed / operator-accepted:** #39, #51, #59, #60, #64. **Issue #42 OPEN.** **WEB-V4J Stage A:** architecture PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) **ACCEPTED** (DRAFT, not merge-authorized); prior PR #50 closed unmerged/superseded. **WEB-V4J Stage B:** draft PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) @ `6b253cb5` on immutable base `cursor/maint-base-12f7acdf-77c6` — fingerprint + reject-on-downgrade + `clearBackIntent` + bidirectional kind-lock + saved advisory lock + unknown-schema family 422 + full saved fingerprint; Technical PM **source ACCEPT**; offline verified (**32** / **389**); **not merged / not deployed**. Release plan (read-only): `docs/deploy/WEB-V4J-B-RELEASE-PLAN.md`. Stage C rear artwork **not generated/approved**. Stage D Front/Back UI **not implemented**. Cursor paid AI: **0**.
 
-**Phase:** Protected family beta. WEB-V4J Stage B amended for Studio↔saved metadata kind integrity — awaiting Technical PM re-review. No FE Back UI. No rear PNG. No deploy. **Exact next PM decision:** re-review PR #68 → GO/HOLD merge&deploy (still no Stage C/D).
+**Phase:** Protected family beta. WEB-V4J Stage B **code accepted** for controlled release planning — **HOLD** merge/deploy/ready-for-review until separate operator authorization. No FE Back UI. No rear PNG. **Exact next decision:** authorize (or HOLD) the SHA-pinned BE maint cutover at `6b253cb5` per the release plan (still no Stage C/D).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -323,10 +323,10 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of WEB-V4J **Stage B** maint-lineage draft PR (`design_service` v2 fingerprint + reject-on-downgrade). Base tip `12f7acdf…`. **Do not merge/deploy** until authorized. See `docs/deploy/WEB-V4J-B-PERSISTENCE-READY.md`.
-2. After Stage B accept + authorized BE deploy: begin **Stage C** rear croquis artwork from accepted specs (operator-held fronts; no shippable binaries until approval).
+1. **Exact next action:** Separate operator/PM decision on the SHA-pinned Stage B **BE maint release plan** (`docs/deploy/WEB-V4J-B-RELEASE-PLAN.md`) for candidate `6b253cb5` — authorize cutover or HOLD. **Do not merge/deploy/mark ready** without that GO. Readiness note: `docs/deploy/WEB-V4J-B-PERSISTENCE-READY.md`.
+2. After authorized BE deploy of `6b253cb5` (FE stays `a740a9b7`, Alembic `005`): begin **Stage C** rear croquis artwork from accepted specs (operator-held fronts; no shippable binaries until approval).
 3. **Stage D** Front/Back Studio UI only after B deployed and C approved.
-4. Stage A PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) remains DRAFT (accepted content; not merge-authorized by Stage A review). **Never deploy GitHub `main` BE/worker** for V4J.
+4. Stage A PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) and Stage B PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) remain **DRAFT** (source-accepted; not merge-authorized). **Never deploy GitHub `main` BE/worker** for V4J.
 5. **Do not auto-merge** maint/feature docs PRs without explicit authorization.
 6. **Operator residual:** expired Access session test (still PENDING).
 
@@ -598,6 +598,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-25 | **WEB-V4J Stage B PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) Technical PM source ACCEPT** @ `6b253cb5`; SHA-pinned read-only release plan `docs/deploy/WEB-V4J-B-RELEASE-PLAN.md` prepared; **HOLD merge/deploy/ready** pending separate operator cutover authorization; Alembic `005`; **0 paid AI**; Stage C/D still gated. |
 | 2026-10-25 | **WEB-V4J Stage B PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) kind-integrity amendment:** reject Studio metadata `designKind=saved_design` poisoning (409) and mixed-kind create (422); subsequent two-sided Studio edits still succeed; suite **32** + full BE pytest updated; Alembic `005`; **0 paid AI**; **STOP for re-review — no merge/deploy**. |
 | 2026-10-25 | **WEB-V4J Stage B PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68) PM amendment:** stored saved-kind protection (no studio hijack); owner advisory lock on saved create; unknown `draft.*`/`saved_design.*` family versions → 422; full saved envelope fingerprint (`sourceRevision`/etc.); suite **30** + full BE pytest **387**; Alembic `005`; **0 paid AI**. |
 | 2026-10-25 | **WEB-V4J Stage B draft PR [#68](https://github.com/perielad2-netizen/FashionRise/pull/68):** immutable base `cursor/maint-base-12f7acdf-77c6` @ `12f7acdf`; `design_service` v2 fingerprint + reject-on-downgrade + `clearBackIntent`; initial suite **23** / pytest **380**; Stage A PR #67 accepted; PR #50 closed unmerged; **0 paid AI**. |

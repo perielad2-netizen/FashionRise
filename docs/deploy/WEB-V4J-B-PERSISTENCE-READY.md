@@ -3,7 +3,9 @@
 **Issue:** [#42](https://github.com/perielad2-netizen/FashionRise/issues/42)  
 **Stage A:** PR [#67](https://github.com/perielad2-netizen/FashionRise/pull/67) accepted (docs; not merge-authorized).  
 **Base branch (immutable):** `cursor/maint-base-12f7acdf-77c6` → `12f7acdff9133e810c0d670697d1500e860f39d6` (not `main`).  
-**Scope:** Backend `design_service` only — `draft.v2` / `saved_design.v2` fingerprint, validation, reject-on-downgrade, OCC/idempotency, explicit Back clear intent.  
+**Candidate HEAD:** `6b253cb52beb9524f976ba805049bf3de2506985`  
+**Technical PM source review:** **ACCEPTED** (2026-10-25) — controlled release planning authorized; **deploy / merge / ready-for-review NOT authorized**.  
+**Scope:** Backend `design_service` only — `draft.v2` / `saved_design.v2` fingerprint, validation, reject-on-downgrade, OCC/idempotency, explicit Back clear intent, bidirectional kind integrity.  
 **Explicit non-scope:** no deploy, no service restart, no Alembic, no FE Back UI, no rear PNG, no paid AI, no Magic worker changes, no Nginx/Cloudflare.
 
 ## Implementation summary
@@ -29,14 +31,19 @@
 | Ruff (new findings) | None on Stage B logic; **pre-existing** UP017/UP012 in handoff PDF helpers only |
 | Mypy `design_service.py` | No new errors; pre-existing `app/storage/local.py` Path/`None` remain |
 | Alembic heads | `005 (head)` — no new revision |
+| GitHub CI check-runs at HEAD | **None** (not independently confirmed by Actions) |
 
-## Proposed later production release plan (NOT authorized now)
+## Release planning (read-only)
 
-1. Technical PM code review of draft PR #68.  
-2. Deploy **only** from this maint lineage (base `cursor/maint-base-12f7acdf-77c6` + Stage B commit), never from undeployed `main` PR #41 packing.  
-3. Authorized BE+worker restart onto the Stage B SHA; Alembic stays `005`; FE stays `a740a9b7` (V1-only clients remain compatible — Stage B dormant).  
-4. Smoke: v1 draft create/update idempotency; synthetic v2 fixture proves old-client strip → 409.  
-5. Rollback: revert API/worker symlink/process to prior tip `12f7acdf` (or previous release tag); no DB migrate down required.  
-6. Only then Stage C artwork / Stage D FE dual-reader.
+SHA-pinned preflight + cutover + rollback checklist:  
+[`docs/deploy/WEB-V4J-B-RELEASE-PLAN.md`](./WEB-V4J-B-RELEASE-PLAN.md)
 
-**STOP:** No merge/deploy from this readiness note alone.
+Summary constraints retained here:
+
+1. Deploy **only** maint lineage tip `6b253cb5` (base `12f7acdf`), never undeployed `main` / PR #41.  
+2. Authorized BE(+worker tree) restart onto that SHA only after **separate** operator deploy auth; Alembic stays `005`; FE stays `a740a9b7`.  
+3. Synthetic V1/V2 smoke only; no paid AI.  
+4. Rollback to exact `12f7acdf`; no DB migrate down.  
+5. Stage C artwork / Stage D FE remain gated after a successful authorized BE release.
+
+**STOP:** PM acceptance ≠ merge/deploy authorization. Do not execute the release plan without a separate explicit operator GO.
