@@ -9,6 +9,7 @@ import {
   defaultModelForGender,
   isLegacyModelId,
   isModelChoice,
+  modelHasRearAsset,
   modelLabel,
   normalizeModelChoice,
 } from '@/assets/modelLibrary'
@@ -55,6 +56,14 @@ describe('modelLibrary', () => {
     expect(canvasSrcForModel('female', 'back')).toBeNull()
     expect(canvasSrcForModel('custom', 'back')).toBeNull()
     expect(canvasSrcForModel('blank', 'back')).toBeNull()
+  })
+
+  it('gates rear availability through the publish manifest (atelier unpublished)', () => {
+    expect(modelHasRearAsset('female-straight')).toBe(true)
+    expect(modelHasRearAsset('male-walk')).toBe(true)
+    expect(modelHasRearAsset('female-atelier')).toBe(false)
+    expect(modelHasRearAsset('female')).toBe(false)
+    expect(modelHasRearAsset('custom')).toBe(false)
   })
 
   it('preserves stored model ids without remapping legacy to new defaults', () => {
