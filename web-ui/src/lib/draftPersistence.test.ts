@@ -60,7 +60,7 @@ const api = vi.hoisted(() => ({
     string,
     {
       id: string
-      design_data: StudioDraftDocument
+      design_data: StudioDraftDocument | Record<string, unknown>
       metadata: Record<string, unknown>
       visibility: string
       updated_at: string
@@ -219,9 +219,10 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
         const { ApiError } = await import('@/services/api/client')
         throw new ApiError('missing', 404, null)
       }
+      const currentRevision = (existing.design_data as { clientRevision?: unknown }).clientRevision
       if (
         options?.expectedRevision != null &&
-        existing.design_data.clientRevision !== options.expectedRevision
+        currentRevision !== options.expectedRevision
       ) {
         const { ApiError } = await import('@/services/api/client')
         throw new ApiError('conflict', 409, {
@@ -230,7 +231,7 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
             message: 'Draft was updated elsewhere.',
             payload: {
               expected_revision: options.expectedRevision,
-              current_revision: existing.design_data.clientRevision,
+              current_revision: currentRevision,
               design: {
                 id: designId,
                 user_id: 'u1',
@@ -640,8 +641,138 @@ describe('draftPersistence WEB-V2.1A/B', () => {
       expectedRevision: 1,
     })
     expect(result.ok).toBe(false)
-    expect(api.designs.get('d1')!.design_data.model).toBe('female-straight')
-    expect(api.designs.get('d2')!.design_data.model).toBe('blank')
+    expect((api.designs.get('d1')!.design_data as StudioDraftDocument).model).toBe('female-straight')
+    expect((api.designs.get('d2')!.design_data as StudioDraftDocument).model).toBe('blank')
     expect(api.updateCalls).toHaveLength(0)
+  })
+})
+
+function malformedCloudV2(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    schema: 'fashionrise.studio.draft.v2',
+    strokes: [
+      {
+        id: 'f1',
+        tool: 'draw',
+        points: [1, 2, 0.5],
+        color: '#1C1C1E',
+        size: 2,
+        opacity: 1,
+      },
+    ],
+    fills: [],
+    activeSide: 'front',
+    // Present malformed Back — strict parse must reject the whole document.
+    back: { strokes: 'not-an-array', fills: [] },
+    model: 'female-straight',
+    customReferenceUrl: null,
+    customReferenceKey: null,
+    brush: { sizeId: 'thin', opacity: 1, color: '#1C1C1E' },
+    dimmed: false,
+    clientRevision: 4,
+    updatedAt: '2026-10-25T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+describe('restoreStudioDraft damaged cloud V2 safety', () => {
+  beforeEach(() => {
+    localStore.records.clear()
+    localStore.designIds.clear()
+    localStore.failWrites = false
+    api.designs.clear()
+    api.failCreateOnce = false
+    api.failUpdateStatus = null
+    api.createCalls = 0
+    api.updateCalls = []
+    api.updateGate = null
+    api.updateGateModel = null
+    api.onBeforeCreate = null
+  })
+
+  it('treats an unreadable cloud V2 row as damaged (not missing) when there is no local copy', async () => {
+    const raw = malformedCloudV2()
+    api.designs.set('cloud-bad', {
+      id: 'cloud-bad',
+      design_data: raw,
+      metadata: { draftKind: 'studio_working_draft', clientRevision: 4, schema: 'fashionrise.studio.draft.v2' },
+      visibility: 'private',
+      updated_at: '2026-10-25T00:00:00.000Z',
+    })
+    localStore.designIds.set('u1', 'cloud-bad')
+
+    const restored = await restoreStudioDraft('u1')
+    expect(restored.damagedCloud?.designId).toBe('cloud-bad')
+    expect(restored.damagedCloud?.rawDesign.design_data).toEqual(raw)
+    expect(restored.blockAutomaticCloudWrites).toBe(true)
+    expect(restored.conflict).toBeNull()
+    expect(restored.notice).toMatch(/could not be read/i)
+    expect(restored.notice).not.toMatch(/Syncing/i)
+    expect(api.createCalls).toBe(0)
+    expect(api.updateCalls).toHaveLength(0)
+    // Must not invent a durable local overwrite during restore.
+    expect(localStore.records.has('u1')).toBe(false)
+  })
+
+  it('preserves a stale local recovery doc and blocks automatic PUT/POST over damaged cloud V2', async () => {
+    const raw = malformedCloudV2({ clientRevision: 9 })
+    const local = strokedDoc()
+    localStore.records.set('u1', {
+      userId: 'u1',
+      designId: 'cloud-bad',
+      document: local,
+      savedAt: '2026-10-24T00:00:00.000Z',
+      syncedRevision: 2,
+    })
+    localStore.designIds.set('u1', 'cloud-bad')
+    api.designs.set('cloud-bad', {
+      id: 'cloud-bad',
+      design_data: raw,
+      metadata: { draftKind: 'studio_working_draft', clientRevision: 9, schema: 'fashionrise.studio.draft.v2' },
+      visibility: 'private',
+      updated_at: '2026-10-25T00:00:00.000Z',
+    })
+
+    const restored = await restoreStudioDraft('u1')
+    expect(restored.blockAutomaticCloudWrites).toBe(true)
+    expect(restored.damagedCloud?.hasLocalRecovery).toBe(true)
+    expect(restored.document.strokes).toEqual(local.strokes)
+    expect(restored.notice).not.toMatch(/Syncing/i)
+    expect(api.createCalls).toBe(0)
+    expect(api.updateCalls).toHaveLength(0)
+    // Local recovery row preserved (not replaced with empty / cloud-derived doc).
+    const kept = localStore.records.get('u1') as { document: StudioDraftDocument }
+    expect(kept.document.strokes).toEqual(local.strokes)
+    expect(api.designs.get('cloud-bad')!.design_data).toEqual(raw)
+
+    // Explicit autosave path must still be a deliberate recovery call — restore itself never wrote.
+    const unsyncedAttempt = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'cloud-bad',
+      document: local,
+      fingerprint: draftContentFingerprint(local),
+      lastSyncedFingerprint: null,
+      expectedRevision: null,
+    })
+    // Without an expected revision token from operator recovery, prefer-id update cannot
+    // extract the damaged row and must not blind-create a second draft.
+    expect(unsyncedAttempt.ok).toBe(false)
+    expect(api.designs.get('cloud-bad')!.design_data).toEqual(raw)
+  })
+
+  it('keeps offline / missing-server local restore behavior unchanged', async () => {
+    const local = strokedDoc()
+    localStore.records.set('u1', {
+      userId: 'u1',
+      designId: null,
+      document: local,
+      savedAt: new Date().toISOString(),
+      syncedRevision: null,
+    })
+    const restored = await restoreStudioDraft('u1')
+    expect(restored.damagedCloud).toBeNull()
+    expect(restored.blockAutomaticCloudWrites).toBe(false)
+    expect(restored.document.strokes).toHaveLength(1)
+    expect(restored.notice).toMatch(/Syncing/i)
   })
 })
