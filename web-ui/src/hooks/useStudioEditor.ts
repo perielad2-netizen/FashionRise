@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DEFAULT_MODEL, type ModelChoice } from '@/assets/modelLibrary'
+import { isStudioDualMagicEnabled } from '@/config/studioDualMagic'
 import { isStudioFrontBackEnabled } from '@/config/studioFrontBack'
 import {
   createEmptyDraftDocument,
@@ -89,6 +90,7 @@ import { useAuth } from '@/services/auth/AuthProvider'
 import type { MagicPhase, MagicSidePanelState } from '@/shell/components/MagicLookPanel'
 
 const MAGIC_NOTICE = 'AI enhancement will be available in a later milestone.'
+const FRONT_BACK_MAGIC_COMING_SOON = 'Front/Back Magic coming soon'
 
 function emptyMagicSide(): MagicSidePanelState {
   return {
@@ -153,6 +155,7 @@ export function useStudioEditor() {
   const historyFront = useRef(new StrokeHistory())
   const historyBack = useRef(new StrokeHistory())
   const frontBackEnabled = isStudioFrontBackEnabled()
+  const dualMagicEnabled = isStudioDualMagicEnabled()
   /** Last committed document snapshot — never rebuild saves from uncommitted React state. */
   const authoritativeDocRef = useRef<StudioDraftDocument>(createEmptyDraftDocument())
   const designIdRef = useRef<string | null>(null)
@@ -925,6 +928,18 @@ export function useStudioEditor() {
       setMagicOpen(true)
       return
     }
+
+    const docGate = authoritativeDocRef.current
+    const backBagGate = docGate.back ?? { strokes: [], fills: [] }
+    // Dual Magic (and Back-ink Magic) stay off until separately authorized.
+    // Front-only Magic continues through the existing single-side polish path.
+    if (frontBackEnabled && !dualMagicEnabled && sideHasInk(backBagGate)) {
+      setStudioNotice(null)
+      setMagicNotice(null)
+      setComingSoon(FRONT_BACK_MAGIC_COMING_SOON)
+      return
+    }
+
     magicInFlightRef.current = true
     setStudioNotice(null)
     setComingSoon(null)
@@ -945,6 +960,7 @@ export function useStudioEditor() {
       const backBag = doc.back ?? { strokes: [], fills: [] }
       const dual =
         frontBackEnabled &&
+        dualMagicEnabled &&
         sideHasInk(frontBag) &&
         sideHasInk(backBag) &&
         rearReferenceAvailable(doc.model)
@@ -1154,6 +1170,7 @@ export function useStudioEditor() {
     }
   }, [
     activeSide,
+    dualMagicEnabled,
     frontBackEnabled,
     publishStudioNotice,
     referenceOpacity,
