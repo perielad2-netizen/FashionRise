@@ -14,26 +14,133 @@ export type FloodFillResult = FloodFillOk | FloodFillErr
 export const MAX_FILL_PIXELS = Math.floor(DESIGN_WIDTH * DESIGN_HEIGHT * 0.42)
 
 /**
+ * Minimum positive interior (design pixels) accepted for a closed fill.
+ * Was 24 — that rejected legitimate straps / tiny panels. Contour fallback
+ * still requires a valid persistent polygon (≥3 points).
+ */
+export const MIN_FILL_PIXELS = 1
+
+/** Default maximum ink dilation (px) considered when sealing freehand hairline gaps. */
+export const DEFAULT_MAX_GAP_CLOSE = 2
+
+/**
  * Flood-fill a closed ink region. Barriers are the **effective visible ink** after
  * draw/erase compositing (same destination-out rules as the canvas). Model
  * reference and fill contours are not barriers — garment parts are defined by
  * the ink the designer can still see.
+ *
+ * Adaptive gap closing: try visible-ink barriers first (preserves narrow necks /
+ * straps), then progressively dilate only when the undilated flood escapes. The
+ * first safely closed candidate wins — dilation never overrides a valid
+ * undilated enclosure.
  */
 export function floodFillRegion(input: {
   strokes: Stroke[]
   x: number
   y: number
   style: FillStyle
-  /** Dilate ink barriers by this many pixels to close tiny gaps. */
+  /**
+   * Maximum barrier dilation (px) to try when sealing freehand gaps.
+   * `0` = visible ink only. Default `2`.
+   */
   gapClose?: number
 }): FloodFillResult {
-  const barrier = buildInkBarrierMask(input.strokes, input.gapClose ?? 2)
-  return floodFillAgainstBarrier({
-    barrier,
+  const maxGap = Math.max(0, Math.min(4, Math.floor(input.gapClose ?? DEFAULT_MAX_GAP_CLOSE)))
+  const raw = buildInkBarrierMask(input.strokes, 0)
+  return floodFillAdaptive({
+    rawBarrier: raw,
     x: input.x,
     y: input.y,
     style: input.style,
+    maxGap,
   })
+}
+
+/**
+ * Adaptive multi-pass fill against a raw (undilated) barrier mask.
+ * Exported for deterministic synthetic-barrier tests without Canvas 2D.
+ */
+export function floodFillAdaptive(input: {
+  rawBarrier: Uint8Array
+  x: number
+  y: number
+  style: FillStyle
+  maxGap?: number
+}): FloodFillResult {
+  const maxGap = Math.max(0, Math.min(4, Math.floor(input.maxGap ?? DEFAULT_MAX_GAP_CLOSE)))
+  const sx = Math.round(input.x)
+  const sy = Math.round(input.y)
+  if (sx < 0 || sy < 0 || sx >= DESIGN_WIDTH || sy >= DESIGN_HEIGHT) {
+    return { ok: false, reason: 'outside', message: 'Tap inside a closed garment outline to fill.' }
+  }
+
+  const raw = input.rawBarrier
+  const seedIdx = sy * DESIGN_WIDTH + sx
+  if (raw[seedIdx]) {
+    return {
+      ok: false,
+      reason: 'outside',
+      message: 'Tap inside a closed shape, not on the outline.',
+    }
+  }
+
+  let lastOpen: FloodFillErr | null = null
+  let lastEmpty: FloodFillErr | null = null
+  let sealedSeed = false
+
+  for (let gap = 0; gap <= maxGap; gap += 1) {
+    const barrier = gap === 0 ? raw : dilateMask(raw, gap)
+    if (barrier[seedIdx]) {
+      // Dilation invented a wall under the click (narrow channel). Stronger
+      // dilation only makes this worse — stop and report a useful error.
+      sealedSeed = true
+      break
+    }
+
+    const result = floodFillAgainstBarrier({
+      barrier,
+      x: input.x,
+      y: input.y,
+      style: input.style,
+    })
+
+    if (result.ok) {
+      // Prefer the least dilation that yields a closed interior.
+      return result
+    }
+    if (result.reason === 'open_outline' || result.reason === 'too_large') {
+      lastOpen = result
+      continue
+    }
+    if (result.reason === 'empty_region') {
+      lastEmpty = result
+      continue
+    }
+    // outside on a dilated barrier should be rare (we checked seedIdx).
+    if (result.reason === 'outside') {
+      sealedSeed = true
+      break
+    }
+  }
+
+  if (sealedSeed && lastOpen) {
+    return lastOpen
+  }
+  if (sealedSeed) {
+    return {
+      ok: false,
+      reason: 'empty_region',
+      message:
+        'That spot is too narrow to fill from here. Tap inside a slightly wider part of the closed shape.',
+    }
+  }
+  if (lastOpen) return lastOpen
+  if (lastEmpty) return lastEmpty
+  return {
+    ok: false,
+    reason: 'open_outline',
+    message: 'Outline looks open — close the shape so the fill stays inside the dress.',
+  }
 }
 
 /** Core flood-fill against a prebuilt barrier mask (testable without Canvas 2D). */
@@ -42,6 +149,10 @@ export function floodFillAgainstBarrier(input: {
   x: number
   y: number
   style: FillStyle
+  /** Override minimum interior pixels (default {@link MIN_FILL_PIXELS}). */
+  minPixels?: number
+  /** Override contour RDP tolerance; omit for size-adaptive tolerance. */
+  simplifyTolerance?: number
 }): FloodFillResult {
   const sx = Math.round(input.x)
   const sy = Math.round(input.y)
@@ -116,28 +227,31 @@ export function floodFillAgainstBarrier(input: {
     sp += 1
   }
 
-  if (count < 24) {
+  const minPixels = Math.max(1, Math.floor(input.minPixels ?? MIN_FILL_PIXELS))
+  if (count < minPixels) {
     return {
       ok: false,
       reason: 'empty_region',
-      message: 'No closed garment region found there. Draw a closed outline first.',
+      message: 'No fillable interior there. Tap inside a closed outline (not on the ink).',
     }
   }
 
-  const contour = traceContour(visited, minX, minY, maxX, maxY)
+  let contour = traceContour(visited, minX, minY, maxX, maxY)
   if (contour.length < 6) {
-    return {
-      ok: false,
-      reason: 'empty_region',
-      message: 'Could not build a fill shape. Try tapping nearer the centre of the region.',
-    }
+    // Degenerate Moore walk on micro-regions (1–few pixels): emit the pixel bbox
+    // so a genuinely closed positive area remains persistable.
+    contour = [minX, minY, maxX + 1, minY, maxX + 1, maxY + 1, minX, maxY + 1]
   }
+
+  const tolerance =
+    input.simplifyTolerance ??
+    contourSimplifyTolerance(count, maxX - minX + 1, maxY - minY + 1)
 
   return {
     ok: true,
     fill: {
       id: createFillId(),
-      contour: simplifyContour(contour, 1.4),
+      contour: simplifyContour(contour, tolerance),
       style: input.style,
       seedX: input.x,
       seedY: input.y,
@@ -149,7 +263,7 @@ export function floodFillAgainstBarrier(input: {
  * Rasterize draw+erase strokes into a barrier mask matching what the user sees.
  * Exported for regression tests (erased seams must not remain invisible barriers).
  */
-export function buildInkBarrierMask(strokes: Stroke[], gapClose = 3): Uint8Array {
+export function buildInkBarrierMask(strokes: Stroke[], gapClose = 0): Uint8Array {
   const canvas = document.createElement('canvas')
   canvas.width = DESIGN_WIDTH
   canvas.height = DESIGN_HEIGHT
@@ -171,7 +285,8 @@ export function buildInkBarrierMask(strokes: Stroke[], gapClose = 3): Uint8Array
   return dilateMask(raw, gapClose)
 }
 
-function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
+/** Square morphological dilate — exported for narrow-channel regression fixtures. */
+export function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
   if (radius <= 0) return mask
   const out = new Uint8Array(mask.length)
   for (let y = 0; y < DESIGN_HEIGHT; y += 1) {
@@ -189,6 +304,18 @@ function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
     }
   }
   return out
+}
+
+/** Lower RDP tolerance for small / narrow regions so thin necks survive. */
+export function contourSimplifyTolerance(
+  pixelCount: number,
+  bboxWidth: number,
+  bboxHeight: number,
+): number {
+  const minDim = Math.min(bboxWidth, bboxHeight)
+  if (pixelCount < 48 || minDim <= 6) return 0.35
+  if (minDim <= 12 || pixelCount < 220) return 0.75
+  return 1.4
 }
 
 /** Moore-neighbour boundary walk → flat [x,y,...] contour. */
@@ -244,7 +371,7 @@ function traceContour(
 }
 
 function simplifyContour(contour: number[], tolerance: number): number[] {
-  if (contour.length <= 8) return contour
+  if (contour.length <= 8 || tolerance <= 0) return contour
   const pts: { x: number; y: number }[] = []
   for (let i = 0; i < contour.length; i += 2) {
     pts.push({ x: contour[i]!, y: contour[i + 1]! })
