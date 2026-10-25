@@ -3,6 +3,26 @@ import { tokenStore } from '@/services/auth/tokenStore'
 import type { AiJobRead } from '@/services/ai/aiJobTypes'
 import type { SharedGarmentSpec } from '@/services/ai/magicGarmentSpec'
 
+/** BE `content_fingerprint` max_length=128 — draft JSON fingerprints must be digested. */
+const CONTENT_FINGERPRINT_MAX = 128
+
+/**
+ * Map a Studio draft fingerprint to the API wire form.
+ * Short values (tests / already-hashed digests) pass through; longer JSON payloads
+ * become SHA-256 hex (64 chars) so Dual Magic enqueue does not 422.
+ */
+export async function toApiContentFingerprint(
+  value?: string | null,
+): Promise<string | null> {
+  if (value == null) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (trimmed.length <= CONTENT_FINGERPRINT_MAX) return trimmed
+  const data = new TextEncoder().encode(trimmed)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 export type PolishSidePayload = {
   image_base64: string
   notes?: string
@@ -53,6 +73,7 @@ export type PolishSketchInput = {
 export async function enqueueSketchPolishDual(
   input: PolishSketchDualInput,
 ): Promise<SketchPolishDualRead> {
+  const contentFingerprint = await toApiContentFingerprint(input.content_fingerprint)
   return apiRequest<SketchPolishDualRead>('/ai/sketch/polish-dual', {
     method: 'POST',
     body: {
@@ -63,7 +84,7 @@ export async function enqueueSketchPolishDual(
       mood_notes: input.mood_notes,
       shared_garment_spec: input.shared_garment_spec,
       source_revision: input.source_revision ?? null,
-      content_fingerprint: input.content_fingerprint ?? null,
+      content_fingerprint: contentFingerprint,
       front: {
         image_base64: input.front.image_base64,
         notes: input.front.notes,
@@ -80,6 +101,7 @@ export async function enqueueSketchPolishDual(
 }
 
 export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJobRead> {
+  const contentFingerprint = await toApiContentFingerprint(input.content_fingerprint)
   return apiRequest<AiJobRead>('/ai/sketch/polish', {
     method: 'POST',
     body: {
@@ -93,7 +115,7 @@ export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJ
         idempotency_key: input.idempotency_key,
         shared_garment_spec: input.shared_garment_spec,
         source_revision: input.source_revision,
-        content_fingerprint: input.content_fingerprint,
+        content_fingerprint: contentFingerprint ?? undefined,
       },
     },
     signal: input.signal,
