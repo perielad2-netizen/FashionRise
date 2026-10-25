@@ -412,7 +412,23 @@ def test_unreviewed_integration_changes_block_live(ev, monkeypatch):
     assert opened == []
 
 
-def test_cli_default_is_dry_run(ev, capsys):
+def test_cli_default_is_dry_run(ev, capsys, monkeypatch):
+    """CLI default is dry-run with zero provider calls on any git branch.
+
+    ``verify_repo_state`` pins an ancient live-eval branch name; that guard is
+    for paid ``--execute`` runs. Stubbing it keeps this offline contract test
+    branch-independent (reproduced failing on unmodified ``main`` when the
+    local HEAD is not ``cursor/openai-gpt6-luna-77c6``).
+    """
+    monkeypatch.setattr(
+        ev,
+        "verify_repo_state",
+        lambda: {
+            "branch": "any-feature-branch",
+            "head": "0" * 40,
+            "reviewed_baseline": ev.REVIEWED_HEAD,
+        },
+    )
     code = ev.main([])
     assert code == 0
     out = capsys.readouterr().out
