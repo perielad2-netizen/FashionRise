@@ -12,6 +12,7 @@ from app.models.ai_job import AIJob
 from app.models.garment_design import GarmentDesign
 from app.models.user import User
 from app.schemas.ai import AIJobCreate
+from app.services.reference_croquis import reference_from_job_input
 from app.storage.local import LocalStorageBackend
 
 _DATA_URL_RE = re.compile(
@@ -55,6 +56,10 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
             raise ForbiddenError("Not allowed for this design")
     if data.job_type in {"sketch_clean", "sketch_polish", "style_suggest"}:
         _validate_sketch_image_payload(data.input_data or {})
+    # Validate optional selected-croquis identity before queueing (no paid call).
+    # Raises ValidationAppError on invalid IDs; None/missing remains compatible.
+    if data.job_type == "sketch_polish":
+        reference_from_job_input(data.input_data if isinstance(data.input_data, dict) else {})
     job = AIJob(
         user_id=user.id,
         design_id=data.design_id,

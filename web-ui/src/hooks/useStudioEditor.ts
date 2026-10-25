@@ -682,6 +682,9 @@ export function useStudioEditor() {
     magicAbortRef.current = controller
 
     try {
+      // Snapshot the selected croquis with the sketch so a mid-flight model switch
+      // cannot desync the Magic identity contract from the captured reference.
+      const referenceModelId = model
       const captured = await captureSketchForMagic({
         strokes,
         fills,
@@ -696,6 +699,7 @@ export function useStudioEditor() {
       setMagicPhase('submitting')
       const job = await enqueueSketchPolish({
         imageBase64: captured.dataUrl,
+        referenceModelId,
         notes: 'polish concept',
         signal: controller.signal,
       })
@@ -739,7 +743,7 @@ export function useStudioEditor() {
     } finally {
       magicInFlightRef.current = false
     }
-  }, [fills, referenceOpacity, referenceUrl, revokeMagicUrls, strokes, user?.id])
+  }, [fills, model, referenceOpacity, referenceUrl, revokeMagicUrls, strokes, user?.id])
 
   const onMagic = useCallback(() => {
     if (!magicEnabled) {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import uuid
 from io import BytesIO
 from typing import Any
@@ -14,6 +15,11 @@ from openai import OpenAI
 
 from app.core.config import get_settings
 from app.models.ai_job import AIJob
+from app.services.reference_croquis import (
+    edit_reference_instructions,
+    reference_from_job_input,
+    vision_reference_instructions,
+)
 from app.storage.local import LocalStorageBackend
 
 logger = logging.getLogger(__name__)
@@ -188,6 +194,8 @@ def _system_prompt(job_type: str) -> str:
             "the model's exact croquis pose/stance and garment silhouette — versus (B) drawing imperfections "
             "that may be professionally refined (wobbly lines, uneven fill, crude shading). "
             "Never invent anatomy, swap left/right, or normalize a dynamic stance into a generic runway pose. "
+            "When the user message includes SELECTED STUDIO REFERENCE metadata, that selection is authoritative "
+            "over any conflicting impression of the figure's fashion-croquis family (male vs female presentation). "
             "Respond ONLY with valid JSON using keys: "
             "summary (one short exciting sentence about the design concept, not the rough drawing), "
             "polish_bullets (array of 3–5 concise tips for the young designer), "
@@ -204,7 +212,8 @@ def _system_prompt(job_type: str) -> str:
             "to preserve: concrete pose relationships from pose_lock, hat/hair, neckline, sleeves, hem, "
             "main colors, fabric patterns, asymmetry, accessories, distinctive details — invent nothing; "
             "do not describe amateur line quality or ask to keep a child sketch look; do not summarize pose "
-            "as a generic 'standing front view' when limbs are bent, lifted, crossed, or asymmetric)."
+            "as a generic 'standing front view' when limbs are bent, lifted, crossed, or asymmetric; "
+            "do not request a different croquis family than the SELECTED STUDIO REFERENCE)."
         )
     return (
         "You are a fashion stylist AI. Respond ONLY with valid JSON using keys: "
@@ -215,6 +224,9 @@ def _system_prompt(job_type: str) -> str:
 def _user_text(job: AIJob) -> str:
     d = job.input_data or {}
     parts: list[str] = []
+    if job.job_type == "sketch_polish":
+        ref = reference_from_job_input(d if isinstance(d, dict) else {})
+        parts.append(vision_reference_instructions(ref))
     notes = d.get("notes")
     if isinstance(notes, str) and notes.strip():
         parts.append(f"Designer notes:\n{notes.strip()}")
@@ -374,11 +386,22 @@ def _pose_lock_clause(identity: dict[str, Any]) -> str:
     )
 
 
+_SUBJECT_METADATA_KEYS = frozenset(
+    {
+        "selected_croquis_family",
+        "selected_reference_model_id",
+        "croquis_presentation",
+    }
+)
+
+
 def _garment_identity_facts(identity: dict[str, Any]) -> list[str]:
     """Garment/design identity facts (pose_lock handled separately for priority packing)."""
     facts: list[str] = []
     has_pose_lock = isinstance(identity.get("pose_lock"), dict) and bool(identity.get("pose_lock"))
     for key in _GARMENT_IDENTITY_FIELD_ORDER:
+        if key in _SUBJECT_METADATA_KEYS:
+            continue
         val = identity.get(key)
         if not _is_usable_identity_text(val):
             continue
@@ -449,13 +472,148 @@ def _evidence_chunks(structured: Any, summary: str) -> list[str]:
     return chunks
 
 
-def _build_image_prompt(structured: Any, summary: str) -> str:
+def _neutralize_opposite_subject_language(text: str, family: str) -> str:
+    """Neutralize opposite-family *subject/figure* claims in vision prose.
+
+    Preserves garment vocabulary and sketch-supported design details (dress, blouse,
+    long hair, textile language, etc.). Only rewrites phrases that assert the wrong
+    fashion-croquis / model presentation relative to the selected Studio reference.
+    """
+    if not text or family not in {"male", "female"}:
+        return text
+    selected = f"selected {family} fashion croquis"
+    if family == "male":
+        patterns = (
+            (
+                r"\bfemale-presenting(?:\s+(?:fashion\s+)?(?:model|figure|croquis))?\b",
+                selected,
+            ),
+            (r"\bfemale(?:\s+fashion)?\s+(?:model|figure|croquis)\b", selected),
+            (r"\bwoman(?:\s+model|\s+figure)?\b", selected),
+            (r"\bgirl(?:\s+model|\s+figure)?\b", selected),
+            (
+                r"\bfeminine(?:\s+facial|\s+body|\s+figure|\s+model|\s+presentation)\b",
+                f"selected {family} croquis presentation",
+            ),
+            (r"\ba\s+female\b", f"a {selected}"),
+            (r"\bthe\s+female\b", f"the {selected}"),
+        )
+    else:
+        patterns = (
+            (
+                r"\bmale-presenting(?:\s+(?:fashion\s+)?(?:model|figure|croquis))?\b",
+                selected,
+            ),
+            (r"\bmale(?:\s+fashion)?\s+(?:model|figure|croquis)\b", selected),
+            (r"\bman(?:\s+model|\s+figure)?\b", selected),
+            (r"\bboy(?:\s+model|\s+figure)?\b", selected),
+            (
+                r"\bmasculine(?:\s+facial|\s+body|\s+figure|\s+model|\s+presentation)\b",
+                f"selected {family} croquis presentation",
+            ),
+            (r"\ba\s+male\b", f"a {selected}"),
+            (r"\bthe\s+male\b", f"the {selected}"),
+        )
+
+    out = text
+    for pat, replacement in patterns:
+        out = re.sub(pat, replacement, out, flags=re.IGNORECASE)
+    return out
+
+
+def _scrub_structured_subject_fields(structured: dict[str, Any], family: str) -> dict[str, Any]:
+    """Apply subject neutralization across every evidence path used by prompt packing."""
+    out = dict(structured)
+    for key in ("image_prompt", "summary"):
+        val = out.get(key)
+        if isinstance(val, str) and val.strip():
+            out[key] = _neutralize_opposite_subject_language(val, family)
+
+    for key in ("polish_bullets", "cleanup_bullets"):
+        bullets = out.get(key)
+        if isinstance(bullets, list):
+            scrubbed: list[Any] = []
+            for item in bullets:
+                if isinstance(item, str):
+                    scrubbed.append(_neutralize_opposite_subject_language(item, family))
+                else:
+                    scrubbed.append(item)
+            out[key] = scrubbed
+
+    identity = out.get("design_identity")
+    if isinstance(identity, dict):
+        identity = dict(identity)
+        for key, val in list(identity.items()):
+            if key in {
+                "selected_croquis_family",
+                "selected_reference_model_id",
+                "croquis_presentation",
+            }:
+                continue
+            if isinstance(val, str):
+                identity[key] = _neutralize_opposite_subject_language(val, family)
+            elif key == "pose_lock" and isinstance(val, dict):
+                pose_lock = {}
+                for pk, pv in val.items():
+                    if isinstance(pv, str):
+                        pose_lock[pk] = _neutralize_opposite_subject_language(pv, family)
+                    else:
+                        pose_lock[pk] = pv
+                identity["pose_lock"] = pose_lock
+        out["design_identity"] = identity
+    return out
+
+
+def _apply_reference_precedence(structured: Any, job: AIJob | None) -> Any:
+    """Ensure vision JSON cannot override the selected Studio croquis presentation.
+
+    Stamps bounded subject/reference metadata and neutralizes opposite-family
+    *subject* claims in every field that can enter the edit brief. Does not strip
+    garment, textile, or sketch-supported hairstyle design details.
+    """
+    if job is None or not isinstance(structured, dict):
+        return structured
+    ref = reference_from_job_input(job.input_data if isinstance(job.input_data, dict) else {})
+    if ref is None or ref.family is None:
+        return structured
+    out = _scrub_structured_subject_fields(structured, ref.family)
+    identity = out.get("design_identity")
+    if not isinstance(identity, dict):
+        identity = {}
+    else:
+        identity = dict(identity)
+    # Bounded authoritative subject metadata — preferred over free-text scrubbing alone.
+    identity["selected_croquis_family"] = ref.family
+    identity["selected_reference_model_id"] = ref.model_id
+    identity["croquis_presentation"] = (
+        f"{ref.family} fashion croquis (selected Studio reference `{ref.model_id}`)"
+    )
+    out["design_identity"] = identity
+    return out
+
+
+def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None) -> str:
     """Build a professional fashion-illustration edit brief (not a pale wash / child-sketch retain).
 
     Assembles a fixed instruction frame plus prioritized evidence. Critical pose_lock facts are
     packed before lower-priority garment prose and free-text image_prompt chunks. The budget is
     enforced by omitting whole trailing segments — never by slicing mid-fact.
+    Trusted selected-croquis identity (when present) is reserved in the fixed frame and takes
+    precedence over conflicting vision prose.
     """
+    structured = _apply_reference_precedence(structured, job)
+    summary_text = summary or ""
+    if job is not None:
+        ref_for_summary = reference_from_job_input(
+            job.input_data if isinstance(job.input_data, dict) else {}
+        )
+        if ref_for_summary is not None and ref_for_summary.family is not None:
+            summary_text = _neutralize_opposite_subject_language(
+                summary_text, ref_for_summary.family
+            )
+            if isinstance(structured, dict) and isinstance(structured.get("summary"), str):
+                summary_text = str(structured.get("summary") or summary_text)
+
     identity: dict[str, Any] = {}
     if isinstance(structured, dict):
         raw_identity = structured.get("design_identity")
@@ -464,7 +622,18 @@ def _build_image_prompt(structured: Any, summary: str) -> str:
 
     pose_facts = _pose_lock_facts(identity)
     garment_facts = _garment_identity_facts(identity)
-    evidence_parts = _evidence_chunks(structured, summary)
+    # Prefer stamped croquis presentation as an early garment-identity fact.
+    croquis_pres = identity.get("croquis_presentation")
+    if _is_usable_identity_text(croquis_pres):
+        garment_facts = [f"croquis presentation: {str(croquis_pres).strip()}"] + [
+            f for f in garment_facts if not str(f).lower().startswith("croquis presentation:")
+        ]
+    evidence_parts = _evidence_chunks(structured, summary_text)
+
+    ref = None
+    if job is not None:
+        ref = reference_from_job_input(job.input_data if isinstance(job.input_data, dict) else {})
+    reference_clause = edit_reference_instructions(ref) + " "
 
     lead = (
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
@@ -498,10 +667,10 @@ def _build_image_prompt(structured: Any, summary: str) -> str:
     suffix = "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark."
 
     # Fixed instruction frame (without trailing avoid-line) is reserved first so polish/safety
-    # language cannot be crowded out by verbose vision text. Pose rules sit immediately after
-    # the lead so anti-repose bans are never budget-optional. Evidence packs next by priority;
-    # the photorealism avoid-line is always last when budget allows.
-    fixed_core = f"{lead}{pose_rules}{preserve}{upgrade}{bans}"
+    # language cannot be crowded out by verbose vision text. Selected croquis identity and pose
+    # rules sit immediately after the lead so they are never budget-optional. Evidence packs next
+    # by priority; the photorealism avoid-line is always last when budget allows.
+    fixed_core = f"{lead}{reference_clause}{pose_rules}{preserve}{upgrade}{bans}"
     suffix_budget = len(suffix) + 1  # leading space before suffix
     evidence_budget = max(0, IMAGE_PROMPT_MAX_CHARS - len(fixed_core) - suffix_budget)
 
@@ -629,7 +798,7 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     if sketch is None:
         raise SketchCompletionError("no sketch image for edit")
 
-    prompt = _build_image_prompt(structured, summary)
+    prompt = _build_image_prompt(structured, summary, job=job)
     size = (getattr(settings, "openai_image_size", None) or "1024x1536").strip()
 
     raw, used_model = _try_edit_look_from_sketch(
