@@ -324,12 +324,77 @@ def _system_prompt(job_type: str) -> str:
     )
 
 
+def _normalized_studio_side(input_data: dict[str, Any]) -> str | None:
+    raw = input_data.get("studio_side")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    return raw.strip().lower()
+
+
+def _shared_garment_spec_clause(input_data: dict[str, Any]) -> str:
+    spec = input_data.get("shared_garment_spec")
+    if spec is None:
+        return ""
+    if isinstance(spec, str) and spec.strip():
+        text = spec.strip()
+    elif isinstance(spec, dict) and spec:
+        try:
+            text = json.dumps(spec, ensure_ascii=True, sort_keys=True)
+        except (TypeError, ValueError):
+            text = str(spec)
+    else:
+        return ""
+    return (
+        "SHARED GARMENT SPEC (keep front/back Magic results consistent — do not contradict): "
+        f"{text[:1200]}"
+    )
+
+
+def _studio_side_vision_clause(side: str | None) -> str:
+    if side == "front":
+        return (
+            "STUDIO VIEW: FRONT of the garment (viewer-facing). This upload is the front sketch only. "
+            "Describe and preserve front-facing design elements. Do NOT describe rear/back-only details "
+            "or claim this is a rear view."
+        )
+    if side == "back":
+        return (
+            "STUDIO VIEW: REAR / BACK of the garment. This upload is the back sketch only — use rear "
+            "fashion-illustration anatomy language (dorsal silhouette, back neckline, back straps, "
+            "rear closures, center-back seams, rear hem). Do NOT claim this is the front view or "
+            "invent front-only details that are not visible from behind."
+        )
+    return ""
+
+
+def _studio_side_edit_clause(side: str | None) -> str:
+    if side == "front":
+        return (
+            "VIEW: front-facing fashion illustration — preserve front garment details only; "
+            "this is not a rear/back view. "
+        )
+    if side == "back":
+        return (
+            "VIEW: rear/back fashion illustration — show the garment from behind with accurate "
+            "back necklines, straps, dorsal seams, and rear hem; never describe this upload as "
+            "a front-facing sketch. "
+        )
+    return ""
+
+
 def _user_text(job: AIJob) -> str:
     d = job.input_data or {}
     parts: list[str] = []
     if job.job_type == "sketch_polish":
         ref = reference_from_job_input(d if isinstance(d, dict) else {})
         parts.append(vision_reference_instructions(ref))
+        side = _normalized_studio_side(d if isinstance(d, dict) else {})
+        side_clause = _studio_side_vision_clause(side)
+        if side_clause:
+            parts.append(side_clause)
+        spec_clause = _shared_garment_spec_clause(d if isinstance(d, dict) else {})
+        if spec_clause:
+            parts.append(spec_clause)
     notes = d.get("notes")
     if isinstance(notes, str) and notes.strip():
         parts.append(f"Designer notes:\n{notes.strip()}")
@@ -589,10 +654,21 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         evidence = summary_text or "Professional fashion illustration of this sketch"
 
     reference_clause = edit_reference_instructions(ref) + " "
+    side_clause = ""
+    if job is not None:
+        side_clause = _studio_side_edit_clause(
+            _normalized_studio_side(job.input_data if isinstance(job.input_data, dict) else {})
+        )
+        shared_edit = _shared_garment_spec_clause(
+            job.input_data if isinstance(job.input_data, dict) else {}
+        )
+        if shared_edit:
+            side_clause = f"{side_clause}{shared_edit} "
     protected = (
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
         "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
         f"{reference_clause}"
+        f"{side_clause}"
         f"{_COVERAGE_PRESERVATION_CONTRACT} "
         "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
         "sleeve type and length, hemline, main colors, fabric/textile patterns, asymmetry, accessories "
