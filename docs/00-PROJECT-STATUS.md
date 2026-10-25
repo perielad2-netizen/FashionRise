@@ -77,10 +77,6 @@
 
 **P1 #59 — Magic croquis identity:** **OPEN** — separate draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) (+ maint lineage). **Do not mix into #60.**
 
-**P1 #51 — Fullscreen Hand→Pencil:** **CLOSED** — real-device **5/5 PASS**; FE on `main` @ `c6fc1eb8`.
-
-**P1 #59 — Magic croquis identity:** **OPEN** — separate draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61). Do not mix into #60.
-
 **P1 #60 — Narrow closed-shape Fill (ACTIVE DRAFT):** Operator evidence 2026-10-25 — hourglass white neck / “closed shape not found.” **Draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** (FE-only): adaptive undilated-first fill; punch-through seam safety; edge-based contours; **large-garment contour compression** (collinear collapse + size-aware RDP under `MAX_FILL_CONTOUR_VALUES=4000`, never silent truncate; `ok:true` only if persistable); real viewport 100/177/300% tests. **Limitation:** short ambiguous connections may be conservatively panel-isolated; perfect intent recognition not claimed. **Issue #60 OPEN** pending real-device acceptance. **No merge/deploy**.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
@@ -130,7 +126,7 @@
 | **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
 | **P1 #51 Hand→Pencil immersive** | **CLOSED** — real-device 5/5 PASS; on `main` @ `c6fc1eb8` (FE) |
 | **P1 #59 Magic croquis identity** | **OPEN** — separate draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61); not mixed with #60 |
-| **P1 #60 narrow closed Fill** | **OPEN** — draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62); seam-safety amendment + neck fidelity + real viewport tests; FE-only; no deploy |
+| **P1 #60 narrow closed Fill** | **OPEN** — draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62); seam safety + large-garment contour persistence; FE-only; no deploy |
 | **Issue #42 / WEB-V4J Front-Back** | **OPEN** — architecture draft PR #50; keep separate from #60 |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
@@ -326,7 +322,7 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **re-review** of P1 #60 narrow-Fill **draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** after the internal-seam safety amendment (Issue [#60](https://github.com/perielad2-netizen/FashionRise/issues/60)). **Do not merge/deploy** until authorized. GO path: **frontend-only** deploy onto production FE lineage `c6fc1eb8` (BE/worker stay `b800e53d`), then operator visual acceptance (hourglass/strap continuity + no adjacent-panel spill). HOLD if ambiguity policy needs an explicit fill-mode product decision.
+1. **Exact next action:** Technical PM **re-review** of P1 #60 **draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** after the large-garment contour persistence amendment (Issue [#60](https://github.com/perielad2-netizen/FashionRise/issues/60)). **Do not merge/deploy** until authorized. GO path: **frontend-only** deploy onto production FE `c6fc1eb8` (BE/worker stay `b800e53d`), then real-device acceptance (narrow necks + no seam spill + large dress/trousers save/reopen). Keep #59 separate.
 2. Keep #60 isolated from Magic identity (#59 / PR #61), Sunburst (#54), and Front/Back (#42).
 3. Production remains FE `c6fc1eb8` / BE+worker `b800e53d` / Alembic `005` until an authorized FE release.
 4. Magic pose fidelity PR #41 remains on `main` but **not** on prod BE — separate track.
@@ -599,6 +595,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-25 | **P1 #60 PR #62 large-garment contour amendment:** collinear collapse + size-aware RDP under `MAX_FILL_CONTOUR_VALUES=4000` (no silent truncate; success only if persistable); synthetic dress/trousers/curved/jagged/hourglass fixtures; prior seam/neck/viewport regressions retained; FE-only; **0 paid AI**; **STOP for Technical PM re-review — no merge/deploy**. |
 | 2026-10-25 | **P1 #60 PR #62 seam-safety amendment:** punch-through bridge-path (compact internal seam holes → panel-local; elongated necks kept); edge-based contours + `minScanlineSpan` simplify; real viewport 100/177/300% + pinch tests; style/persist round-trips; FE-only; **0 paid AI**; production unchanged; **STOP for Technical PM re-review — no merge/deploy**. |
 | 2026-10-25 | **P1 #60 narrow closed-shape Fill (draft):** operator hourglass/strap evidence; root causes = fixed `gapClose=2` sealing 1–4px necks + `count < 24` + rigid RDP; adaptive undilated-first fill; synthetic regressions (1–10px necks, tiny pockets, open U-shape, neighbor seam, zoom independence); Vitest **396**; lint/tsc/build/check:sw PASS; FE-only; **0 paid AI**; production unchanged (`c6fc1eb8` / `b800e53d` / `005`); **STOP for Technical PM review — no merge/deploy**. |
 | 2026-10-24 | **P1 #51 Hand→Pencil hotfix** merged to `main` @ `c6fc1eb8` (draft path PR #52). |
