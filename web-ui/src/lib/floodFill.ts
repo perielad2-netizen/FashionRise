@@ -1,6 +1,12 @@
 import { paintInkStrokes } from '@/lib/exportCanvas'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
-import { createFillId, type FillOp, type FillStyle } from '@/lib/fills'
+import {
+  checkPersistableFill,
+  createFillId,
+  MAX_FILL_CONTOUR_VALUES,
+  type FillOp,
+  type FillStyle,
+} from '@/lib/fills'
 
 export type FloodFillOk = { ok: true; fill: FillOp }
 export type FloodFillErr = {
@@ -14,26 +20,169 @@ export type FloodFillResult = FloodFillOk | FloodFillErr
 export const MAX_FILL_PIXELS = Math.floor(DESIGN_WIDTH * DESIGN_HEIGHT * 0.42)
 
 /**
+ * Minimum positive interior (design pixels) accepted for a closed fill.
+ * Was 24 — that rejected legitimate straps / tiny panels. Contour fallback
+ * still requires a valid persistent polygon (≥3 points).
+ */
+export const MIN_FILL_PIXELS = 1
+
+/** Default maximum ink dilation (px) considered when sealing freehand hairline gaps. */
+export const DEFAULT_MAX_GAP_CLOSE = 2
+
+/**
+ * Compact dilated bridges (max dimension ≤5, ≤16 sealed path pixels) are treated
+ * as accidental seam punch-throughs (prefer panel-local fill). Elongated
+ * corridors (hourglass necks, maxDim ≥6 with aspect ≥3:1) stay connected.
+ *
+ * Remaining limitation: intentional corridors shorter than ~3–5px along their
+ * long axis may be treated conservatively as punch-throughs (prefer panel
+ * isolation over silent merge). Perfect automatic intent recognition is not claimed.
+ */
+
+type FloodExploreOk = {
+  ok: true
+  visited: Uint8Array
+  count: number
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+type FloodExploreResult = FloodExploreOk | FloodFillErr
+
+/**
  * Flood-fill a closed ink region. Barriers are the **effective visible ink** after
  * draw/erase compositing (same destination-out rules as the canvas). Model
  * reference and fill contours are not barriers — garment parts are defined by
  * the ink the designer can still see.
+ *
+ * Adaptive gap closing:
+ * 1. Prefer undilated visible ink (preserves narrow necks / straps).
+ * 2. If undilated succeeds but a modest dilation reveals that the region only
+ *    connected through a *compact* punch-through in an internal seam, prefer the
+ *    dilated (panel-local) result — without globally dilating first.
+ * 3. If undilated escapes to the paper edge, escalate gap-close to seal hairline
+ *    perimeter gaps.
  */
 export function floodFillRegion(input: {
   strokes: Stroke[]
   x: number
   y: number
   style: FillStyle
-  /** Dilate ink barriers by this many pixels to close tiny gaps. */
+  /**
+   * Maximum barrier dilation (px) to try when sealing freehand gaps.
+   * `0` = visible ink only. Default `2`.
+   */
   gapClose?: number
 }): FloodFillResult {
-  const barrier = buildInkBarrierMask(input.strokes, input.gapClose ?? 2)
-  return floodFillAgainstBarrier({
-    barrier,
+  const maxGap = Math.max(0, Math.min(4, Math.floor(input.gapClose ?? DEFAULT_MAX_GAP_CLOSE)))
+  const raw = buildInkBarrierMask(input.strokes, 0)
+  return floodFillAdaptive({
+    rawBarrier: raw,
     x: input.x,
     y: input.y,
     style: input.style,
+    maxGap,
   })
+}
+
+/**
+ * Adaptive multi-pass fill against a raw (undilated) barrier mask.
+ * Exported for deterministic synthetic-barrier tests without Canvas 2D.
+ */
+export function floodFillAdaptive(input: {
+  rawBarrier: Uint8Array
+  x: number
+  y: number
+  style: FillStyle
+  maxGap?: number
+}): FloodFillResult {
+  const maxGap = Math.max(0, Math.min(4, Math.floor(input.maxGap ?? DEFAULT_MAX_GAP_CLOSE)))
+  const sx = Math.round(input.x)
+  const sy = Math.round(input.y)
+  if (sx < 0 || sy < 0 || sx >= DESIGN_WIDTH || sy >= DESIGN_HEIGHT) {
+    return { ok: false, reason: 'outside', message: 'Tap inside a closed garment outline to fill.' }
+  }
+
+  const raw = input.rawBarrier
+  const seedIdx = sy * DESIGN_WIDTH + sx
+  if (raw[seedIdx]) {
+    return {
+      ok: false,
+      reason: 'outside',
+      message: 'Tap inside a closed shape, not on the outline.',
+    }
+  }
+
+  const undilated = exploreFlood(raw, sx, sy)
+  if (undilated.ok) {
+    // Check whether a modest dilation would isolate a panel by sealing only a
+    // compact internal punch-through (not an elongated intentional neck).
+    let chosen: FloodExploreOk = undilated
+    for (let gap = 1; gap <= maxGap; gap += 1) {
+      const dilated = dilateMask(raw, gap)
+      if (dilated[seedIdx]) break
+      const panel = exploreFlood(dilated, sx, sy)
+      if (!panel.ok) continue
+      if (isAccidentalPunchThrough(raw, dilated, undilated, panel)) {
+        chosen = panel
+        // Keep the least dilation that seals the punch-through.
+        break
+      }
+    }
+    return finalizeFlood(chosen, input.x, input.y, input.style)
+  }
+
+  // Undilated escaped / too large / empty — escalate gap-close for perimeter hairlines.
+  let lastOpen: FloodFillErr | null =
+    undilated.ok === false &&
+    (undilated.reason === 'open_outline' || undilated.reason === 'too_large')
+      ? undilated
+      : null
+  let lastEmpty: FloodFillErr | null =
+    undilated.ok === false && undilated.reason === 'empty_region' ? undilated : null
+  let sealedSeed = false
+
+  for (let gap = 1; gap <= maxGap; gap += 1) {
+    const barrier = dilateMask(raw, gap)
+    if (barrier[seedIdx]) {
+      sealedSeed = true
+      break
+    }
+    const explored = exploreFlood(barrier, sx, sy)
+    if (explored.ok) {
+      return finalizeFlood(explored, input.x, input.y, input.style)
+    }
+    if (explored.reason === 'open_outline' || explored.reason === 'too_large') {
+      lastOpen = explored
+      continue
+    }
+    if (explored.reason === 'empty_region') {
+      lastEmpty = explored
+      continue
+    }
+    if (explored.reason === 'outside') {
+      sealedSeed = true
+      break
+    }
+  }
+
+  if (sealedSeed && lastOpen) return lastOpen
+  if (sealedSeed) {
+    return {
+      ok: false,
+      reason: 'empty_region',
+      message:
+        'That spot is too narrow to fill from here. Tap inside a slightly wider part of the closed shape.',
+    }
+  }
+  if (lastOpen) return lastOpen
+  if (lastEmpty) return lastEmpty
+  return {
+    ok: false,
+    reason: 'open_outline',
+    message: 'Outline looks open — close the shape so the fill stays inside the dress.',
+  }
 }
 
 /** Core flood-fill against a prebuilt barrier mask (testable without Canvas 2D). */
@@ -42,14 +191,43 @@ export function floodFillAgainstBarrier(input: {
   x: number
   y: number
   style: FillStyle
+  /** Override minimum interior pixels (default {@link MIN_FILL_PIXELS}). */
+  minPixels?: number
+  /** Override contour RDP tolerance; omit for size-adaptive tolerance. */
+  simplifyTolerance?: number
 }): FloodFillResult {
   const sx = Math.round(input.x)
   const sy = Math.round(input.y)
   if (sx < 0 || sy < 0 || sx >= DESIGN_WIDTH || sy >= DESIGN_HEIGHT) {
     return { ok: false, reason: 'outside', message: 'Tap inside a closed garment outline to fill.' }
   }
+  const idx = sy * DESIGN_WIDTH + sx
+  if (input.barrier[idx]) {
+    return {
+      ok: false,
+      reason: 'outside',
+      message: 'Tap inside a closed shape, not on the outline.',
+    }
+  }
+  const explored = exploreFlood(input.barrier, sx, sy, input.minPixels)
+  if (!explored.ok) return explored
+  return finalizeFlood(explored, input.x, input.y, input.style, input.simplifyTolerance)
+}
 
-  const barrier = input.barrier
+/**
+ * Explore a closed flood region. Exported for seam-safety / pixel-level tests.
+ * Allocations are bounded by DESIGN_WIDTH*DESIGN_HEIGHT; exploration stops at
+ * paper-edge escape or {@link MAX_FILL_PIXELS}.
+ */
+export function exploreFlood(
+  barrier: Uint8Array,
+  sx: number,
+  sy: number,
+  minPixels: number = MIN_FILL_PIXELS,
+): FloodExploreResult {
+  if (sx < 0 || sy < 0 || sx >= DESIGN_WIDTH || sy >= DESIGN_HEIGHT) {
+    return { ok: false, reason: 'outside', message: 'Tap inside a closed garment outline to fill.' }
+  }
   const idx = sy * DESIGN_WIDTH + sx
   if (barrier[idx]) {
     return {
@@ -80,8 +258,6 @@ export function floodFillAgainstBarrier(input: {
     const cy = stackY[sp]!
     count += 1
     if (cx === 0 || cy === 0 || cx === DESIGN_WIDTH - 1 || cy === DESIGN_HEIGHT - 1) {
-      // Fail closed as soon as the flood escapes to the paper edge — do not keep
-      // expanding until MAX_FILL_PIXELS (which would mis-report open outlines).
       return {
         ok: false,
         reason: 'open_outline',
@@ -116,40 +292,395 @@ export function floodFillAgainstBarrier(input: {
     sp += 1
   }
 
-  if (count < 24) {
+  const minPx = Math.max(1, Math.floor(minPixels))
+  if (count < minPx) {
     return {
       ok: false,
       reason: 'empty_region',
-      message: 'No closed garment region found there. Draw a closed outline first.',
+      message: 'No fillable interior there. Tap inside a closed outline (not on the ink).',
     }
   }
 
-  const contour = traceContour(visited, minX, minY, maxX, maxY)
+  return { ok: true, visited, count, minX, minY, maxX, maxY }
+}
+
+/**
+ * True when dilation seals only a *compact* bridge between the undilated region
+ * and a smaller panel-local region — typical of a 1–2px hole in an internal seam.
+ *
+ * Method: under dilation the seed stays in `panel` while a large `leaked` area
+ * (still open, still in the undilated flood) becomes unreachable. A BFS through
+ * the undilated mask finds a shortest path from panel → leaked; bridge pixels on
+ * that path are those sealed by dilation (`dilated && !raw`). Compact bridges
+ * (seam punch-throughs) return true → prefer panel-local fill. Elongated bridges
+ * (hourglass necks) return false → keep the connected undilated fill.
+ *
+ * Limitation: intentional corridors shorter than ~3px along their long axis can
+ * look like punch-throughs; we prefer panel isolation over silent merge. Perfect
+ * automatic intent recognition is not claimed.
+ */
+export function isAccidentalPunchThrough(
+  rawBarrier: Uint8Array,
+  dilatedBarrier: Uint8Array,
+  undilated: FloodExploreOk,
+  panel: FloodExploreOk,
+): boolean {
+  if (panel.count >= undilated.count) return false
+
+  // Leaked = still open under dilation, reached undilated, but not in panel.
+  let leakedCount = 0
+  let leakSeed = -1
+  const x0 = Math.max(0, Math.min(undilated.minX, panel.minX) - 2)
+  const x1 = Math.min(DESIGN_WIDTH - 1, Math.max(undilated.maxX, panel.maxX) + 2)
+  const y0 = Math.max(0, Math.min(undilated.minY, panel.minY) - 2)
+  const y1 = Math.min(DESIGN_HEIGHT - 1, Math.max(undilated.maxY, panel.maxY) + 2)
+
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      const i = y * DESIGN_WIDTH + x
+      if (!undilated.visited[i] || panel.visited[i] || dilatedBarrier[i]) continue
+      leakedCount += 1
+      if (leakSeed < 0) leakSeed = i
+    }
+  }
+
+  // Require a real second enclosure — not a few fringe pixels eaten by dilate.
+  if (leakSeed < 0 || leakedCount < 24) return false
+  if (leakedCount < Math.min(48, Math.floor(panel.count * 0.15))) return false
+
+  // BFS from the panel through undilated.visited to the nearest leaked pixel.
+  const parent = new Int32Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  parent.fill(-1)
+  const qx = new Int32Array(undilated.count + 8)
+  const qy = new Int32Array(undilated.count + 8)
+  let qh = 0
+  let qt = 0
+  const seen = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+
+  for (let y = panel.minY; y <= panel.maxY; y += 1) {
+    for (let x = panel.minX; x <= panel.maxX; x += 1) {
+      const i = y * DESIGN_WIDTH + x
+      if (!panel.visited[i]) continue
+      seen[i] = 1
+      qx[qt] = x
+      qy[qt] = y
+      qt += 1
+    }
+  }
+
+  let meet = -1
+  while (qh < qt && meet < 0) {
+    const cx = qx[qh]!
+    const cy = qy[qh]!
+    qh += 1
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const nx = cx + dx
+      const ny = cy + dy
+      if (nx < 0 || ny < 0 || nx >= DESIGN_WIDTH || ny >= DESIGN_HEIGHT) continue
+      const ni = ny * DESIGN_WIDTH + nx
+      if (seen[ni] || !undilated.visited[ni]) continue
+      seen[ni] = 1
+      parent[ni] = cy * DESIGN_WIDTH + cx
+      if (!panel.visited[ni] && !dilatedBarrier[ni]) {
+        meet = ni
+        break
+      }
+      qx[qt] = nx
+      qy[qt] = ny
+      qt += 1
+    }
+  }
+  if (meet < 0) return false
+
+  // Walk back; bridge = path pixels sealed by dilation (not original ink).
+  let bridgeCount = 0
+  let bMinX = DESIGN_WIDTH
+  let bMinY = DESIGN_HEIGHT
+  let bMaxX = 0
+  let bMaxY = 0
+  let cur = meet
+  let guard = 0
+  const maxPath = undilated.count + 8
+  while (cur >= 0 && guard < maxPath) {
+    guard += 1
+    if (panel.visited[cur]) break
+    if (dilatedBarrier[cur] && !rawBarrier[cur]) {
+      const bx = cur % DESIGN_WIDTH
+      const by = (cur / DESIGN_WIDTH) | 0
+      bridgeCount += 1
+      if (bx < bMinX) bMinX = bx
+      if (by < bMinY) bMinY = by
+      if (bx > bMaxX) bMaxX = bx
+      if (by > bMaxY) bMaxY = by
+    }
+    cur = parent[cur]!
+  }
+
+  if (bridgeCount === 0) return false
+  const w = bMaxX - bMinX + 1
+  const h = bMaxY - bMinY + 1
+  const minDim = Math.min(w, h)
+  const maxDim = Math.max(w, h)
+
+  // Elongated corridor (hourglass neck / strap passage): keep connected fill.
+  // Require a meaningful length so a 3×1 morphological seam cut (wall thicken
+  // + 1px hole) is NOT treated as a neck.
+  if (maxDim >= 6 && maxDim >= 3 * minDim) return false
+  if (bridgeCount > 16 && maxDim >= 6) return false
+
+  // Compact punch-through (1–2px seam hole, short diagonal join, eraser nick).
+  // Morphological dilate-1 around a vertical seam makes a ~3×1 bridge bbox.
+  if (bridgeCount <= 16 && maxDim <= 5) return true
+  return false
+}
+
+function finalizeFlood(
+  explored: FloodExploreOk,
+  seedX: number,
+  seedY: number,
+  style: FillStyle,
+  simplifyTolerance?: number,
+): FloodFillResult {
+  const { visited, count, minX, minY, maxX, maxY } = explored
+  let contour = traceContour(visited, minX, minY, maxX, maxY)
   if (contour.length < 6) {
+    contour = [minX, minY, maxX + 1, minY, maxX + 1, maxY + 1, minX, maxY + 1]
+  }
+
+  // Edge-based traces emit a vertex per unit edge. Collapse exact collinear
+  // runs first — topology-preserving and enough to keep 1px neck walls as
+  // parallel segments without forcing global RDP tolerance to 0.
+  contour = removeCollinearPoints(contour)
+
+  const minSpan = minScanlineSpan(visited, minX, minY, maxX, maxY)
+  const baseTol =
+    simplifyTolerance ??
+    contourSimplifyTolerance(count, maxX - minX + 1, maxY - minY + 1, minSpan)
+
+  const thinSamples =
+    minSpan <= 2 ? collectThinCorridorSamples(visited, minX, minY, maxX, maxY, 24) : []
+
+  // Prefer the finest tolerance that still preserves thin corridors; then
+  // escalate only as needed to stay under MAX_FILL_CONTOUR_VALUES.
+  const candidates = uniqueAscending([
+    baseTol,
+    0.35,
+    0.75,
+    1.4,
+    2.0,
+    3.0,
+    4.5,
+  ])
+
+  let best: number[] | null = null
+  for (const tol of candidates) {
+    let simplified = removeCollinearPoints(simplifyContour(contour, tol))
+    if (simplified.length < 6) continue
+    if (thinSamples.length > 0 && !thinCorridorsPreserved(simplified, thinSamples)) {
+      continue
+    }
+    if (simplified.length > MAX_FILL_CONTOUR_VALUES) {
+      // Keep as last-resort candidate if nothing smaller preserves necks.
+      if (!best || simplified.length < best.length) best = simplified
+      continue
+    }
+    best = simplified
+    break
+  }
+
+  // Fallback: collinear-only contour (already topology-preserving) when every
+  // RDP candidate failed thin-corridor checks but the collapsed ring fits.
+  if ((!best || best.length < 6) && contour.length >= 6 && contour.length <= MAX_FILL_CONTOUR_VALUES) {
+    best = contour
+  }
+
+  if (!best || best.length < 6) {
     return {
       ok: false,
-      reason: 'empty_region',
-      message: 'Could not build a fill shape. Try tapping nearer the centre of the region.',
+      reason: 'too_large',
+      message:
+        'That fill outline is too detailed to keep. Try a slightly simpler closed region.',
+    }
+  }
+  if (best.length > MAX_FILL_CONTOUR_VALUES) {
+    return {
+      ok: false,
+      reason: 'too_large',
+      message:
+        'That fill outline is too detailed to save. Try a slightly simpler closed region — nothing was added.',
     }
   }
 
-  return {
-    ok: true,
-    fill: {
-      id: createFillId(),
-      contour: simplifyContour(contour, 1.4),
-      style: input.style,
-      seedX: input.x,
-      seedY: input.y,
-    },
+  const fill: FillOp = {
+    id: createFillId(),
+    contour: best,
+    style,
+    seedX,
+    seedY,
   }
+  // Never report success for a contour that cannot round-trip through save.
+  const persist = checkPersistableFill(fill)
+  if (!persist.ok) {
+    return {
+      ok: false,
+      reason: 'too_large',
+      message: persist.message,
+    }
+  }
+  return { ok: true, fill: persist.fill }
+}
+
+function uniqueAscending(values: number[]): number[] {
+  const sorted = [...values].filter((v) => Number.isFinite(v) && v >= 0).sort((a, b) => a - b)
+  const out: number[] = []
+  for (const v of sorted) {
+    if (out.length === 0 || out[out.length - 1]! !== v) out.push(v)
+  }
+  return out
+}
+
+/**
+ * Sample centres of the narrowest interior scanline runs so simplification can
+ * be rejected when it would erase a thin neck / tip corridor.
+ */
+export function collectThinCorridorSamples(
+  visited: Uint8Array,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  maxSamples: number,
+): { x: number; y: number }[] {
+  const samples: { x: number; y: number }[] = []
+  const targetSpan = 2
+  for (let y = minY; y <= maxY && samples.length < maxSamples; y += 1) {
+    let run = 0
+    let runStart = minX
+    for (let x = minX; x <= maxX + 1; x += 1) {
+      const on = x <= maxX && !!visited[y * DESIGN_WIDTH + x]
+      if (on) {
+        if (run === 0) runStart = x
+        run += 1
+      } else if (run > 0) {
+        if (run <= targetSpan) {
+          samples.push({ x: runStart + Math.floor((run - 1) / 2), y })
+        }
+        run = 0
+      }
+    }
+  }
+  for (let x = minX; x <= maxX && samples.length < maxSamples; x += 1) {
+    let run = 0
+    let runStart = minY
+    for (let y = minY; y <= maxY + 1; y += 1) {
+      const on = y <= maxY && !!visited[y * DESIGN_WIDTH + x]
+      if (on) {
+        if (run === 0) runStart = y
+        run += 1
+      } else if (run > 0) {
+        if (run <= targetSpan) {
+          samples.push({ x, y: runStart + Math.floor((run - 1) / 2) })
+        }
+        run = 0
+      }
+    }
+  }
+  return samples
+}
+
+function thinCorridorsPreserved(
+  contour: number[],
+  samples: { x: number; y: number }[],
+): boolean {
+  for (const s of samples) {
+    if (!contourCoversPixel(contour, s.x, s.y)) return false
+  }
+  return true
+}
+
+/**
+ * Drop consecutive duplicate and strictly collinear vertices on a closed ring.
+ * Preserves corners and 1px-wide parallel neck walls (left/right remain distinct).
+ */
+export function removeCollinearPoints(contour: number[]): number[] {
+  if (contour.length < 8) return contour
+  const pts: { x: number; y: number }[] = []
+  for (let i = 0; i < contour.length; i += 2) {
+    const x = contour[i]!
+    const y = contour[i + 1]!
+    const prev = pts[pts.length - 1]
+    if (prev && prev.x === x && prev.y === y) continue
+    pts.push({ x, y })
+  }
+  if (pts.length >= 2) {
+    const first = pts[0]!
+    const last = pts[pts.length - 1]!
+    if (first.x === last.x && first.y === last.y) pts.pop()
+  }
+  const n = pts.length
+  if (n < 3) return contour
+
+  const keep: { x: number; y: number }[] = []
+  for (let i = 0; i < n; i += 1) {
+    const prev = pts[(i - 1 + n) % n]!
+    const cur = pts[i]!
+    const next = pts[(i + 1) % n]!
+    const cross = (cur.x - prev.x) * (next.y - cur.y) - (cur.y - prev.y) * (next.x - cur.x)
+    // Integer-grid edges: cross === 0 ⇒ exact collinear; drop the middle vertex.
+    if (cross !== 0) keep.push(cur)
+  }
+  if (keep.length < 3) return contour
+  const out: number[] = []
+  for (const p of keep) out.push(p.x, p.y)
+  return out
+}
+
+/** Narrowest contiguous horizontal/vertical run inside the filled region. */
+export function minScanlineSpan(
+  visited: Uint8Array,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): number {
+  let minSpan = Infinity
+  for (let y = minY; y <= maxY; y += 1) {
+    let run = 0
+    for (let x = minX; x <= maxX; x += 1) {
+      if (visited[y * DESIGN_WIDTH + x]) {
+        run += 1
+      } else if (run > 0) {
+        if (run < minSpan) minSpan = run
+        run = 0
+      }
+    }
+    if (run > 0 && run < minSpan) minSpan = run
+  }
+  for (let x = minX; x <= maxX; x += 1) {
+    let run = 0
+    for (let y = minY; y <= maxY; y += 1) {
+      if (visited[y * DESIGN_WIDTH + x]) {
+        run += 1
+      } else if (run > 0) {
+        if (run < minSpan) minSpan = run
+        run = 0
+      }
+    }
+    if (run > 0 && run < minSpan) minSpan = run
+  }
+  return Number.isFinite(minSpan) ? minSpan : Math.min(maxX - minX + 1, maxY - minY + 1)
 }
 
 /**
  * Rasterize draw+erase strokes into a barrier mask matching what the user sees.
  * Exported for regression tests (erased seams must not remain invisible barriers).
  */
-export function buildInkBarrierMask(strokes: Stroke[], gapClose = 3): Uint8Array {
+export function buildInkBarrierMask(strokes: Stroke[], gapClose = 0): Uint8Array {
   const canvas = document.createElement('canvas')
   canvas.width = DESIGN_WIDTH
   canvas.height = DESIGN_HEIGHT
@@ -165,13 +696,12 @@ export function buildInkBarrierMask(strokes: Stroke[], gapClose = 3): Uint8Array
   for (let i = 0, p = 0; i < raw.length; i += 1, p += 4) {
     raw[i] = img.data[p + 3]! > 12 ? 1 : 0
   }
-  // Morphological dilate closes freehand hairline gaps at corners while staying
-  // derived from rendered ink (not inventing invisible seams).
   if (gapClose <= 0) return raw
   return dilateMask(raw, gapClose)
 }
 
-function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
+/** Square morphological dilate — exported for narrow-channel regression fixtures. */
+export function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
   if (radius <= 0) return mask
   const out = new Uint8Array(mask.length)
   for (let y = 0; y < DESIGN_HEIGHT; y += 1) {
@@ -191,7 +721,76 @@ function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
   return out
 }
 
-/** Moore-neighbour boundary walk → flat [x,y,...] contour. */
+/**
+ * Size-adaptive RDP tolerance. A single 1–2px tip on a *large* garment must not
+ * force tolerance 0 for the whole silhouette (that explodes edge-based contours
+ * past {@link MAX_FILL_CONTOUR_VALUES}). Thin corridors are protected by
+ * collinear collapse + sample checks in {@link finalizeFlood}, not by disabling
+ * simplification globally.
+ */
+export function contourSimplifyTolerance(
+  pixelCount: number,
+  bboxWidth: number,
+  bboxHeight: number,
+  minInteriorSpan?: number,
+): number {
+  const minDim = Math.min(bboxWidth, bboxHeight)
+  const maxDim = Math.max(bboxWidth, bboxHeight)
+  const span = minInteriorSpan ?? minDim
+  const largeGarment = pixelCount >= 4_000 || maxDim >= 180
+
+  // Tiny / narrow overall regions — keep fine detail.
+  if (pixelCount < 48 || minDim <= 6) return 0.35
+  if (!largeGarment && (span <= 4 || minDim <= 12 || pixelCount < 220)) return 0.35
+  if (!largeGarment && (minDim <= 24 || pixelCount < 800)) return 0.75
+  // Large silhouettes: meaningful RDP even when a tip/neck is 1px wide.
+  if (largeGarment) return span <= 2 ? 0.75 : 1.4
+  return 1.4
+}
+
+/** Even-odd point-in-polygon for flat [x,y,...] contours (test / validation helper). */
+export function pointInContour(contour: number[], x: number, y: number): boolean {
+  let inside = false
+  for (let i = 0, j = contour.length - 2; i < contour.length; i += 2) {
+    const xi = contour[i]!
+    const yi = contour[i + 1]!
+    const xj = contour[j]!
+    const yj = contour[j + 1]!
+    const intersect =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + Number.EPSILON) + xi
+    if (intersect) inside = !inside
+    j = i
+  }
+  return inside
+}
+
+/**
+ * True when the unit square for design pixel (px, py) is covered by the contour.
+ * Contours are edge-based half-open squares, so sample the pixel centre.
+ */
+export function contourCoversPixel(contour: number[], px: number, py: number): boolean {
+  return pointInContour(contour, px + 0.5, py + 0.5)
+}
+
+/**
+ * Edge-based outer contour of a filled region (exported for large-contour
+ * regressions that measure uncompressed perimeter size).
+ */
+export function traceRegionContour(
+  mask: Uint8Array,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): number[] {
+  return traceContour(mask, minX, minY, maxX, maxY)
+}
+
+/**
+ * Edge-based outer contour of filled pixels as unit squares [x,x+1]×[y,y+1].
+ * Gives 1px necks / straps positive polygon area (Moore pixel-centre walks
+ * collapse a 1px corridor to a zero-width polyline that canvas won't paint).
+ */
 function traceContour(
   mask: Uint8Array,
   minX: number,
@@ -199,82 +798,137 @@ function traceContour(
   maxX: number,
   maxY: number,
 ): number[] {
-  let startX = -1
-  let startY = -1
-  outer: for (let y = minY; y <= maxY; y += 1) {
+  // Directed edge key: pack (x,y,dir) where dir 0=E,1=S,2=W,3=N along grid lines.
+  // Grid nodes span [minX, maxX+1] × [minY, maxY+1].
+  const nodeW = maxX - minX + 2
+  const nodeH = maxY - minY + 2
+  if (nodeW <= 1 || nodeH <= 1) return []
+
+  const edgeSet = new Set<number>()
+  const pack = (x: number, y: number, dir: number) =>
+    (((y - minY) * nodeW + (x - minX)) << 2) | dir
+
+  const filled = (x: number, y: number) => {
+    if (x < minX || y < minY || x > maxX || y > maxY) return false
+    return !!mask[y * DESIGN_WIDTH + x]
+  }
+
+  for (let y = minY; y <= maxY; y += 1) {
     for (let x = minX; x <= maxX; x += 1) {
       if (!mask[y * DESIGN_WIDTH + x]) continue
-      // left neighbour empty → boundary start
-      if (x === 0 || !mask[y * DESIGN_WIDTH + (x - 1)]) {
-        startX = x
-        startY = y
-        break outer
+      // Top edge → east, bottom → west, left → north, right → south (CCW).
+      if (!filled(x, y - 1)) edgeSet.add(pack(x, y, 0))
+      if (!filled(x, y + 1)) edgeSet.add(pack(x + 1, y + 1, 2))
+      if (!filled(x - 1, y)) edgeSet.add(pack(x, y + 1, 3))
+      if (!filled(x + 1, y)) edgeSet.add(pack(x + 1, y, 1))
+    }
+  }
+  if (edgeSet.size === 0) return []
+
+  // Start at topmost-leftmost east edge.
+  let startKey = -1
+  let bestY = Infinity
+  let bestX = Infinity
+  for (const key of edgeSet) {
+    const dir = key & 3
+    if (dir !== 0) continue
+    const node = key >> 2
+    const x = (node % nodeW) + minX
+    const y = ((node / nodeW) | 0) + minY
+    if (y < bestY || (y === bestY && x < bestX)) {
+      bestY = y
+      bestX = x
+      startKey = key
+    }
+  }
+  if (startKey < 0) {
+    startKey = edgeSet.values().next().value as number
+  }
+
+  const points: number[] = []
+  let key = startKey
+  const maxSteps = edgeSet.size + 4
+  for (let step = 0; step < maxSteps; step += 1) {
+    if (!edgeSet.has(key)) break
+    edgeSet.delete(key)
+    const dir = key & 3
+    const node = key >> 2
+    const x = (node % nodeW) + minX
+    const y = ((node / nodeW) | 0) + minY
+    points.push(x, y)
+
+    const ex = x + (dir === 0 ? 1 : dir === 2 ? -1 : 0)
+    const ey = y + (dir === 1 ? 1 : dir === 3 ? -1 : 0)
+
+    // Prefer left turn, then straight, then right (outer boundary CCW).
+    const order = [(dir + 3) & 3, dir, (dir + 1) & 3, (dir + 2) & 3]
+    let next = -1
+    for (const nd of order) {
+      const nk = pack(ex, ey, nd)
+      if (edgeSet.has(nk)) {
+        next = nk
+        break
       }
     }
+    if (next < 0) break
+    key = next
+    if (key === startKey) break
   }
-  if (startX < 0) return []
 
-  const dx = [1, 1, 0, -1, -1, -1, 0, 1]
-  const dy = [0, 1, 1, 1, 0, -1, -1, -1]
-  const points: number[] = []
-  let x = startX
-  let y = startY
-  let dir = 0
-  const maxSteps = DESIGN_WIDTH * DESIGN_HEIGHT
-
-  for (let step = 0; step < maxSteps; step += 1) {
-    points.push(x, y)
-    let found = false
-    for (let k = 0; k < 8; k += 1) {
-      const nd = (dir + 6 + k) % 8 // prefer turning left
-      const nx = x + dx[nd]!
-      const ny = y + dy[nd]!
-      if (nx < 0 || ny < 0 || nx >= DESIGN_WIDTH || ny >= DESIGN_HEIGHT) continue
-      if (!mask[ny * DESIGN_WIDTH + nx]) continue
-      x = nx
-      y = ny
-      dir = nd
-      found = true
-      break
-    }
-    if (!found) break
-    if (x === startX && y === startY && points.length > 4) break
-  }
-  return points
+  if (points.length >= 6) return points
+  // Degenerate fallback: axis-aligned bbox of the filled region (half-open).
+  return [minX, minY, maxX + 1, minY, maxX + 1, maxY + 1, minX, maxY + 1]
 }
 
 function simplifyContour(contour: number[], tolerance: number): number[] {
-  if (contour.length <= 8) return contour
+  if (contour.length <= 8 || tolerance <= 0) return contour
   const pts: { x: number; y: number }[] = []
   for (let i = 0; i < contour.length; i += 2) {
     pts.push({ x: contour[i]!, y: contour[i + 1]! })
   }
-  const keep = rdp(pts, tolerance)
+  // Iterative RDP — bounded stack, no deep recursion on large perimeters.
+  const keep = rdpIterative(pts, tolerance)
   const out: number[] = []
   for (const p of keep) out.push(Math.round(p.x), Math.round(p.y))
   if (out.length >= 6) return out
   return contour
 }
 
-function rdp(points: { x: number; y: number }[], epsilon: number): { x: number; y: number }[] {
-  if (points.length < 3) return points
-  let maxDist = 0
-  let index = 0
-  const first = points[0]!
-  const last = points[points.length - 1]!
-  for (let i = 1; i < points.length - 1; i += 1) {
-    const d = perpDist(points[i]!, first, last)
-    if (d > maxDist) {
-      maxDist = d
-      index = i
+function rdpIterative(
+  points: { x: number; y: number }[],
+  epsilon: number,
+): { x: number; y: number }[] {
+  const n = points.length
+  if (n < 3) return points
+  const keep = new Uint8Array(n)
+  keep[0] = 1
+  keep[n - 1] = 1
+  const stack: number[] = [0, n - 1]
+  // Worst-case O(n) stack frames for a polyline of n points.
+  while (stack.length >= 2) {
+    const end = stack.pop()!
+    const start = stack.pop()!
+    const first = points[start]!
+    const last = points[end]!
+    let maxDist = 0
+    let index = -1
+    for (let i = start + 1; i < end; i += 1) {
+      const d = perpDist(points[i]!, first, last)
+      if (d > maxDist) {
+        maxDist = d
+        index = i
+      }
+    }
+    if (index >= 0 && maxDist > epsilon) {
+      keep[index] = 1
+      stack.push(start, index, index, end)
     }
   }
-  if (maxDist > epsilon) {
-    const left = rdp(points.slice(0, index + 1), epsilon)
-    const right = rdp(points.slice(index), epsilon)
-    return left.slice(0, -1).concat(right)
+  const out: { x: number; y: number }[] = []
+  for (let i = 0; i < n; i += 1) {
+    if (keep[i]) out.push(points[i]!)
   }
-  return [first, last]
+  return out
 }
 
 function perpDist(
