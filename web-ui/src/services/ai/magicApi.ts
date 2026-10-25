@@ -1,9 +1,12 @@
+import type { ModelChoice } from '@/assets/modelLibrary'
 import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 import type { AiJobRead } from '@/services/ai/aiJobTypes'
 
 export type PolishSketchInput = {
   imageBase64: string
+  /** Selected Studio croquis / reference id captured with the sketch. */
+  referenceModelId: ModelChoice
   notes?: string
   designId?: string | null
   signal?: AbortSignal
@@ -17,6 +20,7 @@ export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJ
       input_data: {
         notes: input.notes ?? 'polish concept',
         image_base64: input.imageBase64,
+        reference_model_id: input.referenceModelId,
       },
     },
     signal: input.signal,
