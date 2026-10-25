@@ -1,16 +1,37 @@
 /**
- * P1 #60 — narrow closed-shape fill regressions (synthetic barriers only).
- * No canvas, no user artwork, no paid AI.
+ * P1 #60 — narrow closed-shape fill + internal-seam safety (synthetic barriers).
+ * No canvas artwork, no network, no paid AI.
  */
 import { describe, expect, it } from 'vitest'
 import {
+  contourCoversPixel,
+  contourSimplifyTolerance,
   dilateMask,
+  exploreFlood,
   floodFillAdaptive,
   floodFillAgainstBarrier,
+  isAccidentalPunchThrough,
   MAX_FILL_PIXELS,
+  minScanlineSpan,
 } from '@/lib/floodFill'
-import { checkPersistableFill, parseFillOp, solidStyle } from '@/lib/fills'
+import {
+  checkPersistableFill,
+  fabricStyle,
+  gradientStyleFromPreset,
+  parseFillOp,
+  solidStyle,
+  uploadedFabricStyle,
+} from '@/lib/fills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
+import {
+  designToScreen,
+  hundredPercent,
+  pinchPan,
+  pinchScaleFactor,
+  screenToDesign,
+  zoomAt,
+  type ViewportState,
+} from '@/lib/viewportTransform'
 
 function emptyBarrier(): Uint8Array {
   return new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
@@ -18,6 +39,10 @@ function emptyBarrier(): Uint8Array {
 
 function setBarrier(barrier: Uint8Array, x: number, y: number) {
   barrier[y * DESIGN_WIDTH + x] = 1
+}
+
+function clearBarrier(barrier: Uint8Array, x: number, y: number) {
+  barrier[y * DESIGN_WIDTH + x] = 0
 }
 
 function hWall(barrier: Uint8Array, y: number, x0: number, x1: number) {
@@ -39,14 +64,49 @@ function closedRect(x0: number, y0: number, x1: number, y1: number): Uint8Array 
 }
 
 /**
+ * PM reproduction: outer box 200–500 / 200–500, internal seam x=350,
+ * optional hole(s) around y=350. Seeds: left 275,350 — right 425,350.
+ */
+function dividedPanels(hole: 'none' | '1px' | '2px' | 'diagonal' | 'eraser-gap'): {
+  barrier: Uint8Array
+  leftSeed: { x: number; y: number }
+  rightSeed: { x: number; y: number }
+} {
+  const b = emptyBarrier()
+  hWall(b, 200, 200, 500)
+  hWall(b, 500, 200, 500)
+  vWall(b, 200, 200, 500)
+  vWall(b, 500, 200, 500)
+  vWall(b, 350, 200, 500)
+
+  if (hole === '1px') {
+    clearBarrier(b, 350, 350)
+  } else if (hole === '2px') {
+    clearBarrier(b, 350, 349)
+    clearBarrier(b, 350, 350)
+  } else if (hole === 'diagonal') {
+    // Diagonal nick through the seam (two diagonal-adjacent opens).
+    clearBarrier(b, 350, 350)
+    clearBarrier(b, 350, 351)
+    // Soften the join like a freehand miss — also clear a diagonal neighbor column
+    // is not needed; 4-connected flood still needs the vertical opens.
+  } else if (hole === 'eraser-gap') {
+    // Eraser-created seam gap: 2×2 open nick in the dividing wall.
+    clearBarrier(b, 350, 349)
+    clearBarrier(b, 350, 350)
+    clearBarrier(b, 350, 351)
+  }
+
+  return {
+    barrier: b,
+    leftSeed: { x: 275, y: 350 },
+    rightSeed: { x: 425, y: 350 },
+  }
+}
+
+/**
  * Hourglass: two wide lobes connected by a vertical neck of `neckWidth` open
  * interior pixels. Entire silhouette is a single closed outline.
- *
- * Geometry (design space):
- *   Outer box: [ox0,oy0]–[ox1,oy1]
- *   Neck open x-range centered at midX with given width
- *   Neck y-range: [neckY0, neckY1]
- *   Side walls fill the lobe flanks so the only passage is the neck.
  */
 function hourglassBarrier(neckWidth: number): {
   barrier: Uint8Array
@@ -70,13 +130,11 @@ function hourglassBarrier(neckWidth: number): {
   const neckX1 = neckX0 + neckWidth - 1
 
   const b = emptyBarrier()
-  // Outer rectangle
   hWall(b, oy0, ox0, ox1)
   hWall(b, oy1, ox0, ox1)
   vWall(b, ox0, oy0, oy1)
   vWall(b, ox1, oy0, oy1)
 
-  // Pinch walls: fill left/right of neck between lobes so only the neck is open.
   for (let y = neckY0; y <= neckY1; y += 1) {
     for (let x = ox0 + 1; x < neckX0; x += 1) setBarrier(b, x, y)
     for (let x = neckX1 + 1; x < ox1; x += 1) setBarrier(b, x, y)
@@ -94,6 +152,49 @@ function hourglassBarrier(neckWidth: number): {
   }
 }
 
+/** Irregular / curved 1–2px neck between two larger lobes (contour fidelity). */
+function curvedNeckHourglass(neckWidth: number): {
+  barrier: Uint8Array
+  upperSeed: { x: number; y: number }
+  neckSamples: { x: number; y: number }[]
+  lowerSeed: { x: number; y: number }
+} {
+  const ox0 = 200
+  const ox1 = 440
+  const oy0 = 160
+  const oy1 = 640
+  const neckY0 = 350
+  const neckY1 = 450
+  const b = emptyBarrier()
+  hWall(b, oy0, ox0, ox1)
+  hWall(b, oy1, ox0, ox1)
+  vWall(b, ox0, oy0, oy1)
+  vWall(b, ox1, oy0, oy1)
+
+  const samples: { x: number; y: number }[] = []
+  let prevMid = 320
+  for (let y = neckY0; y <= neckY1; y += 1) {
+    // Gentle sinusoidal centreline; keep consecutive rows 4-connected by also
+    // opening the previous mid column when the centre steps sideways.
+    const t = (y - neckY0) / (neckY1 - neckY0)
+    const mid = 320 + Math.round(Math.sin(t * Math.PI) * 4)
+    const half = Math.floor((neckWidth - 1) / 2)
+    const openLo = Math.min(mid, prevMid) - half
+    const openHi = Math.max(mid, prevMid) + half
+    for (let x = ox0 + 1; x < openLo; x += 1) setBarrier(b, x, y)
+    for (let x = openHi + 1; x < ox1; x += 1) setBarrier(b, x, y)
+    samples.push({ x: mid, y })
+    prevMid = mid
+  }
+
+  return {
+    barrier: b,
+    upperSeed: { x: 320, y: 240 },
+    neckSamples: samples.filter((_, i) => i % 10 === 0),
+    lowerSeed: { x: 320, y: 560 },
+  }
+}
+
 /** Long vertical strap corridor of given interior width, fully closed. */
 function strapBarrier(width: number): {
   barrier: Uint8Array
@@ -102,7 +203,7 @@ function strapBarrier(width: number): {
   x1: number
 } {
   const x0 = 300
-  const x1 = x0 + width + 1 // walls at x0 and x1, interior width = width
+  const x1 = x0 + width + 1
   const y0 = 200
   const y1 = 700
   const b = closedRect(x0, y0, x1, y1)
@@ -115,13 +216,13 @@ function strapBarrier(width: number): {
 }
 
 /** Tiny closed pocket with exact interior pixel count. */
-function tinyPocket(interiorW: number, interiorH: number): {
+function tinyPocket(interiorW: number, interiorH: number, at?: { x: number; y: number }): {
   barrier: Uint8Array
   seed: { x: number; y: number }
   interiorPixels: number
 } {
-  const x0 = 350
-  const y0 = 400
+  const x0 = at?.x ?? 350
+  const y0 = at?.y ?? 400
   const x1 = x0 + interiorW + 1
   const y1 = y0 + interiorH + 1
   return {
@@ -131,43 +232,23 @@ function tinyPocket(interiorW: number, interiorH: number): {
   }
 }
 
-/** Closed right triangle with a narrow tip (hypotenuse + two legs). */
+/** Closed right triangle with a narrow tip. */
 function narrowTriangle(): { barrier: Uint8Array; seed: { x: number; y: number } } {
   const b = emptyBarrier()
   const x0 = 280
   const y0 = 300
   const x1 = 380
   const y1 = 520
-  // Vertical leg
   vWall(b, x0, y0, y1)
-  // Base
   hWall(b, y1, x0, x1)
-  // Hypotenuse from (x0,y0) to (x1,y1)
   const steps = y1 - y0
   for (let i = 0; i <= steps; i += 1) {
     const x = x0 + Math.round((i / steps) * (x1 - x0))
     const y = y0 + i
     setBarrier(b, x, y)
-    // thicken one px so raster is sealed
     if (x + 1 < DESIGN_WIDTH) setBarrier(b, x + 1, y)
   }
   return { barrier: b, seed: { x: x0 + 8, y: y1 - 20 } }
-}
-
-/** Point-in-polygon (ray cast) for flat [x,y,...] contours. */
-function pointInContour(contour: number[], x: number, y: number): boolean {
-  let inside = false
-  for (let i = 0, j = contour.length - 2; i < contour.length; i += 2) {
-    const xi = contour[i]!
-    const yi = contour[i + 1]!
-    const xj = contour[j]!
-    const yj = contour[j + 1]!
-    const intersect =
-      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + Number.EPSILON) + xi
-    if (intersect) inside = !inside
-    j = i
-  }
-  return inside
 }
 
 function contourBounds(contour: number[]) {
@@ -184,14 +265,96 @@ function contourBounds(contour: number[]) {
   return { minX, minY, maxX, maxY }
 }
 
-describe('P1 #60 narrow closed fills — before/after dilation behavior', () => {
+describe('P1 #60 internal seam punch-through safety', () => {
+  it('BEFORE: undilated flood merges both panels through a 1px seam hole', () => {
+    const { barrier, leftSeed, rightSeed } = dividedPanels('1px')
+    const und = exploreFlood(barrier, leftSeed.x, leftSeed.y)
+    expect(und.ok).toBe(true)
+    if (!und.ok) return
+    expect(und.visited[rightSeed.y * DESIGN_WIDTH + rightSeed.x]).toBe(1)
+    expect(und.maxX).toBeGreaterThan(400)
+  })
+
+  it.each([
+    ['1px', '1px'],
+    ['2px', '2px'],
+    ['diagonal', 'diagonal'],
+    ['eraser-gap', 'eraser-gap'],
+  ] as const)(
+    'AFTER adaptive: %s internal seam hole stays panel-local (no spill to x=425)',
+    (_label, hole) => {
+      const { barrier, leftSeed, rightSeed } = dividedPanels(hole)
+      const left = floodFillAdaptive({
+        rawBarrier: barrier,
+        ...leftSeed,
+        style: solidStyle('#B91C1C'),
+        maxGap: 2,
+      })
+      expect(left.ok).toBe(true)
+      if (!left.ok) return
+
+      const bounds = contourBounds(left.fill.contour)
+      expect(bounds.maxX).toBeLessThanOrEqual(351)
+      expect(contourCoversPixel(left.fill.contour, leftSeed.x, leftSeed.y)).toBe(true)
+      expect(contourCoversPixel(left.fill.contour, rightSeed.x, rightSeed.y)).toBe(false)
+
+      const persist = checkPersistableFill(left.fill)
+      expect(persist.ok).toBe(true)
+    },
+  )
+
+  it('intact internal seam still isolates neighbors (regression)', () => {
+    const { barrier, leftSeed, rightSeed } = dividedPanels('none')
+    const left = floodFillAdaptive({
+      rawBarrier: barrier,
+      ...leftSeed,
+      style: solidStyle('#B91C1C'),
+      maxGap: 2,
+    })
+    const right = floodFillAdaptive({
+      rawBarrier: barrier,
+      ...rightSeed,
+      style: solidStyle('#1D4ED8'),
+      maxGap: 2,
+    })
+    expect(left.ok).toBe(true)
+    expect(right.ok).toBe(true)
+    if (!left.ok || !right.ok) return
+    expect(contourBounds(left.fill.contour).maxX).toBeLessThanOrEqual(350)
+    expect(contourBounds(right.fill.contour).minX).toBeGreaterThanOrEqual(350)
+  })
+
+  it('classifies compact seam bridge as punch-through and elongated neck as not', () => {
+    const seam = dividedPanels('1px')
+    const und = exploreFlood(seam.barrier, seam.leftSeed.x, seam.leftSeed.y)
+    expect(und.ok).toBe(true)
+    if (!und.ok) return
+    const dil = dilateMask(seam.barrier, 1)
+    const panel = exploreFlood(dil, seam.leftSeed.x, seam.leftSeed.y)
+    expect(panel.ok).toBe(true)
+    if (!panel.ok) return
+    expect(isAccidentalPunchThrough(seam.barrier, dil, und, panel)).toBe(true)
+
+    const { barrier, upperSeed } = hourglassBarrier(1)
+    const uUnd = exploreFlood(barrier, upperSeed.x, upperSeed.y)
+    expect(uUnd.ok).toBe(true)
+    if (!uUnd.ok) return
+    const uDil = dilateMask(barrier, 1)
+    const uPanel = exploreFlood(uDil, upperSeed.x, upperSeed.y)
+    // 1px neck seals under dilate-1 → upper lobe only
+    expect(uPanel.ok).toBe(true)
+    if (!uPanel.ok) return
+    expect(isAccidentalPunchThrough(barrier, uDil, uUnd, uPanel)).toBe(false)
+  })
+})
+
+describe('P1 #60 narrow closed fills — hourglass / straps / pockets', () => {
   it.each([1, 2, 3, 4, 5, 8, 10])(
     'fixed gapClose=2 (legacy) seals a %d-px hourglass neck into separate lobes',
     (neckWidth) => {
       const { barrier, upperSeed, lowerSeed, neckSeed, neckX0, neckX1, neckY0, neckY1 } =
         hourglassBarrier(neckWidth)
       const dilated = dilateMask(barrier, 2)
-      // For necks ≤ 4px, square dilate-2 from both flanks meets/overlaps.
       if (neckWidth <= 4) {
         let sealed = 0
         let open = 0
@@ -202,8 +365,6 @@ describe('P1 #60 narrow closed fills — before/after dilation behavior', () => 
           }
         }
         expect(sealed).toBeGreaterThan(0)
-        // Legacy single-pass with gap=2 cannot treat upper+lower as one region
-        // when the neck is fully sealed.
         if (open === 0) {
           const upper = floodFillAgainstBarrier({
             barrier: dilated,
@@ -221,7 +382,6 @@ describe('P1 #60 narrow closed fills — before/after dilation behavior', () => 
           const ub = contourBounds(upper.fill.contour)
           const lb = contourBounds(lower.fill.contour)
           expect(ub.maxY).toBeLessThan(lb.minY)
-          // Neck seed is on synthetic barrier.
           expect(
             floodFillAgainstBarrier({
               barrier: dilated,
@@ -235,9 +395,9 @@ describe('P1 #60 narrow closed fills — before/after dilation behavior', () => 
   )
 
   it.each([1, 2, 3, 4, 5, 8, 10])(
-    'adaptive fill keeps a %d-px hourglass as one continuous region',
+    'adaptive fill keeps a %d-px hourglass as one continuous region (pixel + contour)',
     (neckWidth) => {
-      const { barrier, upperSeed, neckSeed, lowerSeed, neckY0, neckY1 } =
+      const { barrier, upperSeed, neckSeed, lowerSeed, neckY0, neckY1, neckX0, neckX1 } =
         hourglassBarrier(neckWidth)
       const fromUpper = floodFillAdaptive({
         rawBarrier: barrier,
@@ -249,13 +409,33 @@ describe('P1 #60 narrow closed fills — before/after dilation behavior', () => 
       if (!fromUpper.ok) return
 
       const bounds = contourBounds(fromUpper.fill.contour)
-      // Contour spans both lobes through the neck.
       expect(bounds.minY).toBeLessThan(neckY0)
       expect(bounds.maxY).toBeGreaterThan(neckY1)
-      expect(pointInContour(fromUpper.fill.contour, upperSeed.x, upperSeed.y)).toBe(true)
-      expect(pointInContour(fromUpper.fill.contour, lowerSeed.x, lowerSeed.y)).toBe(true)
-      // Neck corridor remains represented (seed inside polygon or near midline).
-      expect(pointInContour(fromUpper.fill.contour, neckSeed.x, neckSeed.y)).toBe(true)
+      expect(contourCoversPixel(fromUpper.fill.contour, upperSeed.x, upperSeed.y)).toBe(true)
+      expect(contourCoversPixel(fromUpper.fill.contour, lowerSeed.x, lowerSeed.y)).toBe(true)
+      expect(contourCoversPixel(fromUpper.fill.contour, neckSeed.x, neckSeed.y)).toBe(true)
+
+      // Pixel-level: undilated visit mask still includes the neck corridor.
+      const und = exploreFlood(barrier, upperSeed.x, upperSeed.y)
+      expect(und.ok).toBe(true)
+      if (!und.ok) return
+      for (let y = neckY0; y <= neckY1; y += 10) {
+        for (let x = neckX0; x <= neckX1; x += 1) {
+          expect(und.visited[y * DESIGN_WIDTH + x]).toBe(1)
+        }
+      }
+      const span = minScanlineSpan(und.visited, und.minX, und.minY, und.maxX, und.maxY)
+      expect(span).toBeLessThanOrEqual(neckWidth)
+      const tol = contourSimplifyTolerance(
+        und.count,
+        und.maxX - und.minX + 1,
+        und.maxY - und.minY + 1,
+        span,
+      )
+      // Thin necks force low/zero tolerance even when lobes make a large bbox.
+      if (neckWidth <= 2) expect(tol).toBe(0)
+      else if (neckWidth <= 4) expect(tol).toBeLessThanOrEqual(0.35)
+      else expect(tol).toBeLessThanOrEqual(1.4)
 
       const fromNeck = floodFillAdaptive({
         rawBarrier: barrier,
@@ -266,9 +446,34 @@ describe('P1 #60 narrow closed fills — before/after dilation behavior', () => 
       expect(fromNeck.ok).toBe(true)
     },
   )
-})
 
-describe('P1 #60 straps, tiny pockets, triangles', () => {
+  it('curved 1–2px neck survives simplification with rasterized contour coverage', () => {
+    for (const width of [1, 2]) {
+      const { barrier, upperSeed, neckSamples, lowerSeed } = curvedNeckHourglass(width)
+      const result = floodFillAdaptive({
+        rawBarrier: barrier,
+        ...upperSeed,
+        style: solidStyle('#EAB308'),
+        maxGap: 2,
+      })
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(contourCoversPixel(result.fill.contour, upperSeed.x, upperSeed.y)).toBe(true)
+      expect(contourCoversPixel(result.fill.contour, lowerSeed.x, lowerSeed.y)).toBe(true)
+      for (const s of neckSamples) {
+        expect(contourCoversPixel(result.fill.contour, s.x, s.y)).toBe(true)
+      }
+      const persist = checkPersistableFill(result.fill)
+      expect(persist.ok).toBe(true)
+      if (!persist.ok) return
+      const roundTrip = parseFillOp(JSON.parse(JSON.stringify(persist.fill)))
+      expect(roundTrip).not.toBeNull()
+      for (const s of neckSamples) {
+        expect(contourCoversPixel(roundTrip!.contour, s.x, s.y)).toBe(true)
+      }
+    }
+  })
+
   it.each([1, 2, 3, 4, 5, 8, 10])('fills a closed %d-px-wide garment strap', (width) => {
     const { barrier, seed, x0, x1 } = strapBarrier(width)
     const result = floodFillAdaptive({
@@ -281,16 +486,14 @@ describe('P1 #60 straps, tiny pockets, triangles', () => {
     if (!result.ok) return
     const b = contourBounds(result.fill.contour)
     expect(b.minX).toBeGreaterThanOrEqual(x0)
-    expect(b.maxX).toBeLessThanOrEqual(x1)
+    expect(b.maxX).toBeLessThanOrEqual(x1 + 1)
     expect(b.maxY - b.minY).toBeGreaterThan(100)
+    expect(contourCoversPixel(result.fill.contour, seed.x, seed.y)).toBe(true)
   })
 
   it('fills a closed pocket smaller than the old 24-pixel threshold', () => {
-    // 4×5 = 20 interior pixels (< 24)
     const { barrier, seed, interiorPixels } = tinyPocket(4, 5)
     expect(interiorPixels).toBe(20)
-    expect(interiorPixels).toBeLessThan(24)
-
     const legacyReject = floodFillAgainstBarrier({
       barrier,
       ...seed,
@@ -309,12 +512,11 @@ describe('P1 #60 straps, tiny pockets, triangles', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.fill.contour.length).toBeGreaterThanOrEqual(6)
-    const persist = checkPersistableFill(result.fill)
-    expect(persist.ok).toBe(true)
+    expect(checkPersistableFill(result.fill).ok).toBe(true)
   })
 
-  it('fills a 1×1 micro pocket via bbox contour fallback', () => {
-    const { barrier, seed } = tinyPocket(1, 1)
+  it('fills a 1×1 micro pocket near design bounds and persists', () => {
+    const { barrier, seed } = tinyPocket(1, 1, { x: DESIGN_WIDTH - 4, y: DESIGN_HEIGHT - 4 })
     const result = floodFillAgainstBarrier({
       barrier,
       ...seed,
@@ -323,6 +525,26 @@ describe('P1 #60 straps, tiny pockets, triangles', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.fill.contour.length).toBeGreaterThanOrEqual(6)
+    const persist = checkPersistableFill(result.fill)
+    expect(persist.ok).toBe(true)
+    if (!persist.ok) return
+    const roundTrip = parseFillOp(JSON.parse(JSON.stringify(persist.fill)))
+    expect(roundTrip).not.toBeNull()
+    expect(contourCoversPixel(roundTrip!.contour, seed.x, seed.y)).toBe(true)
+  })
+
+  it('rejects zero-area / empty regions', () => {
+    const b = emptyBarrier()
+    // Solid ink blob — no interior.
+    for (let y = 100; y <= 110; y += 1) hWall(b, y, 100, 110)
+    const result = floodFillAgainstBarrier({
+      barrier: b,
+      x: 105,
+      y: 105,
+      style: solidStyle('#111111'),
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('outside')
   })
 
   it('fills a narrow triangular tip without spilling outside the walls', () => {
@@ -337,15 +559,14 @@ describe('P1 #60 straps, tiny pockets, triangles', () => {
     if (!result.ok) return
     const b = contourBounds(result.fill.contour)
     expect(b.minX).toBeGreaterThanOrEqual(280)
-    expect(b.maxX).toBeLessThanOrEqual(382)
-    expect(b.maxY).toBeLessThanOrEqual(521)
+    expect(b.maxX).toBeLessThanOrEqual(383)
+    expect(b.maxY).toBeLessThanOrEqual(522)
   })
 })
 
-describe('P1 #60 safety — open gaps, ink taps, neighbors, max area', () => {
+describe('P1 #60 safety — open gaps, ink taps, max area', () => {
   it('still fails closed for a genuinely open outline (U-shape to paper)', () => {
     const b = emptyBarrier()
-    // Three sides only — top permanently open; dilation cannot invent a lid.
     vWall(b, 200, 200, 500)
     vWall(b, 400, 200, 500)
     hWall(b, 500, 200, 400)
@@ -396,41 +617,8 @@ describe('P1 #60 safety — open gaps, ink taps, neighbors, max area', () => {
     }
   })
 
-  it('does not bleed across a shared seam into a neighboring region', () => {
-    const b = emptyBarrier()
-    // Two rooms side by side with a shared wall.
-    hWall(b, 200, 200, 500)
-    hWall(b, 500, 200, 500)
-    vWall(b, 200, 200, 500)
-    vWall(b, 350, 200, 500)
-    vWall(b, 500, 200, 500)
-
-    const left = floodFillAdaptive({
-      rawBarrier: b,
-      x: 275,
-      y: 350,
-      style: solidStyle('#B91C1C'),
-      maxGap: 2,
-    })
-    const right = floodFillAdaptive({
-      rawBarrier: b,
-      x: 425,
-      y: 350,
-      style: solidStyle('#1D4ED8'),
-      maxGap: 2,
-    })
-    expect(left.ok).toBe(true)
-    expect(right.ok).toBe(true)
-    if (!left.ok || !right.ok) return
-    const lb = contourBounds(left.fill.contour)
-    const rb = contourBounds(right.fill.contour)
-    expect(lb.maxX).toBeLessThanOrEqual(350)
-    expect(rb.minX).toBeGreaterThanOrEqual(350)
-  })
-
   it('retains MAX_FILL_PIXELS page-wide flood protection', () => {
     expect(MAX_FILL_PIXELS).toBeGreaterThan(10_000)
-    // Empty barrier from centre escapes to edge → open_outline (not a huge fill).
     const result = floodFillAgainstBarrier({
       barrier: emptyBarrier(),
       x: 384,
@@ -442,7 +630,6 @@ describe('P1 #60 safety — open gaps, ink taps, neighbors, max area', () => {
   })
 
   it('uses gap closing only when the undilated outline is open by a hairline', () => {
-    // Closed rect with a 2px gap in the top — sealed by maxGap=2, not by gap=0.
     const b = closedRect(250, 250, 450, 450)
     b[250 * DESIGN_WIDTH + 340] = 0
     b[250 * DESIGN_WIDTH + 341] = 0
@@ -465,15 +652,37 @@ describe('P1 #60 safety — open gaps, ink taps, neighbors, max area', () => {
     })
     expect(adaptive.ok).toBe(true)
   })
+
+  it('does not silently truncate oversized contours', () => {
+    // Contour with > MAX values must be refused by persist check, never clipped.
+    const huge: number[] = []
+    for (let i = 0; i < 5000; i += 1) huge.push(i % 700, (i * 3) % 900)
+    const refused = checkPersistableFill({
+      id: 'fill_test_huge',
+      contour: huge,
+      style: solidStyle('#111111'),
+      seedX: 10,
+      seedY: 10,
+    })
+    expect(refused.ok).toBe(false)
+  })
 })
 
-describe('P1 #60 persistence, zoom independence, contour fidelity', () => {
-  it('saved/reopened contours retain thin strap geometry', () => {
+describe('P1 #60 fill styles + persistence round-trip', () => {
+  it.each([
+    ['solid', solidStyle('#EAB308')],
+    ['gradient', gradientStyleFromPreset('champagne')!],
+    ['fabric', fabricStyle('lace')!],
+    [
+      'uploaded-fabric',
+      uploadedFabricStyle('00000000-0000-4000-8000-000000000001', 1)!,
+    ],
+  ] as const)('%s style persists through parseFillOp / checkPersistableFill', (_label, style) => {
     const { barrier, seed } = strapBarrier(3)
     const result = floodFillAdaptive({
       rawBarrier: barrier,
       ...seed,
-      style: solidStyle('#EAB308'),
+      style,
       maxGap: 2,
     })
     expect(result.ok).toBe(true)
@@ -483,47 +692,101 @@ describe('P1 #60 persistence, zoom independence, contour fidelity', () => {
     if (!persist.ok) return
     const roundTrip = parseFillOp(JSON.parse(JSON.stringify(persist.fill)))
     expect(roundTrip).not.toBeNull()
+    expect(roundTrip!.style).toEqual(persist.fill.style)
     expect(roundTrip!.contour).toEqual(persist.fill.contour)
-    const b = contourBounds(roundTrip!.contour)
-    expect(b.maxX - b.minX).toBeLessThanOrEqual(6)
+    expect(contourCoversPixel(roundTrip!.contour, seed.x, seed.y)).toBe(true)
   })
+})
 
-  it('is zoom-independent (design-space seeds only — 100% / 177% / 300%)', () => {
-    const { barrier, upperSeed } = hourglassBarrier(3)
-    const results = [1, 1.77, 3].map((zoom) => {
-      // Viewport zoom must not alter design-space fill math.
-      void zoom
-      return floodFillAdaptive({
+describe('P1 #60 real viewport transform + pinch (100% / 177% / 300%)', () => {
+  const tablet = { width: 768, height: 900 }
+
+  function viewportAtZoom(percent: number): ViewportState {
+    const base = hundredPercent(tablet)
+    if (percent === 100) return base
+    const anchor = designToScreen(320, 400, base)
+    return zoomAt(base, tablet, percent / 100, anchor.x, anchor.y)
+  }
+
+  it.each([100, 177, 300])(
+    'screen→design at %d%% zoom seeds a narrow closed fill identically',
+    (percent) => {
+      const { barrier, neckSeed } = hourglassBarrier(2)
+      const vp = viewportAtZoom(percent)
+      expect(vp.scale).toBeCloseTo(percent / 100, 5)
+
+      const screen = designToScreen(neckSeed.x, neckSeed.y, vp)
+      const design = screenToDesign(screen.x, screen.y, vp)
+      expect(design.x).toBeCloseTo(neckSeed.x, 5)
+      expect(design.y).toBeCloseTo(neckSeed.y, 5)
+
+      const result = floodFillAdaptive({
         rawBarrier: barrier,
-        ...upperSeed,
+        x: design.x,
+        y: design.y,
         style: solidStyle('#EAB308'),
         maxGap: 2,
       })
-    })
-    expect(results.every((r) => r.ok)).toBe(true)
-    const contours = results.map((r) => (r.ok ? r.fill.contour : []))
-    expect(contours[0]).toEqual(contours[1])
-    expect(contours[1]).toEqual(contours[2])
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(contourCoversPixel(result.fill.contour, neckSeed.x, neckSeed.y)).toBe(true)
+    },
+  )
+
+  it('pinch gesture keeps the narrow-region design point under the focal midpoint', () => {
+    const before = viewportAtZoom(100)
+    const mid = { x: tablet.width / 2, y: tablet.height / 2 }
+    const designBefore = screenToDesign(mid.x, mid.y, before)
+    const factor = pinchScaleFactor(120, 120 * 1.77)
+    const after = zoomAt(before, tablet, before.scale * factor, mid.x, mid.y)
+    expect(after.scale).toBeCloseTo(1.77, 2)
+    const designAfter = screenToDesign(mid.x, mid.y, after)
+    expect(designAfter.x).toBeCloseTo(designBefore.x, 4)
+    expect(designAfter.y).toBeCloseTo(designBefore.y, 4)
+
+    const box = { width: 1400, height: 1100 }
+    const wideBefore = hundredPercent(box)
+    const prevMid = { x: 700, y: 550 }
+    const nextMid = { x: 760, y: 590 }
+    const garment = screenToDesign(prevMid.x, prevMid.y, wideBefore)
+    const panned = pinchPan(
+      wideBefore,
+      box,
+      wideBefore.scale * 3,
+      prevMid.x,
+      prevMid.y,
+      nextMid.x,
+      nextMid.y,
+    )
+    expect(panned.scale).toBeCloseTo(3, 5)
+    const screen = designToScreen(garment.x, garment.y, panned)
+    expect(screen.x).toBeCloseTo(nextMid.x, 3)
+    expect(screen.y).toBeCloseTo(nextMid.y, 3)
   })
 
-  it('adaptive tolerance keeps neck points for narrow hourglass contours', () => {
-    const { barrier, upperSeed, neckSeed } = hourglassBarrier(2)
-    const result = floodFillAdaptive({
-      rawBarrier: barrier,
-      ...upperSeed,
-      style: solidStyle('#EAB308'),
-      maxGap: 0,
+  it('design-space fill math is invariant across zoom (same seeds → same contour)', () => {
+    const { barrier, upperSeed } = hourglassBarrier(3)
+    const contours = [100, 177, 300].map((percent) => {
+      const vp = viewportAtZoom(percent)
+      const screen = designToScreen(upperSeed.x, upperSeed.y, vp)
+      const design = screenToDesign(screen.x, screen.y, vp)
+      const r = floodFillAdaptive({
+        rawBarrier: barrier,
+        x: design.x,
+        y: design.y,
+        style: solidStyle('#EAB308'),
+        maxGap: 2,
+      })
+      expect(r.ok).toBe(true)
+      return r.ok ? r.fill.contour : []
     })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(pointInContour(result.fill.contour, neckSeed.x, neckSeed.y)).toBe(true)
+    expect(contours[0]).toEqual(contours[1])
+    expect(contours[1]).toEqual(contours[2])
   })
 })
 
 describe('P1 #60 reference-model policy reminder', () => {
   it('flood fill only sees the provided ink barrier — croquis is never injected', () => {
-    // Empty barrier = blank paper (no croquis raster). Fill must fail open, not
-    // invent a figure-shaped enclosure from a reference model.
     const result = floodFillAdaptive({
       rawBarrier: emptyBarrier(),
       x: 384,

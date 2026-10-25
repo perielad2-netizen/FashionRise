@@ -71,9 +71,13 @@
 
 **WEB-V4I (MERGED PR #48 — Issue #47):** Frontend-only tablet UX polish: fit intact 3:4 paper via cqh; Models overlay gallery; Focus removed; Settings Magic Soon footer removed; Models a11y focus trap. **MERGED + FE deployed** @ `dfcaa609`.
 
-**P1 #51 — Fullscreen Hand→Pencil:** Root cause + FE hotfix landed on `main` @ `c6fc1eb8`.
+**P1 #51 — Fullscreen Hand→Pencil:** **CLOSED** — real-device **5/5 PASS**; FE hotfix on `main` @ `c6fc1eb8`.
 
-**P1 #60 — Narrow closed-shape Fill (ACTIVE DRAFT):** Operator evidence 2026-10-25 ~07:18 Asia/Jerusalem — hourglass yellow fill at 177% zoom leaves a thin white neck; small-width closed regions report “closed shape not found.” **Verified causes at `c6fc1eb8`:** (A) `floodFillRegion` default `gapClose=2` dilates ink barriers and can seal 1–4 px interiors; (B) `count < 24` rejects legitimate tiny pockets; (C) fixed RDP `1.4` can oversimplify thin necks. **Fix:** adaptive multi-pass fill — try undilated visible ink first, then gap-close 1…max only if open; `MIN_FILL_PIXELS=1` + micro-region bbox contour fallback; size-adaptive simplify tolerance. Solid/gradient/fabric fills unchanged. FE-only; **no backend**. Offline synthetic regressions in `floodFill.narrow.test.ts`. **Issue #60 stays OPEN** until operator visual acceptance. **No merge/deploy**.
+**P1 #54 — Sunburst Magic recovery:** Recovery reported **deployed** (prod BE/worker `b800e53d`); visual/quality acceptance remains a separate consideration. Not mixed into #60.
+
+**P1 #59 — Magic croquis identity:** **OPEN** — separate draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61) (+ maint lineage). **Do not mix into #60.**
+
+**P1 #60 — Narrow closed-shape Fill (ACTIVE DRAFT):** Operator evidence 2026-10-25 ~07:18 Asia/Jerusalem — hourglass yellow fill at 177% zoom leaves a thin white neck; small-width closed regions report “closed shape not found.” **Verified causes at `c6fc1eb8`:** (A) fixed `gapClose=2` seals 1–4 px interiors; (B) `count < 24` rejects tiny pockets; (C) rigid RDP oversimplifies thin necks. **Draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** (FE-only): adaptive undilated-first fill + punch-through gate (compact internal seam holes → panel-local; elongated hourglass necks stay connected) + edge-based contours + neck-aware simplify (`minScanlineSpan`) + real `screenToDesign` viewport/pinch tests. **Limitation:** perfect automatic intent recognition for ambiguous tiny connections is not claimed — short accidental-looking bridges prefer panel isolation. **Issue #60 stays OPEN**. **No merge/deploy**.
 
 **PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
 
@@ -120,8 +124,9 @@
 | **WEB-V4G brushes + gradients** | **MERGED** PR #40 @ `350a3b7e` · **FE deployed** · operator **5/5 PASS** |
 | **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
 | **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
-| **P1 #51 Hand→Pencil immersive** | On `main` @ `c6fc1eb8` (FE) |
-| **P1 #60 narrow closed Fill** | **Draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** — adaptive gap-close + sub-24px interiors; FE-only; Issue #60 OPEN for visual gate |
+| **P1 #51 Hand→Pencil immersive** | **CLOSED** — real-device 5/5 PASS; on `main` @ `c6fc1eb8` (FE) |
+| **P1 #59 Magic croquis identity** | **OPEN** — separate draft PR [#61](https://github.com/perielad2-netizen/FashionRise/pull/61); not mixed with #60 |
+| **P1 #60 narrow closed Fill** | **OPEN** — draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62); seam-safety amendment + neck fidelity + real viewport tests; FE-only; no deploy |
 | **Issue #42 / WEB-V4J Front-Back** | **OPEN** — architecture draft PR #50; keep separate from #60 |
 | PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
 | Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
@@ -317,8 +322,8 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Technical PM **review** of P1 #60 narrow-Fill **draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** (Issue [#60](https://github.com/perielad2-netizen/FashionRise/issues/60)). **Do not merge/deploy** until authorized. After approve: **frontend-only** deploy onto production FE lineage `c6fc1eb8` (BE/worker stay `b800e53d`). Then operator visual acceptance: hourglass neck + thin straps fill continuously without spill. Keep Issue #60 open until that gate.
-2. Keep #60 isolated from Magic identity (#59), Sunburst (#54), and Front/Back (#42).
+1. **Exact next action:** Technical PM **re-review** of P1 #60 narrow-Fill **draft PR [#62](https://github.com/perielad2-netizen/FashionRise/pull/62)** after the internal-seam safety amendment (Issue [#60](https://github.com/perielad2-netizen/FashionRise/issues/60)). **Do not merge/deploy** until authorized. GO path: **frontend-only** deploy onto production FE lineage `c6fc1eb8` (BE/worker stay `b800e53d`), then operator visual acceptance (hourglass/strap continuity + no adjacent-panel spill). HOLD if ambiguity policy needs an explicit fill-mode product decision.
+2. Keep #60 isolated from Magic identity (#59 / PR #61), Sunburst (#54), and Front/Back (#42).
 3. Production remains FE `c6fc1eb8` / BE+worker `b800e53d` / Alembic `005` until an authorized FE release.
 4. Magic pose fidelity PR #41 remains on `main` but **not** on prod BE — separate track.
 5. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46)/[#58](https://github.com/perielad2-netizen/FashionRise/pull/58).
@@ -590,6 +595,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-25 | **P1 #60 PR #62 seam-safety amendment:** punch-through bridge-path (compact internal seam holes → panel-local; elongated necks kept); edge-based contours + `minScanlineSpan` simplify; real viewport 100/177/300% + pinch tests; style/persist round-trips; FE-only; **0 paid AI**; production unchanged; **STOP for Technical PM re-review — no merge/deploy**. |
 | 2026-10-25 | **P1 #60 narrow closed-shape Fill (draft):** operator hourglass/strap evidence; root causes = fixed `gapClose=2` sealing 1–4px necks + `count < 24` + rigid RDP; adaptive undilated-first fill; synthetic regressions (1–10px necks, tiny pockets, open U-shape, neighbor seam, zoom independence); Vitest **396**; lint/tsc/build/check:sw PASS; FE-only; **0 paid AI**; production unchanged (`c6fc1eb8` / `b800e53d` / `005`); **STOP for Technical PM review — no merge/deploy**. |
 | 2026-10-24 | **P1 #51 Hand→Pencil hotfix** merged to `main` @ `c6fc1eb8` (draft path PR #52). |
 | 2026-10-24 | **P1 #51 Hand→Pencil hotfix draft PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52):** root cause = viewport remount cleared gesture cooldown timer while flag stayed true; stable window listeners + unmount-only timer cleanup; Vitest **362** (8 new controlled-viewport regressions); Playwright Android/iPad PASS; lint/tsc/build/check:sw PASS; **0 paid AI**; production unchanged (`dfcaa609` / `2cbc1ad0` / `005`); **STOP for Technical PM review — no merge/deploy**. |
