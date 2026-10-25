@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   STUDIO_DRAFT_SCHEMA,
   STUDIO_DRAFT_SCHEMA_V2,
+  StudioDraftSerializeError,
   createEmptyDraftDocument,
   draftContentFingerprint,
   parseStudioDraftDocument,
@@ -70,8 +71,26 @@ describe('draftDocument v2', () => {
     expect(wire.schema).toBe(STUDIO_DRAFT_SCHEMA_V2)
     expect(wire.activeSide).toBe('front')
     expect(wire.back).toEqual({ strokes: [], fills: [] })
-    const legacy = serializeStudioDraftDocument(doc, { frontBackEnabled: false })
-    expect(legacy.schema).toBe(STUDIO_DRAFT_SCHEMA)
-    expect(legacy.back).toBeUndefined()
+    expect(() => serializeStudioDraftDocument(doc, { frontBackEnabled: false })).toThrow(
+      StudioDraftSerializeError,
+    )
+  })
+
+  it('rejects malformed v2 back bags on parse', () => {
+    const bad = parseStudioDraftDocument({
+      schema: STUDIO_DRAFT_SCHEMA_V2,
+      strokes: [],
+      fills: [],
+      activeSide: 'front',
+      back: { strokes: 'not-an-array', fills: [] },
+      model: 'female-straight',
+      customReferenceUrl: null,
+      customReferenceKey: null,
+      brush: { sizeId: 'thin', opacity: 1, color: '#1C1C1E' },
+      dimmed: false,
+      clientRevision: 2,
+      updatedAt: '2026-10-25T00:00:00.000Z',
+    })
+    expect(bad).toBeNull()
   })
 })

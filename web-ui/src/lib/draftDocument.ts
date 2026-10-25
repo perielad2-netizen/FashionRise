@@ -185,6 +185,13 @@ function parseSideStrokes(
   return strokes
 }
 
+export class StudioDraftSerializeError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StudioDraftSerializeError'
+  }
+}
+
 export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | null {
   if (!isStudioDraftDocument(raw)) return null
   const schema =
@@ -228,13 +235,11 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
   if (schema === STUDIO_DRAFT_SCHEMA_V2 && 'back' in (raw as object)) {
     const rawBack = (raw as { back?: unknown }).back
     const parsedBag = normalizeSideBag(rawBack)
-    const backStrokes = parsedBag
-      ? parseSideStrokes(parsedBag.strokes, color, sizePx)
-      : parseSideStrokes([], color, sizePx)
+    if (!parsedBag) return null
+    const backStrokes = parseSideStrokes(parsedBag.strokes, color, sizePx)
     const backFills: FillOp[] = []
-    const rawBackFills = parsedBag?.fills ?? []
-    if (Array.isArray(rawBackFills)) {
-      for (const item of rawBackFills) {
+    if (Array.isArray(parsedBag.fills)) {
+      for (const item of parsedBag.fills) {
         const fill = parseFillOp(item)
         if (fill) backFills.push(fill)
       }
@@ -336,6 +341,11 @@ export function serializeStudioDraftDocument(
 ): StudioDraftDocument {
   const frontBackEnabled = options?.frontBackEnabled ?? isStudioFrontBackEnabled()
   const { clearBackIntent: _clearBackIntent, ...rest } = doc
+  if (!frontBackEnabled && isStudioDraftV2(rest)) {
+    throw new StudioDraftSerializeError(
+      'Front/Back is disabled; refusing to downgrade or strip a v2 studio draft.',
+    )
+  }
   if (!frontBackEnabled || !isStudioDraftV2(rest)) {
     const v1: StudioDraftDocument = {
       ...rest,

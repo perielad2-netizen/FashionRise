@@ -15,10 +15,11 @@ import { cloneSideBag, sideHasInk, type StudioPaperSide, type StudioSideBag } fr
 import type { FillOp } from '@/lib/fills'
 import type { BrushSizeId, Stroke } from '@/lib/strokes'
 
+/** Canonical per-side ink in the editor — never alias front/back into one buffer. */
 export type EditorSideState = {
   activeSide: StudioPaperSide
-  strokes: Stroke[]
-  fills: FillOp[]
+  frontStrokes: Stroke[]
+  frontFills: FillOp[]
   backStrokes: Stroke[]
   backFills: FillOp[]
 }
@@ -35,8 +36,11 @@ export function referenceUrlForModelSide(
   if (model === 'custom') return customUrl
   if (model === 'blank') return null
   if (!isStudioFrontBackEnabled()) return canvasSrcForModel(model, 'front')
-  if (side === 'back' && !modelHasRearAsset(model)) return canvasSrcForModel(model, 'front')
-  return canvasSrcForModel(model, side)
+  if (side === 'back') {
+    if (!modelHasRearAsset(model)) return null
+    return canvasSrcForModel(model, 'back')
+  }
+  return canvasSrcForModel(model, 'front')
 }
 
 export function sideStateFromDocument(doc: StudioDraftDocument): EditorSideState {
@@ -45,18 +49,22 @@ export function sideStateFromDocument(doc: StudioDraftDocument): EditorSideState
   const back = backArtworkFromDoc(doc)
   return {
     activeSide,
-    strokes: front.strokes,
-    fills: front.fills,
+    frontStrokes: front.strokes,
+    frontFills: front.fills,
     backStrokes: back.strokes,
     backFills: back.fills,
   }
 }
 
-export function activeArtwork(state: EditorSideState): StudioSideBag {
+export function visibleInkFromState(state: EditorSideState): { strokes: Stroke[]; fills: FillOp[] } {
   if (state.activeSide === 'back') {
     return { strokes: state.backStrokes, fills: state.backFills }
   }
-  return { strokes: state.strokes, fills: state.fills }
+  return { strokes: state.frontStrokes, fills: state.frontFills }
+}
+
+export function activeArtwork(state: EditorSideState): StudioSideBag {
+  return visibleInkFromState(state)
 }
 
 export function documentHasAnyInk(doc: StudioDraftDocument): boolean {
@@ -83,8 +91,14 @@ export function buildDocumentFromEditor(args: {
   let activeSide = args.state.activeSide
   let back: StudioSideBag | undefined = args.prev.back
 
-  const frontBag: StudioSideBag = { strokes: args.state.strokes, fills: args.state.fills }
-  const backBag: StudioSideBag = { strokes: args.state.backStrokes, fills: args.state.backFills }
+  const frontBag: StudioSideBag = {
+    strokes: args.state.frontStrokes,
+    fills: args.state.frontFills,
+  }
+  const backBag: StudioSideBag = {
+    strokes: args.state.backStrokes,
+    fills: args.state.backFills,
+  }
 
   if (frontBack) {
     const needsV2 =
@@ -128,29 +142,18 @@ export function switchEditorSide(
   nextSide: StudioPaperSide,
 ): EditorSideState {
   if (nextSide === state.activeSide) return state
-  return {
-    ...state,
-    activeSide: nextSide,
-    strokes: nextSide === 'front' ? state.strokes : state.strokes,
-    fills: nextSide === 'front' ? state.fills : state.fills,
-    backStrokes: state.backStrokes,
-    backFills: state.backFills,
-  }
+  return { ...state, activeSide: nextSide }
 }
 
-/** After switching sides, load the visible ink into strokes/fills fields. */
-export function visibleInkForSide(state: EditorSideState): { strokes: Stroke[]; fills: FillOp[] } {
-  if (state.activeSide === 'back') {
-    return { strokes: state.backStrokes, fills: state.backFills }
-  }
-  return { strokes: state.strokes, fills: state.fills }
-}
-
-export function withVisibleInk(state: EditorSideState, strokes: Stroke[], fills: FillOp[]): EditorSideState {
+export function patchActiveSideInk(
+  state: EditorSideState,
+  strokes: Stroke[],
+  fills: FillOp[],
+): EditorSideState {
   if (state.activeSide === 'back') {
     return { ...state, backStrokes: strokes, backFills: fills }
   }
-  return { ...state, strokes, fills }
+  return { ...state, frontStrokes: strokes, frontFills: fills }
 }
 
 export function emptyBackBagIfClearing(

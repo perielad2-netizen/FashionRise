@@ -1,6 +1,7 @@
 import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 import type { AiJobRead } from '@/services/ai/aiJobTypes'
+import type { SharedGarmentSpec } from '@/services/ai/magicGarmentSpec'
 
 export type PolishSidePayload = {
   image_base64: string
@@ -14,6 +15,9 @@ export type PolishSketchDualInput = {
   reference_model_id?: string
   notes?: string
   mood_notes?: string
+  shared_garment_spec?: SharedGarmentSpec
+  document_revision?: number
+  document_fingerprint?: string
   front: PolishSidePayload
   back: PolishSidePayload
   signal?: AbortSignal
@@ -47,6 +51,9 @@ export async function enqueueSketchPolishDual(
       reference_model_id: input.reference_model_id ?? null,
       notes: input.notes ?? 'polish concept',
       mood_notes: input.mood_notes,
+      shared_garment_spec: input.shared_garment_spec ?? null,
+      document_revision: input.document_revision ?? null,
+      document_fingerprint: input.document_fingerprint ?? null,
       front: {
         image_base64: input.front.image_base64,
         notes: input.front.notes,

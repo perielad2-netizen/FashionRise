@@ -1,3 +1,5 @@
+import { isRearCroquisPublished } from '@/assets/rearCroquisPublished'
+
 /**
  * WEB-V4D built-in croquis library.
  *
@@ -207,7 +209,10 @@ export function canvasSrcForModel(id: ModelChoice, side: ModelCanvasSide = 'fron
 }
 
 export function modelHasRearAsset(id: ModelChoice): boolean {
-  return canvasSrcForModel(id, 'back') !== null
+  if (id === 'custom' || id === 'blank' || isLegacyModelId(id)) return false
+  const def = SELECTABLE_BY_ID.get(id)
+  if (!def) return false
+  return isRearCroquisPublished(def.id)
 }
 
 export function defaultModelForGender(gender: ModelGender): SelectableBuiltinModelId {

@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/services/api/client'
 import * as magicApi from '@/services/ai/magicApi'
-import { enqueueDualOrSequentialPolish } from '@/services/ai/magicDualPolish'
+import {
+  DualPolishUnavailableError,
+  enqueueDualPolish,
+} from '@/services/ai/magicDualPolish'
 
-describe('enqueueDualOrSequentialPolish', () => {
+describe('enqueueDualPolish', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -15,34 +18,28 @@ describe('enqueueDualOrSequentialPolish', () => {
       back_job: { id: 'jb', status: 'queued' } as magicApi.SketchPolishDualRead['back_job'],
     })
     const single = vi.spyOn(magicApi, 'enqueueSketchPolish')
-    const result = await enqueueDualOrSequentialPolish({
+    const result = await enqueueDualPolish({
       magic_operation_id: 'op-1',
       front: { image_base64: 'data:image/png;base64,aa' },
       back: { image_base64: 'data:image/png;base64,bb' },
     })
-    expect(result.mode).toBe('dual')
     expect(result.front_job_id).toBe('jf')
     expect(result.back_job_id).toBe('jb')
     expect(single).not.toHaveBeenCalled()
   })
 
-  it('falls back to sequential polish on 404', async () => {
+  it('fails closed on 404 without sequential fallback', async () => {
     vi.spyOn(magicApi, 'enqueueSketchPolishDual').mockRejectedValue(
       new ApiError('Not found', 404, null),
     )
-    const single = vi
-      .spyOn(magicApi, 'enqueueSketchPolish')
-      .mockResolvedValueOnce({ id: 'jf', status: 'queued' } as Awaited<ReturnType<typeof magicApi.enqueueSketchPolish>>)
-      .mockResolvedValueOnce({ id: 'jb', status: 'queued' } as Awaited<ReturnType<typeof magicApi.enqueueSketchPolish>>)
-
-    const result = await enqueueDualOrSequentialPolish({
-      magic_operation_id: 'op-2',
-      front: { image_base64: 'data:image/png;base64,aa' },
-      back: { image_base64: 'data:image/png;base64,bb' },
-    })
-    expect(result.mode).toBe('sequential')
-    expect(result.front_job_id).toBe('jf')
-    expect(result.back_job_id).toBe('jb')
-    expect(single).toHaveBeenCalledTimes(2)
+    const single = vi.spyOn(magicApi, 'enqueueSketchPolish')
+    await expect(
+      enqueueDualPolish({
+        magic_operation_id: 'op-2',
+        front: { image_base64: 'data:image/png;base64,aa' },
+        back: { image_base64: 'data:image/png;base64,bb' },
+      }),
+    ).rejects.toBeInstanceOf(DualPolishUnavailableError)
+    expect(single).not.toHaveBeenCalled()
   })
 })

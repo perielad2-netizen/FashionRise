@@ -14,11 +14,11 @@ import {
   activeArtwork,
   buildDocumentFromEditor,
   documentHasAnyInk,
+  patchActiveSideInk,
   rearReferenceAvailable,
   referenceUrlForModelSide,
   sideStateFromDocument,
-  visibleInkForSide,
-  withVisibleInk,
+  visibleInkFromState,
   type EditorSideState,
 } from '@/hooks/studioEditorSides'
 import {
@@ -52,7 +52,11 @@ import {
 import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
 import { ApiError } from '@/services/api/client'
 import { enqueueSketchPolish, fetchJobImageBlob } from '@/services/ai/magicApi'
-import { enqueueDualOrSequentialPolish } from '@/services/ai/magicDualPolish'
+import {
+  DualPolishUnavailableError,
+  enqueueDualPolish,
+} from '@/services/ai/magicDualPolish'
+import { buildSharedGarmentSpec } from '@/services/ai/magicGarmentSpec'
 import { settleMagicJobWithImage } from '@/services/ai/magicPipelineHelpers'
 import {
   patchMagicOperationJob,
@@ -167,10 +171,10 @@ export function useStudioEditor() {
   const openRequestRef = useRef(0)
 
   const [activeSide, setActiveSide] = useState<StudioPaperSide>('front')
+  const [frontStrokes, setFrontStrokes] = useState<Stroke[]>([])
+  const [frontFills, setFrontFills] = useState<FillOp[]>([])
   const [backStrokes, setBackStrokes] = useState<Stroke[]>([])
   const [backFills, setBackFills] = useState<FillOp[]>([])
-  const [strokes, setStrokes] = useState<Stroke[]>([])
-  const [fills, setFills] = useState<FillOp[]>([])
   const [tool, setTool] = useState<ToolKind>('draw')
   const [brushSizePx, setBrushSizePxState] = useState(BRUSH_SIZE_DEFAULT_PX)
   const [opacity, setOpacity] = useState(1)
@@ -249,12 +253,15 @@ export function useStudioEditor() {
   const editorSideState = useCallback((): EditorSideState => {
     return {
       activeSide,
-      strokes,
-      fills,
+      frontStrokes,
+      frontFills,
       backStrokes,
       backFills,
     }
-  }, [activeSide, backFills, backStrokes, fills, strokes])
+  }, [activeSide, backFills, backStrokes, frontFills, frontStrokes])
+
+  const strokes = activeSide === 'back' ? backStrokes : frontStrokes
+  const fills = activeSide === 'back' ? backFills : frontFills
 
   const applyDocument = useCallback((doc: StudioDraftDocument, designId: string | null) => {
     authoritativeDocRef.current = doc
@@ -265,8 +272,8 @@ export function useStudioEditor() {
     // Avoid a spurious revision bump when React state mirrors an already-committed doc.
     skipNextAutosaveRef.current = true
     setActiveSide(sides.activeSide)
-    setStrokes(sides.strokes)
-    setFills(sides.fills)
+    setFrontStrokes(sides.frontStrokes)
+    setFrontFills(sides.frontFills)
     setBackStrokes(sides.backStrokes)
     setBackFills(sides.backFills)
     setModelState(doc.model)
@@ -413,8 +420,8 @@ export function useStudioEditor() {
 
   const commitFromEditor = useCallback(
     (patch: {
-      strokes?: Stroke[]
-      fills?: FillOp[]
+      frontStrokes?: Stroke[]
+      frontFills?: FillOp[]
       backStrokes?: Stroke[]
       backFills?: FillOp[]
       activeSide?: StudioPaperSide
@@ -437,8 +444,8 @@ export function useStudioEditor() {
             : resolveBrushSizePx(prev.brush)
       const state: EditorSideState = {
         activeSide: patch.activeSide ?? activeSide,
-        strokes: patch.strokes ?? strokes,
-        fills: patch.fills ?? fills,
+        frontStrokes: patch.frontStrokes ?? frontStrokes,
+        frontFills: patch.frontFills ?? frontFills,
         backStrokes: patch.backStrokes ?? backStrokes,
         backFills: patch.backFills ?? backFills,
       }
@@ -460,7 +467,7 @@ export function useStudioEditor() {
       void commitDocument(next)
       return next
     },
-    [activeSide, backFills, backStrokes, commitDocument, fills, strokes],
+    [activeSide, backFills, backStrokes, commitDocument, frontFills, frontStrokes],
   )
 
   useEffect(() => {
@@ -536,8 +543,8 @@ export function useStudioEditor() {
     if (draftContentFingerprint(prev) === draftContentFingerprint(next)) return
     void commitDocument(next)
   }, [
-    strokes,
-    fills,
+    frontStrokes,
+    frontFills,
     backStrokes,
     backFills,
     activeSide,
@@ -574,20 +581,21 @@ export function useStudioEditor() {
   const onStrokeComplete = useCallback(
     (stroke: Stroke) => {
       activeHistory().push(artwork())
-      const ink = visibleInkForSide(editorSideState())
+      const state = editorSideState()
+      const ink = visibleInkFromState(state)
       const nextStrokes = [...ink.strokes, stroke]
-      const patch = withVisibleInk(editorSideState(), nextStrokes, ink.fills)
+      const patch = patchActiveSideInk(state, nextStrokes, ink.fills)
       if (patch.activeSide === 'back') {
         setBackStrokes(patch.backStrokes)
         setBackFills(patch.backFills)
       } else {
-        setStrokes(patch.strokes)
-        setFills(patch.fills)
+        setFrontStrokes(patch.frontStrokes)
+        setFrontFills(patch.frontFills)
       }
       syncHistoryFlags()
       commitFromEditor({
-        strokes: patch.strokes,
-        fills: patch.fills,
+        frontStrokes: patch.frontStrokes,
+        frontFills: patch.frontFills,
         backStrokes: patch.backStrokes,
         backFills: patch.backFills,
         activeSide: patch.activeSide,
@@ -599,7 +607,8 @@ export function useStudioEditor() {
   const onFillComplete = useCallback(
     (fill: FillOp) => {
       // Keep saved designs recoverable: refuse fills past the snapshot limit.
-      if (fills.length >= MAX_SNAPSHOT_FILLS) {
+      const visibleFills = visibleInkFromState(editorSideState()).fills
+      if (visibleFills.length >= MAX_SNAPSHOT_FILLS) {
         publishStudioNotice(
           `This design already has ${MAX_SNAPSHOT_FILLS} fills (the save limit). Undo some fills before adding more.`,
         )
@@ -612,20 +621,21 @@ export function useStudioEditor() {
         return
       }
       activeHistory().push(artwork())
-      const ink = visibleInkForSide(editorSideState())
+      const state = editorSideState()
+      const ink = visibleInkFromState(state)
       const nextFills = [...ink.fills, persistable.fill]
-      const patch = withVisibleInk(editorSideState(), ink.strokes, nextFills)
+      const patch = patchActiveSideInk(state, ink.strokes, nextFills)
       if (patch.activeSide === 'back') {
         setBackStrokes(patch.backStrokes)
         setBackFills(patch.backFills)
       } else {
-        setStrokes(patch.strokes)
-        setFills(patch.fills)
+        setFrontStrokes(patch.frontStrokes)
+        setFrontFills(patch.frontFills)
       }
       syncHistoryFlags()
       commitFromEditor({
-        strokes: patch.strokes,
-        fills: patch.fills,
+        frontStrokes: patch.frontStrokes,
+        frontFills: patch.frontFills,
         backStrokes: patch.backStrokes,
         backFills: patch.backFills,
       })
@@ -654,18 +664,19 @@ export function useStudioEditor() {
   const undo = useCallback(() => {
     const prev = activeHistory().undo(artwork())
     if (!prev) return
-    const patch = withVisibleInk(editorSideState(), prev.strokes, prev.fills)
+    const state = editorSideState()
+    const patch = patchActiveSideInk(state, prev.strokes, prev.fills)
     if (patch.activeSide === 'back') {
       setBackStrokes(patch.backStrokes)
       setBackFills(patch.backFills)
     } else {
-      setStrokes(patch.strokes)
-      setFills(patch.fills)
+      setFrontStrokes(patch.frontStrokes)
+      setFrontFills(patch.frontFills)
     }
     syncHistoryFlags()
     commitFromEditor({
-      strokes: patch.strokes,
-      fills: patch.fills,
+      frontStrokes: patch.frontStrokes,
+      frontFills: patch.frontFills,
       backStrokes: patch.backStrokes,
       backFills: patch.backFills,
     })
@@ -674,43 +685,44 @@ export function useStudioEditor() {
   const redo = useCallback(() => {
     const next = activeHistory().redo(artwork())
     if (!next) return
-    const patch = withVisibleInk(editorSideState(), next.strokes, next.fills)
+    const state = editorSideState()
+    const patch = patchActiveSideInk(state, next.strokes, next.fills)
     if (patch.activeSide === 'back') {
       setBackStrokes(patch.backStrokes)
       setBackFills(patch.backFills)
     } else {
-      setStrokes(patch.strokes)
-      setFills(patch.fills)
+      setFrontStrokes(patch.frontStrokes)
+      setFrontFills(patch.frontFills)
     }
     syncHistoryFlags()
     commitFromEditor({
-      strokes: patch.strokes,
-      fills: patch.fills,
+      frontStrokes: patch.frontStrokes,
+      frontFills: patch.frontFills,
       backStrokes: patch.backStrokes,
       backFills: patch.backFills,
     })
   }, [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags])
 
   const clear = useCallback(() => {
-    const ink = visibleInkForSide(editorSideState())
+    const ink = visibleInkFromState(editorSideState())
     if (ink.strokes.length === 0 && ink.fills.length === 0) return
     activeHistory().push(artwork())
-    const patch = withVisibleInk(editorSideState(), [], [])
+    const state = editorSideState()
     const clearBackIntent =
-      frontBackEnabled && patch.activeSide === 'back' && sideHasInk({ strokes: backStrokes, fills: backFills })
-    if (patch.activeSide === 'back') {
+      frontBackEnabled && state.activeSide === 'back' && sideHasInk({ strokes: backStrokes, fills: backFills })
+    if (state.activeSide === 'back') {
       setBackStrokes([])
       setBackFills([])
     } else {
-      setStrokes([])
-      setFills([])
+      setFrontStrokes([])
+      setFrontFills([])
     }
     syncHistoryFlags()
     commitFromEditor({
-      strokes: patch.strokes,
-      fills: patch.fills,
-      backStrokes: patch.activeSide === 'back' ? [] : backStrokes,
-      backFills: patch.activeSide === 'back' ? [] : backFills,
+      frontStrokes: state.activeSide === 'front' ? [] : frontStrokes,
+      frontFills: state.activeSide === 'front' ? [] : frontFills,
+      backStrokes: state.activeSide === 'back' ? [] : backStrokes,
+      backFills: state.activeSide === 'back' ? [] : backFills,
       clearBackIntent,
     })
   }, [
@@ -721,6 +733,8 @@ export function useStudioEditor() {
     commitFromEditor,
     editorSideState,
     frontBackEnabled,
+    frontFills,
+    frontStrokes,
     syncHistoryFlags,
   ])
 
@@ -734,8 +748,8 @@ export function useStudioEditor() {
       if (clearStrokes && designHasInk()) {
         historyFront.current.push(artwork())
         historyBack.current.push(artwork())
-        setStrokes([])
-        setFills([])
+        setFrontStrokes([])
+        setFrontFills([])
         setBackStrokes([])
         setBackFills([])
         syncHistoryFlags()
@@ -743,8 +757,8 @@ export function useStudioEditor() {
         if (!rearReferenceAvailable(next) && activeSide === 'back') setActiveSide('front')
         commitFromEditor({
           model: next,
-          strokes: [],
-          fills: [],
+          frontStrokes: [],
+          frontFills: [],
           backStrokes: [],
           backFills: [],
           activeSide: rearReferenceAvailable(next) ? activeSide : 'front',
@@ -779,38 +793,11 @@ export function useStudioEditor() {
       if (side === activeSide) return
       if (side === 'back' && !rearReferenceAvailable(model)) return
       skipNextAutosaveRef.current = true
-      const nextState: EditorSideState = {
-        activeSide: side,
-        strokes,
-        fills,
-        backStrokes,
-        backFills,
-      }
-      const visible = visibleInkForSide({ ...nextState, activeSide: side })
       setActiveSide(side)
-      setStrokes(visible.strokes)
-      setFills(visible.fills)
       syncHistoryFlags()
-      commitFromEditor({
-        activeSide: side,
-        strokes,
-        fills,
-        backStrokes,
-        backFills,
-      })
+      commitFromEditor({ activeSide: side })
     },
-    [
-      activeSide,
-      backFills,
-      backStrokes,
-      commitFromEditor,
-      editorSideState,
-      fills,
-      frontBackEnabled,
-      model,
-      strokes,
-      syncHistoryFlags,
-    ],
+    [activeSide, commitFromEditor, frontBackEnabled, model, syncHistoryFlags],
   )
 
   const onCustomFile = useCallback(
@@ -989,21 +976,43 @@ export function useStudioEditor() {
 
         setMagicPhase('submitting')
         publishStudioNotice(
-          'Magic will polish Front and Back (two credits when billing is enabled).',
+          'Magic will polish Front and Back. Two renders may cost more when billing is enabled.',
         )
-        const enqueued = await enqueueDualOrSequentialPolish({
+        const frontIdempotencyKey = `${operationId}:front`
+        const backIdempotencyKey = `${operationId}:back`
+        const garmentSpec = buildSharedGarmentSpec(doc, 'polish concept')
+        persistMagicOperation(user.id, {
+          operationId,
+          frontIdempotencyKey,
+          backIdempotencyKey,
+          updatedAt: new Date().toISOString(),
+        })
+        const enqueued = await enqueueDualPolish({
           design_id: designId,
           magic_operation_id: operationId,
           reference_model_id: modelId,
           notes: 'polish concept',
-          front: { image_base64: frontCap.dataUrl, notes: 'polish concept (front)' },
-          back: { image_base64: backCap.dataUrl, notes: 'polish concept (back)' },
+          shared_garment_spec: garmentSpec,
+          document_revision: doc.clientRevision,
+          document_fingerprint: draftContentFingerprint(doc),
+          front: {
+            image_base64: frontCap.dataUrl,
+            notes: 'polish concept (front)',
+            idempotency_key: frontIdempotencyKey,
+          },
+          back: {
+            image_base64: backCap.dataUrl,
+            notes: 'polish concept (back)',
+            idempotency_key: backIdempotencyKey,
+          },
           signal: controller.signal,
         })
         persistMagicOperation(user.id, {
           operationId: enqueued.magic_operation_id,
           frontJobId: enqueued.front_job_id,
           backJobId: enqueued.back_job_id,
+          frontIdempotencyKey,
+          backIdempotencyKey,
           updatedAt: new Date().toISOString(),
         })
         setMagicJobId(enqueued.front_job_id)
@@ -1057,7 +1066,18 @@ export function useStudioEditor() {
         return
       }
 
-      const captured = await captureSide(activeSide)
+      const frontOnly = sideHasInk(frontBag) && !sideHasInk(backBag)
+      const backOnly = sideHasInk(backBag) && !sideHasInk(frontBag)
+      let magicSide: StudioPaperSide = activeSide
+      if (backOnly) magicSide = 'back'
+      else if (frontOnly) magicSide = 'front'
+      else if (!sideHasInk(frontBag) && !sideHasInk(backBag)) {
+        setMagicPhase('failed')
+        setMagicError('Add ink to your sketch before running Magic.')
+        return
+      }
+
+      const captured = await captureSide(magicSide)
       if (controller.signal.aborted) return
       const sketchUrl = URL.createObjectURL(captured.blob)
       magicSketchUrlRef.current = sketchUrl
@@ -1068,6 +1088,8 @@ export function useStudioEditor() {
         imageBase64: captured.dataUrl,
         notes: 'polish concept',
         designId,
+        studio_side: magicSide,
+        reference_model_id: modelId,
         signal: controller.signal,
       })
       setMagicJobId(job.id)
@@ -1091,6 +1113,12 @@ export function useStudioEditor() {
       if (controller.signal.aborted) {
         setMagicPhase('failed')
         setMagicError('Magic wait cancelled. Your sketch is unchanged — recover if the job already finished.')
+        return
+      }
+      if (err instanceof DualPolishUnavailableError) {
+        setMagicPhase('failed')
+        setMagicError(err.message)
+        setMagicDualActive(false)
         return
       }
       const message =
@@ -1129,14 +1157,60 @@ export function useStudioEditor() {
     void runMagicPipeline()
   }, [magicBusy, magicEnabled, runMagicPipeline])
 
+  const recoverDualMagicOperation = useCallback(
+    async (frontJobId: string, backJobId: string, signal: AbortSignal) => {
+      setMagicDualActive(true)
+      setMagicFront({ ...emptyMagicSide(), phase: 'polling' })
+      setMagicBack({ ...emptyMagicSide(), phase: 'polling' })
+      const [frontSettled, backSettled] = await Promise.all([
+        settleMagicJobWithImage(frontJobId, signal),
+        settleMagicJobWithImage(backJobId, signal),
+      ])
+      const applySide = (
+        side: StudioPaperSide,
+        settled: Awaited<ReturnType<typeof settleMagicJobWithImage>>,
+      ): MagicSidePanelState => {
+        const failed = settled.look.status === 'failed'
+        if (settled.lookObjectUrl) {
+          magicSideLookUrlsRef.current[side] = settled.lookObjectUrl
+        }
+        return {
+          phase: failed ? 'failed' : 'ready',
+          result: settled.look,
+          lookObjectUrl: settled.lookObjectUrl,
+          sketchObjectUrl: magicSideSketchUrlsRef.current[side],
+          error: failed ? settled.look.summary : null,
+          canRetry: failed,
+        }
+      }
+      const nextFront = applySide('front', frontSettled)
+      const nextBack = applySide('back', backSettled)
+      setMagicFront(nextFront)
+      setMagicBack(nextBack)
+      const primary = activeSide === 'back' ? nextBack : nextFront
+      setMagicResult(primary.result)
+      if (primary.lookObjectUrl) {
+        magicLookUrlRef.current = primary.lookObjectUrl
+        setMagicLookUrl(primary.lookObjectUrl)
+      }
+      setMagicPhase('ready')
+    },
+    [activeSide],
+  )
+
   const recoverLastMagic = useCallback(() => {
     if (!user?.id) return
     if (magicInFlightRef.current) {
       setMagicOpen(true)
       return
     }
+    const storedOp = readMagicOperation(user.id)
+    const dualJobs =
+      storedOp?.frontJobId && storedOp.backJobId
+        ? { front: storedOp.frontJobId, back: storedOp.backJobId }
+        : null
     const jobId = magicJobId || readMagicJobId(user.id)
-    if (!jobId) {
+    if (!dualJobs && !jobId) {
       setMagicError('No previous Magic job to recover.')
       setMagicPhase('failed')
       setMagicOpen(true)
@@ -1152,7 +1226,11 @@ export function useStudioEditor() {
     magicAbortRef.current?.abort()
     const controller = new AbortController()
     magicAbortRef.current = controller
-    void applySettledMagicJob(jobId, controller.signal)
+    if (storedOp) setMagicOperationId(storedOp.operationId)
+    const run = dualJobs
+      ? recoverDualMagicOperation(dualJobs.front, dualJobs.back, controller.signal)
+      : applySettledMagicJob(jobId!, controller.signal)
+    void run
       .catch((err) => {
         if (controller.signal.aborted) return
         setMagicPhase('failed')
@@ -1161,7 +1239,7 @@ export function useStudioEditor() {
       .finally(() => {
         magicInFlightRef.current = false
       })
-  }, [applySettledMagicJob, magicJobId, user?.id])
+  }, [applySettledMagicJob, magicJobId, recoverDualMagicOperation, user?.id])
 
   // After refresh, restore the stored job id for "See last result" without enqueue.
   useEffect(() => {

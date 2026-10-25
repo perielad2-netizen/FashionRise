@@ -5,6 +5,8 @@ export type MagicOperationRecord = {
   operationId: string
   frontJobId?: string
   backJobId?: string
+  frontIdempotencyKey?: string
+  backIdempotencyKey?: string
   updatedAt: string
 }
 
