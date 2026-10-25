@@ -3,9 +3,10 @@ import {
   draftContentFingerprint,
   frontArtworkFromDoc,
   type StudioDraftDocument,
-  type StudioSideBag,
 } from '@/lib/draftDocument'
 import type { FillOp } from '@/lib/fills'
+
+type SideBag = { strokes: StudioDraftDocument['strokes']; fills: FillOp[] }
 
 /**
  * Bounded garment context for dual Magic — keys must match backend
@@ -27,13 +28,13 @@ function fillMaterialColors(fill: FillOp): string[] {
   return []
 }
 
-function collectFillColors(bag: StudioSideBag, add: (c: string) => void): void {
+function collectFillColors(bag: SideBag, add: (c: string) => void): void {
   for (const f of bag.fills) {
     for (const c of fillMaterialColors(f)) add(c)
   }
 }
 
-function collectStrokeColors(bag: StudioSideBag, add: (c: string) => void): void {
+function collectStrokeColors(bag: SideBag, add: (c: string) => void): void {
   for (const s of bag.strokes) add(s.color)
 }
 
