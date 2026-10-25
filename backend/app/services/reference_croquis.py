@@ -74,13 +74,50 @@ def parse_reference_model_id(raw: Any) -> ReferenceCroquis | None:
     return ReferenceCroquis(model_id=model_id, kind="builtin", family=family)
 
 
+def _normalize_optional_id(raw: Any) -> Any:
+    """Empty strings normalize to absent; other values pass through for parse/validation."""
+    if raw is None:
+        return None
+    if isinstance(raw, str) and not raw.strip():
+        return None
+    return raw
+
+
 def reference_from_job_input(input_data: dict[str, Any] | None) -> ReferenceCroquis | None:
-    """Read ``reference_model_id`` from job input_data (snake or camel)."""
+    """Read canonical ``reference_model_id`` from job input_data.
+
+    Canonical API field is snake_case ``reference_model_id``. CamelCase
+    ``referenceModelId`` is accepted only for older/alternate clients when snake
+    is absent. If both keys are present with disagreeing non-empty values, raise
+    ValidationAppError (fail closed). This is client-supplied intent metadata —
+    not a cryptographic proof against sketch pixels.
+    """
     if not isinstance(input_data, dict):
         return None
-    if "reference_model_id" in input_data:
+    has_snake = "reference_model_id" in input_data
+    has_camel = "referenceModelId" in input_data
+    snake_raw = _normalize_optional_id(input_data.get("reference_model_id")) if has_snake else None
+    camel_raw = _normalize_optional_id(input_data.get("referenceModelId")) if has_camel else None
+
+    if has_snake and has_camel:
+        # Both keys present: require agreement when both carry a value.
+        if snake_raw is not None and camel_raw is not None:
+            snake_id = snake_raw.strip() if isinstance(snake_raw, str) else snake_raw
+            camel_id = camel_raw.strip() if isinstance(camel_raw, str) else camel_raw
+            if snake_id != camel_id:
+                raise ValidationAppError(
+                    "reference_model_id conflict: snake_case and camelCase values disagree"
+                )
+            return parse_reference_model_id(snake_raw)
+        if snake_raw is not None:
+            return parse_reference_model_id(snake_raw)
+        if camel_raw is not None:
+            return parse_reference_model_id(camel_raw)
+        return None
+
+    if has_snake:
         return parse_reference_model_id(input_data.get("reference_model_id"))
-    if "referenceModelId" in input_data:
+    if has_camel:
         return parse_reference_model_id(input_data.get("referenceModelId"))
     return None
 

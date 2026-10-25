@@ -115,31 +115,60 @@ def test_user_text_missing_reference_stays_compatible():
 
 def test_edit_prompt_preserves_male_identity_over_conflicting_vision():
     structured = {
-        "summary": "A stylish look",
+        "summary": "A stylish look on a female-presenting model",
         "image_prompt": (
             "Preserve the grey top and blue trousers on a female-presenting model "
-            "with long wavy hair and feminine styling."
+            "with long wavy hair and a soft blouse drape."
         ),
+        "polish_bullets": ["Keep the feminine facial features of the woman model"],
         "design_identity": {
             "garment_category": "top and trousers",
             "silhouette": "long sleeve top with straight trousers",
-            "pose": "standing front view",
+            "pose": "female model standing with weight on left leg",
             "main_colors": "grey and blue",
             "fabric_patterns": "solid",
             "accessories": None,
             "asymmetry_notes": None,
-            "distinctive_details": "grey long sleeves",
+            "distinctive_details": "grey long sleeves, long wavy hair",
+            "pose_lock": {
+                "supporting_leg": "left leg of the woman figure bears weight",
+                "bent_or_lifted_leg": "right knee slightly soft",
+                "arm_and_hand_positions": "arms relaxed at sides",
+            },
         },
     }
     job = _job(reference_model_id="male-contrapposto", notes="polish concept")
     prompt = sketch_openai._build_image_prompt(structured, structured["summary"], job=job)
     assert "male-contrapposto" in prompt
     assert "SELECTED STUDIO REFERENCE" in prompt
-    assert "female-presenting fashion figure" in prompt.lower() or "female-presenting" in prompt.lower()
+    # Fixed frame still forbids replacing with a female-presenting figure.
+    assert "female-presenting fashion figure" in prompt.lower() or "Do NOT replace" in prompt
     assert "Avoid photorealism" in prompt
-    # Scrubbed vision prose should not keep instructing a woman figure.
-    assert "long wavy hair" not in prompt.lower()
+    # Sketch-supported design details must survive (hair / blouse / colours).
+    assert "long wavy hair" in prompt.lower()
+    assert "blouse" in prompt.lower() or "grey" in prompt.lower()
+    # Opposite-family *subject* claims must not remain as affirmative instructions.
+    assert "female-presenting model" not in prompt.lower()
+    assert "woman model" not in prompt.lower()
+    assert "woman figure" not in prompt.lower()
+    assert "feminine facial" not in prompt.lower()
+    assert "selected male fashion croquis" in prompt.lower() or "male fashion croquis" in prompt.lower()
     assert "PRESERVE exactly from visible evidence" in prompt
+
+
+def test_conflicting_snake_and_camel_reference_ids_rejected():
+    with pytest.raises(ValidationAppError, match="conflict"):
+        reference_from_job_input(
+            {"reference_model_id": "male-straight", "referenceModelId": "female-straight"}
+        )
+
+
+def test_matching_snake_and_camel_reference_ids_accepted():
+    ref = reference_from_job_input(
+        {"reference_model_id": "male-step", "referenceModelId": "male-step"}
+    )
+    assert ref is not None
+    assert ref.model_id == "male-step"
 
 
 def test_edit_prompt_custom_blank_do_not_force_female():
