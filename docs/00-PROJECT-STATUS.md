@@ -3,19 +3,29 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25 (Dual Magic implementation complete for controlled release — BE PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) linked `/polish` retry guards + mocked e2e **PASS**; companion FE PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) `retryMagicSide` persisted per-attempt idempotency. **Not deployed.** Production Dual Magic remains **OFF**. Paid AI: **0**.)
+**Last updated:** 2026-10-26 (Magic **Front/Back enhancement** shipped — FE PR [#77](https://github.com/perielad2-netizen/FashionRise/pull/77) + BE PR [#78](https://github.com/perielad2-netizen/FashionRise/pull/78). Protected `DESIGN ENHANCEMENT` contract elevates imperfect sketches; pattern fidelity retained. Dual Magic **ON**. Alembic **`005`**.)
 
-**Phase:** Protected family beta. **Front/Back drawing LIVE** in production; Dual Magic BE+FE **implementation ready**, awaiting separate activate authorize. Do not deploy undeployed GitHub `main`.
+**Phase:** Protected family beta. **WEB-V4J Front/Back drawing LIVE**; Dual Magic **ON**. Magic elevates Front+Back sketches into polished professional fashion renderings while keeping applied fabric/pattern/color fidelity. Alembic **`005`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`4589a62d`** — Front/Back LIVE; `VITE_STUDIO_DUAL_MAGIC_ENABLED=false`; Magic UI on. |
-| Backend (FastAPI + PostgreSQL) | **`6b253cb5`** — Stage B V2 persistence (maint). Dual Magic BE **not** live. |
-| AI worker | Standalone @ **`6b253cb5`** |
-| Database | `fashionrise_beta` — Alembic **`005`** |
-| Deploy backup | `/var/backups/fashionrise/v4j-frontback-deploy-20261025T174543Z` |
+| Frontend (`web-ui`) | **`db11bf660342932dc3691d06859a4a6146bab3a1`** — Nginx root `/var/www/fashionrise/releases/db11bf66`. Dual Magic **ON**. Garment-spec enhancement notes for Front+Back. |
+| Backend (FastAPI + PostgreSQL) | **`c103ee8d74401d2eb57437751741e90baaa8fc3d`** — `DESIGN ENHANCEMENT` + coverage/color/textile contracts; `IMAGE_PROMPT_MAX_CHARS=4500`. |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`c103ee8d`** · `OPENAI_MODEL=gpt-6-luna` · image `gpt-image-2.5-sunburst` |
+| Database | `fashionrise_beta` — Alembic **`005`** (unchanged) |
+| Deploy backup | `/var/backups/fashionrise/magic-enhance-*` |
+
+**Magic Front/Back enhancement (2026-10-26):**
+
+| Check | Result |
+|---|---|
+| Front enhancement quality | **PASS** — polished professional render; imperfect sketch geometry refined |
+| Back enhancement quality | **PASS** — same elevated quality; not traced/cartoon |
+| Pattern fidelity regression | **PASS** — Dual job `image_inputs=2`; geometric pink/white motif retained |
+| Front/Back consistency | **PASS** — shared materials/theme across sides |
+| Paid calls this slice | **2** (Dual Front+Back; idempotent replay created 0 extras) |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
