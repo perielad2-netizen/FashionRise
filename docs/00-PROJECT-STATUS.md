@@ -3,21 +3,49 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-26 (**Mobile step modals LIVE** `fd9718f3` + CRITICAL AI fix.  — AI reasoning_effort + mobile measurements + Nginx root correction. BE PR [#100](https://github.com/perielad2-netizen/FashionRise/pull/100) `186cac84` · FE PR [#99](https://github.com/perielad2-netizen/FashionRise/pull/99) `33230fa0`. Alembic **`010`**. **0 paid generate by Cursor**. Owner will run the next paid AI Professional test personally. **Samsung Internet / owner phone acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Create Real Design V3.1 LIVE** — measurement tab reset fix + one-click Generate AI PDF + Magic-style progress + PDF quality. FE PR [#102](https://github.com/perielad2-netizen/FashionRise/pull/102) `9ba396a3` · BE PR [#103](https://github.com/perielad2-netizen/FashionRise/pull/103) `ffec1a7b`. Alembic **`010`**. **0 new paid AI calls by Cursor**. **Samsung Internet / owner phone acceptance NOT claimed.**)
 
-**Phase:** Protected family beta. **Create Real Design CRITICAL fix LIVE**. Production FE @ `33230fa0`. Production BE mark @ `186cac84` (on V3 lineage `5fd4b843` + provenance). Alembic **`010`**.
+**Phase:** Protected family beta. **Create Real Design V3.1 LIVE**. Production FE @ `9ba396a3`. Production BE mark @ `ffec1a7b` (on V3 + `186cac84` reasoning lineage). Alembic **`010`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`cf2a31ac`** — Nginx `root` → `/var/www/fashionrise/current`. Sticky App bar. Tap-step StageSheet modals. **Login hotfix:** production builds bake `VITE_API_BASE_URL=/api/v1` (broken `28e7e935` had localhost:8001). |
-| Backend (FastAPI + PostgreSQL) | **`186cac84`** mark (files deployed) — Professional vision passes `reasoning_effort=settings.openai_reasoning_effort`; SketchConfigError → user-safe message + `provider_called=false`; idempotency for running/failed+cost; no cost clamp. Heuristic Basic unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
+| Frontend (`web-ui`) | **`9ba396a3`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/9ba396a3`. Measurement group stability; one-click **Generate AI PDF**; Magic-style progress overlay; `/api/v1` prod assert. |
+| Backend (FastAPI + PostgreSQL) | **`ffec1a7b`** mark (files overlay on V3 lineage) — `POST …/ai/generate-professional` one-tap intent; progress phases; compatibility warnings; PDF V3.1 branding + larger detail flats. Spend gates unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
 | Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
-| Nginx | Root corrected from stale **`129e57dd`** → **`33230fa0`**. `index.html` `Cache-Control: no-cache`. Hashed assets immutable. |
-| Deploy backup | `/var/backups/fashionrise/techpack-crit-fix-deploy-20261026T213807Z` → rollback FE `129e57dd` / prior BE service files (+ env/nginx) |
-| AI spend | Unchanged: `techpack_ai_enabled=true`, ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`, model `gpt-6-luna`. **Cursor did not run paid generate.** |
+| Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
+| Deploy backup | `/var/backups/fashionrise/v31-deploy-20261026T233003Z` (+ prior crit-fix backup) |
+| AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
+
+## V3.1 — what shipped (2026-10-27)
+
+| Item | Detail |
+|---|---|
+| Measurement reset root cause | `MeasurementsSheet` effect depended on `groups` (rebuilt whenever `pieces` identity changed on each keystroke) and reset `groupIndex` to Body |
+| Measurement fix | Track active group by stable id; init only on open / draftKey / initialGroupId; clamp if piece removed |
+| Mobile tests | Vitest keystroke harness: Finished Dress + Preferences + two-piece outfit; focus retained |
+| Generation UX | Single **Generate AI PDF** — no Basic pack / cost-estimate / confirm checkbox in the active workflow |
+| Server intent | One-tap mints confirm token server-side; allowlist, ceilings, concurrent, idempotency preserved |
+| Progress | Named phases on `TechpackAIRun.request.progress`; overlay + `GET …/ai/latest-run` resume (no duplicate paid start) |
+| PDF | Larger detail flats; material REVIEW (silk≠cotton); sleeveless sleeve/construction/inventory flags; `PROPOSED BACK — UNVERIFIED`; footer **Create Real Design V3.1** |
+| Offline PDF / mock AI | BE `test_techpack_v31_one_tap.py` **6 passed**; V3 professional + provenance **13** with disposable `fashionrise_test` |
+| Production smoke | Health/ready OK; OpenAPI exposes generate-professional + latest-run; Alembic `010`; version.json `9ba396a3` |
+
+### Next recommended action (owner — Samsung)
+
+1. Hard-refresh FashionRise (or clear site data once) → confirm App / Create Real Design build **`9ba396a3`**.
+2. Open saved Magic look → Step 3 → Finished Garment → type several values → **must stay on Finished** (no jump to Body).
+3. Step 4 → one tap **Generate AI PDF** → see Magic-style progress → PDF ready → Preview / Download (no second payment).
+4. Review PDF for detail size, material REVIEW, sleeveless construction, proposed back label.
+5. Report results; do not ask Cursor to re-run paid generate unless a real failure appears.
+
+### Rollback (V3.1)
+
+- FE: `ln -sfn /var/www/fashionrise/releases/cf2a31ac /var/www/fashionrise/current && nginx -t && systemctl reload nginx`
+- BE: restore files from `/var/backups/fashionrise/v31-deploy-20261026T233003Z/` into `/opt/fashionrise/src/backend/…` and `systemctl restart fashionrise-api`
+- DB dump retained at that backup path (prefer app rollback; no migration to reverse)
 
 ## CRITICAL fix — root causes (2026-10-26)
 
