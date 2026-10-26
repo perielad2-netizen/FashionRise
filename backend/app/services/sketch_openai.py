@@ -387,23 +387,151 @@ def _normalized_studio_side(input_data: dict[str, Any]) -> str | None:
     return raw.strip().lower()
 
 
+# Bound for SHARED GARMENT SPEC payload text inside the image prompt.
+# Kept tight so COLOR/DESIGN/COVERAGE/STYLE protected contracts always fit.
+_SHARED_GARMENT_SPEC_PROMPT_CHARS = 320
+
+# Ordered whitelist: color/material identity first; diagnostics/notes last.
+# Alphabetical JSON + blind truncation previously dropped main_colors when a
+# long `details` string sorted ahead of it (Issue #42 PM 2026-10-26).
+_SHARED_GARMENT_SPEC_PRIORITY_KEYS: tuple[str, ...] = (
+    "main_colors",
+    "materials",
+    "colors",
+    "garment_category",
+    "silhouette",
+    "hem",
+    "neckline",
+    "notes",
+    "details",
+)
+
+
+def _compact_json_value(value: Any) -> Any:
+    """Shrink nested values for the prompt clause without inventing content."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        out: list[Any] = []
+        for item in value:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    out.append(text)
+            elif isinstance(item, (int, float, bool)) or item is None:
+                out.append(item)
+            else:
+                try:
+                    out.append(json.dumps(item, ensure_ascii=True, separators=(",", ":")))
+                except (TypeError, ValueError):
+                    continue
+        return out
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _clip_prose(text: str, max_chars: int) -> str:
+    """Bound optional notes/details on a word boundary; never emit a partial token mid-word when avoidable."""
+    text = text.strip()
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    clipped = text[:max_chars].rstrip()
+    if " " in clipped:
+        # Prefer a clean word cut when the next char is mid-token.
+        if max_chars < len(text) and not text[max_chars].isspace():
+            clipped = clipped.rsplit(" ", 1)[0].rstrip()
+    return clipped or text[:max_chars].rstrip()
+
+
+def _serialize_shared_garment_spec(spec: dict[str, Any], *, max_chars: int) -> str:
+    """Pack high-priority fields first; never slice mid-field / mid-JSON token."""
+    packed: dict[str, Any] = {}
+    encoded = "{}"
+    for key in _SHARED_GARMENT_SPEC_PRIORITY_KEYS:
+        if key not in spec:
+            continue
+        raw = spec.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, str) and not raw.strip():
+            continue
+        if isinstance(raw, list) and not raw:
+            continue
+        candidate_val = _compact_json_value(raw)
+        if isinstance(candidate_val, str) and not candidate_val:
+            continue
+        if isinstance(candidate_val, list) and not candidate_val:
+            continue
+
+        # Bound low-priority prose so color/material authority keeps headroom.
+        if key in ("notes", "details") and isinstance(candidate_val, str):
+            # Leave room for at least main_colors + materials when present.
+            prose_cap = max(48, max_chars // (4 if key == "details" else 3))
+            candidate_val = _clip_prose(candidate_val, prose_cap)
+
+        trial = dict(packed)
+        trial[key] = candidate_val
+        try:
+            trial_encoded = json.dumps(trial, ensure_ascii=True, separators=(",", ":"))
+        except (TypeError, ValueError):
+            continue
+        if len(trial_encoded) <= max_chars:
+            packed = trial
+            encoded = trial_encoded
+            continue
+
+        # Last chance for optional prose: shrink until it fits, else skip.
+        if key in ("notes", "details") and isinstance(candidate_val, str) and packed:
+            lo, hi = 16, len(candidate_val)
+            best: str | None = None
+            best_packed: dict[str, Any] | None = None
+            while lo <= hi:
+                mid = (lo + hi) // 2
+                trial[key] = _clip_prose(candidate_val, mid)
+                try:
+                    trial_encoded = json.dumps(trial, ensure_ascii=True, separators=(",", ":"))
+                except (TypeError, ValueError):
+                    break
+                if len(trial_encoded) <= max_chars:
+                    best = trial_encoded
+                    best_packed = dict(trial)
+                    lo = mid + 1
+                else:
+                    hi = mid - 1
+            if best is not None and best_packed is not None:
+                encoded = best
+                packed = best_packed
+        # High-priority fields that cannot fit even alone are skipped whole
+        # (never emit truncated/malformed JSON).
+    return encoded if packed else ""
+
+
 def _shared_garment_spec_clause(input_data: dict[str, Any]) -> str:
     spec = input_data.get("shared_garment_spec")
     if spec is None:
         return ""
     if isinstance(spec, str) and spec.strip():
-        text = spec.strip()
+        # Legacy string notes — keep as notes-only compact object.
+        text = _serialize_shared_garment_spec(
+            {"notes": spec.strip()},
+            max_chars=_SHARED_GARMENT_SPEC_PROMPT_CHARS,
+        )
     elif isinstance(spec, dict) and spec:
-        try:
-            text = json.dumps(spec, ensure_ascii=True, sort_keys=True)
-        except (TypeError, ValueError):
-            text = str(spec)
+        text = _serialize_shared_garment_spec(
+            spec,
+            max_chars=_SHARED_GARMENT_SPEC_PROMPT_CHARS,
+        )
     else:
         return ""
-    # Bound tightly so COLOR/DESIGN/COVERAGE/STYLE protected contracts always fit.
+    if not text:
+        return ""
     return (
         "SHARED GARMENT SPEC (front/back consistency — do not contradict): "
-        f"{text[:320]}"
+        f"{text}"
     )
 
 

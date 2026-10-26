@@ -254,6 +254,153 @@ def test_color_fidelity_forbids_invented_accent_colors():
     assert "non-photorealistic" in lower
 
 
+def _realistic_fe_gray_garment_spec() -> dict[str, Any]:
+    """Mirror FE buildSharedGarmentSpec for a gray-only solid dress (long details/notes)."""
+    notes = (
+        "Polished professional fashion concept: keep silhouette/cut and Front/Back coherence; "
+        "ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; "
+        "normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble); "
+        "no traced/cartoon look."
+    )
+    details = (
+        "model=teen_a; front_strokes=12; front_fills=1; back_strokes=10; back_fills=1; "
+        "render=polished_professional_enhancement; sketch_role=strong_guidance_not_pixel_trace; "
+        "color_authority=applied_fills_only; sketch_cleanup=normalize_imperfections; "
+        "fingerprint=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    )
+    return {
+        "notes": notes[:500],
+        "colors": ["#9CA3AF", "#111827"],
+        "main_colors": ["#9CA3AF"],
+        "materials": ["solid fill"],
+        "details": details[:1000],
+        "garment_category": "studio",
+    }
+
+
+def _shared_spec_payload_from_prompt(prompt: str) -> dict[str, Any]:
+    marker = "SHARED GARMENT SPEC (front/back consistency — do not contradict): "
+    assert marker in prompt
+    start = prompt.index(marker) + len(marker)
+    decoder = json.JSONDecoder()
+    obj, _offset = decoder.raw_decode(prompt[start:].lstrip())
+    assert isinstance(obj, dict)
+    return obj
+
+
+def test_shared_garment_spec_prioritizes_main_colors_over_long_details():
+    """Regression: alphabetical JSON[:320] dropped main_colors after lengthy details."""
+    spec = _realistic_fe_gray_garment_spec()
+    # Prove the old failure mode: alphabetical sort places lengthy details before main_colors.
+    naive = json.dumps(spec, ensure_ascii=True, sort_keys=True)
+    assert naive.find('"main_colors"') > sketch_openai._SHARED_GARMENT_SPEC_PROMPT_CHARS
+
+    clause = sketch_openai._shared_garment_spec_clause({"shared_garment_spec": spec})
+    payload = clause.split(": ", 1)[1]
+    assert len(payload) <= sketch_openai._SHARED_GARMENT_SPEC_PROMPT_CHARS
+    obj = json.loads(payload)  # must be complete JSON — never mid-field cut
+    assert obj.get("main_colors") == ["#9CA3AF"]
+    assert obj.get("materials") == ["solid fill"]
+    # Optional diagnostics may be clipped/omitted; color authority must remain.
+    details_text = obj.get("details") or ""
+    assert "fingerprint" not in details_text
+
+
+def test_build_image_prompt_gray_main_colors_authoritative_front_and_back():
+    """E2E: final images.edit brief must carry gray #9CA3AF as effective color authority."""
+    spec = _realistic_fe_gray_garment_spec()
+    structured = {
+        "summary": "Gray dress with uneven strap",
+        "image_prompt": (
+            "gray sheath dress on fashion croquis; left shoulder strap slightly uneven; "
+            "solid gray fill only; dark outline linework"
+        ),
+        "design_identity": {
+            "main_colors": "gray",
+            "silhouette": "sheath dress",
+            "garment_category": "dress",
+            "asymmetry_notes": None,
+        },
+        "refine_ok": ["uneven strap widths", "crooked edges"],
+    }
+    for side in ("front", "back"):
+        prompt = sketch_openai._build_image_prompt(
+            structured,
+            structured["summary"],
+            job=_job(studio_side=side, shared_garment_spec=spec),
+        )
+        assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+        payload = _shared_spec_payload_from_prompt(prompt)
+        assert payload.get("main_colors") == ["#9CA3AF"]
+        assert payload.get("materials") == ["solid fill"]
+        lower = prompt.lower()
+        assert "color fidelity" in lower
+        assert "pink/blue accents on a gray-only dress" in lower
+        assert "uneven strap" in lower
+        assert "normalize sketch glitches" in lower or "sketch glitches" in lower
+        assert "intentional design asymmetry" in lower
+        # Dark outline must not be promoted as fabric authority over gray fill.
+        assert payload["main_colors"] == ["#9CA3AF"]
+        assert "#111827" not in payload.get("main_colors", [])
+
+
+def test_build_image_prompt_keeps_fabric_identity_under_largest_safe_spec():
+    """Largest realistic patterned side payload still fits and keeps textile identity."""
+    notes = (
+        "Polished professional fashion concept: keep silhouette/cut and Front/Back coherence; "
+        "ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; "
+        "normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble); "
+        "no traced/cartoon look. Designer note: evening column with soft drape."
+    )
+    details = (
+        "model=female-atelier; front_strokes=48; front_fills=3; back_strokes=44; back_fills=3; "
+        "render=polished_professional_enhancement; sketch_role=strong_guidance_not_pixel_trace; "
+        "color_authority=applied_fills_only; sketch_cleanup=normalize_imperfections; "
+        "fingerprint=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    )
+    spec = {
+        "notes": notes[:500],
+        "colors": ["#BE185D", "#F9A8D4", "#111827"],
+        "main_colors": ["#BE185D", "#F9A8D4"],
+        "materials": [
+            "Floral satin repeating textile (exact Studio tile reference)",
+            "uploaded fabric repeating textile (exact Studio tile reference)",
+        ],
+        "details": details[:1000],
+        "garment_category": "studio",
+        "silhouette": "column gown",
+        "neckline": "sweetheart",
+        "hem": "floor",
+    }
+    for side in ("front", "back"):
+        prompt = sketch_openai._build_image_prompt(
+            {
+                "summary": "Pink floral column gown",
+                "image_prompt": "pink floral satin column gown, sweetheart neckline",
+                "design_identity": {
+                    "main_colors": "pink",
+                    "fabric_patterns": "floral satin",
+                    "silhouette": "column gown",
+                },
+            },
+            "Pink floral column gown",
+            job=_job(
+                studio_side=side,
+                shared_garment_spec=spec,
+                fabric_swatch_base64="data:image/png;base64,aa",
+            ),
+        )
+        assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+        payload = _shared_spec_payload_from_prompt(prompt)
+        assert payload.get("main_colors") == ["#BE185D", "#F9A8D4"]
+        materials = payload.get("materials") or []
+        assert any("repeating textile" in str(m) for m in materials)
+        lower = prompt.lower()
+        assert "textile reference" in lower
+        assert "design enhancement" in lower
+        assert "color fidelity" in lower
+
+
 def test_design_enhancement_normalizes_sketch_glitches_not_literal_mistakes():
     """Uneven straps/sleeves and accidental asymmetry must be cleaned, not traced."""
     prompt = sketch_openai._build_image_prompt(
