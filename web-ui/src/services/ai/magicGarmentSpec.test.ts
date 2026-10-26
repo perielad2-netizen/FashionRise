@@ -65,8 +65,46 @@ describe('magicGarmentSpec palette priority', () => {
     expect(spec.main_colors).toEqual(expect.arrayContaining(['#FF2D95', '#E6007A']))
     expect(spec.notes).toMatch(/polish concept/i)
     expect(spec.notes).toMatch(/polished professional fashion concept/i)
+    expect(spec.notes).toMatch(/applied fill\/gradient\/fabric colors/i)
+    expect(spec.notes).toMatch(/invent no accent colors/i)
+    expect(spec.notes).toMatch(/uneven straps\/sleeves/i)
+    expect(spec.notes).toMatch(/normalize sketch glitches/i)
+    expect(spec.notes.length).toBeLessThanOrEqual(500)
     expect(spec.details).toMatch(/render=polished_professional_enhancement/)
     expect(spec.details).toMatch(/sketch_role=strong_guidance_not_pixel_trace/)
+    expect(spec.details).toMatch(/color_authority=applied_fills_only/)
+    expect(spec.details).toMatch(/sketch_cleanup=normalize_imperfections/)
+  })
+
+  it('gray-only applied fill keeps main_colors locked to gray (no invented accents in spec)', () => {
+    let doc = createEmptyDraftDocument()
+    doc = bumpDraftDocument(doc, {
+      strokes: [
+        {
+          id: 'outline',
+          tool: 'draw',
+          points: [10, 20, 0.5, 30, 40, 0.5],
+          color: '#1C1C1E',
+          size: 1.75,
+          opacity: 1,
+        },
+      ],
+      fills: [
+        {
+          id: 'gray-fill',
+          contour: [100, 100, 200, 100, 200, 200, 100, 200],
+          style: { kind: 'solid', color: '#9CA3AF' },
+          seedX: 150,
+          seedY: 150,
+        },
+      ],
+    })
+    const { main_colors } = paletteFromDoc(doc)
+    expect(main_colors).toEqual(['#9CA3AF'])
+    expect(main_colors.join(' ')).not.toMatch(/FF|BE185D|0000FF|FF2D95/i)
+    const spec = buildSharedGarmentSpec(doc, 'polish concept')
+    expect(spec.main_colors).toEqual(['#9CA3AF'])
+    expect(spec.notes).toMatch(/invent no accent colors/i)
   })
 
   it('does not treat unused selected brush color as applied garment material', () => {
