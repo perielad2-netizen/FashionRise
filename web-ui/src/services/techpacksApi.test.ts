@@ -23,7 +23,11 @@ vi.mock('@/services/auth/tokenStore', () => ({
 }))
 
 import {
+  confirmTechpackAi,
   createTechpackDraft,
+  generateTechpackAi,
+  getTechpackAiRun,
+  getTechpackAiStatus,
   listTechpackDrafts,
   openOrCreateTechpackForLook,
   updateTechpackDraft,
@@ -70,6 +74,60 @@ describe('techpacksApi', () => {
     expect(apiRequest).toHaveBeenLastCalledWith('/techpacks/d1', {
       method: 'PATCH',
       body: { title: 'Renamed', bump_revision: true },
+    })
+  })
+
+  it('fetches AI status', async () => {
+    apiRequest.mockResolvedValueOnce({ enabled: false, note: 'heuristic only' })
+    const status = await getTechpackAiStatus()
+    expect(status.enabled).toBe(false)
+    expect(apiRequest).toHaveBeenCalledWith('/techpacks/ai/status', {
+      method: 'GET',
+      signal: undefined,
+    })
+  })
+
+  it('confirms and generates AI runs', async () => {
+    apiRequest.mockResolvedValueOnce({
+      draft_id: 'd1',
+      stage: 'generate',
+      confirm_token: 'tok-12345678',
+      estimated_cost_usd_cents: 0,
+      ai_enabled: false,
+      message: 'Heuristic available',
+    })
+    const confirm = await confirmTechpackAi('d1', 'generate')
+    expect(confirm.confirm_token).toBe('tok-12345678')
+    expect(apiRequest).toHaveBeenLastCalledWith('/techpacks/d1/ai/confirm', {
+      method: 'POST',
+      body: { stage: 'generate' },
+    })
+
+    apiRequest.mockResolvedValueOnce({
+      run_id: 'run-1',
+      status: 'completed',
+      cost_usd_cents: 0,
+      mode: 'heuristic',
+    })
+    await generateTechpackAi('d1', {
+      confirm_token: 'tok-12345678',
+      idempotency_key: 'idem-abcdef',
+      mode: 'heuristic',
+    })
+    expect(apiRequest).toHaveBeenLastCalledWith('/techpacks/d1/ai/generate', {
+      method: 'POST',
+      body: {
+        confirm_token: 'tok-12345678',
+        idempotency_key: 'idem-abcdef',
+        mode: 'heuristic',
+      },
+    })
+
+    apiRequest.mockResolvedValueOnce({ id: 'run-1', status: 'completed', cost_usd_cents: 0 })
+    await getTechpackAiRun('run-1')
+    expect(apiRequest).toHaveBeenLastCalledWith('/techpacks/ai/runs/run-1', {
+      method: 'GET',
+      signal: undefined,
     })
   })
 })
