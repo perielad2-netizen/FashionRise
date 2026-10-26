@@ -529,8 +529,107 @@ def _persist_professional_result(
         "vision_model": usage.get("vision_model"),
         "image_model": usage.get("image_model"),
     }
-    spec["warnings"] = collect_measurement_warnings(spec)
+    from app.services.techpack_compatibility import (
+        collect_compatibility_warnings,
+        filter_construction_steps,
+        filter_pattern_inventory,
+        is_sleeveless_analysis,
+    )
+
+    # Post-process construction / inventory against vision analysis.
+    for piece in outfit.get("pieces") or []:
+        if not isinstance(piece, dict):
+            continue
+        illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+        if piece.get("construction_steps"):
+            piece["construction_steps"] = filter_construction_steps(
+                list(piece.get("construction_steps") or []),
+                analysis=analysis,
+            )
+        if piece.get("pattern_pieces"):
+            piece["pattern_pieces"] = filter_pattern_inventory(
+                [p for p in (piece.get("pattern_pieces") or []) if isinstance(p, dict)],
+                analysis=analysis,
+            )
+        elif is_sleeveless_analysis(analysis):
+            from app.services.techpack_flats import pattern_inventory_for_category
+
+            piece["pattern_pieces"] = filter_pattern_inventory(
+                pattern_inventory_for_category(str(piece.get("category") or "other")),
+                analysis=analysis,
+                ai_suggested=analysis.get("pattern_pieces_suggested")
+                if isinstance(analysis.get("pattern_pieces_suggested"), list)
+                else None,
+            )
+
+    spec["warnings"] = collect_measurement_warnings(spec) + collect_compatibility_warnings(spec)
     return spec, artifact_reads
+
+
+def _set_run_progress(db: Session, run: TechpackAIRun, progress: dict[str, Any]) -> None:
+    """Persist named pipeline phase for FE polling (commit so other sessions see it)."""
+    req = dict(run.request) if isinstance(run.request, dict) else {}
+    req["progress"] = progress
+    run.request = req
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
+
+def run_generate_one_tap_professional(
+    db: Session,
+    user: User,
+    draft_id: uuid.UUID,
+    *,
+    idempotency_key: str,
+    propose_back: bool = True,
+    sections: list[str] | None = None,
+) -> dict[str, Any]:
+    """Owner one-click authorization: server-mints intent token then runs Professional generate.
+
+    Spend gates, allowlist, concurrent limits, and idempotency are unchanged.
+    The click is the explicit authorization for one bounded paid operation.
+    """
+    challenge = create_confirm_challenge(
+        db, user, draft_id, stage="generate", mode="professional"
+    )
+    if not challenge.get("ai_enabled"):
+        raise ForbiddenError(
+            challenge.get("message")
+            or "AI Professional is not available for this account"
+        )
+    # Auto-propose back when the draft has no authenticated back Magic image.
+    draft = _owned_draft(db, user, draft_id)
+    effective_propose = bool(propose_back) if draft.back_job_id is None else False
+    return run_generate(
+        db,
+        user,
+        draft_id,
+        confirm_token=str(challenge["confirm_token"]),
+        idempotency_key=idempotency_key,
+        mode="professional",
+        sections=sections,
+        propose_back=effective_propose,
+        authorization="user_click_one_tap",
+    )
+
+
+def latest_run_for_draft(
+    db: Session,
+    user: User,
+    draft_id: uuid.UUID,
+) -> dict[str, Any] | None:
+    """Resume helper — return newest run for this draft (running/completed/failed)."""
+    draft = _owned_draft(db, user, draft_id)
+    row = db.scalars(
+        select(TechpackAIRun)
+        .where(TechpackAIRun.user_id == user.id, TechpackAIRun.draft_id == draft.id)
+        .order_by(TechpackAIRun.created_at.desc())
+    ).first()
+    if row is None:
+        return None
+    return get_run(db, user, row.id)
 
 
 def run_generate(
@@ -543,6 +642,7 @@ def run_generate(
     mode: str = "heuristic",
     sections: list[str] | None = None,
     propose_back: bool = False,
+    authorization: str | None = None,
 ) -> dict[str, Any]:
     draft = _owned_draft(db, user, draft_id)
     if not confirm_token or len(confirm_token) < 8:
@@ -640,11 +740,23 @@ def run_generate(
         status="running",
         confirm_token=confirm_token,
         idempotency_key=idempotency_key,
-        request={"mode": mode, "sections": sections or ["all"], "propose_back": propose_back},
+        request={
+            "mode": mode,
+            "sections": sections or ["all"],
+            "propose_back": propose_back,
+            "authorization": authorization or "confirm_token",
+            "progress": {
+                "phase": "preparing",
+                "message": "Preparing your design",
+                "pieces_done": 0,
+                "pieces_total": max(1, len(pieces)),
+            },
+        },
     )
     if existing is None:
         db.add(run)
-        db.flush()
+        db.commit()
+        db.refresh(run)
 
     try:
         artifacts: list[dict[str, Any]] = []
@@ -663,6 +775,13 @@ def run_generate(
             # Force mock when settings disable paid but tests inject override — production never auto-mocks.
             if _PROVIDER_OVERRIDE is None and not (get_settings().openai_api_key or "").strip():
                 raise ForbiddenError("OpenAI API key missing for professional AI")
+
+            def _on_progress(progress: dict[str, Any]) -> None:
+                try:
+                    _set_run_progress(db, run, progress)
+                except Exception:  # noqa: BLE001
+                    db.rollback()
+
             pipeline = run_professional_pipeline(
                 provider=provider,
                 pieces=pieces or [{"id": "piece-1", "category": "other", "label": "Garment"}],
@@ -671,6 +790,17 @@ def run_generate(
                 look_notes=str(spec.get("look_notes") or ""),
                 propose_back=bool(propose_back),
                 max_images=int(get_settings().techpack_ai_max_images_per_run or 6),
+                on_progress=_on_progress,
+            )
+            _set_run_progress(
+                db,
+                run,
+                {
+                    "phase": "assembling",
+                    "message": "Assembling your PDF",
+                    "pieces_done": max(1, len(pieces)),
+                    "pieces_total": max(1, len(pieces)),
+                },
             )
             pipeline["usage"]["estimated_cost_usd_cents"] = estimate
             enriched, artifacts = _persist_professional_result(
@@ -706,6 +836,15 @@ def run_generate(
         run.status = "completed"
         run.model = model
         run.cost_usd_cents = cost
+        ready_progress = {
+            "phase": "ready",
+            "message": "Your AI Technical Pack is ready",
+            "pieces_done": max(1, len(pieces)),
+            "pieces_total": max(1, len(pieces)),
+        }
+        req = dict(run.request) if isinstance(run.request, dict) else {}
+        req["progress"] = ready_progress
+        run.request = req
         run.result = {
             "piece_count": enriched.get("outfit", {}).get("piece_count"),
             "warnings": enriched.get("warnings") or [],
@@ -715,6 +854,7 @@ def run_generate(
             "estimated_cost_usd_cents": estimate,
             "actual_cost_usd_cents": cost,
             "artifact_ids": [a["id"] for a in artifacts],
+            "progress": ready_progress,
         }
         run.input_hash = hashlib.sha256(
             json.dumps({"mode": mode, "propose_back": propose_back}, sort_keys=True).encode()
@@ -808,6 +948,9 @@ def get_run(db: Session, user: User, run_id: uuid.UUID) -> dict[str, Any]:
     if row is None or row.user_id != user.id:
         raise NotFoundError("AI run not found")
     arts = list(db.scalars(select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == row.id)).all())
+    req = row.request if isinstance(row.request, dict) else {}
+    result = row.result if isinstance(row.result, dict) else {}
+    progress = req.get("progress") or result.get("progress")
     return {
         "id": str(row.id),
         "draft_id": str(row.draft_id),
@@ -818,6 +961,7 @@ def get_run(db: Session, user: User, run_id: uuid.UUID) -> dict[str, Any]:
         "result": row.result,
         "error_message": row.error_message,
         "created_at": row.created_at.isoformat() if row.created_at else None,
+        "progress": progress,
         "artifacts": [_artifact_read(a) for a in arts],
     }
 

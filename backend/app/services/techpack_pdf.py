@@ -28,6 +28,11 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.services.techpack_compatibility import (
+    filter_construction_steps,
+    filter_pattern_inventory,
+    material_contradiction,
+)
 from app.services.techpack_flats import (
     default_bom,
     default_construction_steps,
@@ -254,7 +259,15 @@ class _SizedImage(Flowable):
         self.drawHeight = height
 
     def wrap(self, availWidth: float, availHeight: float) -> tuple[float, float]:  # noqa: N803
-        _ = (availWidth, availHeight)
+        # Fit within available width while preserving intended aspect.
+        if availWidth and self.drawWidth > availWidth:
+            scale = availWidth / self.drawWidth
+            self.drawWidth = availWidth
+            self.drawHeight = self.drawHeight * scale
+        if availHeight and self.drawHeight > availHeight:
+            scale = availHeight / self.drawHeight
+            self.drawHeight = availHeight
+            self.drawWidth = self.drawWidth * scale
         return self.drawWidth, self.drawHeight
 
     def draw(self) -> None:
@@ -510,11 +523,13 @@ def _piece_sections(
     closures = piece.get("closures") if isinstance(piece.get("closures"), dict) else {}
     fit = piece.get("fit") if isinstance(piece.get("fit"), dict) else {}
     story.append(Paragraph("Materials & construction identity", styles["h3"]))
+    shell_name = str(shell.get("name") or shell.get("suggestion") or "—")
+    composition = str(shell.get("composition") or "Unknown / not confirmed")
     story.append(
         _kv_table(
             [
-                ("Shell fabric", str(shell.get("name") or shell.get("suggestion") or "—")),
-                ("Composition", str(shell.get("composition") or "Unknown / not confirmed")),
+                ("Shell fabric", shell_name),
+                ("Composition", composition),
                 ("Lining", str(lining.get("name") or "—")),
                 ("Closure", str(closures.get("type") or closures.get("suggestion") or "—")),
                 ("Silhouette", str(fit.get("silhouette") or fit.get("suggestion") or "—")),
@@ -524,6 +539,9 @@ def _piece_sections(
             styles,
         )
     )
+    contrad = material_contradiction(shell_name, composition)
+    if contrad:
+        story.append(Paragraph(f"<b>REVIEW:</b> {contrad}", styles["warn"]))
 
     story.append(Paragraph("Technical flat drawings", styles["h3"]))
     illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
@@ -566,7 +584,7 @@ def _piece_sections(
                 )
             )
         front_img = (
-            _look_image(front_art, 82 * mm, 105 * mm, styles)
+            _look_image(front_art, 86 * mm, 120 * mm, styles)
             if front_art
             else flat_for_category(cat, back=False)
         )
@@ -576,7 +594,7 @@ def _piece_sections(
                 if arts.get("flat_back_proposed") and not arts.get("flat_back")
                 else "BACK — AI FLAT"
             )
-            back_img = _look_image(back_art, 82 * mm, 105 * mm, styles)
+            back_img = _look_image(back_art, 86 * mm, 120 * mm, styles)
         else:
             back_label = "BACK — category schematic (no AI back)"
             back_img = flat_for_category(cat, back=True)
@@ -588,13 +606,14 @@ def _piece_sections(
                 ],
                 [front_img, back_img],
             ],
-            colWidths=[90 * mm, 90 * mm],
+            colWidths=[88 * mm, 88 * mm],
         )
         flats.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
         story.append(flats)
         if detail_art:
             story.append(Paragraph("Garment detail illustrations", styles["h3"]))
-            story.append(_look_image(detail_art, 160 * mm, 95 * mm, styles))
+            # Use nearly full content width so detail sheets are legible (not tiny top-left).
+            story.append(_look_image(detail_art, 170 * mm, 130 * mm, styles))
     else:
         story.append(
             Paragraph(
@@ -680,9 +699,24 @@ def _piece_sections(
             styles["warn"],
         )
     )
+    analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
     patterns = piece.get("pattern_pieces") if isinstance(piece.get("pattern_pieces"), list) else []
     if not patterns:
         patterns = pattern_inventory_for_category(cat)
+    patterns = filter_pattern_inventory(
+        [p for p in patterns if isinstance(p, dict)],
+        analysis=analysis,
+        ai_suggested=analysis.get("pattern_pieces_suggested")
+        if isinstance(analysis.get("pattern_pieces_suggested"), list)
+        else None,
+    )
+    story.append(
+        Paragraph(
+            "Approved template pieces vs AI-proposed additions are labeled in notes. "
+            "Uncertain cut quantities stay blank — never invented.",
+            styles["muted"],
+        )
+    )
     pat_data = [
         [
             Paragraph("<b>ID</b>", styles["small"]),
@@ -690,23 +724,30 @@ def _piece_sections(
             Paragraph("<b>Cut</b>", styles["small"]),
             Paragraph("<b>Fabric</b>", styles["small"]),
             Paragraph("<b>Grain / fold</b>", styles["small"]),
-            Paragraph("<b>SA</b>", styles["small"]),
+            Paragraph("<b>Review</b>", styles["small"]),
         ]
     ]
     for row in patterns[:30]:
         if not isinstance(row, dict):
             continue
+        cut = row.get("cut_qty")
+        cut_txt = "—" if cut is None else str(cut)
+        review = str(row.get("review_state") or row.get("source") or "—")
+        notes = str(row.get("notes") or "")
+        name_txt = str(row.get("name") or "—")
+        if notes:
+            name_txt = f"{name_txt} — {notes[:80]}"
         pat_data.append(
             [
                 Paragraph(str(row.get("id") or "—"), styles["body"]),
-                Paragraph(str(row.get("name") or "—"), styles["body"]),
-                Paragraph(str(row.get("cut_qty") or "—"), styles["body"]),
+                Paragraph(name_txt, styles["body"]),
+                Paragraph(cut_txt, styles["body"]),
                 Paragraph(str(row.get("fabric") or "shell"), styles["muted"]),
                 Paragraph(
                     f"{row.get('grainline') or 'straight'} / {row.get('fold') or 'none'}",
                     styles["muted"],
                 ),
-                Paragraph(str(row.get("seam_allowance_cm") or "1.0"), styles["muted"]),
+                Paragraph(review, styles["muted"]),
             ]
         )
     pat_table = Table(pat_data, colWidths=[18 * mm, 40 * mm, 14 * mm, 22 * mm, 50 * mm, 16 * mm])
@@ -737,12 +778,16 @@ def _piece_sections(
     steps = piece.get("construction_steps") if isinstance(piece.get("construction_steps"), list) else []
     if not steps:
         steps = default_construction_steps(cat)
-    for row in steps[:40]:
-        if not isinstance(row, dict):
-            continue
-        step = row.get("step", "")
-        instruction = str(row.get("instruction") or "")
-        src = _fmt_source(row)
+    steps = filter_construction_steps(list(steps), analysis=analysis)
+    for idx, row in enumerate(steps[:40], start=1):
+        if isinstance(row, dict):
+            step = row.get("step", idx)
+            instruction = str(row.get("instruction") or "")
+            src = _fmt_source(row)
+        else:
+            step = idx
+            instruction = str(row)
+            src = "validated"
         story.append(
             Paragraph(
                 f"<b>{step}.</b> {instruction} <font color='#5a6578'>({src})</font>",
@@ -1107,7 +1152,7 @@ def build_techpack_pdf(
         )
         canvas.setFillColor(MUTED)
         canvas.setFont("Helvetica", 8)
-        canvas.drawString(MARGIN, 10 * mm, "FashionRise Create Real Design V2")
+        canvas.drawString(MARGIN, 10 * mm, "FashionRise Create Real Design V3.1")
         canvas.drawRightString(
             PAGE_W - MARGIN,
             10 * mm,

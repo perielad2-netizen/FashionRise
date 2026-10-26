@@ -13,7 +13,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from app.core.config import get_settings
 from app.services.sketch_openai import (
@@ -424,6 +424,9 @@ def default_provider() -> ProfessionalAIProvider:
     return OpenAIProfessionalProvider()
 
 
+ProgressCallback = Callable[[dict[str, Any]], None]
+
+
 def run_professional_pipeline(
     *,
     provider: ProfessionalAIProvider,
@@ -433,10 +436,12 @@ def run_professional_pipeline(
     look_notes: str,
     propose_back: bool,
     max_images: int,
+    on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Analyze source Magic image and produce per-piece analysis + illustration bytes.
 
     Returns structured result with `piece_results` and aggregated `usage`.
+    `on_progress` receives named phase dicts (never fake percentages).
     """
     if front_image is None and back_image is None:
         raise ValueError("Professional AI requires at least one Magic look image")
@@ -446,13 +451,40 @@ def run_professional_pipeline(
     piece_results: list[dict[str, Any]] = []
     images_used = 0
     failed: list[str] = []
+    work_pieces = [p for p in pieces if isinstance(p, dict)]
+    total_pieces = max(1, len(work_pieces))
 
-    for piece in pieces:
-        if not isinstance(piece, dict):
-            continue
+    def _progress(phase: str, *, piece_id: str | None = None, detail: str | None = None) -> None:
+        if on_progress is None:
+            return
+        on_progress(
+            {
+                "phase": phase,
+                "piece_id": piece_id,
+                "detail": detail,
+                "pieces_done": len(piece_results),
+                "pieces_total": total_pieces,
+                "message": {
+                    "preparing": "Preparing your design",
+                    "analyzing": "Analyzing the garment",
+                    "flat_front": "Creating technical illustrations",
+                    "flat_back": "Creating technical illustrations",
+                    "flat_back_proposed": "Creating technical illustrations",
+                    "detail_callouts": "Creating technical illustrations",
+                    "pattern_sheet": "Preparing pattern-development drawings",
+                    "assembling": "Assembling your PDF",
+                    "ready": "Your AI Technical Pack is ready",
+                }.get(phase, "Preparing your design"),
+            }
+        )
+
+    _progress("preparing")
+
+    for piece in work_pieces:
         pid = str(piece.get("id") or uuid.uuid4().hex[:8])
         # Prefer front Magic; fall back to back.
         src_bytes, src_mime = primary
+        _progress("analyzing", piece_id=pid)
         analysis, u = provider.analyze_garment(
             image_bytes=src_bytes,
             mime=src_mime,
@@ -470,6 +502,7 @@ def run_professional_pipeline(
             if images_used >= max_images:
                 failed.append(f"{pid}:{kind}:max_images")
                 return
+            _progress(kind, piece_id=pid)
             try:
                 raw, uu = gen()
                 images_used += 1

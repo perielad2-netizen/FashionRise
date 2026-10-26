@@ -79,3 +79,11 @@ class TechpackAiGenerateRequest(BaseModel):
     mode: Literal["heuristic", "ai", "analyze", "professional"] = "heuristic"
     sections: list[str] | None = None
     propose_back: bool = False
+
+
+class TechpackAiOneTapRequest(BaseModel):
+    """One-click Professional authorization — server mints the spend-gated intent."""
+
+    idempotency_key: str = Field(min_length=8, max_length=128)
+    propose_back: bool = True
+    sections: list[str] | None = None

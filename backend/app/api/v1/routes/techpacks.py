@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.schemas.techpack import (
     TechpackAiConfirmRequest,
     TechpackAiGenerateRequest,
+    TechpackAiOneTapRequest,
     TechpackCreate,
     TechpackDraftRead,
     TechpackExportRead,
@@ -159,6 +160,35 @@ def techpack_ai_generate(
         sections=data.sections,
         propose_back=data.propose_back,
     )
+
+
+@router.post("/{draft_id}/ai/generate-professional")
+def techpack_ai_generate_professional_one_tap(
+    draft_id: uuid.UUID,
+    data: TechpackAiOneTapRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, Any]:
+    """One-tap AI Professional — user click authorizes one bounded paid run."""
+    return techpack_ai.run_generate_one_tap_professional(
+        db,
+        user,
+        draft_id,
+        idempotency_key=data.idempotency_key,
+        propose_back=data.propose_back,
+        sections=data.sections,
+    )
+
+
+@router.get("/{draft_id}/ai/latest-run")
+def techpack_ai_latest_run(
+    draft_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, Any]:
+    """Resume helper for progress overlay after reload / tab switch."""
+    row = techpack_ai.latest_run_for_draft(db, user, draft_id)
+    return row or {"run": None, "status": "none"}
 
 
 @router.post("/{draft_id}/ai-draft", status_code=status.HTTP_403_FORBIDDEN)
