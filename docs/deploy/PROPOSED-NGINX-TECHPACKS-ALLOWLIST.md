@@ -1,6 +1,6 @@
 # Proposed Nginx allowlist — Create Real Design (techpacks)
 
-**Status:** candidate for production FashionRise — apply with BE deploy for Issue #83.
+**Status:** applied on production FashionRise with Create Real Design deploy (2026-10-26) — keep in sync with live `fashionrise.app`.
 
 ## Intent
 
