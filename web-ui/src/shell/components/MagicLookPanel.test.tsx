@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
 
 describe('MagicLookPanel', () => {
-  it('shows the full look image with contain sizing and keeps actions available', () => {
+  it('shows the full look image with contain sizing and keeps final look download', () => {
+    const onDownload = vi.fn()
     render(
       <MagicLookPanel
         open
@@ -21,7 +22,7 @@ describe('MagicLookPanel', () => {
         canRecover={false}
         onClose={() => undefined}
         onCancel={() => undefined}
-        onDownload={() => undefined}
+        onDownload={onDownload}
         onRecover={() => undefined}
         onBackToSketch={() => undefined}
       />,
@@ -36,6 +37,9 @@ describe('MagicLookPanel', () => {
     expect(screen.getByRole('button', { name: 'Back to sketch' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close Magic' })).toBeTruthy()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Download look' }))
+    expect(onDownload).toHaveBeenCalledTimes(1)
+
     fireEvent.click(screen.getByRole('button', { name: 'Show look notes' }))
     expect(screen.getByText('A couture look')).toBeTruthy()
     expect(screen.getByText('Hat')).toBeTruthy()
@@ -44,7 +48,9 @@ describe('MagicLookPanel', () => {
     expect(screen.getByAltText('Original sketch')).toBeTruthy()
   })
 
-  it('shows dual front/back panes with retry when dual state is active', () => {
+  it('keeps dual Front/Back Magic look downloads', () => {
+    const onDownloadSide = vi.fn()
+    const onViewSide = vi.fn()
     render(
       <MagicLookPanel
         open
@@ -57,7 +63,7 @@ describe('MagicLookPanel', () => {
         dual={{
           operationId: 'op-1',
           viewSide: 'front',
-          onViewSide: () => undefined,
+          onViewSide,
           front: {
             phase: 'ready',
             result: {
@@ -73,21 +79,21 @@ describe('MagicLookPanel', () => {
             canRetry: false,
           },
           back: {
-            phase: 'failed',
+            phase: 'ready',
             result: {
               jobId: 'jb',
-              status: 'failed',
-              summary: 'Back failed',
+              status: 'completed',
+              summary: 'Back look',
               bullets: [],
-              hasImage: false,
+              hasImage: true,
             },
-            lookObjectUrl: null,
+            lookObjectUrl: 'blob:back',
             sketchObjectUrl: 'blob:sk-back',
-            error: 'Back failed',
-            canRetry: true,
+            error: null,
+            canRetry: false,
           },
           onRetrySide: () => undefined,
-          onDownloadSide: () => undefined,
+          onDownloadSide,
         }}
         onClose={() => undefined}
         onCancel={() => undefined}
@@ -97,7 +103,10 @@ describe('MagicLookPanel', () => {
       />,
     )
     expect(screen.getByAltText('Magic fashion look (front)')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: 'Retry back' }).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Download front' }))
+    expect(onDownloadSide).toHaveBeenCalledWith('front')
+    fireEvent.click(screen.getByRole('tab', { name: /Back/i }))
+    expect(onViewSide).toHaveBeenCalledWith('back')
   })
 
   it('does not render when closed', () => {

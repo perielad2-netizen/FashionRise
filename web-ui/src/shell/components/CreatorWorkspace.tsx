@@ -338,13 +338,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           saveError={editor.saveError}
           onRetrySave={editor.retrySave}
           onSaveDesign={editor.beginSaveDesign}
-          onExportPng={() => void editor.exportPng()}
-          onExportFront={() => void editor.exportSidePng('front')}
-          onExportBack={() => void editor.exportSidePng('back')}
-          onExportSheet={() => void editor.exportSidePng('sheet')}
-          frontBackEnabled={editor.frontBackEnabled}
-          hasBackInk={editor.hasBackInk}
-          exporting={editor.exporting}
           onOpenLibrary={onOpenLibrary}
         />
       ) : null}
@@ -550,7 +543,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 onOpenBrush={() => setDock(dock === 'brush' ? null : 'brush')}
                 onOpenModels={toggleModels}
                 onSave={editor.beginSaveDesign}
-                onExport={() => void editor.exportPng()}
                 onExit={exitImmersive}
                 saveLabel={editor.saveStatusLabel || 'Save'}
               />

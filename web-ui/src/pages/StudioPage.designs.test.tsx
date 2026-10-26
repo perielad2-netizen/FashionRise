@@ -288,45 +288,21 @@ describe('Save as design', () => {
   })
 })
 
-describe('Export visible side', () => {
-  it('exports the authoritative document and downloads a PNG', async () => {
+describe('Studio More menu sketch export removal', () => {
+  it('keeps Save / My Designs / Clear / Save now and omits raw sketch export actions', async () => {
     cleanRestore(workingDoc({ dimmed: true }))
-    const blob = new Blob(['png'], { type: 'image/png' })
-    mocks.exportSketchPng.mockResolvedValue({ blob, referenceIncluded: true })
     renderAt('/studio')
     await ready()
     fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export visible side' }))
-    })
-    expect(mocks.exportSketchPng).toHaveBeenCalledWith({
-      strokes: [STROKE],
-      fills: [],
-      // Legacy model id must keep original croquis geometry.
-      referenceUrl: '/models/female_model.png',
-      referenceOpacity: 0.4,
-    })
-    expect(mocks.downloadBlob).toHaveBeenCalledWith(blob, expect.stringMatching(/^fashionrise-sketch-\d{4}-\d{2}-\d{2}-\d{4}\.png$/))
-    expect(screen.getByRole('status', { name: /PNG exported/ })).toBeInTheDocument()
-  })
-
-  it('reports a missing reference and failures honestly', async () => {
-    mocks.exportSketchPng
-      .mockResolvedValueOnce({ blob: new Blob(['x'], { type: 'image/png' }), referenceIncluded: false })
-      .mockRejectedValueOnce(new Error('Canvas 2D unavailable'))
-    renderAt('/studio')
-    await ready()
-    fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export visible side' }))
-    })
-    expect(screen.getByRole('status', { name: /without the reference image/ })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export visible side' }))
-    })
-    expect(screen.getByRole('status', { name: /PNG export failed/ })).toBeInTheDocument()
-    expect(mocks.downloadBlob).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'My Designs' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Save now' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Export visible side/i })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /^Export front$/i })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /^Export back$/i })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /Export front \+ back sheet/i })).toBeNull()
+    expect(mocks.exportSketchPng).not.toHaveBeenCalled()
   })
 })
 
