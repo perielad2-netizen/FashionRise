@@ -696,3 +696,111 @@
   font-weight: 700;
   letter-spacing: 0.04em;
 }
+
+.mobileMeasureCard {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  background: rgba(244, 114, 182, 0.08);
+  display: grid;
+  gap: 12px;
+}
+
+.mobileMeasureCard p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fr-muted);
+}
+
+.mobileMeasureSummary {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--fr-text);
+}
+
+.provenanceBanner {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.provenanceBanner strong {
+  font-size: 13px;
+}
+
+.provenanceBasic {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+}
+
+.provenanceBasic strong {
+  color: var(--fr-text);
+}
+
+.provenanceProfessional {
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  background: rgba(16, 185, 129, 0.12);
+  color: #a7f3d0;
+}
+
+.provenanceProfessional strong {
+  color: #ecfdf5;
+}
+
+.provenanceMeta {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.workflowSteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.workflowSteps li {
+  counter-increment: step;
+  font-size: 11px;
+  color: var(--fr-muted);
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.workflowSteps li::before {
+  content: counter(step) '. ';
+  color: #f9a8d4;
+  font-weight: 700;
+}
+
+.exportNote {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fr-muted);
+}
+
+.previewProvenance {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--fr-muted);
+}
+
+@media (max-width: 720px) {
+  .previewPane {
+    /* Keep preview after the form; avoid competing with measurement sheet */
+    order: 2;
+  }
+}

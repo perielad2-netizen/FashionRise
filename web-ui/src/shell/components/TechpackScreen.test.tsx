@@ -138,7 +138,12 @@ describe('TechpackScreen', () => {
         spec: {
           ...currentDraft.spec,
           workflow_stage: 'generate',
-          ai: { last_run_id: 'run-1', paid_sections: [] },
+          ai: {
+            last_run_id: 'run-1',
+            last_mode: 'heuristic',
+            paid_sections: [],
+            actual_cost_usd_cents: 0,
+          },
         },
       }
       return {
@@ -218,7 +223,8 @@ describe('TechpackScreen', () => {
     expect(
       screen.getByText(/owner allowlist \/ spend ceiling not configured/i),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Basic.*free lightweight schematics/i)).toBeInTheDocument()
+    expect(screen.getByText(/Basic PDF \/ \$0/i)).toBeInTheDocument()
+    expect(screen.getByText(/Preview and Download never run paid AI/i)).toBeInTheDocument()
   })
 
   it('confirms Basic heuristic generate then previews PDF on generate stage', async () => {
@@ -249,14 +255,42 @@ describe('TechpackScreen', () => {
       )
     })
 
-    expect(await screen.findByRole('button', { name: /Preview PDF/i })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Preview PDF/i }))
+    expect(
+      await screen.findByRole('button', { name: /Preview Basic PDF \(\$0 · No AI\)/i }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText(/Basic \/ No AI/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Preview and Download never run paid AI/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Preview Basic PDF \(\$0 · No AI\)/i }))
     await waitFor(() => {
       expect(updateTechpackDraft).toHaveBeenCalled()
       expect(exportTechpackPdf).toHaveBeenCalledWith('draft-1')
       expect(fetchTechpackPdfBlob).toHaveBeenCalledWith('exp-1')
     })
     expect(await screen.findByTitle('Tech pack PDF preview')).toBeInTheDocument()
+  })
+
+  it('opens mobile measurements sheet at Android-sized viewports', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: String(query).includes('max-width: 720px'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    await screen.findByText('Create Real Design')
+    const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
+    fireEvent.click(within(stepper).getByRole('button', { name: /Measurements/i }))
+    expect(await screen.findByRole('button', { name: /Edit Measurements/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Edit Measurements/i }))
+    expect(await screen.findByRole('dialog', { name: /Body measurements/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Save & Done/i })).toBeInTheDocument()
   })
 
   it('runs Professional confirm + generate with cost line and artifact thumbs when available', async () => {

@@ -112,6 +112,11 @@ export type TechpackSpecV2 = {
     last_run_id?: string | null
     last_mode?: string
     paid_sections?: string[]
+    estimated_cost_usd_cents?: number | null
+    actual_cost_usd_cents?: number | null
+    vision_model?: string | null
+    image_model?: string | null
+    analysis_summary?: string | null
   }
   [key: string]: unknown
 }
