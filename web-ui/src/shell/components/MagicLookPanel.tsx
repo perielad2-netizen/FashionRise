@@ -40,6 +40,7 @@ type Props = {
   onDownload: () => void
   onRecover: () => void
   onBackToSketch: () => void
+  onViewInMyLooks?: () => void
 }
 
 function sideStatusLabel(side: MagicSidePanelState): string {
@@ -63,6 +64,7 @@ export function MagicLookPanel({
   onDownload,
   onRecover,
   onBackToSketch,
+  onViewInMyLooks,
 }: Props) {
   const [compareSketch, setCompareSketch] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -81,6 +83,12 @@ export function MagicLookPanel({
   const showLook = phase === 'ready' && activeLookUrl && !comparing
   const showSketchCompare = comparing && Boolean(activeSketchUrl)
   const hasDetails = Boolean(activeResult?.summary || activeResult?.bullets?.length)
+  const canViewInLooks =
+    phase === 'ready' &&
+    Boolean(onViewInMyLooks) &&
+    (dualActive
+      ? Boolean(dual?.front.lookObjectUrl || dual?.back.lookObjectUrl)
+      : Boolean(lookObjectUrl))
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Your Look">
@@ -259,6 +267,11 @@ export function MagicLookPanel({
               >
                 Download {activeSide}
               </button>
+              {canViewInLooks ? (
+                <button type="button" onClick={onViewInMyLooks}>
+                  View in My Looks
+                </button>
+              ) : null}
               {dual.front.canRetry ? (
                 <button type="button" onClick={() => dual.onRetrySide('front')}>
                   Retry front
@@ -283,6 +296,11 @@ export function MagicLookPanel({
               <button type="button" className={styles.primary} onClick={onDownload}>
                 Download look
               </button>
+              {canViewInLooks ? (
+                <button type="button" onClick={onViewInMyLooks}>
+                  View in My Looks
+                </button>
+              ) : null}
             </>
           ) : null}
           {phase === 'failed' && canRecover ? (

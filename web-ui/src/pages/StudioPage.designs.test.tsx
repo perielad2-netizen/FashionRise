@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   fetchSavedDesign: vi.fn(),
   deleteSavedDesign: vi.fn(),
   listMyDesigns: vi.fn(),
+  listLooks: vi.fn(),
   exportSketchPng: vi.fn(),
   downloadBlob: vi.fn(),
 }))
@@ -86,6 +87,11 @@ vi.mock('@/services/savedDesignsApi', () => ({
 vi.mock('@/services/designsApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/designsApi')>()
   return { ...actual, listMyDesigns: mocks.listMyDesigns }
+})
+
+vi.mock('@/services/looksApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/looksApi')>()
+  return { ...actual, listLooks: mocks.listLooks, updateLook: vi.fn() }
 })
 
 vi.mock('@/lib/exportCanvas', async (importOriginal) => {
@@ -205,6 +211,7 @@ beforeEach(() => {
   mocks.listSavedDesigns.mockResolvedValue({ designs: [RECORD], damaged: [] })
   mocks.fetchSavedDesign.mockResolvedValue({ ok: true, record: RECORD })
   mocks.listMyDesigns.mockResolvedValue([])
+  mocks.listLooks.mockResolvedValue({ items: [], total: 0, limit: 24, offset: 0 })
 })
 
 afterEach(() => {
@@ -316,11 +323,24 @@ describe('My Designs navigation and library', () => {
     fireEvent.click(within(nav).getByRole('button', { name: 'My Designs' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'My Designs' })).toBeInTheDocument()
     expect(within(nav).getByRole('button', { name: 'My Designs' })).toHaveAttribute('aria-current', 'page')
-    for (const label of ['Home', 'Design Book', 'Discover', 'My Looks']) {
+    for (const label of ['Home', 'Design Book', 'Discover']) {
       expect(within(nav).getByRole('button', { name: label })).toBeDisabled()
     }
+    expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
     fireEvent.click(within(nav).getByRole('button', { name: 'Create' }))
     expect(screen.getByRole('heading', { name: 'New Design' })).toBeInTheDocument()
+  })
+
+  it('opens My Looks from the sidebar without touching Studio drafts', async () => {
+    renderAt('/studio')
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Mock stroke' }))
+    const nav = screen.getByRole('navigation', { name: 'FashionRise' })
+    fireEvent.click(within(nav).getByRole('button', { name: 'My Looks' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'My Looks' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'My Looks' })).toHaveAttribute('aria-current', 'page')
+    fireEvent.click(within(nav).getByRole('button', { name: 'Create' }))
+    expect(strokeIds()).toBe('restored-1,new-1')
   })
 
   it('keeps the same editor mounted across screens', async () => {

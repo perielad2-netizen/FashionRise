@@ -31,6 +31,7 @@ type Dock = 'models' | 'materials' | 'settings' | 'brush' | null
 type Props = {
   editor: StudioEditor
   onOpenLibrary?: () => void
+  onOpenLooks?: (lookId?: string) => void
 }
 
 const FOCUSABLE =
@@ -56,7 +57,7 @@ function fullscreenElement(): Element | null {
   return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null
 }
 
-export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
+export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) {
   const [dock, setDock] = useState<Dock>(null)
   const [immersive, setImmersive] = useState(false)
   const [nativeFullscreen, setNativeFullscreen] = useState(false)
@@ -372,6 +373,18 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         onDownload={editor.downloadMagicLook}
         onRecover={editor.recoverLastMagic}
         onBackToSketch={editor.backToSketchFromMagic}
+        onViewInMyLooks={
+          onOpenLooks
+            ? () => {
+                const lookId =
+                  editor.magicDualActive && editor.magicOperationId
+                    ? editor.magicOperationId
+                    : editor.magicResult?.jobId
+                editor.closeMagicPanel()
+                onOpenLooks(lookId)
+              }
+            : undefined
+        }
       />
 
       <div

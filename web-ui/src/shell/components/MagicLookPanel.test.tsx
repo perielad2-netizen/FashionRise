@@ -34,6 +34,7 @@ describe('MagicLookPanel', () => {
 
     expect(screen.getByRole('button', { name: 'Compare sketch' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Download look' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'View in My Looks' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Back to sketch' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close Magic' })).toBeTruthy()
 
@@ -107,6 +108,35 @@ describe('MagicLookPanel', () => {
     expect(onDownloadSide).toHaveBeenCalledWith('front')
     fireEvent.click(screen.getByRole('tab', { name: /Back/i }))
     expect(onViewSide).toHaveBeenCalledWith('back')
+  })
+
+  it('offers View in My Looks when ready and a handler is provided', () => {
+    const onViewInMyLooks = vi.fn()
+    render(
+      <MagicLookPanel
+        open
+        phase="ready"
+        result={{
+          jobId: 'job-1',
+          status: 'completed',
+          summary: 'A couture look',
+          bullets: [],
+          hasImage: true,
+        }}
+        lookObjectUrl="blob:look"
+        sketchObjectUrl="blob:sketch"
+        error={null}
+        canRecover={false}
+        onClose={() => undefined}
+        onCancel={() => undefined}
+        onDownload={() => undefined}
+        onRecover={() => undefined}
+        onBackToSketch={() => undefined}
+        onViewInMyLooks={onViewInMyLooks}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'View in My Looks' }))
+    expect(onViewInMyLooks).toHaveBeenCalledTimes(1)
   })
 
   it('does not render when closed', () => {
