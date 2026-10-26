@@ -26,7 +26,16 @@ const pwaWorkbox = {
   navigateFallback: null,
 } as const
 
+const buildSha =
+  process.env.VITE_BUILD_SHA ||
+  process.env.GITHUB_SHA ||
+  process.env.COMMIT_SHA ||
+  ''
+
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_BUILD_SHA': JSON.stringify(buildSha),
+  },
   plugins: [
     react(),
     VitePWA({

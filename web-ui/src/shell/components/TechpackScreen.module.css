@@ -445,6 +445,38 @@
   font-size: 12px;
 }
 
+.aiErrorPanel {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.35);
+  display: grid;
+  gap: 6px;
+}
+
+.aiErrorText {
+  margin: 0;
+  color: #fecaca;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.aiErrorHint {
+  margin: 0;
+  color: #fde68a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.buildVersion {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--fr-muted);
+  letter-spacing: 0.02em;
+}
+
 .notice {
   margin: 8px 0 0;
   color: #86efac;
@@ -706,11 +738,35 @@
   gap: 12px;
 }
 
+.mobileMeasureCta {
+  min-height: 52px;
+  width: 100%;
+  justify-content: center;
+  font-size: 16px;
+}
+
 .mobileMeasureCard p {
   margin: 0;
   font-size: 13px;
   line-height: 1.45;
   color: var(--fr-muted);
+}
+
+@media (max-width: 720px) {
+  .formPane {
+    /* Single primary scroll surface on phones — avoid nested traps. */
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .body {
+    overflow: hidden;
+  }
+
+  .previewPane {
+    display: none;
+  }
 }
 
 .mobileMeasureSummary {

@@ -408,4 +408,93 @@ describe('TechpackScreen', () => {
     const pills = screen.getAllByText(/DRAFT\s*\/\s*UNVERIFIED/)
     expect(pills.length).toBeGreaterThan(0)
   })
+
+  it('shows build version and maps configuration errors near AI controls', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      owner_allowlisted: true,
+      estimate_professional_cents_min: 40,
+      estimate_professional_cents_max: 120,
+      max_usd_per_run: 8,
+      note: 'Professional available',
+    })
+    confirmTechpackAi.mockRejectedValue(
+      new Error('Technical generation failed: OPENAI_REASONING_EFFORT is empty'),
+    )
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    expect(await screen.findByText(/Build /i)).toBeInTheDocument()
+    const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
+    fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
+    const pro = await screen.findByRole('radio', { name: /AI Professional Technical Pack/i })
+    fireEvent.click(pro)
+    fireEvent.click(screen.getByRole('button', { name: /Get cost estimate/i }))
+    expect(
+      await screen.findByText(/server configuration problem/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/No chargeable AI work ran/i)).toBeInTheDocument()
+    expect(screen.queryByText(/OPENAI_REASONING_EFFORT/i)).not.toBeInTheDocument()
+  })
+
+  it('reuses a stable intent idempotency key for Professional generate', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      owner_allowlisted: true,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
+    confirmTechpackAi.mockResolvedValue({
+      draft_id: 'draft-1',
+      stage: 'generate',
+      confirm_token: 'stable-confirm-token',
+      estimated_cost_usd_cents: 50,
+      ai_enabled: true,
+      max_usd_per_run: 8,
+      mode: 'professional',
+      message: 'ready',
+    })
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    await screen.findByText('Create Real Design')
+    const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
+    fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
+    fireEvent.click(await screen.findByRole('radio', { name: /AI Professional Technical Pack/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Get cost estimate/i }))
+    await waitFor(() => expect(confirmTechpackAi).toHaveBeenCalled())
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /I confirm generating an AI Professional Technical Pack/i }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Generate Professional Pack/i }))
+    await waitFor(() => {
+      expect(generateTechpackAi).toHaveBeenCalledWith(
+        'draft-1',
+        expect.objectContaining({
+          idempotency_key: 'intent-draft-1-stable-confirm-token',
+          mode: 'professional',
+        }),
+      )
+    })
+  })
+
+  it('auto-opens the measurements sheet when entering Step 3 on mobile', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: String(query).includes('max-width: 720px'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+    Object.defineProperty(window, 'innerWidth', { writable: true, value: 390 })
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    await screen.findByText('Create Real Design')
+    const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
+    fireEvent.click(within(stepper).getByRole('button', { name: /Measurements/i }))
+    expect(await screen.findByRole('dialog', { name: /Body measurements/i })).toBeInTheDocument()
+  })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Check,
@@ -53,6 +53,10 @@ import {
 import styles from './TechpackScreen.module.css'
 
 const MOBILE_MEASURE_MQ = '(max-width: 720px)'
+const BUILD_VERSION =
+  (import.meta.env.VITE_BUILD_SHA as string | undefined)?.slice(0, 8) ||
+  (import.meta.env.VITE_APP_VERSION as string | undefined) ||
+  'dev'
 
 type Props = {
   draftId: string
@@ -161,17 +165,40 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [isMobileViewport, setIsMobileViewport] = useState(false)
   const [measureSheetOpen, setMeasureSheetOpen] = useState(false)
   const [measureSheetSnapshot, setMeasureSheetSnapshot] = useState<TechpackSpecV2 | null>(null)
+  const [intentIdempotencyKey, setIntentIdempotencyKey] = useState<string | null>(null)
+  const formPaneRef = useRef<HTMLDivElement>(null)
+  const stageSectionRef = useRef<HTMLElement | null>(null)
+  const aiErrorRef = useRef<HTMLParagraphElement>(null)
+  const activePieceIdRef = useRef(activePieceId)
 
   const frontImg = useAuthJobImage(draft?.front_job_id ?? null, Boolean(draft?.front_job_id))
   const backImg = useAuthJobImage(draft?.back_job_id ?? null, Boolean(draft?.back_job_id))
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const mq = window.matchMedia(MOBILE_MEASURE_MQ)
-    const apply = () => setIsMobileViewport(mq.matches)
+    activePieceIdRef.current = activePieceId
+  }, [activePieceId])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const apply = () => {
+      const mq =
+        typeof window.matchMedia === 'function'
+          ? window.matchMedia(MOBILE_MEASURE_MQ).matches
+          : false
+      // Samsung Internet / zoomed viewports: also trust layout width.
+      const width = window.visualViewport?.width ?? window.innerWidth
+      setIsMobileViewport(mq || width <= 720)
+    }
     apply()
-    mq.addEventListener?.('change', apply)
-    return () => mq.removeEventListener?.('change', apply)
+    const mq = typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_MEASURE_MQ) : null
+    mq?.addEventListener?.('change', apply)
+    window.addEventListener('resize', apply)
+    window.visualViewport?.addEventListener('resize', apply)
+    return () => {
+      mq?.removeEventListener?.('change', apply)
+      window.removeEventListener('resize', apply)
+      window.visualViewport?.removeEventListener('resize', apply)
+    }
   }, [])
 
   const professionalAvailable = Boolean(
@@ -210,8 +237,13 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     setWasV1(wrapped.wasV1)
     const wf = String(wrapped.spec.workflow_stage || 'understand') as WorkflowStage
     setStage(STAGE_INDEX[wf] != null ? wf : 'understand')
-    const first = wrapped.spec.outfit?.pieces?.[0]
-    setActivePieceId(first?.id ?? 'overview')
+    const pieceIds = new Set((wrapped.spec.outfit?.pieces ?? []).map((p) => p.id))
+    const current = activePieceIdRef.current
+    if (current === 'overview' || (typeof current === 'string' && pieceIds.has(current))) {
+      setActivePieceId(current)
+    } else {
+      setActivePieceId(wrapped.spec.outfit?.pieces?.[0]?.id ?? 'overview')
+    }
     const ai = wrapped.spec.ai
     const mode = ai?.last_mode
     if (mode === 'professional' || mode === 'heuristic' || mode === 'ai') {
@@ -422,16 +454,48 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     }
   }
 
+  const scrollStageIntoView = useCallback(() => {
+    const pane = formPaneRef.current
+    const section = stageSectionRef.current
+    if (!section) return
+    if (pane && typeof pane.scrollTo === 'function') {
+      const top = Math.max(0, section.offsetTop - 12)
+      pane.scrollTo({ top, behavior: 'smooth' })
+      return
+    }
+    if (typeof section.scrollIntoView === 'function') {
+      section.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+  }, [])
+
+  const openMeasureSheet = useCallback(() => {
+    setSpec((prev) => {
+      if (!prev) return prev
+      setMeasureSheetSnapshot(structuredClone(prev))
+      return prev
+    })
+    setMeasureSheetOpen(true)
+  }, [])
+
   const goStage = async (next: WorkflowStage) => {
     setStage(next)
     setSpec((prev) => (prev ? { ...prev, workflow_stage: next } : prev))
-    if (next === 'customize' || next === 'measurements') {
+    if (next === 'customize') {
       const first = pieces[0]
       if (first && (activePieceId === 'overview' || !pieces.some((p) => p.id === activePieceId))) {
         setActivePieceId(first.id)
       }
     }
+    if (next === 'measurements') {
+      // Body overview first — finished POMs remain one tap away.
+      setActivePieceId('overview')
+      if (isMobileViewport) {
+        // Open full-screen editor immediately on phones (Samsung Internet included).
+        window.setTimeout(() => openMeasureSheet(), 0)
+      }
+    }
     await save({ workflow: next, silent: true })
+    window.requestAnimationFrame(() => scrollStageIntoView())
   }
 
   const addPiece = () => {
@@ -478,6 +542,23 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     setNotice(null)
   }
 
+  const mapGenerationError = (err: unknown): string => {
+    const raw = err instanceof Error ? err.message : String(err || 'Generation failed')
+    if (/REASONING_EFFORT|server configuration problem/i.test(raw)) {
+      return (
+        'AI Professional could not start because of a server configuration problem. ' +
+        'Your design is safe. Please try again after the issue is fixed.'
+      )
+    }
+    if (/Technical generation failed:/i.test(raw)) {
+      return (
+        'AI Professional generation failed. Your design is safe. ' +
+        'If no illustrations appear, confirm cost again before retrying.'
+      )
+    }
+    return raw
+  }
+
   const prepareGenerate = async (mode: TechpackAiMode) => {
     setBusy(true)
     setError(null)
@@ -488,12 +569,22 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       await save({ workflow: 'generate', silent: true })
       const challenge = await confirmTechpackAi(draftId, 'generate', mode)
       setConfirm(challenge)
+      // Stable key for this confirm intent — retries/double-clicks reuse it.
+      setIntentIdempotencyKey(`intent-${draftId}-${challenge.confirm_token}`)
       setNotice(challenge.message)
       setGenerateProgress('Confirm token ready — review cost and confirm to generate.')
+      window.requestAnimationFrame(() => scrollStageIntoView())
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not prepare generation')
+      setError(mapGenerationError(err))
       setConfirm(null)
+      setIntentIdempotencyKey(null)
       setGenerateProgress(null)
+      window.requestAnimationFrame(() => {
+        const node = aiErrorRef.current
+        if (node && typeof node.scrollIntoView === 'function') {
+          node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }
+      })
     } finally {
       setBusy(false)
     }
@@ -526,9 +617,12 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     )
     try {
       await save({ workflow: 'generate', silent: true })
+      const idem =
+        intentIdempotencyKey ||
+        `intent-${draftId}-${confirm.confirm_token}${opts.retry ? '-retry-sections' : ''}`
       const result = await generateTechpackAi(draftId, {
         confirm_token: confirm.confirm_token,
-        idempotency_key: `gen-${draftId}-${Date.now()}${opts.retry ? '-retry' : ''}`,
+        idempotency_key: idem,
         mode,
         propose_back: mode === 'professional' ? proposeBack : undefined,
         sections: opts.sections,
@@ -577,9 +671,16 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       }
       setConfirm(null)
       setConfirmed(false)
+      setIntentIdempotencyKey(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Generation failed')
+      setError(mapGenerationError(err))
       setGenerateProgress(null)
+      window.requestAnimationFrame(() => {
+        const node = aiErrorRef.current
+        if (node && typeof node.scrollIntoView === 'function') {
+          node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }
+      })
     } finally {
       setBusy(false)
     }
@@ -590,25 +691,22 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       setError('No failed sections to retry.')
       return
     }
-    // Need a fresh confirm token for retry.
+    // Fresh confirm + new intent key for a deliberate section retry (not a network replay).
     setBusy(true)
     setError(null)
     try {
       const challenge = await confirmTechpackAi(draftId, 'generate', 'professional')
       setConfirm(challenge)
+      setIntentIdempotencyKey(
+        `intent-${draftId}-${challenge.confirm_token}-sections-${failedSections.join('_')}`,
+      )
       setConfirmed(true)
       setBusy(false)
       await runGenerate({ sections: failedSections, retry: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not retry failed sections')
+      setError(mapGenerationError(err))
       setBusy(false)
     }
-  }
-
-  const openMeasureSheet = () => {
-    if (!spec) return
-    setMeasureSheetSnapshot(structuredClone(spec))
-    setMeasureSheetOpen(true)
   }
 
   const discardMeasureSheet = () => {
@@ -716,6 +814,9 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           <p className={styles.subtitle}>
             {draft.style_code} · Rev {draft.revision} · guided tech-pack from your Magic look
           </p>
+          <p className={styles.buildVersion} title="Frontend build id for support">
+            Build {BUILD_VERSION}
+          </p>
         </div>
         <div className={styles.actions}>
           <span className={styles.statusPill}>{statusLabel}</span>
@@ -797,9 +898,15 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       </div>
 
       <div className={styles.body}>
-        <div className={styles.formPane}>
+        <div className={styles.formPane} ref={formPaneRef}>
           {stage === 'understand' ? (
-            <section className={styles.section} aria-labelledby="stage-understand">
+            <section
+              className={styles.section}
+              aria-labelledby="stage-understand"
+              ref={(node) => {
+                stageSectionRef.current = node
+              }}
+            >
               <h2 id="stage-understand" className={styles.sectionTitle}>
                 1 · Understand My Design
               </h2>
@@ -928,7 +1035,13 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           ) : null}
 
           {stage === 'customize' ? (
-            <section className={styles.section} aria-labelledby="stage-customize">
+            <section
+              className={styles.section}
+              aria-labelledby="stage-customize"
+              ref={(node) => {
+                stageSectionRef.current = node
+              }}
+            >
               <h2 id="stage-customize" className={styles.sectionTitle}>
                 2 · Customize Each Piece
               </h2>
@@ -1177,7 +1290,13 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           ) : null}
 
           {stage === 'measurements' ? (
-            <section className={styles.section} aria-labelledby="stage-meas">
+            <section
+              className={styles.section}
+              aria-labelledby="stage-meas"
+              ref={(node) => {
+                stageSectionRef.current = node
+              }}
+            >
               <h2 id="stage-meas" className={styles.sectionTitle}>
                 3 · Measurements and Preferences
               </h2>
@@ -1189,9 +1308,18 @@ export function TechpackScreen({ draftId, onBack }: Props) {
 
               {isMobileViewport ? (
                 <div className={styles.mobileMeasureCard}>
+                  <button
+                    type="button"
+                    className={`${styles.primaryBtn} ${styles.mobileMeasureCta}`}
+                    onClick={openMeasureSheet}
+                    disabled={busy}
+                    autoFocus
+                  >
+                    Edit Measurements
+                  </button>
                   <p>
-                    On phones, edit measurements in a full-screen sheet with one group at a time and
-                    large touch inputs. Desktop inline forms stay unchanged.
+                    Full-screen editor with large number fields. Unit and source stay one tap away.
+                    Empty fields are fine — continue to Step 4 when ready.
                   </p>
                   <ul className={styles.mobileMeasureSummary}>
                     <li>
@@ -1205,14 +1333,6 @@ export function TechpackScreen({ draftId, onBack }: Props) {
                     <li>Garment pieces with finished POMs: {pieces.length}</li>
                     <li>Units: {spec.units || 'cm'}</li>
                   </ul>
-                  <button
-                    type="button"
-                    className={styles.primaryBtn}
-                    onClick={openMeasureSheet}
-                    disabled={busy}
-                  >
-                    Edit Measurements
-                  </button>
                 </div>
               ) : (
                 <>
@@ -1380,7 +1500,13 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           ) : null}
 
           {stage === 'generate' ? (
-            <section className={styles.section} aria-labelledby="stage-gen">
+            <section
+              className={styles.section}
+              aria-labelledby="stage-gen"
+              ref={(node) => {
+                stageSectionRef.current = node
+              }}
+            >
               <h2 id="stage-gen" className={styles.sectionTitle}>
                 4 · Generate Technical Design
               </h2>
@@ -1388,6 +1514,20 @@ export function TechpackScreen({ draftId, onBack }: Props) {
                 Choose Basic ($0) or AI Professional (paid). Preview and Download never run paid AI —
                 they only export what already exists for this draft.
               </p>
+
+              {error ? (
+                <div className={styles.aiErrorPanel} role="alert">
+                  <p ref={aiErrorRef} className={styles.aiErrorText}>
+                    {error}
+                  </p>
+                  {/server configuration problem|design is safe/i.test(error) ? (
+                    <p className={styles.aiErrorHint}>
+                      No chargeable AI work ran for this attempt. You can request a new cost estimate
+                      after the fix is live.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div
                 className={
@@ -1785,7 +1925,11 @@ export function TechpackScreen({ draftId, onBack }: Props) {
               Save + bump revision
             </button>
           </div>
-          {error ? <p className={styles.error}>{error}</p> : null}
+          {error && stage !== 'generate' ? (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          ) : null}
           {notice ? <p className={styles.notice}>{notice}</p> : null}
         </div>
 

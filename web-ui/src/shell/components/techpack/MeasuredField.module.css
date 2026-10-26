@@ -57,6 +57,70 @@
   padding: 12px 14px;
 }
 
+.measureRowValueFirst {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 10px;
+}
+
+.valueFirstRow {
+  display: grid;
+  gap: 8px;
+}
+
+.valueUnitGroup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.valueUnitGroup input {
+  min-height: 52px;
+  font-size: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fr-text);
+}
+
+.valueUnitGroup input:focus {
+  outline: 2px solid rgba(244, 114, 182, 0.65);
+  outline-offset: 1px;
+  border-color: rgba(244, 114, 182, 0.7);
+}
+
+.unitBadge {
+  min-width: 48px;
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.metaToggle {
+  margin-top: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: #f9a8d4;
+  font-size: 12px;
+  text-align: left;
+}
+
+.metaPanel {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 @media (max-width: 640px) {
   .measureRow:not(.measureRowCompact) {
     grid-template-columns: 1fr;

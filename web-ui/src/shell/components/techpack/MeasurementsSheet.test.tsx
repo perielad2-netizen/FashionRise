@@ -105,4 +105,22 @@ describe('MeasurementsSheet', () => {
     const height = screen.getByLabelText(/^Height$/i)
     expect(height).toHaveAttribute('inputMode', 'decimal')
   })
+
+  it('keeps unit/source behind a secondary toggle for everyday entry', () => {
+    renderSheet()
+    expect(screen.queryByLabelText(/^Height unit$/i)).not.toBeInTheDocument()
+    const toggles = screen.getAllByRole('button', { name: /Unit \/ source/i })
+    expect(toggles.length).toBeGreaterThan(0)
+    fireEvent.click(toggles[0])
+    expect(screen.getByLabelText(/^Height unit$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Height source$/i)).toBeInTheDocument()
+  })
+
+  it('accepts typed waist values without inventing units', () => {
+    renderSheet()
+    const waist = screen.getByLabelText(/^Waist$/i)
+    fireEvent.change(waist, { target: { value: '80' } })
+    expect(waist).toHaveValue('80')
+    expect(screen.getAllByText('cm').length).toBeGreaterThan(0)
+  })
 })
