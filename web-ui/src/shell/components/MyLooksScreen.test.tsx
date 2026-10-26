@@ -7,6 +7,7 @@ const listLooks = vi.fn()
 const updateLook = vi.fn()
 const deleteLook = vi.fn()
 const fetchJobImageBlob = vi.fn()
+const openOrCreateTechpackForLook = vi.fn()
 
 vi.mock('@/services/looksApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/looksApi')>()
@@ -20,6 +21,10 @@ vi.mock('@/services/looksApi', async (importOriginal) => {
 
 vi.mock('@/services/ai/magicApi', () => ({
   fetchJobImageBlob: (...args: unknown[]) => fetchJobImageBlob(...args),
+}))
+
+vi.mock('@/services/techpacksApi', () => ({
+  openOrCreateTechpackForLook: (...args: unknown[]) => openOrCreateTechpackForLook(...args),
 }))
 
 const LOOK_A: LookRecord = {
@@ -74,7 +79,9 @@ describe('MyLooksScreen', () => {
     updateLook.mockReset()
     deleteLook.mockReset()
     fetchJobImageBlob.mockReset()
+    openOrCreateTechpackForLook.mockReset()
     fetchJobImageBlob.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }))
+    openOrCreateTechpackForLook.mockResolvedValue({ id: 'draft-99' })
     // IntersectionObserver may be missing / inert in jsdom — treat as immediately visible.
     // @ts-expect-error test polyfill
     window.IntersectionObserver = class {
@@ -177,6 +184,19 @@ describe('MyLooksScreen', () => {
     expect(screen.queryByText('Blush gown')).toBeNull()
     expect(screen.getByText('Dual runway')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('permanently deleted')
+  })
+
+  it('opens Create Real Design from look details', async () => {
+    listLooks.mockResolvedValue({ items: [LOOK_A], total: 1, limit: 24, offset: 0 })
+    const onOpenTechpack = vi.fn()
+    render(<MyLooksScreen onBackToStudio={() => undefined} onOpenTechpack={onOpenTechpack} />)
+    await screen.findByText('Blush gown')
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Blush gown' }))
+    fireEvent.click(screen.getByRole('button', { name: /Create Real Design/i }))
+    await waitFor(() => {
+      expect(openOrCreateTechpackForLook).toHaveBeenCalledWith('look-a', 'Blush gown')
+      expect(onOpenTechpack).toHaveBeenCalledWith('draft-99')
+    })
   })
 
   it('offers retry when delete fails without claiming success', async () => {

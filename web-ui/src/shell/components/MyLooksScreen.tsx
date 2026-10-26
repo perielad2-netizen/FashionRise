@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Archive, ArrowLeft, Download, Heart, RefreshCw, Star, Trash2, X } from 'lucide-react'
+import { Archive, ArrowLeft, Download, FileText, Heart, RefreshCw, Star, Trash2, X } from 'lucide-react'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { useAuthJobImage } from '@/hooks/useAuthJobImage'
 import { fetchJobImageBlob } from '@/services/ai/magicApi'
@@ -11,6 +11,7 @@ import {
   type LookFilter,
   type LookRecord,
 } from '@/services/looksApi'
+import { openOrCreateTechpackForLook } from '@/services/techpacksApi'
 import styles from './MyLooksScreen.module.css'
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' })
@@ -20,6 +21,7 @@ type Props = {
   focusLookId?: string | null
   onBackToStudio: () => void
   onFocusConsumed?: () => void
+  onOpenTechpack?: (draftId: string) => void
 }
 
 type LoadState =
@@ -104,12 +106,14 @@ function LookDetailDialog({
   onClose,
   onUpdated,
   onAskDelete,
+  onCreateRealDesign,
   deleteBusy,
 }: {
   look: LookRecord
   onClose: () => void
   onUpdated: (next: LookRecord) => void
   onAskDelete: (look: LookRecord) => void
+  onCreateRealDesign?: (look: LookRecord) => void
   deleteBusy: boolean
 }) {
   const titleId = useId()
@@ -273,6 +277,17 @@ function LookDetailDialog({
         </div>
 
         <div className={styles.dialogActions}>
+          {onCreateRealDesign ? (
+            <button
+              type="button"
+              className={styles.primaryBtn}
+              disabled={busy || deleteBusy}
+              onClick={() => onCreateRealDesign(look)}
+            >
+              <FileText size={14} aria-hidden />
+              Create Real Design
+            </button>
+          ) : null}
           <button
             type="button"
             className={look.is_favorite ? styles.iconBtnActive : styles.iconBtn}
@@ -302,7 +317,7 @@ function LookDetailDialog({
             <Trash2 size={14} aria-hidden />
             Delete
           </button>
-          <button type="button" className={styles.primaryBtn} onClick={onClose} disabled={deleteBusy}>
+          <button type="button" className={styles.ghostBtn} onClick={onClose} disabled={deleteBusy}>
             Done
           </button>
         </div>
@@ -311,7 +326,12 @@ function LookDetailDialog({
   )
 }
 
-export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: Props) {
+export function MyLooksScreen({
+  focusLookId,
+  onBackToStudio,
+  onFocusConsumed,
+  onOpenTechpack,
+}: Props) {
   const [filter, setFilter] = useState<LookFilter>('all')
   const [query, setQuery] = useState('')
   const [deferredQuery, setDeferredQuery] = useState('')
@@ -322,6 +342,7 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
   const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
+  const [techpackBusy, setTechpackBusy] = useState(false)
   const deleteInFlightRef = useRef(false)
   const deleteTriggerRef = useRef<HTMLElement | null>(null)
 
@@ -430,6 +451,25 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
     setSelected(null)
     setDeleteDialog({ phase: 'confirm', look })
   }, [])
+
+  const createRealDesign = useCallback(
+    async (look: LookRecord) => {
+      if (!onOpenTechpack || techpackBusy) return
+      setTechpackBusy(true)
+      setActionError(null)
+      setNotice(null)
+      try {
+        const draft = await openOrCreateTechpackForLook(look.id, look.title)
+        setSelected(null)
+        onOpenTechpack(draft.id)
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : 'Could not open Create Real Design')
+      } finally {
+        setTechpackBusy(false)
+      }
+    },
+    [onOpenTechpack, techpackBusy],
+  )
 
   const closeDeleteDialog = useCallback(() => {
     if (deleteInFlightRef.current) return
@@ -641,7 +681,8 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
           onClose={() => setSelected(null)}
           onUpdated={onUpdated}
           onAskDelete={askDelete}
-          deleteBusy={Boolean(deleteBusy)}
+          onCreateRealDesign={onOpenTechpack ? (look) => void createRealDesign(look) : undefined}
+          deleteBusy={Boolean(deleteBusy) || techpackBusy}
         />
       ) : null}
 
