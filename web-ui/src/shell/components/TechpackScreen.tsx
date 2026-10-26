@@ -184,13 +184,18 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const apply = () => {
-      const mq =
+      const mqNarrow =
         typeof window.matchMedia === 'function'
           ? window.matchMedia(MOBILE_MEASURE_MQ).matches
           : false
-      // Samsung Internet / zoomed viewports: also trust layout width.
+      const mqCoarse =
+        typeof window.matchMedia === 'function'
+          ? window.matchMedia('(pointer: coarse)').matches
+          : false
+      // Samsung Internet / zoomed viewports / desktop-site mode: trust several signals.
       const width = window.visualViewport?.width ?? window.innerWidth
-      setIsMobileViewport(mq || width <= 720)
+      const touch = (navigator.maxTouchPoints || 0) > 0
+      setIsMobileViewport(mqNarrow || width <= 720 || (touch && (mqCoarse || width <= 920)))
     }
     apply()
     const mq = typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_MEASURE_MQ) : null
@@ -201,6 +206,15 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       mq?.removeEventListener?.('change', apply)
       window.removeEventListener('resize', apply)
       window.visualViewport?.removeEventListener('resize', apply)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const prev = document.title
+    document.title = `FashionRise · App ${BUILD_VERSION}`
+    return () => {
+      document.title = prev
     }
   }, [])
 
@@ -834,11 +848,15 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           <p className={styles.subtitle}>
             {draft.style_code} · Rev {draft.revision} · guided tech-pack from your Magic look
           </p>
-          <p className={styles.buildVersion} title="Frontend build id for support">
-            Build {BUILD_VERSION}
-          </p>
         </div>
         <div className={styles.actions}>
+          <span
+            className={styles.appVersionPill}
+            title="If this is not the latest App id from support, refresh or clear site data"
+            data-testid="app-version"
+          >
+            App {BUILD_VERSION}
+          </span>
           <span className={styles.statusPill}>{statusLabel}</span>
           <button type="button" className={styles.ghostBtn} onClick={onBack} disabled={busy}>
             <ArrowLeft size={14} aria-hidden />

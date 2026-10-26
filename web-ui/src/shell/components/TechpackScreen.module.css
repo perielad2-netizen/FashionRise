@@ -477,6 +477,21 @@
   letter-spacing: 0.02em;
 }
 
+.appVersionPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.65);
+  background: rgba(244, 114, 182, 0.18);
+  color: #fce7f3;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
 .notice {
   margin: 8px 0 0;
   color: #86efac;

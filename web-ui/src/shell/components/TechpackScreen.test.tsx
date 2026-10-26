@@ -464,7 +464,7 @@ describe('TechpackScreen', () => {
       new Error('Technical generation failed: OPENAI_REASONING_EFFORT is empty'),
     )
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
-    expect(await screen.findByText(/Build /i)).toBeInTheDocument()
+    expect(await screen.findByTestId('app-version')).toHaveTextContent(/App /i)
     const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
     fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
     const pro = await screen.findByRole('radio', { name: /AI Professional Technical Pack/i })

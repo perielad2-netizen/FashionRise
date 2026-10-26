@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
@@ -38,8 +39,33 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    {
+      name: 'fashionrise-build-id',
+      transformIndexHtml(html) {
+        const short = (buildSha || 'dev').slice(0, 8)
+        return html
+          .replace('<title>FashionRise</title>', `<title>FashionRise · App ${short}</title>`)
+          .replace(
+            '<meta name="application-name" content="FashionRise" />',
+            `<meta name="application-name" content="FashionRise" />\n    <meta name="fr-app-version" content="${short}" />`,
+          )
+      },
+      closeBundle() {
+        const short = (buildSha || 'dev').slice(0, 8)
+        fs.writeFileSync(
+          path.resolve(rootDir, 'dist/version.json'),
+          JSON.stringify({
+            app: short,
+            sha: buildSha || short,
+            builtAt: new Date().toISOString(),
+          }),
+        )
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
+      // Registration is handled in main.tsx via virtual:pwa-register.
+      injectRegister: null,
       includeAssets: [
         'branding/fashion_rise_logo.png',
         'icons/favicon-32.png',
