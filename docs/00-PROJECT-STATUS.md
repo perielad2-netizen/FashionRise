@@ -11,7 +11,7 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`fd9718f3`** — Nginx root **and** `/var/www/fashionrise/current` → `/var/www/fashionrise/releases/fd9718f3`. Tap-step full-screen modals for Create Real Design stages. |
+| Frontend (`web-ui`) | **`28e7e935`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/28e7e935` (was stuck on `75a8e8ca`, which hid App version). Sticky pink **FashionRise App** bar permanent. Tap-step StageSheet modals. |
 | Backend (FastAPI + PostgreSQL) | **`186cac84`** mark (files deployed) — Professional vision passes `reasoning_effort=settings.openai_reasoning_effort`; SketchConfigError → user-safe message + `provider_called=false`; idempotency for running/failed+cost; no cost clamp. Heuristic Basic unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
 | Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
