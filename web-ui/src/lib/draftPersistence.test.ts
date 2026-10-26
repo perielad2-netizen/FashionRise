@@ -400,6 +400,31 @@ describe('draftPersistence WEB-V2.1A/B', () => {
     }
   })
 
+  it('treats same-content 409 as ACK (lost response) without conflict', async () => {
+    const doc = strokedDoc()
+    api.designs.set('d1', {
+      id: 'd1',
+      design_data: doc,
+      metadata: { draftKind: 'studio_working_draft', clientRevision: doc.clientRevision },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    // Stale expected token but identical cloud content → 409 payload, recovered as ACK.
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'd1',
+      document: doc,
+      fingerprint: draftContentFingerprint(documentForCloud(doc)),
+      lastSyncedFingerprint: null,
+      expectedRevision: Math.max(1, doc.clientRevision - 1),
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.designId).toBe('d1')
+      expect(result.syncedRevision).toBe(doc.clientRevision)
+    }
+  })
+
   it('reconciles a lost create response without spawning a second draft', async () => {
     api.failCreateOnce = true
     const doc = strokedDoc()

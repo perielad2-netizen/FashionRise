@@ -379,6 +379,29 @@ export function useStudioEditor() {
       }
 
       if (result.conflict) {
+        const serverFp = draftContentFingerprint(documentForCloud(result.conflict.server))
+        const localFp = draftContentFingerprint(documentForCloud(result.conflict.local))
+        const authFp = draftContentFingerprint(documentForCloud(authoritativeDocRef.current))
+        // Single-session recovery: same-content ACK, or a stale in-flight save whose
+        // 409 payload already matches the newer authoritative local (e.g. draw→undo).
+        // Genuine multi-tab divergence (server ≠ local and server ≠ auth) still conflicts.
+        if (serverFp === localFp || serverFp === authFp) {
+          designIdRef.current = result.conflict.designId
+          syncedRevisionRef.current = result.conflict.server.clientRevision
+          syncedFingerprintRef.current = serverFp
+          if (authoritativeDocRef.current.clearBackIntent && serverFp === authFp) {
+            const { clearBackIntent: _ackIntent, ...acked } = authoritativeDocRef.current
+            authoritativeDocRef.current = acked
+          }
+          if (authFp === serverFp && !cloudDirtyRef.current) {
+            setSaveStatus('saved')
+            setSaveError(null)
+          } else {
+            setSaveStatus('pending')
+            scheduleCloudSaveRef.current()
+          }
+          return
+        }
         conflictOpenRef.current = true
         setDraftConflict(result.conflict)
         setSaveError(result.error)
@@ -708,11 +731,32 @@ export function useStudioEditor() {
     [publishStudioNotice],
   )
 
+  /**
+   * Undo/Redo that empties previously present Back ink is an intentional clear —
+   * must stamp clearBackIntent so OCC does not 409 as a false multi-device conflict.
+   */
+  const backClearIntentForPatch = useCallback(
+    (before: EditorSideState, after: EditorSideState): boolean => {
+      if (!frontBackEnabled) return false
+      const hadBack = sideHasInk({ strokes: before.backStrokes, fills: before.backFills })
+      const hasBack = sideHasInk({ strokes: after.backStrokes, fills: after.backFills })
+      return hadBack && !hasBack
+    },
+    [frontBackEnabled],
+  )
+
   const undo = useCallback(() => {
     const prev = activeHistory().undo(artwork())
     if (!prev) return
     const state = editorSideState()
     const patch = patchActiveSideInk(state, prev.strokes, prev.fills)
+    const clearBackIntent = backClearIntentForPatch(state, {
+      ...state,
+      frontStrokes: patch.frontStrokes,
+      frontFills: patch.frontFills,
+      backStrokes: patch.backStrokes,
+      backFills: patch.backFills,
+    })
     if (patch.activeSide === 'back') {
       setBackStrokes(patch.backStrokes)
       setBackFills(patch.backFills)
@@ -726,14 +770,29 @@ export function useStudioEditor() {
       frontFills: patch.frontFills,
       backStrokes: patch.backStrokes,
       backFills: patch.backFills,
+      clearBackIntent,
     })
-  }, [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags])
+  }, [
+    activeHistory,
+    artwork,
+    backClearIntentForPatch,
+    commitFromEditor,
+    editorSideState,
+    syncHistoryFlags,
+  ])
 
   const redo = useCallback(() => {
     const next = activeHistory().redo(artwork())
     if (!next) return
     const state = editorSideState()
     const patch = patchActiveSideInk(state, next.strokes, next.fills)
+    const clearBackIntent = backClearIntentForPatch(state, {
+      ...state,
+      frontStrokes: patch.frontStrokes,
+      frontFills: patch.frontFills,
+      backStrokes: patch.backStrokes,
+      backFills: patch.backFills,
+    })
     if (patch.activeSide === 'back') {
       setBackStrokes(patch.backStrokes)
       setBackFills(patch.backFills)
@@ -747,8 +806,16 @@ export function useStudioEditor() {
       frontFills: patch.frontFills,
       backStrokes: patch.backStrokes,
       backFills: patch.backFills,
+      clearBackIntent,
     })
-  }, [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags])
+  }, [
+    activeHistory,
+    artwork,
+    backClearIntentForPatch,
+    commitFromEditor,
+    editorSideState,
+    syncHistoryFlags,
+  ])
 
   const clear = useCallback(() => {
     const ink = visibleInkFromState(editorSideState())

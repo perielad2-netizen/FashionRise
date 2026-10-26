@@ -549,6 +549,25 @@ export async function persistStudioDraft(args: {
     if (conflictPayload) {
       const serverDoc =
         extractStudioDraft(conflictPayload.design) ?? createEmptyDraftDocument()
+      // Lost-response / same-content 409: treat as ACK — never open a false conflict.
+      if (sameCloudContent(serverDoc, cloudDoc)) {
+        writeStoredDesignId(args.userId, conflictPayload.design.id)
+        const localAfter = await writeLocalDraft({
+          userId: args.userId,
+          designId: conflictPayload.design.id,
+          document: args.document,
+          savedAt: new Date().toISOString(),
+          syncedRevision: serverDoc.clientRevision,
+        })
+        return {
+          ok: true,
+          designId: conflictPayload.design.id,
+          document: serverDoc,
+          fingerprint: draftContentFingerprint(documentForCloud(serverDoc)),
+          syncedRevision: serverDoc.clientRevision,
+          localPersisted: localPersisted || localAfter.ok,
+        }
+      }
       return {
         ok: false,
         conflict: {
