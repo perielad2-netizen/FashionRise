@@ -49,6 +49,12 @@ export type FillOp = {
   /** Seed click used to create the fill (for debugging / UX). */
   seedX: number
   seedY: number
+  /**
+   * Stroke-list length when this fill was created. Eraser strokes at index >= this
+   * punch the fill; earlier erasers do not (fill-after-erase chronology).
+   * Missing on legacy saves → treat as 0 (all current erasers apply).
+   */
+  eraseAfterStrokeIndex?: number
 }
 
 export type FashionPaletteSwatch = {
@@ -332,12 +338,19 @@ export function parseFillOp(raw: unknown): FillOp | null {
   if (!style) return null
   const seedX = typeof f.seedX === 'number' && Number.isFinite(f.seedX) ? f.seedX : contour[0]!
   const seedY = typeof f.seedY === 'number' && Number.isFinite(f.seedY) ? f.seedY : contour[1]!
+  const eraseAfterStrokeIndex =
+    typeof f.eraseAfterStrokeIndex === 'number' &&
+    Number.isFinite(f.eraseAfterStrokeIndex) &&
+    f.eraseAfterStrokeIndex >= 0
+      ? Math.floor(f.eraseAfterStrokeIndex)
+      : undefined
   return {
     id: typeof f.id === 'string' && f.id ? f.id : createFillId(),
     contour,
     style,
     seedX,
     seedY,
+    ...(eraseAfterStrokeIndex !== undefined ? { eraseAfterStrokeIndex } : {}),
   }
 }
 

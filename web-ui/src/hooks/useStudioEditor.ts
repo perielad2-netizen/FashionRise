@@ -653,8 +653,15 @@ export function useStudioEditor() {
         )
         return
       }
+      // Stamp stroke-list length so earlier erasers cannot punch this new fill.
+      const stateForStamp = editorSideState()
+      const inkForStamp = visibleInkFromState(stateForStamp)
+      const stamped: FillOp = {
+        ...fill,
+        eraseAfterStrokeIndex: inkForStamp.strokes.length,
+      }
       // Contours must satisfy persisted-fill bounds before any state/save write.
-      const persistable = checkPersistableFill(fill)
+      const persistable = checkPersistableFill(stamped)
       if (!persistable.ok) {
         publishStudioNotice(persistable.message)
         return

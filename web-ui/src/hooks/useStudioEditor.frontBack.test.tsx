@@ -107,6 +107,7 @@ describe('useStudioEditor front/back ownership', () => {
     })
     await waitFor(() => expect(result.current.fills.map((f) => f.id)).toEqual(['fill-f']))
     expect(result.current.fills.map((f) => f.id)).toEqual(['fill-f'])
+    expect(result.current.fills[0]?.eraseAfterStrokeIndex).toBe(1)
 
     act(() => {
       result.current.changeActiveSide('back')
@@ -120,6 +121,7 @@ describe('useStudioEditor front/back ownership', () => {
       result.current.onFillComplete(fillB)
     })
     expect(result.current.strokes.map((s) => s.id)).toEqual(['b1'])
+    expect(result.current.fills[0]?.eraseAfterStrokeIndex).toBe(1)
 
     act(() => {
       result.current.changeActiveSide('front')

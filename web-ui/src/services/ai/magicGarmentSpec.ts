@@ -4,7 +4,8 @@ import {
   frontArtworkFromDoc,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
-import type { FillOp } from '@/lib/fills'
+import { FABRIC_PRESETS, type FillOp } from '@/lib/fills'
+import { sampleColorFromStyle } from '@/lib/paintFills'
 
 type SideBag = { strokes: StudioDraftDocument['strokes']; fills: FillOp[] }
 
@@ -16,15 +17,29 @@ export type SharedGarmentSpec = {
   notes?: string
   colors?: string[]
   main_colors?: string[]
+  materials?: string[]
   details?: string
   garment_category?: string
 }
 
 function fillMaterialColors(fill: FillOp): string[] {
   const style = fill.style
-  // Applied solid/gradient pigment only. Uploaded fabric has no client hex — never invent one.
+  // Applied solid/gradient pigment and built-in fabric presets.
+  // Uploaded fabric has no client hex — never invent one.
   if (style.kind === 'solid') return [style.color]
   if (style.kind === 'gradient') return [...style.colors]
+  if (style.kind === 'fabric') return [sampleColorFromStyle(style)]
+  return []
+}
+
+function fillMaterialLabels(fill: FillOp): string[] {
+  const style = fill.style
+  if (style.kind === 'fabric') {
+    const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
+    return [preset ? `${preset.label} fabric` : `${style.fabricId} fabric`]
+  }
+  if (style.kind === 'uploaded-fabric') return ['uploaded fabric']
+  if (style.kind === 'gradient') return ['gradient fabric']
   return []
 }
 
@@ -38,9 +53,15 @@ function collectStrokeColors(bag: SideBag, add: (c: string) => void): void {
   for (const s of bag.strokes) add(s.color)
 }
 
+function collectMaterials(bag: SideBag, add: (m: string) => void): void {
+  for (const f of bag.fills) {
+    for (const m of fillMaterialLabels(f)) add(m)
+  }
+}
+
 /**
  * Palette priority for Magic:
- * 1) Applied fill/gradient garment colors (main fabric)
+ * 1) Applied fill/gradient/built-in-fabric garment colors (main fabric)
  * 2) Drawn stroke/outline colors (linework only)
  * Never promote an unused selected brush swatch.
  */
@@ -74,6 +95,18 @@ export function paletteFromDoc(doc: StudioDraftDocument, max = 12): {
   return { colors, main_colors }
 }
 
+function materialsFromDoc(doc: StudioDraftDocument, max = 8): string[] {
+  const seen = new Set<string>()
+  const add = (m: string) => {
+    const key = m.trim()
+    if (!key || seen.size >= max) return
+    seen.add(key)
+  }
+  collectMaterials(frontArtworkFromDoc(doc), add)
+  collectMaterials(backArtworkFromDoc(doc), add)
+  return [...seen]
+}
+
 /** Bounded garment context for dual Magic — no invented garment details. */
 export function buildSharedGarmentSpec(
   doc: StudioDraftDocument,
@@ -83,6 +116,7 @@ export function buildSharedGarmentSpec(
   const back = backArtworkFromDoc(doc)
   const trimmedNotes = notes?.trim()
   const { colors, main_colors } = paletteFromDoc(doc)
+  const materials = materialsFromDoc(doc)
   const fingerprint = draftContentFingerprint(doc)
   const details = [
     `model=${doc.model}`,
@@ -95,6 +129,7 @@ export function buildSharedGarmentSpec(
   return {
     ...(trimmedNotes ? { notes: trimmedNotes.slice(0, 500) } : {}),
     ...(colors.length ? { colors, main_colors } : {}),
+    ...(materials.length ? { materials } : {}),
     details: details.slice(0, 1000),
     garment_category: 'studio',
   }

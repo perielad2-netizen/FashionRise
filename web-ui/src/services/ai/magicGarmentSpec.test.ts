@@ -113,4 +113,74 @@ describe('magicGarmentSpec palette priority', () => {
     const { main_colors } = paletteFromDoc(doc)
     expect(main_colors.slice(0, 2)).toEqual(['#FF6B9D', '#FFC2D4'])
   })
+
+  it('uses built-in pink satin fabric color in main_colors, not black outline', () => {
+    let doc = createEmptyDraftDocument()
+    doc = bumpDraftDocument(doc, {
+      brush: { sizeId: 'thin', sizePx: 1.75, opacity: 1, color: '#111111' },
+      strokes: [
+        {
+          id: 'outline',
+          tool: 'draw',
+          points: [10, 20, 0.5, 30, 40, 0.5],
+          color: '#1C1C1E',
+          size: 1.75,
+          opacity: 1,
+        },
+      ],
+      fills: [
+        {
+          id: 'satin-pink',
+          contour: [100, 100, 200, 100, 200, 200, 100, 200],
+          style: { kind: 'fabric', fabricId: 'satin' },
+          seedX: 150,
+          seedY: 150,
+        },
+      ],
+    })
+    const { colors, main_colors } = paletteFromDoc(doc)
+    expect(main_colors[0]).toBe('#BE185D')
+    expect(main_colors[0]).not.toBe('#1C1C1E')
+    expect(main_colors[0]).not.toBe('#111111')
+    expect(colors.indexOf('#BE185D')).toBeLessThan(colors.indexOf('#1C1C1E'))
+
+    const spec = buildSharedGarmentSpec(doc)
+    expect(spec.main_colors?.[0]).toBe('#BE185D')
+    expect(spec.materials).toEqual(expect.arrayContaining(['Satin fabric']))
+  })
+
+  it('does not invent a hex color for uploaded fabric', () => {
+    let doc = createEmptyDraftDocument()
+    doc = bumpDraftDocument(doc, {
+      brush: { sizeId: 'thin', sizePx: 1.75, opacity: 1, color: '#111111' },
+      strokes: [
+        {
+          id: 'outline',
+          tool: 'draw',
+          points: [10, 20, 0.5, 30, 40, 0.5],
+          color: '#222222',
+          size: 1.75,
+          opacity: 1,
+        },
+      ],
+      fills: [
+        {
+          id: 'up',
+          contour: [100, 100, 200, 100, 200, 200, 100, 200],
+          style: {
+            kind: 'uploaded-fabric',
+            assetId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+            scale: 1,
+          },
+          seedX: 150,
+          seedY: 150,
+        },
+      ],
+    })
+    const { main_colors } = paletteFromDoc(doc)
+    expect(main_colors).toEqual(['#222222'])
+    const spec = buildSharedGarmentSpec(doc)
+    expect(spec.materials).toEqual(['uploaded fabric'])
+    expect(spec.main_colors).toEqual(['#222222'])
+  })
 })

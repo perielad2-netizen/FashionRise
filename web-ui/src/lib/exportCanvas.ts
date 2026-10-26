@@ -30,13 +30,33 @@ export type Canvas2DLike = {
     dw: number,
     dh: number,
   ): void
+  createLinearGradient?(x0: number, y0: number, x1: number, y1: number): CanvasGradient
+  createPattern?(image: CanvasImageSource, repetition: string): CanvasPattern | null
   save(): void
   restore(): void
 }
 
+type FillPaintTarget = Canvas2DLike & {
+  createLinearGradient(x0: number, y0: number, x1: number, y1: number): CanvasGradient
+  createPattern(image: CanvasImageSource, repetition: string): CanvasPattern | null
+}
+
+/** Paint a single erase stroke with destination-out (never onto reference/base). */
+export function paintEraseStroke(ctx: Canvas2DLike, stroke: Stroke): void {
+  if (stroke.tool !== 'erase') return
+  const path = strokeToSvgPath(stroke)
+  if (!path) return
+  const p = new Path2D(path)
+  ctx.save()
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.fillStyle = 'rgba(0,0,0,1)'
+  ctx.fill(p)
+  ctx.restore()
+}
+
 /**
  * Paint ink strokes onto an ink-only context.
- * Eraser uses destination-out against ink pixels only — never against reference/base.
+ * Eraser uses destination-out against ink pixels — never against reference/base.
  */
 export function paintInkStrokes(ctx: Canvas2DLike, strokes: Stroke[]): void {
   for (const stroke of strokes) {
@@ -57,6 +77,26 @@ export function paintInkStrokes(ctx: Canvas2DLike, strokes: Stroke[]): void {
   }
 }
 
+/**
+ * Paint garment fills, applying eraser strokes that occurred at or after each
+ * fill's `eraseAfterStrokeIndex` (missing → 0 for legacy saves). Croquis/reference
+ * is never present on this context.
+ */
+export function paintFillsWithErasers(
+  ctx: FillPaintTarget,
+  fills: FillOp[],
+  strokes: Stroke[],
+): void {
+  for (const fill of fills) {
+    paintFillOps(ctx, [fill])
+    const after = fill.eraseAfterStrokeIndex ?? 0
+    for (let i = after; i < strokes.length; i += 1) {
+      const stroke = strokes[i]!
+      if (stroke.tool === 'erase') paintEraseStroke(ctx, stroke)
+    }
+  }
+}
+
 export type ArtworkLayerOptions = {
   fills: FillOp[]
   strokes: Stroke[]
@@ -68,8 +108,9 @@ export type ArtworkLayerOptions = {
 }
 
 /**
- * Composite garment fills then ink onto `target`, matching Konva / PNG layering:
- * fills and ink use separate canvases so eraser destination-out removes ink only.
+ * Composite garment fills then ink onto `target`, matching Konva / PNG layering.
+ * Fills and ink stay on separate canvases so eraser never touches the reference;
+ * the same eraser strokes also punch fill pixels (per-fill chronology).
  */
 export function compositeFillAndInkLayers(target: Canvas2DLike, options: ArtworkLayerOptions): void {
   const { width, height, fills, strokes } = options
@@ -82,7 +123,7 @@ export function compositeFillAndInkLayers(target: Canvas2DLike, options: Artwork
   const fillCtx = fillLayer.getContext('2d')
   if (!fillCtx) throw new Error('Canvas 2D unavailable')
   if (sx !== 1 || sy !== 1) fillCtx.scale(sx, sy)
-  paintFillOps(fillCtx, fills)
+  paintFillsWithErasers(fillCtx, fills, strokes)
   target.drawImage(fillLayer, 0, 0, width, height)
 
   const inkLayer = document.createElement('canvas')
@@ -172,7 +213,7 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
   }
 
   // Fills sit above the reference and under ink (garment colour / fabric).
-  // Separate layers: eraser destination-out must not punch holes in fills.
+  // Eraser punches fill + ink on their own layers; reference/base stays intact.
   const strokes = options.minInkSize
     ? withMinimumSize(options.strokes, options.minInkSize / Math.min(sx, sy))
     : options.strokes
