@@ -15,6 +15,7 @@ import { useAuthJobImage } from '@/hooks/useAuthJobImage'
 import {
   confirmTechpackAi,
   exportTechpackPdf,
+  fetchTechpackArtifactBlob,
   fetchTechpackPdfBlob,
   generateTechpackAi,
   getTechpackAiStatus,
@@ -22,7 +23,9 @@ import {
   updateTechpackDraft,
   type MeasuredValue,
   type TechpackAiConfirmResponse,
+  type TechpackAiMode,
   type TechpackAiStatus,
+  type TechpackArtifact,
   type TechpackDraft,
   type TechpackPiece,
   type TechpackSpecV2,
@@ -54,6 +57,15 @@ type Props = {
 }
 
 type WorkflowStage = 'understand' | 'customize' | 'measurements' | 'generate'
+type PackChoice = 'basic' | 'professional'
+
+type ArtifactPreview = {
+  id: string
+  kind: string
+  piece_id?: string | null
+  review_state?: string | null
+  url: string
+}
 
 const STAGES: Array<{ id: WorkflowStage; label: string }> = [
   { id: 'understand', label: 'Understand My Design' },
@@ -201,12 +213,42 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [aiStatus, setAiStatus] = useState<TechpackAiStatus | null>(null)
+  const [packChoice, setPackChoice] = useState<PackChoice>('basic')
   const [confirm, setConfirm] = useState<TechpackAiConfirmResponse | null>(null)
   const [confirmed, setConfirmed] = useState(false)
+  const [proposeBack, setProposeBack] = useState(false)
+  const [generateProgress, setGenerateProgress] = useState<string | null>(null)
   const [lastWarnings, setLastWarnings] = useState<string[]>([])
+  const [failedSections, setFailedSections] = useState<string[]>([])
+  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null)
+  const [artifactPreviews, setArtifactPreviews] = useState<ArtifactPreview[]>([])
+  const [lastGenerateMode, setLastGenerateMode] = useState<TechpackAiMode | null>(null)
 
   const frontImg = useAuthJobImage(draft?.front_job_id ?? null, Boolean(draft?.front_job_id))
   const backImg = useAuthJobImage(draft?.back_job_id ?? null, Boolean(draft?.back_job_id))
+
+  const professionalAvailable = Boolean(
+    aiStatus?.enabled && (aiStatus.professional_available ?? false),
+  )
+
+  const professionalDisabledReason = useMemo(() => {
+    if (!aiStatus) {
+      return 'AI Professional status unavailable — Basic Technical Pack still works at $0.'
+    }
+    if (!aiStatus.enabled || !aiStatus.professional_available) {
+      if (aiStatus.owner_allowlisted === false) {
+        return 'AI Professional unavailable — your account is not on the owner allowlist.'
+      }
+      if (aiStatus.max_usd_per_run == null && aiStatus.spend_ceiling_usd == null) {
+        return 'AI Professional unavailable — owner allowlist / spend ceiling not configured.'
+      }
+      return (
+        aiStatus.note ||
+        'AI Professional unavailable — owner allowlist / spend ceiling not configured.'
+      )
+    }
+    return null
+  }, [aiStatus])
 
   const pieces = spec?.outfit?.pieces ?? []
   const activePiece =
@@ -253,6 +295,41 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  useEffect(() => {
+    return () => {
+      artifactPreviews.forEach((a) => URL.revokeObjectURL(a.url))
+    }
+    // Only revoke on unmount / when replacing the whole set via clearArtifactPreviews.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const clearArtifactPreviews = useCallback(() => {
+    setArtifactPreviews((prev) => {
+      prev.forEach((a) => URL.revokeObjectURL(a.url))
+      return []
+    })
+  }, [])
+
+  const loadArtifactPreviews = useCallback(async (artifacts: TechpackArtifact[]) => {
+    clearArtifactPreviews()
+    const next: ArtifactPreview[] = []
+    for (const art of artifacts) {
+      try {
+        const blob = await fetchTechpackArtifactBlob(art.id)
+        next.push({
+          id: art.id,
+          kind: art.kind,
+          piece_id: art.piece_id,
+          review_state: art.review_state,
+          url: URL.createObjectURL(blob),
+        })
+      } catch {
+        // Skip missing/failed artifact images; warnings surface elsewhere.
+      }
+    }
+    setArtifactPreviews(next)
+  }, [clearArtifactPreviews])
 
   const statusLabel = useMemo(() => {
     if (!draft) return 'DRAFT / UNVERIFIED'
@@ -386,27 +463,46 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     setActivePieceId((cur) => (cur === pieceId ? 'overview' : cur))
   }
 
-  const prepareGenerate = async () => {
+  const selectPackChoice = (choice: PackChoice) => {
+    if (choice === 'professional' && !professionalAvailable) return
+    setPackChoice(choice)
+    setConfirm(null)
+    setConfirmed(false)
+    setGenerateProgress(null)
+    setError(null)
+    setNotice(null)
+  }
+
+  const prepareGenerate = async (mode: TechpackAiMode) => {
     setBusy(true)
     setError(null)
     setNotice(null)
     setConfirmed(false)
+    setGenerateProgress('Requesting confirm token…')
     try {
       await save({ workflow: 'generate', silent: true })
-      const challenge = await confirmTechpackAi(draftId, 'generate')
+      const challenge = await confirmTechpackAi(draftId, 'generate', mode)
       setConfirm(challenge)
       setNotice(challenge.message)
+      setGenerateProgress('Confirm token ready — review cost and confirm to generate.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not prepare generation')
       setConfirm(null)
+      setGenerateProgress(null)
     } finally {
       setBusy(false)
     }
   }
 
-  const runGenerate = async () => {
+  const runGenerate = async (opts: { sections?: string[]; retry?: boolean } = {}) => {
+    const mode: TechpackAiMode =
+      packChoice === 'professional' ? 'professional' : 'heuristic'
+    if (packChoice === 'professional' && !professionalAvailable) {
+      setError('AI Professional is not available for this account.')
+      return
+    }
     if (!confirm?.confirm_token) {
-      setError('Confirm generation first.')
+      setError('Get a cost estimate / confirm token first.')
       return
     }
     if (!confirmed) {
@@ -416,30 +512,88 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     setBusy(true)
     setError(null)
     setNotice(null)
+    setGenerateProgress(
+      opts.retry
+        ? `Retrying failed sections (${(opts.sections ?? []).join(', ') || 'all'})…`
+        : mode === 'professional'
+          ? 'Generating AI Professional Technical Pack…'
+          : 'Generating Basic Technical Pack…',
+    )
     try {
       await save({ workflow: 'generate', silent: true })
-      const mode = confirm.ai_enabled ? 'ai' : 'heuristic'
       const result = await generateTechpackAi(draftId, {
         confirm_token: confirm.confirm_token,
-        idempotency_key: `gen-${draftId}-${Date.now()}`,
+        idempotency_key: `gen-${draftId}-${Date.now()}${opts.retry ? '-retry' : ''}`,
         mode,
+        propose_back: mode === 'professional' ? proposeBack : undefined,
+        sections: opts.sections,
       })
       const warns = (result.warnings ?? [])
-        .map((w) => (typeof w === 'string' ? w : String((w as { message?: string }).message || JSON.stringify(w))))
+        .map((w) =>
+          typeof w === 'string'
+            ? w
+            : String((w as { message?: string }).message || JSON.stringify(w)),
+        )
         .filter(Boolean)
       setLastWarnings(warns)
+      setAnalysisSummary(result.analysis_summary ?? null)
+      setLastGenerateMode(mode)
+      const failed =
+        result.failed_sections ??
+        (result.status === 'partial' || result.status === 'failed'
+          ? (opts.sections ?? [])
+          : [])
+      setFailedSections(failed)
+      if (result.artifacts?.length) {
+        setGenerateProgress('Loading technical illustrations…')
+        await loadArtifactPreviews(result.artifacts)
+      } else if (mode === 'heuristic') {
+        clearArtifactPreviews()
+      }
       const refreshed = await getTechpackDraft(draftId)
       hydrate(refreshed)
-      setNotice(
-        result.mode === 'ai'
-          ? `AI technical pack ready · ${result.cost_usd_cents}¢ · still DRAFT/UNVERIFIED`
-          : 'Heuristic technical pack ready · $0 · still DRAFT/UNVERIFIED',
-      )
+      const actual =
+        result.actual_cost_usd_cents ?? result.cost_usd_cents ?? 0
+      if (result.status === 'partial' || failed.length > 0) {
+        setNotice(
+          `Professional pack partially completed · ${actual}¢ · retry failed sections below · still DRAFT/UNVERIFIED`,
+        )
+        setGenerateProgress('Partial success — some sections need retry.')
+      } else if (mode === 'professional') {
+        setNotice(
+          `AI Professional Technical Pack ready · ${actual}¢ · still DRAFT/UNVERIFIED`,
+        )
+        setGenerateProgress('Professional generation complete.')
+      } else {
+        setNotice('Basic Technical Pack ready · $0 · still DRAFT/UNVERIFIED')
+        setGenerateProgress('Basic generation complete.')
+      }
       setConfirm(null)
       setConfirmed(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed')
+      setGenerateProgress(null)
     } finally {
+      setBusy(false)
+    }
+  }
+
+  const retryFailedSections = async () => {
+    if (!failedSections.length) {
+      setError('No failed sections to retry.')
+      return
+    }
+    // Need a fresh confirm token for retry.
+    setBusy(true)
+    setError(null)
+    try {
+      const challenge = await confirmTechpackAi(draftId, 'generate', 'professional')
+      setConfirm(challenge)
+      setConfirmed(true)
+      setBusy(false)
+      await runGenerate({ sections: failedSections, retry: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not retry failed sections')
       setBusy(false)
     }
   }
@@ -1163,64 +1317,250 @@ export function TechpackScreen({ draftId, onBack }: Props) {
                 4 · Generate Technical Design
               </h2>
               <p className={styles.sectionLead}>
-                Heuristic generation is always available at $0. Paid AI only runs when enabled and
-                after explicit confirmation — this screen never invents a payment UI.
+                Choose Basic for free lightweight schematics, or AI Professional for paid technical
+                illustrations when enabled. Both stay DRAFT / UNVERIFIED until patternmaker review.
+              </p>
+              <p className={styles.diffNote}>
+                <strong style={{ color: 'var(--fr-text)' }}>Basic</strong> uses local heuristics —
+                no paid API calls, simple flats. <strong style={{ color: 'var(--fr-text)' }}>
+                  AI Professional
+                </strong>{' '}
+                runs vision + image models for factory-ready technical art, with an explicit cost
+                confirm and spend ceiling.
               </p>
 
+              <div className={styles.packChoices} role="radiogroup" aria-label="Technical pack type">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={packChoice === 'basic'}
+                  className={
+                    packChoice === 'basic'
+                      ? `${styles.packCard} ${styles.packCardActive}`
+                      : styles.packCard
+                  }
+                  onClick={() => selectPackChoice('basic')}
+                  disabled={busy}
+                >
+                  <span className={styles.packCardTitle}>Basic Technical Pack — Free</span>
+                  <span className={styles.packCardBody}>
+                    Existing heuristic generate. Lightweight schematics. No paid calls.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={packChoice === 'professional'}
+                  aria-disabled={!professionalAvailable}
+                  className={[
+                    styles.packCard,
+                    packChoice === 'professional' ? styles.packCardActive : '',
+                    !professionalAvailable ? styles.packCardDisabled : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => selectPackChoice('professional')}
+                  disabled={busy || !professionalAvailable}
+                >
+                  <span className={styles.packCardTitle}>AI Professional Technical Pack</span>
+                  <span className={styles.packCardBody}>
+                    Paid AI technical illustrations (flat front / related). Requires confirm +
+                    allowance.
+                  </span>
+                  {!professionalAvailable ? (
+                    <span className={styles.packCardHint}>
+                      {professionalDisabledReason ||
+                        'Unavailable — owner allowlist / spend ceiling not configured.'}
+                    </span>
+                  ) : (
+                    <span className={styles.packCardHint}>
+                      Est.{' '}
+                      {aiStatus?.estimate_professional_cents_min ?? '—'}–
+                      {aiStatus?.estimate_professional_cents_max ??
+                        aiStatus?.estimate_chat_cents ??
+                        '—'}
+                      ¢ · max ${aiStatus?.max_usd_per_run ?? '—'} / run
+                    </span>
+                  )}
+                </button>
+              </div>
+
               <div className={styles.aiPanel}>
-                <p>
-                  <strong style={{ color: 'var(--fr-text)' }}>AI status:</strong>{' '}
-                  {aiStatus
-                    ? aiStatus.enabled
-                      ? `Enabled · estimate ~${aiStatus.estimate_chat_cents ?? confirm?.estimated_cost_usd_cents ?? '—'}¢ · ${aiStatus.model || 'model n/a'}`
-                      : 'Paid AI disabled — heuristic technical pack available at $0'
-                    : 'Status unavailable — you can still try heuristic generate after confirm'}
-                </p>
-                {aiStatus?.note ? <p>{aiStatus.note}</p> : null}
-                {confirm ? (
-                  <div className={styles.confirmBox}>
+                {packChoice === 'basic' ? (
+                  <>
                     <p>
-                      Estimated cost:{' '}
-                      <strong style={{ color: 'var(--fr-text)' }}>
-                        {confirm.estimated_cost_usd_cents}¢
-                      </strong>
-                      {confirm.ai_enabled ? ' (paid AI available)' : ' (heuristic / $0)'}
+                      Basic pack always available at <strong style={{ color: 'var(--fr-text)' }}>$0</strong>.
+                      Prepare a confirm token, then generate heuristic content.
                     </p>
-                    <p>{confirm.message}</p>
-                    <label>
+                    {confirm && confirm.mode !== 'professional' ? (
+                      <div className={styles.confirmBox}>
+                        <p>
+                          Estimated cost:{' '}
+                          <strong style={{ color: 'var(--fr-text)' }}>
+                            {confirm.estimated_cost_usd_cents}¢
+                          </strong>{' '}
+                          (heuristic / $0)
+                        </p>
+                        <p>{confirm.message}</p>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={confirmed}
+                            onChange={(e) => setConfirmed(e.target.checked)}
+                          />
+                          <span>
+                            I confirm generating a Basic Technical Pack. Output remains DRAFT /
+                            UNVERIFIED.
+                          </span>
+                        </label>
+                      </div>
+                    ) : null}
+                    <div className={styles.actions} style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        className={styles.ghostBtn}
+                        disabled={busy}
+                        onClick={() => void prepareGenerate('heuristic')}
+                      >
+                        <Sparkles size={14} aria-hidden />
+                        Get confirm token
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.primaryBtn}
+                        disabled={busy || !confirm || !confirmed || packChoice !== 'basic'}
+                        onClick={() => void runGenerate()}
+                      >
+                        <Sparkles size={14} aria-hidden />
+                        {busy ? 'Working…' : 'Generate Basic Pack'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      AI Professional uses vision + image models when your account is allowlisted
+                      and a spend ceiling is configured.
+                    </p>
+                    <p className={styles.costLine}>
+                      {confirm ? (
+                        <>
+                          Estimated cost:{' '}
+                          <strong style={{ color: 'var(--fr-text)' }}>
+                            {confirm.estimated_cost_usd_cents}¢
+                          </strong>
+                          {' · '}
+                          Max allowance:{' '}
+                          <strong style={{ color: 'var(--fr-text)' }}>
+                            ${confirm.max_usd_per_run ?? aiStatus?.max_usd_per_run ?? '—'}
+                          </strong>
+                          {' / run'}
+                        </>
+                      ) : (
+                        <>
+                          Status estimate:{' '}
+                          {aiStatus?.estimate_professional_cents_min ?? '—'}–
+                          {aiStatus?.estimate_professional_cents_max ?? '—'}¢ · max $
+                          {aiStatus?.max_usd_per_run ?? '—'} / run
+                          {aiStatus?.vision_model || aiStatus?.image_model
+                            ? ` · ${[aiStatus.vision_model, aiStatus.image_model]
+                                .filter(Boolean)
+                                .join(' + ')}`
+                            : ''}
+                        </>
+                      )}
+                    </p>
+                    <label className={styles.checkRow}>
                       <input
                         type="checkbox"
-                        checked={confirmed}
-                        onChange={(e) => setConfirmed(e.target.checked)}
+                        checked={proposeBack}
+                        onChange={(e) => setProposeBack(e.target.checked)}
                       />
-                      <span>
-                        I confirm generating a technical design for this draft. Output remains DRAFT /
-                        UNVERIFIED and needs patternmaker review.
-                      </span>
+                      <span>Propose unverified back view (only if no Magic back)</span>
                     </label>
-                  </div>
+                    {confirm ? (
+                      <div className={styles.confirmBox}>
+                        <p>{confirm.message}</p>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={confirmed}
+                            onChange={(e) => setConfirmed(e.target.checked)}
+                          />
+                          <span>
+                            I confirm generating an AI Professional Technical Pack and accept the
+                            estimated cost. Output remains DRAFT / UNVERIFIED.
+                          </span>
+                        </label>
+                      </div>
+                    ) : null}
+                    <div className={styles.actions} style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        className={styles.ghostBtn}
+                        disabled={busy || !professionalAvailable}
+                        onClick={() => void prepareGenerate('professional')}
+                      >
+                        <Sparkles size={14} aria-hidden />
+                        Get cost estimate
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.primaryBtn}
+                        disabled={
+                          busy ||
+                          !professionalAvailable ||
+                          !confirm ||
+                          !confirmed ||
+                          packChoice !== 'professional'
+                        }
+                        onClick={() => void runGenerate()}
+                      >
+                        <Sparkles size={14} aria-hidden />
+                        {busy ? 'Working…' : 'Generate Professional Pack'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {generateProgress ? (
+                  <p className={styles.progressStatus} role="status">
+                    {generateProgress}
+                  </p>
                 ) : null}
+              </div>
+
+              {artifactPreviews.length > 0 ? (
+                <div className={styles.artifactGrid} aria-label="Generated technical illustrations">
+                  <h3 className={styles.sectionTitle}>Technical illustrations</h3>
+                  {analysisSummary ? (
+                    <p className={styles.sectionLead}>{analysisSummary}</p>
+                  ) : null}
+                  <div className={styles.artifactThumbs}>
+                    {artifactPreviews.map((art) => (
+                      <figure key={art.id} className={styles.artifactThumb}>
+                        <img src={art.url} alt={`${art.kind} technical illustration`} />
+                        <figcaption>
+                          {art.kind}
+                          {art.review_state ? ` · ${art.review_state}` : ''}
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {failedSections.length > 0 ? (
                 <div className={styles.actions} style={{ marginTop: 12 }}>
                   <button
                     type="button"
                     className={styles.ghostBtn}
-                    disabled={busy}
-                    onClick={() => void prepareGenerate()}
+                    disabled={busy || !professionalAvailable}
+                    onClick={() => void retryFailedSections()}
                   >
-                    <Sparkles size={14} aria-hidden />
-                    Get cost & confirm token
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.primaryBtn}
-                    disabled={busy || !confirm || !confirmed}
-                    onClick={() => void runGenerate()}
-                  >
-                    <Sparkles size={14} aria-hidden />
-                    {busy ? 'Working…' : confirm?.ai_enabled ? 'Generate with AI' : 'Generate heuristic'}
+                    Retry failed sections ({failedSections.join(', ')})
                   </button>
                 </div>
-              </div>
+              ) : null}
 
               {lastWarnings.length > 0 || (spec.warnings && spec.warnings.length > 0) ? (
                 <div className={styles.warnings} role="status">
@@ -1266,7 +1606,11 @@ export function TechpackScreen({ draftId, onBack }: Props) {
                   disabled={busy}
                 >
                   <FileText size={14} aria-hidden />
-                  {busy ? 'Working…' : 'Preview PDF'}
+                  {busy
+                    ? 'Working…'
+                    : lastGenerateMode === 'professional' || artifactPreviews.length > 0
+                      ? 'Export Professional PDF'
+                      : 'Preview PDF'}
                 </button>
                 <button
                   type="button"
@@ -1276,6 +1620,15 @@ export function TechpackScreen({ draftId, onBack }: Props) {
                 >
                   <Download size={14} aria-hidden />
                   Download PDF
+                </button>
+                <button
+                  type="button"
+                  className={styles.ghostBtn}
+                  onClick={() => void save({ bump: false })}
+                  disabled={busy}
+                >
+                  <Save size={14} aria-hidden />
+                  Save draft
                 </button>
               </div>
             </section>

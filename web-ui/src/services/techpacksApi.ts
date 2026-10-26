@@ -148,6 +148,8 @@ export type TechpackUpdate = {
   bump_revision?: boolean
 }
 
+export type TechpackAiMode = 'heuristic' | 'ai' | 'professional'
+
 export type TechpackAiStatus = {
   enabled: boolean
   configured_flag?: boolean
@@ -156,8 +158,14 @@ export type TechpackAiStatus = {
   max_usd_per_run?: number
   max_usd_per_user_day?: number
   estimate_chat_cents?: number
+  estimate_professional_cents_min?: number
+  estimate_professional_cents_max?: number
+  professional_available?: boolean
+  owner_allowlisted?: boolean
   requires_entitlement?: boolean
   model?: string | null
+  vision_model?: string | null
+  image_model?: string | null
   note?: string
 }
 
@@ -170,13 +178,24 @@ export type TechpackAiConfirmResponse = {
   model?: string | null
   message: string
   expires_hint_seconds?: number
+  max_usd_per_run?: number
+  mode?: TechpackAiMode | string
+}
+
+export type TechpackArtifact = {
+  id: string
+  piece_id?: string | null
+  kind: string
+  url_path?: string | null
+  review_state?: string | null
 }
 
 export type TechpackAiGenerateRequest = {
   confirm_token: string
   idempotency_key: string
-  mode: 'heuristic' | 'ai'
+  mode: TechpackAiMode
   sections?: string[]
+  propose_back?: boolean
 }
 
 export type TechpackAiGenerateResponse = {
@@ -188,6 +207,11 @@ export type TechpackAiGenerateResponse = {
   warnings?: Array<Record<string, unknown> | string>
   result?: Record<string, unknown> | null
   idempotent_replay?: boolean
+  artifacts?: TechpackArtifact[]
+  estimated_cost_usd_cents?: number
+  actual_cost_usd_cents?: number
+  analysis_summary?: string | null
+  failed_sections?: string[]
 }
 
 export type TechpackAiRun = {
@@ -284,10 +308,11 @@ export async function getTechpackAiStatus(signal?: AbortSignal): Promise<Techpac
 export async function confirmTechpackAi(
   draftId: string,
   stage: string,
+  mode?: TechpackAiMode,
 ): Promise<TechpackAiConfirmResponse> {
   return apiRequest<TechpackAiConfirmResponse>(`/techpacks/${draftId}/ai/confirm`, {
     method: 'POST',
-    body: { stage },
+    body: mode ? { stage, mode } : { stage },
   })
 }
 
@@ -306,4 +331,32 @@ export async function getTechpackAiRun(
   signal?: AbortSignal,
 ): Promise<TechpackAiRun> {
   return apiRequest<TechpackAiRun>(`/techpacks/ai/runs/${runId}`, { method: 'GET', signal })
+}
+
+/** Authenticated technical-illustration image for a generate artifact. */
+export async function fetchTechpackArtifactBlob(
+  artifactId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const headers: Record<string, string> = { Accept: 'image/*' }
+  const tokens = tokenStore.get()
+  if (tokens?.accessToken) {
+    headers.Authorization = `Bearer ${tokens.accessToken}`
+  }
+  let response: Response
+  try {
+    response = await fetch(`${getApiBaseUrl()}/techpacks/artifacts/${artifactId}/image`, {
+      method: 'GET',
+      headers,
+      signal,
+    })
+  } catch {
+    throw new ApiError('Unable to reach FashionRise. Check that the API is running.', 0, null)
+  }
+  if (!response.ok) {
+    throw new ApiError(`Artifact image request failed (${response.status})`, response.status, null)
+  }
+  const blob = await response.blob()
+  if (!blob.size) throw new ApiError('Techpack artifact image was empty', response.status, null)
+  return blob
 }

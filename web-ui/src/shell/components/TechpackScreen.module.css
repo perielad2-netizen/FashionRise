@@ -466,6 +466,71 @@
   padding-left: 18px;
 }
 
+.diffNote {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fr-muted);
+}
+
+.packChoices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 720px) {
+  .packChoices {
+    grid-template-columns: 1fr;
+  }
+}
+
+.packCard {
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fr-text);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.packCard:hover:not(:disabled) {
+  border-color: rgba(244, 114, 182, 0.45);
+}
+
+.packCardActive {
+  border-color: rgba(244, 114, 182, 0.7);
+  background: rgba(244, 114, 182, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.25);
+}
+
+.packCardDisabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.packCardTitle {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--fr-text);
+}
+
+.packCardBody {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fr-muted);
+}
+
+.packCardHint {
+  font-size: 11px;
+  color: #f9a8d4;
+}
+
 .aiPanel {
   padding: 12px;
   border-radius: 12px;
@@ -477,6 +542,26 @@
   margin: 0 0 8px;
   font-size: 12px;
   color: var(--fr-muted);
+}
+
+.costLine {
+  font-size: 12px;
+  color: var(--fr-muted);
+}
+
+.progressStatus {
+  margin-top: 10px !important;
+  color: #f9a8d4 !important;
+}
+
+.checkRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: var(--fr-text);
+  cursor: pointer;
+  margin: 8px 0;
 }
 
 .confirmBox {
@@ -494,6 +579,38 @@
   font-size: 12px;
   color: var(--fr-text);
   cursor: pointer;
+}
+
+.artifactGrid {
+  margin-top: 16px;
+}
+
+.artifactThumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.artifactThumb {
+  margin: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.artifactThumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  background: #0b1220;
+}
+
+.artifactThumb figcaption {
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--fr-muted);
 }
 
 .progressList {
