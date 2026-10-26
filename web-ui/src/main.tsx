@@ -18,13 +18,9 @@ registerSW({
   },
 })
 
-// Keep the static HTML version bar until React paints, then remove it so the
-// GlobalHeader "App …" pill remains the durable signal.
-window.addEventListener('DOMContentLoaded', () => {
-  window.setTimeout(() => {
-    document.getElementById('fr-static-app-version')?.remove()
-  }, 4000)
-})
+// Keep the sticky HTML "FashionRise App …" bar for the whole session.
+// Phones were missing the build id when we removed it after paint; the bar is
+// the unmistakable proof the browser loaded this release (not a cached shell).
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
