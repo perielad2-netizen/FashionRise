@@ -1,11 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getLook, listLooks, lookThumbnailJobId, updateLook, type LookRecord } from './looksApi'
+import { ApiError } from '@/services/api/client'
+import {
+  deleteLook,
+  getLook,
+  listLooks,
+  lookThumbnailJobId,
+  updateLook,
+  type LookRecord,
+} from './looksApi'
 
 const apiRequest = vi.fn()
 
-vi.mock('@/services/api/client', () => ({
-  apiRequest: (...args: unknown[]) => apiRequest(...args),
-}))
+vi.mock('@/services/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api/client')>()
+  return {
+    ...actual,
+    apiRequest: (...args: unknown[]) => apiRequest(...args),
+  }
+})
 
 const SAMPLE: LookRecord = {
   id: 'op-1',
@@ -72,5 +84,29 @@ describe('looksApi', () => {
         front: { ...SAMPLE.front!, has_image: false },
       }),
     ).toBe('jb')
+  })
+
+  it('deletes a look on 204', async () => {
+    apiRequest.mockResolvedValueOnce(undefined)
+    await expect(deleteLook('op-1')).resolves.toEqual({ ok: true, alreadyGone: false })
+    expect(apiRequest).toHaveBeenCalledWith('/looks/op-1', expect.objectContaining({ method: 'DELETE' }))
+  })
+
+  it('treats DELETE 404 as success only when look is absent', async () => {
+    apiRequest
+      .mockRejectedValueOnce(new ApiError('missing', 404, null))
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 100, offset: 0 }) // all
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 100, offset: 0 }) // archived
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 100, offset: 0 }) // favorites
+    await expect(deleteLook('op-1')).resolves.toEqual({ ok: true, alreadyGone: true })
+  })
+
+  it('does not claim success when DELETE 404 but look still listed', async () => {
+    apiRequest
+      .mockRejectedValueOnce(new ApiError('missing', 404, null))
+      .mockResolvedValueOnce({ items: [SAMPLE], total: 1, limit: 100, offset: 0 })
+    const result = await deleteLook('op-1')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.canRetry).toBe(true)
   })
 })

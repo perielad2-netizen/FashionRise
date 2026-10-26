@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Archive, ArrowLeft, Download, Heart, RefreshCw, Star, X } from 'lucide-react'
+import { Archive, ArrowLeft, Download, Heart, RefreshCw, Star, Trash2, X } from 'lucide-react'
+import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { useAuthJobImage } from '@/hooks/useAuthJobImage'
 import { fetchJobImageBlob } from '@/services/ai/magicApi'
 import {
+  deleteLook,
   listLooks,
   lookThumbnailJobId,
   updateLook,
@@ -24,6 +26,11 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; items: LookRecord[]; total: number }
+
+type DeleteDialog =
+  | { phase: 'confirm'; look: LookRecord }
+  | { phase: 'deleting'; look: LookRecord }
+  | { phase: 'error'; look: LookRecord; message: string; canRetry: boolean }
 
 function formatDate(iso: string): string {
   const t = Date.parse(iso)
@@ -96,10 +103,14 @@ function LookDetailDialog({
   look,
   onClose,
   onUpdated,
+  onAskDelete,
+  deleteBusy,
 }: {
   look: LookRecord
   onClose: () => void
   onUpdated: (next: LookRecord) => void
+  onAskDelete: (look: LookRecord) => void
+  deleteBusy: boolean
 }) {
   const titleId = useId()
   const [title, setTitle] = useState(look.title)
@@ -275,13 +286,23 @@ function LookDetailDialog({
           <button
             type="button"
             className={styles.ghostBtn}
-            disabled={busy}
+            disabled={busy || deleteBusy}
             onClick={() => void patch({ is_archived: !look.is_archived })}
           >
             <Archive size={14} aria-hidden />
             {look.is_archived ? 'Restore' : 'Archive'}
           </button>
-          <button type="button" className={styles.primaryBtn} onClick={onClose}>
+          <button
+            type="button"
+            className={styles.deleteBtn}
+            disabled={busy || deleteBusy}
+            aria-label={`Delete ${look.title}`}
+            onClick={() => onAskDelete(look)}
+          >
+            <Trash2 size={14} aria-hidden />
+            Delete
+          </button>
+          <button type="button" className={styles.primaryBtn} onClick={onClose} disabled={deleteBusy}>
             Done
           </button>
         </div>
@@ -299,6 +320,10 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
   const [reloadToken, setReloadToken] = useState(0)
   const [selected, setSelected] = useState<LookRecord | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
+  const deleteInFlightRef = useRef(false)
+  const deleteTriggerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     const t = window.setTimeout(() => setDeferredQuery(query.trim()), 200)
@@ -398,6 +423,70 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
     }
   }
 
+  const askDelete = useCallback((look: LookRecord) => {
+    deleteTriggerRef.current = document.activeElement as HTMLElement | null
+    setNotice(null)
+    setActionError(null)
+    setSelected(null)
+    setDeleteDialog({ phase: 'confirm', look })
+  }, [])
+
+  const closeDeleteDialog = useCallback(() => {
+    if (deleteInFlightRef.current) return
+    setDeleteDialog(null)
+    const trigger = deleteTriggerRef.current
+    deleteTriggerRef.current = null
+    if (trigger && document.contains(trigger)) {
+      queueMicrotask(() => trigger.focus())
+    }
+  }, [])
+
+  const removeLookFromList = useCallback((lookId: string, title: string, alreadyGone: boolean) => {
+    setState((prev) => {
+      if (prev.status !== 'ready') return prev
+      const had = prev.items.some((i) => i.id === lookId)
+      const items = prev.items.filter((i) => i.id !== lookId)
+      return {
+        status: 'ready',
+        items,
+        total: had ? Math.max(0, prev.total - 1) : prev.total,
+      }
+    })
+    setSelected((prev) => (prev?.id === lookId ? null : prev))
+    setNotice(alreadyGone ? `“${title}” was already deleted.` : `“${title}” was permanently deleted.`)
+    setDeleteDialog(null)
+    deleteTriggerRef.current = null
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteDialog || deleteInFlightRef.current) return
+    const look = deleteDialog.look
+    deleteInFlightRef.current = true
+    setDeleteDialog({ phase: 'deleting', look })
+    try {
+      const result = await deleteLook(look.id)
+      if (result.ok) {
+        removeLookFromList(look.id, look.title, result.alreadyGone)
+        return
+      }
+      setDeleteDialog({
+        phase: 'error',
+        look,
+        message: result.error,
+        canRetry: result.canRetry,
+      })
+    } finally {
+      deleteInFlightRef.current = false
+    }
+  }, [deleteDialog, removeLookFromList])
+
+  const deleteBusy = deleteDialog?.phase === 'deleting'
+  const dialogTitle = deleteDialog
+    ? deleteDialog.phase === 'error'
+      ? 'Could not delete look'
+      : `Delete “${deleteDialog.look.title}”?`
+    : ''
+
   const emptyCopy = useMemo(() => {
     if (filter === 'favorites') return 'No favorite looks yet. Heart a look to keep it close.'
     if (filter === 'archived') return 'No archived looks. Archive keeps paid Magic results recoverable.'
@@ -458,6 +547,11 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
       </div>
 
       <div className={styles.scroll}>
+        {notice ? (
+          <p className={styles.notice} role="status">
+            {notice}
+          </p>
+        ) : null}
         {actionError ? <p className={styles.stateError}>{actionError}</p> : null}
 
         {state.status === 'loading' ? (
@@ -498,6 +592,7 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
                         type="button"
                         className={styles.cardOpen}
                         onClick={() => setSelected(look)}
+                        disabled={deleteBusy}
                         aria-label={`View details for ${look.title}`}
                       >
                         View details
@@ -507,9 +602,20 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
                         className={look.is_favorite ? styles.iconBtnActive : styles.iconBtn}
                         aria-label={look.is_favorite ? `Unfavorite ${look.title}` : `Favorite ${look.title}`}
                         aria-pressed={look.is_favorite}
+                        disabled={deleteBusy}
                         onClick={() => void toggleFavorite(look)}
                       >
                         <Heart size={14} fill={look.is_favorite ? 'currentColor' : 'none'} />
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.deleteBtn}
+                        onClick={() => askDelete(look)}
+                        disabled={deleteBusy}
+                        aria-label={`Delete ${look.title}`}
+                      >
+                        <Trash2 size={14} aria-hidden />
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -530,7 +636,58 @@ export function MyLooksScreen({ focusLookId, onBackToStudio, onFocusConsumed }: 
       </div>
 
       {selected ? (
-        <LookDetailDialog look={selected} onClose={() => setSelected(null)} onUpdated={onUpdated} />
+        <LookDetailDialog
+          look={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={onUpdated}
+          onAskDelete={askDelete}
+          deleteBusy={Boolean(deleteBusy)}
+        />
+      ) : null}
+
+      {deleteDialog ? (
+        <ConfirmDialog
+          title={dialogTitle}
+          busy={deleteDialog.phase === 'deleting'}
+          onEscape={deleteDialog.phase === 'deleting' ? undefined : closeDeleteDialog}
+          actions={
+            deleteDialog.phase === 'error'
+              ? [
+                  { label: 'Close', onClick: closeDeleteDialog, variant: 'ghost' },
+                  ...(deleteDialog.canRetry
+                    ? [{ label: 'Try again', onClick: () => void confirmDelete(), variant: 'danger' as const }]
+                    : []),
+                ]
+              : [
+                  {
+                    label: 'Cancel',
+                    onClick: closeDeleteDialog,
+                    variant: 'ghost',
+                    disabled: deleteDialog.phase === 'deleting',
+                  },
+                  {
+                    label: deleteDialog.phase === 'deleting' ? 'Deleting…' : 'Delete permanently',
+                    onClick: () => void confirmDelete(),
+                    variant: 'danger',
+                    disabled: deleteDialog.phase === 'deleting',
+                  },
+                ]
+          }
+        >
+          {deleteDialog.phase === 'error' ? (
+            <p role="alert">{deleteDialog.message}</p>
+          ) : deleteDialog.phase === 'deleting' ? (
+            <p role="status">Deleting “{deleteDialog.look.title}”…</p>
+          ) : (
+            <>
+              <p>
+                This permanently removes “{deleteDialog.look.title}” from My Looks. This cannot be
+                undone.
+              </p>
+              <p>Archive remains available for reversible hiding. Studio drafts and My Designs are not affected.</p>
+            </>
+          )}
+        </ConfirmDialog>
       ) : null}
     </section>
   )

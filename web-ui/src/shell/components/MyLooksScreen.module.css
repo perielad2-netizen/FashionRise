@@ -108,6 +108,7 @@
 
 .ghostBtn,
 .primaryBtn,
+.deleteBtn,
 .iconBtn {
   min-height: 34px;
   padding: 0 12px;
@@ -131,6 +132,36 @@
   border: 0;
   background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-soft));
   color: white;
+}
+
+.deleteBtn {
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+}
+
+.deleteBtn:disabled,
+.ghostBtn:disabled,
+.primaryBtn:disabled,
+.iconBtn:disabled,
+.cardOpen:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.deleteBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.notice {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(134, 239, 172, 0.28);
+  background: rgba(20, 83, 45, 0.28);
+  color: #bbf7d0;
+  font-size: 12px;
 }
 
 .iconBtn {

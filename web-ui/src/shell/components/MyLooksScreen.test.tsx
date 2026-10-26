@@ -5,6 +5,7 @@ import type { LookRecord } from '@/services/looksApi'
 
 const listLooks = vi.fn()
 const updateLook = vi.fn()
+const deleteLook = vi.fn()
 const fetchJobImageBlob = vi.fn()
 
 vi.mock('@/services/looksApi', async (importOriginal) => {
@@ -13,6 +14,7 @@ vi.mock('@/services/looksApi', async (importOriginal) => {
     ...actual,
     listLooks: (...args: unknown[]) => listLooks(...args),
     updateLook: (...args: unknown[]) => updateLook(...args),
+    deleteLook: (...args: unknown[]) => deleteLook(...args),
   }
 })
 
@@ -70,6 +72,7 @@ describe('MyLooksScreen', () => {
   beforeEach(() => {
     listLooks.mockReset()
     updateLook.mockReset()
+    deleteLook.mockReset()
     fetchJobImageBlob.mockReset()
     fetchJobImageBlob.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }))
     // IntersectionObserver may be missing / inert in jsdom — treat as immediately visible.
@@ -149,5 +152,47 @@ describe('MyLooksScreen', () => {
         expect.objectContaining({ filter: 'favorites' }),
       ),
     )
+  })
+
+  it('cancels delete confirmation without calling the API', async () => {
+    listLooks.mockResolvedValue({ items: [LOOK_A], total: 1, limit: 24, offset: 0 })
+    render(<MyLooksScreen onBackToStudio={() => undefined} />)
+    await screen.findByText('Blush gown')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Blush gown' }))
+    expect(screen.getByRole('dialog', { name: /Delete “Blush gown”/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: /Delete “Blush gown”/ })).toBeNull()
+    expect(deleteLook).not.toHaveBeenCalled()
+    expect(screen.getByText('Blush gown')).toBeInTheDocument()
+  })
+
+  it('deletes a look after confirm and removes the card', async () => {
+    listLooks.mockResolvedValue({ items: [LOOK_A, LOOK_DUAL], total: 2, limit: 24, offset: 0 })
+    deleteLook.mockResolvedValue({ ok: true, alreadyGone: false })
+    render(<MyLooksScreen onBackToStudio={() => undefined} />)
+    await screen.findByText('Blush gown')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Blush gown' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    await waitFor(() => expect(deleteLook).toHaveBeenCalledWith('look-a'))
+    expect(screen.queryByText('Blush gown')).toBeNull()
+    expect(screen.getByText('Dual runway')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('permanently deleted')
+  })
+
+  it('offers retry when delete fails without claiming success', async () => {
+    listLooks.mockResolvedValue({ items: [LOOK_A], total: 1, limit: 24, offset: 0 })
+    deleteLook.mockResolvedValue({
+      ok: false,
+      error: 'Still present',
+      outcomeUncertain: false,
+      canRetry: true,
+    })
+    render(<MyLooksScreen onBackToStudio={() => undefined} />)
+    await screen.findByText('Blush gown')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Blush gown' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Still present')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.getByText('Blush gown')).toBeInTheDocument()
   })
 })
