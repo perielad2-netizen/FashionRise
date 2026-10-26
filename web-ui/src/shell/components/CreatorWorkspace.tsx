@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Expand } from 'lucide-react'
 import { modelLabel } from '@/assets/modelLibrary'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
+import { rearUnavailableReasonForModel } from '@/shell/rearUnavailableReason'
 import {
   centerPan,
   fitPage,
@@ -338,8 +338,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           saveError={editor.saveError}
           onRetrySave={editor.retrySave}
           onSaveDesign={editor.beginSaveDesign}
-          onExportPng={() => void editor.exportPng()}
-          exporting={editor.exporting}
           onOpenLibrary={onOpenLibrary}
         />
       ) : null}
@@ -356,6 +354,19 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         sketchObjectUrl={editor.magicSketchUrl}
         error={editor.magicError}
         canRecover={editor.magicCanRecover}
+        dual={
+          editor.magicDualActive && editor.magicOperationId
+            ? {
+                operationId: editor.magicOperationId,
+                viewSide: editor.magicDualViewSide,
+                onViewSide: editor.setMagicDualViewSide,
+                front: editor.magicFront,
+                back: editor.magicBack,
+                onRetrySide: editor.retryMagicSide,
+                onDownloadSide: editor.downloadMagicSide,
+              }
+            : null
+        }
         onClose={editor.closeMagicPanel}
         onCancel={editor.cancelMagicWait}
         onDownload={editor.downloadMagicLook}
@@ -475,21 +486,14 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               panTool={panTool}
               viewport={immersive ? viewport : undefined}
               onViewportChange={immersive ? setViewport : undefined}
+              frontBackEnabled={editor.frontBackEnabled}
+              activeSide={editor.activeSide}
+              rearAvailable={editor.rearAvailable}
+              rearUnavailableReason={rearUnavailableReasonForModel(editor.model)}
+              onSideChange={editor.changeActiveSide}
+              onUnavailableFlip={(reason) => editor.publishStudioNotice(reason)}
+              onEnterFullscreen={immersive ? undefined : () => void enterImmersive()}
             />
-            {!immersive ? (
-              <div className={styles.canvasActions}>
-                <button
-                  type="button"
-                  className={styles.immersiveToggle}
-                  aria-label="Enter full screen drawing"
-                  title="Full screen drawing — nearly the whole device, with zoom and pan"
-                  onClick={() => void enterImmersive()}
-                >
-                  <Expand size={16} />
-                  <span>Full screen</span>
-                </button>
-              </div>
-            ) : null}
             {immersive ? (
               <ImmersiveToolbar
                 tool={immersiveTool}
@@ -539,7 +543,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 onOpenBrush={() => setDock(dock === 'brush' ? null : 'brush')}
                 onOpenModels={toggleModels}
                 onSave={editor.beginSaveDesign}
-                onExport={() => void editor.exportPng()}
                 onExit={exitImmersive}
                 saveLabel={editor.saveStatusLabel || 'Save'}
               />
@@ -697,7 +700,46 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </ConfirmDialog>
       ) : null}
 
-      {editor.saveDesignDialog && !editor.draftConflict && !editor.modelSwitchPrompt ? (
+      {editor.damagedCloud && editor.damagedCloudDialogOpen ? (
+        <ConfirmDialog
+          title="Damaged cloud draft"
+          actions={[
+            {
+              label: 'Continue on this device only',
+              onClick: editor.resolveDamagedCloudContinueLocal,
+              variant: 'ghost',
+            },
+            ...(editor.damagedCloud.hasLocalRecovery || editor.hasBackInk || editor.strokes.length > 0
+              ? [
+                  {
+                    label: 'Replace cloud with this device',
+                    onClick: editor.resolveDamagedCloudReplaceCloud,
+                    variant: 'danger' as const,
+                  },
+                ]
+              : []),
+          ]}
+        >
+          <p>
+            Your private cloud Studio draft exists but could not be read safely. The original cloud
+            row was left unchanged. Automatic sync is paused. Choose recovery deliberately — nothing
+            is overwritten until you confirm.
+          </p>
+        </ConfirmDialog>
+      ) : null}
+
+      {editor.damagedCloud && !editor.damagedCloudDialogOpen ? (
+        <div className={styles.damagedCloudBanner} role="alert">
+          <p>
+            Cloud draft recovery is still paused. The damaged private copy was not changed.
+          </p>
+          <button type="button" className={styles.damagedCloudBannerButton} onClick={editor.reopenDamagedCloudRecovery}>
+            Review recovery options
+          </button>
+        </div>
+      ) : null}
+
+      {editor.saveDesignDialog && !editor.draftConflict && !editor.damagedCloudDialogOpen && !editor.modelSwitchPrompt ? (
         <SaveDesignDialog
           defaultTitle={editor.saveDesignDialog.defaultTitle}
           saving={editor.saveDesignDialog.saving}
