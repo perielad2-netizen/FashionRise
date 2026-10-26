@@ -23,6 +23,12 @@ type Props = {
   onExportPng?: () => void
   exporting?: boolean
   onOpenLibrary?: () => void
+  /** When true, export menu offers front/back/sheet actions (flip lives on the paper). */
+  frontBackEnabled?: boolean
+  onExportFront?: () => void
+  onExportBack?: () => void
+  onExportSheet?: () => void
+  hasBackInk?: boolean
 }
 
 export function WorkspaceHeader({
@@ -45,6 +51,11 @@ export function WorkspaceHeader({
   onExportPng,
   exporting = false,
   onOpenLibrary,
+  frontBackEnabled = false,
+  onExportFront,
+  onExportBack,
+  onExportSheet,
+  hasBackInk = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -179,7 +190,49 @@ export function WorkspaceHeader({
                     onExportPng()
                   }}
                 >
-                  {exporting ? 'Exporting PNG…' : 'Export PNG'}
+                  {exporting ? 'Exporting PNG…' : 'Export visible side'}
+                </button>
+              ) : null}
+              {frontBackEnabled && onExportFront ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  disabled={exporting}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onExportFront()
+                  }}
+                >
+                  Export front
+                </button>
+              ) : null}
+              {frontBackEnabled && hasBackInk && onExportBack ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  disabled={exporting}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onExportBack()
+                  }}
+                >
+                  Export back
+                </button>
+              ) : null}
+              {frontBackEnabled && hasBackInk && onExportSheet ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.moreItem}
+                  disabled={exporting}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onExportSheet()
+                  }}
+                >
+                  Export front + back sheet
                 </button>
               ) : null}
               {onOpenLibrary ? (

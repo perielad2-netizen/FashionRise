@@ -151,6 +151,25 @@
   min-width: 0;
 }
 
+.previewWrap {
+  position: relative;
+}
+
+.backBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(28, 28, 30, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 .paper {
   aspect-ratio: 3 / 4;
   width: 100%;

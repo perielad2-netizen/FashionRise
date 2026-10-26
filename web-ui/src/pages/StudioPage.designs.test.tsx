@@ -288,7 +288,7 @@ describe('Save as design', () => {
   })
 })
 
-describe('Export PNG', () => {
+describe('Export visible side', () => {
   it('exports the authoritative document and downloads a PNG', async () => {
     cleanRestore(workingDoc({ dimmed: true }))
     const blob = new Blob(['png'], { type: 'image/png' })
@@ -297,7 +297,7 @@ describe('Export PNG', () => {
     await ready()
     fireEvent.click(screen.getByRole('button', { name: 'More' }))
     await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export PNG' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Export visible side' }))
     })
     expect(mocks.exportSketchPng).toHaveBeenCalledWith({
       strokes: [STROKE],
@@ -318,12 +318,12 @@ describe('Export PNG', () => {
     await ready()
     fireEvent.click(screen.getByRole('button', { name: 'More' }))
     await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export PNG' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Export visible side' }))
     })
     expect(screen.getByRole('status', { name: /without the reference image/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'More' }))
     await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export PNG' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Export visible side' }))
     })
     expect(screen.getByRole('status', { name: /PNG export failed/ })).toBeInTheDocument()
     expect(mocks.downloadBlob).toHaveBeenCalledTimes(1)

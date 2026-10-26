@@ -1,5 +1,9 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { compositeFillAndInkLayers, paintInkStrokes } from '@/lib/exportCanvas'
+import {
+  compositeFillAndInkLayers,
+  paintFillsWithErasers,
+  paintInkStrokes,
+} from '@/lib/exportCanvas'
 import type { FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
 
@@ -61,6 +65,62 @@ describe('paintInkStrokes (ink-only eraser)', () => {
     expect(ops).toEqual(['fill:source-over', 'fill:destination-out'])
     // Eraser never draws onto a shared base — callers must composite ink over base separately.
     expect(ctx.drawImage).not.toHaveBeenCalled()
+  })
+})
+
+describe('paintFillsWithErasers', () => {
+  it('applies destination-out erase strokes to the fill layer after each fill', () => {
+    const { ctx, ops } = mockCtx()
+    const fills: FillOp[] = [
+      {
+        id: 'f',
+        contour: [0, 0, 10, 0, 10, 10, 0, 10],
+        style: { kind: 'solid', color: '#BE185D' },
+        seedX: 5,
+        seedY: 5,
+        eraseAfterStrokeIndex: 0,
+      },
+    ]
+    const strokes: Stroke[] = [
+      {
+        id: 'e1',
+        tool: 'erase',
+        points: [2, 2, 0.5, 8, 8, 0.5],
+        color: '#000',
+        size: 8,
+        opacity: 1,
+      },
+    ]
+    paintFillsWithErasers(ctx, fills, strokes)
+    expect(ops).toContain('fill:destination-out')
+    expect(ops[0]).toBe('fill:source-over')
+  })
+
+  it('skips erasers that occurred before the fill was created', () => {
+    const { ctx, ops } = mockCtx()
+    const fills: FillOp[] = [
+      {
+        id: 'f',
+        contour: [0, 0, 10, 0, 10, 10, 0, 10],
+        style: { kind: 'solid', color: '#BE185D' },
+        seedX: 5,
+        seedY: 5,
+        eraseAfterStrokeIndex: 1,
+      },
+    ]
+    const strokes: Stroke[] = [
+      {
+        id: 'e-old',
+        tool: 'erase',
+        points: [2, 2, 0.5, 8, 8, 0.5],
+        color: '#000',
+        size: 8,
+        opacity: 1,
+      },
+    ]
+    paintFillsWithErasers(ctx, fills, strokes)
+    expect(ops).toEqual(['fill:source-over'])
+    expect(ops).not.toContain('fill:destination-out')
   })
 })
 
