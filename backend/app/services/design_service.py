@@ -814,6 +814,51 @@ def delete_design(db: Session, design_id: uuid.UUID, user: User) -> None:
     db.commit()
 
 
+def _is_deletable_saved_design(design: GarmentDesign) -> bool:
+    """Strict saved-only delete eligibility: private V1/V2, no Studio signals, not damaged."""
+    if design.visibility != "private":
+        return False
+    meta = design.metadata_ or {}
+    data = design.design_data or {}
+    if _has_studio_kind_signals(meta, data) or _is_studio_working_draft(design):
+        return False
+    schema = data.get("schema")
+    if not _is_saved_schema(schema):
+        return False
+    kind = meta.get("designKind")
+    if kind is not None and kind != SAVED_DESIGN_KIND:
+        return False
+    envelope = meta.get("envelope")
+    if envelope is not None and envelope not in SAVED_DESIGN_SCHEMAS:
+        return False
+    try:
+        _validate_saved_design_data(data)
+    except ValidationAppError:
+        return False
+    return True
+
+
+def delete_saved_design(db: Session, design_id: uuid.UUID, user: User) -> None:
+    """Owner-authorized delete for private saved_design.v1/v2 only.
+
+    Rejects Studio working drafts, unknown/damaged envelopes, non-private rows,
+    and other design kinds. Non-owners see a privacy-preserving 404.
+    Generic ``delete_design`` remains unchanged for other API consumers.
+    """
+    d = db.get(GarmentDesign, design_id)
+    if not d:
+        raise NotFoundError("Design not found")
+    if d.user_id != user.id:
+        raise NotFoundError("Design not found")
+    if not _is_deletable_saved_design(d):
+        raise ValidationAppError(
+            "Only private fashionrise.saved_design.v1/v2 records can be deleted through this endpoint"
+        )
+    db.delete(d)
+    _bump_design_count(db, user.id, -1)
+    db.commit()
+
+
 def _owned_design(db: Session, design_id: uuid.UUID, user: User) -> GarmentDesign:
     d = db.get(GarmentDesign, design_id)
     if not d:
