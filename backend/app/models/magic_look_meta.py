@@ -20,6 +20,8 @@ class MagicLookMeta(Base):
     title: Mapped[str | None] = mapped_column(String(120), nullable=True)
     is_favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

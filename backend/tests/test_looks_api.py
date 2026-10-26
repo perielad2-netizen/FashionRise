@@ -297,6 +297,122 @@ def test_pagination_and_validation(client, db_session):
     assert empty.status_code == 422
 
 
+def test_delete_single_and_dual_look_tombstone(client, db_session):
+    tokens = register_with_invite(client, db_session, "looks_del@example.com", "looks_del")
+    other = register_with_invite(client, db_session, "looks_del_o@example.com", "looks_delo")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    uid = uuid.UUID(me["id"])
+    single = _add_job(db_session, user_id=uid, image_url=_store_image())
+    op = str(uuid.uuid4())
+    front = _add_job(
+        db_session,
+        user_id=uid,
+        image_url=_store_image(),
+        studio_side="front",
+        magic_operation_id=op,
+    )
+    back = _add_job(
+        db_session,
+        user_id=uid,
+        image_url=_store_image(),
+        studio_side="back",
+        magic_operation_id=op,
+    )
+    keep = _add_job(db_session, user_id=uid, image_url=_store_image())
+
+    assert client.get("/api/v1/looks", headers=_auth(tokens)).json()["total"] == 3
+
+    deleted = client.delete(f"/api/v1/looks/{single.id}", headers=_auth(tokens))
+    assert deleted.status_code == 204
+    # Idempotent
+    assert client.delete(f"/api/v1/looks/{single.id}", headers=_auth(tokens)).status_code == 204
+
+    listed = client.get("/api/v1/looks", headers=_auth(tokens)).json()
+    assert listed["total"] == 2
+    ids = {i["id"] for i in listed["items"]}
+    assert str(single.id) not in ids
+    assert op in ids
+    assert str(keep.id) in ids
+
+    assert client.get(f"/api/v1/looks/{single.id}", headers=_auth(tokens)).status_code == 404
+    assert (
+        client.patch(
+            f"/api/v1/looks/{single.id}",
+            headers=_auth(tokens),
+            json={"title": "Revive"},
+        ).status_code
+        == 404
+    )
+    # Underlying AI job + image remain for operational history / non-gallery use.
+    assert db_session.get(AIJob, single.id) is not None
+    assert client.get(f"/api/v1/ai/jobs/{single.id}/image", headers=_auth(tokens)).status_code == 200
+    meta = db_session.get(MagicLookMeta, single.id)
+    assert meta is not None and meta.is_deleted is True and meta.deleted_at is not None
+
+    # Dual look deletes as one entity; AI jobs retained.
+    assert client.delete(f"/api/v1/looks/{op}", headers=_auth(tokens)).status_code == 204
+    listed2 = client.get("/api/v1/looks", headers=_auth(tokens)).json()
+    assert listed2["total"] == 1
+    assert listed2["items"][0]["id"] == str(keep.id)
+    assert client.get(f"/api/v1/looks/{op}", headers=_auth(tokens)).status_code == 404
+    assert db_session.get(AIJob, front.id) is not None
+    assert db_session.get(AIJob, back.id) is not None
+    assert client.get(f"/api/v1/ai/jobs/{front.id}/image", headers=_auth(tokens)).status_code == 200
+
+    # Cross-account: other user sees 404 (privacy) even with known id.
+    assert client.delete(f"/api/v1/looks/{keep.id}", headers=_auth(other)).status_code == 404
+    assert client.get("/api/v1/looks", headers=_auth(tokens)).json()["total"] == 1
+
+    # Missing id
+    assert client.delete(f"/api/v1/looks/{uuid.uuid4()}", headers=_auth(tokens)).status_code == 404
+
+    # Archive remains reversible for a non-deleted look; delete is not.
+    client.patch(
+        f"/api/v1/looks/{keep.id}",
+        headers=_auth(tokens),
+        json={"is_archived": True},
+    )
+    assert client.get("/api/v1/looks?filter=archived", headers=_auth(tokens)).json()["total"] == 1
+    client.patch(
+        f"/api/v1/looks/{keep.id}",
+        headers=_auth(tokens),
+        json={"is_archived": False},
+    )
+    assert client.get("/api/v1/looks", headers=_auth(tokens)).json()["total"] == 1
+
+
+def test_deleted_look_does_not_reappear_after_new_side_job(client, db_session):
+    tokens = register_with_invite(client, db_session, "looks_ghost@example.com", "looks_ghost")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    uid = uuid.UUID(me["id"])
+    op = str(uuid.uuid4())
+    _add_job(
+        db_session,
+        user_id=uid,
+        image_url=_store_image(),
+        studio_side="front",
+        magic_operation_id=op,
+    )
+    assert client.delete(f"/api/v1/looks/{op}", headers=_auth(tokens)).status_code == 204
+    # Later completed back / retry must not resurrect the tombstoned look.
+    _add_job(
+        db_session,
+        user_id=uid,
+        image_url=_store_image(),
+        studio_side="back",
+        magic_operation_id=op,
+    )
+    _add_job(
+        db_session,
+        user_id=uid,
+        image_url=_store_image(),
+        studio_side="front",
+        magic_operation_id=op,
+    )
+    assert client.get("/api/v1/looks", headers=_auth(tokens)).json()["total"] == 0
+    assert client.get(f"/api/v1/looks/{op}", headers=_auth(tokens)).status_code == 404
+
+
 def test_gallery_response_omits_sketch_payloads(client, db_session):
     tokens = register_with_invite(client, db_session, "looks_lean@example.com", "looks_lean")
     me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()

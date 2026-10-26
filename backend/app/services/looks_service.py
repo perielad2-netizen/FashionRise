@@ -18,6 +18,10 @@ from app.schemas.look import LookListResponse, LookRead, LookSideRef, LookUpdate
 from app.services.ai_service import extract_result_image_url
 from app.storage.local import LocalStorageBackend
 
+
+def _meta_deleted(meta: MagicLookMeta | None) -> bool:
+    return bool(meta is not None and meta.is_deleted)
+
 LookFilter = Literal["all", "favorites", "archived"]
 
 _TITLE_MAX = 120
@@ -257,7 +261,10 @@ def list_looks(
 
     looks: list[LookRead] = []
     for bucket in buckets:
-        read = _to_look_read(bucket, meta_rows.get(bucket.look_id), storage)
+        meta = meta_rows.get(bucket.look_id)
+        if _meta_deleted(meta):
+            continue
+        read = _to_look_read(bucket, meta, storage)
         if read is None:
             continue
         looks.append(read)
@@ -290,6 +297,8 @@ def get_look(db: Session, user: User, look_id: uuid.UUID) -> LookRead:
     meta = db.get(MagicLookMeta, look_id)
     if meta is not None and meta.user_id != user.id:
         raise NotFoundError("Look not found")
+    if _meta_deleted(meta):
+        raise NotFoundError("Look not found")
     storage = LocalStorageBackend()
     read = _to_look_read(bucket, meta if meta and meta.user_id == user.id else None, storage)
     if read is None:
@@ -307,6 +316,8 @@ def _ensure_meta(db: Session, user: User, look_id: uuid.UUID) -> MagicLookMeta:
         db.flush()
     elif row.user_id != user.id:
         raise NotFoundError("Look not found")
+    if row.is_deleted:
+        raise NotFoundError("Look not found")
     return row
 
 
@@ -323,3 +334,35 @@ def update_look(db: Session, user: User, look_id: uuid.UUID, data: LookUpdate) -
     db.add(row)
     db.commit()
     return get_look(db, user, look_id)
+
+
+def delete_look(db: Session, user: User, look_id: uuid.UUID) -> None:
+    """Tombstone a look in magic_look_meta. Idempotent for the owner.
+
+    Does not erase ai_jobs rows or generated image files. Deleted looks are
+    excluded from list/get/patch; archive/restore cannot revive them.
+    """
+    meta = db.get(MagicLookMeta, look_id)
+    if meta is not None and meta.user_id != user.id:
+        raise NotFoundError("Look not found")
+    if meta is not None and meta.is_deleted:
+        return
+
+    jobs = _load_polish_jobs(db, user)
+    buckets = {b.look_id: b for b in _build_buckets(jobs)}
+    bucket = buckets.get(look_id)
+    if bucket is None:
+        raise NotFoundError("Look not found")
+    storage = LocalStorageBackend()
+    read = _to_look_read(bucket, meta if meta and meta.user_id == user.id else None, storage)
+    if read is None:
+        raise NotFoundError("Look not found")
+
+    if meta is None:
+        meta = MagicLookMeta(id=look_id, user_id=user.id)
+        db.add(meta)
+        db.flush()
+    meta.is_deleted = True
+    meta.deleted_at = datetime.now(UTC)
+    db.add(meta)
+    db.commit()

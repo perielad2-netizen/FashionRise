@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import CurrentUser
@@ -52,3 +52,14 @@ def update_look(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> LookRead:
     return looks_service.update_look(db, user, look_id, data)
+
+
+@router.delete("/{look_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_look(
+    look_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Remove a look from My Looks (tombstone). Does not erase AI job image files."""
+    looks_service.delete_look(db, user, look_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

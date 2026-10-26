@@ -18,7 +18,7 @@ location = /api/v1/looks {
 }
 
 location ~ "^/api/v1/looks/[0-9a-fA-F-]{36}$" {
-    limit_except GET PATCH { deny all; }
+    limit_except GET PATCH DELETE { deny all; }
     proxy_pass http://127.0.0.1:8010;
 }
 """
@@ -29,7 +29,7 @@ MATRIX = [
     ("POST", "/api/v1/looks", "deny_list_post"),
     ("GET", f"/api/v1/looks/{UUID}", "allow_get"),
     ("PATCH", f"/api/v1/looks/{UUID}", "allow_patch"),
-    ("DELETE", f"/api/v1/looks/{UUID}", "deny_delete"),
+    ("DELETE", f"/api/v1/looks/{UUID}", "allow_delete"),
     ("POST", f"/api/v1/looks/{UUID}", "deny_post"),
     ("GET", f"/api/v1/looks/{UUID}/extra", "deny_extra"),
 ]
@@ -45,8 +45,8 @@ def _assert_snippet(text: str) -> None:
         raise SystemExit("FAIL: missing look item location")
     if "limit_except GET" not in text:
         raise SystemExit("FAIL: list location must allow GET only")
-    if "limit_except GET PATCH" not in text:
-        raise SystemExit("FAIL: item location must allow GET PATCH only")
+    if "limit_except GET PATCH DELETE" not in text:
+        raise SystemExit("FAIL: item location must allow GET PATCH DELETE")
 
 
 def _classify(method: str, path: str) -> str:
@@ -60,7 +60,7 @@ def _classify(method: str, path: str) -> str:
         if method == "PATCH":
             return "allow_patch"
         if method == "DELETE":
-            return "deny_delete"
+            return "allow_delete"
         return "deny_post"
     if path.startswith("/api/v1/looks/"):
         return "deny_extra"
