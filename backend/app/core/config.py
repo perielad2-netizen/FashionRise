@@ -42,14 +42,26 @@ class Settings(BaseSettings):
     private_techpack_subdir: str = "private_techpacks"
     # Create Real Design V1 flag (legacy). Prefer techpack_ai_enabled.
     techpack_ai_draft_enabled: bool = False
-    # Create Real Design V2 — explicit user-confirmed AI. Fail closed without spend ceiling.
+    # Create Real Design AI — fail closed without spend ceiling + (for professional) allowlist.
     techpack_ai_enabled: bool = False
     # Operator must set a positive ceiling (USD) before any paid techpack AI call.
     techpack_ai_spend_ceiling_usd: float = 0.0
-    techpack_ai_max_usd_per_run: float = 0.50
-    techpack_ai_max_usd_per_user_day: float = 2.0
-    # Estimated chat cost used for pre-flight budgeting (cents).
+    # Professional image-aware runs need a higher ceiling than text tips ($0.50 is inadequate).
+    techpack_ai_max_usd_per_run: float = 8.0
+    techpack_ai_max_usd_per_user_day: float = 20.0
+    # Legacy V2 text-only estimate (cents). Professional uses image-aware estimator.
     techpack_ai_estimate_chat_cents: int = 8
+    # Conservative professional estimate floor/ceiling used for UI + preflight (cents).
+    techpack_ai_estimate_professional_cents_base: int = 250
+    techpack_ai_estimate_professional_cents_per_piece: int = 180
+    techpack_ai_estimate_professional_cents_propose_back: int = 80
+    # Comma-separated owner emails and/or user UUIDs allowed for paid professional AI.
+    # Empty = nobody (fail closed even if techpack_ai_enabled). Never commit real IDs.
+    techpack_ai_owner_allowlist: str = ""
+    # Max concurrent paid professional runs system-wide (reservation lock).
+    techpack_ai_max_concurrent_runs: int = 2
+    # Max image generations per professional run (front/back/detail/pattern).
+    techpack_ai_max_images_per_run: int = 6
     # Entitlement boundary placeholder for future premium billing (not charged here).
     techpack_ai_requires_entitlement: bool = False
 

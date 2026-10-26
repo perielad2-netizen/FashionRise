@@ -56,6 +56,11 @@ location ~ "^/api/v1/techpacks/exports/[0-9a-fA-F-]{36}/pdf$" {
     limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
 }
+
+location ~ "^/api/v1/techpacks/artifacts/[0-9a-fA-F-]{36}/image$" {
+    limit_except GET { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
 """
 
 UUID = "11111111-1111-1111-1111-111111111111"
@@ -73,6 +78,7 @@ MATRIX = [
     ("POST", f"/api/v1/techpacks/{UUID}/ai/confirm", "allow_ai_confirm"),
     ("POST", f"/api/v1/techpacks/{UUID}/ai/generate", "allow_ai_generate"),
     ("GET", f"/api/v1/techpacks/exports/{UUID}/pdf", "allow_pdf"),
+    ("GET", f"/api/v1/techpacks/artifacts/{UUID}/image", "allow_artifact"),
     ("POST", f"/api/v1/techpacks/{UUID}/ai-draft", "deny_ai_legacy"),
     ("GET", f"/api/v1/techpacks/{UUID}/extra", "deny_extra"),
 ]
@@ -86,6 +92,7 @@ _EXPORTS_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/exports$")
 _AI_CONFIRM_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/confirm$")
 _AI_GENERATE_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate$")
 _PDF_RE = re.compile(r"^/api/v1/techpacks/exports/[0-9a-fA-F-]{36}/pdf$")
+_ARTIFACT_RE = re.compile(r"^/api/v1/techpacks/artifacts/[0-9a-fA-F-]{36}/image$")
 
 
 def _assert_snippet(text: str) -> None:
@@ -99,6 +106,8 @@ def _assert_snippet(text: str) -> None:
         raise SystemExit("FAIL: missing ai/generate location")
     if "/pdf$" not in text:
         raise SystemExit("FAIL: missing pdf location")
+    if "/image$" not in text:
+        raise SystemExit("FAIL: missing artifacts image location")
 
 
 def _classify(method: str, path: str) -> str:
@@ -128,6 +137,8 @@ def _classify(method: str, path: str) -> str:
         return "allow_ai_generate" if method == "POST" else "deny_extra"
     if _PDF_RE.fullmatch(path):
         return "allow_pdf" if method == "GET" else "deny_extra"
+    if _ARTIFACT_RE.fullmatch(path):
+        return "allow_artifact" if method == "GET" else "deny_extra"
     if path.startswith("/api/v1/techpacks/"):
         return "deny_ai_legacy" if path.endswith("/ai-draft") else "deny_extra"
     raise SystemExit(f"FAIL: unmapped matrix path {method} {path}")

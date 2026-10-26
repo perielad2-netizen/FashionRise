@@ -57,6 +57,11 @@
         limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8010;
     }
+
+    location ~ "^/api/v1/techpacks/artifacts/[0-9a-fA-F-]{36}/image$" {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
 ```
 
 ## Matrix

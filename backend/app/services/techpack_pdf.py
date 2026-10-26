@@ -36,6 +36,7 @@ from app.services.techpack_flats import (
 )
 from app.services.techpack_garments import POM_LABELS
 from app.services.techpack_spec import ensure_v2
+from app.storage.local import LocalStorageBackend
 
 PAGE_W, PAGE_H = A4
 MARGIN = 16 * mm
@@ -215,6 +216,28 @@ class _SizedImage(Flowable):
         return self.drawWidth, self.drawHeight
 
     def draw(self) -> None:
+        # Normalize to RGB via ImageReader so reportlab never chokes on odd PNG streams.
+        try:
+            from PIL import Image as PILImage
+            from reportlab.lib.utils import ImageReader
+
+            with PILImage.open(self._path) as pil:
+                rgb = pil.convert("RGB")
+                buf = io.BytesIO()
+                rgb.save(buf, format="PNG")
+                buf.seek(0)
+                self.canv.drawImage(
+                    ImageReader(buf),
+                    0,
+                    0,
+                    width=self.drawWidth,
+                    height=self.drawHeight,
+                    preserveAspectRatio=True,
+                    mask="auto",
+                )
+                return
+        except Exception:  # noqa: BLE001
+            pass
         self.canv.drawImage(
             str(self._path),
             0,
@@ -233,7 +256,13 @@ def _look_image(path: Path | None, max_w: float, max_h: float, styles: dict[str,
         from PIL import Image as PILImage
 
         with PILImage.open(path) as pil:
-            iw, ih = pil.size
+            pil.load()
+            rgb = pil.convert("RGB")
+            iw, ih = rgb.size
+            # Rewrite a normalized temp sibling so reportlab always gets a clean RGB PNG.
+            norm = path.with_name(path.stem + "_rl.png")
+            rgb.save(norm, format="PNG")
+            path = norm
     except Exception:  # noqa: BLE001
         return Paragraph("Look image unavailable — not fabricated.", styles["muted"])
     if iw <= 0 or ih <= 0:
@@ -455,19 +484,92 @@ def _piece_sections(
     )
 
     story.append(Paragraph("Technical flat drawings", styles["h3"]))
-    story.append(
-        Paragraph(
-            "PATTERN DEVELOPMENT SCHEMATICS — NOT TO SCALE. "
-            "Back view is a category schematic, not an invented Magic photo.",
-            styles["muted"],
+    illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+    arts = illust.get("artifacts") if isinstance(illust.get("artifacts"), dict) else {}
+    storage = LocalStorageBackend()
+
+    def _art_path(kind: str) -> Path | None:
+        meta = arts.get(kind) if isinstance(arts.get(kind), dict) else None
+        if not meta:
+            return None
+        key = meta.get("storage_key")
+        if not isinstance(key, str) or not key:
+            return None
+        return storage.resolve_private_techpack_file(key=key)
+
+    front_art = _art_path("flat_front")
+    back_art = _art_path("flat_back") or _art_path("flat_back_proposed")
+    detail_art = _art_path("detail_callouts")
+    pattern_art = _art_path("pattern_sheet")
+    professional = str(illust.get("mode") or "") == "professional" and front_art is not None
+
+    if professional:
+        story.append(
+            Paragraph(
+                "AI PROFESSIONAL technical illustrations generated from the Magic look image. "
+                "Review required. Pattern sheets remain NOT TO SCALE.",
+                styles["muted"],
+            )
         )
-    )
-    flats = Table(
-        [[flat_for_category(cat, back=False), flat_for_category(cat, back=True)]],
-        colWidths=[90 * mm, 90 * mm],
-    )
-    flats.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
-    story.append(KeepTogether([flats]))
+        analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+        if analysis:
+            story.append(
+                Paragraph(
+                    f"Vision summary — silhouette: {analysis.get('silhouette') or '—'}; "
+                    f"neckline: {analysis.get('neckline') or '—'}; "
+                    f"sleeves: {analysis.get('sleeves') or '—'}; "
+                    f"pattern: {analysis.get('fabric_pattern') or '—'} "
+                    f"({analysis.get('stripe_direction') or 'direction n/a'}).",
+                    styles["body"],
+                )
+            )
+        front_img = (
+            _look_image(front_art, 82 * mm, 105 * mm, styles)
+            if front_art
+            else flat_for_category(cat, back=False)
+        )
+        if back_art:
+            back_label = (
+                "PROPOSED BACK — UNVERIFIED"
+                if arts.get("flat_back_proposed") and not arts.get("flat_back")
+                else "BACK — AI FLAT"
+            )
+            back_img = _look_image(back_art, 82 * mm, 105 * mm, styles)
+        else:
+            back_label = "BACK — category schematic (no AI back)"
+            back_img = flat_for_category(cat, back=True)
+        flats = Table(
+            [
+                [
+                    Paragraph("<b>FRONT — AI FLAT</b>", styles["small"]),
+                    Paragraph(f"<b>{back_label}</b>", styles["small"]),
+                ],
+                [front_img, back_img],
+            ],
+            colWidths=[90 * mm, 90 * mm],
+        )
+        flats.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        story.append(flats)
+        if detail_art:
+            story.append(Paragraph("Garment detail illustrations", styles["h3"]))
+            story.append(_look_image(detail_art, 160 * mm, 95 * mm, styles))
+    else:
+        story.append(
+            Paragraph(
+                "PATTERN DEVELOPMENT SCHEMATICS — NOT TO SCALE. "
+                "Back view is a category schematic, not an invented Magic photo. "
+                "Run AI Professional to replace these with source-faithful flats.",
+                styles["muted"],
+            )
+        )
+        flats = Table(
+            [[flat_for_category(cat, back=False), flat_for_category(cat, back=True)]],
+            colWidths=[90 * mm, 90 * mm],
+        )
+        flats.setStyle(
+            TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER")])
+        )
+        story.append(KeepTogether([flats]))
 
     story.append(PageBreak())
     story.append(Paragraph(f"Measurement specification — {heading}", styles["h2"]))
@@ -577,8 +679,17 @@ def _piece_sections(
     )
     story.append(pat_table)
     story.append(Spacer(1, 8))
-    story.append(Paragraph("Cutting layout example", styles["h3"]))
-    story.append(_cutting_layout_schematic(cat))
+    story.append(Paragraph("Cutting layout / pattern development", styles["h3"]))
+    if professional and pattern_art is not None:
+        story.append(
+            Paragraph(
+                "AI pattern-development schematic — NOT TO SCALE — PATTERNMAKER VALIDATION REQUIRED.",
+                styles["warn"],
+            )
+        )
+        story.append(_look_image(pattern_art, 160 * mm, 110 * mm, styles))
+    else:
+        story.append(_cutting_layout_schematic(cat))
 
     story.append(Paragraph("Construction process", styles["h3"]))
     steps = piece.get("construction_steps") if isinstance(piece.get("construction_steps"), list) else []

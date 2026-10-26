@@ -70,10 +70,12 @@ class TechpackListResponse(BaseModel):
 
 class TechpackAiConfirmRequest(BaseModel):
     stage: str = Field(default="generate", max_length=64)
+    mode: Literal["heuristic", "ai", "analyze", "professional"] = "heuristic"
 
 
 class TechpackAiGenerateRequest(BaseModel):
     confirm_token: str = Field(min_length=8, max_length=128)
     idempotency_key: str = Field(min_length=8, max_length=128)
-    mode: Literal["heuristic", "ai", "analyze"] = "heuristic"
+    mode: Literal["heuristic", "ai", "analyze", "professional"] = "heuristic"
     sections: list[str] | None = None
+    propose_back: bool = False

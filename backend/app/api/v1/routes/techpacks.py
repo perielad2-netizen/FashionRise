@@ -27,9 +27,8 @@ router = APIRouter()
 
 @router.get("/ai/status")
 def techpack_ai_status(user: CurrentUser) -> dict[str, Any]:
-    """Public-to-auth AI capability / spend gate status. Never triggers paid work."""
-    _ = user
-    return techpack_ai.ai_status()
+    """AI capability / spend gate status. Never triggers paid work."""
+    return techpack_ai.ai_status(user)
 
 
 @router.get("/ai/runs/{run_id}")
@@ -39,6 +38,23 @@ def techpack_ai_run(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> dict[str, Any]:
     return techpack_ai.get_run(db, user, run_id)
+
+
+@router.get("/artifacts/{artifact_id}/image")
+def download_techpack_artifact(
+    artifact_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> FileResponse:
+    """Serve private AI illustration bytes to the owning authenticated user only."""
+    path, row = techpack_ai.resolve_artifact_image(db, user, artifact_id)
+    return FileResponse(
+        path,
+        media_type=row.mime_type or "image/png",
+        filename=f"{row.kind}_{row.id}.png",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.post("", response_model=TechpackDraftRead, status_code=status.HTTP_201_CREATED)
@@ -67,7 +83,6 @@ def download_techpack_pdf(
     user: CurrentUser,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> FileResponse:
-    """Serve private tech-pack PDF bytes to the owning authenticated user only."""
     path, row = techpack_service.resolve_export_pdf_path(db, user, export_id)
     return FileResponse(
         path,
@@ -122,8 +137,9 @@ def techpack_ai_confirm(
     user: CurrentUser,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> dict[str, Any]:
-    """Issue a one-time confirm token. Does not call paid providers."""
-    return techpack_ai.create_confirm_challenge(db, user, draft_id, stage=data.stage)
+    return techpack_ai.create_confirm_challenge(
+        db, user, draft_id, stage=data.stage, mode=data.mode
+    )
 
 
 @router.post("/{draft_id}/ai/generate")
@@ -133,7 +149,6 @@ def techpack_ai_generate(
     user: CurrentUser,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> dict[str, Any]:
-    """Heuristic ($0) or paid AI generation after explicit confirm_token."""
     return techpack_ai.run_generate(
         db,
         user,
@@ -142,6 +157,7 @@ def techpack_ai_generate(
         idempotency_key=data.idempotency_key,
         mode=data.mode,
         sections=data.sections,
+        propose_back=data.propose_back,
     )
 
 
@@ -151,6 +167,5 @@ def ai_draft_assist(
     user: CurrentUser,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> None:
-    """Legacy V1 path — remains disabled. Use /ai/confirm + /ai/generate."""
     _ = (draft_id, user, db)
     techpack_service.ai_draft_assist_disabled()
