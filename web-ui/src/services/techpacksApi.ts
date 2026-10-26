@@ -219,6 +219,15 @@ export type TechpackAiGenerateResponse = {
   failed_sections?: string[]
 }
 
+export type TechpackAiProgress = {
+  phase?: string
+  message?: string
+  piece_id?: string | null
+  detail?: string | null
+  pieces_done?: number
+  pieces_total?: number
+}
+
 export type TechpackAiRun = {
   id: string
   draft_id: string
@@ -229,6 +238,8 @@ export type TechpackAiRun = {
   result?: Record<string, unknown> | null
   error_message?: string | null
   created_at?: string | null
+  progress?: TechpackAiProgress | null
+  artifacts?: TechpackArtifact[]
 }
 
 export async function createTechpackDraft(lookId: string, title?: string): Promise<TechpackDraft> {
@@ -331,11 +342,38 @@ export async function generateTechpackAi(
   })
 }
 
+/** One-tap Professional — server mints spend-gated intent; user click is authorization. */
+export async function generateTechpackAiProfessionalOneTap(
+  draftId: string,
+  body: { idempotency_key: string; propose_back?: boolean; sections?: string[] },
+): Promise<TechpackAiGenerateResponse> {
+  return apiRequest<TechpackAiGenerateResponse>(
+    `/techpacks/${draftId}/ai/generate-professional`,
+    {
+      method: 'POST',
+      body,
+    },
+  )
+}
+
 export async function getTechpackAiRun(
   runId: string,
   signal?: AbortSignal,
 ): Promise<TechpackAiRun> {
   return apiRequest<TechpackAiRun>(`/techpacks/ai/runs/${runId}`, { method: 'GET', signal })
+}
+
+export async function getLatestTechpackAiRun(
+  draftId: string,
+  signal?: AbortSignal,
+): Promise<TechpackAiRun | null> {
+  const row = await apiRequest<TechpackAiRun | { status?: string; run?: null }>(
+    `/techpacks/${draftId}/ai/latest-run`,
+    { method: 'GET', signal },
+  )
+  if (!row || typeof row !== 'object') return null
+  if ('id' in row && typeof (row as TechpackAiRun).id === 'string') return row as TechpackAiRun
+  return null
 }
 
 /** Authenticated technical-illustration image for a generate artifact. */

@@ -8,9 +8,9 @@ const exportTechpackPdf = vi.fn()
 const fetchTechpackPdfBlob = vi.fn()
 const fetchTechpackArtifactBlob = vi.fn()
 const getTechpackAiStatus = vi.fn()
-const confirmTechpackAi = vi.fn()
-const generateTechpackAi = vi.fn()
+const generateTechpackAiProfessionalOneTap = vi.fn()
 const getTechpackAiRun = vi.fn()
+const getLatestTechpackAiRun = vi.fn()
 
 vi.mock('@/services/techpacksApi', () => ({
   getTechpackDraft: (...args: unknown[]) => getTechpackDraft(...args),
@@ -19,9 +19,10 @@ vi.mock('@/services/techpacksApi', () => ({
   fetchTechpackPdfBlob: (...args: unknown[]) => fetchTechpackPdfBlob(...args),
   fetchTechpackArtifactBlob: (...args: unknown[]) => fetchTechpackArtifactBlob(...args),
   getTechpackAiStatus: (...args: unknown[]) => getTechpackAiStatus(...args),
-  confirmTechpackAi: (...args: unknown[]) => confirmTechpackAi(...args),
-  generateTechpackAi: (...args: unknown[]) => generateTechpackAi(...args),
+  generateTechpackAiProfessionalOneTap: (...args: unknown[]) =>
+    generateTechpackAiProfessionalOneTap(...args),
   getTechpackAiRun: (...args: unknown[]) => getTechpackAiRun(...args),
+  getLatestTechpackAiRun: (...args: unknown[]) => getLatestTechpackAiRun(...args),
 }))
 
 vi.mock('@/hooks/useAuthJobImage', () => ({
@@ -113,9 +114,10 @@ describe('TechpackScreen', () => {
     fetchTechpackPdfBlob.mockReset()
     fetchTechpackArtifactBlob.mockReset()
     getTechpackAiStatus.mockReset()
-    confirmTechpackAi.mockReset()
-    generateTechpackAi.mockReset()
+    generateTechpackAiProfessionalOneTap.mockReset()
     getTechpackAiRun.mockReset()
+    getLatestTechpackAiRun.mockReset()
+    getLatestTechpackAiRun.mockResolvedValue(null)
     getTechpackDraft.mockImplementation(async () => currentDraft)
     getTechpackAiStatus.mockResolvedValue({
       enabled: false,
@@ -139,36 +141,13 @@ describe('TechpackScreen', () => {
         return currentDraft
       },
     )
-    confirmTechpackAi.mockResolvedValue({
-      draft_id: 'draft-1',
-      stage: 'generate',
-      confirm_token: 'confirm-abcdefgh',
-      estimated_cost_usd_cents: 0,
-      ai_enabled: false,
-      mode: 'heuristic',
-      message: 'Paid AI is not enabled. You can still generate a heuristic technical pack at $0.',
-    })
-    generateTechpackAi.mockImplementation(async () => {
-      currentDraft = {
-        ...currentDraft,
-        spec: {
-          ...currentDraft.spec,
-          workflow_stage: 'generate',
-          ai: {
-            last_run_id: 'run-1',
-            last_mode: 'heuristic',
-            paid_sections: [],
-            actual_cost_usd_cents: 0,
-          },
-        },
-      }
-      return {
-        run_id: 'run-1',
-        status: 'completed',
-        cost_usd_cents: 0,
-        mode: 'heuristic',
-        warnings: [],
-      }
+    generateTechpackAiProfessionalOneTap.mockResolvedValue({
+      run_id: 'run-1',
+      status: 'completed',
+      cost_usd_cents: 72,
+      mode: 'professional',
+      artifacts: [],
+      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
     })
     exportTechpackPdf.mockResolvedValue({
       id: 'exp-1',
@@ -227,62 +206,89 @@ describe('TechpackScreen', () => {
     expect(screen.queryByText(/^Inseam$/i)).not.toBeInTheDocument()
   })
 
-  it('exposes Basic and disabled Professional options when AI professional is unavailable', async () => {
+
+  it('shows one Generate AI PDF button and disables it when Professional unavailable', async () => {
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
     const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
     fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
 
-    expect(await screen.findByRole('radio', { name: /Basic Technical Pack — Free/i })).toBeInTheDocument()
-    const pro = screen.getByRole('radio', { name: /AI Professional Technical Pack/i })
-    expect(pro).toBeDisabled()
+    expect(screen.queryByRole('radio', { name: /Basic Technical Pack/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Get cost estimate/i })).not.toBeInTheDocument()
+    const gen = await screen.findByRole('button', { name: /Generate AI PDF/i })
+    expect(gen).toBeDisabled()
     expect(
-      screen.getByText(/owner allowlist \/ spend ceiling not configured/i),
+      screen.getByText(/owner allowlist \/ spend ceiling not configured|not on the owner allowlist/i),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Basic PDF \/ \$0/i)).toBeInTheDocument()
     expect(screen.getByText(/Preview and Download never run paid AI/i)).toBeInTheDocument()
   })
 
-  it('confirms Basic heuristic generate then previews PDF on generate stage', async () => {
+  it('one-tap Generate AI PDF opens progress overlay and loads illustrations', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      owner_allowlisted: true,
+      estimate_professional_cents_min: 40,
+      estimate_professional_cents_max: 120,
+      max_usd_per_run: 2,
+      vision_model: 'gpt-6-luna',
+      image_model: 'gpt-image-2.5-sunburst',
+      note: 'Professional available',
+    })
+    generateTechpackAiProfessionalOneTap.mockImplementation(async () => {
+      currentDraft = {
+        ...currentDraft,
+        spec: {
+          ...currentDraft.spec,
+          workflow_stage: 'generate',
+          ai: { last_run_id: 'run-pro', last_mode: 'professional', paid_sections: ['flat_front'] },
+        },
+      }
+      return {
+        run_id: 'run-pro',
+        status: 'completed',
+        cost_usd_cents: 72,
+        mode: 'professional',
+        artifacts: [
+          {
+            id: 'art-1',
+            piece_id: 'piece-1',
+            kind: 'flat_front',
+            url_path: '/techpacks/artifacts/art-1/image',
+            review_state: 'unverified',
+          },
+        ],
+        estimated_cost_usd_cents: 85,
+        actual_cost_usd_cents: 72,
+        analysis_summary: 'Dress front flat generated',
+        progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
+      }
+    })
+
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
     const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
     fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
-    expect(await screen.findByRole('radio', { name: /Basic Technical Pack — Free/i })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    )
 
-    fireEvent.click(screen.getByRole('button', { name: /Get confirm token/i }))
-    await waitFor(() =>
-      expect(confirmTechpackAi).toHaveBeenCalledWith('draft-1', 'generate', 'heuristic'),
-    )
-    expect(await screen.findByText(/Estimated cost/i)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('checkbox', { name: /I confirm generating a Basic Technical Pack/i }))
-    fireEvent.click(screen.getByRole('button', { name: /Generate Basic Pack/i }))
+    const gen = await screen.findByRole('button', { name: /Generate AI PDF/i })
+    expect(gen).not.toBeDisabled()
+    expect(screen.queryByRole('checkbox', { name: /I confirm/i })).not.toBeInTheDocument()
+    fireEvent.click(gen)
+    expect(await screen.findByRole('dialog', { name: /Creating your AI Technical Pack|Your AI Technical Design is Ready/i })).toBeInTheDocument()
     await waitFor(() => {
-      expect(generateTechpackAi).toHaveBeenCalledWith(
+      expect(generateTechpackAiProfessionalOneTap).toHaveBeenCalledWith(
         'draft-1',
         expect.objectContaining({
-          confirm_token: 'confirm-abcdefgh',
-          mode: 'heuristic',
+          idempotency_key: expect.stringMatching(/^one-tap-draft-1-/),
+          propose_back: true,
         }),
       )
     })
-
-    expect(
-      await screen.findByRole('button', { name: /Preview Basic PDF \(\$0 · No AI\)/i }),
-    ).toBeInTheDocument()
-    expect(screen.getAllByText(/Basic \/ No AI/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/Preview and Download never run paid AI/i)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Preview Basic PDF \(\$0 · No AI\)/i }))
-    await waitFor(() => {
-      expect(updateTechpackDraft).toHaveBeenCalled()
-      expect(exportTechpackPdf).toHaveBeenCalledWith('draft-1')
-      expect(fetchTechpackPdfBlob).toHaveBeenCalledWith('exp-1')
-    })
-    expect(await screen.findByTitle('Tech pack PDF preview')).toBeInTheDocument()
+    await waitFor(() => expect(fetchTechpackArtifactBlob).toHaveBeenCalledWith('art-1'))
+    expect(await screen.findByText(/Your AI Technical Design is Ready/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /View illustrations/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Preview PDF/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Download PDF/i })).toBeInTheDocument()
   })
 
   it('opens a full-screen modal form when a step is tapped on mobile', async () => {
@@ -334,97 +340,6 @@ describe('TechpackScreen', () => {
     expect(screen.getByRole('button', { name: /Save & Done/i })).toBeInTheDocument()
   })
 
-  it('runs Professional confirm + generate with cost line and artifact thumbs when available', async () => {
-    getTechpackAiStatus.mockResolvedValue({
-      enabled: true,
-      professional_available: true,
-      owner_allowlisted: true,
-      estimate_professional_cents_min: 40,
-      estimate_professional_cents_max: 120,
-      max_usd_per_run: 2,
-      vision_model: 'gpt-4.1-mini',
-      image_model: 'gpt-image-1',
-      note: 'Professional available',
-    })
-    confirmTechpackAi.mockResolvedValue({
-      draft_id: 'draft-1',
-      stage: 'generate',
-      confirm_token: 'pro-confirm-token',
-      estimated_cost_usd_cents: 85,
-      ai_enabled: true,
-      max_usd_per_run: 2,
-      mode: 'professional',
-      message: 'Professional estimate ready',
-    })
-    generateTechpackAi.mockImplementation(async () => {
-      currentDraft = {
-        ...currentDraft,
-        spec: {
-          ...currentDraft.spec,
-          workflow_stage: 'generate',
-          ai: { last_run_id: 'run-pro', last_mode: 'professional', paid_sections: ['flat_front'] },
-        },
-      }
-      return {
-        run_id: 'run-pro',
-        status: 'completed',
-        cost_usd_cents: 72,
-        mode: 'professional',
-        artifacts: [
-          {
-            id: 'art-1',
-            piece_id: 'piece-1',
-            kind: 'flat_front',
-            url_path: '/techpacks/artifacts/art-1/image',
-            review_state: 'unverified',
-          },
-        ],
-        estimated_cost_usd_cents: 85,
-        actual_cost_usd_cents: 72,
-        analysis_summary: 'Dress front flat generated',
-      }
-    })
-
-    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
-    await screen.findByText('Create Real Design')
-    const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
-    fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
-
-    const pro = await screen.findByRole('radio', { name: /AI Professional Technical Pack/i })
-    expect(pro).not.toBeDisabled()
-    fireEvent.click(pro)
-    expect(pro).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText(/Status estimate/i)).toBeInTheDocument()
-    expect(
-      screen.getByRole('checkbox', { name: /Propose unverified back view/i }),
-    ).not.toBeChecked()
-
-    fireEvent.click(screen.getByRole('button', { name: /Get cost estimate/i }))
-    await waitFor(() =>
-      expect(confirmTechpackAi).toHaveBeenCalledWith('draft-1', 'generate', 'professional'),
-    )
-    expect(screen.getAllByText(/Estimated cost/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/Max allowance/i)).toBeInTheDocument()
-
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: /I confirm generating an AI Professional Technical Pack/i }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: /Generate Professional Pack/i }))
-    await waitFor(() => {
-      expect(generateTechpackAi).toHaveBeenCalledWith(
-        'draft-1',
-        expect.objectContaining({
-          confirm_token: 'pro-confirm-token',
-          mode: 'professional',
-          propose_back: false,
-        }),
-      )
-    })
-    await waitFor(() => expect(fetchTechpackArtifactBlob).toHaveBeenCalledWith('art-1'))
-    expect(await screen.findByAltText(/flat_front technical illustration/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Export Professional PDF/i })).toBeInTheDocument()
-  })
-
   it('wraps a V1 draft locally and shows migration notice', async () => {
     currentDraft = {
       ...V2_DRAFT,
@@ -450,7 +365,7 @@ describe('TechpackScreen', () => {
     expect(pills.length).toBeGreaterThan(0)
   })
 
-  it('shows build version and maps configuration errors near AI controls', async () => {
+  it('maps configuration errors from one-tap generate', async () => {
     getTechpackAiStatus.mockResolvedValue({
       enabled: true,
       professional_available: true,
@@ -460,24 +375,19 @@ describe('TechpackScreen', () => {
       max_usd_per_run: 8,
       note: 'Professional available',
     })
-    confirmTechpackAi.mockRejectedValue(
+    generateTechpackAiProfessionalOneTap.mockRejectedValue(
       new Error('Technical generation failed: OPENAI_REASONING_EFFORT is empty'),
     )
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     expect(await screen.findByTestId('app-version')).toHaveTextContent(/App /i)
     const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
     fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
-    const pro = await screen.findByRole('radio', { name: /AI Professional Technical Pack/i })
-    fireEvent.click(pro)
-    fireEvent.click(screen.getByRole('button', { name: /Get cost estimate/i }))
-    expect(
-      await screen.findByRole('alert'),
-    ).toHaveTextContent(/server configuration problem/i)
-    expect(screen.getByText(/No chargeable AI work ran/i)).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /Generate AI PDF/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/server configuration problem/i)
     expect(screen.queryByText(/OPENAI_REASONING_EFFORT/i)).not.toBeInTheDocument()
   })
 
-  it('reuses a stable intent idempotency key for Professional generate', async () => {
+  it('reuses a stable one-tap idempotency key across double-clicks', async () => {
     getTechpackAiStatus.mockResolvedValue({
       enabled: true,
       professional_available: true,
@@ -485,39 +395,35 @@ describe('TechpackScreen', () => {
       max_usd_per_run: 8,
       note: 'ok',
     })
-    confirmTechpackAi.mockResolvedValue({
-      draft_id: 'draft-1',
-      stage: 'generate',
-      confirm_token: 'stable-confirm-token',
-      estimated_cost_usd_cents: 50,
-      ai_enabled: true,
-      max_usd_per_run: 8,
-      mode: 'professional',
-      message: 'ready',
-    })
+    let resolveGen: (v: unknown) => void = () => undefined
+    generateTechpackAiProfessionalOneTap.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveGen = resolve
+        }),
+    )
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
     const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
     fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
-    fireEvent.click(await screen.findByRole('radio', { name: /AI Professional Technical Pack/i }))
-    fireEvent.click(screen.getByRole('button', { name: /Get cost estimate/i }))
-    await waitFor(() => expect(confirmTechpackAi).toHaveBeenCalled())
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: /I confirm generating an AI Professional Technical Pack/i }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: /Generate Professional Pack/i }))
-    await waitFor(() => {
-      expect(generateTechpackAi).toHaveBeenCalledWith(
-        'draft-1',
-        expect.objectContaining({
-          idempotency_key: 'intent-draft-1-stable-confirm-token',
-          mode: 'professional',
-        }),
-      )
+    const btn = await screen.findByRole('button', { name: /Generate AI PDF/i })
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+    await waitFor(() => expect(generateTechpackAiProfessionalOneTap).toHaveBeenCalledTimes(1))
+    const key = generateTechpackAiProfessionalOneTap.mock.calls[0][1].idempotency_key as string
+    expect(key).toMatch(/^one-tap-draft-1-/)
+    resolveGen({
+      run_id: 'run-stable',
+      status: 'completed',
+      cost_usd_cents: 10,
+      mode: 'professional',
+      artifacts: [],
+      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
     })
+    expect(await screen.findByText(/Your AI Technical Design is Ready/i)).toBeInTheDocument()
   })
 
-  it('opens Step 4 AI controls in a modal on mobile', async () => {
+  it('opens Step 4 Generate AI PDF controls in a modal on mobile', async () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -546,9 +452,8 @@ describe('TechpackScreen', () => {
     expect(
       await screen.findByRole('dialog', { name: /Generate Technical Design/i }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /Basic Technical Pack — Free/i })).toBeInTheDocument()
-    expect(
-      screen.getByRole('radio', { name: /AI Professional Technical Pack/i }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Generate AI PDF/i })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Basic Technical Pack/i })).not.toBeInTheDocument()
   })
+
 })
