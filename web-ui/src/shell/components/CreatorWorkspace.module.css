@@ -39,41 +39,6 @@
   flex-direction: column;
 }
 
-.canvasActions {
-  /* Keep clear of the paper-corner Flip control (upper-right of the cream paper). */
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 5;
-  display: inline-flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 6px;
-  max-width: calc(100% - 20px);
-  pointer-events: none;
-}
-
-.canvasActions > * {
-  pointer-events: auto;
-}
-
-.immersiveToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(214, 51, 132, 0.35);
-  background: rgba(214, 51, 132, 0.16);
-  color: #9d174d;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
-}
-
 .immersiveMode {
   position: fixed;
   inset: 0;

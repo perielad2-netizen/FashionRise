@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Expand } from 'lucide-react'
 import { modelLabel } from '@/assets/modelLibrary'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
 import { rearUnavailableReasonForModel } from '@/shell/rearUnavailableReason'
@@ -500,21 +499,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               rearUnavailableReason={rearUnavailableReasonForModel(editor.model)}
               onSideChange={editor.changeActiveSide}
               onUnavailableFlip={(reason) => editor.publishStudioNotice(reason)}
+              onEnterFullscreen={immersive ? undefined : () => void enterImmersive()}
             />
-            {!immersive ? (
-              <div className={styles.canvasActions}>
-                <button
-                  type="button"
-                  className={styles.immersiveToggle}
-                  aria-label="Enter full screen drawing"
-                  title="Full screen drawing — nearly the whole device, with zoom and pan"
-                  onClick={() => void enterImmersive()}
-                >
-                  <Expand size={16} />
-                  <span>Full screen</span>
-                </button>
-              </div>
-            ) : null}
             {immersive ? (
               <ImmersiveToolbar
                 tool={immersiveTool}

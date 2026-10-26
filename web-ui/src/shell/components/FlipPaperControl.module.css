@@ -119,3 +119,44 @@
 :global([data-immersive='true']) .wrap {
   background: rgba(255, 252, 247, 0.94);
 }
+
+/*
+ * Narrow paper width (actual cream frame, not viewport): compact Front/Back
+ * treatment. Keep a readable FRONT/BACK label; touch target stays ≥44×44;
+ * corner inset shrinks so Flip never crowds Full Screen opposite.
+ */
+@container studio-paper (max-width: 420px) {
+  .wrap:not(.compact) {
+    top: 7px;
+    right: 7px;
+    gap: 4px;
+    padding: 2px 2px 2px 8px;
+  }
+
+  .wrap:not(.compact) .sideLabel {
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+  }
+
+  .wrap:not(.compact) .flipBtn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Very tight paper (landscape phones): minimize chrome footprint. */
+@container studio-paper (max-width: 260px) {
+  .wrap:not(.compact) {
+    top: 4px;
+    right: 4px;
+    gap: 2px;
+    padding: 2px 2px 2px 6px;
+  }
+
+  .wrap:not(.compact) .sideLabel {
+    font-size: 0.55rem;
+    max-width: 2.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
