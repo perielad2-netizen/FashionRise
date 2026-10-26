@@ -105,6 +105,7 @@ def test_professional_mock_pipeline_fr7182_features(client, db_session, monkeypa
     monkeypatch.setenv("TECHPACK_AI_SPEND_CEILING_USD", "20")
     monkeypatch.setenv("TECHPACK_AI_MAX_USD_PER_RUN", "8")
     monkeypatch.setenv("TECHPACK_AI_OWNER_ALLOWLIST", me["email"])
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-used")
     get_settings.cache_clear()
 
     mock = MockProfessionalProvider()
@@ -245,6 +246,7 @@ def test_owner_isolation_on_artifacts(client, db_session, monkeypatch):
     monkeypatch.setenv("TECHPACK_AI_ENABLED", "true")
     monkeypatch.setenv("TECHPACK_AI_SPEND_CEILING_USD", "20")
     monkeypatch.setenv("TECHPACK_AI_OWNER_ALLOWLIST", me["email"])
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-used")
     get_settings.cache_clear()
     set_professional_provider_override(MockProfessionalProvider())
     job = _add_job(
