@@ -7,7 +7,6 @@ import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -25,7 +24,7 @@ from app.schemas.techpack import (
 )
 from app.services import looks_service
 from app.services.ai_service import extract_result_image_url
-from app.services.techpack_pdf import build_techpack_pdf
+from app.services.techpack_pdf import build_techpack_pdf, resolve_generation_provenance
 from app.services.techpack_spec import default_spec, ensure_v2, merge_spec, style_code_from_look
 from app.storage.local import LocalStorageBackend
 
@@ -205,6 +204,7 @@ def export_pdf(db: Session, user: User, draft_id: uuid.UUID) -> TechpackExportRe
     render_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
     outfit = render_spec.get("outfit") if isinstance(render_spec.get("outfit"), dict) else {}
     pieces = outfit.get("pieces") if isinstance(outfit.get("pieces"), list) else []
+    provenance = resolve_generation_provenance(render_spec)
     pdf_bytes, page_count = build_techpack_pdf(
         title=draft.title,
         style_code=draft.style_code,
@@ -248,6 +248,14 @@ def export_pdf(db: Session, user: User, draft_id: uuid.UUID) -> TechpackExportRe
             # V2 cutting pages use deterministic schematics, not Magic photo reuse.
             "cutting_reuses_magic_looks": False,
             "magic_looks_on_cover_overview_only": True,
+            "generation_mode": provenance["mode"],
+            "generation_label": provenance["label"],
+            "is_professional": provenance["is_professional"],
+            "ai_run_id": provenance["run_id"] or None,
+            "vision_model": provenance["vision_model"] or None,
+            "image_model": provenance["image_model"] or None,
+            "actual_cost_usd_cents": provenance["actual_cost_usd_cents"],
+            "paid_sections": provenance["paid_sections"],
         },
     )
     db.add(row)

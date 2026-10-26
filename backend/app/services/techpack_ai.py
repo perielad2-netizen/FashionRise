@@ -319,10 +319,16 @@ def enrich_spec_heuristic(spec: dict[str, Any]) -> dict[str, Any]:
     out["outfit"] = outfit
     out["workflow_stage"] = "generate"
     out["warnings"] = collect_measurement_warnings(out)
+    prior = out.get("ai") if isinstance(out.get("ai"), dict) else {}
+    # Heuristic regenerate must not keep claiming prior paid Professional sections.
     out["ai"] = {
-        **(out.get("ai") if isinstance(out.get("ai"), dict) else {}),
+        **prior,
         "last_mode": "heuristic",
-        "paid_sections": out.get("ai", {}).get("paid_sections") if isinstance(out.get("ai"), dict) else [],
+        "paid_sections": [],
+        "actual_cost_usd_cents": 0,
+        "prior_professional_run_id": prior.get("last_run_id")
+        if prior.get("last_mode") == "professional"
+        else prior.get("prior_professional_run_id"),
     }
     return out
 

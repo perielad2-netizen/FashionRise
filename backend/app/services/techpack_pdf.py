@@ -41,6 +41,48 @@ from app.storage.local import LocalStorageBackend
 PAGE_W, PAGE_H = A4
 MARGIN = 16 * mm
 
+
+def resolve_generation_provenance(spec: dict[str, Any]) -> dict[str, Any]:
+    """Derive truthful Basic vs AI Professional labels from draft spec (no secrets)."""
+    v2 = ensure_v2(spec if isinstance(spec, dict) else {})
+    ai = v2.get("ai") if isinstance(v2.get("ai"), dict) else {}
+    outfit = v2.get("outfit") if isinstance(v2.get("outfit"), dict) else {}
+    pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+    professional_pieces = 0
+    artifact_kinds: list[str] = []
+    for piece in pieces:
+        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        if str(ill.get("mode") or "") == "professional" and arts:
+            professional_pieces += 1
+            for kind, meta in arts.items():
+                if isinstance(meta, dict) and meta.get("storage_key"):
+                    artifact_kinds.append(str(kind))
+    mode = str(ai.get("last_mode") or "").strip().lower() or "none"
+    # Only claim Professional when mode matches and at least one illustration artifact exists.
+    is_professional = mode == "professional" and professional_pieces > 0
+    if is_professional:
+        label = "AI Professional"
+        short = "professional"
+    elif mode in ("heuristic", "ai"):
+        label = "Basic / No AI Professional"
+        short = "heuristic" if mode == "heuristic" else "ai_text"
+    else:
+        label = "Basic / No AI generated"
+        short = "none"
+    return {
+        "mode": short,
+        "label": label,
+        "is_professional": is_professional,
+        "run_id": str(ai.get("last_run_id") or "") if is_professional else "",
+        "vision_model": str(ai.get("vision_model") or "") if is_professional else "",
+        "image_model": str(ai.get("image_model") or "") if is_professional else "",
+        "actual_cost_usd_cents": int(ai.get("actual_cost_usd_cents") or 0) if is_professional else 0,
+        "paid_sections": list(ai.get("paid_sections") or []) if is_professional else [],
+        "artifact_kinds": sorted(set(artifact_kinds)),
+        "professional_piece_count": professional_pieces,
+    }
+
 INK = colors.HexColor("#1a2233")
 MUTED = colors.HexColor("#5a6578")
 RULE = colors.HexColor("#c9d0dc")
@@ -507,7 +549,7 @@ def _piece_sections(
         story.append(
             Paragraph(
                 "AI PROFESSIONAL technical illustrations generated from the Magic look image. "
-                "Review required. Pattern sheets remain NOT TO SCALE.",
+                "DRAFT / UNVERIFIED. Pattern sheets remain NOT TO SCALE — patternmaker validation required.",
                 styles["muted"],
             )
         )
@@ -556,9 +598,9 @@ def _piece_sections(
     else:
         story.append(
             Paragraph(
-                "PATTERN DEVELOPMENT SCHEMATICS — NOT TO SCALE. "
+                "BASIC / NO AI PROFESSIONAL — PATTERN DEVELOPMENT SCHEMATICS — NOT TO SCALE. "
                 "Back view is a category schematic, not an invented Magic photo. "
-                "Run AI Professional to replace these with source-faithful flats.",
+                "These are not source-faithful AI flats. Run AI Professional to replace them.",
                 styles["muted"],
             )
         )
@@ -732,6 +774,13 @@ def _build_story_v2(
     # A. Cover
     story.append(Paragraph("FashionRise · Create Real Design Technical Pack", styles["muted"]))
     story.append(Paragraph(title or "Untitled look", styles["title"]))
+    cover_prov = resolve_generation_provenance(v2)
+    story.append(
+        Paragraph(
+            f"<b>Pack type:</b> {cover_prov['label']} · DRAFT / UNVERIFIED · Schematics NOT TO SCALE",
+            styles["body"],
+        )
+    )
     component_list = ", ".join(
         f"{(p.get('role') or p.get('category') or 'piece')}".upper()
         + f": {p.get('label') or p.get('category')}"
@@ -743,6 +792,7 @@ def _build_story_v2(
                 ("Style number", style_code),
                 ("Revision", str(revision)),
                 ("Status", status_label),
+                ("Generation", cover_prov["label"]),
                 ("Look ID", look_id),
                 ("Size system", str(v2.get("size_system") or "—")),
                 ("Sample size", str(v2.get("sample_size") or "—")),
@@ -875,11 +925,67 @@ def _build_story_v2(
             styles["body"],
         )
     )
-    ai_meta = v2.get("ai") if isinstance(v2.get("ai"), dict) else {}
+    prov = resolve_generation_provenance(v2)
+    story.append(Paragraph("AI generation identification", styles["h3"]))
+    if prov["is_professional"]:
+        story.append(
+            Paragraph(
+                "This export includes AI Professional technical illustrations from a completed "
+                "paid generation run. Still DRAFT / UNVERIFIED. Pattern sheets NOT TO SCALE.",
+                styles["body"],
+            )
+        )
+        story.append(
+            _kv_table(
+                [
+                    ("Generation mode", prov["label"]),
+                    ("AI run reference", prov["run_id"] or "—"),
+                    ("Vision model", prov["vision_model"] or "—"),
+                    ("Image model", prov["image_model"] or "—"),
+                    (
+                        "Actual cost (¢)",
+                        str(prov["actual_cost_usd_cents"]) if prov["actual_cost_usd_cents"] else "—",
+                    ),
+                    (
+                        "Paid sections",
+                        ", ".join(prov["paid_sections"]) if prov["paid_sections"] else "—",
+                    ),
+                    (
+                        "Illustration kinds",
+                        ", ".join(prov["artifact_kinds"]) if prov["artifact_kinds"] else "—",
+                    ),
+                    ("Draft revision", str(revision)),
+                    ("Notices", "DRAFT / UNVERIFIED · NOT TO SCALE"),
+                ],
+                styles,
+            )
+        )
+    else:
+        story.append(
+            Paragraph(
+                "BASIC / NO AI PROFESSIONAL GENERATED for this export. "
+                "Technical drawings are heuristic or category schematics only. "
+                "Preview/Download never executes paid AI.",
+                styles["body"],
+            )
+        )
+        story.append(
+            _kv_table(
+                [
+                    ("Generation mode", prov["label"]),
+                    ("Mode code", prov["mode"]),
+                    ("Paid sections", "none"),
+                    ("AI run reference", "—"),
+                    ("Draft revision", str(revision)),
+                    ("Notices", "DRAFT / UNVERIFIED · NOT TO SCALE"),
+                ],
+                styles,
+            )
+        )
     story.append(
         Paragraph(
-            f"Generation mode: {ai_meta.get('last_mode') or 'none'} · "
-            f"Paid sections: {', '.join(ai_meta.get('paid_sections') or []) or 'none'}",
+            f"Generation mode: {prov['mode']} · Paid sections: "
+            f"{', '.join(prov['paid_sections']) or 'none'}",
             styles["muted"],
         )
     )
