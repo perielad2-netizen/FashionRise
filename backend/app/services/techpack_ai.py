@@ -25,6 +25,7 @@ from app.models.techpack_ai_run import TechpackAIRun
 from app.models.techpack_draft import TechpackDraft
 from app.models.user import User
 from app.services.ai_service import extract_result_image_url
+from app.services.sketch_openai import SketchConfigError
 from app.services.techpack_ai_professional import (
     MockProfessionalProvider,
     ProfessionalAIProvider,
@@ -572,6 +573,35 @@ def run_generate(
             "failed_sections": (existing.result or {}).get("failed_sections") or [],
             "idempotent_replay": True,
         }
+    if existing and existing.status == "running":
+        # Unknown network outcome — do not start a second paid attempt for the same intent.
+        return {
+            "run_id": str(existing.id),
+            "status": "running",
+            "cost_usd_cents": existing.cost_usd_cents or 0,
+            "actual_cost_usd_cents": existing.cost_usd_cents or 0,
+            "mode": existing.stage,
+            "idempotent_replay": True,
+            "message": "Generation already in progress for this request. Wait or reopen the draft.",
+        }
+    if existing and existing.status == "failed" and int(existing.cost_usd_cents or 0) > 0:
+        # Partial paid failure recorded — do not silently re-bill under the same key.
+        arts = list(
+            db.scalars(select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == existing.id)).all()
+        )
+        return {
+            "run_id": str(existing.id),
+            "status": "failed",
+            "cost_usd_cents": existing.cost_usd_cents,
+            "actual_cost_usd_cents": existing.cost_usd_cents,
+            "mode": existing.stage,
+            "error_message": existing.error_message,
+            "artifacts": [_artifact_read(a) for a in arts],
+            "failed_sections": (existing.result or {}).get("failed_sections") or [],
+            "idempotent_replay": True,
+            "safe_retry": False,
+            "message": "Previous attempt recorded usage. Start a new confirmed generation to continue.",
+        }
 
     spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
     if mode in ("analyze", "ai", "heuristic", "professional") and (
@@ -646,10 +676,8 @@ def run_generate(
             enriched, artifacts = _persist_professional_result(
                 db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=spec
             )
+            # Record provider-reported actual usage; do not clamp incurred cost downward.
             cost = int((pipeline.get("usage") or {}).get("cost_usd_cents") or 0)
-            # Never exceed reserved estimate without a second confirmation — clamp accounting.
-            if cost > estimate > 0:
-                cost = estimate
             model = (pipeline.get("usage") or {}).get("image_model") or (
                 pipeline.get("usage") or {}
             ).get("vision_model")
@@ -714,6 +742,39 @@ def run_generate(
     except (ForbiddenError, ValidationAppError, NotFoundError):
         db.rollback()
         raise
+    except SketchConfigError as exc:
+        db.rollback()
+        draft = _owned_draft(db, user, draft_id)
+        run_row = db.get(TechpackAIRun, run.id) if getattr(run, "id", None) else None
+        err = str(exc)[:1000]
+        if run_row is None:
+            run_row = TechpackAIRun(
+                id=uuid.uuid4(),
+                draft_id=draft.id,
+                user_id=user.id,
+                stage=mode,
+                status="failed",
+                confirm_token=confirm_token,
+                idempotency_key=idempotency_key,
+                request={"mode": mode, "provider_called": False},
+                cost_usd_cents=0,
+                error_message=err,
+            )
+            db.add(run_row)
+        else:
+            run_row.status = "failed"
+            run_row.cost_usd_cents = 0
+            run_row.error_message = err
+            run_row.request = {
+                **(run_row.request if isinstance(run_row.request, dict) else {}),
+                "provider_called": False,
+            }
+            db.add(run_row)
+        db.commit()
+        raise ValidationAppError(
+            "AI Professional could not start because of a server configuration problem. "
+            "Your design is safe. Please try again after the issue is fixed."
+        ) from exc
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         draft = _owned_draft(db, user, draft_id)
@@ -736,7 +797,10 @@ def run_generate(
             run_row.error_message = str(exc)[:1000]
             db.add(run_row)
         db.commit()
-        raise ValidationAppError(f"Technical generation failed: {exc}") from exc
+        raise ValidationAppError(
+            "AI Professional generation failed. Your design is safe. "
+            "If no illustrations appear, you can safely retry after confirming cost again."
+        ) from exc
 
 
 def get_run(db: Session, user: User, run_id: uuid.UUID) -> dict[str, Any]:

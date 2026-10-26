@@ -170,8 +170,10 @@ class OpenAIProfessionalProvider:
                 },
             ],
             max_completion_tokens=min(1800, int(settings.openai_max_completion_tokens or 1400)),
+            reasoning_effort=settings.openai_reasoning_effort,
         )
-        # Ensure response_format json
+        # Ensure response_format json (chat_completion_kwargs already sets json_object;
+        # keep explicit for adapter clarity / older helpers).
         kwargs["response_format"] = {"type": "json_object"}
         result = client.chat.completions.create(**kwargs)
         content = (result.choices[0].message.content or "").strip() if result.choices else ""
