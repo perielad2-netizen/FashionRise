@@ -11,7 +11,7 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`28e7e935`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/28e7e935` (was stuck on `75a8e8ca`, which hid App version). Sticky pink **FashionRise App** bar permanent. Tap-step StageSheet modals. |
+| Frontend (`web-ui`) | **`cf2a31ac`** — Nginx `root` → `/var/www/fashionrise/current`. Sticky App bar. Tap-step StageSheet modals. **Login hotfix:** production builds bake `VITE_API_BASE_URL=/api/v1` (broken `28e7e935` had localhost:8001). |
 | Backend (FastAPI + PostgreSQL) | **`186cac84`** mark (files deployed) — Professional vision passes `reasoning_effort=settings.openai_reasoning_effort`; SketchConfigError → user-safe message + `provider_called=false`; idempotency for running/failed+cost; no cost clamp. Heuristic Basic unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
 | Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
