@@ -62,6 +62,36 @@
   gap: 10px;
 }
 
+.appVersion {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.7);
+  background: rgba(244, 114, 182, 0.22);
+  color: #fdf2f8;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .tagline {
+    display: none;
+  }
+
+  .header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .appVersion {
+    order: -1;
+  }
+}
+
 .avatar {
   width: 32px;
   height: 32px;

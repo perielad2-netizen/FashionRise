@@ -43,12 +43,14 @@ export default defineConfig({
       name: 'fashionrise-build-id',
       transformIndexHtml(html) {
         const short = (buildSha || 'dev').slice(0, 8)
+        const banner = `<div id="fr-static-app-version" style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#9d174d;color:#fff;font:700 13px/1.3 system-ui,sans-serif;text-align:center">FashionRise App ${short} · if this bar is missing you have an old cached page</div>`
         return html
           .replace('<title>FashionRise</title>', `<title>FashionRise · App ${short}</title>`)
           .replace(
             '<meta name="application-name" content="FashionRise" />',
             `<meta name="application-name" content="FashionRise" />\n    <meta name="fr-app-version" content="${short}" />`,
           )
+          .replace('<div id="root"></div>', `${banner}\n    <div id="root"></div>`)
       },
       closeBundle() {
         const short = (buildSha || 'dev').slice(0, 8)

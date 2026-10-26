@@ -18,6 +18,14 @@ registerSW({
   },
 })
 
+// Keep the static HTML version bar until React paints, then remove it so the
+// GlobalHeader "App …" pill remains the durable signal.
+window.addEventListener('DOMContentLoaded', () => {
+  window.setTimeout(() => {
+    document.getElementById('fr-static-app-version')?.remove()
+  }, 4000)
+})
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>

@@ -3,6 +3,11 @@ import { ChevronDown, LogOut, Settings, UserRound } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import styles from './GlobalHeader.module.css'
 
+const APP_VERSION =
+  (import.meta.env.VITE_BUILD_SHA as string | undefined)?.slice(0, 8) ||
+  (import.meta.env.VITE_APP_VERSION as string | undefined) ||
+  'dev'
+
 type Props = {
   leading?: ReactNode
   username: string
@@ -27,6 +32,9 @@ export function GlobalHeader({ leading, username, onLogout, onComingSoon }: Prop
         <span className={styles.plus}>+</span> Create
       </p>
       <div className={styles.actions}>
+        <span className={styles.appVersion} title="Frontend release id" data-testid="global-app-version">
+          App {APP_VERSION}
+        </span>
         <span className={styles.avatar} aria-hidden>
           <UserRound size={16} />
         </span>
