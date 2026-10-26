@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-26 (**CRITICAL production fix LIVE** — AI reasoning_effort + mobile measurements + Nginx root correction. BE PR [#100](https://github.com/perielad2-netizen/FashionRise/pull/100) `186cac84` · FE PR [#99](https://github.com/perielad2-netizen/FashionRise/pull/99) `33230fa0`. Alembic **`010`**. **0 paid generate by Cursor**. Owner will run the next paid AI Professional test personally. **Samsung Internet / owner phone acceptance NOT claimed.**)
+**Last updated:** 2026-10-26 (**Mobile step modals LIVE** `fd9718f3` + CRITICAL AI fix.  — AI reasoning_effort + mobile measurements + Nginx root correction. BE PR [#100](https://github.com/perielad2-netizen/FashionRise/pull/100) `186cac84` · FE PR [#99](https://github.com/perielad2-netizen/FashionRise/pull/99) `33230fa0`. Alembic **`010`**. **0 paid generate by Cursor**. Owner will run the next paid AI Professional test personally. **Samsung Internet / owner phone acceptance NOT claimed.**)
 
 **Phase:** Protected family beta. **Create Real Design CRITICAL fix LIVE**. Production FE @ `33230fa0`. Production BE mark @ `186cac84` (on V3 lineage `5fd4b843` + provenance). Alembic **`010`**.
 
@@ -11,7 +11,7 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`33230fa0`** — Nginx root **and** `/var/www/fashionrise/current` → `/var/www/fashionrise/releases/33230fa0`. Assets `index-Bbvu6SXm.js` / `index-BpX0DUpy.css`. Build id shown in Create Real Design header. Flags: Registration / Magic / Front-Back / Dual Magic **ON**. Permanent Workbox SW (no HTML precache / NavigationRoute). |
+| Frontend (`web-ui`) | **`fd9718f3`** — Nginx root **and** `/var/www/fashionrise/current` → `/var/www/fashionrise/releases/fd9718f3`. Tap-step full-screen modals for Create Real Design stages. |
 | Backend (FastAPI + PostgreSQL) | **`186cac84`** mark (files deployed) — Professional vision passes `reasoning_effort=settings.openai_reasoning_effort`; SketchConfigError → user-safe message + `provider_called=false`; idempotency for running/failed+cost; no cost clamp. Heuristic Basic unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
 | Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
@@ -49,6 +49,11 @@
 | Production browser smoke (origin) | Health OK; Nginx root `33230fa0`; reasoning kwargs resolve to `none`; AI gates unchanged; Alembic `010` |
 | Real Samsung Internet device | **Not exercised by Cursor** — left to owner |
 | Owner acceptance | **Pending** |
+
+
+## Mobile step modals (2026-10-26 night) LIVE
+
+Owner Samsung recording showed step chips with forms buried under the look preview. FE PR [#101](https://github.com/perielad2-netizen/FashionRise/pull/101) `fd9718f3` deployed: tap step → full-screen modal (StageSheet 1/2/4, MeasurementsSheet 3). Nginx root + `current` = `fd9718f3`. BE still `186cac84` (reasoning_effort fix). **Owner Samsung re-check pending** — emulator screenshots are not phone acceptance.
 
 ### Next recommended action (owner)
 
