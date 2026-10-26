@@ -26,8 +26,9 @@ from app.schemas.techpack import (
 from app.services import looks_service
 from app.services.ai_service import extract_result_image_url
 from app.services.techpack_pdf import build_techpack_pdf
-from app.services.techpack_spec import default_spec, merge_spec, style_code_from_look
+from app.services.techpack_spec import default_spec, ensure_v2, merge_spec, style_code_from_look
 from app.storage.local import LocalStorageBackend
+
 
 _TITLE_MAX = 160
 _STYLE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -201,6 +202,9 @@ def export_pdf(db: Session, user: User, draft_id: uuid.UUID) -> TechpackExportRe
 
     status = "DRAFT"
     verification = "UNVERIFIED"
+    render_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    outfit = render_spec.get("outfit") if isinstance(render_spec.get("outfit"), dict) else {}
+    pieces = outfit.get("pieces") if isinstance(outfit.get("pieces"), list) else []
     pdf_bytes, page_count = build_techpack_pdf(
         title=draft.title,
         style_code=draft.style_code,
@@ -210,7 +214,7 @@ def export_pdf(db: Session, user: User, draft_id: uuid.UUID) -> TechpackExportRe
         look_id=str(draft.look_id),
         front_image=front_path,
         back_image=back_path,
-        spec=draft.spec if isinstance(draft.spec, dict) else {},
+        spec=render_spec,
     )
     export_id = uuid.uuid4()
     filename = f"{draft.style_code}_r{draft.revision}_techpack.pdf".replace("/", "-")
@@ -238,7 +242,12 @@ def export_pdf(db: Session, user: User, draft_id: uuid.UUID) -> TechpackExportRe
             "front_image_present": front_path is not None,
             "back_image_present": back_path is not None,
             "height_rows": 1,
-            "cutting_reuses_magic_looks": True,
+            "schema_version": str(render_spec.get("schema_version") or "2.0"),
+            "piece_count": len(pieces),
+            "cutting_uses_schematics": True,
+            # V2 cutting pages use deterministic schematics, not Magic photo reuse.
+            "cutting_reuses_magic_looks": False,
+            "magic_looks_on_cover_overview_only": True,
         },
     )
     db.add(row)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated Nginx Create Real Design (techpacks) allowlist check."""
+"""Isolated Nginx Create Real Design (techpacks) allowlist check — V2 AI routes."""
 
 from __future__ import annotations
 
@@ -14,6 +14,16 @@ SNIPPET = """
 # FashionRise techpacks allowlist candidate (isolated verification only)
 location = /api/v1/techpacks {
     limit_except GET POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location = /api/v1/techpacks/ai/status {
+    limit_except GET { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location ~ "^/api/v1/techpacks/ai/runs/[0-9a-fA-F-]{36}$" {
+    limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
 }
 
@@ -32,6 +42,16 @@ location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/exports$" {
     proxy_pass http://127.0.0.1:8010;
 }
 
+location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/confirm$" {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate$" {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
 location ~ "^/api/v1/techpacks/exports/[0-9a-fA-F-]{36}/pdf$" {
     limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
@@ -43,32 +63,40 @@ MATRIX = [
     ("GET", "/api/v1/techpacks", "allow_list"),
     ("POST", "/api/v1/techpacks", "allow_create"),
     ("DELETE", "/api/v1/techpacks", "deny_list_delete"),
+    ("GET", "/api/v1/techpacks/ai/status", "allow_ai_status"),
+    ("GET", f"/api/v1/techpacks/ai/runs/{UUID}", "allow_ai_run"),
     ("GET", f"/api/v1/techpacks/{UUID}", "allow_get"),
     ("PATCH", f"/api/v1/techpacks/{UUID}", "allow_patch"),
     ("DELETE", f"/api/v1/techpacks/{UUID}", "deny_delete"),
     ("POST", f"/api/v1/techpacks/{UUID}/export", "allow_export"),
     ("GET", f"/api/v1/techpacks/{UUID}/exports", "allow_exports"),
+    ("POST", f"/api/v1/techpacks/{UUID}/ai/confirm", "allow_ai_confirm"),
+    ("POST", f"/api/v1/techpacks/{UUID}/ai/generate", "allow_ai_generate"),
     ("GET", f"/api/v1/techpacks/exports/{UUID}/pdf", "allow_pdf"),
-    ("POST", f"/api/v1/techpacks/{UUID}/ai-draft", "deny_ai"),
+    ("POST", f"/api/v1/techpacks/{UUID}/ai-draft", "deny_ai_legacy"),
     ("GET", f"/api/v1/techpacks/{UUID}/extra", "deny_extra"),
 ]
 
 _LIST_EXACT = "/api/v1/techpacks"
+_AI_STATUS = "/api/v1/techpacks/ai/status"
+_AI_RUN_RE = re.compile(r"^/api/v1/techpacks/ai/runs/[0-9a-fA-F-]{36}$")
 _ITEM_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}$")
 _EXPORT_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/export$")
 _EXPORTS_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/exports$")
+_AI_CONFIRM_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/confirm$")
+_AI_GENERATE_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate$")
 _PDF_RE = re.compile(r"^/api/v1/techpacks/exports/[0-9a-fA-F-]{36}/pdf$")
 
 
 def _assert_snippet(text: str) -> None:
     if "location = /api/v1/techpacks" not in text:
         raise SystemExit("FAIL: missing exact /api/v1/techpacks location")
-    if "limit_except GET POST" not in text:
-        raise SystemExit("FAIL: list location must allow GET POST")
-    if "limit_except GET PATCH" not in text:
-        raise SystemExit("FAIL: item location must allow GET PATCH")
-    if "/export$" not in text:
-        raise SystemExit("FAIL: missing export location")
+    if "location = /api/v1/techpacks/ai/status" not in text:
+        raise SystemExit("FAIL: missing ai/status location")
+    if "/ai/confirm$" not in text:
+        raise SystemExit("FAIL: missing ai/confirm location")
+    if "/ai/generate$" not in text:
+        raise SystemExit("FAIL: missing ai/generate location")
     if "/pdf$" not in text:
         raise SystemExit("FAIL: missing pdf location")
 
@@ -80,6 +108,10 @@ def _classify(method: str, path: str) -> str:
         if method == "POST":
             return "allow_create"
         return "deny_list_delete"
+    if path == _AI_STATUS:
+        return "allow_ai_status" if method == "GET" else "deny_extra"
+    if _AI_RUN_RE.fullmatch(path):
+        return "allow_ai_run" if method == "GET" else "deny_extra"
     if _ITEM_RE.fullmatch(path):
         if method == "GET":
             return "allow_get"
@@ -90,10 +122,14 @@ def _classify(method: str, path: str) -> str:
         return "allow_export" if method == "POST" else "deny_extra"
     if _EXPORTS_RE.fullmatch(path):
         return "allow_exports" if method == "GET" else "deny_extra"
+    if _AI_CONFIRM_RE.fullmatch(path):
+        return "allow_ai_confirm" if method == "POST" else "deny_extra"
+    if _AI_GENERATE_RE.fullmatch(path):
+        return "allow_ai_generate" if method == "POST" else "deny_extra"
     if _PDF_RE.fullmatch(path):
         return "allow_pdf" if method == "GET" else "deny_extra"
     if path.startswith("/api/v1/techpacks/"):
-        return "deny_ai" if path.endswith("/ai-draft") else "deny_extra"
+        return "deny_ai_legacy" if path.endswith("/ai-draft") else "deny_extra"
     raise SystemExit(f"FAIL: unmapped matrix path {method} {path}")
 
 

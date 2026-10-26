@@ -1,8 +1,9 @@
-"""Create Real Design — techpack draft + authenticated PDF routes."""
+"""Create Real Design — techpack draft + authenticated PDF + gated AI routes."""
 
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import FileResponse
@@ -11,15 +12,33 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import CurrentUser
 from app.db.session import get_db
 from app.schemas.techpack import (
+    TechpackAiConfirmRequest,
+    TechpackAiGenerateRequest,
     TechpackCreate,
     TechpackDraftRead,
     TechpackExportRead,
     TechpackListResponse,
     TechpackUpdate,
 )
-from app.services import techpack_service
+from app.services import techpack_ai, techpack_service
 
 router = APIRouter()
+
+
+@router.get("/ai/status")
+def techpack_ai_status(user: CurrentUser) -> dict[str, Any]:
+    """Public-to-auth AI capability / spend gate status. Never triggers paid work."""
+    _ = user
+    return techpack_ai.ai_status()
+
+
+@router.get("/ai/runs/{run_id}")
+def techpack_ai_run(
+    run_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, Any]:
+    return techpack_ai.get_run(db, user, run_id)
 
 
 @router.post("", response_model=TechpackDraftRead, status_code=status.HTTP_201_CREATED)
@@ -96,12 +115,42 @@ def list_techpack_exports(
     return techpack_service.list_exports(db, user, draft_id)
 
 
+@router.post("/{draft_id}/ai/confirm")
+def techpack_ai_confirm(
+    draft_id: uuid.UUID,
+    data: TechpackAiConfirmRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, Any]:
+    """Issue a one-time confirm token. Does not call paid providers."""
+    return techpack_ai.create_confirm_challenge(db, user, draft_id, stage=data.stage)
+
+
+@router.post("/{draft_id}/ai/generate")
+def techpack_ai_generate(
+    draft_id: uuid.UUID,
+    data: TechpackAiGenerateRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, Any]:
+    """Heuristic ($0) or paid AI generation after explicit confirm_token."""
+    return techpack_ai.run_generate(
+        db,
+        user,
+        draft_id,
+        confirm_token=data.confirm_token,
+        idempotency_key=data.idempotency_key,
+        mode=data.mode,
+        sections=data.sections,
+    )
+
+
 @router.post("/{draft_id}/ai-draft", status_code=status.HTTP_403_FORBIDDEN)
 def ai_draft_assist(
     draft_id: uuid.UUID,
     user: CurrentUser,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> None:
-    """Gated placeholder — never performs paid AI in default environments."""
+    """Legacy V1 path — remains disabled. Use /ai/confirm + /ai/generate."""
     _ = (draft_id, user, db)
     techpack_service.ai_draft_assist_disabled()

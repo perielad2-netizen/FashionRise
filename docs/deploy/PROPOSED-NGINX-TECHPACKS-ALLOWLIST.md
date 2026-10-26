@@ -1,19 +1,30 @@
-# Proposed Nginx allowlist — Create Real Design (techpacks)
+# Proposed Nginx allowlist — Create Real Design (techpacks) V2
 
-**Status:** applied on production FashionRise with Create Real Design deploy (2026-10-26) — keep in sync with live `fashionrise.app`.
+**Status:** candidate for Create Real Design V2 deploy — keep in sync with live `fashionrise.app`.
 
 ## Intent
 
 - Permit authenticated techpack draft CRUD + PDF export/download.
+- Permit explicit AI status / confirm / generate / run-status routes (paid AI still fail-closed in API without spend ceiling).
 - Keep PDF bytes on the private authenticated route (never `/static/uploads`).
-- Deny sibling/extra paths under `/api/v1/techpacks/`.
+- Deny sibling/extra paths under `/api/v1/techpacks/` including legacy `/ai-draft`.
 
 ## Smallest FashionRise-only change
 
 ```nginx
-    # Create Real Design — owner-scoped techpack drafts + private PDF
+    # Create Real Design — owner-scoped techpack drafts + private PDF + gated AI
     location = /api/v1/techpacks {
         limit_except GET POST { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
+    location = /api/v1/techpacks/ai/status {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
+    location ~ "^/api/v1/techpacks/ai/runs/[0-9a-fA-F-]{36}$" {
+        limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8010;
     }
 
@@ -32,6 +43,16 @@
         proxy_pass http://127.0.0.1:8010;
     }
 
+    location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/confirm$" {
+        limit_except POST { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
+    location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate$" {
+        limit_except POST { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
     location ~ "^/api/v1/techpacks/exports/[0-9a-fA-F-]{36}/pdf$" {
         limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8010;
@@ -44,10 +65,14 @@
 |---|---|
 | `GET /api/v1/techpacks` | Proxied |
 | `POST /api/v1/techpacks` | Proxied |
+| `GET /api/v1/techpacks/ai/status` | Proxied |
+| `GET /api/v1/techpacks/ai/runs/{uuid}` | Proxied |
 | `GET /api/v1/techpacks/{uuid}` | Proxied |
 | `PATCH /api/v1/techpacks/{uuid}` | Proxied |
 | `POST /api/v1/techpacks/{uuid}/export` | Proxied |
 | `GET /api/v1/techpacks/{uuid}/exports` | Proxied |
+| `POST /api/v1/techpacks/{uuid}/ai/confirm` | Proxied |
+| `POST /api/v1/techpacks/{uuid}/ai/generate` | Proxied |
 | `GET /api/v1/techpacks/exports/{uuid}/pdf` | Proxied |
 | `DELETE /api/v1/techpacks/{uuid}` | Denied |
 | `POST /api/v1/techpacks/{uuid}/ai-draft` | Denied at edge (API also 403) |

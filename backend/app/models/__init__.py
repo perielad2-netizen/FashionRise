@@ -13,6 +13,7 @@ from app.models.material_definition import MaterialDefinition
 from app.models.rating import Rating
 from app.models.refresh_token import RefreshToken
 from app.models.registration_invitation import RegistrationInvitation
+from app.models.techpack_ai_run import TechpackAIRun
 from app.models.techpack_draft import TechpackDraft, TechpackExport
 from app.models.user import User
 from app.models.user_follow import UserFollow
@@ -34,6 +35,7 @@ __all__ = [
     "Rating",
     "RefreshToken",
     "RegistrationInvitation",
+    "TechpackAIRun",
     "TechpackDraft",
     "TechpackExport",
     "User",

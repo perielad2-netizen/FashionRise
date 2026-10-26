@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-FieldSource = Literal["empty", "designer", "estimate", "ai", "look"]
+FieldSource = Literal["empty", "designer", "estimate", "ai", "look", "calculated", "unknown"]
 
 
 class MeasuredValue(BaseModel):
@@ -66,3 +66,14 @@ class TechpackListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class TechpackAiConfirmRequest(BaseModel):
+    stage: str = Field(default="generate", max_length=64)
+
+
+class TechpackAiGenerateRequest(BaseModel):
+    confirm_token: str = Field(min_length=8, max_length=128)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+    mode: Literal["heuristic", "ai", "analyze"] = "heuristic"
+    sections: list[str] | None = None

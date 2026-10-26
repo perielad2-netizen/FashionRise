@@ -40,8 +40,18 @@ class Settings(BaseSettings):
     private_fabric_subdir: str = "private_fabrics"
     # Private tech-pack PDFs — never mounted under /static/uploads.
     private_techpack_subdir: str = "private_techpacks"
-    # Optional AI draft assist for Create Real Design. Default off — 0 paid calls.
+    # Create Real Design V1 flag (legacy). Prefer techpack_ai_enabled.
     techpack_ai_draft_enabled: bool = False
+    # Create Real Design V2 — explicit user-confirmed AI. Fail closed without spend ceiling.
+    techpack_ai_enabled: bool = False
+    # Operator must set a positive ceiling (USD) before any paid techpack AI call.
+    techpack_ai_spend_ceiling_usd: float = 0.0
+    techpack_ai_max_usd_per_run: float = 0.50
+    techpack_ai_max_usd_per_user_day: float = 2.0
+    # Estimated chat cost used for pre-flight budgeting (cents).
+    techpack_ai_estimate_chat_cents: int = 8
+    # Entitlement boundary placeholder for future premium billing (not charged here).
+    techpack_ai_requires_entitlement: bool = False
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 

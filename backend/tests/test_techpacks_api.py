@@ -1,4 +1,4 @@
-"""Create Real Design — techpack draft + PDF API (0 paid AI)."""
+"""Create Real Design V2 — techpack draft + PDF + heuristic AI (0 paid AI by default)."""
 
 from __future__ import annotations
 
@@ -89,8 +89,12 @@ def test_create_update_export_pdf_and_owner_isolation(client, db_session):
     assert draft["look_id"] == str(job.id)
     assert draft["front_job_id"] == str(job.id)
     assert draft["back_job_id"] is None
+    assert draft["spec"]["schema_version"].startswith("2")
     assert draft["spec"]["body"]["height"]["source"] == "empty"
-    assert "Estimate" in (draft["spec"]["garment"]["garment_length"].get("note") or "")
+    pieces = draft["spec"]["outfit"]["pieces"]
+    assert len(pieces) >= 1
+    assert pieces[0]["category"] == "dress"
+    assert "chest_bust" in pieces[0]["finished_measurements"]
 
     patched = client.patch(
         f"/api/v1/techpacks/{draft['id']}",
@@ -108,6 +112,7 @@ def test_create_update_export_pdf_and_owner_isolation(client, db_session):
     assert body["revision"] == 2
     assert body["spec"]["body"]["height"]["value"] == 170
     assert body["spec"]["body"]["height"]["source"] == "designer"
+    assert body["spec"]["outfit"]["pieces"][0]["materials"]["shell"]["name"] == "Cotton sateen"
     assert body["status"] == "DRAFT"
     assert body["verification"] == "UNVERIFIED"
 
@@ -119,7 +124,8 @@ def test_create_update_export_pdf_and_owner_isolation(client, db_session):
     assert export["page_count"] >= 5
     assert export["byte_size"] > 500
     assert export["metadata"]["height_rows"] == 1
-    assert export["metadata"]["cutting_reuses_magic_looks"] is True
+    assert export["metadata"]["cutting_uses_schematics"] is True
+    assert export["metadata"]["cutting_reuses_magic_looks"] is False
 
     pdf = client.get(f"/api/v1/techpacks/exports/{export['id']}/pdf", headers=_auth(tokens))
     assert pdf.status_code == 200, pdf.text
@@ -130,9 +136,10 @@ def test_create_update_export_pdf_and_owner_isolation(client, db_session):
     text = "\n".join((page.extract_text() or "") for page in reader.pages)
     assert "DRAFT" in text and "UNVERIFIED" in text
     assert "Body measurements" in text
-    # Height appears as a measurement label once in the body table (not duplicated).
     assert text.count("Height") == 1
-    assert "same Magic job" in text or "same authenticated Magic" in text
+    assert "NOT TO SCALE" in text
+    assert "Technical flat" in text or "SCHEMATIC" in text
+    assert "Pattern piece development" in text
     assert "not fabricated" in text.lower() or "not invented" in text.lower()
 
     denied = client.get(f"/api/v1/techpacks/exports/{export['id']}/pdf", headers=_auth(other))
@@ -161,9 +168,7 @@ def test_look_delete_does_not_cascade_techpack_draft(client, db_session):
     deleted = client.delete(f"/api/v1/looks/{job.id}", headers=_auth(tokens))
     assert deleted.status_code == 204
 
-    # Look gone from gallery…
     assert client.get(f"/api/v1/looks/{job.id}", headers=_auth(tokens)).status_code == 404
-    # …but techpack draft remains owner-accessible.
     still = client.get(f"/api/v1/techpacks/{draft_id}", headers=_auth(tokens))
     assert still.status_code == 200, still.text
     assert still.json()["id"] == draft_id
@@ -208,3 +213,99 @@ def test_missing_opposite_side_not_invented(client, db_session):
     exported = client.post(f"/api/v1/techpacks/{created['id']}/export", headers=_auth(tokens))
     assert exported.status_code == 201
     assert exported.json()["metadata"]["back_image_present"] is False
+
+
+def test_heuristic_generate_two_piece_and_ai_status(client, db_session):
+    tokens = register_with_invite(client, db_session, "tp_v2@example.com", "tp_v2")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    uid = uuid.UUID(me["id"])
+    url = _store_image()
+    job = _add_job(
+        db_session,
+        user_id=uid,
+        image_url=url,
+        studio_side="front",
+        summary="black shirt and beige trousers outfit",
+    )
+    status = client.get("/api/v1/techpacks/ai/status", headers=_auth(tokens))
+    assert status.status_code == 200
+    assert status.json()["enabled"] is False
+    assert status.json()["spend_ceiling_usd"] == 0.0
+
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "Black shirt set"},
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()
+    pieces = draft["spec"]["outfit"]["pieces"]
+    assert draft["spec"]["outfit"]["piece_count"] == 2
+    cats = {p["category"] for p in pieces}
+    assert "shirt" in cats
+    assert "trousers" in cats
+    shirt = next(p for p in pieces if p["category"] == "shirt")
+    trousers = next(p for p in pieces if p["category"] == "trousers")
+    assert "chest_bust" in shirt["finished_measurements"]
+    assert "inseam" in trousers["finished_measurements"]
+    assert "chest_bust" not in trousers["finished_measurements"]
+    assert "sleeve_length" not in trousers["finished_measurements"]
+
+    confirm = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/confirm",
+        headers=_auth(tokens),
+        json={"stage": "generate"},
+    )
+    assert confirm.status_code == 200, confirm.text
+    token = confirm.json()["confirm_token"]
+    assert len(token) >= 8
+    assert confirm.json()["ai_enabled"] is False
+
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate",
+        headers=_auth(tokens),
+        json={
+            "confirm_token": token,
+            "idempotency_key": f"idem-{uuid.uuid4().hex}",
+            "mode": "heuristic",
+        },
+    )
+    assert gen.status_code == 200, gen.text
+    assert gen.json()["mode"] == "heuristic"
+    assert gen.json()["cost_usd_cents"] == 0
+
+    refreshed = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    for piece in refreshed["spec"]["outfit"]["pieces"]:
+        assert piece["pattern_pieces"]
+        assert piece["construction_steps"]
+        assert piece["bom"]
+
+    # Paid AI fails closed without spend ceiling.
+    confirm2 = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/confirm",
+        headers=_auth(tokens),
+        json={"stage": "generate"},
+    ).json()
+    paid = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate",
+        headers=_auth(tokens),
+        json={
+            "confirm_token": confirm2["confirm_token"],
+            "idempotency_key": f"idem-paid-{uuid.uuid4().hex}",
+            "mode": "ai",
+        },
+    )
+    assert paid.status_code == 403
+
+    exported = client.post(f"/api/v1/techpacks/{draft['id']}/export", headers=_auth(tokens))
+    assert exported.status_code == 201
+    assert exported.json()["metadata"]["piece_count"] == 2
+    assert exported.json()["page_count"] >= 8
+    pdf = client.get(
+        f"/api/v1/techpacks/exports/{exported.json()['id']}/pdf",
+        headers=_auth(tokens),
+    )
+    text = "\n".join((page.extract_text() or "") for page in PdfReader(io.BytesIO(pdf.content)).pages)
+    assert "SHIRT" in text.upper() or "shirt" in text.lower()
+    assert "TROUSER" in text.upper() or "trouser" in text.lower()
+    assert "CUTTING LAYOUT" in text.upper() or "Cutting layout" in text
