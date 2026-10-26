@@ -3,21 +3,66 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-26 (**Create Real Design mobile UX + provenance LIVE**. FE PR [#98](https://github.com/perielad2-netizen/FashionRise/pull/98) `5f519734` + BE PR [#97](https://github.com/perielad2-netizen/FashionRise/pull/97) `08b66ca2` on V3 lineage. Alembic **`010`** (unchanged). Android Step 3 **Edit Measurements** full-screen sheet; Stage 4 unmistakable Basic vs AI Professional; PDF cover/review label **Basic / No AI Professional** unless completed Professional artifacts exist. Non-AI smoke **PASS**. Owner-allowlist AI gates unchanged. **0 paid generate by Cursor**. No monetization.)
+**Last updated:** 2026-10-26 (**CRITICAL production fix LIVE** — AI reasoning_effort + mobile measurements + Nginx root correction. BE PR [#100](https://github.com/perielad2-netizen/FashionRise/pull/100) `186cac84` · FE PR [#99](https://github.com/perielad2-netizen/FashionRise/pull/99) `33230fa0`. Alembic **`010`**. **0 paid generate by Cursor**. Owner will run the next paid AI Professional test personally. **Samsung Internet / owner phone acceptance NOT claimed.**)
 
-**Phase:** Protected family beta. **WEB-V4J Front/Back + Dual Magic LIVE**. **My Looks LIVE**. **Create Real Design V3 + mobile UX LIVE**. Production FE @ `5f519734`. Production BE @ `08b66ca2` (V3 `5fd4b843` + provenance). Alembic **`010`**.
+**Phase:** Protected family beta. **Create Real Design CRITICAL fix LIVE**. Production FE @ `33230fa0`. Production BE mark @ `186cac84` (on V3 lineage `5fd4b843` + provenance). Alembic **`010`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`5f519734`** — Nginx root `/var/www/fashionrise/releases/5f519734`. Flags: Registration / Magic / Front-Back / Dual Magic **ON**. Create Real Design: mobile measurements sheet (≤720px) + Stage 4 provenance/clarity. Permanent Workbox SW (no HTML precache / NavigationRoute). |
-| Backend (FastAPI + PostgreSQL) | **`08b66ca2`** — V3 AI Professional pipeline + truthful PDF/export provenance (`resolve_generation_provenance`). Heuristic Basic pack unchanged. `fashionrise-api` on `127.0.0.1:8010`; worker standalone. |
+| Frontend (`web-ui`) | **`33230fa0`** — Nginx root **and** `/var/www/fashionrise/current` → `/var/www/fashionrise/releases/33230fa0`. Assets `index-Bbvu6SXm.js` / `index-BpX0DUpy.css`. Build id shown in Create Real Design header. Flags: Registration / Magic / Front-Back / Dual Magic **ON**. Permanent Workbox SW (no HTML precache / NavigationRoute). |
+| Backend (FastAPI + PostgreSQL) | **`186cac84`** mark (files deployed) — Professional vision passes `reasoning_effort=settings.openai_reasoning_effort`; SketchConfigError → user-safe message + `provider_called=false`; idempotency for running/failed+cost; no cost clamp. Heuristic Basic unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
-| Database | `fashionrise_beta` — Alembic **`010`** (no new migration for this UX deploy) |
-| Nginx | Techpacks allowlist + AI routes + artifacts image route. No public techpack/look image URLs. |
-| Deploy backup | `/var/backups/fashionrise/techpack-mobile-ux-deploy-20261026T201157Z` → rollback FE `75a8e8ca` / BE files from V3 tip `5fd4b843` (+ env/nginx from backup) |
-| AI spend | **Owner-only first test ready:** `techpack_ai_enabled=true`, ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**. Est. professional ~**`$1.75–$3.37`** (1 piece). Preview/Download never spend. **Cursor did not run paid generate.** |
+| Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
+| Nginx | Root corrected from stale **`129e57dd`** → **`33230fa0`**. `index.html` `Cache-Control: no-cache`. Hashed assets immutable. |
+| Deploy backup | `/var/backups/fashionrise/techpack-crit-fix-deploy-20261026T213807Z` → rollback FE `129e57dd` / prior BE service files (+ env/nginx) |
+| AI spend | Unchanged: `techpack_ai_enabled=true`, ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`, model `gpt-6-luna`. **Cursor did not run paid generate.** |
+
+## CRITICAL fix — root causes (2026-10-26)
+
+| Bug | Root cause | Fix |
+|---|---|---|
+| `OPENAI_REASONING_EFFORT is empty` on paid generate | `OpenAIProfessionalProvider.analyze_garment()` called `chat_completion_kwargs` without `reasoning_effort` | Pass `reasoning_effort=settings.openai_reasoning_effort` |
+| Mobile measurements unusable on Samsung Internet | Nginx still served **`129e57dd`** (no Edit Measurements). Symlink `current`→`5f519734` was **not** the active root. Emulator shots of `5f519734` were mistaken for phone evidence. | Deploy `33230fa0` + set Nginx root + `current` to same release; auto-open sheet; value-first inputs |
+| Step 4 AI hard to reach / errors buried | Form pane scroll not targeted; errors below outfit card | `scrollStageIntoView` on form pane; sticky AI error panel near controls |
+| Caching / version identity | Stale Nginx root + no visible FE build id | Root aligned; `Build {sha}` in Create Real Design header; index no-cache |
+
+### Failed AI run audit (read-only)
+
+| Check | Result |
+|---|---|
+| Matching failed run | **1** with `OPENAI_REASONING_EFFORT is empty` |
+| Status | `failed` |
+| Cost recorded | **0¢** |
+| Provider called | **false** / null (request construction failure — no vision request) |
+| Artifacts | **0** |
+| Draft preserved | **yes** (run did not mutate pack content) |
+| Marked successful? | **No** — left failed |
+
+### Verification matrix (do not conflate)
+
+| Layer | Result |
+|---|---|
+| Unit / SDK-boundary tests (mocked OpenAI) | BE **42 passed** (SDK boundary + V3 + model migration); FE TechpackScreen+MeasurementsSheet **20 passed** |
+| Emulator / headless Chrome 360/390/430 | Measurement sheet + Stage 4 pack UI screenshots under `/opt/cursor/artifacts/techpack-crit-fix/` — **simulated viewports only** |
+| Production browser smoke (origin) | Health OK; Nginx root `33230fa0`; reasoning kwargs resolve to `none`; AI gates unchanged; Alembic `010` |
+| Real Samsung Internet device | **Not exercised by Cursor** — left to owner |
+| Owner acceptance | **Pending** |
+
+### Next recommended action (owner)
+
+1. Open FashionRise on Samsung Internet (normal or fresh tab).
+2. Confirm Create Real Design header shows **Build 33230fa0** (Settings/About-equivalent on this screen).
+3. Open an existing Magic look → Create Real Design → Step 3 → enter Waist/Height → Save & Done → reopen → confirm value persists.
+4. Step 4 → select **AI Professional** → Get cost estimate → confirm checkbox → **Generate Professional Pack** (first paid test by owner).
+5. Report illustrations / PDF back to ChatGPT.
+
+### Rollback
+
+`/var/backups/fashionrise/techpack-crit-fix-deploy-20261026T213807Z/ROLLBACK.sh` restores prior Nginx root `129e57dd` and prior BE service files. Prefer app-only rollback; DB dump retained but not preferred.
+
+---
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 

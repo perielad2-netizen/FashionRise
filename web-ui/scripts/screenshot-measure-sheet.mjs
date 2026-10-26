@@ -11,7 +11,7 @@ import { build } from 'esbuild'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
-const outDir = '/opt/cursor/artifacts/techpack-mobile-ux'
+const outDir = '/opt/cursor/artifacts/techpack-crit-fix'
 mkdirSync(outDir, { recursive: true })
 
 const entry = join(root, 'scripts/measure-sheet-harness.tsx')
@@ -87,6 +87,7 @@ await build({
   jsx: 'automatic',
   loader: { '.css': 'css' },
   define: { 'process.env.NODE_ENV': '"development"' },
+  alias: { '@': join(root, 'src') },
 })
 
 // esbuild CSS sidecar
