@@ -44,6 +44,62 @@ describe('MagicLookPanel', () => {
     expect(screen.getByAltText('Original sketch')).toBeTruthy()
   })
 
+  it('shows dual front/back panes with retry when dual state is active', () => {
+    render(
+      <MagicLookPanel
+        open
+        phase="ready"
+        result={null}
+        lookObjectUrl={null}
+        sketchObjectUrl={null}
+        error={null}
+        canRecover={false}
+        dual={{
+          operationId: 'op-1',
+          viewSide: 'front',
+          onViewSide: () => undefined,
+          front: {
+            phase: 'ready',
+            result: {
+              jobId: 'jf',
+              status: 'completed',
+              summary: 'Front look',
+              bullets: [],
+              hasImage: true,
+            },
+            lookObjectUrl: 'blob:front',
+            sketchObjectUrl: 'blob:sk-front',
+            error: null,
+            canRetry: false,
+          },
+          back: {
+            phase: 'failed',
+            result: {
+              jobId: 'jb',
+              status: 'failed',
+              summary: 'Back failed',
+              bullets: [],
+              hasImage: false,
+            },
+            lookObjectUrl: null,
+            sketchObjectUrl: 'blob:sk-back',
+            error: 'Back failed',
+            canRetry: true,
+          },
+          onRetrySide: () => undefined,
+          onDownloadSide: () => undefined,
+        }}
+        onClose={() => undefined}
+        onCancel={() => undefined}
+        onDownload={() => undefined}
+        onRecover={() => undefined}
+        onBackToSketch={() => undefined}
+      />,
+    )
+    expect(screen.getByAltText('Magic fashion look (front)')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Retry back' }).length).toBeGreaterThan(0)
+  })
+
   it('does not render when closed', () => {
     const { container } = render(
       <MagicLookPanel
