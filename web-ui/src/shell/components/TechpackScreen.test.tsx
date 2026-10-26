@@ -90,6 +90,22 @@ describe('TechpackScreen', () => {
   let currentDraft: typeof V2_DRAFT
 
   beforeEach(() => {
+    // Reset viewport mocks so desktop tests are not polluted by mobile cases.
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1280 })
     currentDraft = structuredClone(V2_DRAFT)
     getTechpackDraft.mockReset()
     updateTechpackDraft.mockReset()
@@ -269,6 +285,32 @@ describe('TechpackScreen', () => {
     expect(await screen.findByTitle('Tech pack PDF preview')).toBeInTheDocument()
   })
 
+  it('opens a full-screen modal form when a step is tapped on mobile', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: String(query).includes('max-width: 720px'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+    Object.defineProperty(window, 'innerWidth', { writable: true, value: 390 })
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    await screen.findByText('Create Real Design')
+    expect(screen.getByText(/Tap a step to open its form/i)).toBeInTheDocument()
+    const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
+    fireEvent.click(within(stepper).getByRole('button', { name: /Understand My Design/i }))
+    expect(await screen.findByRole('dialog', { name: /Understand My Design/i })).toBeInTheDocument()
+    expect(screen.getByText(/Step 1 of 4/i)).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Cream dress')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Save & next step/i })).toBeInTheDocument()
+  })
+
   it('opens mobile measurements sheet at Android-sized viewports', async () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -283,12 +325,11 @@ describe('TechpackScreen', () => {
         dispatchEvent: vi.fn(),
       })),
     })
+    Object.defineProperty(window, 'innerWidth', { writable: true, value: 390 })
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
     const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
     fireEvent.click(within(stepper).getByRole('button', { name: /Measurements/i }))
-    expect(await screen.findByRole('button', { name: /Edit Measurements/i })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Edit Measurements/i }))
     expect(await screen.findByRole('dialog', { name: /Body measurements/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Save & Done/i })).toBeInTheDocument()
   })
@@ -430,8 +471,8 @@ describe('TechpackScreen', () => {
     fireEvent.click(pro)
     fireEvent.click(screen.getByRole('button', { name: /Get cost estimate/i }))
     expect(
-      await screen.findByText(/server configuration problem/i),
-    ).toBeInTheDocument()
+      await screen.findByRole('alert'),
+    ).toHaveTextContent(/server configuration problem/i)
     expect(screen.getByText(/No chargeable AI work ran/i)).toBeInTheDocument()
     expect(screen.queryByText(/OPENAI_REASONING_EFFORT/i)).not.toBeInTheDocument()
   })
@@ -476,7 +517,7 @@ describe('TechpackScreen', () => {
     })
   })
 
-  it('auto-opens the measurements sheet when entering Step 3 on mobile', async () => {
+  it('opens Step 4 AI controls in a modal on mobile', async () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -491,10 +532,23 @@ describe('TechpackScreen', () => {
       })),
     })
     Object.defineProperty(window, 'innerWidth', { writable: true, value: 390 })
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      owner_allowlisted: true,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
     const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
-    fireEvent.click(within(stepper).getByRole('button', { name: /Measurements/i }))
-    expect(await screen.findByRole('dialog', { name: /Body measurements/i })).toBeInTheDocument()
+    fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
+    expect(
+      await screen.findByRole('dialog', { name: /Generate Technical Design/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Basic Technical Pack — Free/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('radio', { name: /AI Professional Technical Pack/i }),
+    ).toBeInTheDocument()
   })
 })

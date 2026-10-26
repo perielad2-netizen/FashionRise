@@ -745,6 +745,51 @@
   font-size: 16px;
 }
 
+.mobileHub {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.mobileHubLead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--fr-text);
+}
+
+.mobileHubHints {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fr-muted);
+}
+
+@media (max-width: 720px) {
+  .stepper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .step {
+    flex: unset;
+    min-height: 52px;
+    font-size: 12px;
+  }
+
+  .outfitBrief {
+    /* Keep compact so the step grid stays the hero of the hub. */
+    margin-top: 10px;
+  }
+
+  .head .actions {
+    width: 100%;
+  }
+}
+
 .mobileMeasureCard p {
   margin: 0;
   font-size: 13px;

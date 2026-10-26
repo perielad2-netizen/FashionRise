@@ -32,6 +32,7 @@ import {
 import { FieldHelp } from '@/shell/components/techpack/FieldHelp'
 import { MeasuredField } from '@/shell/components/techpack/MeasuredField'
 import { MeasurementsSheet } from '@/shell/components/techpack/MeasurementsSheet'
+import { StageSheet } from '@/shell/components/techpack/StageSheet'
 import {
   CLOSURE_SUGGESTIONS,
   FIT_PREFERENCES,
@@ -165,6 +166,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [isMobileViewport, setIsMobileViewport] = useState(false)
   const [measureSheetOpen, setMeasureSheetOpen] = useState(false)
   const [measureSheetSnapshot, setMeasureSheetSnapshot] = useState<TechpackSpecV2 | null>(null)
+  /** Mobile: full-screen modal for steps 1 / 2 / 4 (step 3 uses MeasurementsSheet). */
+  const [stageSheetOpen, setStageSheetOpen] = useState(false)
   const [intentIdempotencyKey, setIntentIdempotencyKey] = useState<string | null>(null)
   const formPaneRef = useRef<HTMLDivElement>(null)
   const stageSectionRef = useRef<HTMLElement | null>(null)
@@ -475,7 +478,20 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       return prev
     })
     setMeasureSheetOpen(true)
+    setStageSheetOpen(false)
   }, [])
+
+  const openStageSheet = useCallback(
+    (next: WorkflowStage) => {
+      if (next === 'measurements') {
+        openMeasureSheet()
+        return
+      }
+      setMeasureSheetOpen(false)
+      setStageSheetOpen(true)
+    },
+    [openMeasureSheet],
+  )
 
   const goStage = async (next: WorkflowStage) => {
     setStage(next)
@@ -489,13 +505,17 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     if (next === 'measurements') {
       // Body overview first — finished POMs remain one tap away.
       setActivePieceId('overview')
-      if (isMobileViewport) {
-        // Open full-screen editor immediately on phones (Samsung Internet included).
-        window.setTimeout(() => openMeasureSheet(), 0)
-      }
+    }
+    if (isMobileViewport) {
+      // Samsung / small screens: every step opens a full-screen modal form.
+      openStageSheet(next)
+    } else {
+      setStageSheetOpen(false)
     }
     await save({ workflow: next, silent: true })
-    window.requestAnimationFrame(() => scrollStageIntoView())
+    if (!isMobileViewport) {
+      window.requestAnimationFrame(() => scrollStageIntoView())
+    }
   }
 
   const addPiece = () => {
@@ -867,6 +887,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
               type="button"
               className={className}
               aria-current={stage === s.id ? 'step' : undefined}
+              aria-haspopup={isMobileViewport ? 'dialog' : undefined}
+              title={isMobileViewport ? `Open step ${idx + 1} form` : undefined}
               onClick={() => void goStage(s.id)}
               disabled={busy}
             >
@@ -876,6 +898,11 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           )
         })}
       </nav>
+      {isMobileViewport ? (
+        <p className={styles.mobileHubLead} style={{ margin: '10px 16px 0' }}>
+          Tap a step to open its form (full-screen on this phone).
+        </p>
+      ) : null}
 
       <div className={styles.outfitBrief}>
         <div className={styles.briefThumb}>
@@ -898,6 +925,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       </div>
 
       <div className={styles.body}>
+        {!isMobileViewport ? (
         <div className={styles.formPane} ref={formPaneRef}>
           {stage === 'understand' ? (
             <section
@@ -1932,6 +1960,1055 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           ) : null}
           {notice ? <p className={styles.notice}>{notice}</p> : null}
         </div>
+        ) : (
+        <div className={styles.mobileHub} ref={formPaneRef}>
+          <p className={styles.mobileHubLead}>
+            Tap a step above to open its full-screen form. On phones, each step is a modal so fields are not buried under the look preview.
+          </p>
+          <button
+            type="button"
+            className={`${styles.primaryBtn} ${styles.mobileMeasureCta}`}
+            onClick={() => openStageSheet(stage)}
+            disabled={busy}
+          >
+            Open Step {stageIdx + 1}: {STAGES[stageIdx]?.label}
+          </button>
+          <ul className={styles.mobileHubHints}>
+            <li>Step 1 — title, style code, outfit pieces</li>
+            <li>Step 2 — fabric, closure, silhouette</li>
+            <li>Step 3 — body & finished measurements</li>
+            <li>Step 4 — Basic or AI Professional pack</li>
+          </ul>
+          {error ? (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          ) : null}
+          {notice ? <p className={styles.notice}>{notice}</p> : null}
+        </div>
+        )}
+
+        {isMobileViewport ? (
+          <StageSheet
+            open={stageSheetOpen && stage !== 'measurements'}
+            stepIndex={stageIdx + 1}
+            title={STAGES[stageIdx]?.label ?? 'Step'}
+            subtitle="Fill this step, then Save or Continue. Empty measurement fields are OK."
+            busy={busy}
+            onClose={() => setStageSheetOpen(false)}
+            onSave={async () => {
+              const saved = await save({ workflow: stage, silent: false })
+              if (saved) setStageSheetOpen(false)
+            }}
+            onContinue={async () => {
+              await save({ workflow: stage, silent: true })
+              if (stageIdx < STAGES.length - 1) {
+                await goStage(STAGES[stageIdx + 1].id)
+              } else {
+                setStageSheetOpen(false)
+              }
+            }}
+            continueLabel={stageIdx < STAGES.length - 1 ? 'Save & next step' : 'Done'}
+            showContinue
+          >
+          {stage === 'understand' ? (
+            <section
+              className={styles.section}
+              aria-labelledby="stage-understand"
+              ref={(node) => {
+                stageSectionRef.current = node
+              }}
+            >
+              <h2 id="stage-understand" className={styles.sectionTitle}>
+                1 · Understand My Design
+              </h2>
+              <p className={styles.sectionLead}>
+                Review Magic Front/Back and correct outfit pieces. Detection is a starting point —
+                never treat categories as guaranteed.
+              </p>
+
+              <div className={styles.lookThumbs}>
+                <div>
+                  <p className={styles.lookLabel}>Front</p>
+                  <div className={styles.lookThumb}>
+                    {frontImg.url ? (
+                      <img src={frontImg.url} alt="Front look" />
+                    ) : (
+                      <span>{draft.front_job_id ? 'Loading…' : 'Not available'}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className={styles.lookLabel}>Back</p>
+                  <div className={styles.lookThumb}>
+                    {backImg.url ? (
+                      <img src={backImg.url} alt="Back look" />
+                    ) : (
+                      <span>{draft.back_job_id ? 'Loading…' : 'Not fabricated'}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label htmlFor="tp-title">Title</label>
+                  <input
+                    id="tp-title"
+                    value={title}
+                    maxLength={160}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="tp-style">Style code</label>
+                  <input
+                    id="tp-style"
+                    value={styleCode}
+                    maxLength={64}
+                    onChange={(e) => setStyleCode(e.target.value.toUpperCase())}
+                  />
+                </div>
+              </div>
+
+              <h3 className={styles.sectionTitle} style={{ marginTop: 16 }}>
+                Outfit · {pieces.length} piece{pieces.length === 1 ? '' : 's'}
+              </h3>
+              {spec.outfit?.note ? <p className={styles.sectionLead}>{spec.outfit.note}</p> : null}
+
+              {pieces.map((piece) => (
+                <div key={piece.id} className={styles.pieceCard}>
+                  <div className={styles.pieceCardHead}>
+                    <strong>{pieceTabLabel(piece)}</strong>
+                    <button
+                      type="button"
+                      className={styles.dangerBtn}
+                      onClick={() => removePiece(piece.id)}
+                      disabled={busy || pieces.length <= 1}
+                      aria-label={`Remove ${piece.label}`}
+                    >
+                      <Trash2 size={14} aria-hidden />
+                      Remove
+                    </button>
+                  </div>
+                  <div className={styles.grid2}>
+                    <div className={styles.field}>
+                      <label htmlFor={`cat-${piece.id}`}>Category</label>
+                      <select
+                        id={`cat-${piece.id}`}
+                        value={piece.category}
+                        onChange={(e) => {
+                          const cat = e.target.value
+                          updatePiece(piece.id, (p) =>
+                            retargetFinishedMeasurements(
+                              { ...p, category: cat, role: cat },
+                              cat,
+                              spec.units || 'cm',
+                            ),
+                          )
+                        }}
+                      >
+                        {PIECE_CATEGORIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={styles.field}>
+                      <label htmlFor={`label-${piece.id}`}>Label</label>
+                      <input
+                        id={`label-${piece.id}`}
+                        value={piece.label}
+                        onChange={(e) =>
+                          updatePiece(piece.id, (p) => ({ ...p, label: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className={styles.field}>
+                      <label htmlFor={`color-${piece.id}`}>Color hint</label>
+                      <input
+                        id={`color-${piece.id}`}
+                        value={piece.color_hint ?? ''}
+                        onChange={(e) =>
+                          updatePiece(piece.id, (p) => ({ ...p, color_hint: e.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <button type="button" className={styles.ghostBtn} onClick={addPiece} disabled={busy}>
+                <Plus size={14} aria-hidden />
+                Add piece
+              </button>
+            </section>
+          ) : null}
+
+          {stage === 'customize' ? (
+            <section
+              className={styles.section}
+              aria-labelledby="stage-customize"
+              ref={(node) => {
+                stageSectionRef.current = node
+              }}
+            >
+              <h2 id="stage-customize" className={styles.sectionTitle}>
+                2 · Customize Each Piece
+              </h2>
+              <p className={styles.sectionLead}>
+                Set shell fabric, composition, closure, and silhouette per piece. Shared notes live
+                under Outfit Overview.
+              </p>
+              <div className={styles.garmentTabs} role="tablist" aria-label="Garment pieces">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activePieceId === 'overview'}
+                  className={
+                    activePieceId === 'overview'
+                      ? `${styles.garmentTab} ${styles.garmentTabActive}`
+                      : styles.garmentTab
+                  }
+                  onClick={() => setActivePieceId('overview')}
+                >
+                  Outfit Overview
+                </button>
+                {pieces.map((piece) => (
+                  <button
+                    key={piece.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activePieceId === piece.id}
+                    className={
+                      activePieceId === piece.id
+                        ? `${styles.garmentTab} ${styles.garmentTabActive}`
+                        : styles.garmentTab
+                    }
+                    onClick={() => setActivePieceId(piece.id)}
+                  >
+                    {pieceTabLabel(piece)}
+                  </button>
+                ))}
+              </div>
+
+              {activePieceId === 'overview' ? (
+                <div className={styles.pieceCard}>
+                  <div className={styles.grid2}>
+                    <div className={styles.field}>
+                      <label htmlFor="tp-size-system">Size system</label>
+                      <select
+                        id="tp-size-system"
+                        value={spec.size_system || 'EU'}
+                        onChange={(e) => setSpec((p) => (p ? { ...p, size_system: e.target.value } : p))}
+                      >
+                        <option value="EU">EU</option>
+                        <option value="US">US</option>
+                        <option value="UK">UK</option>
+                        <option value="Alpha">Alpha</option>
+                      </select>
+                    </div>
+                    <div className={styles.field}>
+                      <label htmlFor="tp-units">Units</label>
+                      <select
+                        id="tp-units"
+                        value={spec.units || 'cm'}
+                        onChange={(e) => setSpec((p) => (p ? { ...p, units: e.target.value } : p))}
+                      >
+                        <option value="cm">cm</option>
+                        <option value="in">in</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className={styles.field} style={{ marginTop: 10 }}>
+                    <label htmlFor="tp-look-notes">Shared look notes</label>
+                    <textarea
+                      id="tp-look-notes"
+                      value={spec.look_notes ?? ''}
+                      onChange={(e) =>
+                        setSpec((p) => (p ? { ...p, look_notes: e.target.value } : p))
+                      }
+                      placeholder="Overall outfit notes shared across pieces…"
+                    />
+                  </div>
+                  <div className={styles.field} style={{ marginTop: 10 }}>
+                    <label htmlFor="tp-designer-notes">Designer notes</label>
+                    <textarea
+                      id="tp-designer-notes"
+                      value={spec.designer_notes ?? ''}
+                      onChange={(e) =>
+                        setSpec((p) => (p ? { ...p, designer_notes: e.target.value } : p))
+                      }
+                      placeholder="Construction preferences, trims, fit intent…"
+                    />
+                  </div>
+                </div>
+              ) : activePiece ? (
+                <div className={styles.pieceCard}>
+                  <div className={styles.field}>
+                    <LabelWithHelp
+                      htmlFor={`shell-${activePiece.id}`}
+                      label="Shell fabric"
+                      helpKey="shell_fabric"
+                    />
+                    <input
+                      id={`shell-${activePiece.id}`}
+                      value={activePiece.materials?.shell?.name ?? ''}
+                      onChange={(e) => {
+                        const name = e.target.value
+                        updatePiece(activePiece.id, (p) => ({
+                          ...p,
+                          materials: {
+                            ...p.materials,
+                            shell: {
+                              ...p.materials?.shell,
+                              name,
+                              source: name.trim() ? 'designer' : 'empty',
+                            },
+                          },
+                        }))
+                      }}
+                    />
+                    <ChipRow
+                      options={SHELL_SUGGESTIONS}
+                      value={activePiece.materials?.shell?.name ?? ''}
+                      onPick={(name) =>
+                        updatePiece(activePiece.id, (p) => ({
+                          ...p,
+                          materials: {
+                            ...p.materials,
+                            shell: { ...p.materials?.shell, name, source: 'designer' },
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className={styles.field} style={{ marginTop: 10 }}>
+                    <LabelWithHelp
+                      htmlFor={`comp-${activePiece.id}`}
+                      label="Composition"
+                      helpKey="composition"
+                    />
+                    <input
+                      id={`comp-${activePiece.id}`}
+                      value={activePiece.materials?.shell?.composition ?? ''}
+                      onChange={(e) => {
+                        const composition = e.target.value
+                        updatePiece(activePiece.id, (p) => ({
+                          ...p,
+                          materials: {
+                            ...p.materials,
+                            shell: { ...p.materials?.shell, composition },
+                          },
+                        }))
+                      }}
+                    />
+                  </div>
+                  <div className={styles.field} style={{ marginTop: 10 }}>
+                    <LabelWithHelp
+                      htmlFor={`closure-${activePiece.id}`}
+                      label="Closure"
+                      helpKey="closure"
+                    />
+                    <input
+                      id={`closure-${activePiece.id}`}
+                      value={activePiece.closures?.type ?? ''}
+                      onChange={(e) => {
+                        const type = e.target.value
+                        updatePiece(activePiece.id, (p) => ({
+                          ...p,
+                          closures: {
+                            ...p.closures,
+                            type,
+                            source: type.trim() ? 'designer' : 'empty',
+                          },
+                        }))
+                      }}
+                    />
+                    <ChipRow
+                      options={CLOSURE_SUGGESTIONS}
+                      value={activePiece.closures?.type ?? ''}
+                      onPick={(type) =>
+                        updatePiece(activePiece.id, (p) => ({
+                          ...p,
+                          closures: { ...p.closures, type, source: 'designer' },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className={styles.field} style={{ marginTop: 10 }}>
+                    <LabelWithHelp
+                      htmlFor={`sil-${activePiece.id}`}
+                      label="Silhouette"
+                      helpKey="silhouette"
+                    />
+                    <input
+                      id={`sil-${activePiece.id}`}
+                      value={activePiece.fit?.silhouette ?? ''}
+                      onChange={(e) => {
+                        const silhouette = e.target.value
+                        updatePiece(activePiece.id, (p) => ({
+                          ...p,
+                          fit: { ...p.fit, silhouette },
+                        }))
+                      }}
+                    />
+                    <ChipRow
+                      options={SILHOUETTE_SUGGESTIONS}
+                      value={activePiece.fit?.silhouette ?? ''}
+                      onPick={(silhouette) =>
+                        updatePiece(activePiece.id, (p) => ({
+                          ...p,
+                          fit: { ...p.fit, silhouette },
+                        }))
+                      }
+                    />
+                  </div>
+                  <details className={styles.advanced}>
+                    <summary>Advanced details</summary>
+                    <div className={styles.advancedBody}>
+                      <div className={styles.field}>
+                        <label htmlFor={`closure-notes-${activePiece.id}`}>Closure notes</label>
+                        <textarea
+                          id={`closure-notes-${activePiece.id}`}
+                          value={activePiece.closures?.notes ?? ''}
+                          onChange={(e) =>
+                            updatePiece(activePiece.id, (p) => ({
+                              ...p,
+                              closures: { ...p.closures, notes: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className={styles.field} style={{ marginTop: 8 }}>
+                        <label htmlFor={`ease-${activePiece.id}`}>Ease note</label>
+                        <input
+                          id={`ease-${activePiece.id}`}
+                          value={activePiece.fit?.ease_note ?? ''}
+                          onChange={(e) =>
+                            updatePiece(activePiece.id, (p) => ({
+                              ...p,
+                              fit: { ...p.fit, ease_note: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {stage === 'measurements' ? (
+            <section
+              className={styles.section}
+              aria-labelledby="stage-meas"
+              ref={(node) => {
+                stageSectionRef.current = node
+              }}
+            >
+              <h2 id="stage-meas" className={styles.sectionTitle}>
+                3 · Measurements and Preferences
+              </h2>
+              <p className={styles.sectionLead}>
+                Body measurements are about the person. Finished POMs are garment-specific — trousers
+                never show bust or sleeve fields. Unknown values may stay empty; Stage 4 does not
+                require every field.
+              </p>
+
+              {isMobileViewport ? (
+                <div className={styles.mobileMeasureCard}>
+                  <button
+                    type="button"
+                    className={`${styles.primaryBtn} ${styles.mobileMeasureCta}`}
+                    onClick={openMeasureSheet}
+                    disabled={busy}
+                    autoFocus
+                  >
+                    Edit Measurements
+                  </button>
+                  <p>
+                    Full-screen editor with large number fields. Unit and source stay one tap away.
+                    Empty fields are fine — continue to Step 4 when ready.
+                  </p>
+                  <ul className={styles.mobileMeasureSummary}>
+                    <li>
+                      Body fields started:{' '}
+                      {['height', 'bust', 'waist', 'hip'].filter((k) => {
+                        const v = spec.body?.[k]?.value
+                        return v !== null && v !== undefined && String(v).trim() !== ''
+                      }).length}
+                      /4 (empty OK)
+                    </li>
+                    <li>Garment pieces with finished POMs: {pieces.length}</li>
+                    <li>Units: {spec.units || 'cm'}</li>
+                  </ul>
+                </div>
+              ) : (
+                <>
+                  <div className={styles.garmentTabs} role="tablist" aria-label="Measurement focus">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activePieceId === 'overview'}
+                      className={
+                        activePieceId === 'overview'
+                          ? `${styles.garmentTab} ${styles.garmentTabActive}`
+                          : styles.garmentTab
+                      }
+                      onClick={() => setActivePieceId('overview')}
+                    >
+                      Body & preferences
+                    </button>
+                    {pieces.map((piece) => (
+                      <button
+                        key={piece.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activePieceId === piece.id}
+                        className={
+                          activePieceId === piece.id
+                            ? `${styles.garmentTab} ${styles.garmentTabActive}`
+                            : styles.garmentTab
+                        }
+                        onClick={() => setActivePieceId(piece.id)}
+                      >
+                        {pieceTabLabel(piece)}
+                      </button>
+                    ))}
+                  </div>
+
+                  {activePieceId === 'overview' ? (
+                    <>
+                      <h3 className={styles.sectionTitle}>Body measurements</h3>
+                      {(
+                        [
+                          ['height', 'Height', 'height'],
+                          ['bust', 'Bust', 'bust'],
+                          ['waist', 'Waist', 'waist'],
+                          ['hip', 'Hip', 'hip'],
+                          ['inseam', 'Inseam', 'body_inseam'],
+                        ] as const
+                      ).map(([key, label, helpKey]) => (
+                        <MeasuredField
+                          key={key}
+                          label={label}
+                          helpKey={helpKey}
+                          value={spec.body?.[key] ?? measured(null, spec.units || 'cm')}
+                          onChange={(next) =>
+                            setSpec((prev) =>
+                              prev
+                                ? { ...prev, body: { ...(prev.body ?? {}), [key]: next } }
+                                : prev,
+                            )
+                          }
+                        />
+                      ))}
+                      <div className={styles.grid2} style={{ marginTop: 12 }}>
+                        <div className={styles.field}>
+                          <label htmlFor="tp-fit-pref">Fit preference</label>
+                          <select
+                            id="tp-fit-pref"
+                            value={spec.preferences?.fit_preference || 'regular'}
+                            onChange={(e) =>
+                              setSpec((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      preferences: {
+                                        ...(prev.preferences ?? {}),
+                                        fit_preference: e.target.value,
+                                      },
+                                    }
+                                  : prev,
+                              )
+                            }
+                          >
+                            {FIT_PREFERENCES.map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className={styles.field}>
+                          <label htmlFor="tp-sample-size">Sample size</label>
+                          <input
+                            id="tp-sample-size"
+                            value={spec.sample_size ?? ''}
+                            onChange={(e) =>
+                              setSpec((prev) =>
+                                prev ? { ...prev, sample_size: e.target.value } : prev,
+                              )
+                            }
+                            placeholder="e.g. 36 / M"
+                          />
+                        </div>
+                      </div>
+                      <details className={styles.advanced}>
+                        <summary>Advanced preferences</summary>
+                        <div className={styles.advancedBody}>
+                          <div className={styles.field}>
+                            <label htmlFor="tp-pref-notes">Preference notes</label>
+                            <textarea
+                              id="tp-pref-notes"
+                              value={spec.preferences?.notes ?? ''}
+                              onChange={(e) =>
+                                setSpec((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        preferences: {
+                                          ...(prev.preferences ?? {}),
+                                          notes: e.target.value,
+                                        },
+                                      }
+                                    : prev,
+                                )
+                              }
+                            />
+                          </div>
+                        </div>
+                      </details>
+                    </>
+                  ) : activePiece ? (
+                    <>
+                      <h3 className={styles.sectionTitle}>
+                        Finished measurements · {pieceTabLabel(activePiece)}
+                      </h3>
+                      {Object.keys(activePiece.finished_measurements ?? {}).length === 0 ? (
+                        <p className={styles.sectionLead}>
+                          No finished POMs for this category (e.g. set). Add piece-level notes
+                          instead.
+                        </p>
+                      ) : (
+                        Object.entries(activePiece.finished_measurements ?? {}).map(
+                          ([key, value]) => (
+                            <MeasuredField
+                              key={key}
+                              label={POM_LABELS[key] ?? key.replace(/_/g, ' ')}
+                              helpKey={POM_HELP_KEY[key]}
+                              value={value}
+                              onChange={(next) =>
+                                updatePiece(activePiece.id, (p) => ({
+                                  ...p,
+                                  finished_measurements: {
+                                    ...(p.finished_measurements ?? {}),
+                                    [key]: next,
+                                  },
+                                }))
+                              }
+                            />
+                          ),
+                        )
+                      )}
+                    </>
+                  ) : null}
+                </>
+              )}
+            </section>
+          ) : null}
+
+          {stage === 'generate' ? (
+            <section
+              className={styles.section}
+              aria-labelledby="stage-gen"
+              ref={(node) => {
+                stageSectionRef.current = node
+              }}
+            >
+              <h2 id="stage-gen" className={styles.sectionTitle}>
+                4 · Generate Technical Design
+              </h2>
+              <p className={styles.sectionLead}>
+                Choose Basic ($0) or AI Professional (paid). Preview and Download never run paid AI —
+                they only export what already exists for this draft.
+              </p>
+
+              {error ? (
+                <div className={styles.aiErrorPanel} role="alert">
+                  <p ref={aiErrorRef} className={styles.aiErrorText}>
+                    {error}
+                  </p>
+                  {/server configuration problem|design is safe/i.test(error) ? (
+                    <p className={styles.aiErrorHint}>
+                      No chargeable AI work ran for this attempt. You can request a new cost estimate
+                      after the fix is live.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div
+                className={
+                  generationProvenanceLabel.kind === 'professional'
+                    ? `${styles.provenanceBanner} ${styles.provenanceProfessional}`
+                    : `${styles.provenanceBanner} ${styles.provenanceBasic}`
+                }
+                role="status"
+              >
+                <strong>{generationProvenanceLabel.title}</strong>
+                <span>{generationProvenanceLabel.detail}</span>
+                {professionalCompleted ? (
+                  <span className={styles.provenanceMeta}>
+                    Models:{' '}
+                    {[aiStatus?.vision_model || spec?.ai?.vision_model, aiStatus?.image_model || spec?.ai?.image_model]
+                      .filter(Boolean)
+                      .join(' + ') || '—'}
+                  </span>
+                ) : null}
+              </div>
+
+              <ol className={styles.workflowSteps} aria-label="AI Professional workflow">
+                <li>Select pack type</li>
+                <li>Cost estimate</li>
+                <li>Confirm</li>
+                <li>Generate</li>
+                <li>Review illustrations</li>
+                <li>Export PDF</li>
+              </ol>
+
+              <p className={styles.diffNote}>
+                <strong style={{ color: 'var(--fr-text)' }}>Basic PDF / $0</strong> — local
+                heuristics and lightweight schematics. No paid model calls.{' '}
+                <strong style={{ color: 'var(--fr-text)' }}>AI Professional / paid</strong> —
+                analyzes your Magic image and generates design-specific technical drawings after an
+                explicit cost confirmation.
+              </p>
+
+              <div className={styles.packChoices} role="radiogroup" aria-label="Technical pack type">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={packChoice === 'basic'}
+                  className={
+                    packChoice === 'basic'
+                      ? `${styles.packCard} ${styles.packCardActive}`
+                      : styles.packCard
+                  }
+                  onClick={() => selectPackChoice('basic')}
+                  disabled={busy}
+                >
+                  <span className={styles.packCardTitle}>Basic Technical Pack — Free</span>
+                  <span className={styles.packCardBody}>
+                    Existing heuristic generate. Lightweight schematics. No paid calls.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={packChoice === 'professional'}
+                  aria-disabled={!professionalAvailable}
+                  className={[
+                    styles.packCard,
+                    packChoice === 'professional' ? styles.packCardActive : '',
+                    !professionalAvailable ? styles.packCardDisabled : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => selectPackChoice('professional')}
+                  disabled={busy || !professionalAvailable}
+                >
+                  <span className={styles.packCardTitle}>AI Professional Technical Pack</span>
+                  <span className={styles.packCardBody}>
+                    Paid AI technical illustrations (flat front / related). Requires confirm +
+                    allowance.
+                  </span>
+                  {!professionalAvailable ? (
+                    <span className={styles.packCardHint}>
+                      {professionalDisabledReason ||
+                        'Unavailable — owner allowlist / spend ceiling not configured.'}
+                    </span>
+                  ) : (
+                    <span className={styles.packCardHint}>
+                      Est.{' '}
+                      {aiStatus?.estimate_professional_cents_min ?? '—'}–
+                      {aiStatus?.estimate_professional_cents_max ??
+                        aiStatus?.estimate_chat_cents ??
+                        '—'}
+                      ¢ · max ${aiStatus?.max_usd_per_run ?? '—'} / run
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              <div className={styles.aiPanel}>
+                {packChoice === 'basic' ? (
+                  <>
+                    <p>
+                      Basic pack always available at <strong style={{ color: 'var(--fr-text)' }}>$0</strong>.
+                      Prepare a confirm token, then generate heuristic content.
+                    </p>
+                    {confirm && confirm.mode !== 'professional' ? (
+                      <div className={styles.confirmBox}>
+                        <p>
+                          Estimated cost:{' '}
+                          <strong style={{ color: 'var(--fr-text)' }}>
+                            {confirm.estimated_cost_usd_cents}¢
+                          </strong>{' '}
+                          (heuristic / $0)
+                        </p>
+                        <p>{confirm.message}</p>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={confirmed}
+                            onChange={(e) => setConfirmed(e.target.checked)}
+                          />
+                          <span>
+                            I confirm generating a Basic Technical Pack. Output remains DRAFT /
+                            UNVERIFIED.
+                          </span>
+                        </label>
+                      </div>
+                    ) : null}
+                    <div className={styles.actions} style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        className={styles.ghostBtn}
+                        disabled={busy}
+                        onClick={() => void prepareGenerate('heuristic')}
+                      >
+                        <Sparkles size={14} aria-hidden />
+                        Get confirm token
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.primaryBtn}
+                        disabled={busy || !confirm || !confirmed || packChoice !== 'basic'}
+                        onClick={() => void runGenerate()}
+                      >
+                        <Sparkles size={14} aria-hidden />
+                        {busy ? 'Working…' : 'Generate Basic Pack'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      AI Professional uses vision + image models when your account is allowlisted
+                      and a spend ceiling is configured.
+                    </p>
+                    <p className={styles.costLine}>
+                      {confirm ? (
+                        <>
+                          Estimated cost:{' '}
+                          <strong style={{ color: 'var(--fr-text)' }}>
+                            {confirm.estimated_cost_usd_cents}¢
+                          </strong>
+                          {' · '}
+                          Max allowance:{' '}
+                          <strong style={{ color: 'var(--fr-text)' }}>
+                            ${confirm.max_usd_per_run ?? aiStatus?.max_usd_per_run ?? '—'}
+                          </strong>
+                          {' / run'}
+                        </>
+                      ) : (
+                        <>
+                          Status estimate:{' '}
+                          {aiStatus?.estimate_professional_cents_min ?? '—'}–
+                          {aiStatus?.estimate_professional_cents_max ?? '—'}¢ · max $
+                          {aiStatus?.max_usd_per_run ?? '—'} / run
+                          {aiStatus?.vision_model || aiStatus?.image_model
+                            ? ` · ${[aiStatus.vision_model, aiStatus.image_model]
+                                .filter(Boolean)
+                                .join(' + ')}`
+                            : ''}
+                        </>
+                      )}
+                    </p>
+                    <label className={styles.checkRow}>
+                      <input
+                        type="checkbox"
+                        checked={proposeBack}
+                        onChange={(e) => setProposeBack(e.target.checked)}
+                      />
+                      <span>Propose unverified back view (only if no Magic back)</span>
+                    </label>
+                    {confirm ? (
+                      <div className={styles.confirmBox}>
+                        <p>{confirm.message}</p>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={confirmed}
+                            onChange={(e) => setConfirmed(e.target.checked)}
+                          />
+                          <span>
+                            I confirm generating an AI Professional Technical Pack and accept the
+                            estimated cost. Output remains DRAFT / UNVERIFIED.
+                          </span>
+                        </label>
+                      </div>
+                    ) : null}
+                    <div className={styles.actions} style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        className={styles.ghostBtn}
+                        disabled={busy || !professionalAvailable}
+                        onClick={() => void prepareGenerate('professional')}
+                      >
+                        <Sparkles size={14} aria-hidden />
+                        Get cost estimate
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.primaryBtn}
+                        disabled={
+                          busy ||
+                          !professionalAvailable ||
+                          !confirm ||
+                          !confirmed ||
+                          packChoice !== 'professional'
+                        }
+                        onClick={() => void runGenerate()}
+                      >
+                        <Sparkles size={14} aria-hidden />
+                        {busy ? 'Working…' : 'Generate Professional Pack'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {generateProgress ? (
+                  <p className={styles.progressStatus} role="status">
+                    {generateProgress}
+                  </p>
+                ) : null}
+              </div>
+
+              {artifactPreviews.length > 0 ? (
+                <div className={styles.artifactGrid} aria-label="Generated technical illustrations">
+                  <h3 className={styles.sectionTitle}>Technical illustrations</h3>
+                  {analysisSummary ? (
+                    <p className={styles.sectionLead}>{analysisSummary}</p>
+                  ) : null}
+                  <div className={styles.artifactThumbs}>
+                    {artifactPreviews.map((art) => (
+                      <figure key={art.id} className={styles.artifactThumb}>
+                        <img src={art.url} alt={`${art.kind} technical illustration`} />
+                        <figcaption>
+                          {art.kind}
+                          {art.review_state ? ` · ${art.review_state}` : ''}
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {failedSections.length > 0 ? (
+                <div className={styles.actions} style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className={styles.ghostBtn}
+                    disabled={busy || !professionalAvailable}
+                    onClick={() => void retryFailedSections()}
+                  >
+                    Retry failed sections ({failedSections.join(', ')})
+                  </button>
+                </div>
+              ) : null}
+
+              {lastWarnings.length > 0 || (spec.warnings && spec.warnings.length > 0) ? (
+                <div className={styles.warnings} role="status">
+                  <strong>Warnings</strong>
+                  <ul>
+                    {(lastWarnings.length
+                      ? lastWarnings
+                      : (spec.warnings ?? []).map((w) =>
+                          typeof w === 'string'
+                            ? w
+                            : String((w as { message?: string }).message || JSON.stringify(w)),
+                        )
+                    ).map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <h3 className={styles.sectionTitle} style={{ marginTop: 16 }}>
+                Progress
+              </h3>
+              <ul className={styles.progressList}>
+                <li data-done={completion.pieces ? 'true' : 'false'}>
+                  {completion.pieces ? <Check size={14} /> : '·'} Outfit pieces reviewed
+                </li>
+                <li data-done={completion.customize ? 'true' : 'false'}>
+                  {completion.customize ? <Check size={14} /> : '·'} Piece materials / silhouette started
+                </li>
+                <li data-done={completion.measurements ? 'true' : 'false'}>
+                  {completion.measurements ? <Check size={14} /> : '·'} Body measurements started
+                </li>
+                <li data-done={completion.generate ? 'true' : 'false'}>
+                  {completion.generate ? <Check size={14} /> : '·'} Technical generation or PDF export
+                </li>
+              </ul>
+
+              <p className={styles.exportNote} role="note">
+                Preview / Download / Save never execute AI. They only assemble a PDF from the current
+                draft
+                {professionalCompleted
+                  ? ' including completed AI Professional illustrations.'
+                  : ' as a Basic / No AI Professional export.'}
+              </p>
+
+              <div className={styles.actions} style={{ marginTop: 16 }}>
+                <button
+                  type="button"
+                  className={styles.primaryBtn}
+                  onClick={() => void exportAndPreview()}
+                  disabled={busy || (packChoice === 'professional' && !professionalCompleted)}
+                  title={
+                    packChoice === 'professional' && !professionalCompleted
+                      ? 'Generate AI Professional illustrations first'
+                      : undefined
+                  }
+                >
+                  <FileText size={14} aria-hidden />
+                  {busy
+                    ? 'Working…'
+                    : professionalCompleted
+                      ? 'Export Professional PDF'
+                      : 'Preview Basic PDF ($0 · No AI)'}
+                </button>
+                {packChoice === 'professional' && !professionalCompleted ? (
+                  <button
+                    type="button"
+                    className={styles.ghostBtn}
+                    onClick={() => void exportAndPreview()}
+                    disabled={busy}
+                  >
+                    <FileText size={14} aria-hidden />
+                    Preview Basic PDF anyway ($0 · No AI)
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={styles.ghostBtn}
+                  onClick={() => void downloadPdf()}
+                  disabled={busy || !draft.latest_export}
+                >
+                  <Download size={14} aria-hidden />
+                  Download last PDF
+                </button>
+                <button
+                  type="button"
+                  className={styles.ghostBtn}
+                  onClick={() => void save({ bump: false })}
+                  disabled={busy}
+                >
+                  <Save size={14} aria-hidden />
+                  Save draft
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          </StageSheet>
+        ) : null}
 
         <div className={styles.previewPane}>
           <h2 className={styles.sectionTitle}>PDF preview</h2>
