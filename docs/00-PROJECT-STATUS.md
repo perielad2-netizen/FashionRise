@@ -3,19 +3,29 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-25 (Dual Magic **implementation ready** — FE PR [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) linked retry idempotency + gate; BE PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) linked `/polish` guards + mocked e2e PASS. Production still FE `4589a62d` / BE `6b253cb5` / Dual Magic **OFF**. No paid AI. Activation not authorized.)
+**Last updated:** 2026-10-26 (Fabric **pattern fidelity** shipped — FE PR [#75](https://github.com/perielad2-netizen/FashionRise/pull/75) + BE PR [#76](https://github.com/perielad2-netizen/FashionRise/pull/76). Studio tile swatch → `images.edit` image #2; Front-only + Dual carry `shared_garment_spec` + swatch. One paid Front-only acceptance **PASS** — repeating pink/white geometric motif preserved. Dual Magic **ON**. Alembic **`005`**.)
 
-**Phase:** Protected family beta. **WEB-V4J Front/Back drawing LIVE** (Dual Magic OFF). Production FE @ `4589a62d` (PR #69 + Dual Magic client gate). Production BE/worker @ Stage B maint tip `6b253cb5` (not GitHub `main`, not PR #70). Paper-corner Flip UX; **9/9 PAIRS_09 Back PNGs**; `female-atelier` Front-only; Alembic **`005`**. Magic pose-fidelity PR #41 remains GitHub-only / not on this BE tip.
+**Phase:** Protected family beta. **WEB-V4J Front/Back drawing LIVE**; Dual Magic **ON**. Fabric pattern fidelity live (exact Studio textile swatch as multi-image edit #2). Alembic **`005`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`4589a62d`** — Nginx root `/var/www/fashionrise/releases/4589a62d`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`, **`VITE_STUDIO_FRONT_BACK_ENABLED=true`**, **`VITE_STUDIO_DUAL_MAGIC_ENABLED=false`**. Front/Back Flip + 9 rear croquis; Back ink shows “Front/Back Magic coming soon” (no `/ai/sketch/polish-dual`). Permanent Workbox SW (no HTML precache / NavigationRoute). |
-| Backend (FastAPI + PostgreSQL) | **`6b253cb52beb9524f976ba805049bf3de2506985`** — Stage B V2 persistence (maint lineage). `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker standalone). **No** Dual Magic polish-dual route. |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`6b253cb5`** (same tree) · `OPENAI_MODEL=gpt-6-luna` · image model unchanged from prior prod `.env` |
+| Frontend (`web-ui`) | **`0bac3384a41f4082006a42a1846e687aeba4cd04`** — Nginx root `/var/www/fashionrise/releases/0bac3384`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`, **`VITE_STUDIO_FRONT_BACK_ENABLED=true`**, **`VITE_STUDIO_DUAL_MAGIC_ENABLED=true`**. Patterned fills capture Studio tile swatch for Magic; Front-only polish sends `shared_garment_spec`. |
+| Backend (FastAPI + PostgreSQL) | **`b1054f10ac23168b031b7d97b7e3e97c13dc1399`** — multi-image fabric swatch on polish / polish-dual; swatch redacted from job APIs (`has_fabric_swatch`). `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker standalone). |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`b1054f10`** (same tree) · `OPENAI_MODEL=gpt-6-luna` · image `gpt-image-2.5-sunburst` |
 | Database | `fashionrise_beta` — Alembic **`005`** (unchanged; no migrate) |
-| Deploy backup | `/var/backups/fashionrise/v4j-frontback-deploy-20261025T174543Z` → `/root/fashionrise-backups/v4j-frontback-deploy-20261025T174543Z` |
+| Deploy backup | `/var/backups/fashionrise/fabric-pattern-*` (pattern-fidelity deploy) |
+
+**Fabric pattern fidelity (Issue #42, 2026-10-26):**
+
+| Check | Result |
+|---|---|
+| Two-image fabric reference (`sketch` + Studio textile) | **PASS** — worker log `image_inputs=2` |
+| Front-only + Dual Magic fabric / garment-spec propagation | **PASS** (unit + Dual per-side redact tests; Front-only paid job carried swatch + `shared_garment_spec`) |
+| Real generated pattern visually preserved | **PASS** — paid job `b8e50a76-76f7-42ea-891b-f9fdfa57ceae`; motif geometry/repeat/pink-white colors retained (not plain satin) |
+| Private swatch leak via job API | **PASS** (redacted; DB retains bytes for worker) |
+| Actual paid calls this slice | **1** (Front-only) |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
