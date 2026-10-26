@@ -3,6 +3,7 @@ import { ArrowLeft, FolderOpen, RefreshCw } from 'lucide-react'
 import { PREVIEW_PAGE_SIZE, PreviewRenderer } from '@/lib/designPreview'
 import {
   modelLabel,
+  savedSnapshotHasBackInk,
   type DamagedSavedDesign,
   type SavedDesignRecord,
   type SavedDesignSnapshot,
@@ -89,9 +90,13 @@ function SavedDesignCard({
 }) {
   const url = usePreview(renderer, `saved:${record.id}`, record.snapshot)
   const title = record.title || 'Untitled design'
+  const backBadge = savedSnapshotHasBackInk(record.snapshot)
   return (
     <li className={styles.card}>
-      <PreviewImage url={url} label={`Preview of ${title}`} />
+      <div className={styles.previewWrap}>
+        <PreviewImage url={url} label={`Preview of ${title}`} />
+        {backBadge ? <span className={styles.backBadge}>Back</span> : null}
+      </div>
       <div className={styles.cardBody}>
         <h3 className={styles.cardTitle} title={title}>
           {title}
