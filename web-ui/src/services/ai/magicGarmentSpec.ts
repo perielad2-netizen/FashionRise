@@ -111,6 +111,12 @@ function materialsFromDoc(doc: StudioDraftDocument, max = 8): string[] {
   return [...seen]
 }
 
+/** Enhancement intent shared by Front-only and Dual Magic (both sides). */
+const MAGIC_ENHANCEMENT_NOTES =
+  'Elevate Front and Back into a polished professional fashion concept: preserve garment ' +
+  'structure, applied fabrics/patterns/colors, and Front/Back coherence; refine minor ' +
+  'hand-drawn imperfections; avoid traced-sketch, cartoon, or heavy outline looks.'
+
 /** Bounded garment context for dual Magic — no invented garment details. */
 export function buildSharedGarmentSpec(
   doc: StudioDraftDocument,
@@ -128,10 +134,17 @@ export function buildSharedGarmentSpec(
     `front_fills=${front.fills.length}`,
     `back_strokes=${back.strokes.length}`,
     `back_fills=${back.fills.length}`,
+    'render=polished_professional_enhancement',
+    'sketch_role=strong_guidance_not_pixel_trace',
     `fingerprint=${fingerprint.slice(0, 64)}`,
   ].join('; ')
+  // Keep designer notes when provided; always append enhancement intent for Front+Back.
+  const notesParts = [
+    ...(trimmedNotes ? [trimmedNotes] : []),
+    MAGIC_ENHANCEMENT_NOTES,
+  ]
   return {
-    ...(trimmedNotes ? { notes: trimmedNotes.slice(0, 500) } : {}),
+    notes: notesParts.join(' ').slice(0, 500),
     ...(colors.length ? { colors, main_colors } : {}),
     ...(materials.length ? { materials } : {}),
     details: details.slice(0, 1000),

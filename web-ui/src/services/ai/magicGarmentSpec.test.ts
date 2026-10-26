@@ -63,6 +63,10 @@ describe('magicGarmentSpec palette priority', () => {
     const spec = buildSharedGarmentSpec(doc, 'polish concept')
     expect(spec.main_colors?.[0]).toBe('#FF2D95')
     expect(spec.main_colors).toEqual(expect.arrayContaining(['#FF2D95', '#E6007A']))
+    expect(spec.notes).toMatch(/polish concept/i)
+    expect(spec.notes).toMatch(/polished professional fashion concept/i)
+    expect(spec.details).toMatch(/render=polished_professional_enhancement/)
+    expect(spec.details).toMatch(/sketch_role=strong_guidance_not_pixel_trace/)
   })
 
   it('does not treat unused selected brush color as applied garment material', () => {
