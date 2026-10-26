@@ -12,6 +12,7 @@ from app.api.v1.routes import (
     palettes,
     profiles,
     ratings,
+    techpacks,
     templates,
     uploads,
 )
@@ -30,3 +31,4 @@ api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 api_router.include_router(fabrics.router, prefix="/fabrics", tags=["fabrics"])
 api_router.include_router(ai_routes.router, prefix="/ai", tags=["ai"])
 api_router.include_router(looks.router, prefix="/looks", tags=["looks"])
+api_router.include_router(techpacks.router, prefix="/techpacks", tags=["techpacks"])

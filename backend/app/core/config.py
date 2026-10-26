@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     upload_subdir: str = "uploads"
     # Private fabric bytes live here — sibling of upload_subdir, never mounted publicly.
     private_fabric_subdir: str = "private_fabrics"
+    # Private tech-pack PDFs — never mounted under /static/uploads.
+    private_techpack_subdir: str = "private_techpacks"
+    # Optional AI draft assist for Create Real Design. Default off — 0 paid calls.
+    techpack_ai_draft_enabled: bool = False
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
