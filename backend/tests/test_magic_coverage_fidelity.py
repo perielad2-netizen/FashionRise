@@ -32,11 +32,12 @@ _COVERAGE_TOKENS = (
 _STYLE_STILL_REQUIRED = (
     "Professionally refine THIS uploaded fashion sketch",
     "SOURCE OF TRUTH",
+    "DESIGN ENHANCEMENT",
     "PRESERVE exactly from visible evidence",
     "UPGRADE construction",
     "Do NOT invent a different garment",
     "Avoid photorealism",
-    "non-photorealistic fashion illustration",
+    "non-photorealistic",
 )
 
 _PROTECTED_ANCHORS = _COVERAGE_TOKENS + _STYLE_STILL_REQUIRED

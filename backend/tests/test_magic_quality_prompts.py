@@ -198,6 +198,44 @@ def test_build_image_prompt_avoids_generic_outfit_homogenization():
     assert "invent a different garment" in prompt.lower() or "do not invent" in prompt.lower()
 
 
+def test_design_enhancement_contract_on_front_and_back():
+    """Front and Back both elevate the sketch; neither treats it as a pixel trace."""
+    for side in ("front", "back"):
+        job = _job(
+            studio_side=side,
+            shared_garment_spec={
+                "main_colors": ["#BE185D"],
+                "materials": ["Satin repeating textile (exact Studio tile reference)"],
+            },
+            fabric_swatch_base64="data:image/png;base64,aa",
+        )
+        prompt = sketch_openai._build_image_prompt(
+            {
+                "summary": "Pink patterned swimsuit",
+                "image_prompt": "one-piece pink geometric satin swimsuit",
+            },
+            "Pink patterned swimsuit",
+            job=job,
+        )
+        lower = prompt.lower()
+        assert "design enhancement" in lower
+        assert "pixel-perfect tracing" in lower or "not a pixel-perfect" in lower
+        assert "traced" in lower or "cartoon" in lower
+        assert "textile reference" in lower
+        assert "color fidelity" in lower
+        assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+        if side == "back":
+            assert "same polished professional" in lower or "not a literal" in lower
+
+
+def test_system_prompt_asks_to_elevate_not_trace():
+    system = sketch_openai._system_prompt("sketch_polish")
+    lower = system.lower()
+    assert "elevate" in lower or "enhancement" in lower
+    assert "trace" in lower
+    assert "imperfections" in lower
+
+
 def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, settings):
     captured: dict[str, Any] = {}
 

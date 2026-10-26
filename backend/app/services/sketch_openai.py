@@ -33,9 +33,11 @@ SKETCH_JOB_TYPES = frozenset({"sketch_clean", "sketch_polish", "style_suggest"})
 JSON_OBJECT_RESPONSE_FORMAT = {"type": "json_object"}
 
 # Hard budget for the images.edit brief (production maint slice). Protected
-# instructions (coverage + non-photoreal illustration style) always fit inside
-# this budget; only lower-priority vision prose is bounded to fill the remainder.
-IMAGE_PROMPT_MAX_CHARS = 3800
+# instructions (enhancement + coverage + non-photoreal illustration style + optional
+# textile reference) always fit inside this budget; only lower-priority vision
+# prose is bounded to fill the remainder. Raised from 3800 to fit Front/Back
+# DESIGN ENHANCEMENT without crowding coverage/pattern contracts or design facts.
+IMAGE_PROMPT_MAX_CHARS = 4500
 
 # Fixed garment-coverage contract for adult, non-explicit fashion (Issue #64).
 # Distinguishes drawn fabric from exposed skin / croquis body / paper — does not
@@ -73,10 +75,24 @@ _FABRIC_SWATCH_EDIT_CONTRACT = (
     "Do not alter silhouette, pose, or skin/coverage boundaries."
 )
 
+# Front + Back: elevate the design; do not pixel-trace sketch mistakes.
+# Protected — must survive IMAGE_PROMPT_MAX_CHARS evidence bounding.
+_DESIGN_ENHANCEMENT_CONTRACT = (
+    "DESIGN ENHANCEMENT (Front and Back): Sketch = strong guidance for concept, silhouette, "
+    "cut, straps, openings, proportions, and applied colors/fabrics — NOT a pixel-perfect "
+    "tracing target. Correct minor hand-drawn imperfections (uneven/crooked lines, rough "
+    "symmetry, imperfect edges, slight placement mistakes); keep design intent. Deliver a "
+    "polished professional fashion concept — clean, elegant, beautified — almost similar "
+    "to the drawing but elevated. Do NOT overfit tiny sketch mistakes, look traced/"
+    "cartoonish, add dark outline/border artifacts, flatten fabric into generic shading, "
+    "or replace the applied fabric/pattern/color theme."
+)
+
 # Illustration-style restriction — equal priority with coverage; must not be truncated
 # away by verbose vision evidence (Issue #64 PM amendment).
 _ILLUSTRATION_STYLE_CONTRACT = (
-    "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark. "
+    "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark, "
+    "cartoon outlines, and heavy black border framing. "
     "Deliver a polished non-photorealistic fashion illustration."
 )
 
@@ -328,26 +344,32 @@ def _system_prompt(job_type: str) -> str:
         )
     if job_type == "sketch_polish":
         return (
-            "You are a senior fashion design director. A young designer uploaded a rough fashion sketch. "
-            "Your job is to extract the DESIGN CONCEPT for a professional fashion-illustration edit. "
-            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence, versus "
-            "(B) drawing imperfections that may be professionally refined (wobbly lines, uneven fill, crude shading). "
+            "You are a senior fashion design director. A young designer uploaded a rough fashion sketch "
+            "(Front or Back). Your job is to extract the DESIGN CONCEPT for a polished professional "
+            "fashion-illustration enhancement — elevate the idea; do not ask the image model to trace "
+            "the rough sketch literally. "
+            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence "
+            "(garment concept, silhouette, cut, straps, openings, applied colors/fabrics/patterns, "
+            "Front/Back coherence), versus (B) drawing imperfections that MUST be professionally "
+            "refined away (wobbly/crooked lines, rough symmetry, uneven fill, crude shading, awkward "
+            "hand-drawn proportions, traced-sketch look). "
             "When the user message includes SELECTED STUDIO REFERENCE metadata, that selection is authoritative "
             "over any conflicting impression of the figure's fashion-croquis family (male vs female presentation). "
             "Respond ONLY with valid JSON using keys: "
-            "summary (one short exciting sentence about the design concept, not the rough drawing), "
+            "summary (one short exciting sentence about the elevated design concept, not the rough drawing), "
             "polish_bullets (array of 3–5 concise tips for the young designer), "
             "design_identity (object with evidence-backed fields; use null only when not visible: "
             "garment_category, silhouette, pose, neckline, sleeve_type, sleeve_length, hemline, "
             "main_colors, fabric_patterns, accessories, asymmetry_notes, distinctive_details, "
             "skin_visible_regions, garment_panels, cutouts_and_openings, intended_pale_or_white_fabric), "
-            "refine_ok (array of short drawing imperfections that MAY be upgraded — never design decisions), "
+            "refine_ok (array of short drawing imperfections that SHOULD be upgraded — never design decisions), "
             "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes to preserve: "
             "pose, hat/hair, neckline, sleeves, hem, main colors, fabric patterns, asymmetry, accessories, "
             "distinctive details, garment coverage boundaries, exposed skin/midriff/cut-outs, and any "
             "intentionally drawn white/pale fabric — invent nothing; never invent bodysuits, linings, or "
             "modesty panels; do not treat blank/light croquis body or paper as garment fabric; "
-            "do not describe amateur line quality or ask to keep a child sketch look; "
+            "explicitly call for polished professional fashion rendering that corrects minor sketch "
+            "imperfections; do not describe amateur line quality or ask to keep a traced/cartoon sketch look; "
             "do not request a different croquis family than the SELECTED STUDIO REFERENCE)."
         )
     return (
@@ -386,6 +408,7 @@ def _studio_side_vision_clause(side: str | None) -> str:
     if side == "front":
         return (
             "STUDIO VIEW: FRONT of the garment (viewer-facing). This upload is the front sketch only. "
+            "Extract front design intent for a polished professional enhancement (not a literal trace). "
             "Describe and preserve front-facing design elements. Do NOT describe rear/back-only details "
             "or claim this is a rear view."
         )
@@ -394,8 +417,9 @@ def _studio_side_vision_clause(side: str | None) -> str:
             "STUDIO VIEW: REAR / BACK of the garment. This upload is the back sketch only — use neutral "
             "professional fashion-illustration language for adult swimwear and rear garment construction "
             "(dorsal silhouette, back neckline, back straps or ties, rear closures, center-back seams, "
-            "rear hem, coverage panels as drawn). Do NOT claim this is the front view, invent front-only "
-            "details, or add coverage that is not drawn."
+            "rear hem, coverage panels as designed). Target the same polished professional enhancement "
+            "quality as Front — not a traced or cartoon back sketch. Do NOT claim this is the front view, "
+            "invent front-only details, or add coverage that is not drawn."
         )
     return ""
 
@@ -403,15 +427,15 @@ def _studio_side_vision_clause(side: str | None) -> str:
 def _studio_side_edit_clause(side: str | None) -> str:
     if side == "front":
         return (
-            "VIEW: front-facing fashion illustration — preserve front garment details only; "
-            "this is not a rear/back view. "
+            "VIEW: front-facing fashion illustration — preserve front garment concept and "
+            "applied materials; polish imperfections; this is not a rear/back view. "
         )
     if side == "back":
         return (
             "VIEW: rear/back fashion illustration of adult swimwear or similar rear garment "
-            "construction — show the garment from behind with accurate back necklines, straps or "
-            "ties, dorsal seams, and rear hem as drawn; use neutral technical fashion language; "
-            "never describe this upload as a front-facing sketch. "
+            "construction — accurate back necklines, straps/ties, dorsal seams, rear hem as "
+            "designed; same polished professional quality as front (not a literal/traced/"
+            "cartoon back sketch); never describe this upload as a front-facing sketch. "
         )
     return ""
 
@@ -712,6 +736,7 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         f"{reference_clause}"
         f"{side_clause}"
         f"{fabric_clause}"
+        f"{_DESIGN_ENHANCEMENT_CONTRACT} "
         f"{_COVERAGE_PRESERVATION_CONTRACT} "
         f"{_COLOR_FIDELITY_CONTRACT} "
         "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
