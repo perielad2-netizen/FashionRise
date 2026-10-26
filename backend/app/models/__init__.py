@@ -8,6 +8,7 @@ from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
 from app.models.garment_template import GarmentTemplate
+from app.models.magic_look_meta import MagicLookMeta
 from app.models.material_definition import MaterialDefinition
 from app.models.rating import Rating
 from app.models.refresh_token import RefreshToken
@@ -27,6 +28,7 @@ __all__ = [
     "GalleryLike",
     "GarmentDesign",
     "GarmentTemplate",
+    "MagicLookMeta",
     "MaterialDefinition",
     "Rating",
     "RefreshToken",
