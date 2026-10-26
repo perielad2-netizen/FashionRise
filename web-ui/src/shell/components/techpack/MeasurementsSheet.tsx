@@ -16,6 +16,8 @@ type Props = {
   open: boolean
   spec: TechpackSpecV2
   pieces: TechpackPiece[]
+  /** Stable draft id — when it changes while open, re-initialize group selection. */
+  draftKey?: string
   initialGroupId?: MeasurementGroupId
   busy?: boolean
   onChangeSpec: (updater: (prev: TechpackSpecV2) => TechpackSpecV2) => void
@@ -35,10 +37,19 @@ function groupsFor(pieces: TechpackPiece[]): Array<{ id: MeasurementGroupId; lab
   ]
 }
 
+function resolveInitialGroup(
+  groups: Array<{ id: MeasurementGroupId }>,
+  initialGroupId?: MeasurementGroupId,
+): MeasurementGroupId {
+  if (initialGroupId && groups.some((g) => g.id === initialGroupId)) return initialGroupId
+  return groups[0]?.id ?? 'body'
+}
+
 export function MeasurementsSheet({
   open,
   spec,
   pieces,
+  draftKey,
   initialGroupId,
   busy = false,
   onChangeSpec,
@@ -50,22 +61,43 @@ export function MeasurementsSheet({
   const dialogRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const groups = useMemo(() => groupsFor(pieces), [pieces])
-  const [groupIndex, setGroupIndex] = useState(0)
+  /** Stable selection by group id — never reset merely because `pieces` identity changes. */
+  const [activeGroupId, setActiveGroupId] = useState<MeasurementGroupId>(() =>
+    resolveInitialGroup(groupsFor(pieces), initialGroupId),
+  )
   const [dirty, setDirty] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const wasOpenRef = useRef(false)
+  const initKeyRef = useRef<string>('')
 
+  // Initialize group only when the sheet opens, the draft changes, or the
+  // explicit initial selection changes — NOT when garment measurements edit
+  // and recompute the `groups` array identity.
+  useEffect(() => {
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+    const justOpened = !wasOpenRef.current
+    wasOpenRef.current = true
+    const key = `${draftKey ?? ''}::${initialGroupId ?? ''}`
+    if (justOpened || initKeyRef.current !== key) {
+      initKeyRef.current = key
+      setActiveGroupId(resolveInitialGroup(groupsFor(pieces), initialGroupId))
+      setDirty(false)
+      setConfirmDiscard(false)
+    }
+    // intentionally omit `groups` / `pieces` — edits must not re-init
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draftKey, initialGroupId])
+
+  // If a piece is removed, fall back to a still-valid group without clearing dirty.
   useEffect(() => {
     if (!open) return
-    const idx = initialGroupId
-      ? Math.max(
-          0,
-          groups.findIndex((g) => g.id === initialGroupId),
-        )
-      : 0
-    setGroupIndex(idx === -1 ? 0 : idx)
-    setDirty(false)
-    setConfirmDiscard(false)
-  }, [open, initialGroupId, groups])
+    if (!groups.some((g) => g.id === activeGroupId)) {
+      setActiveGroupId(groups[0]?.id ?? 'body')
+    }
+  }, [open, groups, activeGroupId])
 
   useEffect(() => {
     if (!open) return
@@ -80,13 +112,19 @@ export function MeasurementsSheet({
     }
   }, [open])
 
+  const groupIndex = Math.max(
+    0,
+    groups.findIndex((g) => g.id === activeGroupId),
+  )
+  const current = groups[groupIndex] ?? groups[0]
+
   useEffect(() => {
     if (!open) return
     const node = scrollRef.current
     if (!node) return
     if (typeof node.scrollTo === 'function') node.scrollTo({ top: 0 })
     else node.scrollTop = 0
-  }, [groupIndex, open])
+  }, [activeGroupId, open])
 
   useEffect(() => {
     if (!open) return
@@ -103,7 +141,6 @@ export function MeasurementsSheet({
 
   if (!open) return null
 
-  const current = groups[groupIndex] ?? groups[0]
   const pieceId =
     current?.id.startsWith('piece:') ? current.id.slice('piece:'.length) : null
   const activePiece = pieceId ? pieces.find((p) => p.id === pieceId) ?? null : null
@@ -118,8 +155,14 @@ export function MeasurementsSheet({
     onDiscardAndClose()
   }
 
-  const goPrev = () => setGroupIndex((i) => Math.max(0, i - 1))
-  const goNext = () => setGroupIndex((i) => Math.min(groups.length - 1, i + 1))
+  const goPrev = () => {
+    const next = Math.max(0, groupIndex - 1)
+    setActiveGroupId(groups[next]?.id ?? 'body')
+  }
+  const goNext = () => {
+    const next = Math.min(groups.length - 1, groupIndex + 1)
+    setActiveGroupId(groups[next]?.id ?? 'body')
+  }
 
   return (
     <div className={styles.scrim} role="presentation">
@@ -154,14 +197,16 @@ export function MeasurementsSheet({
         </header>
 
         <div className={styles.groupTabs} role="tablist" aria-label="Measurement groups">
-          {groups.map((g, idx) => (
+          {groups.map((g) => (
             <button
               key={g.id}
               type="button"
               role="tab"
-              aria-selected={idx === groupIndex}
-              className={idx === groupIndex ? `${styles.groupTab} ${styles.groupTabActive}` : styles.groupTab}
-              onClick={() => setGroupIndex(idx)}
+              aria-selected={g.id === activeGroupId}
+              className={
+                g.id === activeGroupId ? `${styles.groupTab} ${styles.groupTabActive}` : styles.groupTab
+              }
+              onClick={() => setActiveGroupId(g.id)}
             >
               {g.label}
             </button>

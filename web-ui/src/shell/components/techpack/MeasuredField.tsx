@@ -57,8 +57,11 @@ export function MeasuredField({ label, value, onChange, helpKey, compact = false
               onChange={(e) => onValue(e.target.value)}
               onFocus={(e) => {
                 // Keep focused field visible above Android keyboard when possible.
+                const target = e.target
                 window.setTimeout(() => {
-                  e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                  if (typeof target.scrollIntoView === 'function') {
+                    target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                  }
                 }, 50)
               }}
             />

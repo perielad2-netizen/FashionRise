@@ -3050,6 +3050,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       {spec ? (
         <MeasurementsSheet
           open={measureSheetOpen}
+          draftKey={draft.id}
           spec={spec}
           pieces={pieces}
           busy={busy}
