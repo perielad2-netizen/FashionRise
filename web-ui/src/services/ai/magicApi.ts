@@ -25,6 +25,11 @@ export async function toApiContentFingerprint(
 
 export type PolishSidePayload = {
   image_base64: string
+  /**
+   * Optional PNG data URL of the exact Studio fabric tile (patterned fills only).
+   * Sent as images.edit image #2; never invent for solids/gradients.
+   */
+  fabric_swatch_base64?: string
   notes?: string
   /** Required for dual polish — unique per side within an operation. */
   idempotency_key: string
@@ -56,6 +61,8 @@ export type SketchPolishDualRead = {
 
 export type PolishSketchInput = {
   imageBase64: string
+  /** Optional exact Studio fabric tile PNG data URL (patterned fills). */
+  fabricSwatchBase64?: string
   notes?: string
   designId?: string | null
   /** WEB-V4J dual-sided polish grouping. */
@@ -87,11 +94,17 @@ export async function enqueueSketchPolishDual(
       content_fingerprint: contentFingerprint,
       front: {
         image_base64: input.front.image_base64,
+        ...(input.front.fabric_swatch_base64
+          ? { fabric_swatch_base64: input.front.fabric_swatch_base64 }
+          : {}),
         notes: input.front.notes,
         idempotency_key: input.front.idempotency_key,
       },
       back: {
         image_base64: input.back.image_base64,
+        ...(input.back.fabric_swatch_base64
+          ? { fabric_swatch_base64: input.back.fabric_swatch_base64 }
+          : {}),
         notes: input.back.notes,
         idempotency_key: input.back.idempotency_key,
       },
@@ -109,6 +122,9 @@ export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJ
       input_data: {
         notes: input.notes ?? 'polish concept',
         image_base64: input.imageBase64,
+        ...(input.fabricSwatchBase64
+          ? { fabric_swatch_base64: input.fabricSwatchBase64 }
+          : {}),
         magic_operation_id: input.magic_operation_id,
         studio_side: input.studio_side,
         reference_model_id: input.reference_model_id,

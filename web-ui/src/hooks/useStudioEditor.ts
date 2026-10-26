@@ -42,6 +42,7 @@ import {
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 import { checkPersistableFill, solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
 import { MAX_SNAPSHOT_FILLS } from '@/lib/savedDesign'
+import { captureFabricSwatchForMagic } from '@/lib/fabricSwatchCapture'
 import { captureSketchForMagic } from '@/lib/sketchCapture'
 import {
   createSaveRequestId,
@@ -1006,7 +1007,12 @@ export function useStudioEditor() {
       }
 
       if (dual) {
-        const [frontCap, backCap] = await Promise.all([captureSide('front'), captureSide('back')])
+        const [frontCap, backCap, frontSwatch, backSwatch] = await Promise.all([
+          captureSide('front'),
+          captureSide('back'),
+          captureFabricSwatchForMagic(frontBag.fills),
+          captureFabricSwatchForMagic(backBag.fills),
+        ])
         if (controller.signal.aborted) return
         const frontSketchUrl = URL.createObjectURL(frontCap.blob)
         const backSketchUrl = URL.createObjectURL(backCap.blob)
@@ -1063,11 +1069,13 @@ export function useStudioEditor() {
           content_fingerprint: contentFingerprint,
           front: {
             image_base64: frontCap.dataUrl,
+            ...(frontSwatch ? { fabric_swatch_base64: frontSwatch.dataUrl } : {}),
             notes: 'polish concept (front)',
             idempotency_key: frontIdempotencyKey,
           },
           back: {
             image_base64: backCap.dataUrl,
+            ...(backSwatch ? { fabric_swatch_base64: backSwatch.dataUrl } : {}),
             notes: 'polish concept (back)',
             idempotency_key: backIdempotencyKey,
           },
@@ -1160,19 +1168,29 @@ export function useStudioEditor() {
         return
       }
 
-      const captured = await captureSide(magicSide)
+      const bagForSide = magicSide === 'back' ? backBag : frontBag
+      const [captured, fabricSwatch] = await Promise.all([
+        captureSide(magicSide),
+        captureFabricSwatchForMagic(bagForSide.fills),
+      ])
       if (controller.signal.aborted) return
       const sketchUrl = URL.createObjectURL(captured.blob)
       magicSketchUrlRef.current = sketchUrl
       setMagicSketchUrl(sketchUrl)
 
       setMagicPhase('submitting')
+      // Front-only / single-side: same garment material identity as Dual Magic.
+      const garmentSpec = buildSharedGarmentSpec(doc, 'polish concept')
       const job = await enqueueSketchPolish({
         imageBase64: captured.dataUrl,
+        ...(fabricSwatch ? { fabricSwatchBase64: fabricSwatch.dataUrl } : {}),
         notes: 'polish concept',
         designId,
         studio_side: magicSide,
         reference_model_id: modelId,
+        shared_garment_spec: garmentSpec,
+        source_revision: doc.clientRevision,
+        content_fingerprint: draftContentFingerprint(doc),
         signal: controller.signal,
       })
       setMagicJobId(job.id)
@@ -1432,12 +1450,15 @@ export function useStudioEditor() {
             side === 'front'
               ? { strokes: doc.strokes, fills: doc.fills ?? [] }
               : doc.back ?? { strokes: [], fills: [] }
-          const cap = await captureSketchForMagic({
-            strokes: bag.strokes,
-            fills: bag.fills,
-            referenceUrl: referenceUrlForDocument(doc, side),
-            referenceOpacity: doc.dimmed ? 0.4 : 1,
-          })
+          const [cap, fabricSwatch] = await Promise.all([
+            captureSketchForMagic({
+              strokes: bag.strokes,
+              fills: bag.fills,
+              referenceUrl: referenceUrlForDocument(doc, side),
+              referenceOpacity: doc.dimmed ? 0.4 : 1,
+            }),
+            captureFabricSwatchForMagic(bag.fills),
+          ])
 
           // Persist a new per-attempt key before POST so lost responses can replay.
           const idempotencyKey = allocateMagicRetryIdempotencyKey(user.id, side)
@@ -1449,6 +1470,7 @@ export function useStudioEditor() {
           try {
             const job = await enqueueSketchPolish({
               imageBase64: cap.dataUrl,
+              ...(fabricSwatch ? { fabricSwatchBase64: fabricSwatch.dataUrl } : {}),
               notes: `polish concept (${side}) retry`,
               designId: stored.designId ?? designIdRef.current,
               magic_operation_id: operationId,

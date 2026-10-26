@@ -68,4 +68,19 @@ describe('enqueueDualPolish', () => {
     expect(arg?.front.idempotency_key).toContain(':front')
     expect(arg?.back.idempotency_key).toContain(':back')
   })
+
+  it('forwards independent fabric swatches per Dual Magic side', async () => {
+    const spy = vi.spyOn(magicApi, 'enqueueSketchPolishDual').mockResolvedValue({
+      magic_operation_id: '11111111-1111-1111-1111-111111111111',
+      front_job: { id: 'jf', status: 'queued' } as magicApi.SketchPolishDualRead['front_job'],
+      back_job: { id: 'jb', status: 'queued' } as magicApi.SketchPolishDualRead['back_job'],
+    })
+    const input = dualInput()
+    input.front.fabric_swatch_base64 = 'data:image/png;base64,frontSwatch'
+    input.back.fabric_swatch_base64 = 'data:image/png;base64,backSwatch'
+    await enqueueDualPolish(input)
+    const arg = spy.mock.calls[0]?.[0]
+    expect(arg?.front.fabric_swatch_base64).toBe('data:image/png;base64,frontSwatch')
+    expect(arg?.back.fabric_swatch_base64).toBe('data:image/png;base64,backSwatch')
+  })
 })

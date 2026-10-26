@@ -146,7 +146,8 @@ describe('magicGarmentSpec palette priority', () => {
 
     const spec = buildSharedGarmentSpec(doc)
     expect(spec.main_colors?.[0]).toBe('#BE185D')
-    expect(spec.materials).toEqual(expect.arrayContaining(['Satin fabric']))
+    expect(spec.materials?.[0]).toMatch(/Satin repeating textile/i)
+    expect(spec.materials?.[0]).toMatch(/exact Studio tile/i)
   })
 
   it('does not invent a hex color for uploaded fabric', () => {
@@ -180,7 +181,9 @@ describe('magicGarmentSpec palette priority', () => {
     const { main_colors } = paletteFromDoc(doc)
     expect(main_colors).toEqual(['#222222'])
     const spec = buildSharedGarmentSpec(doc)
-    expect(spec.materials).toEqual(['uploaded fabric'])
+    expect(spec.materials).toEqual([
+      'uploaded fabric repeating textile (exact Studio tile reference)',
+    ])
     expect(spec.main_colors).toEqual(['#222222'])
   })
 })

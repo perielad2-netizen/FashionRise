@@ -36,9 +36,13 @@ function fillMaterialLabels(fill: FillOp): string[] {
   const style = fill.style
   if (style.kind === 'fabric') {
     const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
-    return [preset ? `${preset.label} fabric` : `${style.fabricId} fabric`]
+    const name = preset ? preset.label : style.fabricId
+    // Emphasize repeating tile identity — Magic receives the exact swatch separately.
+    return [`${name} repeating textile (exact Studio tile reference)`]
   }
-  if (style.kind === 'uploaded-fabric') return ['uploaded fabric']
+  if (style.kind === 'uploaded-fabric') {
+    return ['uploaded fabric repeating textile (exact Studio tile reference)']
+  }
   if (style.kind === 'gradient') return ['gradient fabric']
   return []
 }
