@@ -183,3 +183,88 @@ export async function fetchSavedDesign(
   }
   return { ok: true, record }
 }
+
+export type DeleteSavedDesignResult =
+  | { ok: true; alreadyGone: boolean }
+  | { ok: false; error: string; outcomeUncertain: boolean; canRetry: boolean }
+
+const DELETE_OFFLINE_MESSAGE =
+  'You are offline. The design was not deleted. Reconnect and try again.'
+
+async function savedDesignStillPresent(ownerId: string, designId: string): Promise<boolean | null> {
+  try {
+    const mine = await listMyDesigns()
+    return mine.some((row) => {
+      const parsed = parseSavedDesign(row, ownerId)
+      return parsed?.id === designId
+    })
+  } catch {
+    try {
+      await getDesign(designId)
+      return true
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return false
+      return null
+    }
+  }
+}
+
+/**
+ * Permanently delete one owner-private saved design via the saved-only endpoint.
+ * Offline requests are never sent. Ambiguous network/5xx responses are reconciled
+ * against the owner's list (or GET) before success is claimed. A verified 404 is
+ * treated as idempotent success (already deleted on another device).
+ */
+export async function deleteSavedDesign(
+  ownerId: string,
+  designId: string,
+): Promise<DeleteSavedDesignResult> {
+  if (isOffline()) {
+    return { ok: false, error: DELETE_OFFLINE_MESSAGE, outcomeUncertain: false, canRetry: true }
+  }
+
+  try {
+    await apiRequest<void>(`/designs/saved/${designId}`, { method: 'DELETE' })
+    return { ok: true, alreadyGone: false }
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { ok: true, alreadyGone: true }
+    }
+
+    const uncertain = outcomeUncertain(err)
+    if (uncertain) {
+      const present = await savedDesignStillPresent(ownerId, designId)
+      if (present === false) {
+        return { ok: true, alreadyGone: true }
+      }
+      if (present === true) {
+        return {
+          ok: false,
+          error:
+            err instanceof ApiError && err.status !== 0
+              ? err.message
+              : 'Could not reach FashionRise. The design was not deleted. Try again.',
+          outcomeUncertain: false,
+          canRetry: true,
+        }
+      }
+      return {
+        ok: false,
+        error:
+          'Could not confirm whether the design was deleted. Refresh My Designs before trying again.',
+        outcomeUncertain: true,
+        canRetry: true,
+      }
+    }
+
+    return {
+      ok: false,
+      error:
+        err instanceof ApiError && err.status !== 0
+          ? err.message
+          : 'Could not delete this design. Try again.',
+      outcomeUncertain: false,
+      canRetry: err instanceof ApiError ? err.status === 0 || err.status >= 500 : true,
+    }
+  }
+}

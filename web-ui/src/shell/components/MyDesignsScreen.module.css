@@ -43,6 +43,7 @@
 
 .ghostBtn,
 .openBtn,
+.deleteBtn,
 .moreBtn {
   min-height: 34px;
   padding: 0 12px;
@@ -67,20 +68,45 @@
   border: 0;
   background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-soft));
   color: white;
-  align-self: flex-start;
+}
+
+.deleteBtn {
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 2px;
 }
 
 .ghostBtn:disabled,
-.openBtn:disabled {
+.openBtn:disabled,
+.deleteBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 .ghostBtn:focus-visible,
 .openBtn:focus-visible,
+.deleteBtn:focus-visible,
 .moreBtn:focus-visible {
   outline: 2px solid #f9a8d4;
   outline-offset: 2px;
+}
+
+.notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(134, 239, 172, 0.28);
+  background: rgba(20, 83, 45, 0.28);
+  color: #bbf7d0;
+  font-size: 12px;
 }
 
 .scroll {

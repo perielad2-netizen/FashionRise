@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   saveDesignSnapshot: vi.fn(),
   listSavedDesigns: vi.fn(),
   fetchSavedDesign: vi.fn(),
+  deleteSavedDesign: vi.fn(),
   listMyDesigns: vi.fn(),
   exportSketchPng: vi.fn(),
   downloadBlob: vi.fn(),
@@ -79,6 +80,7 @@ vi.mock('@/services/savedDesignsApi', () => ({
   saveDesignSnapshot: mocks.saveDesignSnapshot,
   listSavedDesigns: mocks.listSavedDesigns,
   fetchSavedDesign: mocks.fetchSavedDesign,
+  deleteSavedDesign: mocks.deleteSavedDesign,
 }))
 
 vi.mock('@/services/designsApi', async (importOriginal) => {
@@ -777,5 +779,96 @@ describe('Reopen a saved design', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Go to Studio' }))
     expect(await screen.findByRole('dialog', { name: 'Draft recovery conflict' })).toBeInTheDocument()
     expect(mocks.persistStudioDraft).not.toHaveBeenCalled()
+  })
+})
+
+describe('Delete saved design', () => {
+  const RECORD_B: SavedDesignRecord = {
+    ...RECORD,
+    id: 'saved-2',
+    title: 'Keep me',
+    saveRequestId: 'req-2',
+  }
+
+  it('cancel leaves the library unchanged', async () => {
+    renderAt('/studio/designs')
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Evening gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “Evening gown”?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(mocks.deleteSavedDesign).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Delete Evening gown' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Saved designs/ })).toHaveTextContent('1')
+  })
+
+  it('confirmed delete removes only that card and updates the count', async () => {
+    mocks.listSavedDesigns.mockResolvedValue({ designs: [RECORD, RECORD_B], damaged: [] })
+    mocks.deleteSavedDesign.mockResolvedValue({ ok: true, alreadyGone: false })
+    renderAt('/studio/designs')
+    await ready()
+    expect(screen.getByRole('heading', { name: /Saved designs/ })).toHaveTextContent('2')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Evening gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “Evening gown”?' })
+    expect(within(dialog).getByText(/permanently deletes/i)).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+    })
+
+    expect(mocks.deleteSavedDesign).toHaveBeenCalledWith('u1', 'saved-1')
+    expect(
+      await screen.findByText('“Evening gown” was permanently deleted.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Evening gown' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Delete Keep me' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Saved designs/ })).toHaveTextContent('1')
+    // Working draft section still present; Studio autosave untouched.
+    expect(screen.getByRole('heading', { name: 'Studio working draft' })).toBeInTheDocument()
+    expect(mocks.persistStudioDraft).not.toHaveBeenCalled()
+  })
+
+  it('disables duplicate submissions while deleting', async () => {
+    let resolveDelete!: (v: unknown) => void
+    mocks.deleteSavedDesign.mockReturnValue(new Promise((r) => (resolveDelete = r)))
+    renderAt('/studio/designs')
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Evening gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “Evening gown”?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+    expect(within(dialog).getByRole('button', { name: 'Deleting…' })).toBeDisabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Deleting…' }))
+    expect(mocks.deleteSavedDesign).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      resolveDelete({ ok: true, alreadyGone: false })
+    })
+  })
+
+  it('offline/error keeps the card and allows retry', async () => {
+    mocks.deleteSavedDesign
+      .mockResolvedValueOnce({
+        ok: false,
+        error: 'You are offline. The design was not deleted. Reconnect and try again.',
+        outcomeUncertain: false,
+        canRetry: true,
+      })
+      .mockResolvedValueOnce({ ok: true, alreadyGone: false })
+    renderAt('/studio/designs')
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Evening gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “Evening gown”?' })
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+    })
+    const err = await screen.findByRole('dialog', { name: 'Could not delete design' })
+    expect(within(err).getByRole('alert')).toHaveTextContent(/offline/i)
+    expect(screen.getByRole('button', { name: 'Delete Evening gown' })).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(within(err).getByRole('button', { name: 'Try again' }))
+    })
+    expect(mocks.deleteSavedDesign).toHaveBeenCalledTimes(2)
+    expect(await screen.findByRole('status')).toHaveTextContent(/permanently deleted/)
   })
 })

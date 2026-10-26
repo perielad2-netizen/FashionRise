@@ -22,7 +22,9 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
   }
 })
 
-const { fetchSavedDesign, saveDesignSnapshot } = await import('@/services/savedDesignsApi')
+const { deleteSavedDesign, fetchSavedDesign, saveDesignSnapshot } = await import(
+  '@/services/savedDesignsApi'
+)
 
 const OWNER = 'owner-1'
 const snapshot: SavedDesignSnapshot = snapshotFromDocument({
@@ -177,5 +179,46 @@ describe('fetchSavedDesign', () => {
     await expect(fetchSavedDesign(OWNER, 'x')).resolves.toMatchObject({ ok: false, reason: 'not-found' })
     getDesign.mockRejectedValueOnce(new ApiError('Unable to reach FashionRise.', 0, null))
     await expect(fetchSavedDesign(OWNER, 'x')).resolves.toMatchObject({ ok: false, reason: 'network' })
+  })
+})
+
+describe('deleteSavedDesign', () => {
+  it('calls the saved-only DELETE route', async () => {
+    apiRequest.mockResolvedValueOnce(undefined)
+    await expect(deleteSavedDesign(OWNER, 'd1')).resolves.toEqual({ ok: true, alreadyGone: false })
+    expect(apiRequest).toHaveBeenCalledWith('/designs/saved/d1', { method: 'DELETE' })
+  })
+
+  it('treats 404 as idempotent success', async () => {
+    apiRequest.mockRejectedValueOnce(new ApiError('Design not found', 404, null))
+    await expect(deleteSavedDesign(OWNER, 'd1')).resolves.toEqual({ ok: true, alreadyGone: true })
+  })
+
+  it('offline: no request', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const result = await deleteSavedDesign(OWNER, 'd1')
+    expect(result).toMatchObject({ ok: false, canRetry: true })
+    expect(apiRequest).not.toHaveBeenCalled()
+  })
+
+  it('reconciles a lost response before claiming success', async () => {
+    apiRequest.mockRejectedValueOnce(new ApiError('Unable to reach FashionRise.', 0, null))
+    listMyDesigns.mockResolvedValueOnce([])
+    await expect(deleteSavedDesign(OWNER, 'd1')).resolves.toEqual({ ok: true, alreadyGone: true })
+  })
+
+  it('keeps the card when reconcile shows the design still exists', async () => {
+    apiRequest.mockRejectedValueOnce(new ApiError('Bad gateway', 502, null))
+    listMyDesigns.mockResolvedValueOnce([serverRow('d1', 'req-1')])
+    const result = await deleteSavedDesign(OWNER, 'd1')
+    expect(result).toMatchObject({ ok: false, canRetry: true, outcomeUncertain: false })
+  })
+
+  it('reports uncertain when reconcile itself fails', async () => {
+    apiRequest.mockRejectedValueOnce(new ApiError('Unable to reach FashionRise.', 0, null))
+    listMyDesigns.mockRejectedValueOnce(new ApiError('Unable to reach FashionRise.', 0, null))
+    getDesign.mockRejectedValueOnce(new ApiError('Unable to reach FashionRise.', 0, null))
+    const result = await deleteSavedDesign(OWNER, 'd1')
+    expect(result).toMatchObject({ ok: false, outcomeUncertain: true, canRetry: true })
   })
 })

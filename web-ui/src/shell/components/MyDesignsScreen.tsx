@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, FolderOpen, RefreshCw } from 'lucide-react'
+import { ArrowLeft, FolderOpen, RefreshCw, Trash2 } from 'lucide-react'
+import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { PREVIEW_PAGE_SIZE, PreviewRenderer } from '@/lib/designPreview'
 import {
   modelLabel,
@@ -11,7 +12,7 @@ import {
 import type { SaveStatus } from '@/lib/draftDocument'
 import type { Stroke } from '@/lib/strokes'
 import type { ModelChoice } from '@/shell/modelTypes'
-import { listSavedDesigns } from '@/services/savedDesignsApi'
+import { deleteSavedDesign, listSavedDesigns } from '@/services/savedDesignsApi'
 import styles from './MyDesignsScreen.module.css'
 
 type WorkingDraft = {
@@ -36,6 +37,11 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; designs: SavedDesignRecord[]; damaged: DamagedSavedDesign[] }
+
+type DeleteDialog =
+  | { phase: 'confirm'; record: SavedDesignRecord }
+  | { phase: 'deleting'; record: SavedDesignRecord }
+  | { phase: 'error'; record: SavedDesignRecord; message: string; canRetry: boolean }
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -81,11 +87,13 @@ function SavedDesignCard({
   record,
   renderer,
   onOpen,
+  onDelete,
   disabled,
 }: {
   record: SavedDesignRecord
   renderer: PreviewRenderer | null
   onOpen: (id: string) => void
+  onDelete: (record: SavedDesignRecord) => void
   disabled: boolean
 }) {
   const url = usePreview(renderer, `saved:${record.id}`, record.snapshot)
@@ -106,16 +114,28 @@ function SavedDesignCard({
           <span aria-hidden="true"> · </span>
           <span>{modelLabel(record.snapshot.model)}</span>
         </p>
-        <button
-          type="button"
-          className={styles.openBtn}
-          onClick={() => onOpen(record.id)}
-          disabled={disabled}
-          aria-label={`Open ${title} in Studio`}
-        >
-          <FolderOpen size={14} aria-hidden="true" />
-          Open
-        </button>
+        <div className={styles.cardActions}>
+          <button
+            type="button"
+            className={styles.openBtn}
+            onClick={() => onOpen(record.id)}
+            disabled={disabled}
+            aria-label={`Open ${title} in Studio`}
+          >
+            <FolderOpen size={14} aria-hidden="true" />
+            Open
+          </button>
+          <button
+            type="button"
+            className={styles.deleteBtn}
+            onClick={() => onDelete(record)}
+            disabled={disabled}
+            aria-label={`Delete ${title}`}
+          >
+            <Trash2 size={14} aria-hidden="true" />
+            Delete
+          </button>
+        </div>
       </div>
     </li>
   )
@@ -133,7 +153,11 @@ export function MyDesignsScreen({
   const [visible, setVisible] = useState(PREVIEW_PAGE_SIZE)
   const [reloadToken, setReloadToken] = useState(0)
   const [renderer] = useState(() => new PreviewRenderer())
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const workingKeyRef = useRef<string | null>(null)
+  const deleteInFlightRef = useRef(false)
+  const deleteTriggerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => () => renderer.dispose(), [renderer])
 
@@ -184,6 +208,73 @@ export function MyDesignsScreen({
   const designs = state.status === 'ready' ? state.designs : []
   const damaged = state.status === 'ready' ? state.damaged : []
 
+  const askDelete = useCallback((record: SavedDesignRecord) => {
+    deleteTriggerRef.current = document.activeElement as HTMLElement | null
+    setNotice(null)
+    setDeleteDialog({ phase: 'confirm', record })
+  }, [])
+
+  const closeDeleteDialog = useCallback(() => {
+    if (deleteInFlightRef.current) return
+    setDeleteDialog(null)
+    const trigger = deleteTriggerRef.current
+    deleteTriggerRef.current = null
+    if (trigger && document.contains(trigger)) {
+      queueMicrotask(() => trigger.focus())
+    }
+  }, [])
+
+  const removeDesignFromList = useCallback(
+    (designId: string, title: string, alreadyGone: boolean) => {
+      renderer.release(`saved:${designId}`)
+      setState((prev) => {
+        if (prev.status !== 'ready') return prev
+        return {
+          ...prev,
+          designs: prev.designs.filter((d) => d.id !== designId),
+        }
+      })
+      setVisible((v) => Math.max(PREVIEW_PAGE_SIZE, v))
+      setNotice(
+        alreadyGone
+          ? `“${title}” was already deleted.`
+          : `“${title}” was permanently deleted.`,
+      )
+      setDeleteDialog(null)
+      deleteTriggerRef.current = null
+    },
+    [renderer],
+  )
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteDialog || deleteInFlightRef.current) return
+    const record = deleteDialog.record
+    const title = record.title || 'Untitled design'
+    deleteInFlightRef.current = true
+    setDeleteDialog({ phase: 'deleting', record })
+    try {
+      const result = await deleteSavedDesign(ownerId, record.id)
+      if (result.ok) {
+        removeDesignFromList(record.id, title, result.alreadyGone)
+        return
+      }
+      setDeleteDialog({
+        phase: 'error',
+        record,
+        message: result.error,
+        canRetry: result.canRetry,
+      })
+    } finally {
+      deleteInFlightRef.current = false
+    }
+  }, [deleteDialog, ownerId, removeDesignFromList])
+
+  const dialogTitle = deleteDialog
+    ? deleteDialog.phase === 'error'
+      ? 'Could not delete design'
+      : `Delete “${deleteDialog.record.title || 'Untitled design'}”?`
+    : ''
+
   return (
     <section className={styles.screen} aria-label="My Designs">
       <header className={styles.head}>
@@ -209,6 +300,12 @@ export function MyDesignsScreen({
       </header>
 
       <div className={styles.scroll}>
+        {notice ? (
+          <p className={styles.notice} role="status">
+            {notice}
+          </p>
+        ) : null}
+
         <section className={styles.section} aria-labelledby="my-designs-working">
           <h2 id="my-designs-working" className={styles.sectionTitle}>
             Studio working draft
@@ -273,7 +370,8 @@ export function MyDesignsScreen({
                   record={record}
                   renderer={renderer}
                   onOpen={onOpen}
-                  disabled={opening}
+                  onDelete={askDelete}
+                  disabled={opening || deleteDialog?.phase === 'deleting'}
                 />
               ))}
             </ul>
@@ -308,6 +406,51 @@ export function MyDesignsScreen({
           ) : null}
         </section>
       </div>
+
+      {deleteDialog ? (
+        <ConfirmDialog
+          title={dialogTitle}
+          busy={deleteDialog.phase === 'deleting'}
+          onEscape={deleteDialog.phase === 'deleting' ? undefined : closeDeleteDialog}
+          actions={
+            deleteDialog.phase === 'error'
+              ? [
+                  { label: 'Close', onClick: closeDeleteDialog, variant: 'ghost' },
+                  ...(deleteDialog.canRetry
+                    ? [{ label: 'Try again', onClick: () => void confirmDelete(), variant: 'danger' as const }]
+                    : []),
+                ]
+              : [
+                  {
+                    label: 'Cancel',
+                    onClick: closeDeleteDialog,
+                    variant: 'ghost',
+                    disabled: deleteDialog.phase === 'deleting',
+                  },
+                  {
+                    label: deleteDialog.phase === 'deleting' ? 'Deleting…' : 'Delete permanently',
+                    onClick: () => void confirmDelete(),
+                    variant: 'danger',
+                    disabled: deleteDialog.phase === 'deleting',
+                  },
+                ]
+          }
+        >
+          {deleteDialog.phase === 'error' ? (
+            <p role="alert">{deleteDialog.message}</p>
+          ) : deleteDialog.phase === 'deleting' ? (
+            <p role="status">Deleting “{deleteDialog.record.title || 'Untitled design'}”…</p>
+          ) : (
+            <>
+              <p>
+                This permanently deletes “{deleteDialog.record.title || 'Untitled design'}” from My
+                Designs. This cannot be undone.
+              </p>
+              <p>Your Studio working draft and other saved designs are not affected.</p>
+            </>
+          )}
+        </ConfirmDialog>
+      ) : null}
     </section>
   )
 }
