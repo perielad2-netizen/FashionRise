@@ -78,6 +78,19 @@
   padding: 14px 16px 24px;
 }
 
+/* Keep nested TechpackScreen field labels readable on the dark sheet. */
+.body :global(label) {
+  color: #e7e5e4;
+  font-weight: 600;
+}
+
+.body :global(input),
+.body :global(select),
+.body :global(textarea) {
+  min-height: 48px;
+  font-size: 16px;
+}
+
 .footer {
   display: flex;
   gap: 8px;
