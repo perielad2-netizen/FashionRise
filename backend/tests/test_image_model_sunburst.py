@@ -297,6 +297,42 @@ def test_build_image_edit_kwargs_omits_input_fidelity_for_sunburst():
     assert buf.getvalue() == _TINY_PNG
 
 
+def test_build_image_edit_kwargs_sends_sketch_then_textile_swatch():
+    textile = _TINY_PNG + b"\x01\x02"
+    kwargs = sketch_openai.build_image_edit_kwargs(
+        model="gpt-image-2.5-sunburst",
+        prompt="refine with textile",
+        sketch=(_TINY_PNG, "image/png"),
+        size="1024x1536",
+        quality="high",
+        fabric_swatch=(textile, "image/png"),
+    )
+    assert isinstance(kwargs["image"], list)
+    assert len(kwargs["image"]) == 2
+    sketch_name, sketch_buf, _ = kwargs["image"][0]
+    textile_name, textile_buf, _ = kwargs["image"][1]
+    assert sketch_name.startswith("sketch.")
+    assert textile_name.startswith("textile.")
+    assert sketch_buf.getvalue() == _TINY_PNG
+    assert textile_buf.getvalue() == textile
+
+
+def test_image_prompt_includes_textile_clause_when_swatch_present():
+    job = _job(
+        image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+        fabric_swatch_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+        shared_garment_spec={"main_colors": ["#BE185D"], "materials": ["Satin repeating textile"]},
+    )
+    prompt = sketch_openai._build_image_prompt(
+        {"summary": "pink satin swimsuit", "image_prompt": "one-piece pink swimsuit"},
+        "pink satin swimsuit",
+        job,
+    )
+    assert "TEXTILE REFERENCE" in prompt
+    assert "Image 2" in prompt
+    assert "plain glossy satin" in prompt.lower() or "plain glossy" in prompt.lower()
+
+
 def test_gpt_image_2_also_omits_input_fidelity():
     kwargs = sketch_openai.build_image_edit_kwargs(
         model="gpt-image-2",

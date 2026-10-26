@@ -533,6 +533,54 @@ def test_linked_polish_rejects_new_key_while_side_active(client, db_session):
     assert count == 1
 
 
+def test_dual_per_side_fabric_swatch_independent_and_redacted(client, db_session):
+    """Each Dual Magic side keeps its own textile bytes; API responses never leak them."""
+    tokens = register_with_invite(client, db_session, "dual_swatch@example.com", "dual_swatch")
+    # Distinct payloads so fingerprints differ per side.
+    front_swatch = f"data:image/png;base64,{_TINY_PNG}"
+    back_tiny = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mP8z8BQz0AEYBxVSF+F"
+        "AP5FDvcfRYWgAAAAAElFTkSuQmCC"
+    )
+    back_swatch = f"data:image/png;base64,{back_tiny}"
+    body = _dual_payload(
+        front={
+            "image_base64": _DATA_URL,
+            "fabric_swatch_base64": front_swatch,
+            "idempotency_key": f"front-sw-{uuid4().hex[:8]}",
+        },
+        back={
+            "image_base64": _DATA_URL,
+            "fabric_swatch_base64": back_swatch,
+            "idempotency_key": f"back-sw-{uuid4().hex[:8]}",
+        },
+        shared_garment_spec={
+            "main_colors": ["#BE185D"],
+            "materials": ["Satin repeating textile (exact Studio tile reference)"],
+            "garment_category": "studio",
+        },
+    )
+    r = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert r.status_code == 201, r.text
+    data = r.json()
+    front = data["front_job"]
+    back = data["back_job"]
+    assert "fabric_swatch_base64" not in front["input_data"]
+    assert "fabric_swatch_base64" not in back["input_data"]
+    assert front["input_data"].get("has_fabric_swatch") is True
+    assert back["input_data"].get("has_fabric_swatch") is True
+    assert front["input_data"].get("shared_garment_spec", {}).get("main_colors") == ["#BE185D"]
+
+    front_row = db_session.get(AIJob, UUID(front["id"]))
+    back_row = db_session.get(AIJob, UUID(back["id"]))
+    assert front_row is not None and back_row is not None
+    assert front_row.input_data.get("fabric_swatch_base64") == front_swatch
+    assert back_row.input_data.get("fabric_swatch_base64") == back_swatch
+    assert front_row.input_data.get("fabric_swatch_fingerprint") != back_row.input_data.get(
+        "fabric_swatch_fingerprint"
+    )
+
+
 def test_dual_missing_shared_garment_spec_422(client, db_session):
     tokens = register_with_invite(client, db_session, "dual_miss@example.com", "dual_miss")
     body = _dual_payload()

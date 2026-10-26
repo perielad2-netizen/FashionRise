@@ -145,6 +145,42 @@ def test_polish_and_status_omit_image_base64_but_preserve_db_input(client, db_se
     assert polled["status"] in {"queued", "running", "completed", "failed"}
 
 
+def test_polish_redacts_fabric_swatch_but_keeps_private_bytes_in_db(client, db_session):
+    tokens = register_with_invite(client, db_session, "swatch@example.com", "swatch_user")
+    tiny = base64.b64encode(_png_bytes()).decode("ascii")
+    sketch = f"data:image/png;base64,{tiny}"
+    swatch = f"data:image/png;base64,{tiny}"
+    created = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json={
+            "input_data": {
+                "notes": "polish concept",
+                "image_base64": sketch,
+                "fabric_swatch_base64": swatch,
+                "studio_side": "front",
+                "shared_garment_spec": {
+                    "main_colors": ["#BE185D"],
+                    "materials": ["Satin repeating textile (exact Studio tile reference)"],
+                    "garment_category": "studio",
+                },
+            }
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert "fabric_swatch_base64" not in body["input_data"]
+    assert body["input_data"].get("has_fabric_swatch") is True
+    assert body["input_data"].get("has_sketch_image") is True
+    assert body["input_data"].get("shared_garment_spec", {}).get("main_colors") == ["#BE185D"]
+
+    row = db_session.get(AIJob, uuid.UUID(body["id"]))
+    assert row is not None
+    assert row.input_data.get("fabric_swatch_base64") == swatch
+    assert isinstance(row.input_data.get("fabric_swatch_fingerprint"), str)
+    assert len(row.input_data["fabric_swatch_fingerprint"]) == 64
+
+
 def test_failed_job_api_exposes_only_allowlisted_error_meta(client, db_session):
     tokens = register_with_invite(client, db_session, "errmeta@example.com", "errmeta_user")
     me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()

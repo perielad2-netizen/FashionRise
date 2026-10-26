@@ -63,6 +63,16 @@ _COLOR_FIDELITY_CONTRACT = (
     "and Back material colors, straps, cut-outs, and silhouette consistent with the sketch."
 )
 
+# Used only when a second textile swatch image is attached to images.edit.
+_FABRIC_SWATCH_EDIT_CONTRACT = (
+    "TEXTILE REFERENCE: Image 1 is the garment sketch (silhouette, pose, coverage, painted "
+    "regions). Image 2 is the EXACT textile swatch from the Studio canvas — reproduce this "
+    "repeating motif, spacing, scale, and colors on painted garment regions only. Do NOT "
+    "replace the motif with plain glossy satin, a solid fill, or an invented pattern. "
+    "Natural draping and folds are allowed; motif geometry must remain recognizable. "
+    "Do not alter silhouette, pose, or skin/coverage boundaries."
+)
+
 # Illustration-style restriction — equal priority with coverage; must not be truncated
 # away by verbose vision evidence (Issue #64 PM amendment).
 _ILLUSTRATION_STYLE_CONTRACT = (
@@ -285,6 +295,19 @@ def _raw_sketch_bytes(job: AIJob) -> tuple[bytes, str] | None:
             logger.warning("OpenAI job %s: bad image_base64: %s", job.id, e)
             return None
     return None
+
+
+def _raw_fabric_swatch_bytes(job: AIJob) -> tuple[bytes, str] | None:
+    """Optional exact Studio textile tile (never invent; fail closed if corrupt)."""
+    d = job.input_data or {}
+    b64raw = d.get("fabric_swatch_base64")
+    if not isinstance(b64raw, str) or not b64raw.strip():
+        return None
+    try:
+        return _decode_inline_base64(b64raw)
+    except Exception as e:
+        logger.warning("OpenAI job %s: bad fabric_swatch_base64: %s", job.id, e)
+        return None
 
 
 def _image_part(job: AIJob) -> dict[str, Any] | None:
@@ -666,6 +689,7 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
 
     reference_clause = edit_reference_instructions(ref) + " "
     side_clause = ""
+    fabric_clause = ""
     if job is not None:
         side_clause = _studio_side_edit_clause(
             _normalized_studio_side(job.input_data if isinstance(job.input_data, dict) else {})
@@ -675,11 +699,19 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         )
         if shared_edit:
             side_clause = f"{side_clause}{shared_edit} "
+        swatch_raw = (
+            job.input_data.get("fabric_swatch_base64")
+            if isinstance(job.input_data, dict)
+            else None
+        )
+        if isinstance(swatch_raw, str) and swatch_raw.strip():
+            fabric_clause = f"{_FABRIC_SWATCH_EDIT_CONTRACT} "
     protected = (
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
         "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
         f"{reference_clause}"
         f"{side_clause}"
+        f"{fabric_clause}"
         f"{_COVERAGE_PRESERVATION_CONTRACT} "
         f"{_COLOR_FIDELITY_CONTRACT} "
         "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
@@ -1089,8 +1121,9 @@ def build_image_edit_kwargs(
     sketch: tuple[bytes, str],
     size: str,
     quality: str | None,
+    fabric_swatch: tuple[bytes, str] | None = None,
 ) -> dict[str, Any]:
-    """Construct a single images.edit kwargs dict from the model capability table."""
+    """Construct images.edit kwargs. With a fabric swatch, send [sketch, textile] as image list."""
     configured = (model or "").strip()
     caps = assert_image_model_editable(configured)
     sketch_bytes, mime = sketch
@@ -1098,11 +1131,29 @@ def build_image_edit_kwargs(
     size_value = size if size in caps.sizes else _DEFAULT_IMAGE_SIZE
     if size_value not in caps.sizes:
         size_value = "1024x1536" if "1024x1536" in caps.sizes else next(iter(sorted(caps.sizes)))
-    img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
+    sketch_img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
+    if fabric_swatch is not None:
+        sw_bytes, sw_mime = fabric_swatch
+        sw_ext = (
+            "jpg"
+            if ("jpeg" in sw_mime or "jpg" in sw_mime)
+            else "webp"
+            if "webp" in sw_mime
+            else "png"
+        )
+        textile_img = (
+            f"textile.{sw_ext}",
+            BytesIO(sw_bytes),
+            sw_mime or f"image/{sw_ext}",
+        )
+        # OpenAI images.edit accepts a sequence: image 1 = sketch, image 2 = textile.
+        image_arg: Any = [sketch_img, textile_img]
+    else:
+        image_arg = sketch_img
     # Forward the exact allowlisted model id (canonical or documented snapshot).
     kwargs: dict[str, Any] = {
         "model": configured,
-        "image": img,
+        "image": image_arg,
         "prompt": prompt,
         "size": size_value,
         "n": 1,
@@ -1129,6 +1180,7 @@ def _try_edit_look_from_sketch(
 ) -> tuple[bytes | None, str, dict[str, Any]]:
     """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0)."""
     model = (model or "").strip()
+    fabric_swatch = _raw_fabric_swatch_bytes(job)
     try:
         kwargs = build_image_edit_kwargs(
             model=model,
@@ -1136,6 +1188,7 @@ def _try_edit_look_from_sketch(
             sketch=sketch,
             size=size,
             quality=quality,
+            fabric_swatch=fabric_swatch,
         )
     except SketchCompletionError:
         raise
@@ -1149,15 +1202,18 @@ def _try_edit_look_from_sketch(
         }
 
     fidelity = kwargs.get("input_fidelity", "omit")
+    image_count = 2 if isinstance(kwargs.get("image"), list) else 1
     try:
         logger.info(
-            "OpenAI job %s: editing sketch with %s size=%s quality=%s output_format=%s input_fidelity=%s",
+            "OpenAI job %s: editing sketch with %s size=%s quality=%s output_format=%s "
+            "input_fidelity=%s image_inputs=%s",
             job.id,
             kwargs.get("model"),
             kwargs.get("size"),
             kwargs.get("quality"),
             kwargs.get("output_format"),
             fidelity,
+            image_count,
         )
         # Disable OpenAI SDK automatic retries for this paid image call only.
         # Chat Completions (vision) keeps the client default retry policy.

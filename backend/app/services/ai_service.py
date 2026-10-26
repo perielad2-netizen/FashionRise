@@ -98,6 +98,8 @@ def _prompt_identity_fingerprint(input_data: dict) -> str | None:
         "reference_model_id": input_data.get("reference_model_id"),
         "notes": input_data.get("notes"),
         "mood_notes": input_data.get("mood_notes"),
+        # Bind textile reference without storing raw private bytes in the fingerprint.
+        "fabric_swatch_fingerprint": input_data.get("fabric_swatch_fingerprint"),
     }
     if all(v is None or v == "" for v in payload.values()):
         return None
@@ -320,12 +322,49 @@ def _assert_idempotency_identity(
             )
 
 
+def _decode_data_url_image(raw: str, *, field: str) -> bytes:
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValidationAppError(f"{field} must be a non-empty string")
+    match = _DATA_URL_RE.match(raw.strip())
+    b64 = match.group(2) if match else raw.strip()
+    try:
+        decoded = base64.b64decode(b64, validate=False)
+    except (binascii.Error, ValueError) as exc:
+        raise ValidationAppError(f"{field} is not valid base64") from exc
+    if not decoded:
+        raise ValidationAppError(f"{field} payload is empty")
+    return decoded
+
+
+def _validate_optional_fabric_swatch(input_data: dict) -> None:
+    """Bound optional textile reference; never invent or require for solid/gradient designs."""
+    raw = input_data.get("fabric_swatch_base64")
+    if raw is None or raw == "":
+        input_data.pop("fabric_swatch_base64", None)
+        return
+    if not isinstance(raw, str):
+        raise ValidationAppError("fabric_swatch_base64 must be a string")
+    settings = get_settings()
+    # Textile swatches are small tiles — keep well under the sketch upload limit.
+    max_bytes = min(settings.max_upload_bytes, 1_500_000)
+    match = _DATA_URL_RE.match(raw.strip())
+    b64 = match.group(2) if match else raw.strip()
+    if len(b64) > int(max_bytes * 1.4) + 64:
+        raise ValidationAppError("Fabric swatch image is too large")
+    decoded = _decode_data_url_image(raw, field="fabric_swatch_base64")
+    if len(decoded) > max_bytes:
+        raise ValidationAppError("Fabric swatch image is too large")
+    # Fingerprint only — never expose bytes in API responses.
+    input_data["fabric_swatch_fingerprint"] = hashlib.sha256(decoded).hexdigest()
+
+
 def _validate_sketch_image_payload(input_data: dict) -> None:
     """Bound vision payloads before enqueue (no OpenAI call)."""
     if not isinstance(input_data, dict):
         raise ValidationAppError("input_data must be an object")
     raw = input_data.get("image_base64")
     if raw is None or raw == "":
+        _validate_optional_fabric_swatch(input_data)
         return
     if not isinstance(raw, str):
         raise ValidationAppError("image_base64 must be a string")
@@ -340,6 +379,7 @@ def _validate_sketch_image_payload(input_data: dict) -> None:
         raise ValidationAppError("Sketch image payload is empty")
     if len(decoded) > max_bytes:
         raise ValidationAppError("Sketch image is too large")
+    _validate_optional_fabric_swatch(input_data)
 
 
 def _stamp_revision_fields(raw: dict, source_revision: int | None, content_fingerprint: str | None) -> None:
@@ -369,6 +409,8 @@ def _prepare_sketch_polish_input(
     if design_id is not None:
         raw["design_id"] = str(design_id)
     _stamp_revision_fields(raw, source_revision, content_fingerprint)
+    # Stamp textile fingerprint before prompt identity so Dual merge binds swatch identity.
+    _validate_optional_fabric_swatch(raw)
     img_fp = _compute_image_fingerprint(raw)
     if img_fp:
         raw["image_fingerprint"] = img_fp
@@ -688,23 +730,36 @@ def get_job(db: Session, user: User, job_id: uuid.UUID) -> AIJob:
     return job
 
 
-_REDACTED_IMAGE_KEYS = ("image_base64", "imageBase64")
+_REDACTED_IMAGE_KEYS = (
+    "image_base64",
+    "imageBase64",
+    "fabric_swatch_base64",
+    "fabricSwatchBase64",
+)
 
 
 def sanitize_job_input_for_response(input_data: dict | None) -> dict:
-    """Omit large sketch payloads from API responses; keep DB/worker input intact.
+    """Omit large sketch / private fabric swatch payloads from API responses.
 
-    Unity-compatible: other input_data keys (notes, local_path_placeholder, etc.)
-    remain. When a sketch was present, set has_sketch_image=true.
+    Keep DB/worker input intact. Unity-compatible: other input_data keys
+    (notes, local_path_placeholder, etc.) remain. When a sketch was present,
+    set has_sketch_image=true. When a textile swatch was present, set
+    has_fabric_swatch=true (never return private fabric bytes or URLs).
     """
     raw = dict(input_data or {})
     had_image = False
+    had_swatch = False
     for key in _REDACTED_IMAGE_KEYS:
         if key in raw:
-            had_image = True
+            if key.lower().startswith("fabric"):
+                had_swatch = True
+            else:
+                had_image = True
             raw.pop(key, None)
     if had_image:
         raw["has_sketch_image"] = True
+    if had_swatch:
+        raw["has_fabric_swatch"] = True
     return raw
 
 
