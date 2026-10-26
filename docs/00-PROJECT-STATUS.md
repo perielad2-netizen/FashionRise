@@ -3,20 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-26 (**Create Real Design LIVE** — Issue [#83](https://github.com/perielad2-netizen/FashionRise/issues/83). BE PR [#91](https://github.com/perielad2-netizen/FashionRise/pull/91) `b4a0976c` + FE PR [#92](https://github.com/perielad2-netizen/FashionRise/pull/92) `3ef29bc4`. Alembic **`008`**. My Looks → editable tech-pack → authenticated PDF. API smoke **PASS** (5-page DRAFT/UNVERIFIED PDF; Height once; cutting reuses Magic looks). **0 paid AI**. Stop — no monetization.)
+**Last updated:** 2026-10-26 (**Create Real Design V2 LIVE** — AI Technical Design Studio. BE PR [#93](https://github.com/perielad2-netizen/FashionRise/pull/93) `f2433513` + FE PR [#94](https://github.com/perielad2-netizen/FashionRise/pull/94) `e2416ed0`. Alembic **`009`**. Guided 4-stage UI; multi-piece heuristic detect; garment-specific POMs; deterministic flats/cutting schematics (**NOT TO SCALE**); content-driven PDF; spend-gated AI fail-closed (`techpack_ai_enabled=false`, ceiling `$0`). Production smoke **PASS** (heuristic generate cost `0`; paid AI 403; 6-page PDF with schematics). **0 paid AI**. No monetization.)
 
-**Phase:** Protected family beta. **WEB-V4J Front/Back + Dual Magic LIVE**. **My Looks LIVE**. **Create Real Design LIVE**. Production FE @ `3ef29bc4`. Production BE @ `b4a0976c`. Alembic **`008`**.
+**Phase:** Protected family beta. **WEB-V4J Front/Back + Dual Magic LIVE**. **My Looks LIVE**. **Create Real Design V2 LIVE**. Production FE @ `e2416ed0`. Production BE @ `f2433513`. Alembic **`009`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`3ef29bc49c1b53d2732de535cc81cfa96d9b77b5`** — Nginx root `/var/www/fashionrise/releases/3ef29bc4`. Flags: Registration / Magic / Front-Back / Dual Magic **ON**. **My Looks** + **Create Real Design** (`/studio/techpacks/:id`). Permanent Workbox SW (no HTML precache / NavigationRoute). |
-| Backend (FastAPI + PostgreSQL) | **`b4a0976c90c171ec3bd6713e91dbddb9937d81db`** — Techpack drafts/exports + reportlab PDF; My Looks delete retained. `fashionrise-api` on `127.0.0.1:8010`; worker standalone. |
+| Frontend (`web-ui`) | **`e2416ed0b2766257a92019c84c0e1d06f968c549`** — Nginx root `/var/www/fashionrise/releases/e2416ed0`. Flags: Registration / Magic / Front-Back / Dual Magic **ON**. **My Looks** + **Create Real Design V2** guided studio (`/studio/techpacks/:id`). Permanent Workbox SW (no HTML precache / NavigationRoute). |
+| Backend (FastAPI + PostgreSQL) | **`f243351335e49003615acd308b550ea8a1ada94b`** — Multi-piece techpack schema 2.0, heuristic enrich, gated `/ai/*`, rich multi-piece PDF. My Looks delete retained. `fashionrise-api` on `127.0.0.1:8010`; worker standalone. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
-| Database | `fashionrise_beta` — Alembic **`008`** (`techpack_drafts` / `techpack_exports`) |
-| Nginx | Techpacks allowlist (GET/POST list; GET/PATCH item; POST export; GET exports/pdf). Looks DELETE retained. No public techpack/look image URLs. |
-| Deploy backup | `/var/backups/fashionrise/techpack-deploy-20261026T163802Z` → rollback FE `6be1cf2d` / BE `26a374d5` (+ nginx; optional `alembic downgrade 007`) |
+| Database | `fashionrise_beta` — Alembic **`009`** (`techpack_ai_runs`; drafts remain JSONB-compatible with V1 rows) |
+| Nginx | Techpacks allowlist + V2 AI routes (`/ai/status`, `/ai/confirm`, `/ai/generate`, `/ai/runs/{id}`). Legacy `/ai-draft` denied at edge. Looks DELETE retained. No public techpack/look image URLs. |
+| Deploy backup | `/var/backups/fashionrise/techpack-v2-deploy-20261026T181418Z` → rollback FE `3ef29bc4` / BE `b4a0976c` / Alembic `008` (+ nginx from backup) |
+| AI spend | `techpack_ai_enabled=false`, `techpack_ai_spend_ceiling_usd=0` → **fail closed**. Heuristic `$0` always. Caps when enabled: `$0.50`/run, `$2`/user/day, estimate `8¢`/chat. |
 
 **Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
 
@@ -711,6 +712,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-26 | **Create Real Design V2 DEPLOYED** FE `e2416ed0` (PR [#94](https://github.com/perielad2-netizen/FashionRise/pull/94)) + BE `f2433513` (PR [#93](https://github.com/perielad2-netizen/FashionRise/pull/93)); Alembic `009` `techpack_ai_runs`; Nginx AI allowlist; multi-piece PDF + flats/schematics; smoke PASS (heuristic `$0`, paid AI 403); Dual Magic ON; **0 paid AI**; backup `techpack-v2-deploy-20261026T181418Z`. No monetization. |
 | 2026-10-26 | **Create Real Design DEPLOYED** FE `3ef29bc4` (PR [#92](https://github.com/perielad2-netizen/FashionRise/pull/92)) + BE `b4a0976c` (PR [#91](https://github.com/perielad2-netizen/FashionRise/pull/91)); Alembic `008` techpack tables; Nginx techpacks allowlist; API smoke PASS (5-page DRAFT/UNVERIFIED PDF); Dual Magic ON; **0 paid AI**; backup `techpack-deploy-20261026T163802Z`. Stop — no monetization. |
 | 2026-10-26 | **My Looks Delete DEPLOYED** FE `6be1cf2d` (PR [#90](https://github.com/perielad2-netizen/FashionRise/pull/90)) + BE `26a374d5` (PR [#89](https://github.com/perielad2-netizen/FashionRise/pull/89)); Alembic `007` tombstone; Nginx DELETE on looks `{uuid}`; API smoke PASS; Dual Magic ON; **0 paid AI**; backup `my-looks-delete-deploy-20261026T160605Z`. Next: owner browser Delete check; do not start #83 PDF. |
 | 2026-10-26 | **My Looks DEPLOYED** FE `811ffc52` (PR [#88](https://github.com/perielad2-netizen/FashionRise/pull/88)) + BE `ba013fdf` (PR [#87](https://github.com/perielad2-netizen/FashionRise/pull/87)); Alembic `006` `magic_look_meta`; Nginx looks allowlist; API smoke PASS; Dual Magic ON; **0 paid AI**; backup `my-looks-deploy-20261026T151741Z`. |
