@@ -25,8 +25,9 @@ _COVERAGE_TOKENS = (
     "intentionally drawn white or pale fabric",
     "do not invent bare-skin regions",
     "COLOR FIDELITY",
-    "applied garment fill",
+    "colors/gradients/fabrics actually applied",
     "outline strokes are linework",
+    "Do NOT invent extra accent colors",
 )
 
 _STYLE_STILL_REQUIRED = (

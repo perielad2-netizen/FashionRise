@@ -225,7 +225,60 @@ def test_design_enhancement_contract_on_front_and_back():
         assert "color fidelity" in lower
         assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
         if side == "back":
-            assert "same polished professional" in lower or "not a literal" in lower
+            assert "same polished" in lower or "not traced" in lower
+
+
+def test_color_fidelity_forbids_invented_accent_colors():
+    """Gray-only / applied-palette sketches must not invite pink/blue accent invention."""
+    job = _job(
+        studio_side="front",
+        shared_garment_spec={"main_colors": ["#9CA3AF"], "materials": ["solid fill"]},
+    )
+    prompt = sketch_openai._build_image_prompt(
+        {
+            "summary": "Gray dress",
+            "image_prompt": "simple gray sheath dress",
+            "design_identity": {"main_colors": "gray", "silhouette": "sheath"},
+        },
+        "Gray dress",
+        job=job,
+    )
+    lower = prompt.lower()
+    assert "color fidelity" in lower
+    assert "do not invent extra accent colors" in lower
+    assert "pink/blue accents on a gray-only dress" in lower
+    assert "applied main colors only" in lower
+    assert "colors/gradients/fabrics actually applied" in lower
+    # Textile / pattern fidelity protections remain alongside the color lock.
+    assert "fabric/textile patterns" in lower or "textile patterns" in lower
+    assert "non-photorealistic" in lower
+
+
+def test_design_enhancement_normalizes_sketch_glitches_not_literal_mistakes():
+    """Uneven straps/sleeves and accidental asymmetry must be cleaned, not traced."""
+    prompt = sketch_openai._build_image_prompt(
+        {
+            "summary": "Blue swimsuit",
+            "image_prompt": "blue one-piece swimsuit with straps",
+            "design_identity": {
+                "main_colors": "blue",
+                "garment_category": "swimsuit",
+                "asymmetry_notes": None,
+            },
+            "refine_ok": ["uneven strap widths", "crooked edges"],
+        },
+        "Blue swimsuit",
+        job=_job(studio_side="front"),
+    )
+    lower = prompt.lower()
+    assert "design enhancement" in lower
+    assert "uneven strap" in lower
+    assert "normalize sketch glitches" in lower or "normalize" in lower
+    assert "sketch glitches" in lower
+    assert "intentional design asymmetry" in lower
+    assert "balance accidental uneven straps/sleeves" in lower
+    assert "pixel-perfect trace" in lower or "not a pixel-perfect" in lower
+    assert "non-photorealistic" in lower
 
 
 def test_system_prompt_asks_to_elevate_not_trace():
@@ -234,6 +287,8 @@ def test_system_prompt_asks_to_elevate_not_trace():
     assert "elevate" in lower or "enhancement" in lower
     assert "trace" in lower
     assert "imperfections" in lower
+    assert "accent colors" in lower or "decorative panels" in lower
+    assert "uneven strap" in lower or "strap or sleeve" in lower
 
 
 def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, settings):

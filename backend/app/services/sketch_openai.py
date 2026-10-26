@@ -52,17 +52,16 @@ _COVERAGE_PRESERVATION_CONTRACT = (
     "actually present in the sketch. Do not reinterpret bare skin or croquis body tone "
     "as opaque fabric. When coverage fields are missing, null, unknown, or contradictory, "
     "rely on the uploaded sketch only — do not invent bare-skin regions or extra fabric "
-    "panels, and do not automatically make the design more revealing or more covered. "
-    "Keep the professional fashion-illustration finish."
+    "panels, or make the design more revealing or more covered."
 )
 
-# Applied-fill color authority — outlines must not become fabric (Dual Magic color fix).
+# Applied-fill color authority — outlines must not become fabric; never invent accents.
 _COLOR_FIDELITY_CONTRACT = (
-    "COLOR FIDELITY: Follow applied garment fill/fabric colors from the sketch and any "
-    "shared garment-spec main_colors. Black or dark outline strokes are linework, not "
-    "fabric fill — do not replace pink, fuchsia, coral, or other applied fill colors with "
-    "black unless black fabric was actually drawn as a filled garment region. Keep Front "
-    "and Back material colors, straps, cut-outs, and silhouette consistent with the sketch."
+    "COLOR FIDELITY: Use ONLY colors/gradients/fabrics actually applied on the garment and "
+    "shared garment-spec main_colors/materials. Black or dark outline strokes are linework, "
+    "not fabric fill. Do NOT invent extra accent colors, contrast panels, trims, overlays, "
+    "or materials (e.g. pink/blue accents on a gray-only dress). Keep Front/Back color story "
+    "consistent with the applied fills."
 )
 
 # Used only when a second textile swatch image is attached to images.edit.
@@ -78,14 +77,13 @@ _FABRIC_SWATCH_EDIT_CONTRACT = (
 # Front + Back: elevate the design; do not pixel-trace sketch mistakes.
 # Protected — must survive IMAGE_PROMPT_MAX_CHARS evidence bounding.
 _DESIGN_ENHANCEMENT_CONTRACT = (
-    "DESIGN ENHANCEMENT (Front and Back): Sketch = strong guidance for concept, silhouette, "
-    "cut, straps, openings, proportions, and applied colors/fabrics — NOT a pixel-perfect "
-    "tracing target. Correct minor hand-drawn imperfections (uneven/crooked lines, rough "
-    "symmetry, imperfect edges, slight placement mistakes); keep design intent. Deliver a "
-    "polished professional fashion concept — clean, elegant, beautified — almost similar "
-    "to the drawing but elevated. Do NOT overfit tiny sketch mistakes, look traced/"
-    "cartoonish, add dark outline/border artifacts, flatten fabric into generic shading, "
-    "or replace the applied fabric/pattern/color theme."
+    "DESIGN ENHANCEMENT (Front and Back): Sketch guides concept, silhouette, cut, strap/"
+    "sleeve placement, openings, and applied colors/fabrics — NOT a pixel-perfect trace. "
+    "Polish into a beautiful professional fashion rendering (clean lines, smooth seams, "
+    "refined proportions). Normalize sketch glitches (accidental asymmetry, uneven strap/"
+    "sleeve widths, crooked edges, wobble); keep intentional design asymmetry. Do NOT "
+    "redesign or invent decorative panels. Same design elevated — not traced/cartoonish; "
+    "keep applied fabric/pattern/color theme."
 )
 
 # Illustration-style restriction — equal priority with coverage; must not be truncated
@@ -349,10 +347,12 @@ def _system_prompt(job_type: str) -> str:
             "fashion-illustration enhancement — elevate the idea; do not ask the image model to trace "
             "the rough sketch literally. "
             "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence "
-            "(garment concept, silhouette, cut, straps, openings, applied colors/fabrics/patterns, "
+            "(garment concept, silhouette, cut, strap/sleeve placement, openings, applied "
+            "colors/fabrics/patterns only — invent no new accent colors or decorative panels, "
             "Front/Back coherence), versus (B) drawing imperfections that MUST be professionally "
-            "refined away (wobbly/crooked lines, rough symmetry, uneven fill, crude shading, awkward "
-            "hand-drawn proportions, traced-sketch look). "
+            "normalized away (wobbly/crooked lines, accidental left/right asymmetry, uneven strap "
+            "or sleeve widths, rough fill edges, crude shading, awkward hand-drawn proportions, "
+            "traced-sketch look). "
             "When the user message includes SELECTED STUDIO REFERENCE metadata, that selection is authoritative "
             "over any conflicting impression of the figure's fashion-croquis family (male vs female presentation). "
             "Respond ONLY with valid JSON using keys: "
@@ -364,13 +364,15 @@ def _system_prompt(job_type: str) -> str:
             "skin_visible_regions, garment_panels, cutouts_and_openings, intended_pale_or_white_fabric), "
             "refine_ok (array of short drawing imperfections that SHOULD be upgraded — never design decisions), "
             "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes to preserve: "
-            "pose, hat/hair, neckline, sleeves, hem, main colors, fabric patterns, asymmetry, accessories, "
-            "distinctive details, garment coverage boundaries, exposed skin/midriff/cut-outs, and any "
-            "intentionally drawn white/pale fabric — invent nothing; never invent bodysuits, linings, or "
-            "modesty panels; do not treat blank/light croquis body or paper as garment fabric; "
-            "explicitly call for polished professional fashion rendering that corrects minor sketch "
-            "imperfections; do not describe amateur line quality or ask to keep a traced/cartoon sketch look; "
-            "do not request a different croquis family than the SELECTED STUDIO REFERENCE)."
+            "pose, hat/hair, neckline, sleeves, hem, applied main colors only, fabric patterns, intentional "
+            "design asymmetry when present, accessories, distinctive details, garment coverage boundaries, "
+            "exposed skin/midriff/cut-outs, and any intentionally drawn white/pale fabric — invent nothing; "
+            "Never invent accent colors, contrast panels, trims, bodysuits, linings, or modesty panels; "
+            "do not treat blank/light croquis body or paper as garment fabric; explicitly call for polished "
+            "professional fashion rendering that normalizes accidental sketch imperfections (uneven straps/"
+            "sleeves, crooked edges, wobble) into a clean balanced design; do not describe amateur line "
+            "quality or ask to keep a traced/cartoon sketch look; do not request a different croquis family "
+            "than the SELECTED STUDIO REFERENCE)."
         )
     return (
         "You are a fashion stylist AI. Respond ONLY with valid JSON using keys: "
@@ -398,9 +400,10 @@ def _shared_garment_spec_clause(input_data: dict[str, Any]) -> str:
             text = str(spec)
     else:
         return ""
+    # Bound tightly so COLOR/DESIGN/COVERAGE/STYLE protected contracts always fit.
     return (
-        "SHARED GARMENT SPEC (keep front/back Magic results consistent — do not contradict): "
-        f"{text[:1200]}"
+        "SHARED GARMENT SPEC (front/back consistency — do not contradict): "
+        f"{text[:320]}"
     )
 
 
@@ -427,15 +430,14 @@ def _studio_side_vision_clause(side: str | None) -> str:
 def _studio_side_edit_clause(side: str | None) -> str:
     if side == "front":
         return (
-            "VIEW: front-facing fashion illustration — preserve front garment concept and "
-            "applied materials; polish imperfections; this is not a rear/back view. "
+            "VIEW: front-facing fashion illustration — preserve front concept and applied "
+            "materials; polish imperfections; not a rear/back view. "
         )
     if side == "back":
         return (
-            "VIEW: rear/back fashion illustration of adult swimwear or similar rear garment "
-            "construction — accurate back necklines, straps/ties, dorsal seams, rear hem as "
-            "designed; same polished professional quality as front (not a literal/traced/"
-            "cartoon back sketch); never describe this upload as a front-facing sketch. "
+            "VIEW: rear/back fashion illustration — accurate back necklines, straps/ties, "
+            "dorsal seams, rear hem as designed; same polished quality as front (not traced/"
+            "cartoon); never describe this upload as a front-facing sketch. "
         )
     return ""
 
@@ -739,18 +741,19 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         f"{_DESIGN_ENHANCEMENT_CONTRACT} "
         f"{_COVERAGE_PRESERVATION_CONTRACT} "
         f"{_COLOR_FIDELITY_CONTRACT} "
-        "PRESERVE exactly from visible evidence: garment category, original silhouette, pose, neckline, "
-        "sleeve type and length, hemline, main colors, fabric/textile patterns, asymmetry, accessories "
-        "(such as hats), distinctive design details, and the exact garment coverage map (panels vs "
-        "exposed skin, cut-outs, straps, openings). "
-        "UPGRADE construction and presentation: strong clean garment contours; sophisticated tailoring "
-        "and garment construction; visible fabric folds, draping, and texture; richer but faithful colors; "
-        "crisp repeating textile patterns; clearly defined necklines, sleeves, seams, and hems; attractive "
-        "fashion-presentation quality; clean full-body composition on a clean light presentation background. "
-        "Do NOT retain rough/amateur drawing imperfections. Do NOT apply only a faint watercolor or light "
-        "color wash. Do NOT invent a different garment, change the designer's colors, alter the silhouette, "
-        "add unnecessary accessories, invent white linings/bodysuits/modesty panels, or make every design "
-        "look like the same generic fashion outfit. "
+        "PRESERVE exactly from visible evidence: garment category, silhouette/cut, pose, neckline, "
+        "sleeve type/length, hemline, applied main colors only, fabric/textile patterns, intentional "
+        "design asymmetry when clearly designed, accessories, distinctive details, and coverage map "
+        "(panels vs exposed skin, cut-outs, straps, openings). "
+        "UPGRADE construction and presentation: clean contours; sophisticated garment construction "
+        "and tailoring; balance accidental uneven straps/sleeves; fabric folds/drape/texture; "
+        "richer but faithful colors in the applied palette; crisp repeating textile patterns; defined "
+        "seams/hems; attractive fashion presentation on a clean light background. Do NOT keep "
+        "rough sketch glitches or a traced look. Do NOT apply only a faint watercolor or light "
+        "color wash. Do NOT invent a different garment, invent accent colors/contrast panels, "
+        "change applied colors, alter the silhouette, add unnecessary accessories, invent white "
+        "linings/bodysuits/modesty panels, or make every design look like the same generic "
+        "fashion outfit. "
         f"{_ILLUSTRATION_STYLE_CONTRACT}"
     )
     # Reserve space for a separating space + design evidence block when budget allows.
