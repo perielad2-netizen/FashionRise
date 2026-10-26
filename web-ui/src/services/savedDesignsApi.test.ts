@@ -189,9 +189,42 @@ describe('deleteSavedDesign', () => {
     expect(apiRequest).toHaveBeenCalledWith('/designs/saved/d1', { method: 'DELETE' })
   })
 
-  it('treats 404 as idempotent success', async () => {
+  it('404 with record still present keeps the card (raw id, even if unparseable)', async () => {
     apiRequest.mockRejectedValueOnce(new ApiError('Design not found', 404, null))
+    const damaged: DesignRead = {
+      ...serverRow('d1', 'req-1'),
+      design_data: { schema: 'fashionrise.saved_design.v9', snapshot: null },
+      metadata: { designKind: 'saved_design' },
+    }
+    listMyDesigns.mockResolvedValueOnce([damaged])
+    const result = await deleteSavedDesign(OWNER, 'd1')
+    expect(result).toMatchObject({
+      ok: false,
+      canRetry: true,
+      outcomeUncertain: false,
+      error: expect.stringMatching(/still in your library/i),
+    })
+    expect(listMyDesigns).toHaveBeenCalledTimes(1)
+    expect(getDesign).not.toHaveBeenCalled()
+  })
+
+  it('404 with confirmed absence is idempotent success', async () => {
+    apiRequest.mockRejectedValueOnce(new ApiError('Design not found', 404, null))
+    listMyDesigns.mockResolvedValueOnce([serverRow('other', 'req-other')])
     await expect(deleteSavedDesign(OWNER, 'd1')).resolves.toEqual({ ok: true, alreadyGone: true })
+  })
+
+  it('404 with unavailable verification does not claim success', async () => {
+    apiRequest.mockRejectedValueOnce(new ApiError('Design not found', 404, null))
+    listMyDesigns.mockRejectedValueOnce(new ApiError('Unable to reach FashionRise.', 0, null))
+    getDesign.mockRejectedValueOnce(new ApiError('Unable to reach FashionRise.', 0, null))
+    const result = await deleteSavedDesign(OWNER, 'd1')
+    expect(result).toMatchObject({
+      ok: false,
+      outcomeUncertain: true,
+      canRetry: true,
+      error: expect.stringMatching(/could not confirm/i),
+    })
   })
 
   it('offline: no request', async () => {

@@ -3,17 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-26 (Issue **#17 Delete saved design DEPLOYED** — FE `4095e0ac` + BE `108db149`; saved-only `DELETE /designs/saved/{id}` + narrow Nginx DELETE allowlist; My Designs Delete confirm UX. Alembic **`005`**. Dual Magic ON. **0 paid AI**.)
+**Last updated:** 2026-10-26 (Issue **#17 post-release hardening prepared** on PR [#86](https://github.com/perielad2-netizen/FashionRise/pull/86) — DELETE 404 no longer auto-success; owner-scoped raw-id reconcile. **Production still FE `4095e0ac` / BE `108db149`.** Owner browser acceptance of deployed Delete: **PASS** (4→3, draft intact). **STOP before hardening FE deploy.** Alembic **`005`**. Dual Magic ON. **0 paid AI**.)
 
-**Phase:** Protected family beta. **WEB-V4J Front/Back + Dual Magic LIVE**. Production FE @ `4095e0ac`. Production BE @ `108db149` (worker tree still magic-polish lineage). Alembic **`005`**.
+**Phase:** Protected family beta. **WEB-V4J Front/Back + Dual Magic LIVE**. Production FE @ `4095e0ac`. Production BE @ `108db149`. Alembic **`005`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`4095e0ac`** — Nginx root `/var/www/fashionrise/releases/4095e0ac`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`, **`VITE_STUDIO_FRONT_BACK_ENABLED=true`**, **`VITE_STUDIO_DUAL_MAGIC_ENABLED=true`**. My Designs Delete + permanent confirm; sketch-export UI removed earlier in lineage. Permanent Workbox SW (no HTML precache / NavigationRoute). |
-| Backend (FastAPI + PostgreSQL) | **`108db14906912b9386793cb42acf695810299608`** — Issue #17 saved-only `DELETE /api/v1/designs/saved/{id}` (private v1/v2, owner-only; rejects working drafts/unknown). Generic `DELETE /designs/{id}` preserved. Magic polish contracts retained from `18344e6a`. `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker standalone). |
-| AI worker | Standalone `fashionrise-ai-worker` — **unchanged** this deploy (still prior magic-polish tree; no worker code change required for #17) · `OPENAI_MODEL=gpt-6-luna` |
+| Frontend (`web-ui`) | **`4095e0ac`** — Nginx root `/var/www/fashionrise/releases/4095e0ac`. `VITE_API_BASE_URL=/api/v1`, `VITE_REGISTRATION_UI_ENABLED=true`, `VITE_MAGIC_UI_ENABLED=true`, **`VITE_STUDIO_FRONT_BACK_ENABLED=true`**, **`VITE_STUDIO_DUAL_MAGIC_ENABLED=true`**. My Designs Delete + permanent confirm. **Hardening patch (404 reconcile) prepared on PR #86 tip — not deployed.** Permanent Workbox SW (no HTML precache / NavigationRoute). |
+| Backend (FastAPI + PostgreSQL) | **`108db14906912b9386793cb42acf695810299608`** — Issue #17 saved-only `DELETE /api/v1/designs/saved/{id}` (private v1/v2, owner-only; rejects working drafts/unknown). Generic `DELETE /designs/{id}` preserved. No BE change in hardening patch. `fashionrise-api` on `127.0.0.1:8010`; `AI_WORKER_ENABLED=false` (worker standalone). |
+| AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
 | Database | `fashionrise_beta` — Alembic **`005`** (unchanged; no migrate) |
 | Nginx | FashionRise-only: exact `DELETE /api/v1/designs/saved/{uuid}` allowed; general designs location `limit_except GET POST PUT` (generic edge DELETE denied). Fabrics/AI/register allowlists unchanged. |
 | Deploy backup | `/var/backups/fashionrise/issue17-delete-saved-20261026T134249Z` (rollback → FE `c052e075` / BE `18344e6a` + prior nginx) |
@@ -315,9 +315,9 @@ The backend's singleton logic only matches the working-draft marker or a top-lev
 
 ## Suggested next steps
 
-1. **Exact next action:** Owner phase audit / roadmap priorities (after #17). Merge Issue #17 PRs [#85](https://github.com/perielad2-netizen/FashionRise/pull/85)/[#86](https://github.com/perielad2-netizen/FashionRise/pull/86) when ready (production already on tips).
-2. Create Real Design editable PDF — tracked Issue [#83](https://github.com/perielad2-netizen/FashionRise/issues/83); do not bundle.
-3. Magic pose fidelity PR #41 — no paid retest unless separately authorized.
+1. **Exact next action:** Review + authorize **FE-only** deploy of Issue #17 hardening from PR [#86](https://github.com/perielad2-netizen/FashionRise/pull/86) tip (after this patch lands). Do **not** redeploy BE/`108db149`. Do **not** bulk-merge historical PRs into stale `main`.
+2. Repository reconciliation: keep production lineage PRs ([#85](https://github.com/perielad2-netizen/FashionRise/pull/85)/[#86](https://github.com/perielad2-netizen/FashionRise/pull/86)) as cherry-pick / lineage-forward sources; resolve #85 conflict with `main` separately if/when recording history — never force-merge unrelated old stacks.
+3. Create Real Design editable PDF — tracked Issue [#83](https://github.com/perielad2-netizen/FashionRise/issues/83); do not bundle.
 4. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46).
 5. **Operator residual:** expired Access session test (still PENDING).
 
@@ -640,17 +640,34 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 | BE tests | `test_delete_saved_design.py` + nginx allowlist script **PASS** (owner V1/V2, cross-user, draft protect, nonexistent, unknown/damaged, siblings) |
 | FE tests | `savedDesignsApi` + `StudioPage.designs` delete suite **PASS** |
 | Prod API smoke | **PASS** — delete V2, keep V1, draft 422, cross-user 404, idempotent 404 |
-| Browser smoke | **PASS** — save two → cancel → delete one → reload; remaining + working draft preserved (prod FE build via local proxy + API tunnel; Cloudflare Access not required for this path) |
+| Browser smoke | **PASS** — save two → cancel → delete one → reload; remaining + working draft preserved |
+| Owner production acceptance | **PASS** — 4 saved → 3 after delete; Studio working draft intact |
 | Deployed FE | **`4095e0ac`** · PR [#86](https://github.com/perielad2-netizen/FashionRise/pull/86) |
 | Deployed BE | **`108db149`** · PR [#85](https://github.com/perielad2-netizen/FashionRise/pull/85) |
 | Flags / Alembic | Front/Back **ON**, Dual Magic **ON** · Alembic **`005`** |
 | Backup / rollback | `/var/backups/fashionrise/issue17-delete-saved-20261026T134249Z` → FE `c052e075` / BE `18344e6a` |
 | Paid AI | **0** |
 
+## Issue #17 — post-release delete 404 hardening (2026-10-26) PREPARED — not deployed
+
+| Check | Result |
+|---|---|
+| Production (unchanged) | FE **`4095e0ac`** · BE **`108db149`** · Alembic **`005`** · Dual Magic **ON** · Nginx saved-DELETE allowlist live |
+| Owner acceptance of live Delete | **PASS** (4→3, draft intact) — feature not reimplemented |
+| Exact fix | `deleteSavedDesign`: DELETE HTTP **404** no longer auto-success; reconcile via fresh `listMyDesigns` / `getDesign` using **raw** `row.id` + `user_id` (not `parseSavedDesign` success). Success only when deleted (204) or confirmed **absent**; if still present or verification unavailable → keep card + accurate error |
+| Scope | FE-only (`savedDesignsApi.ts` + tests + status). No Magic / drafts / Front/Back / fabric / Nginx / BE |
+| Tests | Vitest focused cases: 404+present (incl. unparseable raw id), 404+absent, 404+unavailable verification; delete suite still green (**47** in designs/api files) |
+| Gates | oxlint warnings-only (pre-existing) · `tsc -b` PASS · production build + `check:sw` ok |
+| PR status | [#86](https://github.com/perielad2-netizen/FashionRise/pull/86) OPEN / MERGEABLE vs `main` (lineage tip). [#85](https://github.com/perielad2-netizen/FashionRise/pull/85) OPEN / **CONFLICTING** vs stale `main` (BE already live at `108db149`) |
+| Blockers | **STOP for review** — authorize FE-only hardening deploy before changing prod FE root |
+| Next action | After approval: build PR #86 tip with current Vite flags → new `/var/www/fashionrise/releases/<sha>` → point FashionRise nginx `root` only → reload nginx → smoke one delete 404-reconcile path. Leave BE/Nginx allowlist/worker untouched |
+| Paid AI | **0** |
+
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-26 | **Issue #17 delete 404 hardening prepared** on PR [#86](https://github.com/perielad2-netizen/FashionRise/pull/86) (FE-only): no auto-success on DELETE 404; raw owner-id reconcile; Vitest + tsc + build PASS; production still `4095e0ac`/`108db149`; **STOP before deploy**. |
 | 2026-10-26 | **Issue #17 Delete saved design DEPLOYED** FE `4095e0ac` + BE `108db149` (PRs [#86](https://github.com/perielad2-netizen/FashionRise/pull/86)/[#85](https://github.com/perielad2-netizen/FashionRise/pull/85)); saved-only DELETE + Nginx narrow allowlist; browser smoke PASS; Dual Magic ON; Alembic `005`; **0 paid AI**; backup `issue17-delete-saved-20261026T134249Z`. |
 | 2026-10-26 | **Magic polish DEPLOYED** FE `ec0ad13a` + BE/worker `18344e6a` (PRs [#80](https://github.com/perielad2-netizen/FashionRise/pull/80)/[#81](https://github.com/perielad2-netizen/FashionRise/pull/81)); shared garment-spec color-authority serialization fix; one paid Dual gray/uneven-strap visual **PASS**; Dual Magic ON; Alembic `005`; backup `v4j-magic-polish-deploy-20261026T123621Z`. |
 | 2026-10-26 | **Undo→autosave false conflict FIXED + FE deployed** @ `c99c2c86` (PR [#79](https://github.com/perielad2-netizen/FashionRise/pull/79)); BE/worker stay `c103ee8d`; Vitest 29/29 + Playwright Undo→Save Front/Back PASS + multi-tab PASS; **0 paid AI**. |

@@ -191,29 +191,63 @@ export type DeleteSavedDesignResult =
 const DELETE_OFFLINE_MESSAGE =
   'You are offline. The design was not deleted. Reconnect and try again.'
 
-async function savedDesignStillPresent(ownerId: string, designId: string): Promise<boolean | null> {
+const DELETE_STILL_PRESENT_MESSAGE =
+  'FashionRise could not delete this design, and it is still in your library. Try again.'
+
+const DELETE_UNCONFIRMED_MESSAGE =
+  'Could not confirm whether the design was deleted. Refresh My Designs before trying again.'
+
+type OwnerDesignPresence = 'present' | 'absent' | 'unknown'
+
+/**
+ * Fresh owner-scoped presence check by raw design id (not parse success).
+ * A damaged/unsupported row that still belongs to the owner counts as present.
+ */
+async function ownerDesignPresence(ownerId: string, designId: string): Promise<OwnerDesignPresence> {
   try {
     const mine = await listMyDesigns()
-    return mine.some((row) => {
-      const parsed = parseSavedDesign(row, ownerId)
-      return parsed?.id === designId
-    })
+    if (mine.some((row) => row.id === designId && row.user_id === ownerId)) {
+      return 'present'
+    }
+    return 'absent'
   } catch {
     try {
-      await getDesign(designId)
-      return true
+      const row = await getDesign(designId)
+      return row.id === designId && row.user_id === ownerId ? 'present' : 'absent'
     } catch (err) {
-      if (err instanceof ApiError && err.status === 404) return false
-      return null
+      if (err instanceof ApiError && err.status === 404) return 'absent'
+      return 'unknown'
     }
+  }
+}
+
+function deleteResultFromPresence(
+  presence: OwnerDesignPresence,
+  opts: { alreadyGone: boolean; presentError: string },
+): DeleteSavedDesignResult {
+  if (presence === 'absent') {
+    return { ok: true, alreadyGone: opts.alreadyGone }
+  }
+  if (presence === 'present') {
+    return {
+      ok: false,
+      error: opts.presentError,
+      outcomeUncertain: false,
+      canRetry: true,
+    }
+  }
+  return {
+    ok: false,
+    error: DELETE_UNCONFIRMED_MESSAGE,
+    outcomeUncertain: true,
+    canRetry: true,
   }
 }
 
 /**
  * Permanently delete one owner-private saved design via the saved-only endpoint.
- * Offline requests are never sent. Ambiguous network/5xx responses are reconciled
- * against the owner's list (or GET) before success is claimed. A verified 404 is
- * treated as idempotent success (already deleted on another device).
+ * Offline requests are never sent. HTTP 404 and ambiguous network/5xx responses are
+ * reconciled against a fresh owner-scoped read (raw ids) before success is claimed.
  */
 export async function deleteSavedDesign(
   ownerId: string,
@@ -228,33 +262,23 @@ export async function deleteSavedDesign(
     return { ok: true, alreadyGone: false }
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      return { ok: true, alreadyGone: true }
+      const presence = await ownerDesignPresence(ownerId, designId)
+      return deleteResultFromPresence(presence, {
+        alreadyGone: true,
+        presentError: DELETE_STILL_PRESENT_MESSAGE,
+      })
     }
 
     const uncertain = outcomeUncertain(err)
     if (uncertain) {
-      const present = await savedDesignStillPresent(ownerId, designId)
-      if (present === false) {
-        return { ok: true, alreadyGone: true }
-      }
-      if (present === true) {
-        return {
-          ok: false,
-          error:
-            err instanceof ApiError && err.status !== 0
-              ? err.message
-              : 'Could not reach FashionRise. The design was not deleted. Try again.',
-          outcomeUncertain: false,
-          canRetry: true,
-        }
-      }
-      return {
-        ok: false,
-        error:
-          'Could not confirm whether the design was deleted. Refresh My Designs before trying again.',
-        outcomeUncertain: true,
-        canRetry: true,
-      }
+      const presence = await ownerDesignPresence(ownerId, designId)
+      return deleteResultFromPresence(presence, {
+        alreadyGone: true,
+        presentError:
+          err instanceof ApiError && err.status !== 0
+            ? err.message
+            : 'Could not reach FashionRise. The design was not deleted. Try again.',
+      })
     }
 
     return {
