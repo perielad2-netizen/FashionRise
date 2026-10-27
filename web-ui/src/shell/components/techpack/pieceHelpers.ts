@@ -345,6 +345,8 @@ export function retargetFinishedMeasurements(
   return {
     ...piece,
     category: nextCategory,
+    category_user_confirmed: true,
+    detection_source: 'designer',
     finished_measurements: next,
   }
 }

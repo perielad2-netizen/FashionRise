@@ -195,3 +195,34 @@
 .primaryBtn:disabled {
   opacity: 0.5;
 }
+
+.provenance {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--fr-muted);
+}
+
+.conflictBox {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+  font-size: 12px;
+  line-height: 1.4;
+  color: #fde68a;
+}
+
+.visibleDetails {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--fr-muted);
+}
+
+.visibleDetails strong {
+  color: var(--fr-text);
+  font-weight: 600;
+}

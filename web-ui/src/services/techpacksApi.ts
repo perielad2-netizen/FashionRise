@@ -59,6 +59,8 @@ export type TechpackPiece = {
       suggestion?: string
       composition?: string
       source?: string
+      provenance?: string
+      composition_note?: string
     }
     lining?: { name?: string; source?: string }
     interfacing?: { name?: string; source?: string }
@@ -68,12 +70,19 @@ export type TechpackPiece = {
     suggestion?: string
     notes?: string
     source?: string
+    provenance?: string
   }
   fit?: {
     silhouette?: string
     suggestion?: string
     ease_note?: string
+    silhouette_provenance?: string
   }
+  visible_details?: Record<string, unknown>
+  color_hint_provenance?: string
+  category_provenance?: string
+  category_user_confirmed?: boolean
+  ai_conflicts?: Array<Record<string, unknown>>
   finished_measurements?: Record<string, MeasuredValue>
   bom?: unknown[]
   pattern_pieces?: unknown[]

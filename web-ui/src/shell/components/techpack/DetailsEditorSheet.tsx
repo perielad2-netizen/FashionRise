@@ -62,6 +62,15 @@ function ChipRow({
   )
 }
 
+function provenanceLabel(raw: unknown): string | null {
+  const v = typeof raw === 'string' ? raw : ''
+  if (v === 'visually_supported') return 'Visually supported'
+  if (v === 'ai_inferred') return 'AI proposed'
+  if (v === 'unknown') return 'Unknown'
+  if (v === 'designer') return 'Confirmed by you'
+  return null
+}
+
 export function DetailsEditorSheet({
   open,
   draftKey,
@@ -289,6 +298,16 @@ export function DetailsEditorSheet({
 
               {activePiece ? (
                 <>
+                  {Array.isArray(activePiece.ai_conflicts) && activePiece.ai_conflicts.length > 0 ? (
+                    <div className={styles.conflictBox} role="status">
+                      AI suggestion differs from your confirmed values — kept your data.
+                      {(activePiece.ai_conflicts as Array<Record<string, unknown>>).map((c, i) => (
+                        <div key={i}>
+                          {String(c.message || `${c.field}: you=${c.user_value}, AI=${c.ai_value}`)}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className={styles.fieldBlock}>
                     <label htmlFor="de-piece-label">Piece label</label>
                     <input
@@ -317,7 +336,66 @@ export function DetailsEditorSheet({
                         </option>
                       ))}
                     </select>
+                    {provenanceLabel(
+                      activePiece.category_user_confirmed
+                        ? 'designer'
+                        : activePiece.category_provenance ||
+                            (String(activePiece.detection_source || '').startsWith('heuristic')
+                              ? 'ai_inferred'
+                              : activePiece.detection_source === 'look_identity'
+                                ? 'visually_supported'
+                                : null),
+                    ) ? (
+                      <p className={styles.provenance}>
+                        {provenanceLabel(
+                          activePiece.category_user_confirmed
+                            ? 'designer'
+                            : activePiece.category_provenance ||
+                                (String(activePiece.detection_source || '').startsWith('heuristic')
+                                  ? 'ai_inferred'
+                                  : activePiece.detection_source === 'look_identity'
+                                    ? 'visually_supported'
+                                    : null),
+                        )}
+                      </p>
+                    ) : null}
                   </div>
+                  {(() => {
+                    const vd =
+                      activePiece.visible_details && typeof activePiece.visible_details === 'object'
+                        ? (activePiece.visible_details as Record<string, unknown>)
+                        : null
+                    if (!vd) return null
+                    const rows = [
+                      ['neckline', 'Neckline'],
+                      ['sleeves', 'Sleeves'],
+                      ['panels_seams', 'Construction'],
+                    ] as const
+                    const shown = rows.filter(([k]) => typeof vd[k] === 'string' && String(vd[k]).trim())
+                    if (!shown.length && !activePiece.color_hint) return null
+                    return (
+                      <div className={styles.visibleDetails}>
+                        {activePiece.color_hint ? (
+                          <div>
+                            <strong>Color</strong> · {String(activePiece.color_hint)}
+                            {provenanceLabel(activePiece.color_hint_provenance) ? (
+                              <span> · {provenanceLabel(activePiece.color_hint_provenance)}</span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {shown.map(([key, label]) => (
+                          <div key={key}>
+                            <strong>{label}</strong> · {String(vd[key])}
+                            {provenanceLabel(vd[`${key}_provenance`]) ? (
+                              <span> · {provenanceLabel(vd[`${key}_provenance`])}</span>
+                            ) : (
+                              <span> · Visually supported</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
                   <div className={styles.fieldBlock}>
                     <label htmlFor="de-shell">Material / shell</label>
                     <input
@@ -332,11 +410,24 @@ export function DetailsEditorSheet({
                               ...(p.materials?.shell ?? {}),
                               name: e.target.value,
                               source: 'designer',
+                              provenance: 'designer',
                             },
                           },
                         }))
                       }
                     />
+                    {provenanceLabel(activePiece.materials?.shell?.provenance) ||
+                    activePiece.materials?.shell?.source === 'ai' ? (
+                      <p className={styles.provenance}>
+                        {provenanceLabel(activePiece.materials?.shell?.provenance) ||
+                          (activePiece.materials?.shell?.source === 'designer'
+                            ? 'Confirmed by you'
+                            : 'AI proposed')}
+                        {activePiece.materials?.shell?.composition === 'Unknown'
+                          ? ' · composition unknown'
+                          : ''}
+                      </p>
+                    ) : null}
                     <ChipRow
                       options={SHELL_SUGGESTIONS}
                       value={activePiece.materials?.shell?.name ?? ''}
@@ -349,6 +440,7 @@ export function DetailsEditorSheet({
                               ...(p.materials?.shell ?? {}),
                               name: next,
                               source: 'designer',
+                              provenance: 'designer',
                             },
                           },
                         }))
@@ -363,17 +455,36 @@ export function DetailsEditorSheet({
                       onChange={(e) =>
                         onUpdatePiece(activePiece.id, (p) => ({
                           ...p,
-                          fit: { ...(p.fit ?? {}), silhouette: e.target.value },
+                          fit: {
+                            ...(p.fit ?? {}),
+                            silhouette: e.target.value,
+                            silhouette_provenance: 'designer',
+                          },
                         }))
                       }
                     />
+                    {provenanceLabel(
+                      (activePiece.fit as { silhouette_provenance?: string } | undefined)
+                        ?.silhouette_provenance,
+                    ) ? (
+                      <p className={styles.provenance}>
+                        {provenanceLabel(
+                          (activePiece.fit as { silhouette_provenance?: string } | undefined)
+                            ?.silhouette_provenance,
+                        )}
+                      </p>
+                    ) : null}
                     <ChipRow
                       options={SILHOUETTE_SUGGESTIONS}
                       value={activePiece.fit?.silhouette ?? ''}
                       onPick={(next) =>
                         onUpdatePiece(activePiece.id, (p) => ({
                           ...p,
-                          fit: { ...(p.fit ?? {}), silhouette: next },
+                          fit: {
+                            ...(p.fit ?? {}),
+                            silhouette: next,
+                            silhouette_provenance: 'designer',
+                          },
                         }))
                       }
                     />
@@ -390,10 +501,20 @@ export function DetailsEditorSheet({
                             ...(p.closures ?? {}),
                             type: e.target.value,
                             source: 'designer',
+                            provenance: 'designer',
                           },
                         }))
                       }
                     />
+                    {provenanceLabel(
+                      (activePiece.closures as { provenance?: string } | undefined)?.provenance,
+                    ) || activePiece.closures?.source === 'ai' ? (
+                      <p className={styles.provenance}>
+                        {provenanceLabel(
+                          (activePiece.closures as { provenance?: string } | undefined)?.provenance,
+                        ) || 'AI proposed'}
+                      </p>
+                    ) : null}
                     <ChipRow
                       options={CLOSURE_SUGGESTIONS}
                       value={activePiece.closures?.type ?? ''}
@@ -404,6 +525,7 @@ export function DetailsEditorSheet({
                             ...(p.closures ?? {}),
                             type: next,
                             source: 'designer',
+                            provenance: 'designer',
                           },
                         }))
                       }
