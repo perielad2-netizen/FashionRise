@@ -278,21 +278,53 @@ def _propose_finished_measurements(piece: dict[str, Any], body: dict[str, Any], 
             "note": "First-pass proposal — review before manufacturing",
         }
 
+    # Never invent garment dimensions from thin air. Only propose when designer body
+    # measurements exist; otherwise leave empty / explicitly unknown.
     if category in ("shirt", "top", "jacket", "dress", "jumpsuit"):
-        set_calc("chest_bust", bust + ease if bust is not None else None, [f"body bust + {ease}cm ease ({fit})"])
-        set_calc("shoulder_width", (bust * 0.23) if bust is not None else None, ["≈23% of bust — estimate, not image-scaled"])
-        set_calc("garment_length", 70.0 if category != "dress" else 110.0, ["Default length assumption — confirm on body"])
-        set_calc("sleeve_length", 62.0, ["Standard long-sleeve assumption"])
+        set_calc(
+            "chest_bust",
+            bust + ease if bust is not None else None,
+            [f"body bust + {ease}cm ease ({fit})"] if bust is not None else ["Needs body bust or designer input"],
+        )
+        set_calc(
+            "shoulder_width",
+            (bust * 0.23) if bust is not None else None,
+            ["≈23% of bust — estimate, not image-scaled"]
+            if bust is not None
+            else ["Needs body bust — not fabricated from image"],
+        )
+        set_calc(
+            "garment_length",
+            None,
+            ["Garment length not measured from image — enter when known"],
+        )
+        set_calc(
+            "sleeve_length",
+            None,
+            ["Sleeve length not fabricated — enter when known or confirm from visible style"],
+        )
     if category in ("trousers", "shorts", "skirt", "dress", "jumpsuit"):
-        set_calc("waist", waist + ease if waist is not None else None, [f"body waist + {ease}cm ease ({fit})"])
-        set_calc("hip", hip + ease if hip is not None else None, [f"body hip + {ease}cm ease ({fit})"])
+        set_calc(
+            "waist",
+            waist + ease if waist is not None else None,
+            [f"body waist + {ease}cm ease ({fit})"] if waist is not None else ["Needs body waist or designer input"],
+        )
+        set_calc(
+            "hip",
+            hip + ease if hip is not None else None,
+            [f"body hip + {ease}cm ease ({fit})"] if hip is not None else ["Needs body hip or designer input"],
+        )
     if category in ("trousers", "shorts", "jumpsuit"):
-        set_calc("inseam", inseam if inseam is not None else 78.0, ["Body inseam if provided, else 78cm default"])
-        set_calc("front_rise", 26.0, ["Regular rise assumption"])
-        set_calc("back_rise", 34.0, ["Regular rise assumption"])
-        set_calc("leg_opening", 38.0 if fit != "wide-leg" else 48.0, [f"Opening for {fit} fit"])
+        set_calc(
+            "inseam",
+            inseam if inseam is not None else None,
+            ["From body inseam"] if inseam is not None else ["Inseam not fabricated — enter when known"],
+        )
+        set_calc("front_rise", None, ["Front rise unknown — enter when known"])
+        set_calc("back_rise", None, ["Back rise unknown — enter when known"])
+        set_calc("leg_opening", None, ["Leg opening unknown — enter when known"])
     if category == "skirt":
-        set_calc("skirt_length", 60.0, ["Midi-ish default — confirm"])
+        set_calc("skirt_length", None, ["Skirt length unknown — enter when known"])
     return finished
 
 
@@ -432,27 +464,13 @@ def _persist_professional_result(
                     "fold": "none",
                     "seam_allowance_cm": 1.0,
                     "source": "ai",
-                    "notes": str(x.get("notes") or ""),
+                    "notes": str(x.get("notes") or "")
+                    + " — illustrative inventory, not a verified cutting pattern",
+                    "provenance": "ai_inferred",
                 }
                 for i, x in enumerate(analysis["pattern_pieces_suggested"])
                 if isinstance(x, dict)
             ]
-        # Update silhouette / materials hints from analysis when empty.
-        fit = piece.get("fit") if isinstance(piece.get("fit"), dict) else {}
-        if not fit.get("silhouette") and analysis.get("silhouette"):
-            fit = {**fit, "silhouette": str(analysis["silhouette"])[:80], "suggestion": str(analysis.get("fit") or "")}
-            piece["fit"] = fit
-        mats = piece.get("materials") if isinstance(piece.get("materials"), dict) else {}
-        shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
-        if not shell.get("name") and analysis.get("fabric_pattern"):
-            shell = {
-                **shell,
-                "name": str(analysis.get("fabric_pattern"))[:120],
-                "composition": shell.get("composition") or "Unknown",
-                "source": "ai",
-            }
-            mats["shell"] = shell
-            piece["materials"] = mats
 
         illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
         art_meta: dict[str, Any] = {}
@@ -505,14 +523,18 @@ def _persist_professional_result(
                 "analysis": {
                     k: analysis.get(k)
                     for k in (
+                        "schema_version",
+                        "category",
                         "silhouette",
                         "length",
                         "neckline",
                         "sleeves",
                         "fit",
+                        "closure_visible",
                         "fabric_pattern",
                         "stripe_direction",
                         "colors",
+                        "panels_seams",
                         "distinctive_features",
                         "confidence",
                         "assumptions",
@@ -524,9 +546,13 @@ def _persist_professional_result(
                     art_meta.get("flat_back") or art_meta.get("flat_back_proposed") or {}
                 ).get("artifact_id")
                 or "schematic",
+                "status_banner": "DRAFT / UNVERIFIED",
             }
         )
         piece["illustrations"] = illust
+        from app.services.techpack_autofill import apply_visible_analysis_to_piece
+
+        piece = apply_visible_analysis_to_piece(piece, analysis, only_empty=True)
         by_id[pid] = piece
 
     outfit["pieces"] = list(by_id.values())
@@ -543,6 +569,8 @@ def _persist_professional_result(
         "actual_cost_usd_cents": usage.get("cost_usd_cents"),
         "vision_model": usage.get("vision_model"),
         "image_model": usage.get("image_model"),
+        "autofill_applied": True,
+        "autofill_paid_call": False,
     }
     from app.services.techpack_compatibility import (
         collect_compatibility_warnings,
@@ -550,13 +578,17 @@ def _persist_professional_result(
         filter_pattern_inventory,
         is_sleeveless_analysis,
     )
+    from app.services.techpack_autofill import snapshot_garment_analysis
 
     # Post-process construction / inventory against vision analysis.
+    piece_analyses: dict[str, dict[str, Any]] = {}
     for piece in outfit.get("pieces") or []:
         if not isinstance(piece, dict):
             continue
         illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
         analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+        if analysis:
+            piece_analyses[str(piece.get("id") or "")] = analysis
         if piece.get("construction_steps"):
             piece["construction_steps"] = filter_construction_steps(
                 list(piece.get("construction_steps") or []),
@@ -578,6 +610,18 @@ def _persist_professional_result(
                 else None,
             )
 
+    look_identity = (
+        spec.get("look_design_identity")
+        if isinstance(spec.get("look_design_identity"), dict)
+        else None
+    )
+    spec["garment_analysis"] = snapshot_garment_analysis(
+        pieces=list(outfit.get("pieces") or []),
+        piece_analyses=piece_analyses,
+        look_summary=str(spec.get("look_notes") or ""),
+        design_identity=look_identity,
+        run_id=str(run.id),
+    )
     spec["warnings"] = collect_measurement_warnings(spec) + collect_compatibility_warnings(spec)
     return spec, artifact_reads
 
@@ -1312,11 +1356,62 @@ def run_generate(
         }
 
     spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
-    if mode in ("analyze", "ai", "heuristic", "professional") and (
+    from app.services.techpack_autofill import (
+        extract_job_evidence,
+        outfit_needs_structure_repair,
+        repair_outfit_from_evidence,
+        apply_persisted_analyses_to_spec,
+    )
+
+    look_summary = str(spec.get("look_notes") or "")
+    design_identity = (
+        spec.get("look_design_identity")
+        if isinstance(spec.get("look_design_identity"), dict)
+        else None
+    )
+    # Prefer already-persisted Magic job evidence (no paid calls).
+    if design_identity is None or not look_summary:
+        from app.models.ai_job import AIJob
+
+        for jid in (draft.front_job_id, draft.back_job_id):
+            if jid is None:
+                continue
+            job = db.get(AIJob, jid)
+            if job is None or not isinstance(job.result_data, dict):
+                continue
+            evidence = extract_job_evidence(job.result_data)
+            if not look_summary and evidence.get("summary"):
+                look_summary = str(evidence["summary"])
+                if not spec.get("look_notes"):
+                    spec["look_notes"] = look_summary[:500]
+            if design_identity is None and evidence.get("design_identity"):
+                design_identity = evidence["design_identity"]
+                spec["look_design_identity"] = {
+                    k: design_identity.get(k)
+                    for k in design_identity
+                    if design_identity.get(k) is not None
+                }
+            if look_summary and design_identity is not None:
+                break
+
+    if outfit_needs_structure_repair(
+        spec.get("outfit") if isinstance(spec.get("outfit"), dict) else None,
+        look_summary=look_summary,
+        design_identity=design_identity,
+    ):
+        spec = repair_outfit_from_evidence(
+            spec,
+            look_summary=look_summary,
+            design_identity=design_identity,
+            units=str(spec.get("units") or "cm"),
+        )
+    elif mode in ("analyze", "ai", "heuristic", "professional") and (
         not (spec.get("outfit") or {}).get("pieces") or (sections and "detect" in sections)
     ):
         detection = detect_pieces_from_evidence(
-            look_summary=str(spec.get("look_notes") or ""), units=str(spec.get("units") or "cm")
+            look_summary=look_summary,
+            design_identity=design_identity,
+            units=str(spec.get("units") or "cm"),
         )
         if not sections or "detect" in (sections or []):
             if all(
@@ -1324,6 +1419,9 @@ def run_generate(
                 for p in (spec.get("outfit") or {}).get("pieces") or []
             ):
                 spec["outfit"] = detection
+
+    # Reuse persisted vision analysis onto empty qualitative fields (zero paid).
+    spec = apply_persisted_analyses_to_spec(spec)
 
     paid = mode in ("ai", "professional")
     outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}

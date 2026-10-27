@@ -306,6 +306,149 @@ class OpenAIProfessionalProvider:
         )
 
 
+def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str, Any]:
+    """Category-aware mock vision — supports shirt+trousers regression without paid AI."""
+    cat = str(piece.get("category") or "other").lower()
+    notes = (look_notes or "").lower()
+    color_hint = str(piece.get("color_hint") or "").lower()
+
+    if cat in ("shirt", "top", "blouse"):
+        neckline = "V-slit neckline"
+        if "v-slit" in notes or "v slit" in notes or "v-neck" in notes or "v neck" in notes:
+            neckline = "V-slit neckline"
+        sleeves = "three-quarter sleeves"
+        if "three-quarter" in notes or "3/4" in notes or "three quarter" in notes:
+            sleeves = "three-quarter sleeves"
+        elif "long sleeve" in notes:
+            sleeves = "long sleeves"
+        elif "short sleeve" in notes:
+            sleeves = "short sleeves"
+        colors = ["black"] if "black" in notes or "black" in color_hint else (
+            [color_hint] if color_hint else ["dark"]
+        )
+        return {
+            "schema_version": ANALYSIS_SCHEMA_VERSION,
+            "category": "shirt" if cat != "top" else cat,
+            "silhouette": "relaxed straight shirt",
+            "length": "hip length",
+            "neckline": neckline,
+            "sleeves": sleeves,
+            "fit": "relaxed",
+            "closure_visible": "none clearly verified — confirm placket/buttons",
+            "fabric_pattern": "solid" if "black" in colors else "solid tonal",
+            "stripe_direction": None,
+            "colors": colors,
+            "panels_seams": "shoulder seams; side seams; set-in sleeves",
+            "distinctive_features": [neckline, sleeves, f"{colors[0]} shell"],
+            "pattern_pieces_suggested": [
+                {"id": "SH-F", "name": "Front", "cut_qty": 1},
+                {"id": "SH-B", "name": "Back", "cut_qty": 1},
+                {"id": "SH-SL", "name": "Sleeve", "cut_qty": 2},
+            ],
+            "construction_notes": [
+                f"Finish {neckline} cleanly before setting sleeves.",
+                f"Set {sleeves}; confirm finished sleeve length with designer.",
+            ],
+            "confidence": "high",
+            "assumptions": [
+                "Mock shirt analysis from look notes — measurements not fabricated",
+                "Back view not verified unless a Magic back image exists",
+            ],
+        }
+
+    if cat in ("trousers", "pants", "shorts"):
+        colors = ["beige"] if "beige" in notes or "beige" in color_hint else (
+            [color_hint] if color_hint else ["neutral"]
+        )
+        length = "full length" if cat != "shorts" else "short"
+        return {
+            "schema_version": ANALYSIS_SCHEMA_VERSION,
+            "category": "trousers" if cat != "shorts" else "shorts",
+            "silhouette": "straight leg" if cat != "shorts" else "relaxed short",
+            "length": length,
+            "neckline": None,
+            "sleeves": None,
+            "fit": "regular",
+            "closure_visible": "waistband — closure not verified from front alone",
+            "fabric_pattern": "solid woven appearance",
+            "stripe_direction": None,
+            "colors": colors,
+            "panels_seams": "side seams; inseam; waistband",
+            "distinctive_features": [f"{colors[0]} trousers", "straight leg", length],
+            "pattern_pieces_suggested": [
+                {"id": "TR-F", "name": "Front leg", "cut_qty": 2},
+                {"id": "TR-B", "name": "Back leg", "cut_qty": 2},
+                {"id": "TR-WB", "name": "Waistband", "cut_qty": 1},
+            ],
+            "construction_notes": [
+                "Assemble front/back legs at outseam and inseam.",
+                "Attach waistband; confirm rise and inseam with designer — not measured from image.",
+            ],
+            "confidence": "high",
+            "assumptions": [
+                "Mock trousers analysis from look notes — no fabricated inseam cm",
+                "Back pockets/closure unverified without back view",
+            ],
+        }
+
+    if cat == "skirt":
+        return {
+            "schema_version": ANALYSIS_SCHEMA_VERSION,
+            "category": "skirt",
+            "silhouette": "straight",
+            "length": "midi",
+            "neckline": None,
+            "sleeves": None,
+            "fit": "regular",
+            "closure_visible": "not verified",
+            "fabric_pattern": "solid",
+            "stripe_direction": None,
+            "colors": [color_hint] if color_hint else ["unknown"],
+            "panels_seams": "side seams",
+            "distinctive_features": ["skirt"],
+            "pattern_pieces_suggested": [
+                {"id": "SK-F", "name": "Front", "cut_qty": 1},
+                {"id": "SK-B", "name": "Back", "cut_qty": 1},
+            ],
+            "construction_notes": ["Assemble side seams; finish waist."],
+            "confidence": "medium",
+            "assumptions": ["Mock skirt analysis"],
+        }
+
+    # Default: FR-7182-style pink striped dress (legacy tests).
+    return {
+        "schema_version": ANALYSIS_SCHEMA_VERSION,
+        "category": piece.get("category") or "dress",
+        "silhouette": "fitted bodycon mini",
+        "length": "mini",
+        "neckline": "deep plunging V-neckline",
+        "sleeves": "long sleeves",
+        "fit": "fitted",
+        "closure_visible": "none visible — pull-on assumed",
+        "fabric_pattern": "bright pink and white diagonal stripes",
+        "stripe_direction": "diagonal",
+        "colors": ["bright pink", "white"],
+        "panels_seams": "side seams; set-in sleeves",
+        "distinctive_features": [
+            "deep plunging V-neckline",
+            "long sleeves",
+            "fitted mini length",
+            "diagonal pink/white stripes",
+        ],
+        "pattern_pieces_suggested": [
+            {"id": "DR-F", "name": "Front bodice", "cut_qty": 1},
+            {"id": "DR-B", "name": "Back bodice", "cut_qty": 1},
+            {"id": "DR-SL", "name": "Sleeve", "cut_qty": 2},
+        ],
+        "construction_notes": [
+            "Stabilize deep V neckline before setting sleeves.",
+            "Match diagonal stripe continuity at side seams.",
+        ],
+        "confidence": "high",
+        "assumptions": ["Mock analysis for FR-7182-style pink striped dress"],
+    }
+
+
 class MockProfessionalProvider:
     """Deterministic fixture provider for tests — incurs $0 real spend."""
 
@@ -324,38 +467,11 @@ class MockProfessionalProvider:
         self.calls.append(f"analyze:{len(image_bytes)}:{mime}")
         if self.analysis_override:
             data = dict(self.analysis_override)
+            # Keep override but stamp category from piece when absent so multi-piece tests work.
+            data.setdefault("category", piece.get("category") or "dress")
+            data.setdefault("schema_version", ANALYSIS_SCHEMA_VERSION)
         else:
-            data = {
-                "schema_version": ANALYSIS_SCHEMA_VERSION,
-                "category": piece.get("category") or "dress",
-                "silhouette": "fitted bodycon mini",
-                "length": "mini",
-                "neckline": "deep plunging V-neckline",
-                "sleeves": "long sleeves",
-                "fit": "fitted",
-                "closure_visible": "none visible — pull-on assumed",
-                "fabric_pattern": "bright pink and white diagonal stripes",
-                "stripe_direction": "diagonal",
-                "colors": ["bright pink", "white"],
-                "panels_seams": "side seams; set-in sleeves",
-                "distinctive_features": [
-                    "deep plunging V-neckline",
-                    "long sleeves",
-                    "fitted mini length",
-                    "diagonal pink/white stripes",
-                ],
-                "pattern_pieces_suggested": [
-                    {"id": "DR-F", "name": "Front bodice", "cut_qty": 1},
-                    {"id": "DR-B", "name": "Back bodice", "cut_qty": 1},
-                    {"id": "DR-SL", "name": "Sleeve", "cut_qty": 2},
-                ],
-                "construction_notes": [
-                    "Stabilize deep V neckline before setting sleeves.",
-                    "Match diagonal stripe continuity at side seams.",
-                ],
-                "confidence": "high",
-                "assumptions": ["Mock analysis for FR-7182-style pink striped dress"],
-            }
+            data = _mock_analysis_for_piece(piece, look_notes)
         return data, ProviderUsage(cost_usd_cents=3, vision_model="mock-vision", vision_calls=1)
 
     def generate_technical_flat(

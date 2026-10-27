@@ -104,16 +104,39 @@ def _resolve_job_image(storage: LocalStorageBackend, job_id: uuid.UUID | None, d
     return storage.resolve_existing_file(key=key)
 
 
-def create_draft(db: Session, user: User, data: TechpackCreate) -> TechpackDraftRead:
-    look = looks_service.get_look(db, user, data.look_id)
-    if not ((look.front and look.front.has_image) or (look.back and look.back.has_image)):
-        raise ValidationAppError("Look must have at least one finished Magic image")
+def _look_evidence(db: Session, look) -> tuple[str | None, dict | None]:
+    """Pull summary + design_identity from Magic jobs (zero paid AI)."""
+    from app.models.ai_job import AIJob
+    from app.services.techpack_autofill import extract_job_evidence
 
     summary = None
     if look.front and look.front.summary:
         summary = look.front.summary
     elif look.back and look.back.summary:
         summary = look.back.summary
+    identity = None
+    for side in (look.front, look.back):
+        if side is None or not side.job_id:
+            continue
+        job = db.get(AIJob, side.job_id)
+        if job is None or not isinstance(job.result_data, dict):
+            continue
+        evidence = extract_job_evidence(job.result_data)
+        if not summary and evidence.get("summary"):
+            summary = evidence["summary"]
+        if identity is None and evidence.get("design_identity"):
+            identity = evidence["design_identity"]
+        if summary and identity is not None:
+            break
+    return summary, identity
+
+
+def create_draft(db: Session, user: User, data: TechpackCreate) -> TechpackDraftRead:
+    look = looks_service.get_look(db, user, data.look_id)
+    if not ((look.front and look.front.has_image) or (look.back and look.back.has_image)):
+        raise ValidationAppError("Look must have at least one finished Magic image")
+
+    summary, design_identity = _look_evidence(db, look)
 
     title = _normalize_title(data.title, look.title)
     style_code = style_code_from_look(look.id)
@@ -134,7 +157,7 @@ def create_draft(db: Session, user: User, data: TechpackCreate) -> TechpackDraft
         revision=1,
         status="DRAFT",
         verification="UNVERIFIED",
-        spec=default_spec(look_summary=summary),
+        spec=default_spec(look_summary=summary, design_identity=design_identity),
         front_job_id=look.front.job_id if look.front and look.front.has_image else None,
         back_job_id=look.back.job_id if look.back and look.back.has_image else None,
     )
@@ -185,7 +208,70 @@ def _owned_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraft:
 
 
 def get_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraftRead:
-    return _draft_read(db, _owned_draft(db, user, draft_id))
+    """Return draft; repair stale one-piece dress metadata from Magic evidence (no paid AI)."""
+    from app.models.ai_job import AIJob
+    from app.services.techpack_autofill import (
+        apply_persisted_analyses_to_spec,
+        extract_job_evidence,
+        outfit_needs_structure_repair,
+        repair_outfit_from_evidence,
+    )
+
+    draft = _owned_draft(db, user, draft_id)
+    spec = draft.spec if isinstance(draft.spec, dict) else {}
+    look_summary = str(spec.get("look_notes") or "") or None
+    design_identity = (
+        spec.get("look_design_identity")
+        if isinstance(spec.get("look_design_identity"), dict)
+        else None
+    )
+    for jid in (draft.front_job_id, draft.back_job_id):
+        if jid is None:
+            continue
+        job = db.get(AIJob, jid)
+        if job is None or not isinstance(job.result_data, dict):
+            continue
+        evidence = extract_job_evidence(job.result_data)
+        if not look_summary and evidence.get("summary"):
+            look_summary = evidence["summary"]
+        if design_identity is None and evidence.get("design_identity"):
+            design_identity = evidence["design_identity"]
+    dirty = False
+    if outfit_needs_structure_repair(
+        spec.get("outfit") if isinstance(spec.get("outfit"), dict) else None,
+        look_summary=look_summary,
+        design_identity=design_identity,
+    ):
+        spec = repair_outfit_from_evidence(
+            spec,
+            look_summary=look_summary,
+            design_identity=design_identity,
+            units=str(spec.get("units") or "cm"),
+        )
+        dirty = True
+    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+    has_persisted_analysis = any(
+        isinstance((p.get("illustrations") or {}).get("analysis"), dict)
+        and (p.get("illustrations") or {}).get("analysis")
+        for p in (outfit.get("pieces") or [])
+        if isinstance(p, dict)
+    )
+    if has_persisted_analysis:
+        filled = apply_persisted_analyses_to_spec(spec)
+        if filled != spec:
+            spec = filled
+            dirty = True
+    if dirty:
+        if look_summary and not spec.get("look_notes"):
+            spec["look_notes"] = look_summary[:500]
+        if design_identity and not isinstance(spec.get("look_design_identity"), dict):
+            spec["look_design_identity"] = design_identity
+        draft.spec = spec
+        draft.updated_at = datetime.now(UTC)
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
+    return _draft_read(db, draft)
 
 
 def update_draft(db: Session, user: User, draft_id: uuid.UUID, data: TechpackUpdate) -> TechpackDraftRead:

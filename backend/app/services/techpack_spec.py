@@ -21,11 +21,20 @@ def _mv(value: Any = None, *, unit: str | None = None, source: str = "empty", no
     return {"value": value, "unit": unit, "source": src, "note": note}
 
 
-def default_spec(*, look_summary: str | None = None, units: str = "cm") -> dict[str, Any]:
-    """V2 default — guided multi-piece outfit with heuristic detection."""
-    detection = detect_pieces_from_evidence(look_summary=look_summary, units=units)
+def default_spec(
+    *,
+    look_summary: str | None = None,
+    design_identity: dict[str, Any] | None = None,
+    units: str = "cm",
+) -> dict[str, Any]:
+    """V2 default — guided multi-piece outfit with heuristic / look-identity detection."""
+    from app.services.techpack_autofill import repair_outfit_from_evidence
+
+    detection = detect_pieces_from_evidence(
+        look_summary=look_summary, design_identity=design_identity, units=units
+    )
     body = {key: _mv(unit=units) for key in BODY_KEYS}
-    return {
+    spec: dict[str, Any] = {
         "schema_version": "2.0",
         "workflow_stage": "understand",
         "units": units,
@@ -51,6 +60,33 @@ def default_spec(*, look_summary: str | None = None, units: str = "cm") -> dict[
         ],
         "ai": {"last_run_id": None, "paid_sections": []},
     }
+    if design_identity:
+        # Seed visible qualitative details from Magic identity (zero paid AI).
+        spec = repair_outfit_from_evidence(
+            spec,
+            look_summary=look_summary,
+            design_identity=design_identity,
+            units=units,
+        )
+        spec["look_design_identity"] = {
+            k: design_identity.get(k)
+            for k in (
+                "garment_category",
+                "silhouette",
+                "neckline",
+                "sleeve_type",
+                "sleeve_length",
+                "sleeve_style",
+                "sleeves",
+                "main_colors",
+                "fabric_patterns",
+                "distinctive_details",
+                "components",
+                "pieces",
+            )
+            if design_identity.get(k) is not None
+        }
+    return spec
 
 
 def style_code_from_look(look_id: Any) -> str:
