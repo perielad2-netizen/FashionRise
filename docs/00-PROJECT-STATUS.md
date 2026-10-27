@@ -3,21 +3,45 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Create Real Design V3.1 LIVE** — measurement tab reset fix + one-click Generate AI PDF + Magic-style progress + PDF quality. FE PR [#102](https://github.com/perielad2-netizen/FashionRise/pull/102) `9ba396a3` · BE PR [#103](https://github.com/perielad2-netizen/FashionRise/pull/103) `ffec1a7b`. Alembic **`010`**. **0 new paid AI calls by Cursor**. **Samsung Internet / owner phone acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Access friction fix LIVE** — AI owner-allowlist gate removed; pink “App dev” banner removed; build SHA in Settings/About; Nginx allowlist patched for `generate-professional` / `latest-run` / CF SSO routes. FE PR [#105](https://github.com/perielad2-netizen/FashionRise/pull/105) `7b4a3a0c` · BE PR [#104](https://github.com/perielad2-netizen/FashionRise/pull/104) `35f48cf5`. Alembic **`010`**. CF Access SSO code ready but **not enabled** (`CF_ACCESS_SSO_LOGIN=false`; no `CF_ACCESS_AUD` in prod). **0 paid AI calls by Cursor**. **Samsung acceptance NOT claimed.**)
 
-**Phase:** Protected family beta. **Create Real Design V3.1 LIVE**. Production FE @ `9ba396a3`. Production BE mark @ `ffec1a7b` (on V3 + `186cac84` reasoning lineage). Alembic **`010`**.
+**Phase:** Protected family beta. Production FE @ `7b4a3a0c`. Production BE mark @ `35f48cf5`. Alembic **`010`**. App remains private behind Cloudflare Access.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`9ba396a3`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/9ba396a3`. Measurement group stability; one-click **Generate AI PDF**; Magic-style progress overlay; `/api/v1` prod assert. |
-| Backend (FastAPI + PostgreSQL) | **`ffec1a7b`** mark (files overlay on V3 lineage) — `POST …/ai/generate-professional` one-tap intent; progress phases; compatibility warnings; PDF V3.1 branding + larger detail flats. Spend gates unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
-| AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
-| Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
-| Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
-| Deploy backup | `/var/backups/fashionrise/v31-deploy-20261026T233003Z` (+ prior crit-fix backup) |
-| AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
+| Frontend (`web-ui`) | **`7b4a3a0c`** — `current` → `releases/7b4a3a0c`. No pink debug banner. Build SHA in Settings → About. One-click Generate AI PDF. `/api/v1` prod assert. Bundle `index-DTZ4U_eX.js`. |
+| Backend (FastAPI + PostgreSQL) | **`35f48cf5`** — AI Professional no longer requires `TECHPACK_AI_OWNER_ALLOWLIST`; spend ceilings unchanged. Optional `POST /auth/cf-access/login` present; `CF_ACCESS_SSO_LOGIN=false`. |
+| AI worker | Unchanged · `OPENAI_MODEL=gpt-6-luna` |
+| Database | `fashionrise_beta` — Alembic **`010`** |
+| Nginx | `root /var/www/fashionrise/current;` + V3.1 one-tap + CF SSO auth locations (backup `nginx-access-friction-*`) |
+| Deploy backup | `/var/backups/fashionrise/access-friction-*` + `nginx-access-friction-*` (+ `v31-deploy-*`) |
+| AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. Allowlist env retained but **not a gate**. |
+
+## Access friction — root cause & fix (2026-10-27)
+
+| Item | Detail |
+|---|---|
+| AI blocker root cause | Separate `techpack_ai_owner_allowlist` required exact email/uuid/username match. Prod had 3 allowlist entries matching **1 of 16** users. Owner’s authenticated session was not that match → “not on the owner allowlist” despite prior paid success under a different account/session. |
+| AI access fix | `professional_available = enabled ∧ API key ∧ ceiling > 0` for any authenticated user. Ownership of look/draft still enforced. |
+| Edge blocker found at deploy | Live Nginx still lacked `…/ai/generate-professional` and `…/ai/latest-run` (V3.1 FE calls these). Edge returned **403** before API. Patched + reloaded; AOP smoke: unauth generate-professional/latest-run **401**, ai-draft **403**, version **`7b4a3a0c`**, banner **0**. |
+| Cloudflare-only login | **Not enabled in prod.** Code + tests for verified Access JWT → existing User mapping exist. Blocker: production `.env` has no `CF_ACCESS_AUD` / team domain; `CF_ACCESS_SSO_LOGIN=false`. Nginx now proxies `cf-access/status|login` for when operator enables. Password FashionRise login remains. |
+| Debug banner | Pink sticky “FashionRise App dev · if this bar is missing…” removed. Build SHA from git/`VITE_BUILD_SHA`; About dialog under Settings. Live `version.json` app=`7b4a3a0c`. |
+| Tests | BE allowlist + CF SSO suites green; FE Techpack/Measurements Vitest green; origin AOP smoke for new Nginx paths + unauth AI 401. |
+
+### Next recommended action (owner)
+
+1. Hard refresh Samsung → confirm **no pink banner**; Settings → About shows build **`7b4a3a0c`**.
+2. FashionRise email/password login (CF Access alone does not open the app session yet).
+3. Open Create Real Design → Step 4 → **Generate AI PDF** — must not say allowlist blocked; one-tap progress should reach the API.
+4. Optional later (operator): set `CF_ACCESS_TEAM_DOMAIN` + `CF_ACCESS_AUD`, flip `CF_ACCESS_SSO_LOGIN=true` only when Access email matches the existing FashionRise user email.
+
+### Rollback
+
+- FE: `ln -sfn /var/www/fashionrise/releases/9ba396a3 /var/www/fashionrise/current && nginx -t && systemctl reload nginx`
+- BE: restore `techpack_ai.py` / auth/config from `/var/backups/fashionrise/access-friction-*/` and restart `fashionrise-api`
+- Nginx: `cp /var/backups/fashionrise/nginx-access-friction-*/fashionrise.app /etc/nginx/sites-enabled/fashionrise.app && nginx -t && systemctl reload nginx`
 
 ## V3.1 — what shipped (2026-10-27)
 
