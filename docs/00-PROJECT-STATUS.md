@@ -3,21 +3,43 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Create Real Design AI auto-fill LIVE** — Magic look evidence + persisted vision fill specs; shirt+trousers not dress. BE PR [#110](https://github.com/perielad2-netizen/FashionRise/pull/110) `732bda9f` · FE PR [#111](https://github.com/perielad2-netizen/FashionRise/pull/111) `cb2c5b8d`. Alembic **`011`**. **0 paid OpenAI tests by Cursor**. **Samsung device acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Create Real Design mobile polish LIVE** — Magic image `object-fit: contain` + stable Done during autosave. FE PR [#112](https://github.com/perielad2-netizen/FashionRise/pull/112) `b2fbd043`. Backend unchanged `732bda9f` · Alembic **`011`**. **0 paid OpenAI**. **Samsung device acceptance NOT claimed.**)
 
-**Phase:** Protected family beta. **Create Real Design AI auto-fill LIVE** (on simple UX Generate → Wait → Download). Production FE @ `cb2c5b8d`. Production BE @ `732bda9f`. Alembic **`011`**. Durable AI worker + polling retained.
+**Phase:** Protected family beta. **Create Real Design mobile polish LIVE** (AI auto-fill + simple UX retained). Production FE @ `b2fbd043`. Production BE @ `732bda9f`. Alembic **`011`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`cb2c5b8d`** — Nginx `current` → `releases/cb2c5b8d`. Simple UX retained; Edit measurements & details shows visually supported / AI proposed / unknown provenance + conflict notices. API base `/api/v1`. |
-| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — `techpack_autofill` repairs stale one-dress metadata from Magic evidence; seeds visible details; versioned `garment_analysis`; no fabricate empty-body POMs; category-aware mock vision for $0 regression. `fashionrise-api` on `127.0.0.1:8010`. |
-| AI worker | `fashionrise-ai-worker` — unchanged durable queue; PDF assembly before completed/ready |
-| Database | `fashionrise_beta` — Alembic **`011`** (no new migration) |
+| Frontend (`web-ui`) | **`b2fbd043`** — Nginx `current` → `releases/b2fbd043`. Hero + waiting-modal thumbs use `object-fit: contain` with cream letterbox; Done button fixed full-width row (no autosave reflow). API base `/api/v1`. |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged** this deploy (AI auto-fill). `fashionrise-api` on `127.0.0.1:8010`. |
+| AI worker | `fashionrise-ai-worker` — **not restarted** |
+| Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
-| Deploy backup | BE `/var/backups/fashionrise/autofill-be-20261027T111104Z` · FE rollback → `releases/ac485620` |
+| Deploy backup / rollback FE | Previous FE **`releases/cb2c5b8d`** |
 | AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. **Cursor did not run paid generate.** |
+
+## Mobile polish — Magic image + Done stability (2026-10-27)
+
+| Item | Detail |
+|---|---|
+| Bug 1 | `.heroImage` + waiting `.thumb`: `cover` → `contain`; cream `#faf6f1→#f3ebe3` letterbox; portrait 3:4; spinner below thumb |
+| Bug 2 | Details footer: status row (`aria-live`) + fixed `48px` full-width Done; flush debounced autosave on Done; keep open on save failure |
+| Tests | Vitest contain contract + Done stability + flush-fail; Playwright harness 360/390/430 — new Done `neuStable=true` (identical x/y/w/h across Saving/Saved/long status); old flex footer width varied |
+| Artifacts | `mobile_hero_compare_*.png`, `mobile_wait_modal_{before,after}_*.png`, `done_stability_*.json` |
+| Limitation | If a Magic source image was cropped before save, contain cannot invent missing pixels |
+| Backend | Unchanged `732bda9f` · worker not restarted · **0 paid AI** |
+
+### Next recommended action (owner — Samsung Internet)
+
+1. Hard-refresh FashionRise → confirm App build **`b2fbd043`**.
+2. Create Real Design → confirm full Magic figure (head → feet) in the main image; open Generate waiting UI without completing paid generate if possible, or glance at thumb during an already-started wait — full figure, spinner below.
+3. Edit measurements & details → type quickly while status flips Saving…/Saved — **Done must not move**.
+4. Report acceptance.
+
+### Rollback (mobile polish FE only)
+
+`ln -sfn /var/www/fashionrise/releases/cb2c5b8d /var/www/fashionrise/current && nginx -t && systemctl reload nginx`
 
 ## AI auto-fill technical specs (2026-10-27)
 
