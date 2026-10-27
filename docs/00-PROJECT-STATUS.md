@@ -3,21 +3,43 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Create Real Design V3.1 LIVE** — measurement tab reset fix + one-click Generate AI PDF + Magic-style progress + PDF quality. FE PR [#102](https://github.com/perielad2-netizen/FashionRise/pull/102) `9ba396a3` · BE PR [#103](https://github.com/perielad2-netizen/FashionRise/pull/103) `ffec1a7b`. Alembic **`010`**. **0 new paid AI calls by Cursor**. **Samsung Internet / owner phone acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Quiet autosave LIVE** — FE PR [#114](https://github.com/perielad2-netizen/FashionRise/pull/114) `31c1de01`. Responsive editor PR [#113](https://github.com/perielad2-netizen/FashionRise/pull/113) retained. Backend **`732bda9f`** / Alembic **`011`** unchanged. **0 paid AI calls**. **Owner verification PENDING.**)
 
-**Phase:** Protected family beta. **Create Real Design V3.1 LIVE**. Production FE @ `9ba396a3`. Production BE mark @ `ffec1a7b` (on V3 + `186cac84` reasoning lineage). Alembic **`010`**.
+**Phase:** Protected family beta. Create Real Design main workflow unchanged. Responsive Measurements & details editor approved; autosave loop fixed and save chrome removed.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`9ba396a3`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/9ba396a3`. Measurement group stability; one-click **Generate AI PDF**; Magic-style progress overlay; `/api/v1` prod assert. |
-| Backend (FastAPI + PostgreSQL) | **`ffec1a7b`** mark (files overlay on V3 lineage) — `POST …/ai/generate-professional` one-tap intent; progress phases; compatibility warnings; PDF V3.1 branding + larger detail flats. Spend gates unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
+| Frontend (`web-ui`) | **`31c1de01`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/31c1de01`. Quiet dirty-only autosave; no Saving/Saved flicker; stable Done. Lineage: `ce752b43` (#113 responsive) ← `b2fbd043` (#112) ← `cb2c5b8d` (#111). |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged**. AI autofill + generate-professional + spend/privacy gates. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
-| Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
+| Database | `fashionrise_beta` — Alembic **`011`** (no migration this cycle) |
 | Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
-| Deploy backup | `/var/backups/fashionrise/v31-deploy-20261026T233003Z` (+ prior crit-fix backup) |
+| Deploy backup | `/var/backups/fashionrise/autosave-quiet-fe-deploy-20261027T150341Z` (rollback → prior FE `ce752b43`) |
 | AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
+
+## Quiet autosave (2026-10-27) LIVE — stop for owner verification
+
+| Item | Detail |
+|---|---|
+| PR | FE [#114](https://github.com/perielad2-netizen/FashionRise/pull/114) · branch `cursor/web-techpack-autosave-quiet-77c6` · tip `31c1de015d55197f0a1695eb3b6ce24fc3fcf73b` |
+| Root cause | Silent `persist()` called `hydrate(next)` after every PATCH → new object refs → 700ms autosave effect re-armed → Saving/Saved loop with no user edits |
+| Fix | `editorPersistFingerprint` dirty tracking; autosave only when editable values change; server responses update revision meta only (no live form replace); in-flight / stale-response coordination |
+| UI | Removed `Saving…` / `Saved` / `Edits save automatically` / autosave subtitle. Header: **Measurements & details**. Footer: stable **Done**. Failures: alert + Retry |
+| Done | Clean → immediate close, 0 requests. Dirty → one flush. Coordinates with in-flight autosave |
+| Tests (StrictMode, 390/768/1366) | Open+idle 60s → **0** PATCH; tab/garment switch → **0**; one edit → **1** then idle 60s stays **1**; rapid typing coalesced **1**; Done clean **0**; Done dirty **1**; fail retains value + Retry |
+| Safety | FE-only; BE/worker untouched; **0 paid AI** |
+| Rollback | `ln -sfn /var/www/fashionrise/releases/ce752b43 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` · or backup `ROLLBACK.sh` |
+
+### Next recommended action (owner)
+
+1. Hard-refresh → confirm build **`31c1de01`**.
+2. Open lavender hoodie + yellow shorts → **Edit measurements & details**.
+3. Leave untouched for several minutes: **no movement, no Saving/Saved, no network write loop**.
+4. Switch garments/tabs without editing — still quiet.
+5. Edit one field — silent background save; Done stays put; no success toast.
+6. Done without edits closes instantly.
 
 ## V3.1 — what shipped (2026-10-27)
 
