@@ -72,6 +72,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const saveInFlightRef = useRef(false)
   const saveEpochRef = useRef(0)
   const rerunAfterFlightRef = useRef(false)
+  /** Prevents overlapping Done/Escape close flushes. */
+  const closeDetailsInFlightRef = useRef(false)
   const aiErrorRef = useRef<HTMLParagraphElement>(null)
 
   titleRef.current = title
@@ -711,35 +713,61 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   }
 
   const closeDetails = async () => {
-    if (autosaveTimer.current) {
-      window.clearTimeout(autosaveTimer.current)
-      autosaveTimer.current = null
-    }
-    // Nothing changed — close immediately with zero network writes.
-    if (!isEditorDirty() && !saveInFlightRef.current) {
-      setSaveError(null)
-      setDetailsOpen(false)
-      return
-    }
-    setBusy(true)
+    // Repeated Done / Escape while a flush is pending must not start a second closer.
+    if (closeDetailsInFlightRef.current) return
+    closeDetailsInFlightRef.current = true
     try {
-      // Coordinate with an in-flight autosave; never discard newer local edits.
-      const started = Date.now()
-      while (saveInFlightRef.current && Date.now() - started < 15000) {
-        await new Promise((r) => window.setTimeout(r, 40))
+      if (autosaveTimer.current) {
+        window.clearTimeout(autosaveTimer.current)
+        autosaveTimer.current = null
       }
-      if (!isEditorDirty()) {
+      // Nothing changed — close immediately with zero network writes.
+      if (!isEditorDirty() && !saveInFlightRef.current) {
         setSaveError(null)
         setDetailsOpen(false)
         return
       }
-      const saved = await persist({ silent: false })
-      if (saved || !isEditorDirty()) {
-        setSaveError(null)
-        setDetailsOpen(false)
+
+      setBusy(true)
+      try {
+        const deadline = Date.now() + 30_000
+        while (Date.now() < deadline) {
+          // Never overlap PATCH requests — wait for any in-flight save to settle.
+          while (saveInFlightRef.current && Date.now() < deadline) {
+            await new Promise((r) => window.setTimeout(r, 40))
+          }
+
+          // Settled and clean → safe to close (covers edits that landed during the wait).
+          if (!isEditorDirty()) {
+            setSaveError(null)
+            setDetailsOpen(false)
+            return
+          }
+
+          // Flush the newest editable snapshot. silent:true so this closer owns busy.
+          const saved = await persist({ silent: true })
+
+          // Another PATCH was already running / just started — wait and re-check.
+          if (saveInFlightRef.current) continue
+
+          // Latest save failed and unsaved edits remain — keep editor open with error UI.
+          if (!saved && isEditorDirty()) {
+            return
+          }
+
+          // Save succeeded for what it sent; if newer edits arrived mid-flight, loop again.
+          if (isEditorDirty()) continue
+
+          setSaveError(null)
+          setDetailsOpen(false)
+          return
+        }
+        setSaveError('Could not finish saving. Please try again.')
+      } finally {
+        setBusy(false)
       }
     } finally {
-      setBusy(false)
+      closeDetailsInFlightRef.current = false
     }
   }
 
