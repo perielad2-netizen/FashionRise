@@ -117,6 +117,8 @@ export type TechpackSpecV2 = {
     vision_model?: string | null
     image_model?: string | null
     analysis_summary?: string | null
+    export_id?: string | null
+    dirty_since_generation?: boolean
   }
   [key: string]: unknown
 }
@@ -212,9 +214,11 @@ export type TechpackAiGenerateResponse = {
   warnings?: Array<Record<string, unknown> | string>
   result?: Record<string, unknown> | null
   idempotent_replay?: boolean
+  reused_completed?: boolean
   artifacts?: TechpackArtifact[]
   estimated_cost_usd_cents?: number
   actual_cost_usd_cents?: number
+  budget_recorded_usd_cents?: number
   analysis_summary?: string | null
   failed_sections?: string[]
   progress?: TechpackAiProgress | null
@@ -223,6 +227,10 @@ export type TechpackAiGenerateResponse = {
   message?: string
   safe_retry?: boolean
   error_message?: string | null
+  export_id?: string | null
+  download_path?: string | null
+  pdf_ready?: boolean
+  pdf_filename?: string | null
 }
 
 export type TechpackAiProgress = {
@@ -246,6 +254,10 @@ export type TechpackAiRun = {
   created_at?: string | null
   progress?: TechpackAiProgress | null
   artifacts?: TechpackArtifact[]
+  export_id?: string | null
+  download_path?: string | null
+  pdf_ready?: boolean
+  pdf_filename?: string | null
 }
 
 export async function createTechpackDraft(lookId: string, title?: string): Promise<TechpackDraft> {

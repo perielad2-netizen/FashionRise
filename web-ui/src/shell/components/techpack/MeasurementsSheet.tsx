@@ -20,10 +20,15 @@ type Props = {
   draftKey?: string
   initialGroupId?: MeasurementGroupId
   busy?: boolean
+  /** Unobtrusive autosave status shown in the footer ("Saved", "Saving…"). */
+  saveStatus?: string | null
   onChangeSpec: (updater: (prev: TechpackSpecV2) => TechpackSpecV2) => void
   onUpdatePiece: (pieceId: string, updater: (piece: TechpackPiece) => TechpackPiece) => void
+  /** Persist then close — preferred for the simplified Create Real Design flow. */
   onSaveAndDone: () => void | Promise<void>
   onDiscardAndClose: () => void
+  /** When true, Close autosaves valid edits instead of requiring Save & Done. */
+  autosaveOnClose?: boolean
 }
 
 function groupsFor(pieces: TechpackPiece[]): Array<{ id: MeasurementGroupId; label: string }> {
@@ -52,10 +57,12 @@ export function MeasurementsSheet({
   draftKey,
   initialGroupId,
   busy = false,
+  saveStatus = null,
   onChangeSpec,
   onUpdatePiece,
   onSaveAndDone,
   onDiscardAndClose,
+  autosaveOnClose = false,
 }: Props) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -148,6 +155,10 @@ export function MeasurementsSheet({
   const markDirty = () => setDirty(true)
 
   const requestClose = () => {
+    if (autosaveOnClose) {
+      void onSaveAndDone()
+      return
+    }
     if (dirty) {
       setConfirmDiscard(true)
       return
@@ -176,12 +187,15 @@ export function MeasurementsSheet({
       >
         <header className={styles.header}>
           <div className={styles.headerText}>
-            <p className={styles.kicker}>Step 3 · Measurements</p>
+            <p className={styles.kicker}>
+              {autosaveOnClose ? 'Measurements & details' : 'Step 3 · Measurements'}
+            </p>
             <h2 id={titleId} className={styles.title}>
               {current?.label ?? 'Measurements'}
             </h2>
             <p className={styles.progress}>
               Group {groupIndex + 1} of {groups.length} · empty fields stay unknown
+              {saveStatus ? ` · ${saveStatus}` : ''}
             </p>
           </div>
           <button
@@ -375,14 +389,25 @@ export function MeasurementsSheet({
                   <ChevronRight size={16} aria-hidden />
                 </button>
               ) : null}
-              <button
-                type="button"
-                className={styles.primaryBtn}
-                disabled={busy}
-                onClick={() => void onSaveAndDone()}
-              >
-                {busy ? 'Saving…' : 'Save & Done'}
-              </button>
+              {autosaveOnClose ? (
+                <button
+                  type="button"
+                  className={styles.primaryBtn}
+                  disabled={busy}
+                  onClick={() => void onSaveAndDone()}
+                >
+                  {busy ? 'Saving…' : 'Done'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.primaryBtn}
+                  disabled={busy}
+                  onClick={() => void onSaveAndDone()}
+                >
+                  {busy ? 'Saving…' : 'Save & Done'}
+                </button>
+              )}
             </div>
           )}
         </footer>
