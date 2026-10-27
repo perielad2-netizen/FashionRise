@@ -3,49 +3,82 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Create Real Design V3.1 LIVE** — measurement tab reset fix + one-click Generate AI PDF + Magic-style progress + PDF quality. FE PR [#102](https://github.com/perielad2-netizen/FashionRise/pull/102) `9ba396a3` · BE PR [#103](https://github.com/perielad2-netizen/FashionRise/pull/103) `ffec1a7b`. Alembic **`010`**. **0 new paid AI calls by Cursor**. **Samsung Internet / owner phone acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Create Real Design AI auto-fill LIVE** — Magic look evidence + persisted vision fill specs; shirt+trousers not dress. BE PR [#110](https://github.com/perielad2-netizen/FashionRise/pull/110) `3307da95` · FE PR [#111](https://github.com/perielad2-netizen/FashionRise/pull/111) `cb2c5b8d`. Alembic **`011`**. **0 paid OpenAI tests by Cursor**. **Samsung device acceptance NOT claimed.**)
 
-**Phase:** Protected family beta. **Create Real Design V3.1 LIVE**. Production FE @ `9ba396a3`. Production BE mark @ `ffec1a7b` (on V3 + `186cac84` reasoning lineage). Alembic **`010`**.
+**Phase:** Protected family beta. **Create Real Design AI auto-fill LIVE** (on simple UX Generate → Wait → Download). Production FE @ `cb2c5b8d`. Production BE @ `3307da95`. Alembic **`011`**. Durable AI worker + polling retained.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`9ba396a3`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/9ba396a3`. Measurement group stability; one-click **Generate AI PDF**; Magic-style progress overlay; `/api/v1` prod assert. |
-| Backend (FastAPI + PostgreSQL) | **`ffec1a7b`** mark (files overlay on V3 lineage) — `POST …/ai/generate-professional` one-tap intent; progress phases; compatibility warnings; PDF V3.1 branding + larger detail flats. Spend gates unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
-| AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
-| Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
-| Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
-| Deploy backup | `/var/backups/fashionrise/v31-deploy-20261026T233003Z` (+ prior crit-fix backup) |
-| AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
+| Frontend (`web-ui`) | **`cb2c5b8d`** — Nginx `current` → `releases/cb2c5b8d`. Simple UX retained; Edit measurements & details shows visually supported / AI proposed / unknown provenance + conflict notices. API base `/api/v1`. |
+| Backend (FastAPI + PostgreSQL) | **`3307da95`** — `techpack_autofill` repairs stale one-dress metadata from Magic evidence; seeds visible details; versioned `garment_analysis`; no fabricate empty-body POMs; category-aware mock vision for $0 regression. `fashionrise-api` on `127.0.0.1:8010`. |
+| AI worker | `fashionrise-ai-worker` — unchanged durable queue; PDF assembly before completed/ready |
+| Database | `fashionrise_beta` — Alembic **`011`** (no new migration) |
+| Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
+| Deploy backup | BE `/var/backups/fashionrise/autofill-be-20261027T111104Z` · FE rollback → `releases/ac485620` |
+| AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. **Cursor did not run paid generate.** |
 
-## V3.1 — what shipped (2026-10-27)
+## AI auto-fill technical specs (2026-10-27)
 
 | Item | Detail |
 |---|---|
-| Measurement reset root cause | `MeasurementsSheet` effect depended on `groups` (rebuilt whenever `pieces` identity changed on each keystroke) and reset `groupIndex` to Body |
-| Measurement fix | Track active group by stable id; init only on open / draftKey / initialGroupId; clamp if piece removed |
-| Mobile tests | Vitest keystroke harness: Finished Dress + Preferences + two-piece outfit; focus retained |
-| Generation UX | Single **Generate AI PDF** — no Basic pack / cost-estimate / confirm checkbox in the active workflow |
-| Server intent | One-tap mints confirm token server-side; allowlist, ceilings, concurrent, idempotency preserved |
-| Progress | Named phases on `TechpackAIRun.request.progress`; overlay + `GET …/ai/latest-run` resume (no duplicate paid start) |
-| PDF | Larger detail flats; material REVIEW (silk≠cotton); sleeveless sleeve/construction/inventory flags; `PROPOSED BACK — UNVERIFIED`; footer **Create Real Design V3.1** |
-| Offline PDF / mock AI | BE `test_techpack_v31_one_tap.py` **6 passed**; V3 professional + provenance **13** with disposable `fashionrise_test` |
-| Production smoke | Health/ready OK; OpenAPI exposes generate-professional + latest-run; Alembic `010`; version.json `9ba396a3` |
+| Workflow | Unchanged: **Select Magic Look → Generate AI PDF → Wait → Download** |
+| Zero-cost fill | Uses Magic summary/`design_identity` + already-persisted Professional `illustrations.analysis` on create/get/generate — **no paid OpenAI on page open** |
+| Multi-piece | Shirt + trousers detected; stale migrated single-dress drafts repaired from look evidence |
+| Qualitative suggestions | Color, neckline, sleeves, silhouette, fabric appearance, construction cues with provenance |
+| Authoritative snapshot | `garment_analysis` v1 shared across PDF sections |
+| Designer values | Confirmed fields preserved; AI conflicts flagged, never silent overwrite |
+| Measurements | Unknown stay empty / explicitly unknown — no fabricated sleeve/inseam/rise cm without body input |
+| Optional edits | Existing Edit measurements & details only — no new mandatory confirmation step |
+| Regression | Black shirt + beige trousers mocked $0 (`test_techpack_autofill.py`) — 2 garments, V-slit, 3/4 sleeves, not dress, DRAFT/UNVERIFIED |
+| Production smoke | `/ready` OK; Alembic `011`; FE `version.json` `cb2c5b8d`; BE detect/repair shirt+trousers OK; OpenAPI generate-professional + latest-run present |
 
-### Next recommended action (owner — Samsung)
+### Next recommended action (owner)
 
-1. Hard-refresh FashionRise (or clear site data once) → confirm App / Create Real Design build **`9ba396a3`**.
-2. Open saved Magic look → Step 3 → Finished Garment → type several values → **must stay on Finished** (no jump to Body).
-3. Step 4 → one tap **Generate AI PDF** → see Magic-style progress → PDF ready → Preview / Download (no second payment).
-4. Review PDF for detail size, material REVIEW, sleeveless construction, proposed back label.
-5. Report results; do not ask Cursor to re-run paid generate unless a real failure appears.
+1. Hard-refresh FashionRise → confirm App build **`cb2c5b8d`**.
+2. Open the black shirt + beige trousers Magic look → Create Real Design (**no form edits required**).
+3. Confirm garments show **shirt** + **trousers** (not dress); shirt V-slit + three-quarter sleeves suggested.
+4. **Generate AI PDF** → Wait → **Download PDF**; both garment sections present; illustrations DRAFT/UNVERIFIED.
+5. Optional: Edit measurements & details to correct a field — regenerate should reuse structured analysis without surprise overwrite of confirmed values.
+6. Report acceptance; do **not** ask Cursor to run paid OpenAI unless a real failure appears.
 
-### Rollback (V3.1)
+### Rollback (AI auto-fill)
 
-- FE: `ln -sfn /var/www/fashionrise/releases/cf2a31ac /var/www/fashionrise/current && nginx -t && systemctl reload nginx`
-- BE: restore files from `/var/backups/fashionrise/v31-deploy-20261026T233003Z/` into `/opt/fashionrise/src/backend/…` and `systemctl restart fashionrise-api`
-- DB dump retained at that backup path (prefer app rollback; no migration to reverse)
+- FE: `ln -sfn /var/www/fashionrise/releases/ac485620 /var/www/fashionrise/current && nginx -t && systemctl reload nginx`
+- BE: restore `/var/backups/fashionrise/autofill-be-20261027T111104Z/` into `/opt/fashionrise/src/backend/app/services/` (+ remove `techpack_autofill.py` if rolling fully back) and restore `REVISION`/`APP_REVISION`, then `systemctl restart fashionrise-api fashionrise-ai-worker`
+- Prefer app rollback; no migration to reverse
+
+## Simple UX + AI PDF delivery (2026-10-27)
+
+| Item | Detail |
+|---|---|
+| Removed from main UX | Four-stage wizard, Basic PDF choice, Save Draft / Save&Done maze, cost-estimate/confirm checkbox, View Illustrations, Preview PDF, progress checklists, latest_export explanations |
+| New primary screen | Brand + subtitle + Magic image + **Edit measurements & details** + **Generate AI PDF** |
+| Details editor | Optional sheet: garments/materials, body + finished measurements; autosave + unobtrusive Saved; close returns to main screen |
+| Waiting modal | Magic-consistent; truthful phases; reconnects after reload to same durable run |
+| Ready | Only when Professional PDF bound to that AI run — single **Download PDF** |
+| Architecture | Worker: illustrations → assemble Professional PDF → `result.export_id`/`pdf_ready` → `completed`/`ready`. Never substitute Basic `latest_export`. |
+| FR-7182 recovery | Run `1ccb0d5f…` · 4 artifacts · export `f91e0a52…` rebound · 7-page Professional PDF (`generation_mode=professional`) · download path live · **0 OpenAI** |
+| Cost accounting | Preserve conservative budget reservations; expose `budget_recorded_usd_cents`; do not present fixed fallbacks as verified wallet spend |
+| Tests | BE `test_techpack_pdf_ready_binding.py` + async/V3 suites; FE TechpackScreen simplified UX **16** sheet/screen tests |
+| Production smoke | Health OK; FE asset strings Generate/Wait/Ready/Download; no Basic/wizard strings; Alembic `011`; FR-7182 `pdf_ready=true` |
+| Safety | CF Access / AOP / owner scoping / spend gates preserved; no unrelated VPS apps touched |
+
+### Next recommended action (owner)
+
+1. Hard-refresh FashionRise → confirm App build **`ac485620`**.
+2. My Looks → pink striped Magic dress → **Create Real Design**.
+3. Confirm single screen (no 4-stage wizard) → optional Edit measurements → **Generate AI PDF** once.
+4. Wait for Ready → **Download PDF** only (Professional, not Basic).
+5. For FR-7182 reopen: should show Download immediately without a new charge.
+6. Report acceptance; do not ask Cursor to re-run paid OpenAI unless a real failure appears.
+
+### Rollback (simple UX)
+
+- FE: `ln -sfn /var/www/fashionrise/releases/58d82605 /var/www/fashionrise/current && nginx -t && systemctl reload nginx`
+- BE: restore `/var/backups/fashionrise/simple-ux-be-20261027T101719Z/` into `/opt/fashionrise/src/backend/app/services/` + prior `REVISION`, then `systemctl restart fashionrise-api fashionrise-ai-worker`
+- Prefer app rollback; no migration to reverse
 
 ## CRITICAL fix — root causes (2026-10-26)
 
