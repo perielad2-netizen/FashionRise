@@ -22,7 +22,7 @@ export type ArtworkSample = {
 /**
  * Sample the final composite pixel at a design-space point using the same
  * fill→ink layering as Konva preview / PNG / Magic capture (no reference).
- * Erasers remove ink only; fills beneath erased strokes remain sampleable.
+ * Erasers punch both ink and fill pixels (per-fill chronology); croquis is never sampled.
  */
 export function sampleArtworkPixel(input: ArtworkSampleInput): ArtworkSample {
   const px = Math.round(input.x)

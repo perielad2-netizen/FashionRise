@@ -1,0 +1,228 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(8, 10, 14, 0.72);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+    env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+}
+
+.sheet {
+  width: min(100%, 480px);
+  height: 100%;
+  max-height: 100dvh;
+  background: #141820;
+  color: var(--fr-text);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #10141c;
+}
+
+.headerText {
+  min-width: 0;
+}
+
+.kicker {
+  margin: 0 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fr-muted);
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--fr-text);
+}
+
+.progress {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--fr-muted);
+}
+
+.closeBtn {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-text);
+  display: grid;
+  place-items: center;
+}
+
+.groupTabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  -webkit-overflow-scrolling: touch;
+}
+
+.groupTab {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--fr-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.groupTabActive {
+  color: var(--fr-text);
+  border-color: rgba(244, 114, 182, 0.55);
+  background: rgba(244, 114, 182, 0.12);
+}
+
+.body {
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 14px 24px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fr-muted);
+}
+
+.fieldBlock {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.fieldBlock label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fr-text);
+}
+
+.fieldBlock input,
+.fieldBlock select,
+.fieldBlock textarea {
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-text);
+  font-size: 16px;
+}
+
+.fieldBlock textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: #10141c;
+}
+
+.footerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ghostBtn,
+.primaryBtn,
+.dangerBtn {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.ghostBtn {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: var(--fr-text);
+}
+
+.primaryBtn {
+  flex: 1 1 auto;
+  border: 0;
+  background: linear-gradient(135deg, #f472b6, #c45d8c);
+  color: #1a1014;
+}
+
+.dangerBtn {
+  border: 0;
+  background: #b91c1c;
+  color: #fff;
+}
+
+.discardBar p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #fde68a;
+}
+
+.ghostBtn:disabled,
+.primaryBtn:disabled {
+  opacity: 0.5;
+}
+
+.provenance {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--fr-muted);
+}
+
+.conflictBox {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+  font-size: 12px;
+  line-height: 1.4;
+  color: #fde68a;
+}
+
+.visibleDetails {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--fr-muted);
+}
+
+.visibleDetails strong {
+  color: var(--fr-text);
+  font-weight: 600;
+}

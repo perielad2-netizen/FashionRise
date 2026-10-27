@@ -38,6 +38,16 @@ describe('WEB-V2.3 responsive layout contract', () => {
     expect(rule(drawingCss, '.wrap')).toContain('container-type: size')
   })
 
+  it('anchors Full Screen / Flip to the paper frame with paper-width container queries', () => {
+    const frame = rule(drawingCss, '.canvasFrame')
+    expect(frame).toContain('container-type: inline-size')
+    expect(frame).toContain('container-name: studio-paper')
+    expect(drawingCss).toContain('.fullscreenCorner')
+    expect(drawingCss).toContain('@container studio-paper (max-width: 420px)')
+    // Stage chrome must not host a competing absolute Full Screen cluster.
+    expect(creatorCss).not.toContain('.canvasActions')
+  })
+
   it('no longer reserves desktop space for a floating brush window', () => {
     expect(drawingCss).not.toContain('wrapWithBrush')
     expect(drawingCss).not.toContain('156px')
