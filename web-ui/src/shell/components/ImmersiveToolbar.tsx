@@ -38,7 +38,6 @@ type Props = {
   onOpenBrush: () => void
   onOpenModels: () => void
   onSave: () => void
-  onExport: () => void
   onExit: () => void
   saveLabel?: string
 }
@@ -63,7 +62,6 @@ export function ImmersiveToolbar({
   onOpenBrush,
   onOpenModels,
   onSave,
-  onExport,
   onExit,
   saveLabel = 'Save',
 }: Props) {
@@ -145,9 +143,6 @@ export function ImmersiveToolbar({
           </button>
           <button type="button" className={styles.textBtn} onClick={onSave}>
             {saveLabel}
-          </button>
-          <button type="button" className={styles.textBtn} onClick={onExport}>
-            Export PNG
           </button>
         </div>
       </div>
