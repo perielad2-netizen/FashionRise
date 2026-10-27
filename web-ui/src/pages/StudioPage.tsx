@@ -1,8 +1,10 @@
-import { useCallback } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useCallback, useMemo } from 'react'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FashionRiseAppShell } from '@/shell/components/FashionRiseAppShell'
 import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
 import { MyDesignsScreen } from '@/shell/components/MyDesignsScreen'
+import { MyLooksScreen } from '@/shell/components/MyLooksScreen'
+import { TechpackScreen } from '@/shell/components/TechpackScreen'
 import { OpenDesignDialog } from '@/shell/components/OpenDesignDialog'
 import type { NavDestination } from '@/shell/components/GlobalNavigation'
 import { useStudioEditor } from '@/hooks/useStudioEditor'
@@ -11,25 +13,56 @@ import styles from './StudioPage.module.css'
 
 export const STUDIO_PATH = '/studio'
 export const MY_DESIGNS_PATH = '/studio/designs'
+export const MY_LOOKS_PATH = '/studio/looks'
+export const TECHPACK_PATH_PREFIX = '/studio/techpacks'
 
 /**
- * Studio and My Designs share one mounted editor so the working draft's autosave chain,
- * IndexedDB recovery and conflict state survive switching between the two screens.
+ * Studio, My Designs and My Looks share one mounted editor so the working draft's
+ * autosave chain, IndexedDB recovery and conflict state survive screen switches.
  */
 export function StudioPage() {
   const editor = useStudioEditor()
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const path = location.pathname.replace(/\/+$/, '') || STUDIO_PATH
-  const view = path === MY_DESIGNS_PATH ? 'library' : path === STUDIO_PATH ? 'studio' : null
+  const techpackDraftId = path.startsWith(`${TECHPACK_PATH_PREFIX}/`)
+    ? path.slice(`${TECHPACK_PATH_PREFIX}/`.length).split('/').filter(Boolean)[0] || null
+    : null
+  const view =
+    techpackDraftId
+      ? 'techpack'
+      : path === MY_DESIGNS_PATH
+        ? 'library'
+        : path === MY_LOOKS_PATH
+          ? 'looks'
+          : path === STUDIO_PATH
+            ? 'studio'
+            : null
 
   const onNavigate = useCallback(
     (destination: NavDestination) => {
-      navigate(destination === 'designs' ? MY_DESIGNS_PATH : STUDIO_PATH)
+      if (destination === 'designs') navigate(MY_DESIGNS_PATH)
+      else if (destination === 'looks') navigate(MY_LOOKS_PATH)
+      else navigate(STUDIO_PATH)
     },
     [navigate],
   )
   const backToStudio = useCallback(() => navigate(STUDIO_PATH), [navigate])
+  const backToLooks = useCallback(() => navigate(MY_LOOKS_PATH), [navigate])
+  const focusLookId = searchParams.get('look')
+  const clearFocusLook = useCallback(() => {
+    if (!searchParams.has('look')) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('look')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const currentNav: NavDestination = useMemo(() => {
+    if (view === 'library') return 'designs'
+    if (view === 'looks' || view === 'techpack') return 'looks'
+    return 'create'
+  }, [view])
 
   if (view === null) return <Navigate to={STUDIO_PATH} replace />
 
@@ -39,7 +72,7 @@ export function StudioPage() {
         username={editor.user?.username ?? 'Creator'}
         onLogout={editor.onLogout}
         onComingSoon={editor.showComingSoon}
-        currentNav={view === 'library' ? 'designs' : 'create'}
+        currentNav={currentNav}
         onNavigate={onNavigate}
       >
         {view === 'library' && editor.user?.id ? (
@@ -63,8 +96,23 @@ export function StudioPage() {
             onBackToStudio={backToStudio}
             opening={editor.openDesign !== null}
           />
+        ) : view === 'looks' ? (
+          <MyLooksScreen
+            focusLookId={focusLookId}
+            onBackToStudio={backToStudio}
+            onFocusConsumed={clearFocusLook}
+            onOpenTechpack={(draftId) => navigate(`${TECHPACK_PATH_PREFIX}/${draftId}`)}
+          />
+        ) : view === 'techpack' && techpackDraftId ? (
+          <TechpackScreen draftId={techpackDraftId} onBack={backToLooks} />
         ) : (
-          <CreatorWorkspace editor={editor} onOpenLibrary={() => onNavigate('designs')} />
+          <CreatorWorkspace
+            editor={editor}
+            onOpenLibrary={() => onNavigate('designs')}
+            onOpenLooks={(lookId) =>
+              navigate(lookId ? `${MY_LOOKS_PATH}?look=${encodeURIComponent(lookId)}` : MY_LOOKS_PATH)
+            }
+          />
         )}
       </FashionRiseAppShell>
       {editor.openDesign ? (

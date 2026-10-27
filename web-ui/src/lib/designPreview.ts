@@ -1,4 +1,5 @@
-import { canvasSrcForModel } from '@/assets/modelLibrary'
+import { canvasSrcForModel, type ModelCanvasSide } from '@/assets/modelLibrary'
+import { isStudioFrontBackEnabled } from '@/config/studioFrontBack'
 import { canvasToPngBlob, loadImage, renderSketchCanvas } from '@/lib/exportCanvas'
 import type { SavedDesignSnapshot } from '@/lib/savedDesign'
 
@@ -10,8 +11,12 @@ export const PREVIEW_PAGE_SIZE = 24
 /** Thumbnail-only floor so pencil-fine strokes stay visible at 240×320. */
 export const PREVIEW_MIN_INK_SIZE = 1.5
 
-export function previewReferenceUrl(snapshot: Pick<SavedDesignSnapshot, 'model'>): string | null {
-  return canvasSrcForModel(snapshot.model)
+export function previewReferenceUrl(
+  snapshot: Pick<SavedDesignSnapshot, 'model' | 'activeSide'>,
+  side: ModelCanvasSide = 'front',
+): string | null {
+  const target = isStudioFrontBackEnabled() && side === 'back' ? 'back' : 'front'
+  return canvasSrcForModel(snapshot.model, target)
 }
 
 const referenceCache = new Map<string, Promise<HTMLImageElement>>()

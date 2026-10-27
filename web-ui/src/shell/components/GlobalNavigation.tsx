@@ -1,7 +1,7 @@
 import { BookOpen, Compass, FolderHeart, Home, Images, Sparkles } from 'lucide-react'
 import styles from './GlobalNavigation.module.css'
 
-export type NavDestination = 'create' | 'designs'
+export type NavDestination = 'create' | 'designs' | 'looks'
 
 const ITEMS = [
   { id: 'home', label: 'Home', icon: Home, destination: null },
@@ -9,7 +9,7 @@ const ITEMS = [
   { id: 'designs', label: 'My Designs', icon: FolderHeart, destination: 'designs' },
   { id: 'book', label: 'Design Book', icon: BookOpen, destination: null },
   { id: 'discover', label: 'Discover', icon: Compass, destination: null },
-  { id: 'looks', label: 'My Looks', icon: Images, destination: null },
+  { id: 'looks', label: 'My Looks', icon: Images, destination: 'looks' },
 ] as const
 
 type Props = {
