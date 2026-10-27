@@ -36,6 +36,40 @@ function toStored(tokens: TokenResponse): StoredTokens {
   }
 }
 
+export type CfAccessSsoStatus = {
+  sso_enabled: boolean
+  note?: string
+}
+
+export async function getCfAccessSsoStatus(signal?: AbortSignal): Promise<CfAccessSsoStatus> {
+  return apiRequest<CfAccessSsoStatus>('/auth/cf-access/status', {
+    method: 'GET',
+    auth: false,
+    signal,
+  })
+}
+
+/**
+ * Seamless login using the Cloudflare Access JWT that the edge forwards to origin.
+ * Maps verified Access email → existing FashionRise user only (never invents accounts).
+ */
+export async function loginWithCloudflareAccess(): Promise<{ user: User; tokens: StoredTokens }> {
+  tokenStore.clear()
+  const tokens = await apiRequest<TokenResponse>('/auth/cf-access/login', {
+    method: 'POST',
+    auth: false,
+  })
+  const stored = toStored(tokens)
+  tokenStore.set(stored)
+  try {
+    const user = await fetchMe()
+    return { user, tokens: stored }
+  } catch (err) {
+    tokenStore.clear()
+    throw err
+  }
+}
+
 export async function login(payload: LoginPayload): Promise<{ user: User; tokens: StoredTokens }> {
   // Drop any prior tokens before applying a new session (account switch).
   tokenStore.clear()

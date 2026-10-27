@@ -47,24 +47,36 @@ function blendOver(dst: Buf, src: Buf) {
   }
 }
 
-function paintFillsOnto(buf: Buf, fills: FillOp[]) {
-  for (const fill of fills) {
-    if (fill.style.kind === 'solid') {
-      const hex = fill.style.color.slice(1)
-      const r = parseInt(hex.slice(0, 2), 16)
-      const g = parseInt(hex.slice(2, 4), 16)
-      const b = parseInt(hex.slice(4, 6), 16)
-      for (let y = fill.seedY - 2; y <= fill.seedY + 2; y += 1) {
-        for (let x = fill.seedX - 2; x <= fill.seedX + 2; x += 1) {
-          setPixel(buf, x, y, r, g, b)
-        }
+function paintOneFill(buf: Buf, fill: FillOp) {
+  if (fill.style.kind === 'solid') {
+    const hex = fill.style.color.slice(1)
+    const r = parseInt(hex.slice(0, 2), 16)
+    const g = parseInt(hex.slice(2, 4), 16)
+    const b = parseInt(hex.slice(4, 6), 16)
+    for (let y = fill.seedY - 2; y <= fill.seedY + 2; y += 1) {
+      for (let x = fill.seedX - 2; x <= fill.seedX + 2; x += 1) {
+        setPixel(buf, x, y, r, g, b)
       }
-    } else if (fill.style.kind === 'gradient') {
-      setPixel(buf, fill.seedX - 20, fill.seedY, 255, 0, 0)
-      setPixel(buf, fill.seedX + 20, fill.seedY, 0, 0, 255)
-    } else if (fill.style.kind === 'fabric') {
-      setPixel(buf, fill.seedX, fill.seedY, 30, 58, 138)
-      setPixel(buf, fill.seedX + 1, fill.seedY, 147, 197, 253)
+    }
+  } else if (fill.style.kind === 'gradient') {
+    setPixel(buf, fill.seedX - 20, fill.seedY, 255, 0, 0)
+    setPixel(buf, fill.seedX + 20, fill.seedY, 0, 0, 255)
+  } else if (fill.style.kind === 'fabric') {
+    setPixel(buf, fill.seedX, fill.seedY, 30, 58, 138)
+    setPixel(buf, fill.seedX + 1, fill.seedY, 147, 197, 253)
+  }
+}
+
+function paintFillsWithErasersOnto(buf: Buf, fills: FillOp[], strokes: Stroke[]) {
+  for (const fill of fills) {
+    paintOneFill(buf, fill)
+    const after = fill.eraseAfterStrokeIndex ?? 0
+    for (let i = after; i < strokes.length; i += 1) {
+      const stroke = strokes[i]!
+      if (stroke.tool !== 'erase') continue
+      const x = Math.round(stroke.points[0] ?? 0)
+      const y = Math.round(stroke.points[1] ?? 0)
+      setPixel(buf, x, y, 0, 0, 0, 0)
     }
   }
 }
@@ -92,7 +104,7 @@ function paintInkOnto(buf: Buf, strokes: Stroke[]) {
 
 /**
  * Mirrors production compositeFillAndInkLayers: fills and ink are separate buffers;
- * eraser clears ink only, then layers are blended onto the target.
+ * eraser punches both (fills honor eraseAfterStrokeIndex chronology).
  */
 vi.mock('@/lib/exportCanvas', () => ({
   compositeFillAndInkLayers: (
@@ -101,7 +113,7 @@ vi.mock('@/lib/exportCanvas', () => ({
   ) => {
     const fillBuf = new Uint8ClampedArray(options.width * options.height * 4)
     const inkBuf = new Uint8ClampedArray(options.width * options.height * 4)
-    paintFillsOnto(fillBuf, options.fills)
+    paintFillsWithErasersOnto(fillBuf, options.fills, options.strokes)
     paintInkOnto(inkBuf, options.strokes)
     blendOver(target.__buf, fillBuf)
     blendOver(target.__buf, inkBuf)
@@ -160,7 +172,7 @@ describe('sampleArtworkPixel', () => {
     expect(sampleArtworkPixel({ fills, strokes: [], x: 20, y: 20 }).hex).toBe('#B91C1C')
   })
 
-  it('still samples red fill after black ink is erased (ink-only eraser)', async () => {
+  it('erases fill pixels along with ink at the same point', async () => {
     const { sampleArtworkPixel } = await import('@/lib/sampleArtworkPixel')
     const fills: FillOp[] = [
       {
@@ -169,6 +181,41 @@ describe('sampleArtworkPixel', () => {
         style: { kind: 'solid', color: '#B91C1C' },
         seedX: 20,
         seedY: 20,
+        eraseAfterStrokeIndex: 0,
+      },
+    ]
+    const strokes: Stroke[] = [
+      {
+        id: 'ink',
+        tool: 'draw',
+        points: [20, 20, 0.5],
+        color: '#111111',
+        size: 4,
+        opacity: 1,
+      },
+      {
+        id: 'erase',
+        tool: 'erase',
+        points: [20, 20, 0.5],
+        color: '#000000',
+        size: 8,
+        opacity: 1,
+      },
+    ]
+    const sampled = sampleArtworkPixel({ fills, strokes, x: 20, y: 20 })
+    expect(sampled.hit).toBe(false)
+  })
+
+  it('keeps fill pixels when erase happened before the fill was created', async () => {
+    const { sampleArtworkPixel } = await import('@/lib/sampleArtworkPixel')
+    const fills: FillOp[] = [
+      {
+        id: 'f',
+        contour: [10, 10, 40, 10, 40, 40, 10, 40],
+        style: { kind: 'solid', color: '#B91C1C' },
+        seedX: 20,
+        seedY: 20,
+        eraseAfterStrokeIndex: 2,
       },
     ]
     const strokes: Stroke[] = [
@@ -194,7 +241,7 @@ describe('sampleArtworkPixel', () => {
     expect(sampled.hex).toBe('#B91C1C')
   })
 
-  it('still samples fabric and gradient after ink erase at that pixel', async () => {
+  it('erases fabric and gradient fill pixels at the eraser tip', async () => {
     const { sampleArtworkPixel } = await import('@/lib/sampleArtworkPixel')
     const fabric: FillOp[] = [
       {
@@ -203,6 +250,7 @@ describe('sampleArtworkPixel', () => {
         style: { kind: 'fabric', fabricId: 'denim' },
         seedX: 10,
         seedY: 10,
+        eraseAfterStrokeIndex: 0,
       },
     ]
     const gradient: FillOp[] = [
@@ -217,6 +265,7 @@ describe('sampleArtworkPixel', () => {
         },
         seedX: 50,
         seedY: 20,
+        eraseAfterStrokeIndex: 0,
       },
     ]
     const eraseAt = (x: number, y: number): Stroke[] => [
@@ -237,11 +286,11 @@ describe('sampleArtworkPixel', () => {
         opacity: 1,
       },
     ]
-    expect(sampleArtworkPixel({ fills: fabric, strokes: eraseAt(10, 10), x: 10, y: 10 }).hex).toBe(
-      '#1E3A8A',
+    expect(sampleArtworkPixel({ fills: fabric, strokes: eraseAt(10, 10), x: 10, y: 10 }).hit).toBe(
+      false,
     )
-    expect(sampleArtworkPixel({ fills: gradient, strokes: eraseAt(30, 20), x: 30, y: 20 }).hex).toBe(
-      '#FF0000',
+    expect(sampleArtworkPixel({ fills: gradient, strokes: eraseAt(30, 20), x: 30, y: 20 }).hit).toBe(
+      false,
     )
   })
 
