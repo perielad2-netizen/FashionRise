@@ -374,8 +374,9 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     const nav = screen.getByRole('navigation', { name: 'FashionRise' })
     expect(nav.querySelector('img')).toBeNull()
     expect(within(nav).getByRole('button', { name: 'Create' })).toHaveAttribute('aria-current', 'page')
-    for (const label of ['Home', 'Design Book', 'Discover', 'My Looks']) {
+    for (const label of ['Home', 'Design Book', 'Discover']) {
       expect(within(nav).getByRole('button', { name: label })).toBeDisabled()
     }
+    expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
   })
 })

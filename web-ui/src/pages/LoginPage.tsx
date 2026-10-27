@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
@@ -9,7 +9,7 @@ import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './LoginPage.module.css'
 
 export function LoginPage() {
-  const { login, isAuthenticated, bootstrapping } = useAuth()
+  const { login, loginWithAccess, isAuthenticated, bootstrapping, accessSsoAvailable } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -17,6 +17,17 @@ export function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [accessHint, setAccessHint] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!accessSsoAvailable) {
+      setAccessHint(null)
+      return
+    }
+    setAccessHint(
+      'Cloudflare Access verified — continue with FashionRise credentials if automatic sign-in did not complete.',
+    )
+  }, [accessSsoAvailable])
 
   if (bootstrapping) return null
   if (isAuthenticated) return <Navigate to="/studio" replace />
@@ -65,6 +76,30 @@ export function LoginPage() {
 
         <h2 className={styles.title}>Welcome back</h2>
         <p className={styles.subtitle}>Sign in to open Creator Studio.</p>
+        {accessHint ? <p className={styles.subtitle}>{accessHint}</p> : null}
+        {accessSsoAvailable && loginWithAccess ? (
+          <button
+            type="button"
+            className={styles.submit}
+            style={{ marginBottom: 12 }}
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true)
+                setFormError(null)
+                const ok = await loginWithAccess()
+                setBusy(false)
+                if (ok) navigate('/studio', { replace: true })
+                else
+                  setFormError(
+                    'Could not link Cloudflare Access to a FashionRise account. Sign in with email below once.',
+                  )
+              })()
+            }}
+          >
+            Continue with Cloudflare Access
+          </button>
+        ) : null}
 
         <form className={styles.form} onSubmit={onSubmit} noValidate>
           <label className={styles.field}>
