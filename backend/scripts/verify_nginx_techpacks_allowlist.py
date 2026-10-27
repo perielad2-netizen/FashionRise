@@ -52,6 +52,16 @@ location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate$" {
     proxy_pass http://127.0.0.1:8010;
 }
 
+location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate-professional$" {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/latest-run$" {
+    limit_except GET { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
 location ~ "^/api/v1/techpacks/exports/[0-9a-fA-F-]{36}/pdf$" {
     limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
@@ -77,6 +87,8 @@ MATRIX = [
     ("GET", f"/api/v1/techpacks/{UUID}/exports", "allow_exports"),
     ("POST", f"/api/v1/techpacks/{UUID}/ai/confirm", "allow_ai_confirm"),
     ("POST", f"/api/v1/techpacks/{UUID}/ai/generate", "allow_ai_generate"),
+    ("POST", f"/api/v1/techpacks/{UUID}/ai/generate-professional", "allow_ai_generate_professional"),
+    ("GET", f"/api/v1/techpacks/{UUID}/ai/latest-run", "allow_ai_latest_run"),
     ("GET", f"/api/v1/techpacks/exports/{UUID}/pdf", "allow_pdf"),
     ("GET", f"/api/v1/techpacks/artifacts/{UUID}/image", "allow_artifact"),
     ("POST", f"/api/v1/techpacks/{UUID}/ai-draft", "deny_ai_legacy"),
@@ -91,6 +103,10 @@ _EXPORT_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/export$")
 _EXPORTS_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/exports$")
 _AI_CONFIRM_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/confirm$")
 _AI_GENERATE_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate$")
+_AI_GENERATE_PROFESSIONAL_RE = re.compile(
+    r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate-professional$"
+)
+_AI_LATEST_RUN_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/latest-run$")
 _PDF_RE = re.compile(r"^/api/v1/techpacks/exports/[0-9a-fA-F-]{36}/pdf$")
 _ARTIFACT_RE = re.compile(r"^/api/v1/techpacks/artifacts/[0-9a-fA-F-]{36}/image$")
 
@@ -104,6 +120,10 @@ def _assert_snippet(text: str) -> None:
         raise SystemExit("FAIL: missing ai/confirm location")
     if "/ai/generate$" not in text:
         raise SystemExit("FAIL: missing ai/generate location")
+    if "/ai/generate-professional$" not in text:
+        raise SystemExit("FAIL: missing ai/generate-professional location")
+    if "/ai/latest-run$" not in text:
+        raise SystemExit("FAIL: missing ai/latest-run location")
     if "/pdf$" not in text:
         raise SystemExit("FAIL: missing pdf location")
     if "/image$" not in text:
@@ -133,8 +153,12 @@ def _classify(method: str, path: str) -> str:
         return "allow_exports" if method == "GET" else "deny_extra"
     if _AI_CONFIRM_RE.fullmatch(path):
         return "allow_ai_confirm" if method == "POST" else "deny_extra"
+    if _AI_GENERATE_PROFESSIONAL_RE.fullmatch(path):
+        return "allow_ai_generate_professional" if method == "POST" else "deny_extra"
     if _AI_GENERATE_RE.fullmatch(path):
         return "allow_ai_generate" if method == "POST" else "deny_extra"
+    if _AI_LATEST_RUN_RE.fullmatch(path):
+        return "allow_ai_latest_run" if method == "GET" else "deny_extra"
     if _PDF_RE.fullmatch(path):
         return "allow_pdf" if method == "GET" else "deny_extra"
     if _ARTIFACT_RE.fullmatch(path):

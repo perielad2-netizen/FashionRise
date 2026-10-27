@@ -53,6 +53,16 @@
         proxy_pass http://127.0.0.1:8010;
     }
 
+    location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate-professional$" {
+        limit_except POST { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
+    location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/latest-run$" {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
     location ~ "^/api/v1/techpacks/exports/[0-9a-fA-F-]{36}/pdf$" {
         limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8010;
@@ -78,6 +88,8 @@
 | `GET /api/v1/techpacks/{uuid}/exports` | Proxied |
 | `POST /api/v1/techpacks/{uuid}/ai/confirm` | Proxied |
 | `POST /api/v1/techpacks/{uuid}/ai/generate` | Proxied |
+| `POST /api/v1/techpacks/{uuid}/ai/generate-professional` | Proxied (V3.1 one-tap) |
+| `GET /api/v1/techpacks/{uuid}/ai/latest-run` | Proxied (V3.1 resume) |
 | `GET /api/v1/techpacks/exports/{uuid}/pdf` | Proxied |
 | `DELETE /api/v1/techpacks/{uuid}` | Denied |
 | `POST /api/v1/techpacks/{uuid}/ai-draft` | Denied at edge (API also 403) |
