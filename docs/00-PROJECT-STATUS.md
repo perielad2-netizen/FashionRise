@@ -3,17 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Professional Tech Pack P0/P1 reliability fix** — BE branch `cursor/web-techpack-p0-reliability-be-77c6`. Owner acceptance PASS for Measurements & Details on FE `69b83c01`. PR #115 audit PM-accepted. **0 paid AI**. Deploy status pending verification.)
+**Last updated:** 2026-10-27 (**Professional Tech Pack P0/P1 reliability DEPLOYED** — PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) @ `bae05c56`. Owner acceptance PASS for Measurements & Details on FE `69b83c01`. PR #115 audit PM-accepted. **0 paid AI**.)
 
-**Phase:** Protected family beta. Create Real Design Generate → Wait → Download unchanged. Editor accepted. Professional PDF reliability hardening in progress/landed on BE branch.
+**Phase:** Protected family beta. Create Real Design Generate → Wait → Download unchanged. Editor accepted. Professional PDF P0/P1 reliability **deployed** (`bae05c56`).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114 quiet autosave + PDF validity + Done race). **OWNER ACCEPTANCE PASS — 2026-10-27**. |
-| Backend (FastAPI + PostgreSQL) | **`732bda9f`** pre-fix baseline · P0/P1 reliability fix pending deploy from this branch. Alembic **`011`** (no migration). |
-| AI worker | Standalone `fashionrise-ai-worker` — loads same techpack_ai modules; restart required with API on deploy |
+| Backend (FastAPI + PostgreSQL) | **`bae05c56`** (PR #116 P0/P1 reliability). Prior logical baseline **`732bda9f`**. Alembic **`011`** (no migration). |
+| AI worker | Standalone `fashionrise-ai-worker` @ **`bae05c56`** (restarted with API) |
 | Database | `fashionrise_beta` — Alembic **`011`** |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. **This work: $0 paid AI.** |
@@ -30,19 +30,20 @@ Evidence-only audit (`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md` on `cursor/te
 
 | Item | Detail |
 |---|---|
-| Branch / PR | `cursor/web-techpack-p0-reliability-be-77c6` (base production BE `732bda9f`) |
+| Branch / PR | [`#116`](https://github.com/perielad2-netizen/FashionRise/pull/116) · `cursor/web-techpack-p0-reliability-be-77c6` @ **`bae05c56`** (from `732bda9f`) |
 | Scope | Structure validation before paid generate; remove `pieces[0]` artifact fallback; fair image budget; structure repair invalidates Download; honest pattern `proposed_unverified`; PDF material/sleeve REVIEW |
 | Workflow | Unchanged: **Generate AI PDF → Wait → Download PDF** |
 | Migration | **None** (Alembic stays `011`) |
 | Offline tests | `test_techpack_p0_reliability` + v3/v31/v2/provenance/autofill/api → **40 passed** (MockProfessionalProvider, $0) |
 | Paid AI | **0** |
+| Deploy | **2026-10-27 22:14 Asia/Jerusalem** · backup `techpack-p0-reliability-deploy-20261027T201322Z` · rollback `ROLLBACK.sh` → `732bda9f` · health OK · worker active · Alembic `011` |
 | Blocked | No paid Professional regeneration authorized |
 
 ### Exact next action (owner / PM)
 
-1. Review BE PR for P0/P1 reliability.  
-2. After deploy: hard-refresh FE `69b83c01`; open FR-D47D-class two-piece draft → confirm Generate (not stale one-piece Download) after structure repair; do **not** pay for a new Professional PDF unless explicitly authorized.  
-3. Rollback: restore prior BE files from deploy backup and restart `fashionrise-api` + `fashionrise-ai-worker`.
+1. Hard-refresh FE `69b83c01`; open FR-D47D (or equivalent two-piece) → confirm Generate (not stale one-piece Download) after any structure repair.  
+2. Do **not** pay for a new Professional PDF unless explicitly authorized.  
+3. Rollback if needed: `/var/backups/fashionrise/techpack-p0-reliability-deploy-20261027T201322Z/ROLLBACK.sh` (restores `732bda9f` content; restarts API + worker).
 
 
 ## Prior production lineage notes
