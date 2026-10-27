@@ -3,43 +3,44 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Quiet autosave LIVE** — FE PR [#114](https://github.com/perielad2-netizen/FashionRise/pull/114) `31c1de01`. Responsive editor PR [#113](https://github.com/perielad2-netizen/FashionRise/pull/113) retained. Backend **`732bda9f`** / Alembic **`011`** unchanged. **0 paid AI calls**. **Owner verification PENDING.**)
+**Last updated:** 2026-10-27 (**PR #114 PDF-validity follow-up LIVE** — FE `af1ddbb5`. Quiet autosave retained. Backend **`732bda9f`** / worker unchanged / Alembic **`011`**. **0 paid AI calls**. **Owner acceptance PENDING.**)
 
-**Phase:** Protected family beta. Create Real Design main workflow unchanged. Responsive Measurements & details editor approved; autosave loop fixed and save chrome removed.
+**Phase:** Protected family beta. Create Real Design main workflow unchanged. Responsive editor + quiet autosave + Professional PDF validity sync after designer edits.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`31c1de01`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/31c1de01`. Quiet dirty-only autosave; no Saving/Saved flicker; stable Done. Lineage: `ce752b43` (#113 responsive) ← `b2fbd043` (#112) ← `cb2c5b8d` (#111). |
-| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged**. AI autofill + generate-professional + spend/privacy gates. `fashionrise-api` on `127.0.0.1:8010`. |
+| Frontend (`web-ui`) | **`af1ddbb5`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/af1ddbb5`. Quiet autosave + PDF validity sync. Prior quiet release `31c1de01`; responsive `ce752b43` (#113). |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged**. Still sets `spec.ai.dirty_since_generation=True` on designer PATCH after Professional. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
-| Database | `fashionrise_beta` — Alembic **`011`** (no migration this cycle) |
+| Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
-| Deploy backup | `/var/backups/fashionrise/autosave-quiet-fe-deploy-20261027T150341Z` (rollback → prior FE `ce752b43`) |
+| Deploy backup | `/var/backups/fashionrise/pdf-validity-fe-deploy-20261027T152349Z` (rollback → prior FE `31c1de01`) |
 | AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
 
-## Quiet autosave (2026-10-27) LIVE — stop for owner verification
+## Quiet autosave + PDF validity (2026-10-27) LIVE — stop for owner verification
 
 | Item | Detail |
 |---|---|
-| PR | FE [#114](https://github.com/perielad2-netizen/FashionRise/pull/114) · branch `cursor/web-techpack-autosave-quiet-77c6` · tip `31c1de015d55197f0a1695eb3b6ce24fc3fcf73b` |
-| Root cause | Silent `persist()` called `hydrate(next)` after every PATCH → new object refs → 700ms autosave effect re-armed → Saving/Saved loop with no user edits |
-| Fix | `editorPersistFingerprint` dirty tracking; autosave only when editable values change; server responses update revision meta only (no live form replace); in-flight / stale-response coordination |
-| UI | Removed `Saving…` / `Saved` / `Edits save automatically` / autosave subtitle. Header: **Measurements & details**. Footer: stable **Done**. Failures: alert + Retry |
-| Done | Clean → immediate close, 0 requests. Dirty → one flush. Coordinates with in-flight autosave |
-| Tests (StrictMode, 390/768/1366) | Open+idle 60s → **0** PATCH; tab/garment switch → **0**; one edit → **1** then idle 60s stays **1**; rapid typing coalesced **1**; Done clean **0**; Done dirty **1**; fail retains value + Retry |
+| PR / branch | FE [#114](https://github.com/perielad2-netizen/FashionRise/pull/114) · `cursor/web-techpack-autosave-quiet-77c6` · tip `af1ddbb5d2216b2df6549afdfad712c22cc4a229` |
+| Quiet-autosave root cause | Silent `persist()` hydrated after every PATCH → object-ref loop |
+| Quiet-autosave fix | Value fingerprint dirty tracking; no live form replace; no Saving/Saved chrome; Done clean = 0 requests |
+| PDF-validity root cause | `applyServerMetaOnly()` skipped server `ai.dirty_since_generation`, so Download PDF could remain after designer edits |
+| PDF-validity fix | Merge server-owned `ai` after PATCH; fingerprint **omits** `ai` so validity sync cannot re-arm autosave; local unsaved edits also hide Download immediately |
+| Preserved | `last_run_id`, export identity, revision, provenance, prior PDF artifacts; Generate → Wait → Download UX |
+| Tests (StrictMode, 390/768/1366) | Idle Professional draft **0** PATCH + Download; local edit → Generate before PATCH; PATCH `dirty_since_generation=true` → Generate, idle 60s stays **1** PATCH; in-flight edit retains latest + Done flush; reload outdated → Generate; new completed run → Download; prior quiet-autosave suite still green (**55** related tests) |
+| Production verify | `current`→`af1ddbb5`; version.json full SHA; health/ready OK; BE `APP_REVISION` still `732bda9f`; services active |
 | Safety | FE-only; BE/worker untouched; **0 paid AI** |
-| Rollback | `ln -sfn /var/www/fashionrise/releases/ce752b43 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` · or backup `ROLLBACK.sh` |
+| Rollback | `ln -sfn /var/www/fashionrise/releases/31c1de01 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` · or `pdf-validity-fe-deploy-…/ROLLBACK.sh` |
 
 ### Next recommended action (owner)
 
-1. Hard-refresh → confirm build **`31c1de01`**.
-2. Open lavender hoodie + yellow shorts → **Edit measurements & details**.
-3. Leave untouched for several minutes: **no movement, no Saving/Saved, no network write loop**.
-4. Switch garments/tabs without editing — still quiet.
-5. Edit one field — silent background save; Done stays put; no success toast.
-6. Done without edits closes instantly.
+1. Hard-refresh → confirm build **`af1ddbb5`**.
+2. Open a look with an existing Professional PDF → confirm **Download PDF**.
+3. Edit a measurement → CTA must switch to **Generate AI PDF** (no Saving/Saved flicker; silent save).
+4. Leave idle — no write loop; Download must not return for the old PDF.
+5. Optional: Generate a new PDF later (owner-paid) → Download returns for the new export.
 
 ## V3.1 — what shipped (2026-10-27)
 
