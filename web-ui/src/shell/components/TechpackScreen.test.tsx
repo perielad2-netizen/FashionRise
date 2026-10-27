@@ -181,7 +181,7 @@ describe('TechpackScreen simplified UX', () => {
     await screen.findByText('Create Real Design')
     fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
     expect(await screen.findByRole('dialog', { name: /Measurements & details/i })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: /^Body$/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Body measurements/i }))
     const height = await screen.findByLabelText(/^Height$/i)
     fireEvent.change(height, { target: { value: '170' } })
     fireEvent.click(screen.getByTestId('details-done'))

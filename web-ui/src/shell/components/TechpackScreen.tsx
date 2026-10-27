@@ -743,6 +743,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         pieces={pieces}
         busy={busy}
         saveStatus={saveStatus}
+        lookThumbnailUrl={frontImg.url}
         onChangeTitle={setTitle}
         onChangeStyleCode={setStyleCode}
         onChangeSpec={(updater) => setSpec((prev) => (prev ? updater(prev) : prev))}

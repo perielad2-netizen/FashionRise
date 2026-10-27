@@ -14,12 +14,12 @@ import {
 import {
   createEmptyPiece,
   measured,
-  pieceTabLabel,
+  pieceDisplayLabel,
   retargetFinishedMeasurements,
 } from '@/shell/components/techpack/pieceHelpers'
-import styles from './MeasurementsSheet.module.css'
+import styles from './DetailsEditorSheet.module.css'
 
-type SectionId = 'garments' | 'body' | 'preferences' | `piece:${string}`
+type SectionId = 'garments' | 'body' | 'preferences' | 'finished'
 
 type Props = {
   open: boolean
@@ -30,6 +30,7 @@ type Props = {
   pieces: TechpackPiece[]
   busy?: boolean
   saveStatus?: string | null
+  lookThumbnailUrl?: string | null
   onChangeTitle: (value: string) => void
   onChangeStyleCode: (value: string) => void
   onChangeSpec: (updater: (prev: TechpackSpecV2) => TechpackSpecV2) => void
@@ -47,12 +48,12 @@ function ChipRow({
   onPick: (next: string) => void
 }) {
   return (
-    <div className={styles.groupTabs} role="group">
+    <div className={styles.chipRow} role="group">
       {options.map((opt) => (
         <button
           key={opt}
           type="button"
-          className={value === opt ? `${styles.groupTab} ${styles.groupTabActive}` : styles.groupTab}
+          className={value === opt ? `${styles.chip} ${styles.chipActive}` : styles.chip}
           onClick={() => onPick(opt)}
         >
           {opt}
@@ -62,12 +63,39 @@ function ChipRow({
   )
 }
 
-function provenanceLabel(raw: unknown): string | null {
+function provenanceKey(raw: unknown): 'visual' | 'ai' | 'user' | 'unknown' | null {
   const v = typeof raw === 'string' ? raw : ''
-  if (v === 'visually_supported') return 'Visually supported'
-  if (v === 'ai_inferred') return 'AI proposed'
-  if (v === 'unknown') return 'Unknown'
-  if (v === 'designer') return 'Confirmed by you'
+  if (v === 'visually_supported') return 'visual'
+  if (v === 'ai_inferred') return 'ai'
+  if (v === 'designer') return 'user'
+  if (v === 'unknown') return 'unknown'
+  return null
+}
+
+function ProvenanceBadge({ kind }: { kind: ReturnType<typeof provenanceKey> }) {
+  if (!kind) return null
+  const label =
+    kind === 'visual'
+      ? 'Visually supported'
+      : kind === 'ai'
+        ? 'AI proposed'
+        : kind === 'user'
+          ? 'Confirmed'
+          : 'Unknown'
+  return (
+    <span className={kind === 'unknown' ? `${styles.badge} ${styles.badgeMuted}` : styles.badge}>
+      {label}
+    </span>
+  )
+}
+
+function categoryProvenance(piece: TechpackPiece): ReturnType<typeof provenanceKey> {
+  if (piece.category_user_confirmed) return 'user'
+  if (piece.category_provenance) return provenanceKey(piece.category_provenance)
+  if (String(piece.detection_source || '').startsWith('heuristic')) return 'ai'
+  if (piece.detection_source === 'look_identity' || piece.detection_source === 'ai_vision') {
+    return 'visual'
+  }
   return null
 }
 
@@ -80,6 +108,7 @@ export function DetailsEditorSheet({
   pieces,
   busy = false,
   saveStatus = null,
+  lookThumbnailUrl = null,
   onChangeTitle,
   onChangeStyleCode,
   onChangeSpec,
@@ -88,22 +117,20 @@ export function DetailsEditorSheet({
 }: Props) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const sections = useMemo(() => {
-    const list: Array<{ id: SectionId; label: string }> = [
-      { id: 'garments', label: 'Garments' },
-      { id: 'body', label: 'Body' },
-      { id: 'preferences', label: 'Preferences' },
-      ...pieces.map((p) => ({
-        id: `piece:${p.id}` as SectionId,
-        label: `Finished · ${pieceTabLabel(p)}`,
-      })),
-    ]
-    return list
-  }, [pieces])
   const [activeId, setActiveId] = useState<SectionId>('garments')
   const [activePieceId, setActivePieceId] = useState<string | null>(pieces[0]?.id ?? null)
   const wasOpenRef = useRef(false)
+
+  const navItems = useMemo(
+    () =>
+      [
+        { id: 'garments' as const, label: 'Garments' },
+        { id: 'body' as const, label: 'Body measurements' },
+        { id: 'preferences' as const, label: 'Preferences' },
+        { id: 'finished' as const, label: 'Finished measurements' },
+      ] as const,
+    [],
+  )
 
   useEffect(() => {
     if (!open) {
@@ -120,10 +147,10 @@ export function DetailsEditorSheet({
 
   useEffect(() => {
     if (!open) return
-    if (!sections.some((s) => s.id === activeId)) {
-      setActiveId(sections[0]?.id ?? 'garments')
+    if (activePieceId && !pieces.some((p) => p.id === activePieceId)) {
+      setActivePieceId(pieces[0]?.id ?? null)
     }
-  }, [open, sections, activeId])
+  }, [open, pieces, activePieceId])
 
   useEffect(() => {
     if (!open) return
@@ -154,10 +181,6 @@ export function DetailsEditorSheet({
 
   const activePiece =
     activePieceId != null ? pieces.find((p) => p.id === activePieceId) ?? null : null
-  const finishedPieceId = activeId.startsWith('piece:') ? activeId.slice('piece:'.length) : null
-  const finishedPiece = finishedPieceId
-    ? pieces.find((p) => p.id === finishedPieceId) ?? null
-    : null
 
   const addPiece = () => {
     const piece = createEmptyPiece({
@@ -193,6 +216,362 @@ export function DetailsEditorSheet({
     setActivePieceId((cur) => (cur === pieceId ? pieces.find((p) => p.id !== pieceId)?.id ?? null : cur))
   }
 
+  const selectPiece = (id: string) => {
+    setActivePieceId(id)
+    if (activeId === 'finished') setActiveId('finished')
+    else setActiveId('garments')
+  }
+
+  const renderGarmentPills = (variant: 'mobile' | 'side') => (
+    <div className={variant === 'side' ? undefined : styles.garmentPills} role="tablist" aria-label="Garment pieces">
+      {pieces.map((p) => {
+        const active = p.id === activePieceId
+        const cls =
+          variant === 'side'
+            ? active
+              ? `${styles.sideGarmentBtn} ${styles.sideGarmentBtnActive}`
+              : styles.sideGarmentBtn
+            : active
+              ? `${styles.garmentPill} ${styles.garmentPillActive}`
+              : styles.garmentPill
+        return (
+          <button
+            key={p.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={cls}
+            onClick={() => selectPiece(p.id)}
+          >
+            {pieceDisplayLabel(p)}
+          </button>
+        )
+      })}
+      {variant === 'mobile' ? (
+        <button type="button" className={styles.addPieceBtn} onClick={addPiece}>
+          <Plus size={14} aria-hidden /> Add piece
+        </button>
+      ) : null}
+    </div>
+  )
+
+  const renderPieceEditor = (piece: TechpackPiece) => {
+    const vd =
+      piece.visible_details && typeof piece.visible_details === 'object'
+        ? (piece.visible_details as Record<string, unknown>)
+        : null
+    const visualRows = (
+      [
+        ['color', piece.color_hint, piece.color_hint_provenance],
+        ['neckline', vd?.neckline, vd?.neckline_provenance ?? 'visually_supported'],
+        ['sleeves', vd?.sleeves, vd?.sleeves_provenance ?? 'visually_supported'],
+        ['panels', vd?.panels_seams, vd?.panels_seams_provenance],
+      ] as const
+    ).filter(([, value]) => typeof value === 'string' && String(value).trim())
+
+    return (
+      <>
+        {Array.isArray(piece.ai_conflicts) && piece.ai_conflicts.length > 0 ? (
+          <div className={styles.conflictBox} role="status">
+            AI suggestion differs from your confirmed values — kept your data.
+            {(piece.ai_conflicts as Array<Record<string, unknown>>).map((c, i) => (
+              <div key={i}>
+                {String(c.message || `${c.field}: you=${c.user_value}, AI=${c.ai_value}`)}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <section className={styles.sectionBlock}>
+          <h3 className={styles.sectionHeading}>Identity</h3>
+          <div className={styles.fieldGrid}>
+            <div className={styles.fieldBlock}>
+              <label htmlFor="de-piece-label">Piece label</label>
+              <input
+                id="de-piece-label"
+                value={piece.label}
+                onChange={(e) =>
+                  onUpdatePiece(piece.id, (p) => ({ ...p, label: e.target.value }))
+                }
+              />
+            </div>
+            <div className={styles.fieldBlock}>
+              <label htmlFor="de-category">
+                Garment type
+                <ProvenanceBadge kind={categoryProvenance(piece)} />
+              </label>
+              <select
+                id="de-category"
+                value={piece.category}
+                onChange={(e) => {
+                  const category = e.target.value
+                  onUpdatePiece(piece.id, (p) =>
+                    retargetFinishedMeasurements(p, category, spec.units || 'cm'),
+                  )
+                }}
+              >
+                {PIECE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.sectionBlock}>
+          <h3 className={styles.sectionHeading}>Visual design</h3>
+          {visualRows.length ? (
+            <div className={styles.visibleDetails}>
+              {visualRows.map(([key, value, prov]) => (
+                <div key={key} className={styles.detailRow}>
+                  <strong>
+                    {key === 'color'
+                      ? 'Color'
+                      : key === 'neckline'
+                        ? 'Neckline'
+                        : key === 'sleeves'
+                          ? 'Sleeves'
+                          : 'Construction'}
+                  </strong>
+                  <span>{String(value)}</span>
+                  <ProvenanceBadge kind={provenanceKey(prov) ?? (key === 'panels' ? 'ai' : 'visual')} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.lead}>No per-garment visual details yet — edit fields below or generate AI PDF.</p>
+          )}
+          <div className={styles.fieldGrid}>
+            <div className={styles.fieldBlock}>
+              <label htmlFor="de-color">
+                Color hint
+                <ProvenanceBadge kind={provenanceKey(piece.color_hint_provenance)} />
+              </label>
+              <input
+                id="de-color"
+                value={piece.color_hint ?? ''}
+                onChange={(e) =>
+                  onUpdatePiece(piece.id, (p) => ({
+                    ...p,
+                    color_hint: e.target.value,
+                    color_hint_provenance: 'designer',
+                  }))
+                }
+              />
+            </div>
+            <div className={styles.fieldBlock}>
+              <label htmlFor="de-silhouette">
+                Silhouette
+                <ProvenanceBadge
+                  kind={provenanceKey(
+                    (piece.fit as { silhouette_provenance?: string } | undefined)
+                      ?.silhouette_provenance,
+                  )}
+                />
+              </label>
+              <input
+                id="de-silhouette"
+                value={piece.fit?.silhouette ?? ''}
+                onChange={(e) =>
+                  onUpdatePiece(piece.id, (p) => ({
+                    ...p,
+                    fit: {
+                      ...(p.fit ?? {}),
+                      silhouette: e.target.value,
+                      silhouette_provenance: 'designer',
+                    },
+                  }))
+                }
+              />
+              <ChipRow
+                options={SILHOUETTE_SUGGESTIONS}
+                value={piece.fit?.silhouette ?? ''}
+                onPick={(next) =>
+                  onUpdatePiece(piece.id, (p) => ({
+                    ...p,
+                    fit: {
+                      ...(p.fit ?? {}),
+                      silhouette: next,
+                      silhouette_provenance: 'designer',
+                    },
+                  }))
+                }
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.sectionBlock}>
+          <h3 className={styles.sectionHeading}>Materials & fabric</h3>
+          <div className={styles.fieldGrid}>
+            <div className={`${styles.fieldBlock} ${styles.fieldBlockWide}`}>
+              <label htmlFor="de-shell">
+                Material / shell
+                <ProvenanceBadge
+                  kind={
+                    provenanceKey(piece.materials?.shell?.provenance) ||
+                    (piece.materials?.shell?.source === 'ai'
+                      ? 'ai'
+                      : piece.materials?.shell?.source === 'designer'
+                        ? 'user'
+                        : null)
+                  }
+                />
+              </label>
+              <input
+                id="de-shell"
+                value={piece.materials?.shell?.name ?? ''}
+                onChange={(e) =>
+                  onUpdatePiece(piece.id, (p) => ({
+                    ...p,
+                    materials: {
+                      ...(p.materials ?? {}),
+                      shell: {
+                        ...(p.materials?.shell ?? {}),
+                        name: e.target.value,
+                        source: 'designer',
+                        provenance: 'designer',
+                      },
+                    },
+                  }))
+                }
+              />
+              {piece.materials?.shell?.composition === 'Unknown' ? (
+                <p className={styles.lead}>Composition unknown — confirm before production.</p>
+              ) : null}
+              <ChipRow
+                options={SHELL_SUGGESTIONS}
+                value={piece.materials?.shell?.name ?? ''}
+                onPick={(next) =>
+                  onUpdatePiece(piece.id, (p) => ({
+                    ...p,
+                    materials: {
+                      ...(p.materials ?? {}),
+                      shell: {
+                        ...(p.materials?.shell ?? {}),
+                        name: next,
+                        source: 'designer',
+                        provenance: 'designer',
+                      },
+                    },
+                  }))
+                }
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.sectionBlock}>
+          <h3 className={styles.sectionHeading}>Fit & construction</h3>
+          <div className={styles.fieldGrid}>
+            <div className={`${styles.fieldBlock} ${styles.fieldBlockWide}`}>
+              <label htmlFor="de-closure">
+                Closure
+                <ProvenanceBadge
+                  kind={
+                    provenanceKey(
+                      (piece.closures as { provenance?: string } | undefined)?.provenance,
+                    ) || (piece.closures?.source === 'ai' ? 'ai' : null)
+                  }
+                />
+              </label>
+              <input
+                id="de-closure"
+                value={piece.closures?.type ?? ''}
+                onChange={(e) =>
+                  onUpdatePiece(piece.id, (p) => ({
+                    ...p,
+                    closures: {
+                      ...(p.closures ?? {}),
+                      type: e.target.value,
+                      source: 'designer',
+                      provenance: 'designer',
+                    },
+                  }))
+                }
+              />
+              <ChipRow
+                options={CLOSURE_SUGGESTIONS}
+                value={piece.closures?.type ?? ''}
+                onPick={(next) =>
+                  onUpdatePiece(piece.id, (p) => ({
+                    ...p,
+                    closures: {
+                      ...(p.closures ?? {}),
+                      type: next,
+                      source: 'designer',
+                      provenance: 'designer',
+                    },
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <details className={styles.detailsCollapse}>
+            <summary>Advanced notes</summary>
+            <div className={styles.fieldBlock}>
+              <label htmlFor="de-ease">Ease / fit note</label>
+              <input
+                id="de-ease"
+                value={piece.fit?.ease_note ?? ''}
+                onChange={(e) =>
+                  onUpdatePiece(piece.id, (p) => ({
+                    ...p,
+                    fit: { ...(p.fit ?? {}), ease_note: e.target.value },
+                  }))
+                }
+              />
+            </div>
+          </details>
+        </section>
+
+        {pieces.length > 1 ? (
+          <button
+            type="button"
+            className={styles.dangerBtn}
+            onClick={() => removePiece(piece.id)}
+          >
+            <Trash2 size={14} aria-hidden /> Remove piece
+          </button>
+        ) : null}
+      </>
+    )
+  }
+
+  const renderFinished = (piece: TechpackPiece) => (
+    <>
+      <p className={styles.lead}>
+        Finished garment measurements for {pieceDisplayLabel(piece)}. Unknown values may stay empty.
+      </p>
+      <div className={styles.fieldGrid}>
+        {Object.keys(piece.finished_measurements ?? {}).length === 0 ? (
+          <p className={styles.lead}>No finished POMs for this category.</p>
+        ) : (
+          Object.entries(piece.finished_measurements ?? {}).map(([key, value]) => (
+            <MeasuredField
+              key={key}
+              compact
+              label={POM_LABELS[key] ?? key.replace(/_/g, ' ')}
+              helpKey={POM_HELP_KEY[key]}
+              value={value as MeasuredValue}
+              onChange={(next) =>
+                onUpdatePiece(piece.id, (p) => ({
+                  ...p,
+                  finished_measurements: {
+                    ...(p.finished_measurements ?? {}),
+                    [key]: next,
+                  },
+                }))
+              }
+            />
+          ))
+        )}
+      </div>
+    </>
+  )
+
   return (
     <div className={styles.scrim} role="presentation">
       <div
@@ -202,16 +581,16 @@ export function DetailsEditorSheet({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        data-testid="details-editor"
       >
         <header className={styles.header}>
           <div className={styles.headerText}>
-            <p className={styles.kicker}>Optional</p>
+            <p className={styles.kicker}>Create Real Design</p>
             <h2 id={titleId} className={styles.title}>
               Measurements & details
             </h2>
-            <p className={styles.progress}>
-              All fields optional · empty stays unknown
-              {saveStatus ? ` · ${saveStatus}` : ''}
+            <p className={styles.subtitle}>
+              Optional corrections · autosave on · same data on every screen size
             </p>
           </div>
           <button
@@ -226,321 +605,91 @@ export function DetailsEditorSheet({
           </button>
         </header>
 
-        <div className={styles.groupTabs} role="tablist" aria-label="Detail sections">
-          {sections.map((s) => (
+        <nav className={styles.navTabs} role="tablist" aria-label="Detail sections">
+          {navItems.map((item) => (
             <button
-              key={s.id}
+              key={item.id}
               type="button"
               role="tab"
-              aria-selected={s.id === activeId}
+              aria-selected={activeId === item.id}
               className={
-                s.id === activeId ? `${styles.groupTab} ${styles.groupTabActive}` : styles.groupTab
+                activeId === item.id ? `${styles.navTab} ${styles.navTabActive}` : styles.navTab
               }
-              onClick={() => setActiveId(s.id)}
+              onClick={() => setActiveId(item.id)}
             >
-              {s.label}
+              {item.label}
             </button>
           ))}
-        </div>
+        </nav>
 
-        <div ref={scrollRef} className={styles.body}>
+        <aside className={styles.sidebar} aria-label="Editor navigation">
+          {lookThumbnailUrl ? (
+            <div className={styles.lookPreview}>
+              <img src={lookThumbnailUrl} alt="" />
+            </div>
+          ) : null}
+          <p className={styles.sideNavLabel}>Sections</p>
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={
+                activeId === item.id
+                  ? `${styles.sideNavBtn} ${styles.sideNavBtnActive}`
+                  : styles.sideNavBtn
+              }
+              onClick={() => setActiveId(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+          <p className={styles.sideNavLabel}>Garments</p>
+          {renderGarmentPills('side')}
+          <button type="button" className={styles.addPieceBtn} onClick={addPiece}>
+            <Plus size={14} aria-hidden /> Add piece
+          </button>
+        </aside>
+
+        <div className={styles.main}>
           {activeId === 'garments' ? (
             <>
-              <div className={styles.fieldBlock}>
-                <label htmlFor="de-title">Design title</label>
-                <input
-                  id="de-title"
-                  value={title}
-                  onChange={(e) => onChangeTitle(e.target.value)}
-                />
-              </div>
-              <div className={styles.fieldBlock}>
-                <label htmlFor="de-style">Style code</label>
-                <input
-                  id="de-style"
-                  value={styleCode}
-                  onChange={(e) => onChangeStyleCode(e.target.value)}
-                />
-              </div>
-              <div className={styles.fieldBlock}>
-                <label htmlFor="de-notes">Look notes</label>
-                <textarea
-                  id="de-notes"
-                  rows={3}
-                  value={spec.look_notes ?? ''}
-                  onChange={(e) =>
-                    onChangeSpec((prev) => ({ ...prev, look_notes: e.target.value }))
-                  }
-                />
+              <div className={styles.fieldGrid}>
+                <div className={styles.fieldBlock}>
+                  <label htmlFor="de-title">Design title</label>
+                  <input
+                    id="de-title"
+                    value={title}
+                    onChange={(e) => onChangeTitle(e.target.value)}
+                  />
+                </div>
+                <div className={styles.fieldBlock}>
+                  <label htmlFor="de-style">Style code</label>
+                  <input
+                    id="de-style"
+                    value={styleCode}
+                    onChange={(e) => onChangeStyleCode(e.target.value)}
+                  />
+                </div>
+                <div className={`${styles.fieldBlock} ${styles.fieldBlockWide}`}>
+                  <label htmlFor="de-notes">Look notes</label>
+                  <textarea
+                    id="de-notes"
+                    rows={2}
+                    value={spec.look_notes ?? ''}
+                    onChange={(e) =>
+                      onChangeSpec((prev) => ({ ...prev, look_notes: e.target.value }))
+                    }
+                  />
+                </div>
               </div>
 
-              <div className={styles.groupTabs} role="tablist" aria-label="Garment pieces">
-                {pieces.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={p.id === activePieceId}
-                    className={
-                      p.id === activePieceId
-                        ? `${styles.groupTab} ${styles.groupTabActive}`
-                        : styles.groupTab
-                    }
-                    onClick={() => setActivePieceId(p.id)}
-                  >
-                    {pieceTabLabel(p)}
-                  </button>
-                ))}
-                <button type="button" className={styles.groupTab} onClick={addPiece}>
-                  <Plus size={14} aria-hidden /> Add piece
-                </button>
-              </div>
+              <p className={styles.sideNavLabel} style={{ marginTop: 8 }}>
+                Active garment
+              </p>
+              {renderGarmentPills('mobile')}
 
               {activePiece ? (
-                <>
-                  {Array.isArray(activePiece.ai_conflicts) && activePiece.ai_conflicts.length > 0 ? (
-                    <div className={styles.conflictBox} role="status">
-                      AI suggestion differs from your confirmed values — kept your data.
-                      {(activePiece.ai_conflicts as Array<Record<string, unknown>>).map((c, i) => (
-                        <div key={i}>
-                          {String(c.message || `${c.field}: you=${c.user_value}, AI=${c.ai_value}`)}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  <div className={styles.fieldBlock}>
-                    <label htmlFor="de-piece-label">Piece label</label>
-                    <input
-                      id="de-piece-label"
-                      value={activePiece.label}
-                      onChange={(e) =>
-                        onUpdatePiece(activePiece.id, (p) => ({ ...p, label: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className={styles.fieldBlock}>
-                    <label htmlFor="de-category">Garment type</label>
-                    <select
-                      id="de-category"
-                      value={activePiece.category}
-                      onChange={(e) => {
-                        const category = e.target.value
-                        onUpdatePiece(activePiece.id, (p) =>
-                          retargetFinishedMeasurements(p, category, spec.units || 'cm'),
-                        )
-                      }}
-                    >
-                      {PIECE_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    {provenanceLabel(
-                      activePiece.category_user_confirmed
-                        ? 'designer'
-                        : activePiece.category_provenance ||
-                            (String(activePiece.detection_source || '').startsWith('heuristic')
-                              ? 'ai_inferred'
-                              : activePiece.detection_source === 'look_identity'
-                                ? 'visually_supported'
-                                : null),
-                    ) ? (
-                      <p className={styles.provenance}>
-                        {provenanceLabel(
-                          activePiece.category_user_confirmed
-                            ? 'designer'
-                            : activePiece.category_provenance ||
-                                (String(activePiece.detection_source || '').startsWith('heuristic')
-                                  ? 'ai_inferred'
-                                  : activePiece.detection_source === 'look_identity'
-                                    ? 'visually_supported'
-                                    : null),
-                        )}
-                      </p>
-                    ) : null}
-                  </div>
-                  {(() => {
-                    const vd =
-                      activePiece.visible_details && typeof activePiece.visible_details === 'object'
-                        ? (activePiece.visible_details as Record<string, unknown>)
-                        : null
-                    if (!vd) return null
-                    const rows = [
-                      ['neckline', 'Neckline'],
-                      ['sleeves', 'Sleeves'],
-                      ['panels_seams', 'Construction'],
-                    ] as const
-                    const shown = rows.filter(([k]) => typeof vd[k] === 'string' && String(vd[k]).trim())
-                    if (!shown.length && !activePiece.color_hint) return null
-                    return (
-                      <div className={styles.visibleDetails}>
-                        {activePiece.color_hint ? (
-                          <div>
-                            <strong>Color</strong> · {String(activePiece.color_hint)}
-                            {provenanceLabel(activePiece.color_hint_provenance) ? (
-                              <span> · {provenanceLabel(activePiece.color_hint_provenance)}</span>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {shown.map(([key, label]) => (
-                          <div key={key}>
-                            <strong>{label}</strong> · {String(vd[key])}
-                            {provenanceLabel(vd[`${key}_provenance`]) ? (
-                              <span> · {provenanceLabel(vd[`${key}_provenance`])}</span>
-                            ) : (
-                              <span> · Visually supported</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  })()}
-                  <div className={styles.fieldBlock}>
-                    <label htmlFor="de-shell">Material / shell</label>
-                    <input
-                      id="de-shell"
-                      value={activePiece.materials?.shell?.name ?? ''}
-                      onChange={(e) =>
-                        onUpdatePiece(activePiece.id, (p) => ({
-                          ...p,
-                          materials: {
-                            ...(p.materials ?? {}),
-                            shell: {
-                              ...(p.materials?.shell ?? {}),
-                              name: e.target.value,
-                              source: 'designer',
-                              provenance: 'designer',
-                            },
-                          },
-                        }))
-                      }
-                    />
-                    {provenanceLabel(activePiece.materials?.shell?.provenance) ||
-                    activePiece.materials?.shell?.source === 'ai' ? (
-                      <p className={styles.provenance}>
-                        {provenanceLabel(activePiece.materials?.shell?.provenance) ||
-                          (activePiece.materials?.shell?.source === 'designer'
-                            ? 'Confirmed by you'
-                            : 'AI proposed')}
-                        {activePiece.materials?.shell?.composition === 'Unknown'
-                          ? ' · composition unknown'
-                          : ''}
-                      </p>
-                    ) : null}
-                    <ChipRow
-                      options={SHELL_SUGGESTIONS}
-                      value={activePiece.materials?.shell?.name ?? ''}
-                      onPick={(next) =>
-                        onUpdatePiece(activePiece.id, (p) => ({
-                          ...p,
-                          materials: {
-                            ...(p.materials ?? {}),
-                            shell: {
-                              ...(p.materials?.shell ?? {}),
-                              name: next,
-                              source: 'designer',
-                              provenance: 'designer',
-                            },
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className={styles.fieldBlock}>
-                    <label htmlFor="de-silhouette">Silhouette</label>
-                    <input
-                      id="de-silhouette"
-                      value={activePiece.fit?.silhouette ?? ''}
-                      onChange={(e) =>
-                        onUpdatePiece(activePiece.id, (p) => ({
-                          ...p,
-                          fit: {
-                            ...(p.fit ?? {}),
-                            silhouette: e.target.value,
-                            silhouette_provenance: 'designer',
-                          },
-                        }))
-                      }
-                    />
-                    {provenanceLabel(
-                      (activePiece.fit as { silhouette_provenance?: string } | undefined)
-                        ?.silhouette_provenance,
-                    ) ? (
-                      <p className={styles.provenance}>
-                        {provenanceLabel(
-                          (activePiece.fit as { silhouette_provenance?: string } | undefined)
-                            ?.silhouette_provenance,
-                        )}
-                      </p>
-                    ) : null}
-                    <ChipRow
-                      options={SILHOUETTE_SUGGESTIONS}
-                      value={activePiece.fit?.silhouette ?? ''}
-                      onPick={(next) =>
-                        onUpdatePiece(activePiece.id, (p) => ({
-                          ...p,
-                          fit: {
-                            ...(p.fit ?? {}),
-                            silhouette: next,
-                            silhouette_provenance: 'designer',
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className={styles.fieldBlock}>
-                    <label htmlFor="de-closure">Closure</label>
-                    <input
-                      id="de-closure"
-                      value={activePiece.closures?.type ?? ''}
-                      onChange={(e) =>
-                        onUpdatePiece(activePiece.id, (p) => ({
-                          ...p,
-                          closures: {
-                            ...(p.closures ?? {}),
-                            type: e.target.value,
-                            source: 'designer',
-                            provenance: 'designer',
-                          },
-                        }))
-                      }
-                    />
-                    {provenanceLabel(
-                      (activePiece.closures as { provenance?: string } | undefined)?.provenance,
-                    ) || activePiece.closures?.source === 'ai' ? (
-                      <p className={styles.provenance}>
-                        {provenanceLabel(
-                          (activePiece.closures as { provenance?: string } | undefined)?.provenance,
-                        ) || 'AI proposed'}
-                      </p>
-                    ) : null}
-                    <ChipRow
-                      options={CLOSURE_SUGGESTIONS}
-                      value={activePiece.closures?.type ?? ''}
-                      onPick={(next) =>
-                        onUpdatePiece(activePiece.id, (p) => ({
-                          ...p,
-                          closures: {
-                            ...(p.closures ?? {}),
-                            type: next,
-                            source: 'designer',
-                            provenance: 'designer',
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                  {pieces.length > 1 ? (
-                    <button
-                      type="button"
-                      className={styles.dangerBtn}
-                      onClick={() => removePiece(activePiece.id)}
-                    >
-                      <Trash2 size={14} aria-hidden /> Remove piece
-                    </button>
-                  ) : null}
-                </>
+                renderPieceEditor(activePiece)
               ) : (
                 <p className={styles.lead}>Add a garment piece to edit materials and construction.</p>
               )}
@@ -549,117 +698,104 @@ export function DetailsEditorSheet({
 
           {activeId === 'body' ? (
             <>
+              <h3 className={styles.sectionHeading}>Body measurements</h3>
               <p className={styles.lead}>
                 Body measurements describe the person. Leave unknown values empty.
               </p>
-              {(
-                [
-                  ['height', 'Height', 'height'],
-                  ['bust', 'Bust', 'bust'],
-                  ['waist', 'Waist', 'waist'],
-                  ['hip', 'Hip', 'hip'],
-                  ['inseam', 'Inseam', 'body_inseam'],
-                ] as const
-              ).map(([key, label, helpKey]) => (
-                <MeasuredField
-                  key={key}
-                  compact
-                  label={label}
-                  helpKey={helpKey}
-                  value={spec.body?.[key] ?? measured(null, spec.units || 'cm')}
-                  onChange={(next) =>
-                    onChangeSpec((prev) => ({
-                      ...prev,
-                      body: { ...(prev.body ?? {}), [key]: next },
-                    }))
-                  }
-                />
-              ))}
+              <div className={styles.fieldGrid}>
+                {(
+                  [
+                    ['height', 'Height', 'height'],
+                    ['bust', 'Bust', 'bust'],
+                    ['waist', 'Waist', 'waist'],
+                    ['hip', 'Hip', 'hip'],
+                    ['inseam', 'Inseam', 'body_inseam'],
+                  ] as const
+                ).map(([key, label, helpKey]) => (
+                  <MeasuredField
+                    key={key}
+                    compact
+                    label={label}
+                    helpKey={helpKey}
+                    value={spec.body?.[key] ?? measured(null, spec.units || 'cm')}
+                    onChange={(next) =>
+                      onChangeSpec((prev) => ({
+                        ...prev,
+                        body: { ...(prev.body ?? {}), [key]: next },
+                      }))
+                    }
+                  />
+                ))}
+              </div>
             </>
           ) : null}
 
           {activeId === 'preferences' ? (
             <>
-              <div className={styles.fieldBlock}>
-                <label htmlFor="de-fit">Fit preference</label>
-                <select
-                  id="de-fit"
-                  value={spec.preferences?.fit_preference || 'regular'}
-                  onChange={(e) =>
-                    onChangeSpec((prev) => ({
-                      ...prev,
-                      preferences: {
-                        ...(prev.preferences ?? {}),
-                        fit_preference: e.target.value,
-                      },
-                    }))
-                  }
-                >
-                  {FIT_PREFERENCES.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className={styles.fieldBlock}>
-                <label htmlFor="de-sample">Sample size</label>
-                <input
-                  id="de-sample"
-                  value={spec.sample_size ?? ''}
-                  placeholder="e.g. 36 / M"
-                  onChange={(e) =>
-                    onChangeSpec((prev) => ({ ...prev, sample_size: e.target.value }))
-                  }
-                />
-              </div>
-              <div className={styles.fieldBlock}>
-                <label htmlFor="de-pref-notes">Preference notes</label>
-                <textarea
-                  id="de-pref-notes"
-                  rows={4}
-                  value={spec.preferences?.notes ?? ''}
-                  onChange={(e) =>
-                    onChangeSpec((prev) => ({
-                      ...prev,
-                      preferences: {
-                        ...(prev.preferences ?? {}),
-                        notes: e.target.value,
-                      },
-                    }))
-                  }
-                />
-              </div>
-            </>
-          ) : null}
-
-          {finishedPiece ? (
-            <>
-              <p className={styles.lead}>
-                Finished garment measurements for {pieceTabLabel(finishedPiece)}. Unknown values may
-                stay empty.
-              </p>
-              {Object.keys(finishedPiece.finished_measurements ?? {}).length === 0 ? (
-                <p className={styles.lead}>No finished POMs for this category.</p>
-              ) : (
-                Object.entries(finishedPiece.finished_measurements ?? {}).map(([key, value]) => (
-                  <MeasuredField
-                    key={key}
-                    compact
-                    label={POM_LABELS[key] ?? key.replace(/_/g, ' ')}
-                    helpKey={POM_HELP_KEY[key]}
-                    value={value as MeasuredValue}
-                    onChange={(next) =>
-                      onUpdatePiece(finishedPiece.id, (p) => ({
-                        ...p,
-                        finished_measurements: {
-                          ...(p.finished_measurements ?? {}),
-                          [key]: next,
+              <h3 className={styles.sectionHeading}>Preferences</h3>
+              <div className={styles.fieldGrid}>
+                <div className={styles.fieldBlock}>
+                  <label htmlFor="de-fit">Fit preference</label>
+                  <select
+                    id="de-fit"
+                    value={spec.preferences?.fit_preference || 'regular'}
+                    onChange={(e) =>
+                      onChangeSpec((prev) => ({
+                        ...prev,
+                        preferences: {
+                          ...(prev.preferences ?? {}),
+                          fit_preference: e.target.value,
+                        },
+                      }))
+                    }
+                  >
+                    {FIT_PREFERENCES.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className={styles.fieldBlock}>
+                  <label htmlFor="de-sample">Sample size</label>
+                  <input
+                    id="de-sample"
+                    value={spec.sample_size ?? ''}
+                    placeholder="e.g. 36 / M"
+                    onChange={(e) =>
+                      onChangeSpec((prev) => ({ ...prev, sample_size: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className={`${styles.fieldBlock} ${styles.fieldBlockWide}`}>
+                  <label htmlFor="de-pref-notes">Preference notes</label>
+                  <textarea
+                    id="de-pref-notes"
+                    rows={4}
+                    value={spec.preferences?.notes ?? ''}
+                    onChange={(e) =>
+                      onChangeSpec((prev) => ({
+                        ...prev,
+                        preferences: {
+                          ...(prev.preferences ?? {}),
+                          notes: e.target.value,
                         },
                       }))
                     }
                   />
-                ))
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {activeId === 'finished' ? (
+            <>
+              <p className={styles.sideNavLabel}>Garment</p>
+              {renderGarmentPills('mobile')}
+              {activePiece ? (
+                renderFinished(activePiece)
+              ) : (
+                <p className={styles.lead}>Select a garment to edit finished measurements.</p>
               )}
             </>
           ) : null}

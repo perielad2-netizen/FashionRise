@@ -88,6 +88,7 @@ function Harness({
         pieces={pieces}
         busy={busy}
         saveStatus={saveStatus}
+        lookThumbnailUrl="blob:magic-look"
         onChangeTitle={() => undefined}
         onChangeStyleCode={() => undefined}
         onChangeSpec={(updater) => setSpec((prev) => updater(prev))}

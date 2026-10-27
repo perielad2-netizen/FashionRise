@@ -315,10 +315,70 @@ function normalizePiece(raw: Record<string, unknown>, idx: number, units: string
   }
 }
 
+function titleCaseWords(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+}
+
+/** Role prefix for multi-piece outfits (Top / Bottom / …). */
+export function pieceRoleLabel(category: string): string {
+  const c = String(category || 'other').toLowerCase()
+  if (c === 'shirt' || c === 'top' || c === 'jacket') return 'Top'
+  if (c === 'trousers' || c === 'shorts' || c === 'skirt') return 'Bottom'
+  if (c === 'dress') return 'Dress'
+  if (c === 'jumpsuit') return 'Jumpsuit'
+  if (c === 'set') return 'Set'
+  return 'Garment'
+}
+
+function humanCategory(category: string): string {
+  const c = String(category || 'piece').toLowerCase()
+  if (c === 'trousers') return 'trousers'
+  return c
+}
+
+/**
+ * Human garment label for nav/tabs — avoids "TOP — TOP" / "SHORTS — SHORTS".
+ * Prefers designer label, then color + category, with a role prefix.
+ */
+export function pieceDisplayLabel(piece: TechpackPiece): string {
+  const cat = String(piece.category || 'other').toLowerCase()
+  const role = pieceRoleLabel(cat)
+  const rawLabel = String(piece.label || '').trim()
+  const color = String(piece.color_hint || '').trim()
+  const labelNorm = rawLabel.toLowerCase()
+  const catNorm = cat.toLowerCase()
+  const redundant =
+    !rawLabel ||
+    labelNorm === catNorm ||
+    labelNorm === role.toLowerCase() ||
+    labelNorm === `${catNorm} ${catNorm}` ||
+    labelNorm.replace(/\s+/g, '') === catNorm
+
+  let name: string
+  if (!redundant) {
+    name = titleCaseWords(rawLabel)
+  } else if (color) {
+    name = `${titleCaseWords(color)} ${titleCaseWords(humanCategory(cat))}`
+  } else {
+    name = titleCaseWords(humanCategory(cat))
+  }
+
+  // If name already starts with the role, don't double-prefix.
+  if (name.toLowerCase().startsWith(`${role.toLowerCase()} `) || name.toLowerCase() === role.toLowerCase()) {
+    return name
+  }
+  return `${role} — ${name}`
+}
+
+/** @deprecated Prefer pieceDisplayLabel — kept for call sites / tests. */
 export function pieceTabLabel(piece: TechpackPiece): string {
-  const cat = String(piece.category || 'piece').toUpperCase()
-  const label = String(piece.label || '').trim().toUpperCase()
-  return label ? `${cat} — ${label}` : cat
+  return pieceDisplayLabel(piece)
 }
 
 export function retargetFinishedMeasurements(
