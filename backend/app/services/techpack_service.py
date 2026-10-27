@@ -237,8 +237,21 @@ def get_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraftRead
         if design_identity is None and evidence.get("design_identity"):
             design_identity = evidence["design_identity"]
     dirty = False
+    structure_repaired = False
+    prior_ai = spec.get("ai") if isinstance(spec.get("ai"), dict) else {}
+    prior_outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+    prior_piece_ids = sorted(
+        str(p.get("id") or "")
+        for p in (prior_outfit.get("pieces") or [])
+        if isinstance(p, dict)
+    )
+    prior_piece_cats = sorted(
+        str(p.get("category") or "")
+        for p in (prior_outfit.get("pieces") or [])
+        if isinstance(p, dict)
+    )
     if outfit_needs_structure_repair(
-        spec.get("outfit") if isinstance(spec.get("outfit"), dict) else None,
+        prior_outfit if prior_outfit else None,
         look_summary=look_summary,
         design_identity=design_identity,
     ):
@@ -249,6 +262,7 @@ def get_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraftRead
             units=str(spec.get("units") or "cm"),
         )
         dirty = True
+        structure_repaired = True
     outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
     has_persisted_analysis = any(
         isinstance((p.get("illustrations") or {}).get("analysis"), dict)
@@ -266,8 +280,44 @@ def get_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraftRead
             spec["look_notes"] = look_summary[:500]
         if design_identity and not isinstance(spec.get("look_design_identity"), dict):
             spec["look_design_identity"] = design_identity
+        ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+        new_outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+        new_piece_ids = sorted(
+            str(p.get("id") or "")
+            for p in (new_outfit.get("pieces") or [])
+            if isinstance(p, dict)
+        )
+        new_piece_cats = sorted(
+            str(p.get("category") or "")
+            for p in (new_outfit.get("pieces") or [])
+            if isinstance(p, dict)
+        )
+        structure_changed = structure_repaired and (
+            prior_piece_ids != new_piece_ids or prior_piece_cats != new_piece_cats
+        )
+        had_professional = (
+            str(prior_ai.get("last_mode") or "") == "professional"
+            and bool(prior_ai.get("last_run_id") or prior_ai.get("export_id"))
+        )
+        # Preserve historical export/run ids; invalidate current Download until regenerate.
+        if structure_changed and had_professional:
+            if prior_ai.get("export_id"):
+                ai["outdated_export_id"] = prior_ai.get("export_id")
+            ai["dirty_since_generation"] = True
+            # Keep last_run_id / export_id for history; FE hides Download when dirty.
+            if prior_ai.get("last_run_id") and not ai.get("last_run_id"):
+                ai["last_run_id"] = prior_ai.get("last_run_id")
+            if prior_ai.get("export_id") and not ai.get("export_id"):
+                ai["export_id"] = prior_ai.get("export_id")
+            if prior_ai.get("last_mode") and not ai.get("last_mode"):
+                ai["last_mode"] = prior_ai.get("last_mode")
+        spec["ai"] = ai
+        # Do not bump revision / status on read-time repair.
         draft.spec = spec
         draft.updated_at = datetime.now(UTC)
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(draft, "spec")
         db.add(draft)
         db.commit()
         db.refresh(draft)

@@ -97,22 +97,56 @@ def collect_compatibility_warnings(spec: dict[str, Any]) -> list[dict[str, Any]]
             if isinstance(piece.get("finished_measurements"), dict)
             else {}
         )
-        if sleeveless:
-            sleeve_cell = finished.get("sleeve_length")
-            if isinstance(sleeve_cell, dict) and isinstance(sleeve_cell.get("value"), (int, float)):
+        sleeve_cell = finished.get("sleeve_length")
+        sleeves_txt = _text(analysis.get("sleeves"))
+        if sleeveless and isinstance(sleeve_cell, dict) and isinstance(
+            sleeve_cell.get("value"), (int, float)
+        ):
+            warnings.append(
+                {
+                    "code": "measurement_garment_mismatch",
+                    "piece_id": pid,
+                    "pom": "sleeve_length",
+                    "value": sleeve_cell.get("value"),
+                    "unit": sleeve_cell.get("unit"),
+                    "message": (
+                        f"REVIEW: {POM_LABELS.get('sleeve_length', 'Sleeve length')} "
+                        f"({sleeve_cell.get('value')} {sleeve_cell.get('unit') or 'cm'}) "
+                        f"may not apply to a sleeveless garment "
+                        f"(AI sleeves: {analysis.get('sleeves')}). "
+                        f"Owner value preserved — review before manufacturing."
+                    ),
+                    "severity": "warning",
+                }
+            )
+            sleeve_cell["review_status"] = "needs_review"
+            sleeve_cell["confidence"] = "low"
+            note = str(sleeve_cell.get("note") or "")
+            if "REVIEW" not in note:
+                sleeve_cell["note"] = (
+                    (note + " · " if note else "")
+                    + "REVIEW: sleeveless analysis — sleeve length may not apply"
+                ).strip(" ·")
+        elif isinstance(sleeve_cell, dict) and isinstance(sleeve_cell.get("value"), (int, float)):
+            assumptions = sleeve_cell.get("assumptions")
+            assumption_blob = " ".join(str(a) for a in assumptions) if isinstance(assumptions, list) else ""
+            note_blob = f"{sleeve_cell.get('note') or ''} {assumption_blob}".lower()
+            three_q = any(
+                tok in sleeves_txt for tok in ("three-quarter", "3/4", "three quarter", "elbow")
+            )
+            long_assumed = "long-sleeve" in note_blob or "long sleeve" in note_blob
+            if three_q and long_assumed:
                 warnings.append(
                     {
-                        "code": "measurement_garment_mismatch",
+                        "code": "measurement_sleeve_length_assumption",
                         "piece_id": pid,
                         "pom": "sleeve_length",
                         "value": sleeve_cell.get("value"),
                         "unit": sleeve_cell.get("unit"),
                         "message": (
-                            f"{POM_LABELS.get('sleeve_length', 'Sleeve length')} "
-                            f"({sleeve_cell.get('value')} {sleeve_cell.get('unit') or 'cm'}) "
-                            f"may not apply to a sleeveless garment "
-                            f"(AI sleeves: {analysis.get('sleeves')}). "
-                            f"Owner value preserved — review before manufacturing."
+                            "REVIEW: sleeve length used a long-sleeve assumption while analysis "
+                            f"describes three-quarter sleeves ({analysis.get('sleeves')}). "
+                            "Owner/calculated value preserved — confirm length before manufacturing."
                         ),
                         "severity": "warning",
                     }
@@ -197,7 +231,16 @@ def filter_pattern_inventory(
                 }
             )
             continue
-        out.append({**row, "review_state": row.get("review_state") or "approved_template"})
+        # Preserve explicit operator/reviewer states; never invent approvals for AI/estimate rows.
+        existing_review = row.get("review_state")
+        if existing_review:
+            out.append(dict(row))
+            continue
+        source = _text(row.get("source"))
+        if source in {"template", "approved", "designer", "validated"}:
+            out.append({**row, "review_state": "approved_template"})
+        else:
+            out.append({**row, "review_state": "proposed_unverified"})
 
     # Surface AI-suggested extras that are not already listed, as proposed only.
     existing = {_text(r.get("name")) for r in out}

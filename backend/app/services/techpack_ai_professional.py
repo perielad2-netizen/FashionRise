@@ -553,12 +553,18 @@ def run_professional_pipeline(
     propose_back: bool,
     max_images: int,
     on_progress: ProgressCallback | None = None,
+    image_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Analyze source Magic image and produce per-piece analysis + illustration bytes.
 
     Returns structured result with `piece_results` and aggregated `usage`.
     `on_progress` receives named phase dicts (never fake percentages).
+
+    Image budget: required ``flat_front`` for every garment is allocated first; optional
+    backs/details/patterns are fair-shared via ``image_plan`` (or planned here).
     """
+    from app.services.techpack_structure import plan_professional_image_kinds
+
     if front_image is None and back_image is None:
         raise ValueError("Professional AI requires at least one Magic look image")
     primary = front_image or back_image
@@ -568,7 +574,17 @@ def run_professional_pipeline(
     images_used = 0
     failed: list[str] = []
     work_pieces = [p for p in pieces if isinstance(p, dict)]
-    total_pieces = max(1, len(work_pieces))
+    if not work_pieces:
+        raise ValueError("Professional AI requires at least one validated garment piece")
+    total_pieces = len(work_pieces)
+    plan = image_plan or plan_professional_image_kinds(
+        work_pieces,
+        propose_back=propose_back,
+        has_back_image=back_image is not None,
+        max_images=max_images,
+    )
+    per_piece_plan = plan.get("per_piece") if isinstance(plan.get("per_piece"), dict) else {}
+    failed.extend(str(x) for x in (plan.get("skipped_optional") or []) if x)
 
     def _progress(
         phase: str,
@@ -608,7 +624,10 @@ def run_professional_pipeline(
     _progress("preparing")
 
     for piece in work_pieces:
-        pid = str(piece.get("id") or uuid.uuid4().hex[:8])
+        pid = str(piece.get("id") or "").strip()
+        if not pid:
+            raise ValueError("Professional piece missing stable id")
+        allowed = set((per_piece_plan.get(pid) or {}).get("all") or ["flat_front"])
         # Prefer front Magic; fall back to back.
         src_bytes, src_mime = primary
         _progress(
@@ -631,6 +650,8 @@ def run_professional_pipeline(
 
         def _add_image(kind: str, gen) -> None:
             nonlocal images_used
+            if kind not in allowed:
+                return
             if images_used >= max_images:
                 failed.append(f"{pid}:{kind}:max_images")
                 return
@@ -731,5 +752,6 @@ def run_professional_pipeline(
         },
         "analysis_summary": "; ".join(summary_bits)[:800],
         "failed_sections": failed,
+        "image_plan": plan,
         "schema_version": ANALYSIS_SCHEMA_VERSION,
     }

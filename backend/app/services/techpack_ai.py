@@ -436,16 +436,21 @@ def _persist_professional_result(
     artifact_rows: list[TechpackAIArtifact] = []
     artifact_reads: list[dict[str, Any]] = []
 
+    from app.services.techpack_structure import assert_pipeline_covers_required
+
+    # Exact ID association only — never fall back to pieces[0].
+    assert_pipeline_covers_required(pieces=pieces, pipeline=pipeline)
+
     for pr in pipeline.get("piece_results") or []:
         if not isinstance(pr, dict):
             continue
         pid = str(pr.get("piece_id") or "")
         piece = by_id.get(pid)
-        if piece is None and pieces:
-            piece = pieces[0]
-            pid = str(piece.get("id"))
         if piece is None:
-            continue
+            raise ValidationAppError(
+                f"Professional artifact piece_id “{pid}” does not match the authorized outfit. "
+                "Refusing to attach illustrations to the wrong garment."
+            )
         analysis = pr.get("analysis") if isinstance(pr.get("analysis"), dict) else {}
         # Merge AI construction tips without wiping designer fields.
         if analysis.get("construction_notes") and not piece.get("construction_steps"):
@@ -572,13 +577,13 @@ def _persist_professional_result(
         "autofill_applied": True,
         "autofill_paid_call": False,
     }
+    from app.services.techpack_autofill import snapshot_garment_analysis
     from app.services.techpack_compatibility import (
         collect_compatibility_warnings,
         filter_construction_steps,
         filter_pattern_inventory,
         is_sleeveless_analysis,
     )
-    from app.services.techpack_autofill import snapshot_garment_analysis
 
     # Post-process construction / inventory against vision analysis.
     piece_analyses: dict[str, dict[str, Any]] = {}
@@ -710,22 +715,30 @@ def ensure_professional_pdf_for_run(
 ) -> TechpackAIRun:
     """Idempotently assemble/bind Professional PDF for a completed illustration run (zero OpenAI)."""
     from app.services import techpack_service
+    from app.services.techpack_structure import (
+        list_outfit_pieces,
+        run_matches_draft_structure,
+    )
 
     if run.stage != "professional":
         return run
+    draft = _owned_draft(db, user, run.draft_id)
+    spec = draft.spec if isinstance(draft.spec, dict) else {}
+    pieces = list_outfit_pieces(spec)
+    req = dict(run.request) if isinstance(run.request, dict) else {}
+    structure_ok = run_matches_draft_structure(req, pieces)
     result = dict(run.result) if isinstance(run.result, dict) else {}
     export_id_raw = result.get("export_id")
     if export_id_raw and result.get("pdf_ready"):
         # Verify file still readable; otherwise reassemble.
         try:
             techpack_service.resolve_export_pdf_path(db, user, uuid.UUID(str(export_id_raw)))
-            # Keep draft.ai.export_id in sync for reopen/Download without a new paid run.
-            draft = _owned_draft(db, user, run.draft_id)
-            spec = draft.spec if isinstance(draft.spec, dict) else {}
             ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
-            if ai.get("export_id") != str(export_id_raw) or ai.get("dirty_since_generation"):
+            # Never clear dirty_since_generation / rebind Download when structure drifted.
+            if not structure_ok or ai.get("dirty_since_generation"):
+                return run
+            if ai.get("export_id") != str(export_id_raw):
                 ai["export_id"] = str(export_id_raw)
-                ai["dirty_since_generation"] = False
                 ai["last_run_id"] = str(run.id)
                 ai["last_mode"] = "professional"
                 spec["ai"] = ai
@@ -738,6 +751,10 @@ def ensure_professional_pdf_for_run(
             return run
         except Exception:  # noqa: BLE001
             pass
+
+    if not structure_ok:
+        # Historical PDF may exist on the run, but must not become current Download.
+        return run
 
     arts = list(
         db.scalars(select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run.id)).all()
@@ -755,16 +772,21 @@ def ensure_professional_pdf_for_run(
     draft = _owned_draft(db, user, run.draft_id)
     spec = draft.spec if isinstance(draft.spec, dict) else {}
     ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
-    ai["export_id"] = str(exported.id)
-    ai["dirty_since_generation"] = False
-    ai["last_run_id"] = str(run.id)
-    ai["last_mode"] = "professional"
-    spec["ai"] = ai
-    draft.spec = spec
-    from sqlalchemy.orm.attributes import flag_modified
+    # Only clear dirty when this run still matches the live outfit structure.
+    if run_matches_draft_structure(
+        dict(run.request) if isinstance(run.request, dict) else {},
+        list_outfit_pieces(spec),
+    ):
+        ai["export_id"] = str(exported.id)
+        ai["dirty_since_generation"] = False
+        ai["last_run_id"] = str(run.id)
+        ai["last_mode"] = "professional"
+        spec["ai"] = ai
+        draft.spec = spec
+        from sqlalchemy.orm.attributes import flag_modified
 
-    flag_modified(draft, "spec")
-    db.add(draft)
+        flag_modified(draft, "spec")
+        db.add(draft)
 
     ready_progress = {
         "phase": "ready",
@@ -857,6 +879,20 @@ def enqueue_generate_one_tap_professional(
         payload["message"] = "A Professional generation is already in progress for this draft."
         return payload
 
+    from app.services.techpack_structure import (
+        list_outfit_pieces,
+        plan_professional_image_kinds,
+        prepare_professional_outfit,
+        run_matches_draft_structure,
+    )
+
+    # Resolve/validate outfit BEFORE spend gates or queue insert (fail closed, $0).
+    spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    spec, pieces, structure_meta = prepare_professional_outfit(
+        db, draft, spec, persist_repair=True
+    )
+    draft = _owned_draft(db, user, draft_id)
+
     # Reuse a completed Professional run + PDF for this draft revision (no second paid job).
     spec_now = draft.spec if isinstance(draft.spec, dict) else {}
     ai_now = spec_now.get("ai") if isinstance(spec_now.get("ai"), dict) else {}
@@ -873,23 +909,32 @@ def enqueue_generate_one_tap_professional(
             .order_by(TechpackAIRun.created_at.desc())
         ).first()
         if completed is not None:
-            completed = ensure_professional_pdf_for_run(db, user, completed)
-            payload = _run_status_payload(db, completed)
-            if payload.get("pdf_ready"):
-                result = completed.result if isinstance(completed.result, dict) else {}
-                same_rev = int(result.get("draft_revision") or 0) == int(draft.revision or 1)
-                if same_rev or not result.get("draft_revision"):
-                    payload["idempotent_replay"] = True
-                    payload["reused_completed"] = True
-                    payload["message"] = "Using your existing AI Technical Pack for this design."
-                    return payload
+            live_pieces = list_outfit_pieces(spec_now)
+            if run_matches_draft_structure(
+                completed.request if isinstance(completed.request, dict) else {},
+                live_pieces,
+            ):
+                completed = ensure_professional_pdf_for_run(db, user, completed)
+                payload = _run_status_payload(db, completed)
+                if payload.get("pdf_ready"):
+                    result = completed.result if isinstance(completed.result, dict) else {}
+                    same_rev = int(result.get("draft_revision") or 0) == int(draft.revision or 1)
+                    if same_rev or not result.get("draft_revision"):
+                        payload["idempotent_replay"] = True
+                        payload["reused_completed"] = True
+                        payload["message"] = "Using your existing AI Technical Pack for this design."
+                        return payload
 
     effective_propose = bool(propose_back) if draft.back_job_id is None else False
-    spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
-    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
-    pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+    max_images = int(get_settings().techpack_ai_max_images_per_run or 6)
+    image_plan = plan_professional_image_kinds(
+        pieces,
+        propose_back=effective_propose,
+        has_back_image=draft.back_job_id is not None,
+        max_images=max_images,
+    )
     _lo, hi = estimate_professional_cents(
-        piece_count=max(1, len(pieces)),
+        piece_count=len(pieces),
         propose_back=effective_propose,
         has_back_image=draft.back_job_id is not None,
     )
@@ -909,11 +954,17 @@ def enqueue_generate_one_tap_professional(
             "propose_back": effective_propose,
             "authorization": "user_click_one_tap",
             "estimate_cents": hi,
+            "max_images": max_images,
+            "image_plan": image_plan,
+            "structure_fingerprint": structure_meta["structure_fingerprint"],
+            "piece_ids": structure_meta["piece_ids"],
+            "piece_count": structure_meta["piece_count"],
+            "draft_revision": structure_meta["draft_revision"],
             "progress": {
                 "phase": "preparing",
                 "message": "Preparing your design",
                 "pieces_done": 0,
-                "pieces_total": max(1, len(pieces)),
+                "pieces_total": len(pieces),
             },
         },
     )
@@ -1037,9 +1088,46 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
     propose_back = bool(req.get("propose_back"))
     sections = req.get("sections") if isinstance(req.get("sections"), list) else ["all"]
     estimate = int(req.get("estimate_cents") or 0)
-    spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
-    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
-    pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+    from app.services.techpack_structure import (
+        plan_professional_image_kinds,
+        prepare_professional_outfit,
+        run_matches_draft_structure,
+    )
+
+    # Worker boundary: re-validate structure before the first paid provider call.
+    try:
+        spec, pieces, structure_meta = prepare_professional_outfit(
+            db, draft, draft.spec if isinstance(draft.spec, dict) else {}, persist_repair=False
+        )
+    except ValidationAppError as exc:
+        _fail_run_preserve_cost(
+            db,
+            run.id,
+            error=str(exc),
+            provider_called=False,
+            force_zero_if_no_usage=True,
+        )
+        raise
+
+    if not run_matches_draft_structure(req, pieces):
+        msg = (
+            "Draft outfit structure changed after this Professional run was queued. "
+            "No paid generation was started — open Create Real Design and Generate again."
+        )
+        _fail_run_preserve_cost(
+            db, run.id, error=msg, provider_called=False, force_zero_if_no_usage=True
+        )
+        raise ValidationAppError(msg)
+
+    max_images = int(req.get("max_images") or get_settings().techpack_ai_max_images_per_run or 6)
+    image_plan = req.get("image_plan") if isinstance(req.get("image_plan"), dict) else None
+    if image_plan is None:
+        image_plan = plan_professional_image_kinds(
+            pieces,
+            propose_back=propose_back,
+            has_back_image=draft.back_job_id is not None,
+            max_images=max_images,
+        )
 
     try:
         storage = LocalStorageBackend()
@@ -1074,13 +1162,14 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
 
         pipeline = run_professional_pipeline(
             provider=provider,
-            pieces=pieces or [{"id": "piece-1", "category": "other", "label": "Garment"}],
+            pieces=pieces,
             front_image=front,
             back_image=back,
             look_notes=str(spec.get("look_notes") or ""),
             propose_back=bool(propose_back),
-            max_images=int(get_settings().techpack_ai_max_images_per_run or 6),
+            max_images=max_images,
             on_progress=_on_progress,
+            image_plan=image_plan,
         )
         usage_cost = int((pipeline.get("usage") or {}).get("cost_usd_cents") or 0)
         _set_run_progress(
@@ -1089,8 +1178,8 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             {
                 "phase": "assembling",
                 "message": "Assembling your PDF",
-                "pieces_done": max(1, len(pieces)),
-                "pieces_total": max(1, len(pieces)),
+                "pieces_done": len(pieces),
+                "pieces_total": len(pieces),
             },
             cost_usd_cents=usage_cost,
             clear_in_flight=True,
@@ -1167,7 +1256,7 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
                 ai_run_id=run.id,
                 require_professional=True,
             )
-        except Exception as pdf_exc:  # noqa: BLE001
+        except Exception as pdf_exc:
             # Illustrations are preserved; do not claim Ready without a PDF.
             run_row = db.get(TechpackAIRun, run_id)
             if run_row is not None:
@@ -1355,77 +1444,100 @@ def run_generate(
             "message": "Previous attempt recorded usage. Start a new confirmed generation to continue.",
         }
 
+    from app.services.techpack_autofill import apply_persisted_analyses_to_spec
+    from app.services.techpack_structure import (
+        plan_professional_image_kinds,
+        prepare_professional_outfit,
+    )
+
     spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
-    from app.services.techpack_autofill import (
-        extract_job_evidence,
-        outfit_needs_structure_repair,
-        repair_outfit_from_evidence,
-        apply_persisted_analyses_to_spec,
-    )
+    structure_meta: dict[str, Any] = {}
+    image_plan: dict[str, Any] | None = None
+    max_images = int(get_settings().techpack_ai_max_images_per_run or 6)
 
-    look_summary = str(spec.get("look_notes") or "")
-    design_identity = (
-        spec.get("look_design_identity")
-        if isinstance(spec.get("look_design_identity"), dict)
-        else None
-    )
-    # Prefer already-persisted Magic job evidence (no paid calls).
-    if design_identity is None or not look_summary:
-        from app.models.ai_job import AIJob
+    if mode == "professional":
+        # Shared structure gate with one-tap path — never invent piece-1.
+        spec, pieces, structure_meta = prepare_professional_outfit(
+            db, draft, spec, persist_repair=True
+        )
+        draft = _owned_draft(db, user, draft_id)
+        image_plan = plan_professional_image_kinds(
+            pieces,
+            propose_back=propose_back,
+            has_back_image=draft.back_job_id is not None,
+            max_images=max_images,
+        )
+    else:
+        from app.services.techpack_autofill import (
+            extract_job_evidence,
+            outfit_needs_structure_repair,
+            repair_outfit_from_evidence,
+        )
 
-        for jid in (draft.front_job_id, draft.back_job_id):
-            if jid is None:
-                continue
-            job = db.get(AIJob, jid)
-            if job is None or not isinstance(job.result_data, dict):
-                continue
-            evidence = extract_job_evidence(job.result_data)
-            if not look_summary and evidence.get("summary"):
-                look_summary = str(evidence["summary"])
-                if not spec.get("look_notes"):
-                    spec["look_notes"] = look_summary[:500]
-            if design_identity is None and evidence.get("design_identity"):
-                design_identity = evidence["design_identity"]
-                spec["look_design_identity"] = {
-                    k: design_identity.get(k)
-                    for k in design_identity
-                    if design_identity.get(k) is not None
-                }
-            if look_summary and design_identity is not None:
-                break
+        look_summary = str(spec.get("look_notes") or "")
+        design_identity = (
+            spec.get("look_design_identity")
+            if isinstance(spec.get("look_design_identity"), dict)
+            else None
+        )
+        if design_identity is None or not look_summary:
+            from app.models.ai_job import AIJob
 
-    if outfit_needs_structure_repair(
-        spec.get("outfit") if isinstance(spec.get("outfit"), dict) else None,
-        look_summary=look_summary,
-        design_identity=design_identity,
-    ):
-        spec = repair_outfit_from_evidence(
-            spec,
+            for jid in (draft.front_job_id, draft.back_job_id):
+                if jid is None:
+                    continue
+                job = db.get(AIJob, jid)
+                if job is None or not isinstance(job.result_data, dict):
+                    continue
+                evidence = extract_job_evidence(job.result_data)
+                if not look_summary and evidence.get("summary"):
+                    look_summary = str(evidence["summary"])
+                    if not spec.get("look_notes"):
+                        spec["look_notes"] = look_summary[:500]
+                if design_identity is None and evidence.get("design_identity"):
+                    design_identity = evidence["design_identity"]
+                    spec["look_design_identity"] = {
+                        k: design_identity.get(k)
+                        for k in design_identity
+                        if design_identity.get(k) is not None
+                    }
+                if look_summary and design_identity is not None:
+                    break
+
+        if outfit_needs_structure_repair(
+            spec.get("outfit") if isinstance(spec.get("outfit"), dict) else None,
             look_summary=look_summary,
             design_identity=design_identity,
-            units=str(spec.get("units") or "cm"),
-        )
-    elif mode in ("analyze", "ai", "heuristic", "professional") and (
-        not (spec.get("outfit") or {}).get("pieces") or (sections and "detect" in sections)
-    ):
-        detection = detect_pieces_from_evidence(
-            look_summary=look_summary,
-            design_identity=design_identity,
-            units=str(spec.get("units") or "cm"),
-        )
-        if not sections or "detect" in (sections or []):
-            if all(
-                str(p.get("detection_source") or "").startswith("heuristic")
-                for p in (spec.get("outfit") or {}).get("pieces") or []
-            ):
-                spec["outfit"] = detection
+        ):
+            spec = repair_outfit_from_evidence(
+                spec,
+                look_summary=look_summary,
+                design_identity=design_identity,
+                units=str(spec.get("units") or "cm"),
+            )
+        elif mode in ("analyze", "ai", "heuristic") and (
+            not (spec.get("outfit") or {}).get("pieces") or (sections and "detect" in sections)
+        ):
+            detection = detect_pieces_from_evidence(
+                look_summary=look_summary,
+                design_identity=design_identity,
+                units=str(spec.get("units") or "cm"),
+            )
+            if not sections or "detect" in (sections or []):
+                if all(
+                    str(p.get("detection_source") or "").startswith("heuristic")
+                    for p in (spec.get("outfit") or {}).get("pieces") or []
+                ):
+                    spec["outfit"] = detection
+        outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+        pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
 
     # Reuse persisted vision analysis onto empty qualitative fields (zero paid).
     spec = apply_persisted_analyses_to_spec(spec)
-
-    paid = mode in ("ai", "professional")
     outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
     pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+
+    paid = mode in ("ai", "professional")
     lo, hi = estimate_professional_cents(
         piece_count=max(1, len(pieces)),
         propose_back=propose_back,
@@ -1451,6 +1563,12 @@ def run_generate(
             "sections": sections or ["all"],
             "propose_back": propose_back,
             "authorization": authorization or "confirm_token",
+            "max_images": max_images if mode == "professional" else None,
+            "image_plan": image_plan,
+            "structure_fingerprint": structure_meta.get("structure_fingerprint"),
+            "piece_ids": structure_meta.get("piece_ids"),
+            "piece_count": structure_meta.get("piece_count") or len(pieces),
+            "draft_revision": int(draft.revision or 1),
             "progress": {
                 "phase": "preparing",
                 "message": "Preparing your design",
@@ -1490,13 +1608,14 @@ def run_generate(
 
             pipeline = run_professional_pipeline(
                 provider=provider,
-                pieces=pieces or [{"id": "piece-1", "category": "other", "label": "Garment"}],
+                pieces=pieces,
                 front_image=front,
                 back_image=back,
                 look_notes=str(spec.get("look_notes") or ""),
                 propose_back=bool(propose_back),
-                max_images=int(get_settings().techpack_ai_max_images_per_run or 6),
+                max_images=max_images,
                 on_progress=_on_progress,
+                image_plan=image_plan,
             )
             _set_run_progress(
                 db,
@@ -1504,8 +1623,8 @@ def run_generate(
                 {
                     "phase": "assembling",
                     "message": "Assembling your PDF",
-                    "pieces_done": max(1, len(pieces)),
-                    "pieces_total": max(1, len(pieces)),
+                    "pieces_done": len(pieces),
+                    "pieces_total": len(pieces),
                 },
             )
             pipeline["usage"]["estimated_cost_usd_cents"] = estimate

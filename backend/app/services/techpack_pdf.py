@@ -29,6 +29,7 @@ from reportlab.platypus import (
 )
 
 from app.services.techpack_compatibility import (
+    collect_compatibility_warnings,
     filter_construction_steps,
     filter_pattern_inventory,
     material_contradiction,
@@ -214,8 +215,12 @@ def _measurement_table(rows: list[tuple[str, Any]], styles: dict[str, ParagraphS
     for label, cell in rows:
         note = ""
         confidence = "—"
+        point_label = label
         if isinstance(cell, dict):
             parts = []
+            review = str(cell.get("review_status") or "").lower()
+            if review in {"needs_review", "proposed", "proposed_unverified"}:
+                point_label = f"{label} · REVIEW"
             if isinstance(cell.get("note"), str) and cell["note"]:
                 parts.append(cell["note"])
             assumptions = cell.get("assumptions")
@@ -225,7 +230,7 @@ def _measurement_table(rows: list[tuple[str, Any]], styles: dict[str, ParagraphS
             confidence = str(cell.get("confidence") or cell.get("review_status") or "—")
         data.append(
             [
-                Paragraph(label, styles["body"]),
+                Paragraph(point_label, styles["body"]),
                 Paragraph(_fmt_value(cell), styles["body"]),
                 Paragraph(_fmt_source(cell), styles["muted"]),
                 Paragraph(confidence, styles["muted"]),
@@ -642,6 +647,10 @@ def _piece_sections(
             styles["muted"],
         )
     )
+    # PDF-time compatibility: mark sleeveless/sleeve mismatches even on older drafts.
+    from app.services.techpack_compatibility import collect_compatibility_warnings
+
+    _ = collect_compatibility_warnings({"outfit": {"pieces": [piece]}})
     finished = piece.get("finished_measurements") if isinstance(piece.get("finished_measurements"), dict) else {}
     finished_rows = [
         (POM_LABELS.get(key, key), cell)
@@ -650,6 +659,21 @@ def _piece_sections(
     ]
     if finished_rows:
         story.append(_measurement_table(finished_rows, styles))
+        sleeve_cell = finished.get("sleeve_length")
+        analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+        if (
+            isinstance(sleeve_cell, dict)
+            and isinstance(sleeve_cell.get("value"), (int, float))
+            and str(sleeve_cell.get("review_status") or "") == "needs_review"
+        ):
+            story.append(
+                Paragraph(
+                    "<b>REVIEW:</b> Sleeve length is recorded but may not apply to this garment "
+                    f"(analysis sleeves: {analysis.get('sleeves') or '—'}). "
+                    "Designer value preserved — confirm before manufacturing.",
+                    styles["warn"],
+                )
+            )
     else:
         story.append(Paragraph("No finished measurements recorded for this piece.", styles["muted"]))
 
@@ -930,10 +954,22 @@ def _build_story_v2(
         )
     )
 
-    warnings = v2.get("warnings") if isinstance(v2.get("warnings"), list) else []
-    if warnings:
+    warnings = [w for w in (v2.get("warnings") if isinstance(v2.get("warnings"), list) else [])]
+    # Merge PDF-time compatibility warnings once (material / sleeveless POM), de-duped.
+    seen_warn: set[str] = set()
+    merged_warns: list[Any] = []
+    for w in list(warnings) + collect_compatibility_warnings(v2):
+        if isinstance(w, dict):
+            key = f"{w.get('code')}|{w.get('piece_id')}|{w.get('pom')}|{w.get('message')}"
+        else:
+            key = str(w)
+        if key in seen_warn:
+            continue
+        seen_warn.add(key)
+        merged_warns.append(w)
+    if merged_warns:
         story.append(Paragraph("Measurement review warnings", styles["h3"]))
-        for w in warnings[:30]:
+        for w in merged_warns[:30]:
             if isinstance(w, dict):
                 story.append(Paragraph(f"• {w.get('message') or w}", styles["warn"]))
             else:
