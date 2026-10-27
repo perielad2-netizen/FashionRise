@@ -536,6 +536,16 @@
     padding: 22px 28px 32px;
   }
 
+  /* Garment selection lives in the sidebar on desktop — avoid duplicate pills. */
+  .main .garmentPills,
+  .main > .sideNavLabel {
+    display: none;
+  }
+
+  .lookPreview {
+    min-height: 220px;
+  }
+
   .footer {
     grid-column: 1 / -1;
     grid-row: 3;
