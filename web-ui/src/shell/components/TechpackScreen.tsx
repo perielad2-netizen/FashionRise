@@ -52,7 +52,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [progressOpen, setProgressOpen] = useState(false)
   const [progressReady, setProgressReady] = useState(false)
   const [progressReconnect, setProgressReconnect] = useState(false)
-  const [lastRunId, setLastRunId] = useState<string | null>(null)
+  const [, setLastRunId] = useState<string | null>(null)
   const [readyExportId, setReadyExportId] = useState<string | null>(null)
   const [readyFilename, setReadyFilename] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
