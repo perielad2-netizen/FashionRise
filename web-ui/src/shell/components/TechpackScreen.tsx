@@ -609,8 +609,13 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   }
 
   const closeDetails = async () => {
-    await persist({ silent: false })
-    setDetailsOpen(false)
+    // Flush any outstanding debounced autosave before closing so edits are not lost.
+    if (autosaveTimer.current) {
+      window.clearTimeout(autosaveTimer.current)
+      autosaveTimer.current = null
+    }
+    const saved = await persist({ silent: false })
+    if (saved) setDetailsOpen(false)
   }
 
   if (loading) {

@@ -666,13 +666,14 @@ export function DetailsEditorSheet({
         </div>
 
         <footer className={styles.footer}>
-          <div className={styles.footerActions}>
-            <span className={styles.progress} aria-live="polite">
+          <div className={styles.footerStack}>
+            <p className={styles.saveStatusLine} role="status" aria-live="polite">
               {saveStatus || (busy ? 'Saving…' : 'Edits save automatically')}
-            </span>
+            </p>
             <button
               type="button"
-              className={styles.primaryBtn}
+              className={styles.doneBtn}
+              data-testid="details-done"
               disabled={busy}
               onClick={() => void onClose()}
             >

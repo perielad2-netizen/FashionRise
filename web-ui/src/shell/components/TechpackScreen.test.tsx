@@ -184,11 +184,34 @@ describe('TechpackScreen simplified UX', () => {
     fireEvent.click(screen.getByRole('tab', { name: /^Body$/i }))
     const height = await screen.findByLabelText(/^Height$/i)
     fireEvent.change(height, { target: { value: '170' } })
-    fireEvent.click(screen.getByRole('button', { name: /^Done$/i }))
+    fireEvent.click(screen.getByTestId('details-done'))
     await waitFor(() => expect(updateTechpackDraft).toHaveBeenCalled())
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: /Measurements & details/i })).not.toBeInTheDocument(),
     )
+  })
+
+  it('keeps details open when Done flush save fails', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
+    updateTechpackDraft.mockRejectedValueOnce(new Error('network down'))
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    await screen.findByText('Create Real Design')
+    fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+    expect(await screen.findByRole('dialog', { name: /Measurements & details/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('details-done'))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/network down|Could not save/i)
+    expect(screen.getByRole('dialog', { name: /Measurements & details/i })).toBeInTheDocument()
+  })
+
+  it('renders Magic hero with contain class (no cover crop)', async () => {
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    const img = await screen.findByRole('img', { name: /Cream dress|Magic look/i })
+    expect(img.className).toMatch(/heroImage/)
   })
 
   it('one-tap Generate shows waiting then Download PDF only when pdf_ready', async () => {
