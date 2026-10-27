@@ -3,21 +3,49 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Create Real Design V3.1 LIVE** — measurement tab reset fix + one-click Generate AI PDF + Magic-style progress + PDF quality. FE PR [#102](https://github.com/perielad2-netizen/FashionRise/pull/102) `9ba396a3` · BE PR [#103](https://github.com/perielad2-netizen/FashionRise/pull/103) `ffec1a7b`. Alembic **`010`**. **0 new paid AI calls by Cursor**. **Samsung Internet / owner phone acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Async AI PDF LIVE** — overlay z-index fix; `generate-professional` returns **202** + durable worker; partial-cost accounting; owner interrupted run **recovered completed**. FE PR async `58d82605` · BE PR async `95fbded9`. Alembic **`011`**. Spend unchanged **$15 / $8/run / $20/day**. **0 paid AI calls by Cursor**. **Samsung acceptance NOT claimed.**)
 
-**Phase:** Protected family beta. **Create Real Design V3.1 LIVE**. Production FE @ `9ba396a3`. Production BE mark @ `ffec1a7b` (on V3 + `186cac84` reasoning lineage). Alembic **`010`**.
+**Phase:** Protected family beta. Production FE @ `58d82605`. Production BE mark @ `95fbded9`. Alembic **`011`**. App remains private behind Cloudflare Access.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`9ba396a3`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/9ba396a3`. Measurement group stability; one-click **Generate AI PDF**; Magic-style progress overlay; `/api/v1` prod assert. |
-| Backend (FastAPI + PostgreSQL) | **`ffec1a7b`** mark (files overlay on V3 lineage) — `POST …/ai/generate-professional` one-tap intent; progress phases; compatibility warnings; PDF V3.1 branding + larger detail flats. Spend gates unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
-| AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
-| Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
-| Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
-| Deploy backup | `/var/backups/fashionrise/v31-deploy-20261026T233003Z` (+ prior crit-fix backup) |
-| AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
+| Frontend (`web-ui`) | **`58d82605`** — `current` → `releases/58d82605`. Portal AI overlay z-index 120; Step 4 Done removed; poll short status after 202. Bundle `index-Dh_eLSGA.js`. |
+| Backend (FastAPI + PostgreSQL) | **`95fbded9`** — one-tap enqueues `queued` TechpackAIRun; `fashionrise-ai-worker` claims via SKIP LOCKED; partial cost + `reconciliation_required`. |
+| AI worker | **`fashionrise-ai-worker`** now also drains Professional techpack runs (Magic AIJobs unchanged). |
+| Database | `fashionrise_beta` — Alembic **`011`** (queue index) |
+| Nginx | Unchanged allowlist from access-friction (generate-professional / latest-run already open). |
+| Deploy backup | `/var/backups/fashionrise/async-ai-deploy-*` |
+| AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. |
+
+## Async AI PDF reliability — root cause & fix (2026-10-27)
+
+| Item | Detail |
+|---|---|
+| Hidden overlay root cause | `GenerateAiPdfOverlay` scrim **z-index 80** under mobile `StageSheet` **z-index 90**. Progress opened in state but was invisible until Done closed the sheet. |
+| Overlay fix | Portal to `document.body`, z-index **120**, close StageSheet on Generate, remove Step 4 **Done** footer. Spinner paints before network. |
+| Proxy timeout root cause | Sync `POST …/generate-professional` held the HTTP connection for the full paid pipeline (~150s). Cloudflare/origin **120s proxy read timeout** cut the browser while the API kept working. |
+| Async fix | POST returns **202** with `run_id` + `status_url`; worker executes off-request; FE polls `GET …/ai/runs/{id}` / `latest-run`. |
+| Owner interrupted run audit | Run `1ccb0d5f…` (draft `2eb779b3…`) **completed** at 09:01:11Z with **165¢** recorded and **4** illustration artifacts (`flat_front`, `flat_back_proposed`, `detail_callouts`, `pattern_sheet`). No new PDF export row that minute — Preview/Download assembles PDF from draft without new AI charges. OpenAI wallet delta in screenshots is **not** asserted as exact owed amount. |
+| Recovery | Reopen Create Real Design → latest completed Professional run surfaces ready overlay + illustrations; Preview/Download free. **Do not press Generate again** for that look unless starting a new intentional paid run. |
+| Queue/worker | `techpack_ai_runs.status=queued` → worker `FOR UPDATE SKIP LOCKED` → `running` → `completed`/`failed`/`reconciliation_required`. In-flight provider marker prevents blind retry. |
+| Tests | BE async worker suite + V3.1 one-tap (14); FE TechpackScreen Vitest (13). Prod smoke: health/ready, unauth generate 401, alembic 011, version `58d82605`, banner 0. |
+| Budget | Unchanged ceilings; spend gates count known cost on completed/failed/reconciliation/running/queued. |
+
+### Next recommended action (owner — Samsung)
+
+1. Hard refresh FashionRise → About / version **`58d82605`**, no pink banner.
+2. Open the same Create Real Design look from the interrupted attempt → expect recovered illustrations / Ready (no new Generate required).
+3. Preview / Download PDF (no AI charge).
+4. Only if starting a **new** design: press **Generate AI PDF once** → progress appears immediately (no Done) → may exceed 2 minutes safely → Ready.
+5. Report results; do not ask Cursor to run paid generate.
+
+### Rollback
+
+- FE: `ln -sfn /var/www/fashionrise/releases/7b4a3a0c /var/www/fashionrise/current && nginx -t && systemctl reload nginx`
+- BE/worker: `/var/backups/fashionrise/async-ai-deploy-*/ROLLBACK.sh` (then `alembic downgrade 010` only if needed)
+- Prefer app rollback; DB dump retained in the same backup folder.
 
 ## V3.1 — what shipped (2026-10-27)
 
