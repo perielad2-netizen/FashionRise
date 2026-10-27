@@ -3,16 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Create Real Design AI auto-fill LIVE** — Magic look evidence + persisted vision fill specs; shirt+trousers not dress. BE PR [#110](https://github.com/perielad2-netizen/FashionRise/pull/110) `3307da95` · FE PR [#111](https://github.com/perielad2-netizen/FashionRise/pull/111) `cb2c5b8d`. Alembic **`011`**. **0 paid OpenAI tests by Cursor**. **Samsung device acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Create Real Design AI auto-fill LIVE** — Magic look evidence + persisted vision fill specs; shirt+trousers not dress. BE PR [#110](https://github.com/perielad2-netizen/FashionRise/pull/110) `732bda9f` · FE PR [#111](https://github.com/perielad2-netizen/FashionRise/pull/111) `cb2c5b8d`. Alembic **`011`**. **0 paid OpenAI tests by Cursor**. **Samsung device acceptance NOT claimed.**)
 
-**Phase:** Protected family beta. **Create Real Design AI auto-fill LIVE** (on simple UX Generate → Wait → Download). Production FE @ `cb2c5b8d`. Production BE @ `3307da95`. Alembic **`011`**. Durable AI worker + polling retained.
+**Phase:** Protected family beta. **Create Real Design AI auto-fill LIVE** (on simple UX Generate → Wait → Download). Production FE @ `cb2c5b8d`. Production BE @ `732bda9f`. Alembic **`011`**. Durable AI worker + polling retained.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`cb2c5b8d`** — Nginx `current` → `releases/cb2c5b8d`. Simple UX retained; Edit measurements & details shows visually supported / AI proposed / unknown provenance + conflict notices. API base `/api/v1`. |
-| Backend (FastAPI + PostgreSQL) | **`3307da95`** — `techpack_autofill` repairs stale one-dress metadata from Magic evidence; seeds visible details; versioned `garment_analysis`; no fabricate empty-body POMs; category-aware mock vision for $0 regression. `fashionrise-api` on `127.0.0.1:8010`. |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — `techpack_autofill` repairs stale one-dress metadata from Magic evidence; seeds visible details; versioned `garment_analysis`; no fabricate empty-body POMs; category-aware mock vision for $0 regression. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | `fashionrise-ai-worker` — unchanged durable queue; PDF assembly before completed/ready |
 | Database | `fashionrise_beta` — Alembic **`011`** (no new migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
@@ -824,6 +824,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-27 | **Create Real Design AI auto-fill LIVE** FE `cb2c5b8d` (PR [#111](https://github.com/perielad2-netizen/FashionRise/pull/111)) + BE `732bda9f` (PR [#110](https://github.com/perielad2-netizen/FashionRise/pull/110)); Alembic `011` unchanged; Magic/`design_identity` + persisted vision fill; shirt+trousers repair; `garment_analysis` snapshot; mocked $0 regression; provenance in details sheet; Generate→Wait→Download unchanged; smoke PASS; **0 paid OpenAI**; backup `autofill-be-20261027T111104Z`. Owner shirt+trousers acceptance pending. |
+| 2026-10-27 | **Create Real Design simple UX LIVE** FE `ac485620` (PR [#109](https://github.com/perielad2-netizen/FashionRise/pull/109)) + BE `bb3fcc09` (PR [#108](https://github.com/perielad2-netizen/FashionRise/pull/108)); Alembic `011`; Generate→Wait→Download; Professional PDF binding; FR-7182 rebound **0 OpenAI**; **0 paid** by Cursor. |
 | 2026-10-26 | **Create Real Design mobile UX + provenance DEPLOYED** FE `5f519734` (PR [#98](https://github.com/perielad2-netizen/FashionRise/pull/98)) + BE `08b66ca2` (PR [#97](https://github.com/perielad2-netizen/FashionRise/pull/97)); Alembic `010` unchanged; Android Edit Measurements sheet; Stage 4 Basic vs Professional clarity; PDF Basic/No-AI labeling; smoke PASS (heuristic provenance, **0 paid**); backup `techpack-mobile-ux-deploy-20261026T201157Z`. Owner first paid AI test still pending. |
 | 2026-10-26 | **Create Real Design V3 DEPLOYED** FE `75a8e8ca` (PR [#96](https://github.com/perielad2-netizen/FashionRise/pull/96)) + BE `5fd4b843` (PR [#95](https://github.com/perielad2-netizen/FashionRise/pull/95)); Alembic `010` `techpack_ai_artifacts`; Nginx artifacts image route; owner-allowlist AI gates ON (ceiling `$15`, max `$8`/run, `$20`/day); non-AI smoke PASS (heuristic `$0`, professional confirm only); mocked CI + FR-7182 fixture PDF; Dual Magic ON; **0 paid generate by Cursor**; backup `techpack-v3-deploy-20261026T190439Z`. Owner to run first live AI Professional test. No monetization. |
 | 2026-10-26 | **Create Real Design V2 DEPLOYED** FE `e2416ed0` (PR [#94](https://github.com/perielad2-netizen/FashionRise/pull/94)) + BE `f2433513` (PR [#93](https://github.com/perielad2-netizen/FashionRise/pull/93)); Alembic `009` `techpack_ai_runs`; Nginx AI allowlist; multi-piece PDF + flats/schematics; smoke PASS (heuristic `$0`, paid AI 403); Dual Magic ON; **0 paid AI**; backup `techpack-v2-deploy-20261026T181418Z`. No monetization. |
