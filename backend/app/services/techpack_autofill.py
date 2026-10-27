@@ -353,8 +353,14 @@ def repair_outfit_from_evidence(
         "note": "Outfit structure inferred from Magic look evidence — optional corrections in Edit measurements & details.",
     }
     out["outfit"] = detection
-    if look_summary and not out.get("look_notes"):
-        out["look_notes"] = look_summary[:500]
+    if look_summary:
+        prior_notes = str(out.get("look_notes") or "")
+        # Replace empty or stale single-dress notes when evidence describes separates.
+        if (not prior_notes.strip()) or (
+            "dress" in prior_notes.lower()
+            and ("shirt" in look_summary.lower() or "trouser" in look_summary.lower())
+        ):
+            out["look_notes"] = look_summary[:500]
     ai = out.get("ai") if isinstance(out.get("ai"), dict) else {}
     ai["autofill_structure"] = "magic_look_evidence"
     out["ai"] = ai
