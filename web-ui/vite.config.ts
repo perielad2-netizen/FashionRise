@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
+import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,11 +28,22 @@ const pwaWorkbox = {
   navigateFallback: null,
 } as const
 
-const buildSha =
-  process.env.VITE_BUILD_SHA ||
-  process.env.GITHUB_SHA ||
-  process.env.COMMIT_SHA ||
-  ''
+function resolveBuildSha(): string {
+  const fromEnv =
+    process.env.VITE_BUILD_SHA || process.env.GITHUB_SHA || process.env.COMMIT_SHA || ''
+  if (fromEnv.trim()) return fromEnv.trim()
+  try {
+    // Prefer the real git SHA so production never ships a "dev" identity by accident.
+    return execSync('git rev-parse HEAD', {
+      cwd: path.resolve(rootDir, '..'),
+      encoding: 'utf8',
+    }).trim()
+  } catch {
+    return ''
+  }
+}
+
+const buildSha = resolveBuildSha()
 
 export default defineConfig({
   define: {
@@ -42,18 +54,17 @@ export default defineConfig({
     {
       name: 'fashionrise-build-id',
       transformIndexHtml(html) {
-        const short = (buildSha || 'dev').slice(0, 8)
-        const banner = `<div id="fr-static-app-version" style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#9d174d;color:#fff;font:700 13px/1.3 system-ui,sans-serif;text-align:center">FashionRise App ${short} · if this bar is missing you have an old cached page</div>`
+        const short = (buildSha || 'unknown').slice(0, 8)
+        // No intrusive pink debug banner in production — SHA lives in meta + Settings/About.
         return html
           .replace('<title>FashionRise</title>', `<title>FashionRise · App ${short}</title>`)
           .replace(
             '<meta name="application-name" content="FashionRise" />',
             `<meta name="application-name" content="FashionRise" />\n    <meta name="fr-app-version" content="${short}" />`,
           )
-          .replace('<div id="root"></div>', `${banner}\n    <div id="root"></div>`)
       },
       closeBundle() {
-        const short = (buildSha || 'dev').slice(0, 8)
+        const short = (buildSha || 'unknown').slice(0, 8)
         fs.writeFileSync(
           path.resolve(rootDir, 'dist/version.json'),
           JSON.stringify({
@@ -62,6 +73,7 @@ export default defineConfig({
             builtAt: new Date().toISOString(),
           }),
         )
+        fs.writeFileSync(path.resolve(rootDir, 'dist/REVISION'), `${short}\n`)
       },
     },
     VitePWA({

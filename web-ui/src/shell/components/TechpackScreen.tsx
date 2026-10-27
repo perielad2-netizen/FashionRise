@@ -59,7 +59,7 @@ const MOBILE_MEASURE_MQ = '(max-width: 720px)'
 const BUILD_VERSION =
   (import.meta.env.VITE_BUILD_SHA as string | undefined)?.slice(0, 8) ||
   (import.meta.env.VITE_APP_VERSION as string | undefined) ||
-  'dev'
+  'unknown'
 
 type Props = {
   draftId: string
@@ -228,18 +228,21 @@ export function TechpackScreen({ draftId, onBack }: Props) {
 
   const professionalDisabledReason = useMemo(() => {
     if (!aiStatus) {
-      return 'AI Professional status unavailable — Basic Technical Pack still works at $0.'
+      return 'AI Professional status unavailable — try again in a moment.'
     }
     if (!aiStatus.enabled || !aiStatus.professional_available) {
-      if (aiStatus.owner_allowlisted === false) {
-        return 'AI Professional unavailable — your account is not on the owner allowlist.'
+      if (!aiStatus.api_key_present) {
+        return 'AI Professional unavailable — provider credentials are not configured.'
       }
-      if (aiStatus.max_usd_per_run == null && aiStatus.spend_ceiling_usd == null) {
-        return 'AI Professional unavailable — owner allowlist / spend ceiling not configured.'
+      if (!(aiStatus.spend_ceiling_usd && aiStatus.spend_ceiling_usd > 0)) {
+        return 'AI Professional unavailable — spend ceiling is not configured.'
+      }
+      if (!aiStatus.configured_flag) {
+        return 'AI Professional unavailable — feature flag is off.'
       }
       return (
         aiStatus.note ||
-        'AI Professional unavailable — owner allowlist / spend ceiling not configured.'
+        'AI Professional unavailable — check enablement, API key, and spend ceiling.'
       )
     }
     return null

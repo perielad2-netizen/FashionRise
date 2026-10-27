@@ -218,7 +218,9 @@ describe('TechpackScreen', () => {
     const gen = await screen.findByRole('button', { name: /Generate AI PDF/i })
     expect(gen).toBeDisabled()
     expect(
-      screen.getByText(/owner allowlist \/ spend ceiling not configured|not on the owner allowlist/i),
+      screen.getByText(
+        /AI Professional unavailable|provider credentials|spend ceiling|feature flag/i,
+      ),
     ).toBeInTheDocument()
     expect(screen.getByText(/Preview and Download never run paid AI/i)).toBeInTheDocument()
   })
