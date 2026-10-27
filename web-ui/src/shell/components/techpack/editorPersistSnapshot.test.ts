@@ -17,6 +17,12 @@ const SPEC: TechpackSpecV2 = {
   body: { height: { value: 170, unit: 'cm', source: 'designer' } },
   preferences: { fit_preference: 'regular', notes: '' },
   warnings: [],
+  ai: {
+    last_run_id: 'run-1',
+    last_mode: 'professional',
+    export_id: 'exp-1',
+    dirty_since_generation: false,
+  },
 }
 
 describe('editorPersistFingerprint', () => {
@@ -35,12 +41,30 @@ describe('editorPersistFingerprint', () => {
     expect(after).not.toBe(before)
   })
 
-  it('buildEditorPersistSnapshot trims title/style and normalizes stage', () => {
+  it('ignores server-owned ai metadata changes (dirty_since_generation / export_id)', () => {
+    const before = editorPersistFingerprint('Title', 'FR', SPEC)
+    const after = editorPersistFingerprint('Title', 'FR', {
+      ...SPEC,
+      ai: {
+        ...SPEC.ai,
+        dirty_since_generation: true,
+        export_id: 'exp-2',
+        last_run_id: 'run-2',
+      },
+    })
+    expect(after).toBe(before)
+  })
+
+  it('buildEditorPersistSnapshot still includes ai for PATCH merge compatibility', () => {
     const snap = buildEditorPersistSnapshot('  X ', ' Y ', SPEC)
     expect(snap).toEqual({
       title: 'X',
       style_code: 'Y',
-      spec: expect.objectContaining({ workflow_stage: 'generate', look_notes: 'notes' }),
+      spec: expect.objectContaining({
+        workflow_stage: 'generate',
+        look_notes: 'notes',
+        ai: expect.objectContaining({ last_run_id: 'run-1', dirty_since_generation: false }),
+      }),
     })
   })
 })

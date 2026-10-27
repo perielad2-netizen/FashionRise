@@ -1,7 +1,7 @@
 import type { TechpackSpecV2 } from '@/services/techpacksApi'
 
 /**
- * Canonical editable payload for dirty detection / PATCH bodies.
+ * Canonical editable payload for PATCH bodies.
  * Must match what TechpackScreen sends in updateTechpackDraft.
  */
 export function buildEditorSpecPatch(spec: TechpackSpecV2 | null | undefined): TechpackSpecV2 {
@@ -37,6 +37,7 @@ export function buildEditorSpecPatch(spec: TechpackSpecV2 | null | undefined): T
     preferences: current.preferences ?? { fit_preference: 'regular', notes: '' },
     warnings: current.warnings ?? [],
     qc_checklist: current.qc_checklist,
+    // Included in PATCH for merge compatibility; excluded from dirty fingerprint below.
     ai: current.ai,
   }
 }
@@ -59,11 +60,21 @@ export function buildEditorPersistSnapshot(
   }
 }
 
-/** Stable fingerprint for dirty checks — value equality, not object identity. */
+/**
+ * Value fingerprint for quiet autosave dirty checks.
+ * Omits server-owned `ai` metadata (dirty_since_generation, last_run_id, export_id, …)
+ * so syncing PDF validity after PATCH cannot re-arm the autosave loop.
+ */
 export function editorPersistFingerprint(
   title: string,
   styleCode: string,
   spec: TechpackSpecV2 | null | undefined,
 ): string {
-  return JSON.stringify(buildEditorPersistSnapshot(title, styleCode, spec))
+  const snap = buildEditorPersistSnapshot(title, styleCode, spec)
+  const { ai: _serverOwnedAi, ...editableSpec } = snap.spec
+  return JSON.stringify({
+    title: snap.title,
+    style_code: snap.style_code,
+    spec: editableSpec,
+  })
 }

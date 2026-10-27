@@ -61,6 +61,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [readyFilename, setReadyFilename] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [intentIdempotencyKey, setIntentIdempotencyKey] = useState<string | null>(null)
+  /** Bumps when the saved fingerprint changes so React can recompute editorDirty. */
+  const [savedTick, setSavedTick] = useState(0)
   const pollAbortRef = useRef<AbortController | null>(null)
   const autosaveTimer = useRef<number | null>(null)
   const savedFingerprintRef = useRef<string | null>(null)
@@ -75,6 +77,14 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   titleRef.current = title
   styleCodeRef.current = styleCode
   specRef.current = spec
+
+  const markSavedFingerprint = useCallback(
+    (nextTitle: string, nextStyleCode: string, nextSpec: TechpackSpecV2 | null | undefined) => {
+      savedFingerprintRef.current = editorPersistFingerprint(nextTitle, nextStyleCode, nextSpec)
+      setSavedTick((n) => n + 1)
+    },
+    [],
+  )
 
   const frontImg = useAuthJobImage(draft?.front_job_id ?? null, Boolean(draft?.front_job_id))
 
@@ -103,39 +113,54 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   }, [aiStatus])
 
   const pieces = spec?.outfit?.pieces ?? []
-  const dirtySinceGeneration = Boolean(spec?.ai?.dirty_since_generation)
+  // Reactive dirty vs last-saved editable values (excludes server-owned ai metadata).
+  const editorDirty = useMemo(() => {
+    // savedTick forces recompute after markSavedFingerprint updates the ref.
+    void savedTick
+    if (savedFingerprintRef.current == null) return false
+    return editorPersistFingerprint(title, styleCode, spec) !== savedFingerprintRef.current
+  }, [title, styleCode, spec, savedTick])
+  // PDF is outdated if the server says so OR the designer has local unsaved edits.
+  const dirtySinceGeneration =
+    Boolean(spec?.ai?.dirty_since_generation) || editorDirty
   const hasReadyPdf = Boolean(readyExportId) && !dirtySinceGeneration
 
-  const hydrate = useCallback((row: TechpackDraft, opts: { markSaved?: boolean } = {}) => {
-    setDraft(row)
-    setTitle(row.title)
-    setStyleCode(row.style_code)
-    const wrapped = wrapSpecForEditing(asRecord(row.spec))
-    setSpec(wrapped.spec)
-    if (opts.markSaved !== false) {
-      savedFingerprintRef.current = editorPersistFingerprint(row.title, row.style_code, wrapped.spec)
-    }
-    const ai = wrapped.spec.ai
-    if (ai?.last_run_id) setLastRunId(String(ai.last_run_id))
-    const exportFromAi = ai && typeof ai === 'object' ? (ai as { export_id?: string }).export_id : null
-    if (exportFromAi && !ai?.dirty_since_generation) {
-      setReadyExportId(String(exportFromAi))
-    }
-    const latest = row.latest_export
-    const meta = latest?.metadata ?? {}
-    if (
-      latest &&
-      meta &&
-      typeof meta === 'object' &&
-      Boolean((meta as { is_professional?: boolean }).is_professional) &&
-      !ai?.dirty_since_generation
-    ) {
-      setReadyExportId(latest.id)
-      setReadyFilename(latest.filename)
-    }
-  }, [])
+  const hydrate = useCallback(
+    (row: TechpackDraft, opts: { markSaved?: boolean } = {}) => {
+      setDraft(row)
+      setTitle(row.title)
+      setStyleCode(row.style_code)
+      const wrapped = wrapSpecForEditing(asRecord(row.spec))
+      setSpec(wrapped.spec)
+      if (opts.markSaved !== false) {
+        markSavedFingerprint(row.title, row.style_code, wrapped.spec)
+      }
+      const ai = wrapped.spec.ai
+      if (ai?.last_run_id) setLastRunId(String(ai.last_run_id))
+      const exportFromAi = ai && typeof ai === 'object' ? (ai as { export_id?: string }).export_id : null
+      if (exportFromAi && !ai?.dirty_since_generation) {
+        setReadyExportId(String(exportFromAi))
+      }
+      const latest = row.latest_export
+      const meta = latest?.metadata ?? {}
+      if (
+        latest &&
+        meta &&
+        typeof meta === 'object' &&
+        Boolean((meta as { is_professional?: boolean }).is_professional) &&
+        !ai?.dirty_since_generation
+      ) {
+        setReadyExportId(latest.id)
+        setReadyFilename(latest.filename)
+      }
+    },
+    [markSavedFingerprint],
+  )
 
-  /** Update server bookkeeping without replacing live form values (preserves focus/caret). */
+  /**
+   * Update server bookkeeping + AI validity/lineage without replacing editable form values.
+   * Preserves focus/caret and must not change the editable dirty fingerprint.
+   */
   const applyServerMetaOnly = useCallback((row: TechpackDraft) => {
     setDraft((prev) => {
       if (!prev) return row
@@ -148,6 +173,34 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         latest_export: row.latest_export,
       }
     })
+    const serverAi = wrapSpecForEditing(asRecord(row.spec)).spec.ai
+    setSpec((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        ai: {
+          ...(prev.ai ?? {}),
+          ...(serverAi ?? {}),
+        },
+      }
+    })
+    const serverAiRec = serverAi && typeof serverAi === 'object' ? serverAi : null
+    if (serverAiRec?.last_run_id) setLastRunId(String(serverAiRec.last_run_id))
+    // Keep export identity for outdated-PDF messaging; Download gating uses dirtySinceGeneration.
+    const exportFromAi =
+      serverAiRec && typeof serverAiRec.export_id === 'string' ? serverAiRec.export_id : null
+    if (exportFromAi) setReadyExportId(String(exportFromAi))
+    const latest = row.latest_export
+    const meta = latest?.metadata ?? {}
+    if (
+      latest &&
+      meta &&
+      typeof meta === 'object' &&
+      Boolean((meta as { is_professional?: boolean }).is_professional)
+    ) {
+      setReadyExportId(latest.id)
+      setReadyFilename(latest.filename)
+    }
   }, [])
 
   useEffect(() => {
@@ -206,7 +259,6 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         styleCodeRef.current,
         specRef.current,
       )
-      const sentFingerprint = JSON.stringify(snapshot)
 
       saveInFlightRef.current = true
       if (!opts.silent) setBusy(true)
@@ -220,8 +272,9 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         if (epoch !== saveEpochRef.current) {
           return null
         }
-        // Mark clean using the payload we actually sent (local form values stay put).
-        savedFingerprintRef.current = sentFingerprint
+        // Mark clean from editable values only (ai metadata excluded from fingerprint).
+        markSavedFingerprint(snapshot.title, snapshot.style_code, snapshot.spec)
+        // Sync server-owned AI validity (dirty_since_generation, export_id, …) without form replace.
         applyServerMetaOnly(next)
         setSaveError(null)
         return next
@@ -246,7 +299,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         }
       }
     },
-    [applyServerMetaOnly, draft, draftId, isEditorDirty],
+    [applyServerMetaOnly, draft, draftId, isEditorDirty, markSavedFingerprint],
   )
 
   // Quiet autosave: only when editable values actually differ from last saved snapshot.
