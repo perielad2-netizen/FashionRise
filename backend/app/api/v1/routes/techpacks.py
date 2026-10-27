@@ -162,15 +162,18 @@ def techpack_ai_generate(
     )
 
 
-@router.post("/{draft_id}/ai/generate-professional")
+@router.post(
+    "/{draft_id}/ai/generate-professional",
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def techpack_ai_generate_professional_one_tap(
     draft_id: uuid.UUID,
     data: TechpackAiOneTapRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> dict[str, Any]:
-    """One-tap AI Professional — user click authorizes one bounded paid run."""
-    return techpack_ai.run_generate_one_tap_professional(
+    """One-tap AI Professional — enqueue durable paid run; poll status_url / latest-run."""
+    return techpack_ai.enqueue_generate_one_tap_professional(
         db,
         user,
         draft_id,

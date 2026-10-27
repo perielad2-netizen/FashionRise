@@ -454,29 +454,40 @@ def run_professional_pipeline(
     work_pieces = [p for p in pieces if isinstance(p, dict)]
     total_pieces = max(1, len(work_pieces))
 
-    def _progress(phase: str, *, piece_id: str | None = None, detail: str | None = None) -> None:
+    def _progress(
+        phase: str,
+        *,
+        piece_id: str | None = None,
+        detail: str | None = None,
+        provider_in_flight: dict[str, Any] | None = None,
+        clear_in_flight: bool = False,
+    ) -> None:
         if on_progress is None:
             return
-        on_progress(
-            {
-                "phase": phase,
-                "piece_id": piece_id,
-                "detail": detail,
-                "pieces_done": len(piece_results),
-                "pieces_total": total_pieces,
-                "message": {
-                    "preparing": "Preparing your design",
-                    "analyzing": "Analyzing the garment",
-                    "flat_front": "Creating technical illustrations",
-                    "flat_back": "Creating technical illustrations",
-                    "flat_back_proposed": "Creating technical illustrations",
-                    "detail_callouts": "Creating technical illustrations",
-                    "pattern_sheet": "Preparing pattern-development drawings",
-                    "assembling": "Assembling your PDF",
-                    "ready": "Your AI Technical Pack is ready",
-                }.get(phase, "Preparing your design"),
-            }
-        )
+        payload: dict[str, Any] = {
+            "phase": phase,
+            "piece_id": piece_id,
+            "detail": detail,
+            "pieces_done": len(piece_results),
+            "pieces_total": total_pieces,
+            "cost_usd_cents": total_usage.cost_usd_cents,
+            "message": {
+                "preparing": "Preparing your design",
+                "analyzing": "Analyzing the garment",
+                "flat_front": "Creating technical illustrations",
+                "flat_back": "Creating technical illustrations",
+                "flat_back_proposed": "Creating technical illustrations",
+                "detail_callouts": "Creating technical illustrations",
+                "pattern_sheet": "Preparing pattern-development drawings",
+                "assembling": "Assembling your PDF",
+                "ready": "Your AI Technical Pack is ready",
+            }.get(phase, "Preparing your design"),
+        }
+        if provider_in_flight is not None:
+            payload["provider_in_flight"] = provider_in_flight
+        if clear_in_flight:
+            payload["clear_in_flight"] = True
+        on_progress(payload)
 
     _progress("preparing")
 
@@ -484,7 +495,11 @@ def run_professional_pipeline(
         pid = str(piece.get("id") or uuid.uuid4().hex[:8])
         # Prefer front Magic; fall back to back.
         src_bytes, src_mime = primary
-        _progress("analyzing", piece_id=pid)
+        _progress(
+            "analyzing",
+            piece_id=pid,
+            provider_in_flight={"kind": "vision", "piece_id": pid},
+        )
         analysis, u = provider.analyze_garment(
             image_bytes=src_bytes,
             mime=src_mime,
@@ -494,6 +509,7 @@ def run_professional_pipeline(
         total_usage.cost_usd_cents += u.cost_usd_cents
         total_usage.vision_calls += u.vision_calls
         total_usage.vision_model = u.vision_model or total_usage.vision_model
+        _progress("analyzing", piece_id=pid, clear_in_flight=True)
 
         arts: list[dict[str, Any]] = []
 
@@ -502,7 +518,11 @@ def run_professional_pipeline(
             if images_used >= max_images:
                 failed.append(f"{pid}:{kind}:max_images")
                 return
-            _progress(kind, piece_id=pid)
+            _progress(
+                kind,
+                piece_id=pid,
+                provider_in_flight={"kind": kind, "piece_id": pid},
+            )
             try:
                 raw, uu = gen()
                 images_used += 1
@@ -510,9 +530,11 @@ def run_professional_pipeline(
                 total_usage.image_calls += uu.image_calls
                 total_usage.image_model = uu.image_model or total_usage.image_model
                 arts.append({"kind": kind, "bytes": raw, "mime": "image/png", "model": uu.image_model})
+                _progress(kind, piece_id=pid, clear_in_flight=True)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("professional illustration failed piece=%s kind=%s: %s", pid, kind, exc)
                 failed.append(f"{pid}:{kind}:{type(exc).__name__}")
+                _progress(kind, piece_id=pid, clear_in_flight=True)
 
         _add_image(
             "flat_front",

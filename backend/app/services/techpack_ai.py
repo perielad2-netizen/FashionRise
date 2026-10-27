@@ -1,7 +1,8 @@
 """Create Real Design AI generation — heuristic ($0) + professional (image-aware, spend-gated).
 
-Paid professional calls require: enabled flag, positive spend ceiling, owner allowlist,
-confirm_token, and idempotency_key. Preview/export never triggers paid work.
+Paid professional one-tap enqueues a durable TechpackAIRun (status=queued) and returns
+promptly; fashionrise-ai-worker claims and executes the paid pipeline off the HTTP path.
+Preview/export never triggers paid work.
 """
 
 from __future__ import annotations
@@ -27,15 +28,21 @@ from app.models.user import User
 from app.services.ai_service import extract_result_image_url
 from app.services.sketch_openai import SketchConfigError
 from app.services.techpack_ai_professional import (
-    MockProfessionalProvider,
     ProfessionalAIProvider,
     default_provider,
     estimate_professional_cents,
     run_professional_pipeline,
 )
 from app.services.techpack_detect import detect_pieces_from_evidence
-from app.services.techpack_flats import default_bom, default_construction_steps, pattern_inventory_for_category
-from app.services.techpack_garments import collect_measurement_warnings, empty_finished_measurements
+from app.services.techpack_flats import (
+    default_bom,
+    default_construction_steps,
+    pattern_inventory_for_category,
+)
+from app.services.techpack_garments import (
+    collect_measurement_warnings,
+    empty_finished_measurements,
+)
 from app.services.techpack_spec import ensure_v2
 from app.storage.local import LocalStorageBackend
 
@@ -185,12 +192,14 @@ def _assert_professional_allowed(db: Session, user: User, *, estimate_cents: int
     if estimate_cents > max_run > 0:
         raise ForbiddenError("Estimated cost exceeds per-run spend limit")
     day_ago = datetime.now(UTC) - timedelta(days=1)
+    # Count known paid usage across completed / failed / reconciliation — never ignore partial spend.
+    billable_statuses = ("completed", "failed", "reconciliation_required", "running", "queued")
     spent = int(
         db.scalar(
             select(func.coalesce(func.sum(TechpackAIRun.cost_usd_cents), 0)).where(
                 TechpackAIRun.user_id == user.id,
                 TechpackAIRun.created_at >= day_ago,
-                TechpackAIRun.status == "completed",
+                TechpackAIRun.status.in_(billable_statuses),
                 TechpackAIRun.stage.in_(("professional", "ai")),
             )
         )
@@ -203,7 +212,7 @@ def _assert_professional_allowed(db: Session, user: User, *, estimate_cents: int
     total_spent = int(
         db.scalar(
             select(func.coalesce(func.sum(TechpackAIRun.cost_usd_cents), 0)).where(
-                TechpackAIRun.status == "completed",
+                TechpackAIRun.status.in_(billable_statuses),
                 TechpackAIRun.stage.in_(("professional", "ai")),
             )
         )
@@ -213,7 +222,9 @@ def _assert_professional_allowed(db: Session, user: User, *, estimate_cents: int
         raise ForbiddenError("Operator techpack AI spend ceiling reached")
     running = int(
         db.scalar(
-            select(func.count()).select_from(TechpackAIRun).where(TechpackAIRun.status == "running")
+            select(func.count())
+            .select_from(TechpackAIRun)
+            .where(TechpackAIRun.status.in_(("queued", "running")))
         )
         or 0
     )
@@ -571,14 +582,167 @@ def _persist_professional_result(
     return spec, artifact_reads
 
 
-def _set_run_progress(db: Session, run: TechpackAIRun, progress: dict[str, Any]) -> None:
-    """Persist named pipeline phase for FE polling (commit so other sessions see it)."""
+def _set_run_progress(
+    db: Session,
+    run: TechpackAIRun,
+    progress: dict[str, Any],
+    *,
+    cost_usd_cents: int | None = None,
+    provider_in_flight: dict[str, Any] | None = None,
+    clear_in_flight: bool = False,
+) -> None:
+    """Persist named pipeline phase + known spend for FE polling (commit so other sessions see it)."""
     req = dict(run.request) if isinstance(run.request, dict) else {}
     req["progress"] = progress
+    if cost_usd_cents is not None:
+        run.cost_usd_cents = max(int(run.cost_usd_cents or 0), int(cost_usd_cents))
+        req["usage"] = {
+            **(req.get("usage") if isinstance(req.get("usage"), dict) else {}),
+            "cost_usd_cents": run.cost_usd_cents,
+        }
+    if clear_in_flight:
+        req.pop("provider_in_flight", None)
+    elif provider_in_flight is not None:
+        req["provider_in_flight"] = provider_in_flight
     run.request = req
     db.add(run)
     db.commit()
     db.refresh(run)
+
+
+def _run_status_payload(db: Session, run: TechpackAIRun) -> dict[str, Any]:
+    arts = list(
+        db.scalars(select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run.id)).all()
+    )
+    req = run.request if isinstance(run.request, dict) else {}
+    result = run.result if isinstance(run.result, dict) else {}
+    return {
+        "run_id": str(run.id),
+        "id": str(run.id),
+        "draft_id": str(run.draft_id),
+        "status": run.status,
+        "status_url": f"/api/v1/techpacks/ai/runs/{run.id}",
+        "cost_usd_cents": int(run.cost_usd_cents or 0),
+        "actual_cost_usd_cents": int(run.cost_usd_cents or 0),
+        "estimated_cost_usd_cents": result.get("estimated_cost_usd_cents")
+        or (req.get("estimate_cents") if isinstance(req, dict) else None),
+        "mode": run.stage,
+        "stage": run.stage,
+        "progress": req.get("progress") or result.get("progress"),
+        "result": result,
+        "error_message": run.error_message,
+        "artifacts": [_artifact_read(a) for a in arts],
+        "analysis_summary": result.get("analysis_summary"),
+        "failed_sections": result.get("failed_sections") or [],
+        "safe_retry": run.status not in ("running", "queued", "reconciliation_required")
+        and not (run.status == "failed" and int(run.cost_usd_cents or 0) > 0),
+    }
+
+
+def enqueue_generate_one_tap_professional(
+    db: Session,
+    user: User,
+    draft_id: uuid.UUID,
+    *,
+    idempotency_key: str,
+    propose_back: bool = True,
+    sections: list[str] | None = None,
+) -> dict[str, Any]:
+    """Authorize one bounded Professional run and enqueue durable work (HTTP returns promptly)."""
+    challenge = create_confirm_challenge(
+        db, user, draft_id, stage="generate", mode="professional"
+    )
+    if not challenge.get("ai_enabled"):
+        raise ForbiddenError(
+            challenge.get("message")
+            or "AI Professional is not available for this account"
+        )
+    draft = _owned_draft(db, user, draft_id)
+    if not idempotency_key or len(idempotency_key) < 8:
+        raise ValidationAppError("idempotency_key required")
+
+    existing = db.scalars(
+        select(TechpackAIRun).where(
+            TechpackAIRun.user_id == user.id,
+            TechpackAIRun.idempotency_key == idempotency_key,
+        )
+    ).first()
+    if existing is not None:
+        payload = _run_status_payload(db, existing)
+        payload["idempotent_replay"] = True
+        if existing.status in ("queued", "running"):
+            payload["message"] = (
+                "Generation already in progress for this request. Wait or reopen the draft."
+            )
+        elif existing.status == "reconciliation_required":
+            payload["safe_retry"] = False
+            payload["message"] = (
+                "Previous attempt needs reconciliation — usable artifacts are preserved; "
+                "do not start a new paid run until recovery is confirmed."
+            )
+        elif existing.status == "failed" and int(existing.cost_usd_cents or 0) > 0:
+            payload["safe_retry"] = False
+            payload["message"] = (
+                "Previous attempt recorded usage. Start a new confirmed generation to continue."
+            )
+        return payload
+
+    inflight = db.scalars(
+        select(TechpackAIRun)
+        .where(
+            TechpackAIRun.user_id == user.id,
+            TechpackAIRun.draft_id == draft.id,
+            TechpackAIRun.stage == "professional",
+            TechpackAIRun.status.in_(("queued", "running")),
+        )
+        .order_by(TechpackAIRun.created_at.desc())
+    ).first()
+    if inflight is not None:
+        payload = _run_status_payload(db, inflight)
+        payload["idempotent_replay"] = True
+        payload["message"] = "A Professional generation is already in progress for this draft."
+        return payload
+
+    effective_propose = bool(propose_back) if draft.back_job_id is None else False
+    spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+    pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+    _lo, hi = estimate_professional_cents(
+        piece_count=max(1, len(pieces)),
+        propose_back=effective_propose,
+        has_back_image=draft.back_job_id is not None,
+    )
+    _assert_professional_allowed(db, user, estimate_cents=hi)
+
+    run = TechpackAIRun(
+        id=uuid.uuid4(),
+        draft_id=draft.id,
+        user_id=user.id,
+        stage="professional",
+        status="queued",
+        confirm_token=str(challenge["confirm_token"]),
+        idempotency_key=idempotency_key,
+        request={
+            "mode": "professional",
+            "sections": sections or ["all"],
+            "propose_back": effective_propose,
+            "authorization": "user_click_one_tap",
+            "estimate_cents": hi,
+            "progress": {
+                "phase": "preparing",
+                "message": "Preparing your design",
+                "pieces_done": 0,
+                "pieces_total": max(1, len(pieces)),
+            },
+        },
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    payload = _run_status_payload(db, run)
+    payload["idempotent_replay"] = False
+    payload["accepted"] = True
+    return payload
 
 
 def run_generate_one_tap_professional(
@@ -590,33 +754,229 @@ def run_generate_one_tap_professional(
     propose_back: bool = True,
     sections: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Owner one-click authorization: server-mints intent token then runs Professional generate.
-
-    Spend gates, allowlist, concurrent limits, and idempotency are unchanged.
-    The click is the explicit authorization for one bounded paid operation.
-    """
-    challenge = create_confirm_challenge(
-        db, user, draft_id, stage="generate", mode="professional"
-    )
-    if not challenge.get("ai_enabled"):
-        raise ForbiddenError(
-            challenge.get("message")
-            or "AI Professional is not available for this account"
-        )
-    # Auto-propose back when the draft has no authenticated back Magic image.
-    draft = _owned_draft(db, user, draft_id)
-    effective_propose = bool(propose_back) if draft.back_job_id is None else False
-    return run_generate(
+    """Enqueue durable Professional work — does not wait on the paid provider pipeline."""
+    return enqueue_generate_one_tap_professional(
         db,
         user,
         draft_id,
-        confirm_token=str(challenge["confirm_token"]),
         idempotency_key=idempotency_key,
-        mode="professional",
+        propose_back=propose_back,
         sections=sections,
-        propose_back=effective_propose,
-        authorization="user_click_one_tap",
     )
+
+
+def _fail_run_preserve_cost(
+    db: Session,
+    run_id: uuid.UUID,
+    *,
+    error: str,
+    provider_called: bool,
+    force_zero_if_no_usage: bool = False,
+) -> None:
+    run_row = db.get(TechpackAIRun, run_id)
+    if run_row is None:
+        return
+    req = dict(run_row.request) if isinstance(run_row.request, dict) else {}
+    known = int(run_row.cost_usd_cents or 0)
+    usage = req.get("usage") if isinstance(req.get("usage"), dict) else {}
+    known = max(known, int(usage.get("cost_usd_cents") or 0))
+    if force_zero_if_no_usage and known == 0:
+        run_row.cost_usd_cents = 0
+    else:
+        run_row.cost_usd_cents = known
+    run_row.status = "failed"
+    run_row.error_message = error[:1000]
+    req["provider_called"] = provider_called
+    req.pop("provider_in_flight", None)
+    run_row.request = req
+    result = dict(run_row.result) if isinstance(run_row.result, dict) else {}
+    result["actual_cost_usd_cents"] = run_row.cost_usd_cents
+    run_row.result = result
+    db.add(run_row)
+    db.commit()
+
+
+def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
+    """Worker entry: execute a claimed Professional run to completion / failure / reconciliation."""
+    run = db.get(TechpackAIRun, run_id)
+    if run is None:
+        raise NotFoundError("AI run not found")
+    if run.status in ("completed", "reconciliation_required"):
+        return _run_status_payload(db, run)
+    if run.status not in ("running", "queued"):
+        return _run_status_payload(db, run)
+
+    user = db.get(User, run.user_id)
+    if user is None:
+        run.status = "failed"
+        run.error_message = "User missing for techpack AI run"
+        db.add(run)
+        db.commit()
+        return _run_status_payload(db, run)
+
+    draft = _owned_draft(db, user, run.draft_id)
+    req = dict(run.request) if isinstance(run.request, dict) else {}
+    if isinstance(req.get("provider_in_flight"), dict) and req["provider_in_flight"]:
+        run.status = "reconciliation_required"
+        run.error_message = (
+            "Provider call was in flight when the worker stopped. "
+            "Manual recovery required — do not auto-retry."
+        )[:1000]
+        db.add(run)
+        db.commit()
+        return _run_status_payload(db, run)
+
+    if run.status == "queued":
+        run.status = "running"
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+
+    mode = "professional"
+    propose_back = bool(req.get("propose_back"))
+    sections = req.get("sections") if isinstance(req.get("sections"), list) else ["all"]
+    estimate = int(req.get("estimate_cents") or 0)
+    spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+    pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+
+    try:
+        storage = LocalStorageBackend()
+        front = _resolve_job_bytes(storage, draft.front_job_id, db)
+        back = _resolve_job_bytes(storage, draft.back_job_id, db)
+        if front is None and back is None:
+            raise ValidationAppError("Professional AI requires an authenticated Magic look image")
+        provider = _PROVIDER_OVERRIDE or default_provider()
+        if _PROVIDER_OVERRIDE is None and not (get_settings().openai_api_key or "").strip():
+            raise ForbiddenError("OpenAI API key missing for professional AI")
+
+        def _on_progress(progress: dict[str, Any]) -> None:
+            try:
+                cost = progress.get("cost_usd_cents")
+                in_flight = progress.get("provider_in_flight")
+                clear = bool(progress.get("clear_in_flight"))
+                clean = {
+                    k: v
+                    for k, v in progress.items()
+                    if k not in ("cost_usd_cents", "provider_in_flight", "clear_in_flight")
+                }
+                _set_run_progress(
+                    db,
+                    run,
+                    clean,
+                    cost_usd_cents=int(cost) if cost is not None else None,
+                    provider_in_flight=in_flight if isinstance(in_flight, dict) else None,
+                    clear_in_flight=clear,
+                )
+            except Exception:  # noqa: BLE001
+                db.rollback()
+
+        pipeline = run_professional_pipeline(
+            provider=provider,
+            pieces=pieces or [{"id": "piece-1", "category": "other", "label": "Garment"}],
+            front_image=front,
+            back_image=back,
+            look_notes=str(spec.get("look_notes") or ""),
+            propose_back=bool(propose_back),
+            max_images=int(get_settings().techpack_ai_max_images_per_run or 6),
+            on_progress=_on_progress,
+        )
+        usage_cost = int((pipeline.get("usage") or {}).get("cost_usd_cents") or 0)
+        _set_run_progress(
+            db,
+            run,
+            {
+                "phase": "assembling",
+                "message": "Assembling your PDF",
+                "pieces_done": max(1, len(pieces)),
+                "pieces_total": max(1, len(pieces)),
+            },
+            cost_usd_cents=usage_cost,
+            clear_in_flight=True,
+        )
+        pipeline["usage"]["estimated_cost_usd_cents"] = estimate
+        enriched, artifacts = _persist_professional_result(
+            db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=spec
+        )
+        cost = int((pipeline.get("usage") or {}).get("cost_usd_cents") or usage_cost or 0)
+        model = (pipeline.get("usage") or {}).get("image_model") or (
+            pipeline.get("usage") or {}
+        ).get("vision_model")
+        analysis_summary = pipeline.get("analysis_summary")
+        failed_sections = list(pipeline.get("failed_sections") or [])
+
+        draft.spec = enriched
+        draft.status = "DRAFT"
+        draft.verification = "UNVERIFIED"
+        draft.updated_at = datetime.now(UTC)
+        run.status = "completed"
+        run.model = model
+        run.cost_usd_cents = max(int(run.cost_usd_cents or 0), cost)
+        ready_progress = {
+            "phase": "ready",
+            "message": "Your AI Technical Pack is ready",
+            "pieces_done": max(1, len(pieces)),
+            "pieces_total": max(1, len(pieces)),
+        }
+        req2 = dict(run.request) if isinstance(run.request, dict) else {}
+        req2["progress"] = ready_progress
+        req2.pop("provider_in_flight", None)
+        run.request = req2
+        run.result = {
+            "piece_count": enriched.get("outfit", {}).get("piece_count"),
+            "warnings": enriched.get("warnings") or [],
+            "mode": mode,
+            "analysis_summary": analysis_summary,
+            "failed_sections": failed_sections,
+            "estimated_cost_usd_cents": estimate,
+            "actual_cost_usd_cents": run.cost_usd_cents,
+            "artifact_ids": [a["id"] for a in artifacts],
+            "progress": ready_progress,
+            "sections": sections,
+        }
+        run.input_hash = hashlib.sha256(
+            json.dumps({"mode": mode, "propose_back": propose_back}, sort_keys=True).encode()
+        ).hexdigest()[:64]
+        run.error_message = None
+        db.add(draft)
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+        return _run_status_payload(db, run)
+    except (ForbiddenError, ValidationAppError, NotFoundError) as exc:
+        db.rollback()
+        _fail_run_preserve_cost(db, run_id, error=str(exc), provider_called=False)
+        raise
+    except SketchConfigError as exc:
+        db.rollback()
+        _fail_run_preserve_cost(
+            db, run_id, error=str(exc), provider_called=False, force_zero_if_no_usage=True
+        )
+        raise ValidationAppError(
+            "AI Professional could not start because of a server configuration problem. "
+            "Your design is safe. Please try again after the issue is fixed."
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        run_row = db.get(TechpackAIRun, run_id)
+        req_now = run_row.request if run_row and isinstance(run_row.request, dict) else {}
+        if isinstance(req_now.get("provider_in_flight"), dict) and req_now["provider_in_flight"]:
+            if run_row is not None:
+                run_row.status = "reconciliation_required"
+                run_row.error_message = (
+                    f"Uncertain provider outcome: {type(exc).__name__}. Do not auto-retry."
+                )[:1000]
+                db.add(run_row)
+                db.commit()
+            raise ValidationAppError(
+                "AI Professional may have partially completed. Your design is safe. "
+                "Recover existing illustrations before starting a new paid run."
+            ) from exc
+        _fail_run_preserve_cost(db, run_id, error=str(exc), provider_called=True)
+        raise ValidationAppError(
+            "AI Professional generation failed. Your design is safe. "
+            "If illustrations already appear, preview/download without regenerating."
+        ) from exc
 
 
 def latest_run_for_draft(
@@ -888,62 +1248,27 @@ def run_generate(
         raise
     except SketchConfigError as exc:
         db.rollback()
-        draft = _owned_draft(db, user, draft_id)
-        run_row = db.get(TechpackAIRun, run.id) if getattr(run, "id", None) else None
-        err = str(exc)[:1000]
-        if run_row is None:
-            run_row = TechpackAIRun(
-                id=uuid.uuid4(),
-                draft_id=draft.id,
-                user_id=user.id,
-                stage=mode,
-                status="failed",
-                confirm_token=confirm_token,
-                idempotency_key=idempotency_key,
-                request={"mode": mode, "provider_called": False},
-                cost_usd_cents=0,
-                error_message=err,
+        if getattr(run, "id", None):
+            _fail_run_preserve_cost(
+                db,
+                run.id,
+                error=str(exc),
+                provider_called=False,
+                force_zero_if_no_usage=True,
             )
-            db.add(run_row)
-        else:
-            run_row.status = "failed"
-            run_row.cost_usd_cents = 0
-            run_row.error_message = err
-            run_row.request = {
-                **(run_row.request if isinstance(run_row.request, dict) else {}),
-                "provider_called": False,
-            }
-            db.add(run_row)
-        db.commit()
         raise ValidationAppError(
             "AI Professional could not start because of a server configuration problem. "
             "Your design is safe. Please try again after the issue is fixed."
         ) from exc
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         db.rollback()
-        draft = _owned_draft(db, user, draft_id)
-        run_row = db.get(TechpackAIRun, run.id) if getattr(run, "id", None) else None
-        if run_row is None:
-            run_row = TechpackAIRun(
-                id=uuid.uuid4(),
-                draft_id=draft.id,
-                user_id=user.id,
-                stage=mode,
-                status="failed",
-                confirm_token=confirm_token,
-                idempotency_key=idempotency_key,
-                request={"mode": mode},
-                error_message=str(exc)[:1000],
+        if getattr(run, "id", None):
+            _fail_run_preserve_cost(
+                db, run.id, error=str(exc), provider_called=True
             )
-            db.add(run_row)
-        else:
-            run_row.status = "failed"
-            run_row.error_message = str(exc)[:1000]
-            db.add(run_row)
-        db.commit()
         raise ValidationAppError(
             "AI Professional generation failed. Your design is safe. "
-            "If no illustrations appear, you can safely retry after confirming cost again."
+            "If illustrations already appear, preview/download without regenerating."
         ) from exc
 
 

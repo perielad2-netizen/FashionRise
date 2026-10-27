@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.models.ai_job import AIJob
 from app.services.techpack_ai import set_professional_provider_override
 from app.services.techpack_ai_professional import MockProfessionalProvider
+from app.services.techpack_ai_worker import run_techpack_worker_tick
 from app.services.techpack_compatibility import (
     collect_compatibility_warnings,
     filter_construction_steps,
@@ -179,19 +180,26 @@ def test_one_tap_professional_idempotent_and_progress(client, db_session, monkey
         headers=_auth(tokens),
         json={"idempotency_key": idem, "propose_back": True},
     )
-    assert gen.status_code == 200, gen.text
+    assert gen.status_code == 202, gen.text
     body = gen.json()
     assert body["mode"] == "professional"
-    assert body["status"] == "completed"
+    assert body["status"] == "queued"
     assert body["idempotent_replay"] is False
-    assert body["artifacts"]
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    settled = client.get(
+        f"/api/v1/techpacks/ai/runs/{body['run_id']}",
+        headers=_auth(tokens),
+    )
+    assert settled.status_code == 200
+    assert settled.json()["status"] == "completed"
+    assert settled.json()["artifacts"]
 
     replay = client.post(
         f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
         headers=_auth(tokens),
         json={"idempotency_key": idem, "propose_back": True},
     )
-    assert replay.status_code == 200
+    assert replay.status_code == 202
     assert replay.json()["idempotent_replay"] is True
     assert replay.json()["run_id"] == body["run_id"]
 

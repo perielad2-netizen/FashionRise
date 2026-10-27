@@ -1,4 +1,4 @@
-"""In-process consumer for queued AI jobs (OpenAI vision for sketch pipeline when configured; otherwise stub)."""
+"""In-process consumer for queued AI jobs + Techpack Professional runs."""
 
 import logging
 from typing import Any
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.ai_job import AIJob
 from app.services import sketch_openai
+from app.services.techpack_ai_worker import run_techpack_worker_tick
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,8 @@ def _safe_failure_result(meta: Any) -> dict[str, Any] | None:
     return sketch_openai.failure_result_for_storage(meta)
 
 
-def run_worker_tick(db: Session, *, limit: int = 12) -> int:
-    """Claim up to *limit* queued jobs (SKIP LOCKED), complete with stub *result_data* or mark failed."""
+def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
+    """Claim up to *limit* queued Magic AIJob rows (SKIP LOCKED)."""
     processed = 0
     for _ in range(limit):
         job = db.scalar(
@@ -61,3 +62,10 @@ def run_worker_tick(db: Session, *, limit: int = 12) -> int:
         db.commit()
         processed += 1
     return processed
+
+
+def run_worker_tick(db: Session, *, limit: int = 12) -> int:
+    """Process Magic AIJobs then up to 2 Techpack Professional runs per tick."""
+    magic_n = run_magic_worker_tick(db, limit=limit)
+    tech_n = run_techpack_worker_tick(db, limit=2)
+    return magic_n + tech_n
