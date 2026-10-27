@@ -217,6 +217,12 @@ export type TechpackAiGenerateResponse = {
   actual_cost_usd_cents?: number
   analysis_summary?: string | null
   failed_sections?: string[]
+  progress?: TechpackAiProgress | null
+  status_url?: string
+  accepted?: boolean
+  message?: string
+  safe_retry?: boolean
+  error_message?: string | null
 }
 
 export type TechpackAiProgress = {

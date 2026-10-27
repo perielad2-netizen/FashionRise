@@ -159,6 +159,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [progressPhase, setProgressPhase] = useState<string | null>(null)
   const [progressOpen, setProgressOpen] = useState(false)
   const [progressReady, setProgressReady] = useState(false)
+  const [progressReconnect, setProgressReconnect] = useState(false)
   const [lastWarnings, setLastWarnings] = useState<string[]>([])
   const [failedSections, setFailedSections] = useState<string[]>([])
   const [analysisSummary, setAnalysisSummary] = useState<string | null>(null)
@@ -600,15 +601,27 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     pollAbortRef.current?.abort()
     const ac = new AbortController()
     pollAbortRef.current = ac
-    for (let i = 0; i < 180; i += 1) {
+    let consecutiveErrors = 0
+    // Long-lived jobs: ~15 minutes of short polls (no single long HTTP wait).
+    for (let i = 0; i < 600; i += 1) {
       if (ac.signal.aborted) return null
       await new Promise((r) => window.setTimeout(r, 1500))
       try {
         const row = await getTechpackAiRun(runId, ac.signal)
+        consecutiveErrors = 0
+        setProgressReconnect(false)
         applyProgress(row.progress ?? null)
-        if (row.status === 'completed' || row.status === 'failed') return row
+        if (
+          row.status === 'completed' ||
+          row.status === 'failed' ||
+          row.status === 'reconciliation_required'
+        ) {
+          return row
+        }
       } catch {
-        // keep polling through transient network blips
+        consecutiveErrors += 1
+        if (consecutiveErrors >= 2) setProgressReconnect(true)
+        // Never treat a poll timeout as generation failure — job continues server-side.
       }
     }
     return null
@@ -624,6 +637,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     actual_cost_usd_cents?: number
     cost_usd_cents?: number
     progress?: TechpackAiProgress | null
+    error_message?: string | null
   }) => {
     const warns = (result.warnings ?? [])
       .map((w) =>
@@ -649,8 +663,25 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     if (result.status === 'failed') {
       setProgressReady(false)
       setProgressOpen(false)
-      setError('AI Professional generation failed. Your design is safe.')
+      setError(
+        result.error_message ||
+          'AI Professional generation failed. Your design is safe. If illustrations appear below, preview/download without regenerating.',
+      )
       setGenerateProgress(null)
+      return
+    }
+    if (result.status === 'reconciliation_required') {
+      setProgressReady(Boolean(result.artifacts?.length))
+      setProgressOpen(true)
+      setError(
+        result.error_message ||
+          'Generation needs recovery. Usable illustrations are preserved — do not press Generate again.',
+      )
+      if (result.artifacts?.length) {
+        setProgressPhase('ready')
+        setGenerateProgress('Partial results available — preview without regenerating')
+        setProgressReady(true)
+      }
       return
     }
     if (failed.length > 0) {
@@ -665,7 +696,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     setProgressReady(true)
   }
 
-  /** One-tap Generate AI PDF — user click authorizes one bounded Professional run. */
+  /** One-tap Generate AI PDF — enqueue durable run; poll short status (never wait on long POST). */
   const runOneTapGenerate = async (opts: { sections?: string[]; retry?: boolean } = {}) => {
     if (!professionalAvailable) {
       setError(professionalDisabledReason || 'AI Professional is not available for this account.')
@@ -676,8 +707,11 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     setError(null)
     setNotice(null)
     setPackChoice('professional')
+    // Immediate overlay — before network — and clear Stage 4 sheet so it cannot cover progress.
+    setStageSheetOpen(false)
     setProgressOpen(true)
     setProgressReady(false)
+    setProgressReconnect(false)
     setProgressPhase('preparing')
     setGenerateProgress('Preparing your design')
     try {
@@ -687,29 +721,104 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           ? `one-tap-${draftId}-sections-${opts.sections.join('_')}-${Date.now()}`
           : intentIdempotencyKey || `one-tap-${draftId}-${Date.now()}`
       setIntentIdempotencyKey(idem)
-      const generatePromise = generateTechpackAiProfessionalOneTap(draftId, {
+      const accepted = await generateTechpackAiProfessionalOneTap(draftId, {
         idempotency_key: idem,
         propose_back: proposeBack,
         sections: opts.sections,
       })
-      // Parallel status polling (same run appears as running for resume clients).
-      void (async () => {
-        await new Promise((r) => window.setTimeout(r, 800))
-        try {
-          const latest = await getLatestTechpackAiRun(draftId)
-          if (latest?.id && latest.status === 'running') {
-            setLastRunId(latest.id)
-            applyProgress(latest.progress ?? null)
-            await pollRunUntilSettled(latest.id)
-          }
-        } catch {
-          /* ignore — primary await handles outcome */
-        }
-      })()
-      const result = await generatePromise
-      await finishFromGenerateResult(result)
-      setIntentIdempotencyKey(null)
+      const runId = accepted.run_id
+      setLastRunId(runId)
+      applyProgress(accepted.progress ?? null, 'Preparing your design')
+
+      if (accepted.status === 'completed') {
+        await finishFromGenerateResult(accepted)
+        setIntentIdempotencyKey(null)
+        return
+      }
+      if (accepted.status === 'failed' || accepted.status === 'reconciliation_required') {
+        await finishFromGenerateResult(accepted)
+        setIntentIdempotencyKey(null)
+        return
+      }
+
+      // 202 queued / running — settle via short authenticated polls only.
+      const settled = await pollRunUntilSettled(runId)
+      if (!settled) {
+        setNotice(
+          'Still working on FashionRise servers. Reopen Create Real Design to resume this same run — do not press Generate again.',
+        )
+        setProgressReconnect(true)
+        return
+      }
+      await finishFromGenerateResult({
+        run_id: settled.id,
+        status: settled.status,
+        artifacts: settled.artifacts,
+        analysis_summary:
+          typeof settled.result?.analysis_summary === 'string'
+            ? settled.result.analysis_summary
+            : null,
+        failed_sections: Array.isArray(settled.result?.failed_sections)
+          ? (settled.result?.failed_sections as string[])
+          : [],
+        actual_cost_usd_cents: settled.cost_usd_cents,
+        progress: settled.progress,
+        error_message: settled.error_message,
+      })
+      if (settled.status === 'completed') setIntentIdempotencyKey(null)
     } catch (err) {
+      // If accept failed but a run may exist, try resume rather than claiming total failure.
+      try {
+        const latest = await getLatestTechpackAiRun(draftId)
+        if (
+          latest &&
+          (latest.status === 'queued' ||
+            latest.status === 'running' ||
+            latest.status === 'completed')
+        ) {
+          setLastRunId(latest.id)
+          applyProgress(latest.progress ?? null)
+          if (latest.status === 'completed') {
+            await finishFromGenerateResult({
+              run_id: latest.id,
+              status: latest.status,
+              artifacts: latest.artifacts,
+              analysis_summary:
+                typeof latest.result?.analysis_summary === 'string'
+                  ? latest.result.analysis_summary
+                  : null,
+              failed_sections: Array.isArray(latest.result?.failed_sections)
+                ? (latest.result?.failed_sections as string[])
+                : [],
+              actual_cost_usd_cents: latest.cost_usd_cents,
+              progress: latest.progress,
+            })
+            setIntentIdempotencyKey(null)
+            return
+          }
+          const settled = await pollRunUntilSettled(latest.id)
+          if (settled?.status === 'completed') {
+            await finishFromGenerateResult({
+              run_id: settled.id,
+              status: settled.status,
+              artifacts: settled.artifacts,
+              analysis_summary:
+                typeof settled.result?.analysis_summary === 'string'
+                  ? settled.result.analysis_summary
+                  : null,
+              failed_sections: Array.isArray(settled.result?.failed_sections)
+                ? (settled.result?.failed_sections as string[])
+                : [],
+              actual_cost_usd_cents: settled.cost_usd_cents,
+              progress: settled.progress,
+            })
+            setIntentIdempotencyKey(null)
+            return
+          }
+        }
+      } catch {
+        /* fall through to mapped error */
+      }
       setError(mapGenerationError(err))
       setProgressOpen(false)
       setProgressReady(false)
@@ -741,15 +850,20 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       try {
         const latest = await getLatestTechpackAiRun(draftId)
         if (cancelled || !latest) return
-        if (latest.status === 'running') {
+        if (latest.status === 'queued' || latest.status === 'running') {
           setLastRunId(latest.id)
+          setStageSheetOpen(false)
           setProgressOpen(true)
           setProgressReady(false)
-          applyProgress(latest.progress ?? null, 'Analyzing the garment')
+          applyProgress(latest.progress ?? null, 'Preparing your design')
           setBusy(true)
           const settled = await pollRunUntilSettled(latest.id)
           if (cancelled) return
-          if (settled?.status === 'completed') {
+          if (
+            settled?.status === 'completed' ||
+            settled?.status === 'failed' ||
+            settled?.status === 'reconciliation_required'
+          ) {
             await finishFromGenerateResult({
               run_id: settled.id,
               status: settled.status,
@@ -763,17 +877,30 @@ export function TechpackScreen({ draftId, onBack }: Props) {
                 : [],
               actual_cost_usd_cents: settled.cost_usd_cents,
               progress: settled.progress,
+              error_message: settled.error_message,
             })
-          } else if (settled?.status === 'failed') {
-            setProgressOpen(false)
-            setError(settled.error_message || 'AI Professional generation failed.')
+          } else {
+            setProgressReconnect(true)
+            setNotice(
+              'Still working on FashionRise servers. Leave this screen open or reopen later — do not press Generate again.',
+            )
           }
           setBusy(false)
         } else if (latest.status === 'completed' && latest.stage === 'professional') {
           setLastRunId(latest.id)
           setLastGenerateMode('professional')
           setLastActualCostCents(latest.cost_usd_cents)
-          if (latest.artifacts?.length) await loadArtifactPreviews(latest.artifacts)
+          if (latest.artifacts?.length) {
+            await loadArtifactPreviews(latest.artifacts)
+            // Recover completed work after proxy timeout — show ready without new paid call.
+            setProgressOpen(true)
+            setProgressReady(true)
+            setProgressPhase('ready')
+            setGenerateProgress('Your AI Technical Pack is ready')
+            setNotice(
+              `Recovered AI Professional results · ${latest.cost_usd_cents}¢ · Preview/Download free`,
+            )
+          }
         }
       } catch {
         /* ignore resume errors */
@@ -1896,7 +2023,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
               }
             }}
             continueLabel={stageIdx < STAGES.length - 1 ? 'Save & next step' : 'Done'}
-            showContinue
+            showContinue={stage !== 'generate'}
           >
           {stage === 'understand' ? (
             <section
@@ -2748,6 +2875,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         phase={progressPhase}
         thumbnailUrl={frontImg.url}
         ready={progressReady}
+        reconnecting={progressReconnect}
         busyActions={busy}
         onViewIllustrations={() => {
           setProgressOpen(false)

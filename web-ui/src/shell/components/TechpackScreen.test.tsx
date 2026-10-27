@@ -455,7 +455,60 @@ describe('TechpackScreen', () => {
       await screen.findByRole('dialog', { name: /Generate Technical Design/i }),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Generate AI PDF/i })).toBeInTheDocument()
+    // Done footer removed on Step 4 — Generate AI PDF is the only primary action.
+    expect(screen.queryByRole('button', { name: /^Done$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: /Basic Technical Pack/i })).not.toBeInTheDocument()
+  })
+
+  it('202 queued generate polls status and shows ready without Done', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      owner_allowlisted: true,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
+    generateTechpackAiProfessionalOneTap.mockResolvedValue({
+      run_id: 'run-async',
+      status: 'queued',
+      cost_usd_cents: 0,
+      mode: 'professional',
+      accepted: true,
+      progress: { phase: 'preparing', message: 'Preparing your design' },
+    })
+    getTechpackAiRun.mockResolvedValue({
+      id: 'run-async',
+      draft_id: 'draft-1',
+      stage: 'professional',
+      status: 'completed',
+      cost_usd_cents: 55,
+      artifacts: [
+        {
+          id: 'art-async',
+          piece_id: 'piece-1',
+          kind: 'flat_front',
+          url_path: '/techpacks/artifacts/art-async/image',
+        },
+      ],
+      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
+      result: { analysis_summary: 'ok', failed_sections: [] },
+    })
+
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    await screen.findByText('Create Real Design')
+    const stepper = screen.getByRole('navigation', { name: /Create Real Design stages/i })
+    fireEvent.click(within(stepper).getByRole('button', { name: /Generate Technical Design/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Generate AI PDF/i }))
+    expect(
+      await screen.findByRole('dialog', {
+        name: /Creating your AI Technical Pack|Your AI Technical Design is Ready/i,
+      }),
+    ).toBeInTheDocument()
+    await waitFor(
+      () => expect(getTechpackAiRun).toHaveBeenCalledWith('run-async', expect.anything()),
+      { timeout: 5000 },
+    )
+    expect(await screen.findByText(/Your AI Technical Design is Ready/i)).toBeInTheDocument()
   })
 
 })
