@@ -3,16 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Create Real Design AI auto-fill LIVE** — Magic look evidence + persisted vision fill specs; shirt+trousers not dress. BE PR [#110](https://github.com/perielad2-netizen/FashionRise/pull/110) `3307da95` · FE PR [#111](https://github.com/perielad2-netizen/FashionRise/pull/111) `cb2c5b8d`. Alembic **`011`**. **0 paid OpenAI tests by Cursor**. **Samsung device acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Create Real Design AI auto-fill LIVE** — Magic look evidence + persisted vision fill specs; shirt+trousers not dress. BE PR [#110](https://github.com/perielad2-netizen/FashionRise/pull/110) `732bda9f` · FE PR [#111](https://github.com/perielad2-netizen/FashionRise/pull/111) `cb2c5b8d`. Alembic **`011`**. **0 paid OpenAI tests by Cursor**. **Samsung device acceptance NOT claimed.**)
 
-**Phase:** Protected family beta. **Create Real Design AI auto-fill LIVE** (on simple UX Generate → Wait → Download). Production FE @ `cb2c5b8d`. Production BE @ `3307da95`. Alembic **`011`**. Durable AI worker + polling retained.
+**Phase:** Protected family beta. **Create Real Design AI auto-fill LIVE** (on simple UX Generate → Wait → Download). Production FE @ `cb2c5b8d`. Production BE @ `732bda9f`. Alembic **`011`**. Durable AI worker + polling retained.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`cb2c5b8d`** — Nginx `current` → `releases/cb2c5b8d`. Simple UX retained; Edit measurements & details shows visually supported / AI proposed / unknown provenance + conflict notices. API base `/api/v1`. |
-| Backend (FastAPI + PostgreSQL) | **`3307da95`** — `techpack_autofill` repairs stale one-dress metadata from Magic evidence; seeds visible details; versioned `garment_analysis`; no fabricate empty-body POMs; category-aware mock vision for $0 regression. `fashionrise-api` on `127.0.0.1:8010`. |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — `techpack_autofill` repairs stale one-dress metadata from Magic evidence; seeds visible details; versioned `garment_analysis`; no fabricate empty-body POMs; category-aware mock vision for $0 regression. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | `fashionrise-ai-worker` — unchanged durable queue; PDF assembly before completed/ready |
 | Database | `fashionrise_beta` — Alembic **`011`** (no new migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
