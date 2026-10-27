@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-27 (**PR #116 amendment** — inconclusive garment identity rejected before paid generate; queued runs bound to authorized input fingerprint. Production BE/worker **pending this amendment deploy**. FE **`69b83c01`** OWNER ACCEPTANCE PASS. PR #115 audit PM-accepted **NEEDS IMPROVEMENT**. Alembic **`011`**. **0 paid AI**.)
+**Last updated:** 2026-10-27 (**PR #116 amendment DEPLOYED** @ `270e87e2` — inconclusive identity rejected; queued input fingerprint. FE **`69b83c01`** OWNER ACCEPTANCE PASS. PR #115 audit PM-accepted **NEEDS IMPROVEMENT**. Alembic **`011`**. **0 paid AI**.)
 
 **Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. Editor accepted. Professional PDF P0/P1 reliability on PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116).
 
@@ -12,8 +12,8 @@
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114). **OWNER ACCEPTANCE PASS — 2026-10-27**. |
-| Backend (FastAPI + PostgreSQL) | **`bae05c56`** live (PR #116 P0/P1). Amendment commit pending deploy on same branch. Prior logical baseline **`732bda9f`**. Alembic **`011`** (no migration). |
-| AI worker | `fashionrise-ai-worker` @ **`bae05c56`** (restart with API on amendment deploy) |
+| Backend (FastAPI + PostgreSQL) | **`270e87e2`** (PR #116 amendment). Prior P0 deploy **`bae05c56`** · baseline **`732bda9f`**. Alembic **`011`** (no migration). |
+| AI worker | `fashionrise-ai-worker` @ **`270e87e2`** |
 | Database | `fashionrise_beta` — Alembic **`011`** |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. **This work: $0 paid AI.** |
@@ -31,20 +31,21 @@ Evidence-only audit (`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md` on `cursor/te
 | Item | Detail |
 |---|---|
 | Branch / PR | [`#116`](https://github.com/perielad2-netizen/FashionRise/pull/116) · `cursor/web-techpack-p0-reliability-be-77c6` |
-| Initial deploy | **`bae05c56`** (2026-10-27) · backup `techpack-p0-reliability-deploy-20261027T201322Z` · rollback → `732bda9f` |
+| Initial deploy | **`bae05c56`** · backup `techpack-p0-reliability-deploy-20261027T201322Z` · rollback → `732bda9f` |
+| Amendment deploy | **`270e87e2`** (2026-10-27 22:53 Asia/Jerusalem) · backup `techpack-p0-amend-deploy-20261027T205258Z` · rollback → `bae05c56` |
 | Scope (landed) | Structure validation before paid generate; remove `pieces[0]` fallback; fair image budget; repair invalidates Download; pattern `proposed_unverified`; PDF material/sleeve REVIEW |
-| Amendment (this turn) | (A) Reject inconclusive `other` / “Garment (confirm category)” before paid call; preserve designer-confirmed pieces. (B) Versioned `input_fingerprint` on authorize; worker rejects measurement/material drift with $0 provider use. (C) Restore historical status archive below. |
+| Amendment | (A) Reject inconclusive `other` / “Garment (confirm category)” before paid call; preserve designer-confirmed pieces. (B) Versioned `input_fingerprint` on authorize; worker rejects measurement/material drift with $0 provider use. (C) Restore historical status archive below. |
 | Workflow | Unchanged: **Generate AI PDF → Wait → Download PDF** |
 | Migration | **None** (Alembic stays `011`) |
-| Offline tests | `test_techpack_p0_reliability` + related techpack suites (MockProfessionalProvider, $0) |
+| Offline tests | **46 passed** focused techpack suite (`test_techpack_p0_reliability` 15 + related; MockProfessionalProvider, $0) |
 | Paid AI | **0** |
 | Blocked | No paid Professional regeneration authorized |
 
 ### Exact next action (owner / PM)
 
-1. After amendment deploy: hard-refresh FE `69b83c01`; open FR-D47D-class two-piece draft → confirm Generate (not stale one-piece Download) after structure repair.  
+1. Hard-refresh FE `69b83c01`; open FR-D47D-class two-piece draft → confirm Generate (not stale one-piece Download) after structure repair.  
 2. Do **not** pay for a new Professional PDF unless explicitly authorized.  
-3. Rollback: `/var/backups/fashionrise/techpack-p0-reliability-deploy-*/ROLLBACK.sh` (or latest amendment backup) → prior BE SHA; restart `fashionrise-api` + `fashionrise-ai-worker`.
+3. Rollback amendment: `/var/backups/fashionrise/techpack-p0-amend-deploy-20261027T205258Z/ROLLBACK.sh` → `bae05c56`.
 
 ---
 
