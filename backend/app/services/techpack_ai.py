@@ -616,6 +616,23 @@ def _run_status_payload(db: Session, run: TechpackAIRun) -> dict[str, Any]:
     )
     req = run.request if isinstance(run.request, dict) else {}
     result = run.result if isinstance(run.result, dict) else {}
+    export_id = result.get("export_id")
+    pdf_ready = bool(result.get("pdf_ready")) and bool(export_id)
+    # Budget-recorded cents (internal reservation / fallback accounting) — not verified wallet billing.
+    budget_cents = result.get("budget_recorded_usd_cents")
+    if budget_cents is None:
+        budget_cents = int(run.cost_usd_cents or 0)
+    download_path = f"/api/v1/techpacks/exports/{export_id}/pdf" if export_id else None
+    # Ready for the user only when Professional PDF is bound to this exact run.
+    progress = req.get("progress") or result.get("progress")
+    if run.status == "completed" and not pdf_ready:
+        # Never claim Ready without a verified Professional PDF for this run.
+        if isinstance(progress, dict) and progress.get("phase") == "ready":
+            progress = {
+                **progress,
+                "phase": "assembling",
+                "message": "Preparing your PDF…",
+            }
     return {
         "run_id": str(run.id),
         "id": str(run.id),
@@ -624,19 +641,93 @@ def _run_status_payload(db: Session, run: TechpackAIRun) -> dict[str, Any]:
         "status_url": f"/api/v1/techpacks/ai/runs/{run.id}",
         "cost_usd_cents": int(run.cost_usd_cents or 0),
         "actual_cost_usd_cents": int(run.cost_usd_cents or 0),
+        "budget_recorded_usd_cents": int(budget_cents or 0),
         "estimated_cost_usd_cents": result.get("estimated_cost_usd_cents")
         or (req.get("estimate_cents") if isinstance(req, dict) else None),
         "mode": run.stage,
         "stage": run.stage,
-        "progress": req.get("progress") or result.get("progress"),
+        "progress": progress,
         "result": result,
         "error_message": run.error_message,
         "artifacts": [_artifact_read(a) for a in arts],
         "analysis_summary": result.get("analysis_summary"),
         "failed_sections": result.get("failed_sections") or [],
+        "export_id": str(export_id) if export_id else None,
+        "download_path": download_path,
+        "pdf_ready": pdf_ready,
+        "pdf_filename": result.get("pdf_filename"),
         "safe_retry": run.status not in ("running", "queued", "reconciliation_required")
         and not (run.status == "failed" and int(run.cost_usd_cents or 0) > 0),
     }
+
+
+def ensure_professional_pdf_for_run(
+    db: Session, user: User, run: TechpackAIRun
+) -> TechpackAIRun:
+    """Idempotently assemble/bind Professional PDF for a completed illustration run (zero OpenAI)."""
+    from app.services import techpack_service
+
+    if run.stage != "professional":
+        return run
+    result = dict(run.result) if isinstance(run.result, dict) else {}
+    export_id_raw = result.get("export_id")
+    if export_id_raw and result.get("pdf_ready"):
+        # Verify file still readable; otherwise reassemble.
+        try:
+            techpack_service.resolve_export_pdf_path(db, user, uuid.UUID(str(export_id_raw)))
+            return run
+        except Exception:  # noqa: BLE001
+            pass
+
+    arts = list(
+        db.scalars(select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run.id)).all()
+    )
+    if not arts and run.status != "completed":
+        return run
+
+    exported = techpack_service.export_pdf(
+        db,
+        user,
+        run.draft_id,
+        ai_run_id=run.id,
+        require_professional=True,
+    )
+    draft = _owned_draft(db, user, run.draft_id)
+    spec = draft.spec if isinstance(draft.spec, dict) else {}
+    ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+    ai["export_id"] = str(exported.id)
+    ai["dirty_since_generation"] = False
+    ai["last_run_id"] = str(run.id)
+    ai["last_mode"] = "professional"
+    spec["ai"] = ai
+    draft.spec = spec
+    db.add(draft)
+
+    ready_progress = {
+        "phase": "ready",
+        "message": "Your AI Technical Pack is ready",
+    }
+    req = dict(run.request) if isinstance(run.request, dict) else {}
+    req["progress"] = ready_progress
+    run.request = req
+    result.update(
+        {
+            "export_id": str(exported.id),
+            "pdf_ready": True,
+            "pdf_filename": exported.filename,
+            "download_path": f"/api/v1/techpacks/exports/{exported.id}/pdf",
+            "draft_revision": int(draft.revision or 1),
+            "budget_recorded_usd_cents": int(run.cost_usd_cents or 0),
+            "progress": ready_progress,
+        }
+    )
+    run.result = result
+    if run.status not in ("failed", "reconciliation_required", "queued", "running"):
+        run.status = "completed"
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
 
 
 def enqueue_generate_one_tap_professional(
@@ -702,6 +793,33 @@ def enqueue_generate_one_tap_professional(
         payload["idempotent_replay"] = True
         payload["message"] = "A Professional generation is already in progress for this draft."
         return payload
+
+    # Reuse a completed Professional run + PDF for this draft revision (no second paid job).
+    spec_now = draft.spec if isinstance(draft.spec, dict) else {}
+    ai_now = spec_now.get("ai") if isinstance(spec_now.get("ai"), dict) else {}
+    dirty = bool(ai_now.get("dirty_since_generation"))
+    if not dirty:
+        completed = db.scalars(
+            select(TechpackAIRun)
+            .where(
+                TechpackAIRun.user_id == user.id,
+                TechpackAIRun.draft_id == draft.id,
+                TechpackAIRun.stage == "professional",
+                TechpackAIRun.status == "completed",
+            )
+            .order_by(TechpackAIRun.created_at.desc())
+        ).first()
+        if completed is not None:
+            completed = ensure_professional_pdf_for_run(db, user, completed)
+            payload = _run_status_payload(db, completed)
+            if payload.get("pdf_ready"):
+                result = completed.result if isinstance(completed.result, dict) else {}
+                same_rev = int(result.get("draft_revision") or 0) == int(draft.revision or 1)
+                if same_rev or not result.get("draft_revision"):
+                    payload["idempotent_replay"] = True
+                    payload["reused_completed"] = True
+                    payload["message"] = "Using your existing AI Technical Pack for this design."
+                    return payload
 
     effective_propose = bool(propose_back) if draft.back_job_id is None else False
     spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
@@ -801,12 +919,32 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
     run = db.get(TechpackAIRun, run_id)
     if run is None:
         raise NotFoundError("AI run not found")
-    if run.status in ("completed", "reconciliation_required"):
+    user = db.get(User, run.user_id)
+    if run.status == "completed" and user is not None:
+        try:
+            run = ensure_professional_pdf_for_run(db, user, run)
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            run = db.get(TechpackAIRun, run_id) or run
+        return _run_status_payload(db, run)
+    if run.status == "reconciliation_required":
+        if user is not None:
+            result = run.result if isinstance(run.result, dict) else {}
+            arts = list(
+                db.scalars(
+                    select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run.id)
+                ).all()
+            )
+            if arts and not result.get("pdf_ready"):
+                try:
+                    run = ensure_professional_pdf_for_run(db, user, run)
+                except Exception:  # noqa: BLE001
+                    db.rollback()
+                    run = db.get(TechpackAIRun, run_id) or run
         return _run_status_payload(db, run)
     if run.status not in ("running", "queued"):
         return _run_status_payload(db, run)
 
-    user = db.get(User, run.user_id)
     if user is None:
         run.status = "failed"
         run.error_message = "User missing for techpack AI run"
@@ -905,21 +1043,28 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         analysis_summary = pipeline.get("analysis_summary")
         failed_sections = list(pipeline.get("failed_sections") or [])
 
+        # Persist illustrations first so PDF assembly (and recovery) can use them.
+        ai_block = enriched.get("ai") if isinstance(enriched.get("ai"), dict) else {}
+        ai_block = {
+            **ai_block,
+            "dirty_since_generation": False,
+            "budget_recorded_usd_cents": max(int(run.cost_usd_cents or 0), cost),
+        }
+        enriched["ai"] = ai_block
         draft.spec = enriched
         draft.status = "DRAFT"
         draft.verification = "UNVERIFIED"
         draft.updated_at = datetime.now(UTC)
-        run.status = "completed"
         run.model = model
         run.cost_usd_cents = max(int(run.cost_usd_cents or 0), cost)
-        ready_progress = {
-            "phase": "ready",
-            "message": "Your AI Technical Pack is ready",
+        assembling = {
+            "phase": "assembling",
+            "message": "Preparing your PDF…",
             "pieces_done": max(1, len(pieces)),
             "pieces_total": max(1, len(pieces)),
         }
         req2 = dict(run.request) if isinstance(run.request, dict) else {}
-        req2["progress"] = ready_progress
+        req2["progress"] = assembling
         req2.pop("provider_in_flight", None)
         run.request = req2
         run.result = {
@@ -930,14 +1075,91 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             "failed_sections": failed_sections,
             "estimated_cost_usd_cents": estimate,
             "actual_cost_usd_cents": run.cost_usd_cents,
+            "budget_recorded_usd_cents": run.cost_usd_cents,
             "artifact_ids": [a["id"] for a in artifacts],
-            "progress": ready_progress,
+            "progress": assembling,
             "sections": sections,
+            "pdf_ready": False,
+            "draft_revision": int(draft.revision or 1),
         }
         run.input_hash = hashlib.sha256(
             json.dumps({"mode": mode, "propose_back": propose_back}, sort_keys=True).encode()
         ).hexdigest()[:64]
         run.error_message = None
+        # Not completed/ready until Professional PDF is assembled and bound to this run.
+        run.status = "running"
+        db.add(draft)
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+        db.refresh(draft)
+
+        from app.services import techpack_service
+
+        try:
+            exported = techpack_service.export_pdf(
+                db,
+                user,
+                draft.id,
+                ai_run_id=run.id,
+                require_professional=True,
+            )
+        except Exception as pdf_exc:  # noqa: BLE001
+            # Illustrations are preserved; do not claim Ready without a PDF.
+            run_row = db.get(TechpackAIRun, run_id)
+            if run_row is not None:
+                req_fail = dict(run_row.request) if isinstance(run_row.request, dict) else {}
+                req_fail["progress"] = {
+                    "phase": "assembling",
+                    "message": "Could not finish PDF — illustrations are saved",
+                }
+                run_row.request = req_fail
+                run_row.status = "reconciliation_required"
+                run_row.error_message = f"PDF assembly failed: {type(pdf_exc).__name__}"[:1000]
+                result_fail = dict(run_row.result) if isinstance(run_row.result, dict) else {}
+                result_fail["pdf_ready"] = False
+                result_fail["pdf_error"] = str(pdf_exc)[:400]
+                run_row.result = result_fail
+                db.add(run_row)
+                db.commit()
+            raise ValidationAppError(
+                "AI illustrations were saved, but the Professional PDF could not be assembled. "
+                "Your design is safe — reopen Create Real Design to recover without a new paid run."
+            ) from pdf_exc
+
+        run = db.get(TechpackAIRun, run_id)
+        draft = _owned_draft(db, user, draft.id)
+        assert run is not None
+        ready_progress = {
+            "phase": "ready",
+            "message": "Your AI Technical Pack is ready",
+            "pieces_done": max(1, len(pieces)),
+            "pieces_total": max(1, len(pieces)),
+        }
+        req3 = dict(run.request) if isinstance(run.request, dict) else {}
+        req3["progress"] = ready_progress
+        run.request = req3
+        result_ok = dict(run.result) if isinstance(run.result, dict) else {}
+        result_ok.update(
+            {
+                "export_id": str(exported.id),
+                "pdf_ready": True,
+                "pdf_filename": exported.filename,
+                "download_path": f"/api/v1/techpacks/exports/{exported.id}/pdf",
+                "draft_revision": int(draft.revision or 1),
+                "progress": ready_progress,
+            }
+        )
+        run.result = result_ok
+        run.status = "completed"
+        spec_final = draft.spec if isinstance(draft.spec, dict) else {}
+        ai_final = dict(spec_final.get("ai") if isinstance(spec_final.get("ai"), dict) else {})
+        ai_final["export_id"] = str(exported.id)
+        ai_final["dirty_since_generation"] = False
+        ai_final["last_run_id"] = str(run.id)
+        ai_final["last_mode"] = "professional"
+        spec_final["ai"] = ai_final
+        draft.spec = spec_final
         db.add(draft)
         db.add(run)
         db.commit()
@@ -1276,23 +1498,22 @@ def get_run(db: Session, user: User, run_id: uuid.UUID) -> dict[str, Any]:
     row = db.get(TechpackAIRun, run_id)
     if row is None or row.user_id != user.id:
         raise NotFoundError("AI run not found")
-    arts = list(db.scalars(select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == row.id)).all())
-    req = row.request if isinstance(row.request, dict) else {}
-    result = row.result if isinstance(row.result, dict) else {}
-    progress = req.get("progress") or result.get("progress")
-    return {
-        "id": str(row.id),
-        "draft_id": str(row.draft_id),
-        "stage": row.stage,
-        "status": row.status,
-        "model": row.model,
-        "cost_usd_cents": row.cost_usd_cents,
-        "result": row.result,
-        "error_message": row.error_message,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "progress": progress,
-        "artifacts": [_artifact_read(a) for a in arts],
-    }
+    # Zero-cost recovery: completed illustration runs missing a bound PDF get one assembled.
+    if row.stage == "professional" and row.status in ("completed", "reconciliation_required"):
+        result = row.result if isinstance(row.result, dict) else {}
+        arts = list(
+            db.scalars(select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == row.id)).all()
+        )
+        if arts and (not result.get("pdf_ready") or not result.get("export_id")):
+            try:
+                row = ensure_professional_pdf_for_run(db, user, row)
+            except Exception:  # noqa: BLE001
+                db.rollback()
+                row = db.get(TechpackAIRun, run_id) or row
+    payload = _run_status_payload(db, row)
+    payload["created_at"] = row.created_at.isoformat() if row.created_at else None
+    payload["model"] = row.model
+    return payload
 
 
 def resolve_artifact_image(db: Session, user: User, artifact_id: uuid.UUID) -> tuple[Path, TechpackAIArtifact]:
