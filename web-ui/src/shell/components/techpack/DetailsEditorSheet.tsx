@@ -29,12 +29,14 @@ type Props = {
   spec: TechpackSpecV2
   pieces: TechpackPiece[]
   busy?: boolean
-  saveStatus?: string | null
+  /** Only set when a background/flush save genuinely fails — never routine status. */
+  saveError?: string | null
   lookThumbnailUrl?: string | null
   onChangeTitle: (value: string) => void
   onChangeStyleCode: (value: string) => void
   onChangeSpec: (updater: (prev: TechpackSpecV2) => TechpackSpecV2) => void
   onUpdatePiece: (pieceId: string, updater: (piece: TechpackPiece) => TechpackPiece) => void
+  onRetrySave?: () => void
   onClose: () => void | Promise<void>
 }
 
@@ -107,12 +109,13 @@ export function DetailsEditorSheet({
   spec,
   pieces,
   busy = false,
-  saveStatus = null,
+  saveError = null,
   lookThumbnailUrl = null,
   onChangeTitle,
   onChangeStyleCode,
   onChangeSpec,
   onUpdatePiece,
+  onRetrySave,
   onClose,
 }: Props) {
   const titleId = useId()
@@ -585,13 +588,9 @@ export function DetailsEditorSheet({
       >
         <header className={styles.header}>
           <div className={styles.headerText}>
-            <p className={styles.kicker}>Create Real Design</p>
             <h2 id={titleId} className={styles.title}>
               Measurements & details
             </h2>
-            <p className={styles.subtitle}>
-              Optional corrections · autosave on · same data on every screen size
-            </p>
           </div>
           <button
             type="button"
@@ -803,9 +802,21 @@ export function DetailsEditorSheet({
 
         <footer className={styles.footer}>
           <div className={styles.footerStack}>
-            <p className={styles.saveStatusLine} role="status" aria-live="polite">
-              {saveStatus || (busy ? 'Saving…' : 'Edits save automatically')}
-            </p>
+            {saveError ? (
+              <div className={styles.saveError} role="alert" data-testid="details-save-error">
+                <p className={styles.saveErrorText}>{saveError}</p>
+                {onRetrySave ? (
+                  <button
+                    type="button"
+                    className={styles.retrySaveBtn}
+                    onClick={() => onRetrySave()}
+                    disabled={busy}
+                  >
+                    Retry save
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <button
               type="button"
               className={styles.doneBtn}

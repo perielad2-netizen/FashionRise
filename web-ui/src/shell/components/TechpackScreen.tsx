@@ -19,6 +19,10 @@ import {
 import { DetailsEditorSheet } from '@/shell/components/techpack/DetailsEditorSheet'
 import { GenerateAiPdfOverlay } from '@/shell/components/techpack/GenerateAiPdfOverlay'
 import {
+  buildEditorPersistSnapshot,
+  editorPersistFingerprint,
+} from '@/shell/components/techpack/editorPersistSnapshot'
+import {
   asRecord,
   wrapSpecForEditing,
 } from '@/shell/components/techpack/pieceHelpers'
@@ -45,7 +49,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [saveStatus, setSaveStatus] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [aiStatus, setAiStatus] = useState<TechpackAiStatus | null>(null)
   const [generateProgress, setGenerateProgress] = useState<string | null>(null)
   const [progressPhase, setProgressPhase] = useState<string | null>(null)
@@ -59,7 +63,18 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [intentIdempotencyKey, setIntentIdempotencyKey] = useState<string | null>(null)
   const pollAbortRef = useRef<AbortController | null>(null)
   const autosaveTimer = useRef<number | null>(null)
+  const savedFingerprintRef = useRef<string | null>(null)
+  const titleRef = useRef(title)
+  const styleCodeRef = useRef(styleCode)
+  const specRef = useRef(spec)
+  const saveInFlightRef = useRef(false)
+  const saveEpochRef = useRef(0)
+  const rerunAfterFlightRef = useRef(false)
   const aiErrorRef = useRef<HTMLParagraphElement>(null)
+
+  titleRef.current = title
+  styleCodeRef.current = styleCode
+  specRef.current = spec
 
   const frontImg = useAuthJobImage(draft?.front_job_id ?? null, Boolean(draft?.front_job_id))
 
@@ -91,12 +106,15 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const dirtySinceGeneration = Boolean(spec?.ai?.dirty_since_generation)
   const hasReadyPdf = Boolean(readyExportId) && !dirtySinceGeneration
 
-  const hydrate = useCallback((row: TechpackDraft) => {
+  const hydrate = useCallback((row: TechpackDraft, opts: { markSaved?: boolean } = {}) => {
     setDraft(row)
     setTitle(row.title)
     setStyleCode(row.style_code)
     const wrapped = wrapSpecForEditing(asRecord(row.spec))
     setSpec(wrapped.spec)
+    if (opts.markSaved !== false) {
+      savedFingerprintRef.current = editorPersistFingerprint(row.title, row.style_code, wrapped.spec)
+    }
     const ai = wrapped.spec.ai
     if (ai?.last_run_id) setLastRunId(String(ai.last_run_id))
     const exportFromAi = ai && typeof ai === 'object' ? (ai as { export_id?: string }).export_id : null
@@ -115,6 +133,21 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       setReadyExportId(latest.id)
       setReadyFilename(latest.filename)
     }
+  }, [])
+
+  /** Update server bookkeeping without replacing live form values (preserves focus/caret). */
+  const applyServerMetaOnly = useCallback((row: TechpackDraft) => {
+    setDraft((prev) => {
+      if (!prev) return row
+      return {
+        ...prev,
+        revision: row.revision,
+        updated_at: row.updated_at,
+        status: row.status,
+        verification: row.verification,
+        latest_export: row.latest_export,
+      }
+    })
   }, [])
 
   useEffect(() => {
@@ -149,70 +182,86 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     }
   }, [])
 
-  const buildSpecPatch = useCallback((): TechpackSpecV2 => {
-    const current = spec ?? wrapSpecForEditing({}).spec
-    return {
-      ...current,
-      schema_version: '2.0',
-      workflow_stage: 'generate',
-      designer_notes: current.designer_notes ?? '',
-      look_notes: current.look_notes ?? '',
-      units: current.units || 'cm',
-      size_system: current.size_system || 'EU',
-      sample_size: current.sample_size || '',
-      outfit: {
-        piece_count: current.outfit?.pieces?.length ?? 0,
-        pieces: current.outfit?.pieces ?? [],
-        detection_confidence: current.outfit?.detection_confidence,
-        needs_user_confirm: current.outfit?.needs_user_confirm,
-        note: current.outfit?.note,
-      },
-      body: current.body ?? {},
-      preferences: current.preferences ?? { fit_preference: 'regular', notes: '' },
-      warnings: current.warnings ?? [],
-      qc_checklist: current.qc_checklist,
-      ai: current.ai,
-    }
-  }, [spec])
+  const isEditorDirty = useCallback(() => {
+    if (savedFingerprintRef.current == null) return false
+    return (
+      editorPersistFingerprint(titleRef.current, styleCodeRef.current, specRef.current) !==
+      savedFingerprintRef.current
+    )
+  }, [])
 
   const persist = useCallback(
-    async (opts: { silent?: boolean } = {}) => {
+    async (opts: { silent?: boolean; force?: boolean } = {}) => {
+      if (!opts.force && !isEditorDirty()) {
+        return draft
+      }
+      if (saveInFlightRef.current) {
+        rerunAfterFlightRef.current = true
+        return null
+      }
+
+      const epoch = ++saveEpochRef.current
+      const snapshot = buildEditorPersistSnapshot(
+        titleRef.current,
+        styleCodeRef.current,
+        specRef.current,
+      )
+      const sentFingerprint = JSON.stringify(snapshot)
+
+      saveInFlightRef.current = true
       if (!opts.silent) setBusy(true)
-      setSaveStatus('Saving…')
       try {
         const next = await updateTechpackDraft(draftId, {
-          title: title.trim(),
-          style_code: styleCode.trim(),
-          spec: buildSpecPatch(),
+          title: snapshot.title,
+          style_code: snapshot.style_code,
+          spec: snapshot.spec,
         })
-        hydrate(next)
-        setSaveStatus('Saved')
-        window.setTimeout(() => setSaveStatus(null), 1600)
+        // Ignore stale responses that finished after a newer save started.
+        if (epoch !== saveEpochRef.current) {
+          return null
+        }
+        // Mark clean using the payload we actually sent (local form values stay put).
+        savedFingerprintRef.current = sentFingerprint
+        applyServerMetaOnly(next)
+        setSaveError(null)
         return next
       } catch (err) {
-        setSaveStatus(null)
+        if (epoch !== saveEpochRef.current) {
+          return null
+        }
+        const message = err instanceof Error ? err.message : 'Could not save draft'
+        setSaveError(message)
         if (!opts.silent) {
-          setError(err instanceof Error ? err.message : 'Could not save draft')
+          setError(message)
         }
         return null
       } finally {
+        saveInFlightRef.current = false
         if (!opts.silent) setBusy(false)
+        if (rerunAfterFlightRef.current) {
+          rerunAfterFlightRef.current = false
+          if (isEditorDirty()) {
+            void persist({ silent: true })
+          }
+        }
       }
     },
-    [buildSpecPatch, draftId, hydrate, styleCode, title],
+    [applyServerMetaOnly, draft, draftId, isEditorDirty],
   )
 
-  // Autosave details edits while the editor is open.
+  // Quiet autosave: only when editable values actually differ from last saved snapshot.
   useEffect(() => {
     if (!detailsOpen || !spec) return
+    if (!isEditorDirty()) return
     if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
     autosaveTimer.current = window.setTimeout(() => {
+      if (!isEditorDirty()) return
       void persist({ silent: true })
     }, 700)
     return () => {
       if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
     }
-  }, [detailsOpen, spec, title, styleCode, persist])
+  }, [detailsOpen, spec, title, styleCode, persist, isEditorDirty])
 
   const updatePiece = (pieceId: string, updater: (piece: TechpackPiece) => TechpackPiece) => {
     setSpec((prev) => {
@@ -609,13 +658,41 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   }
 
   const closeDetails = async () => {
-    // Flush any outstanding debounced autosave before closing so edits are not lost.
     if (autosaveTimer.current) {
       window.clearTimeout(autosaveTimer.current)
       autosaveTimer.current = null
     }
-    const saved = await persist({ silent: false })
-    if (saved) setDetailsOpen(false)
+    // Nothing changed — close immediately with zero network writes.
+    if (!isEditorDirty() && !saveInFlightRef.current) {
+      setSaveError(null)
+      setDetailsOpen(false)
+      return
+    }
+    setBusy(true)
+    try {
+      // Coordinate with an in-flight autosave; never discard newer local edits.
+      const started = Date.now()
+      while (saveInFlightRef.current && Date.now() - started < 15000) {
+        await new Promise((r) => window.setTimeout(r, 40))
+      }
+      if (!isEditorDirty()) {
+        setSaveError(null)
+        setDetailsOpen(false)
+        return
+      }
+      const saved = await persist({ silent: false })
+      if (saved || !isEditorDirty()) {
+        setSaveError(null)
+        setDetailsOpen(false)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const retrySave = () => {
+    setSaveError(null)
+    void persist({ silent: true })
   }
 
   if (loading) {
@@ -742,12 +819,13 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         spec={spec}
         pieces={pieces}
         busy={busy}
-        saveStatus={saveStatus}
+        saveError={saveError}
         lookThumbnailUrl={frontImg.url}
         onChangeTitle={setTitle}
         onChangeStyleCode={setStyleCode}
         onChangeSpec={(updater) => setSpec((prev) => (prev ? updater(prev) : prev))}
         onUpdatePiece={updatePiece}
+        onRetrySave={retrySave}
         onClose={closeDetails}
       />
     </div>

@@ -191,7 +191,7 @@ describe('TechpackScreen simplified UX', () => {
     )
   })
 
-  it('keeps details open when Done flush save fails', async () => {
+  it('keeps details open when Done flush save fails after an edit', async () => {
     getTechpackAiStatus.mockResolvedValue({
       enabled: true,
       professional_available: true,
@@ -202,10 +202,27 @@ describe('TechpackScreen simplified UX', () => {
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
     fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
-    expect(await screen.findByRole('dialog', { name: /Measurements & details/i })).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', { name: /Measurements & details/i })
+    fireEvent.click(within(dialog).getByRole('tab', { name: /Body measurements/i }))
+    const height = await within(dialog).findByLabelText(/^Height$/i)
+    fireEvent.change(height, { target: { value: '170' } })
     fireEvent.click(screen.getByTestId('details-done'))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/network down|Could not save/i)
+    expect(await screen.findByTestId('details-save-error')).toHaveTextContent(/network down/i)
     expect(screen.getByRole('dialog', { name: /Measurements & details/i })).toBeInTheDocument()
+    expect(height).toHaveValue('170')
+  })
+
+  it('Done with no edits closes without PATCH', async () => {
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    await screen.findByText('Create Real Design')
+    fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+    expect(await screen.findByRole('dialog', { name: /Measurements & details/i })).toBeInTheDocument()
+    updateTechpackDraft.mockClear()
+    fireEvent.click(screen.getByTestId('details-done'))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /Measurements & details/i })).not.toBeInTheDocument(),
+    )
+    expect(updateTechpackDraft).toHaveBeenCalledTimes(0)
   })
 
   it('renders Magic hero with contain class (no cover crop)', async () => {
