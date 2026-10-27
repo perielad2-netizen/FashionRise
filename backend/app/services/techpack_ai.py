@@ -675,6 +675,22 @@ def ensure_professional_pdf_for_run(
         # Verify file still readable; otherwise reassemble.
         try:
             techpack_service.resolve_export_pdf_path(db, user, uuid.UUID(str(export_id_raw)))
+            # Keep draft.ai.export_id in sync for reopen/Download without a new paid run.
+            draft = _owned_draft(db, user, run.draft_id)
+            spec = draft.spec if isinstance(draft.spec, dict) else {}
+            ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+            if ai.get("export_id") != str(export_id_raw) or ai.get("dirty_since_generation"):
+                ai["export_id"] = str(export_id_raw)
+                ai["dirty_since_generation"] = False
+                ai["last_run_id"] = str(run.id)
+                ai["last_mode"] = "professional"
+                spec["ai"] = ai
+                draft.spec = spec
+                from sqlalchemy.orm.attributes import flag_modified
+
+                flag_modified(draft, "spec")
+                db.add(draft)
+                db.commit()
             return run
         except Exception:  # noqa: BLE001
             pass
@@ -701,6 +717,9 @@ def ensure_professional_pdf_for_run(
     ai["last_mode"] = "professional"
     spec["ai"] = ai
     draft.spec = spec
+    from sqlalchemy.orm.attributes import flag_modified
+
+    flag_modified(draft, "spec")
     db.add(draft)
 
     ready_progress = {
@@ -1160,6 +1179,9 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         ai_final["last_mode"] = "professional"
         spec_final["ai"] = ai_final
         draft.spec = spec_final
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(draft, "spec")
         db.add(draft)
         db.add(run)
         db.commit()
