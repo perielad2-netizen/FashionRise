@@ -3,21 +3,51 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**Create Real Design V3.1 LIVE** — measurement tab reset fix + one-click Generate AI PDF + Magic-style progress + PDF quality. FE PR [#102](https://github.com/perielad2-netizen/FashionRise/pull/102) `9ba396a3` · BE PR [#103](https://github.com/perielad2-netizen/FashionRise/pull/103) `ffec1a7b`. Alembic **`010`**. **0 new paid AI calls by Cursor**. **Samsung Internet / owner phone acceptance NOT claimed.**)
+**Last updated:** 2026-10-27 (**Responsive Measurements & details editor LIVE** — FE PR [#113](https://github.com/perielad2-netizen/FashionRise/pull/113) `ce752b43`. Backend **`732bda9f`** / Alembic **`011`** unchanged. Autofill PRs [#110](https://github.com/perielad2-netizen/FashionRise/pull/110)/[#111](https://github.com/perielad2-netizen/FashionRise/pull/111) + mobile polish [#112](https://github.com/perielad2-netizen/FashionRise/pull/112) remain in lineage. **0 paid AI calls by Cursor**. **Owner visual acceptance PENDING.**)
 
-**Phase:** Protected family beta. **Create Real Design V3.1 LIVE**. Production FE @ `9ba396a3`. Production BE mark @ `ffec1a7b` (on V3 + `186cac84` reasoning lineage). Alembic **`010`**.
+**Phase:** Protected family beta. **Create Real Design** main workflow unchanged (Select Magic Look → Generate AI PDF → Wait → Download). Optional editor is now responsive for desktop / tablet / mobile.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`9ba396a3`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/9ba396a3`. Measurement group stability; one-click **Generate AI PDF**; Magic-style progress overlay; `/api/v1` prod assert. |
-| Backend (FastAPI + PostgreSQL) | **`ffec1a7b`** mark (files overlay on V3 lineage) — `POST …/ai/generate-professional` one-tap intent; progress phases; compatibility warnings; PDF V3.1 branding + larger detail flats. Spend gates unchanged. `fashionrise-api` on `127.0.0.1:8010`. |
+| Frontend (`web-ui`) | **`ce752b43`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/ce752b43`. Responsive **Edit measurements & details** (desktop sidebar + 2-col grid; tablet touch sheet; polished mobile fullscreen). Stable Done footer; Magic previews `object-fit: contain`. Branched from deployed `b2fbd043` (not stale main). |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged** this cycle. AI garment auto-fill + generate-professional + spend/privacy gates. `fashionrise-api` on `127.0.0.1:8010`. |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
-| Database | `fashionrise_beta` — Alembic **`010`** (no migration) |
+| Database | `fashionrise_beta` — Alembic **`011`** (no migration this cycle) |
 | Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
-| Deploy backup | `/var/backups/fashionrise/v31-deploy-20261026T233003Z` (+ prior crit-fix backup) |
+| Deploy backup | `/var/backups/fashionrise/responsive-editor-fe-deploy-20261027T140651Z` (rollback → prior FE `b2fbd043`) |
 | AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
+
+## Responsive editor (2026-10-27) LIVE — stop for owner visual acceptance
+
+| Item | Detail |
+|---|---|
+| PR | FE [#113](https://github.com/perielad2-netizen/FashionRise/pull/113) · branch `cursor/web-techpack-responsive-editor-77c6` · tip `ce752b436456cee945916e0fa6a3caf100a313ad` |
+| Lineage | Deployed from `b2fbd043` (PR #112 contain + Done) ← `cb2c5b8d` (PR #111 autofill UI) + BE `732bda9f` (PR #110) |
+| Shared editor | One React `DetailsEditorSheet` + shared field model / provenance / autosave; layouts via viewport CSS (≥1024 / 641–1023 / ≤640), not UA |
+| Desktop | ~1120px sheet, 280px sidebar (Garments / Body / Preferences / Finished + look preview), 2-column fields, sticky Done |
+| Tablet | Wider sheet, compact section nav, 1–2 columns, ≥44px targets |
+| Mobile | Full-screen single-column polish; numeric keyboards; sticky Done; safe-area |
+| Garment labels | `Top — Lavender Hoodie` / `Bottom — Yellow Shorts` via `pieceDisplayLabel` (no `TOP — TOP`) |
+| Hierarchy | Identity → Visual → Materials → Fit → Finished; Body + Preferences separate; compact provenance chips |
+| Visual bugs | Done no longer jumps with autosave text; Magic images `object-fit: contain` |
+| Main workflow | **Unchanged** Generate → Wait → Download |
+| Tests | Vitest editor suites **14 passed**; Playwright metrics all 9 viewports `stable` + `noHScroll`; lint warnings only (pre-existing); `tsc -b` + prod build + SW/`/api/v1` asserts OK |
+| Screenshots | `/opt/cursor/artifacts/responsive_editor_{mobile,tablet,desktop}_*.png` + `responsive_editor_metrics.json` |
+| Production smoke | `current` → `ce752b43`; `version.json` matches full SHA; health/ready OK; Alembic `011`; BE `APP_REVISION` still `732bda9f`; OpenAPI generate-professional present; **0 paid AI** |
+| Known limitations | Desktop sheet max ~1120px by design (not full-bleed monitor edge-to-edge). Authenticated Cloudflare browser smoke still requires owner Access session. Owner visual acceptance not claimed. |
+| Safety | FE-only immutable release; BE/worker untouched; rollback script in backup dir |
+| Rollback | `ln -sfn /var/www/fashionrise/releases/b2fbd043 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` · or `/var/backups/fashionrise/responsive-editor-fe-deploy-20261027T140651Z/ROLLBACK.sh` |
+
+### Next recommended action (owner — visual acceptance)
+
+1. Hard-refresh FashionRise → confirm build **`ce752b43`**.
+2. Open the lavender hoodie + yellow shorts Magic look → optional **Edit measurements & details**.
+3. **Desktop (≥1024):** wide studio sheet, sidebar garment selection, two-column fields, no phone-column feel, no horizontal scrollbars, Done stays put while autosave flickers.
+4. **Tablet / phone:** touch-friendly; both garments independently selectable with clear names; Magic image shows full garment (`contain`).
+5. Switch sections / garments / close+reopen → values persist. Do **not** re-run paid Generate unless validating an unrelated PDF issue.
+6. Report visual accept / reject.
 
 ## V3.1 — what shipped (2026-10-27)
 
