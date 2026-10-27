@@ -105,10 +105,13 @@ describe('renderSketchCanvas composition', () => {
     const ink = ops.filter((o) => o.canvas === 2)
     expect(base[0]).toMatchObject({ op: 'fillRect', detail: { a: [0, 0, 768, 1024], fill: '#F8F4F0' } })
     expect(base[1]).toMatchObject({ op: 'drawImage', detail: { img: reference, alpha: 0.4, a: [192, 0, 384, 1024] } })
-    // Fills paint on their own layer (under ink), never destination-out on the base.
+    // Fills paint on their own layer (under ink); eraser also punches the fill layer.
     expect(fillLayer.some((o) => o.op === 'fill')).toBe(true)
     expect(fillLayer[0]).toMatchObject({ detail: { fill: '#B91C1C' } })
-    // Eraser runs on the ink canvas only; the base never receives destination-out.
+    expect(fillLayer.map((o) => (o.detail as { mode?: string }).mode).filter(Boolean)).toContain(
+      'destination-out',
+    )
+    // Ink layer still gets draw + erase; the base/reference never receives destination-out.
     expect(ink.map((o) => (o.detail as { mode: string }).mode)).toEqual(['source-over', 'destination-out'])
     expect(ink[0]).toMatchObject({ detail: { alpha: 0.5, fill: '#D63384' } })
     expect(base.some((o) => o.op === 'fill')).toBe(false)
