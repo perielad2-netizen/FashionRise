@@ -26,6 +26,34 @@ OPTIONAL_IMAGE_KIND_PHASES: tuple[str, ...] = (
     "pattern_sheet",
 )
 
+# Versioned authorized-input snapshot for queued Professional runs.
+INPUT_FINGERPRINT_VERSION = 1
+
+_INCONCLUSIVE_CATEGORIES = frozenset({"", "other"})
+_INCONCLUSIVE_LABELS = frozenset(
+    {
+        "garment (confirm category)",
+        "garment",
+        "confirm category",
+    }
+)
+_INCONCLUSIVE_SOURCES = frozenset(
+    {
+        "heuristic_fallback",
+        "inconclusive",
+    }
+)
+_CREDIBLE_DETECTION_CONFIDENCE = frozenset(
+    {
+        "look_identity",
+        "heuristic",
+    }
+)
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
 
 def piece_id(piece: dict[str, Any]) -> str:
     return str(piece.get("id") or "").strip()
@@ -34,21 +62,80 @@ def piece_id(piece: dict[str, Any]) -> str:
 def list_outfit_pieces(spec: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(spec, dict):
         return []
-    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
-    return [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+    outfit = _as_dict(spec.get("outfit"))
+    pieces = outfit.get("pieces")
+    if not isinstance(pieces, list):
+        return []
+    return [p for p in pieces if isinstance(p, dict)]
+
+
+def is_designer_confirmed_piece(piece: dict[str, Any]) -> bool:
+    if piece.get("category_user_confirmed"):
+        return True
+    return str(piece.get("detection_source") or "") == "designer"
 
 
 def designer_structure_locked(pieces: list[dict[str, Any]]) -> bool:
     """True when every piece is explicitly designer-confirmed (do not auto-replace)."""
     if not pieces:
         return False
-    for p in pieces:
-        if p.get("category_user_confirmed"):
-            continue
-        if str(p.get("detection_source") or "") == "designer":
-            continue
+    return all(is_designer_confirmed_piece(p) for p in pieces)
+
+
+def is_inconclusive_piece(piece: dict[str, Any]) -> bool:
+    """True for generic/fallback garments that are not a validated Professional identity.
+
+    Designer-confirmed pieces are never treated as inconclusive — even if category is
+    ``other`` or a weak detector later returns a fallback label.
+    """
+    if is_designer_confirmed_piece(piece):
         return False
+    cat = str(piece.get("category") or "").strip().lower()
+    label = str(piece.get("label") or "").strip().lower()
+    source = str(piece.get("detection_source") or "").strip().lower()
+    if source in _INCONCLUSIVE_SOURCES:
+        return True
+    if cat in _INCONCLUSIVE_CATEGORIES:
+        return True
+    return label in _INCONCLUSIVE_LABELS
+
+
+def detection_has_credible_pieces(detection: dict[str, Any] | None) -> bool:
+    """Structured Magic / clear heuristic hits only — not generic ``other`` fallback."""
+    if not isinstance(detection, dict):
+        return False
+    confidence = str(detection.get("detection_confidence") or "").strip().lower()
+    if confidence in ("heuristic_fallback", "inconclusive"):
+        return False
+    pieces = [p for p in (detection.get("pieces") or []) if isinstance(p, dict)]
+    if not pieces:
+        return False
+    credible = [p for p in pieces if not is_inconclusive_piece(p)]
+    if not credible:
+        return False
+    # look_identity / heuristic with real categories is OK; unknown confidence still OK
+    # when every piece is non-inconclusive.
+    if confidence and confidence not in _CREDIBLE_DETECTION_CONFIDENCE:
+        # Still accept if pieces themselves are concrete (e.g. future sources).
+        return all(not is_inconclusive_piece(p) for p in pieces)
     return True
+
+
+def reject_inconclusive_professional_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Fail closed when Professional would run on unresolved generic garments."""
+    if not pieces:
+        raise ValidationAppError(
+            "Cannot start AI Professional: this draft has no garment pieces. "
+            "Open Measurements & details, confirm the outfit pieces from your Magic look, then try again."
+        )
+    bad = [p for p in pieces if is_inconclusive_piece(p)]
+    if bad:
+        raise ValidationAppError(
+            "Cannot start AI Professional: garment categories are inconclusive. "
+            "Open Measurements & details and confirm each garment category "
+            "(do not leave “Garment (confirm category)” / Other unresolved), then Generate again."
+        )
+    return pieces
 
 
 def outfit_structure_fingerprint(pieces: list[dict[str, Any]]) -> str:
@@ -65,6 +152,100 @@ def outfit_structure_fingerprint(pieces: list[dict[str, Any]]) -> str:
             )
         )
     return hashlib.sha256("\n".join(rows).encode("utf-8")).hexdigest()[:40]
+
+
+def _stable_jsonable(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {
+            str(k): _stable_jsonable(value[k])
+            for k in sorted(value.keys(), key=lambda x: str(x))
+            if value[k] is not None and value[k] != ""
+        }
+    if isinstance(value, (list, tuple)):
+        return [_stable_jsonable(v) for v in value]
+    return str(value)
+
+
+def _measurement_snapshot(cell: Any) -> dict[str, Any] | None:
+    if not isinstance(cell, dict):
+        return None
+    value = cell.get("value")
+    if value is None or value == "":
+        return None
+    out: dict[str, Any] = {"value": value}
+    unit = cell.get("unit")
+    if unit not in (None, ""):
+        out["unit"] = unit
+    source = cell.get("source")
+    if source not in (None, "", "empty"):
+        out["source"] = source
+    return out
+
+
+def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
+    """Generation/PDF-relevant fields only — no volatile illustration/AI bookkeeping."""
+    mats = _as_dict(piece.get("materials"))
+    shell = _as_dict(mats.get("shell"))
+    lining = _as_dict(mats.get("lining"))
+    finished = _as_dict(piece.get("finished_measurements"))
+    finished_snap = {
+        k: snap
+        for k, cell in sorted(finished.items(), key=lambda kv: str(kv[0]))
+        for snap in [_measurement_snapshot(cell)]
+        if snap is not None
+    }
+    closures = _as_dict(piece.get("closures"))
+    fit = _as_dict(piece.get("fit"))
+    visible = _as_dict(piece.get("visible_details"))
+    return _stable_jsonable(
+        {
+            "id": piece_id(piece),
+            "category": str(piece.get("category") or ""),
+            "role": str(piece.get("role") or ""),
+            "label": str(piece.get("label") or ""),
+            "color_hint": str(piece.get("color_hint") or ""),
+            "category_user_confirmed": bool(piece.get("category_user_confirmed")),
+            "detection_source": str(piece.get("detection_source") or ""),
+            "materials": {
+                "shell_name": str(shell.get("name") or ""),
+                "shell_composition": str(shell.get("composition") or ""),
+                "lining_name": str(lining.get("name") or ""),
+            },
+            "finished_measurements": finished_snap,
+            "closures_type": str(closures.get("type") or ""),
+            "closures_notes": str(closures.get("notes") or ""),
+            "fit_silhouette": str(fit.get("silhouette") or ""),
+            "visible_details": {
+                k: visible[k]
+                for k in sorted(visible.keys(), key=lambda x: str(x))
+                if not str(k).endswith("_provenance") and visible.get(k) not in (None, "")
+            },
+        }
+    )
+
+
+def professional_input_fingerprint(
+    spec: dict[str, Any] | None,
+    pieces: list[dict[str, Any]],
+    *,
+    version: int = INPUT_FINGERPRINT_VERSION,
+) -> str:
+    """Stable hash of authorized Professional generation inputs (not draft.revision)."""
+    spec_d = spec if isinstance(spec, dict) else {}
+    payload = {
+        "v": int(version),
+        "units": str(spec_d.get("units") or "cm"),
+        "look_notes": str(spec_d.get("look_notes") or "").strip(),
+        "designer_notes": str(spec_d.get("designer_notes") or "").strip(),
+        "pieces": [
+            _piece_input_snapshot(p)
+            for p in sorted(pieces, key=lambda x: piece_id(x))
+        ],
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def validate_professional_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -100,7 +281,7 @@ def validate_professional_pieces(pieces: list[dict[str, Any]]) -> list[dict[str,
 
 def sync_outfit_piece_count(spec: dict[str, Any], pieces: list[dict[str, Any]]) -> dict[str, Any]:
     out = deepcopy(spec) if isinstance(spec, dict) else {}
-    outfit = dict(out.get("outfit") if isinstance(out.get("outfit"), dict) else {})
+    outfit = _as_dict(out.get("outfit"))
     outfit["pieces"] = pieces
     outfit["piece_count"] = len(pieces)
     out["outfit"] = outfit
@@ -133,20 +314,34 @@ def load_magic_evidence(db: Any, draft: Any, spec: dict[str, Any]) -> tuple[str,
     return look_summary, design_identity if isinstance(design_identity, dict) else None
 
 
+def evidence_detection(
+    *,
+    look_summary: str | None,
+    design_identity: dict[str, Any] | None,
+    units: str = "cm",
+) -> dict[str, Any]:
+    from app.services.techpack_detect import detect_pieces_from_evidence
+
+    return detect_pieces_from_evidence(
+        look_summary=look_summary, design_identity=design_identity, units=units
+    )
+
+
 def evidence_piece_categories(
     *,
     look_summary: str | None,
     design_identity: dict[str, Any] | None,
 ) -> list[str]:
-    from app.services.techpack_detect import detect_pieces_from_evidence
-
-    detection = detect_pieces_from_evidence(
+    """Credible garment categories only — never treat generic ``other`` fallback as proof."""
+    detection = evidence_detection(
         look_summary=look_summary, design_identity=design_identity, units="cm"
     )
+    if not detection_has_credible_pieces(detection):
+        return []
     return [
         str(p.get("category") or "")
         for p in (detection.get("pieces") or [])
-        if isinstance(p, dict) and p.get("category")
+        if isinstance(p, dict) and not is_inconclusive_piece(p) and p.get("category")
     ]
 
 
@@ -175,12 +370,19 @@ def prepare_professional_outfit(
 
     pieces = list_outfit_pieces(working)
     locked = designer_structure_locked(pieces)
+    detection = evidence_detection(
+        look_summary=look_summary or None,
+        design_identity=design_identity,
+        units=str(working.get("units") or "cm"),
+    )
+    credible = detection_has_credible_pieces(detection)
     want = evidence_piece_categories(
         look_summary=look_summary or None, design_identity=design_identity
     )
     have = [str(p.get("category") or "") for p in pieces]
     # Designer-confirmed structure that disagrees with credible Magic evidence → block.
-    if locked and want and sorted(want) != sorted(have):
+    # Weak/inconclusive detection must never override or conflict-reject confirmed garments.
+    if locked and credible and want and sorted(want) != sorted(have):
         raise ValidationAppError(
             "Cannot start AI Professional: your confirmed garment structure conflicts with "
             f"Magic look evidence (draft: {', '.join(have) or 'none'}; "
@@ -195,7 +397,7 @@ def prepare_professional_outfit(
     )
     repaired = False
     if needs and not locked:
-        if want or not pieces:
+        if credible and want:
             working = repair_outfit_from_evidence(
                 working,
                 look_summary=look_summary or None,
@@ -204,17 +406,22 @@ def prepare_professional_outfit(
             )
             pieces = list_outfit_pieces(working)
             repaired = True
-        elif not pieces:
+        elif not pieces or all(is_inconclusive_piece(p) for p in pieces):
             raise ValidationAppError(
-                "Cannot start AI Professional: outfit structure is empty and Magic evidence "
-                "does not describe clear garments. Confirm pieces in Measurements & details first."
+                "Cannot start AI Professional: Magic look evidence does not identify clear "
+                "garment categories. Open Measurements & details, confirm each garment "
+                "category, then Generate again. No paid call was made."
             )
 
     pieces = validate_professional_pieces(pieces)
+    pieces = reject_inconclusive_professional_pieces(pieces)
     working = sync_outfit_piece_count(working, pieces)
     fingerprint = outfit_structure_fingerprint(pieces)
+    input_fp = professional_input_fingerprint(working, pieces)
     meta = {
         "structure_fingerprint": fingerprint,
+        "input_fingerprint": input_fp,
+        "input_fingerprint_version": INPUT_FINGERPRINT_VERSION,
         "piece_ids": [piece_id(p) for p in pieces],
         "piece_count": len(pieces),
         "structure_repaired": repaired,
@@ -359,6 +566,35 @@ def run_matches_draft_structure(run_request: dict[str, Any] | None, pieces: list
     if isinstance(authorized, list) and authorized:
         return sorted(str(x) for x in authorized) == sorted(piece_id(p) for p in pieces)
     return True
+
+
+def run_matches_authorized_inputs(
+    run_request: dict[str, Any] | None,
+    *,
+    spec: dict[str, Any] | None,
+    pieces: list[dict[str, Any]],
+) -> bool:
+    """Compare live draft inputs to the snapshot authorized when the run was queued.
+
+    Structure-only legacy runs (no input_fingerprint) still pass via structure match so
+    historical recovery / reconciliation stays intact. New runs always stamp
+    ``input_fingerprint`` at authorization time.
+    """
+    req = run_request if isinstance(run_request, dict) else {}
+    authorized = str(req.get("input_fingerprint") or "").strip()
+    if not authorized:
+        return run_matches_draft_structure(req, pieces)
+    version = int(req.get("input_fingerprint_version") or INPUT_FINGERPRINT_VERSION)
+    current = professional_input_fingerprint(spec, pieces, version=version)
+    return authorized == current
+
+
+def authorized_input_drift_message() -> str:
+    return (
+        "This draft changed after Professional generation was authorized "
+        "(measurements, materials, or garment details). No paid generation was started — "
+        "reopen the draft and Generate again."
+    )
 
 
 def structure_meta_json(meta: dict[str, Any]) -> str:

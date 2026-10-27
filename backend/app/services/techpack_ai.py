@@ -957,6 +957,8 @@ def enqueue_generate_one_tap_professional(
             "max_images": max_images,
             "image_plan": image_plan,
             "structure_fingerprint": structure_meta["structure_fingerprint"],
+            "input_fingerprint": structure_meta["input_fingerprint"],
+            "input_fingerprint_version": structure_meta["input_fingerprint_version"],
             "piece_ids": structure_meta["piece_ids"],
             "piece_count": structure_meta["piece_count"],
             "draft_revision": structure_meta["draft_revision"],
@@ -1089,12 +1091,14 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
     sections = req.get("sections") if isinstance(req.get("sections"), list) else ["all"]
     estimate = int(req.get("estimate_cents") or 0)
     from app.services.techpack_structure import (
+        authorized_input_drift_message,
         plan_professional_image_kinds,
         prepare_professional_outfit,
+        run_matches_authorized_inputs,
         run_matches_draft_structure,
     )
 
-    # Worker boundary: re-validate structure before the first paid provider call.
+    # Worker boundary: re-validate structure + authorized inputs before first paid call.
     try:
         spec, pieces, structure_meta = prepare_professional_outfit(
             db, draft, draft.spec if isinstance(draft.spec, dict) else {}, persist_repair=False
@@ -1114,6 +1118,13 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             "Draft outfit structure changed after this Professional run was queued. "
             "No paid generation was started — open Create Real Design and Generate again."
         )
+        _fail_run_preserve_cost(
+            db, run.id, error=msg, provider_called=False, force_zero_if_no_usage=True
+        )
+        raise ValidationAppError(msg)
+
+    if not run_matches_authorized_inputs(req, spec=spec, pieces=pieces):
+        msg = authorized_input_drift_message()
         _fail_run_preserve_cost(
             db, run.id, error=msg, provider_called=False, force_zero_if_no_usage=True
         )
@@ -1566,6 +1577,8 @@ def run_generate(
             "max_images": max_images if mode == "professional" else None,
             "image_plan": image_plan,
             "structure_fingerprint": structure_meta.get("structure_fingerprint"),
+            "input_fingerprint": structure_meta.get("input_fingerprint"),
+            "input_fingerprint_version": structure_meta.get("input_fingerprint_version"),
             "piece_ids": structure_meta.get("piece_ids"),
             "piece_count": structure_meta.get("piece_count") or len(pieces),
             "draft_revision": int(draft.revision or 1),

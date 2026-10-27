@@ -1,19 +1,19 @@
 # FashionRise — project status & session handoff
 
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
-**Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
+**Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-27 (**Professional Tech Pack P0/P1 reliability DEPLOYED** — PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) @ `bae05c56`. Owner acceptance PASS for Measurements & Details on FE `69b83c01`. PR #115 audit PM-accepted. **0 paid AI**.)
+**Last updated:** 2026-10-27 (**PR #116 amendment** — inconclusive garment identity rejected before paid generate; queued runs bound to authorized input fingerprint. Production BE/worker **pending this amendment deploy**. FE **`69b83c01`** OWNER ACCEPTANCE PASS. PR #115 audit PM-accepted **NEEDS IMPROVEMENT**. Alembic **`011`**. **0 paid AI**.)
 
-**Phase:** Protected family beta. Create Real Design Generate → Wait → Download unchanged. Editor accepted. Professional PDF P0/P1 reliability **deployed** (`bae05c56`).
+**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. Editor accepted. Professional PDF P0/P1 reliability on PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114 quiet autosave + PDF validity + Done race). **OWNER ACCEPTANCE PASS — 2026-10-27**. |
-| Backend (FastAPI + PostgreSQL) | **`bae05c56`** (PR #116 P0/P1 reliability). Prior logical baseline **`732bda9f`**. Alembic **`011`** (no migration). |
-| AI worker | Standalone `fashionrise-ai-worker` @ **`bae05c56`** (restarted with API) |
+| Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114). **OWNER ACCEPTANCE PASS — 2026-10-27**. |
+| Backend (FastAPI + PostgreSQL) | **`bae05c56`** live (PR #116 P0/P1). Amendment commit pending deploy on same branch. Prior logical baseline **`732bda9f`**. Alembic **`011`** (no migration). |
+| AI worker | `fashionrise-ai-worker` @ **`bae05c56`** (restart with API on amendment deploy) |
 | Database | `fashionrise_beta` — Alembic **`011`** |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. **This work: $0 paid AI.** |
@@ -24,36 +24,879 @@ Owner PASS on FE `69b83c01` for idle editor, Done save, reopen persistence, Gene
 
 ## PR #115 Professional quality audit — PM accepted
 
-Evidence-only audit (`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md` on `cursor/techpack-quality-audit-77c6` / PR #115). Decision **NEEDS IMPROVEMENT**. This branch implements the approved P0/P1 reliability fixes without regenerating paid PDFs.
+Evidence-only audit (`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md` on `cursor/techpack-quality-audit-77c6` / PR #115). Decision **NEEDS IMPROVEMENT**. Audit document kept intact as historical evidence — not rewritten by PR #116.
 
-## Professional Tech Pack P0/P1 reliability fix (2026-10-27)
+## Professional Tech Pack P0/P1 reliability — PR #116
 
 | Item | Detail |
 |---|---|
-| Branch / PR | [`#116`](https://github.com/perielad2-netizen/FashionRise/pull/116) · `cursor/web-techpack-p0-reliability-be-77c6` @ **`bae05c56`** (from `732bda9f`) |
-| Scope | Structure validation before paid generate; remove `pieces[0]` artifact fallback; fair image budget; structure repair invalidates Download; honest pattern `proposed_unverified`; PDF material/sleeve REVIEW |
+| Branch / PR | [`#116`](https://github.com/perielad2-netizen/FashionRise/pull/116) · `cursor/web-techpack-p0-reliability-be-77c6` |
+| Initial deploy | **`bae05c56`** (2026-10-27) · backup `techpack-p0-reliability-deploy-20261027T201322Z` · rollback → `732bda9f` |
+| Scope (landed) | Structure validation before paid generate; remove `pieces[0]` fallback; fair image budget; repair invalidates Download; pattern `proposed_unverified`; PDF material/sleeve REVIEW |
+| Amendment (this turn) | (A) Reject inconclusive `other` / “Garment (confirm category)” before paid call; preserve designer-confirmed pieces. (B) Versioned `input_fingerprint` on authorize; worker rejects measurement/material drift with $0 provider use. (C) Restore historical status archive below. |
 | Workflow | Unchanged: **Generate AI PDF → Wait → Download PDF** |
 | Migration | **None** (Alembic stays `011`) |
-| Offline tests | `test_techpack_p0_reliability` + v3/v31/v2/provenance/autofill/api → **40 passed** (MockProfessionalProvider, $0) |
+| Offline tests | `test_techpack_p0_reliability` + related techpack suites (MockProfessionalProvider, $0) |
 | Paid AI | **0** |
-| Deploy | **2026-10-27 22:14 Asia/Jerusalem** · backup `techpack-p0-reliability-deploy-20261027T201322Z` · rollback `ROLLBACK.sh` → `732bda9f` · health OK · worker active · Alembic `011` |
 | Blocked | No paid Professional regeneration authorized |
 
 ### Exact next action (owner / PM)
 
-1. Hard-refresh FE `69b83c01`; open FR-D47D (or equivalent two-piece) → confirm Generate (not stale one-piece Download) after any structure repair.  
+1. After amendment deploy: hard-refresh FE `69b83c01`; open FR-D47D-class two-piece draft → confirm Generate (not stale one-piece Download) after structure repair.  
 2. Do **not** pay for a new Professional PDF unless explicitly authorized.  
-3. Rollback if needed: `/var/backups/fashionrise/techpack-p0-reliability-deploy-20261027T201322Z/ROLLBACK.sh` (restores `732bda9f` content; restarts API + worker).
+3. Rollback: `/var/backups/fashionrise/techpack-p0-reliability-deploy-*/ROLLBACK.sh` (or latest amendment backup) → prior BE SHA; restart `fashionrise-api` + `fashionrise-ai-worker`.
+
+---
+
+## Historical handoff archive (preserved)
+
+> The following sections are preserved from prior status revisions so project decisions and milestones are not lost. Prefer the **Last updated** / production table above for current truth.
+
+### Archived snapshot — techpack-quality-audit / owner PASS era
+
+# FashionRise — project status & session handoff
+
+**Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
+**Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
+
+**Last updated:** 2026-10-27 (**OWNER ACCEPTANCE PASS** — Measurements & Details FE `69b83c01` / PR #114. Professional AI Technical Pack **quality audit complete** → **NEEDS IMPROVEMENT**. Backend **`732bda9f`** / worker unchanged / Alembic **`011`**. **0 paid AI calls**. Docs-only analysis branch — **no deploy**.)
+
+**Phase:** Protected family beta. Create Real Design main workflow unchanged. Editor acceptance closed; Professional PDF quality gated on PM review of audit evidence.
+
+**Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
+
+| Layer | Revision |
+|---|---|
+| Frontend (`web-ui`) | **`69b83c01`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/69b83c01`. Done closes only after latest editable snapshot is clean. Prior: `af1ddbb5` (PDF validity) ← `31c1de01` (quiet autosave) ← `ce752b43` (#113). |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged** (hash-matched `techpack_pdf.py` / `techpack_ai_professional.py` during audit). |
+| AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
+| Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
+| Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
+| Deploy backup | `/var/backups/fashionrise/done-race-fe-deploy-20261027T164012Z` (rollback → prior FE `af1ddbb5`) |
+| AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Audit paid calls: 0.** |
+
+## OWNER ACCEPTANCE PASS — 2026-10-27 (Measurements & Details)
+
+Owner confirmed PASS on production FE **`69b83c01`** for all four scenarios:
+
+1. Open editor without flicker / write loops.  
+2. Edit a measurement and close with Done.  
+3. Reopen and confirm the saved value.  
+4. Edit a design that already has a Professional PDF → UI shows **Generate AI PDF** (not stale Download).
+
+Quiet autosave + PDF validity + Done/save race (PR #114) remain LIVE. **No further editor work** unless a new regression appears.
+
+## Professional AI Technical Pack quality audit — 2026-10-27 (docs only)
+
+| Item | Detail |
+|---|---|
+| Deliverable | [`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`](./TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md) |
+| Branch | `cursor/techpack-quality-audit-77c6` (from docs tip `ac76632a` / production FE lineage) |
+| Decision | **NEEDS IMPROVEMENT** |
+| Real PDFs inspected | **FR-7182** (pink striped dress, V3.1), **FR-D47D** (Magic = tunic+trousers but PDF = 1× dress), **FR-CF5A** (burgundy slip, V2 footer) |
+| Not evaluable | **FR-3958** lavender hoodie + yellow shorts — draft only, **no** Professional export |
+| Offline tests | `test_techpack_v3_professional` + `v31_one_tap` + `v2_pdf_fixtures` + `provenance` → **20 passed** (mock provider, $0) |
+| Top P0 | Multi-piece identity collapse (FR-D47D); AI pattern rows labeled `approved_template` |
+| Top P1 | silk≠cotton without REVIEW on stored FR-CF5A; sleeveless + sleeve length 60; long-sleeve assumption on ¾ tunic |
+| Safety | No production code/deploy/migration; private PDFs not committed; **0 paid AI** |
+| Blocked / unapproved | Fixes, regenerations, deploys, merges of stale `main` / unrelated PRs |
+
+### Exact next action (PM)
+
+1. Read the audit scorecards (especially FR-D47D P0 and FR-7182 `approved_template`).  
+2. Choose: **targeted fix** (multi-piece generate gate + review_state default + PDF REVIEW/sleeve guards) **or** owner visual review of FR-7182 pages 1/3/5 first.  
+3. Do **not** authorize paid Professional regenerations until that choice is explicit.
+
+## Quiet autosave + PDF validity + Done race (2026-10-27) LIVE — owner accepted
+
+| Item | Detail |
+|---|---|
+| PR / branch | FE [#114](https://github.com/perielad2-netizen/FashionRise/pull/114) · `cursor/web-techpack-autosave-quiet-77c6` · tip `69b83c010391cb14d937a0ba777a77a8de87be73` |
+| Quiet autosave | Dirty-only 700ms debounce; no Saving/Saved chrome; fingerprint omits server `ai` |
+| PDF validity | Local edits + server `dirty_since_generation` hide Download; sync after PATCH without form replace |
+| Done-race root cause | `if (saved || !isEditorDirty())` closed after an older successful PATCH even when newer mid-flight edits remained |
+| Done-race fix | Non-overlapping flush loop closes only when fingerprint is clean and saves settled; re-entry guard on Done/Escape; failure keeps editor + Retry |
+| Tests (StrictMode, 390/768/1366) | Clean Done **0** PATCH; dirty Done **1**; A→Done→edit B mid-flight → B persisted before close (`maxInFlight=1`); B fail → stay open; Done during background PATCH → no overlap; repeated Done/Escape → no duplicate writes; prior quiet/PDF suites green (**73** related tests) |
+| Production verify | `current`→`69b83c01`; version.json full SHA; health/ready OK; BE still `732bda9f` |
+| Safety | FE-only; BE/worker untouched; **0 paid AI** |
+| Owner acceptance | **PASS — 2026-10-27** |
+| Rollback | `ln -sfn /var/www/fashionrise/releases/af1ddbb5 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` · or `done-race-fe-deploy-…/ROLLBACK.sh` |
+
+## V3.1 — what shipped (2026-10-27)
+
+| Item | Detail |
+|---|---|
+| Measurement reset root cause | `MeasurementsSheet` effect depended on `groups` (rebuilt whenever `pieces` identity changed on each keystroke) and reset `groupIndex` to Body |
+| Measurement fix | Track active group by stable id; init only on open / draftKey / initialGroupId; clamp if piece removed |
+| Mobile tests | Vitest keystroke harness: Finished Dress + Preferences + two-piece outfit; focus retained |
+| Generation UX | Single **Generate AI PDF** — no Basic pack / cost-estimate / confirm checkbox in the active workflow |
+| Server intent | One-tap mints confirm token server-side; allowlist, ceilings, concurrent, idempotency preserved |
+| Progress | Named phases on `TechpackAIRun.request.progress`; overlay + `GET …/ai/latest-run` resume (no duplicate paid start) |
+| PDF | Larger detail flats; material REVIEW (silk≠cotton); sleeveless sleeve/construction/inventory flags; `PROPOSED BACK — UNVERIFIED`; footer **Create Real Design V3.1** |
+| Offline PDF / mock AI | BE `test_techpack_v31_one_tap.py` **6 passed**; V3 professional + provenance **13** with disposable `fashionrise_test` |
+| Production smoke | Health/ready OK; OpenAPI exposes generate-professional + latest-run; Alembic `010`; version.json `9ba396a3` |
+
+### Next recommended action (owner — Samsung)
+
+1. Hard-refresh FashionRise (or clear site data once) → confirm App / Create Real Design build **`9ba396a3`**.
+2. Open saved Magic look → Step 3 → Finished Garment → type several values → **must stay on Finished** (no jump to Body).
+3. Step 4 → one tap **Generate AI PDF** → see Magic-style progress → PDF ready → Preview / Download (no second payment).
+4. Review PDF for detail size, material REVIEW, sleeveless construction, proposed back label.
+5. Report results; do not ask Cursor to re-run paid generate unless a real failure appears.
+
+### Rollback (V3.1)
+
+- FE: `ln -sfn /var/www/fashionrise/releases/cf2a31ac /var/www/fashionrise/current && nginx -t && systemctl reload nginx`
+- BE: restore files from `/var/backups/fashionrise/v31-deploy-20261026T233003Z/` into `/opt/fashionrise/src/backend/…` and `systemctl restart fashionrise-api`
+- DB dump retained at that backup path (prefer app rollback; no migration to reverse)
+
+## CRITICAL fix — root causes (2026-10-26)
+
+| Bug | Root cause | Fix |
+|---|---|---|
+| `OPENAI_REASONING_EFFORT is empty` on paid generate | `OpenAIProfessionalProvider.analyze_garment()` called `chat_completion_kwargs` without `reasoning_effort` | Pass `reasoning_effort=settings.openai_reasoning_effort` |
+| Mobile measurements unusable on Samsung Internet | Nginx still served **`129e57dd`** (no Edit Measurements). Symlink `current`→`5f519734` was **not** the active root. Emulator shots of `5f519734` were mistaken for phone evidence. | Deploy `33230fa0` + set Nginx root + `current` to same release; auto-open sheet; value-first inputs |
+| Step 4 AI hard to reach / errors buried | Form pane scroll not targeted; errors below outfit card | `scrollStageIntoView` on form pane; sticky AI error panel near controls |
+| Caching / version identity | Stale Nginx root + no visible FE build id | Root aligned; `Build {sha}` in Create Real Design header; index no-cache |
+
+### Failed AI run audit (read-only)
+
+| Check | Result |
+|---|---|
+| Matching failed run | **1** with `OPENAI_REASONING_EFFORT is empty` |
+| Status | `failed` |
+| Cost recorded | **0¢** |
+| Provider called | **false** / null (request construction failure — no vision request) |
+| Artifacts | **0** |
+| Draft preserved | **yes** (run did not mutate pack content) |
+| Marked successful? | **No** — left failed |
+
+### Verification matrix (do not conflate)
+
+| Layer | Result |
+|---|---|
+| Unit / SDK-boundary tests (mocked OpenAI) | BE **42 passed** (SDK boundary + V3 + model migration); FE TechpackScreen+MeasurementsSheet **20 passed** |
+| Emulator / headless Chrome 360/390/430 | Measurement sheet + Stage 4 pack UI screenshots under `/opt/cursor/artifacts/techpack-crit-fix/` — **simulated viewports only** |
+| Production browser smoke (origin) | Health OK; Nginx root `33230fa0`; reasoning kwargs resolve to `none`; AI gates unchanged; Alembic `010` |
+| Real Samsung Internet device | **Not exercised by Cursor** — left to owner |
+| Owner acceptance | **Pending** |
 
 
-## Prior production lineage notes
+## Mobile step modals (2026-10-26 night) LIVE
 
-See earlier sections in git history / PR #115 audit for Professional PDF quality findings (FR-7182 / FR-D47D / FR-CF5A). Keep the audit document intact as historical evidence.
+Owner Samsung recording showed step chips with forms buried under the look preview. FE PR [#101](https://github.com/perielad2-netizen/FashionRise/pull/101) `fd9718f3` deployed: tap step → full-screen modal (StageSheet 1/2/4, MeasurementsSheet 3). Nginx root + `current` = `fd9718f3`. BE still `186cac84` (reasoning_effort fix). **Owner Samsung re-check pending** — emulator screenshots are not phone acceptance.
+
+### Next recommended action (owner)
+
+1. Open FashionRise on Samsung Internet (normal or fresh tab).
+2. Confirm Create Real Design header shows **Build 33230fa0** (Settings/About-equivalent on this screen).
+3. Open an existing Magic look → Create Real Design → Step 3 → enter Waist/Height → Save & Done → reopen → confirm value persists.
+4. Step 4 → select **AI Professional** → Get cost estimate → confirm checkbox → **Generate Professional Pack** (first paid test by owner).
+5. Report illustrations / PDF back to ChatGPT.
+
+### Rollback
+
+`/var/backups/fashionrise/techpack-crit-fix-deploy-20261026T213807Z/ROLLBACK.sh` restores prior Nginx root `129e57dd` and prior BE service files. Prefer app-only rollback; DB dump retained but not preferred.
+
+---
+
+**Operator / Cursor VPS workflow:** Cursor already has authorized SSH (`FASHIONRISE_VPS_*`) and Git credentials for this host. Future PM assignments should authorize Cursor to run FashionRise-scoped VPS commands directly rather than asking the human to relay shell steps. Independent PM approval is still required for deploy, migrations, Nginx, Cloudflare, and secret handling. (Standing handoff also tracked in draft PR [#14](https://github.com/perielad2-netizen/FashionRise/pull/14).)
+
+**WEB-V2.2 acceptance on production:**
+
+| Check | Result |
+|---|---|
+| Desktop acceptance | **5 / 5 PASS** |
+| Cross-device cloud recovery | **PASS** |
+| Two-tab conflict resolution | **PASS** |
+| Tablet portrait | Usable |
+| Tablet landscape in a normal browser | **Limited.** Tabs and the address bar leave too little height, so the paper and side panels were cut off. WEB-V2.3 corrects this. |
+
+**WEB-V2.3:** merged as PR [#12](https://github.com/perielad2-netizen/FashionRise/pull/12) at `f8a5b222`. Real-tablet acceptance 6/6 PASS. Report: `docs/WEB-V2.3-TABLET-LANDSCAPE-QA.md`
+
+**WEB-V3A:** merged PR [#13](https://github.com/perielad2-netizen/FashionRise/pull/13) at `85b6561b` and deployed 2026-10-20T12:45Z. Report: `docs/WEB-V3A-DESIGN-LIBRARY-QA.md`. Deploy record: draft PR [#15](https://github.com/perielad2-netizen/FashionRise/pull/15).
+
+**WEB-V3A operator-reported production acceptance** (recorded via PR #15; not independently reproduced by Cursor):
+
+| Check | Result |
+|---|---|
+| Desktop draw → Save → My Designs → Open → Export PNG | **5 / 5 PASS** |
+| Tablet / cross-device library, reopen, rotation, export | **4 / 4 PASS** |
+| Offline Save → honest error → online Try again (one card) | **PASS** |
+| Two-device draft conflict **detection** | **PASS** (detection only; both resolution choices not fully accepted) |
+| Login/Studio recovery after temporary SW mitigation (“I'm in”) | **PASS** |
+
+**Stage B operator browser acceptance:** **6 / 6 PASS** (valid Access: sign-in, Studio, drafts, My Designs, reopen, PNG Export — operator-confirmed). Cursor infrastructure probes (Access 302, AOP, SW hash, registration UI off) remain separately recorded in `docs/deploy/PWA-FRONTEND-ROLLOUT-STAGE-B.md`.
+
+**Still outstanding for WEB-V3A / Access:** **expired** Cloudflare Access session check with the permanent SW; second-account privacy (needs registration activation); untested conflict-resolution branches (Keep device / Use cloud).
+
+**WEB-V3B / registration:** **MERGED** PRs [#19](https://github.com/perielad2-netizen/FashionRise/pull/19)/[#20](https://github.com/perielad2-netizen/FashionRise/pull/20)/[#26](https://github.com/perielad2-netizen/FashionRise/pull/26). **Production activation PASS** (2026-10-21): backend `46747e85`, migration `004`, Nginx POST register allowlist, `REGISTRATION_ENABLED=true`, frontend Create Account on. **Real second-user browser acceptance PASS** (operator-confirmed 2026-10-21). Access/AOP unchanged. JWT/Option B hardening remains a **separate** optional track.
+
+**WEB-V4A (Magic → React):** **MERGED** PR [#27](https://github.com/perielad2-netizen/FashionRise/pull/27) at `dc9e31aa` and **deployed**. React Studio uses Unity polish + poll/recovery; authenticated job image; `image_base64` redacted from job API; See last result after refresh. Production Magic UI on; Nginx AI allowlist live. **No paid generation yet** (operator deferred). Docs-only draft PR [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) records activation — **do not merge as a deploy artifact**.
+
+**WEB-V4B (Fashion design toolkit):** **MERGED** PR [#29](https://github.com/perielad2-netizen/FashionRise/pull/29) and **deployed** with V4C at `d7e37b59`.
+
+**WEB-V4C (Custom fabric upload):** **MERGED** PR [#30](https://github.com/perielad2-netizen/FashionRise/pull/30) and **deployed** at `d7e37b59` / Alembic **`005`**. Private `fabric_assets` + owner-auth image route live.
+
+**Production defect (2026-10-22) — fill autosave / Keep-this-device:** **Hotfix MERGED + backend deployed** at `c21fee6b` (now superseded by full `2cbc1ad0` stack). Operator may still need to choose **Keep this device** once in any leftover conflict UI.
+
+**WEB-V4D + WEB-V4E production deploy (2026-10-22):** Authorized operator rollout of `main` **`2cbc1ad04e5bfc01d1d356c92398e26e3014afe9`**. Backend + worker + frontend switched; Alembic stayed **`005`**; **0** deploy-time paid OpenAI calls; AI queue had **0** non-terminal jobs before worker restart. Deploy detail recorded in docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) — do not auto-merge as a deploy artifact.
+
+**Post-deploy Magic operator sample:** Visual acceptance **PASS** for the first tested design (professional fashion illustration; creative concept preserved). Textile / fabric-pattern fidelity was **not exact**.
+
+**Magic pose regression (Issue [#39](https://github.com/perielad2-netizen/FashionRise/issues/39), 2026-10-23):** Second sample — original asymmetric bent/lifted-leg croquis stance was reposed by Magic into a more conventional upright stance with both boots lowered. Professional WEB-V4E polish kept; **pose fidelity NOT accepted**. **PR #41 MERGED** to `main` @ `4819b951` (`pose_lock` + priority packing + anti-repose brief) — **not deployed** to production BE/worker. Detail: `docs/WEB-V4E-MAGIC-POSE-FIDELITY.md`.
+
+**WEB-V4F:** **MERGED** PR #37 @ `1aa5dc5a` and **frontend-only deployed**. HSV picker + Magic contain + tablet Focus/materials. Backend/worker unchanged at `2cbc1ad0`. Operator authenticated acceptance **5/5 PASS**. Docs deploy record: draft PR [#38](https://github.com/perielad2-netizen/FashionRise/pull/38).
+
+**WEB-V4G:** **MERGED** PR [#40](https://github.com/perielad2-netizen/FashionRise/pull/40) @ `350a3b7e` and **frontend-only deployed**. Operator authenticated acceptance **5/5 PASS** (numeric brushes + wheel, 16 gradients + custom designer, interactive closed custom-gradient fill, save/reopen/export, tablet Focus/materials/undo + legacy designs). Docs checkpoint: draft PR [#44](https://github.com/perielad2-netizen/FashionRise/pull/44).
+
+**WEB-V4H (MERGED PR #45 — Issue #43):** Immersive full-screen drawing with real zoom/pan (Konva Layer transform + inverse pointer mapping), Fit Page / Fit Width / 100%, native Fullscreen API + fixed-viewport fallback, pinch / two-finger pan, Space+drag + Hand tool, Ctrl/Cmd+wheel zoom (Alt+wheel remains V4G brush size). **MERGED + FE deployed** @ `4f332a62`. **Real-tablet operator acceptance: 7/7 PASS.** Focus was still present at merge; WEB-V4I retires it.
+
+**WEB-V4I (MERGED PR #48 — Issue #47):** Frontend-only tablet UX polish: fit intact 3:4 paper via cqh; Models overlay gallery; Focus removed; Settings Magic Soon footer removed; Models a11y focus trap. **MERGED + FE deployed** @ `dfcaa609`.
+
+**P1 #51 — Fullscreen Hand→Pencil (ACTIVE HOTFIX):** After Full Screen Drawing → Hand pan/pinch-zoom → Pencil, fresh strokes are ignored until page refresh. **Root cause (proven):** `DrawingCanvas` window-pointer `useEffect` depended on `pointFrom`→`viewport`; pan/zoom rerenders remounted listeners and **cleared `gestureCooldownTimer` while leaving `gestureCooldown.current === true`**, so `onPointerDown` returned forever. **Fix:** long-lived window listeners via handler refs (deps: `immersive` only); cooldown timer cleared only on component unmount; clear pan state when leaving Hand. Regression Vitest suite added (controlled viewport React state). **No merge/deploy** until Technical PM review + post-deploy operator mobile/tablet acceptance.
+
+**PWA / Cloudflare Access:** Stage B deployed permanent SW from PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16) at `8c6a391a`. No-session Access **302** verified; AOP **400** without client cert verified. Operator valid-session acceptance **6/6 PASS**. Expired Access **PENDING**.
+
+---
+
+## Product decision (2026-10-18)
+
+| Decision | Detail |
+|----------|--------|
+| Active frontend | **React / TypeScript PWA** under `web-ui/` |
+| Backend | **FastAPI + PostgreSQL** preserved (JWT, uploads, designs, gallery, AI sketch pipeline, Magic, Design Book/PDF) |
+| Unity | **LEGACY** — retained in `FashionRise/` for reference; **do not continue Unity UI work** for product delivery |
+| Unity PR #8 | **Superseded** for active client development; **do not merge** as the product path; PM may close later |
+| Reason for pivot | Unity Creator Studio visual fidelity was rejected; web enables faster iteration, true PWA/installable app feel, and a structured stroke model for future tools |
+| WEB-1 Magic | Visual CTA only — **no OpenAI / paid AI calls** |
+| Next after WEB-1 | Operator visual review → **WEB-2** (connect Magic to existing backend pipeline) |
+| **Registration (2026-10-20)** | **Invite-only beta** (Cloudflare Access outer + application invitation inner). **Not** public registration. |
+
+---
+
+## Development integration
+
+| Item | Status |
+|------|--------|
+| PR #1 Magic Look | **MERGED** — `433b1b99` |
+| PR #6 GPT-6 Luna | **MERGED** — `a5b3c167` |
+| PR #7 status docs | **MERGED** — `2fc4c1fa` |
+| GitHub `main` | **`dfcaa609`** — WEB-V4I merged (PR #41 pose fidelity source present, BE not deployed) |
+| Production frontend / backend / worker | **`4589a62d` / `6b253cb5` / `6b253cb5`** · Alembic **`005`** · Dual Magic BE **not** deployed |
+| Unity Visual Reboot VR1 (draft PR #8) | **SUPERSEDED for active client** — not the product path; left open until PM closes |
+| **WEB-1 / WEB-V2.1C** | **MERGED** to `main` as PR #9 (`6df327ba`) |
+| **WEB-V2.2** | **MERGED** as PR #11 (`9db1fa86`) and previously deployed |
+| **WEB-V2.3** | **MERGED** as PR #12 (`f8a5b222`). Tablet acceptance 6/6 PASS. |
+| **WEB-V3A** | **MERGED** PR #13 (`85b6561b`) and **DEPLOYED**. Operator-reported desktop 5/5, tablet/cross-device 4/4, offline retry, conflict detection PASS (see above). |
+| **WEB-V3B** | **MERGED** + **production registration activated** (PR #26 @ `46747e85`, Alembic `004`) |
+| **WEB-V4A Magic React** | **MERGED** PR #27 @ `dc9e31aa` and **deployed** |
+| **WEB-V4B Fashion toolkit** | **MERGED** PR #29 · **deployed** (now at `2cbc1ad0`) |
+| **WEB-V4C Custom fabrics** | **MERGED** PR #30 · Alembic **`005`** |
+| **Hotfix: fill autosave fingerprint** | **MERGED** PR #32 · included in `2cbc1ad0` |
+| **WEB-V4D Studio UX + models** | **MERGED** PR #34 · **DEPLOYED** @ `2cbc1ad0` |
+| **WEB-V4E Magic quality** | **MERGED** PR #35 · **DEPLOYED** backend/worker @ `2cbc1ad0` (edit `max_retries=0`; no generate fallback) |
+| **WEB-V4F color picker + Magic preview** | **MERGED** PR #37 · **FE deployed** @ `1aa5dc5a` |
+| **Magic pose fidelity (Issue #39)** | **MERGED** PR #41 @ `4819b951` — **not deployed**; visual pose **NOT accepted**; no paid validation |
+| **WEB-V4G brushes + gradients** | **MERGED** PR #40 @ `350a3b7e` · **FE deployed** · operator **5/5 PASS** |
+| **WEB-V4H immersive drawing (Issue #43)** | **MERGED** PR #45 @ `4f332a62` · **FE deployed** · real-tablet operator **7/7 PASS** |
+| **WEB-V4I tablet UX polish (Issue #47)** | **MERGED** PR #48 @ `dfcaa609` · **FE deployed** |
+| **P1 #51 Hand→Pencil immersive** | **Draft PR [#52](https://github.com/perielad2-netizen/FashionRise/pull/52)** — gesture cooldown stuck after viewport remount; FE-only; **STOP for PM** (priority over #42) |
+| **Issue #42 / WEB-V4J Front-Back** | **DEPLOYED** drawing @ `4589a62d` + Stage B BE `6b253cb5`. Dual Magic **implementation ready** on PR [#70](https://github.com/perielad2-netizen/FashionRise/pull/70) + FE retry on [#69](https://github.com/perielad2-netizen/FashionRise/pull/69) — **not activated** (`DUAL_MAGIC=false`). |
+| PWA Access fix | **MERGED** PR [#16](https://github.com/perielad2-netizen/FashionRise/pull/16). Still in live SW assertions. |
+| Registration UI gate | **MERGED** PR [#20](https://github.com/perielad2-netizen/FashionRise/pull/20). Production build **on** after activation. |
+| Docs handoffs | Draft PRs [#14](https://github.com/perielad2-netizen/FashionRise/pull/14) (VPS workflow), [#15](https://github.com/perielad2-netizen/FashionRise/pull/15) (deploy record), [#28](https://github.com/perielad2-netizen/FashionRise/pull/28) (Magic activation), [#36](https://github.com/perielad2-netizen/FashionRise/pull/36) (V4D+V4E deploy record — do not auto-merge). |
+| INFRA-2 docs | Separate draft PR #10. |
+| Paid OpenAI | Post-deploy V4E sample visually accepted (textile imperfect). **Issue #39 pose sample NOT accepted.** PR #41 + V4G Cursor paid calls: **0** |
+| Safety flags (prod) | Registration **on** (invite-gated). Magic AI allowlisted (polish + job/image only). Uploads / public docs / Gallery remain Nginx-denied. AOP on. Cloudflare Access unchanged. |
+
+---
+
+## Session pause — where we stopped
+
+**Active work:** WEB-1 tablet-first Creator Studio in `web-ui/`.
+
+**Shipped in WEB-1:**
+
+- Vite + React + TypeScript + React Router + Konva/perfect-freehand + PWA
+- Routes: `/login` → `/studio` (session restore skips login when valid)
+- Real FastAPI auth (`/auth/login`, `/auth/me`, refresh)
+- Studio: Female/Male/Custom/Blank references, Draw/Erase/Undo/Redo/Clear, brush sizes, ink swatches, Dim reference
+- Structured stroke history (clear undoable)
+- Export utility foundation (PNG blob; not customer-facing yet)
+- Magic button shows “coming in the next milestone” (no AI call)
+- Docs reset: Unity marked legacy; web is active client
+
+**Pre-operator hardening (PM review of PR #9):**
+
+- Real `validateLogin` + LoginPage field errors; invalid submit does **not** call API/`login()`
+- `exportCompositePng` uses base (bg+reference) + ink layer; eraser is ink-only
+- DrawingCanvas uses **Pointer Events only** (no mouse/touch duplicate paths)
+- Custom reference validates MIME (`image/jpeg|png|webp`) before object URL
+- No backend / Unity / AI / paid-call changes
+
+**Operator Windows review + drawing/asset amendment:**
+
+- Login and Studio load succeeded in the real browser
+- Visual direction approved as significantly better than the Unity Studio
+- Critical bug: a click could leave drawing armed so later mouse moves continued the stroke
+- Fix: pointer lifecycle requires the primary button (or an active pointer) and ends on pointerup, pointercancel, window release, and mouse `buttons` without bit 1
+- Pencil sizes/freehand retuned for a finer sketch line; pen pressure is stored when the device reports it
+- Selector cards use FashionRise model artwork; canvas uses female croquis + cleaned male display croquis (original male source preserved)
+
+**Final visual & asset integration:**
+
+- Central registry `web-ui/src/assets/uiAssets.ts` + manifest `web-ui/docs/ASSET_MANIFEST.md`
+- Male canvas croquis display asset; Unsaved session label; pointer lifecycle preserved
+
+**WEB-V1 — design-lab mockup reconstruction:**
+
+- DEV-only `/_design/studio`; visual direction **approved** by PM/operator
+- Report: `docs/WEB-V1-VISUAL-QA.md`
+
+**WEB-V2 — functional Studio integration:**
+
+- Approved shell on `/studio`; visual composition **approved**
+- Report: `docs/WEB-V2-VISUAL-QA.md`
+
+**WEB-V2.1 — private-beta draft persistence:**
+
+- Debounced autosave to private `/api/v1/designs` working draft (`fashionrise.studio.draft.v1`)
+- IndexedDB recovery + explicit conflict dialog
+- Model switch confirmation; Brush panel overlay; Magic notice-only
+- Docs: `docs/WEB-V2.1-PRIVATE-BETA.md`
+
+**WEB-V2.1A — data-loss prevention:**
+
+- Authoritative snapshot saves; IndexedDB-on-edit + honest status; 409 concurrency; create reconcile; custom uploads disabled
+
+**WEB-V2.1C — conflict resolution final gate (this amendment):**
+
+- Keep this device rebases onto a revision above the current server snapshot and saves with optimistic concurrency
+- Another concurrent server update reopens the choice; no silent overwrite
+- Use cloud draft replaces IndexedDB even when the cloud revision is lower; Saved only after that write succeeds
+- Automatic cloud writes suspended while a conflict is open, including saves already queued behind the request that opened it
+- Create/reconcile cannot report Saved when acknowledged content differs from the local document
+- Next: PM review, then protected family-beta tablet testing on fashionrise.app
+- Deploy still **not** performed in this PR
+
+**WEB-V2.1B — final persistence hardening:**
+
+- Monotonic IndexedDB writes (delayed cloud A cannot overwrite local B)
+- Atomic Studio create via per-owner advisory lock; equal-rev different-content → 409; identical retries idempotent
+- Studio updates require `expected_revision`; reject stale/non-advancing transitions; non-Studio stays compatible
+- Fingerprint no-op returns last server-acked revision (not unsent local rev)
+- Non-409 preferred PUT failures do not blind-reconcile/overwrite
+- Live FastAPI + isolated Postgres concurrency/create regressions
+- Remaining: private-beta access gating; **operator live tablet acceptance**
+- Deploy target: **fashionrise.app** via Cloudflare + isolated VPS — **not enabled in this PR**
+
+**WEB-V2.2 — premium UI, brand assets, beta honesty (merged as PR #11, deployed frontend `9db1fa86`):**
+
+- Login uses the approved emblem and wordmark on a cream plate. Header uses the approved monogram plus a readable cream/pink wordmark.
+- Library cards are derived from the existing artwork. Female edge matte removed. Originals kept.
+- Beta tools that already worked stay wired. Unfinished controls are labeled Soon or Unavailable.
+- Shortcuts B, E, and undo/redo now match the Settings list.
+- Beta limitation notices render once under the workspace title, including at 1024px and below, and dismiss without opening Settings.
+- Persistence, Magic API, uploads, registration, and infra were not changed.
+- Report: `docs/WEB-V2.2-VISUAL-QA.md`
+
+**WEB-V2.3 — tablet landscape fit and final UI refinements (merged as PR #12, `f8a5b222`):**
+
+Changes (frontend only):
+
+- **Short landscape:** `#root` uses `100dvh` and the shell pads by safe-area insets. Grid rows are `minmax(0, 1fr)`, so panels scroll inside their own column. The 3:4 paper is sized from available width and height (`min(100cqw, max width, 75cqh)`). Compact header, dock, notice, rail, and panel spacing apply only at `(min-width: 821px) and (max-height: 760px)`. The tool rail scrolls when it is taller than the paper column. Model cards no longer overlap in a short library.
+- **Sidebar:** the cropped “Fashion is your superpower” promo card is removed. Navigation controls are unchanged.
+- **Generate with AI:** one line with the Soon label, in a sticky footer inside the Settings panel. Still notice-only.
+- **Desktop brush window:** removed, and the paper takes the reclaimed room. Brush size and opacity stay in Settings. At 1024px and below, the Brush dock opens a dismissible sheet (`BrushControls`, formerly `FloatingBrushPanel`).
+- Portrait keeps the WEB-V2.2 layout. With the Models dock open on a phone, the paper now shrinks instead of running off-screen.
+- No change to persistence, backend, database, Nginx, Cloudflare, AI, uploads, registration, or brand assets.
+
+Correction measured in local Chrome at 100% zoom (offline notice showing):
+
+| Viewport | WEB-V2.2 paper | WEB-V2.3 paper |
+|---|---|---|
+| 1024 × 550 | 346 × 461, bottom 208px below the viewport | 227 × 302, fully visible (260 × 346 with no notice) |
+| 1024 × 700 | 346 × 461, bottom 58px below the viewport | 339 × 452, fully visible |
+| 1180 × 600 | Fits, but the brush window and Generate with AI were below the viewport | 291 × 388; brush controls and Generate visible in Settings |
+| 1440 × 900 | 345 × 460 plus floating brush window | 468 × 624, no floating window |
+
+WEB-V2.3 was merged as PR #12 (`f8a5b222`) and passed real-tablet acceptance 6/6.
+
+**WEB-V3A — Export, Save & My Designs (draft PR #13, not deployed):**
+
+What changed:
+
+- **Export PNG** (More menu):
+  - 768×1024 PNG rendered on the device from the authoritative document.
+  - Cream paper, croquis reference (dimmed when Dim reference is on), and ink in original colours. The eraser never erases the reference. No UI chrome.
+  - Safe filename `fashionrise-<title>-YYYY-MM-DD-HHMM.png`. Honest failures. The object URL is always revoked. No AI and no upload.
+- **Save as design** (header button and More menu):
+  - Dialog with a validated title (1–80 characters).
+  - Stores an owner-private snapshot as a separate design record.
+  - Success is shown only after the server acknowledges a matching snapshot. Retries cannot create duplicates; see the QA doc for the one small documented race. Offline never reports success.
+  - The Studio working draft is untouched.
+- **My Designs** (`/studio/designs`, sidebar item):
+  - The working draft and saved designs are shown separately, with title, date, model, and a bounded on-device preview.
+  - Loading, empty, error, damaged, and refresh states.
+  - Titles are rendered as text. Owner-private. No Gallery or social features.
+- **Open a saved design:**
+  - Fresh fetch plus strict validation.
+  - Never silently replaces unsaved edits: they must sync first (Retry save). A synced sketch needs an explicit "Replace and open".
+  - Known draft id: writes the single working draft forward with the normal `expected_revision` check.
+  - No known draft id: `createOnly` end-to-end (create, recover identical content, or conflict). No blocking list preflight before persistence.
+  - Uncertain network/5xx errors say the server outcome could not be confirmed (they never claim the draft was unchanged). Retry stays safe and can acknowledge the draft created by the first attempt.
+  - Undo history starts fresh, and refresh restores the opened sketch.
+- Fix found in browser QA: the More menu now stays above workspace notices.
+- **Safety amendments (after PM review):** empty-Studio reopen race closed (`createOnly` + backend create/reconcile 409 on different content); uncertain reopen messaging corrected; redundant clean-empty list preflight removed so lost create-only responses recover on retry.
+
+**Working draft vs saved designs:**
+
+| | Studio working draft | Saved design |
+|---|---|---|
+| Count per user | Exactly one (unchanged) | Any number |
+| `design_data.schema` | `fashionrise.studio.draft.v1` | `fashionrise.saved_design.v1` (snapshot nested inside) |
+| `metadata` marker | `draftKind: "studio_working_draft"` | `designKind: "saved_design"`, no `draftKind` |
+| Writes | Autosave, `expected_revision` OCC, create reconcile | One plain create per save. Never updated or overwritten by the UI. |
+| Visibility | Private | Private |
+
+The backend's singleton logic only matches the working-draft marker or a top-level Studio schema, so saved designs never enter create-reconcile or revision checks. This is proven against live FastAPI and PostgreSQL in `backend/tests/test_saved_design_isolation.py`.
+
+**Database / API / migration impact:** **no migration, no new endpoint, no schema change.**
+
+- Reuses the authenticated `POST /api/v1/designs`, `GET /api/v1/designs/my`, `GET /api/v1/designs/{id}`, and the existing working-draft `PUT`.
+- **Narrow backend change:** Studio create/reconcile now returns **409** when an existing working draft has **different content** (including at a higher incoming revision). Same-content retries stay idempotent; lower-revision retries still return the newer existing draft. No new public route. Alembic head stays `003`. No data backfill.
+- `/api/v1/gallery` is not used.
+- **Deploy note:** after merge, restart FastAPI so the create/reconcile change is live. No PostgreSQL migration.
+
+**Safety flags and disabled features (unchanged):**
+
+- No paid AI or OpenAI calls. Magic and Generate with AI stay notice-only.
+- Persistent custom uploads stay disabled. Saved designs never store custom-reference images.
+- Public registration stays off. Public Gallery and unrestricted API routing stay off.
+- No Cloudflare, Nginx, VPS, or production-data changes. No automatic deploy.
+- Home, Design Book, Discover, and future rail tools stay disabled. **My Looks is enabled.**
+
+**Known limitations:**
+
+- A duplicate **Save as design** card is possible only if the original request is still being processed on the server when a retry's lookup runs. Accepted as a non-blocking beta limitation for this PR; server-side dedupe is deferred.
+- If a reopen response is lost and the user refreshes instead of retrying, the normal conflict dialog may appear. The user chooses; nothing is lost. In-dialog errors now say the outcome is unconfirmed.
+- Custom references are not saved.
+- Saved designs cannot be renamed or deleted yet.
+- `/designs/my` returns full rows. This is fine at beta scale.
+- Tested only in local headless Chrome against an isolated database. Physical-device acceptance is still to do.
+
+**Do not:**
+
+- Continue Unity UI / merge PR #8 as product
+- Merge or deploy WEB-V3A before PM approval
+- Activate Magic / public registration / persistent uploads / public Gallery
+- Mix INFRA-2 PR #10 into WEB-V3A
+
+---
+
+## Suggested next steps
+
+1. **Exact next action (owner):** On Android: My Looks → FR-7182 → Create Real Design → Step 3 **Edit Measurements** (full-screen sheet; empty OK) → Continue → Stage 4 select **AI Professional Technical Pack** (not Preview Basic) → Get cost estimate → confirm → **Generate Professional Pack** → review illustrations → **Export Professional PDF**. Send screenshots + PDF for quality review. Do **not** start monetization.
+2. After owner visual review: tune prompts/limits only if FR-7182 flats fail source fidelity (deep V, long sleeves, fitted mini, diagonal pink/white stripes).
+3. Repository reconciliation: keep production lineage PRs as cherry-pick sources; never force-merge unrelated old stacks into stale `main`.
+4. **Do not auto-merge** docs draft PRs [#28](https://github.com/perielad2-netizen/FashionRise/pull/28)/[#36](https://github.com/perielad2-netizen/FashionRise/pull/36)/[#38](https://github.com/perielad2-netizen/FashionRise/pull/38)/[#44](https://github.com/perielad2-netizen/FashionRise/pull/44)/[#46](https://github.com/perielad2-netizen/FashionRise/pull/46).
+5. **Operator residual:** expired Access session test (still PENDING).
+
+---
+
+## Repository map
+
+```text
+FashionRise/
+├── backend/                 # ACTIVE — FastAPI + PostgreSQL
+├── web-ui/                  # ACTIVE — React/TS PWA Creator Studio
+├── FashionRise/             # LEGACY — Unity client (reference only)
+├── deploy/
+├── docs/
+└── README.md
+```
+
+---
+
+## Configuration quick reference
+
+| Concern | Dev |
+|--------|-----|
+| Backend env | `backend/.env` from `.env.example` |
+| Web API base | `web-ui/.env` → `VITE_API_BASE_URL=http://127.0.0.1:8001/api/v1` |
+| Web scripts | `cd web-ui && npm install && npm run dev` |
+| Tests / build | `npm test`, `npm run build`, `npm run lint` |
+
+---
+
+## When you open Cursor next
+
+1. Read **this file**.
+2. Assume **`web-ui/`** is the active client unless the operator says otherwise.
+3. Do **not** resume Unity Creator Studio UI work.
+4. Backend: venv + `alembic upgrade head` + uvicorn on the port matching `VITE_API_BASE_URL`.
+5. Frontend: `cd web-ui && npm run dev`.
+6. Pick work from **Suggested next steps**. WEB-V3A is deployed; WEB-V3B is on `main` but must not be activated in production yet; permanent PWA fix (PR #16) gates the next frontend deploy.
+
+---
+
+## WEB-V3A verification (draft PR #13)
+
+| Gate | Result |
+|------|--------|
+| `npm test` | **Pass: 170 tests, 29 files.** Adds PNG export, save idempotency, format isolation, private filtering, previews, reopen without loss, `createOnly` race/refusal/recovery (including lost create-only response retry), uncertain reopen messaging, offline, switching with queued saves, cross-device conflict, and layout contracts. |
+| `npm run lint` | Pass, with the same three pre-existing oxlint warnings |
+| `npm run build` (`tsc -b` + Vite + PWA) | Pass |
+| Backend focused suites | Studio concurrency + saved-design isolation: **15 / 15**. Full suite: 103 pass, 1 pre-existing unrelated failure (`test_cli_default_is_dry_run`). |
+| Singleton rules | **Intact.** Saved designs never reconcile with the working draft. Different-content Studio create now 409s instead of overwriting. OCC update path unchanged. |
+| Local browser full flow (**simulated**) | **33 / 33** original PASS. Safety amendment re-check **16 / 16 PASS** (create 409, fresh open, empty-open race, uncertain messaging + retry). Isolated `fashionrise_v3a_qa` DB only. |
+| Production database | **Not used** |
+| OpenAI / paid AI | **None** |
+| Backend | Narrow create/reconcile change only. No migration. No infra. |
+| Physical device | **Not yet** |
+
+## WEB-V2.3 verification (PR #12, merged)
+
+| Gate | Result |
+|------|--------|
+| `npm test` | **Pass: 87 tests, 24 files.** Adds landscape notices, brush access, Generate notice, orientation changes, sidebar, and a CSS layout contract. |
+| `npm run lint` | Pass, with the same three pre-existing oxlint warnings |
+| `npm run build` | Pass. Production CSS keeps `100dvh`, the container-unit paper sizing, and its fallback. |
+| Browser matrix | **Pass** at 1024×550, 1180×600, 1024×700, 768×1024, 390×844, 1440×900, 1920×1080, on both the dev server and `vite preview` |
+| Orientation / browser-chrome resize | **Pass.** Same canvas node, ink kept, Undo enabled. |
+| Mouse, pen, and touch stroke placement | **Pass** (CDP-simulated pen and touch) |
+| Desktop pixel diff vs WEB-V2.2 | Only the three approved changes: promo, Generate footer, paper area |
+| OpenAI / paid AI | **None** |
+| Backend / persistence / infra | **Unchanged** |
+| Physical tablet | **Not yet.** Local headless Chrome only. |
+
+---
+
+## WEB-V3B verification (draft PR #19, final safety corrections)
+
+| Gate | Result |
+|------|--------|
+| Test DB safety | Fail-closed: missing `DATABASE_URL_TEST` → exit **2**; `fashionrise_beta` rejected; suites on `fashionrise_test` / `fashionrise_mig_v3b` only |
+| Bound migration smoke | `run_migration_smoke.py` refuses missing/beta without connecting; `0→head` + `003↔004` on `fashionrise_mig_v3b` with ambient `DATABASE_URL` pointing at beta name — Alembic still bound to mig DB |
+| Invite code-file | New-file only (`O_EXCL`/`O_NOFOLLOW`); existing/symlink refused; write failure revokes invite; secret never in stdout/stderr |
+| Invite + concurrency pytest | **19 / 19 pass** |
+| Full backend pytest | **145 pass**, 1 pre-existing unrelated fail (`test_cli_default_is_dry_run`) |
+| `npm test` | **195 / 195 pass** (35 files) |
+| `npm run lint` / `tsc` / `npm run build` | Pass (same 3 pre-existing oxlint warnings) |
+| Rate-limit activation note | `TRUST_PROXY_HEADERS=true` only after Nginx overwrites `X-Real-IP` on **all** proxied API locations (login/refresh included); otherwise all users share `127.0.0.1` |
+| Production DB / Nginx / CF / registration gate | **Untouched** |
+
+## PWA Access fix verification (draft PR #16)
+
+| Gate | Result |
+|------|--------|
+| Branch base | Rebased onto `main` `28449c41` (preserves WEB-V3B) |
+| `navigateFallback` | Explicit `null` (no Workbox `NavigationRoute`) |
+| HTML precache | Removed from `globPatterns`; `**/*.html` ignored |
+| Standard `npm run build` | Runs `tsc` → `vite build` → **embedded** `assert-sw-access-safe` (fails closed). Standalone `npm run check:sw` kept for audits |
+| Unsafe SW fixture red-path | `scripts/fixtures/unsafe-sw-with-html-navigation.js` → `check:sw` exit **1** |
+| Frontend tests | **200 / 200** (includes SW safety + unsafe-fixture red-path) |
+| Lint / tsc / build | Pass |
+| Route smoke (Playwright + active SW) | `/login`, `/register`, `/studio`, `/studio/designs` — document navigations **not** served from SW (`fromServiceWorker=0`) |
+| `REGISTRATION_ENABLED` default | **false** |
+| Production deploy | **Not done** (draft only) |
+
+## WEB-V4B verification (merged PR #29)
+
+| Gate | Result |
+|------|--------|
+| Merge | **MERGED** @ `5a9440c0` (2026-10-22) |
+| Production deploy | **Not done** — live still `dc9e31aa` |
+
+## WEB-V4C verification (draft PR #30 — custom fabric upload)
+
+| Gate | Result |
+|------|--------|
+| Head | Draft PR #30 on `cursor/web-v4c-custom-fabric-77c6` (amendment after PM review of `cd7681b7`) |
+| Base | `5a9440c0` (required) |
+| Private storage | Bytes under `local_storage_root/private_fabrics/` — **outside** `/static/uploads` mount; owner-auth `GET …/image` only; static path **404** |
+| Account caches | `bindFabricCacheToUser` on login/logout/register/restore; generation guard drops in-flight; uploaded tile cache cleared |
+| Pattern scale | Base tile **128px** × scale, clamp 24–512 → 0.25×=32, 1×=128, 4×=512 (no 512-saturation on 2048 uploads) |
+| Image validation | `probe_image_dimensions` (PNG/JPEG/WebP headers) before `Image.open`/`load`; JPG/PNG/WebP + 8 MB / 2048 px preserved |
+| Backend tests | Full suite **226 passed**; 1 unrelated fail (`test_cli_default_is_dry_run` branch-guard expects `cursor/openai-gpt6-luna-77c6`). Fabric suite **6/6** |
+| Frontend tests | **266 / 266** (53 files); lint warnings only (pre-existing patterns); build + `check:sw` **ok=true** |
+| Browser / demo | Real 2048 fabric on curved dress at 0.25×/1×/4×; save/reopen; PNG export; mock Magic capture (no paid call); A→B privacy (list empty, image 404, cache clear, static 404) |
+| OpenAI / paid Magic | **None** |
+| Nginx | Live `nginx -T`: **no** `/api/v1/fabrics` location (auth/designs/AI only). Proposal: `docs/deploy/PROPOSED-NGINX-FABRICS-ALLOWLIST.md` — **not applied** |
+| Cloudflare / workers / Unity | **Unchanged** |
+| Production | **Not deployed** — still Alembic `004` / FE `dc9e31aa` |
+| Blocked operations | Merge, production deploy, Alembic `005` on prod, Nginx reload, paid Magic |
+| Next action | **Technical PM final review of draft PR #30** → approve merge; separate auth later for migrate `005` + fabrics Nginx allowlist + FE deploy |
+
+## Hotfix verification — fill fingerprint (draft PR [#32](https://github.com/perielad2-netizen/FashionRise/pull/32))
+
+| Gate | Result |
+|------|--------|
+| Base | Production-approved `main` `d7e37b59` (Alembic **`005`**) |
+| Root cause | `_studio_content_fingerprint` omitted `fills` → fill-only updates idempotent no-op → FE conflict / Keep-device Save failed |
+| Correction | Normalized `fills` in fingerprint; missing ≡ `[]`; OCC / row locks / 409 / owner isolation preserved |
+| Frontend | Inspected `draftPersistence` / `draftContentFingerprint` — already includes `fills`; **no FE change** |
+| Focused BE | `tests/test_studio_draft_concurrency.py` **21/21** (fill-only solid/gradient/restyle/uploaded-fabric, idempotent, missing↔empty, 409, Keep-device rebase, create reconcile, cross-account) |
+| Full BE | **236 passed**; 1 unrelated fail (`test_cli_default_is_dry_run` branch-guard expects `cursor/openai-gpt6-luna-77c6`) |
+| Ruff | Changed test file clean; pre-existing `design_service` style debt untouched |
+| FE checks | `draftDocument` + `draftPersistence` **21/21** |
+| OpenAI / paid Magic | **None** |
+| Production data | **Untouched** — no IndexedDB clear, no draft delete, no destructive migration |
+| Blocked | Merge, production deploy of hotfix, Magic click |
+| Next | **Technical PM review** → merge → backend-only deploy → operator Keep-this-device recovery |
+
+## WEB-V4D+V4E production deploy verification (`2cbc1ad0`)
+
+| Gate | Result |
+|------|--------|
+| Authorized SHA | `2cbc1ad04e5bfc01d1d356c92398e26e3014afe9` |
+| Backup | `/var/backups/fashionrise/v4de-deploy-20261022T204254Z` · dump **1,520,125** bytes · `gzip -t` OK |
+| AI queue before worker restart | **0** non-terminal jobs (`completed=9`) |
+| Backend / worker | Checked out + restarted at `2cbc1ad0`; health/ready OK; imported code has `with_options(max_retries=0)` |
+| Models / flags | `gpt-6-luna` / `gpt-image-1` / `AI_WORKER_ENABLED=false` / `REGISTRATION_ENABLED=true` preserved |
+| Alembic | **`005` (head)** — no upgrade run |
+| Frontend build | `npm test` **278/278** · lint 0 errors · `tsc -b`+vite build · `check:sw` **ok=true** |
+| Frontend release | `/var/www/fashionrise/releases/2cbc1ad0` · 10 library PNGs + legacy female/male croquis |
+| Nginx | FashionRise `root` switched only; `nginx -t` OK; reload OK; neighbors untouched |
+| Deploy paid OpenAI | **0** (worker started; no completions/edits after restart) |
+| Infra API smoke | `/health` ok · `/ready` ok · auth/designs/fabrics **401** unauth · register empty **422** · polish empty **401** |
+| Signed-in Studio browser acceptance | **PARTIAL** — Magic sample visually accepted; broader Studio UX acceptance still outstanding |
+| Paid Magic visual retest | **PASS** for tested design (textile-pattern fidelity not exact) |
+| Rollback | App-only: checkout `c21fee6b` + nginx root `d7e37b59` (see backup in draft PR #36); DB restore not preferred |
+
+Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRise/pull/36).
+
+## Magic pose fidelity verification (Issue #39 — PR #41 MERGED, not deployed)
+
+| Gate | Result |
+|------|--------|
+| GitHub | **MERGED** @ `4819b951` |
+| Production BE/worker | Still **`2cbc1ad0`** — pose-fidelity code **not live** |
+| Visual acceptance | **NOT accepted** — no paid validation authorized |
+| Scope note | Backend Magic only; WEB-V4G must not modify `sketch_openai.py` |
+
+## WEB-V4G verification (PR #40 — MERGED + FE deployed @ `350a3b7e`)
+
+| Gate | Result |
+|------|--------|
+| GitHub / production FE | **MERGED** + **deployed** @ `350a3b7e` (`/var/www/fashionrise/releases/350a3b7e`) |
+| Backend / worker / Alembic | Unchanged `2cbc1ad0` / `005` |
+| Operator authenticated acceptance | **5/5 PASS** |
+| Docs checkpoint | Draft PR [#44](https://github.com/perielad2-netizen/FashionRise/pull/44) — do not auto-merge |
+
+## WEB-V4H verification (Issue #43 — MERGED PR #45 @ `4f332a62`)
+
+| Gate | Result |
+|------|--------|
+| Scope | Frontend-only immersive drawing; merged + FE deployed |
+| Base / production FE | `main` / production @ **`4f332a62`** |
+| Operator real-tablet acceptance | **7/7 PASS** |
+| Viewport architecture | Shared `viewportTransform` (absolute CSS-px/design-px scale + pan); Konva Stage fills host; content Layer applies scale/pan; `screenToDesign` inverse for all pointers |
+| 100% | Absolute 1 design px = 1 CSS px |
+| Fit modes | Fit Page · Fit Width (top-aligned when taller) · Center/Reset · Zoom ± · clamp limits keep Fit Width/100% attainable |
+| Fullscreen | Native Fullscreen API from user gesture when available; fixed immersive CSS fallback otherwise; `fullscreenchange` tracked |
+| Gestures (hardened) | Combined `pinchPan` (prev-mid design → next mid); second touch cancels draft + releases capture; window `pointerup/cancel/lostpointercapture` clears outside-stage pointers; cooldown never clears while residual pointers remain; touch Fill/Eyedropper commit on confirmed single-pointer up; Space+drag + Hand; Ctrl/Cmd+wheel zoom; **Alt+wheel reserved for V4G brush size** |
+| Escape precedence (at merge) | Modal → dock/sheet → immersive exit → Focus exit |
+| Toolbar (hardened) | Full-bleed safe-area two-row bar; Exit pinned; measured inside viewport on tablet/mobile/desktop |
+| Export / Magic capture | Viewport-only — design space remains **768×1024** |
+| Operator acceptance | **7/7 PASS** on real tablet |
+| Paid OpenAI | **0** during V4H engineering |
+| Production | FE **`4f332a62`** · BE+worker **`2cbc1ad0`** · Alembic **`005`** |
+| Magic pose PR #41 | Merged on `main`, **not deployed**; visual pose **NOT accepted** |
+| Docs PRs #44 / #46 | Remain draft — **do not auto-merge** |
+| Follow-on | Focus retired in WEB-V4I (product decision) |
+
+## P1 #51 Hand→Pencil hotfix verification
+
+| Gate | Result |
+|------|--------|
+| Issue | [#51](https://github.com/perielad2-netizen/FashionRise/issues/51) — Fullscreen Hand→Pencil stops drawing until reload |
+| Severity | **P1** — primary immersive drawing broken after pan/zoom tool switch |
+| Baseline | GitHub / production FE **`dfcaa609`** · BE+worker **`2cbc1ad0`** · Alembic **`005`** |
+| Reproduction | Studio draw → Full Screen → Hand → pan + pinch zoom → Pencil → strokes ignored until refresh |
+| Root cause | Window pointer `useEffect` deps included `pointFrom` (viewport-sensitive). Pan/pinch `setViewport` remounted the effect; cleanup **`clearTimeout(gestureCooldownTimer)`** without clearing **`gestureCooldown.current`**, permanently blocking `onPointerDown`. |
+| Before evidence | New controlled-viewport Vitest cases **5 failed / 0 strokes** on `dfcaa609` after pinch→Pencil (cooldown stuck). |
+| After evidence | Same cases **14/14 pass** after fix; Pencil commits strokes after Hand pan, pinch, cancel/lostcapture, outside release, tool hops (Erase/Fill/Eyedropper), repeated Hand/Pencil. |
+| Fix | Stable window listeners (`immersive` only) via handler refs; cooldown timer cleared **only on unmount**; clear `panning` when leaving Hand. No arbitrary substitute timeouts; residual pinch fingers still cannot stroke. |
+| Scope | Frontend-only; no BE/worker/Nginx/Cloudflare/migrations/schema/artwork/paid AI; no WEB-V4J Front/Back |
+| Frontend gates | Vitest **362** · oxlint warnings-only · `tsc -b` · production build · `check:sw` ok (no HTML precache / NavigationRoute) |
+| Browser QA | Playwright on DEV `/_design/studio-layout`: **Android 390×844 PASS** (Path 1→2 after Hand/pinch/zoom→Pencil; 2→3 after Eraser/Fill/Eyedropper hop); **iPad 1024×768 PASS** (same). Shots: `/opt/cursor/artifacts/screenshots/p1-51-{android,ipad}-*.png`. No real multitouch hardware / no production Access session. |
+| Production | **Unchanged** — still FE **`dfcaa609`** until authorized FE-only rollout |
+| Next action | Technical PM review → merge → authorize FE-only deploy → **operator real mobile/tablet acceptance** of Hand→Pencil recovery → then resume WEB-V4J |
+| Merge / deploy | **Blocked** — STOP for Technical PM review |
+
+## WEB-V4I verification (Issue #47 — MERGED PR #48 @ `dfcaa609`)
+
+| Gate | Result |
+|------|--------|
+| Scope | Frontend-only; merged + FE deployed @ `dfcaa609` |
+| Base | Was `main` @ **`4f332a62`** (WEB-V4H); now production FE **`dfcaa609`** |
+| Task A — croquis fit | Normal Studio paper sized with `min(100cqw, …, calc(100cqh * 768 / 1024))` + matching `max-height`; 3:4 preserved. Emulated bounds: Mini portrait paper **600×800** in stage **750×842**; Mini landscape **477×636** in **934×648**; Pro portrait **640×853**; mobile **364×485**; short desktop **402×536**; desktop **560×747**. `paperFits=true`, `aspect≈0.75` on all seven viewports. |
+| Task B — Models gallery | Root cause: inline `max-height: 220px` strip stole canvas height. Now overlay dialog (`data-dock-overlay`) with large cards; portrait bottom sheet (~72vh); landscape side drawer (`min(480px,56vw)`, 2-col cards ~**220×294**). Stage size unchanged when Models opens. Escape/Done/scrim dismiss. Desktop sidebar browsing preserved (>1024). |
+| Task C — Focus removed | No Focus / Exit Focus controls; Full Screen Drawing enter/exit + immersive toolbar remain. Escape: modal → dock → immersive exit. |
+| Task D — Settings Soon footer | `SettingsInspector` footer / `generateSoon` removed. Header Magic (env-gated Soon) intact. |
+| A11y amendment | Models gallery: focus moves to **Done** on open; Tab/Shift+Tab trapped inside dialog; focus restored to Models trigger on Done / Escape / scrim. Model-switch `ConfirmDialog` keeps focus + Escape precedence (`modalOpen()` excludes dock overlays). Regression tests in `CreatorWorkspace.layout.test.tsx`. |
+| Visual PM approval | Tasks A–D approved at **`aef499b6`**; a11y-only follow-up on same PR #48 |
+| Frontend tests / lint / build / SW | Vitest suite · oxlint warnings-only · `tsc -b` · production build · `check:sw` ok=true (no HTML precache / NavigationRoute) — see latest PR head |
+| Browser QA | DEV `/_design/studio-layout` headless Chrome measurements + screenshots under `/opt/cursor/artifacts/screenshots/v4i-*` (visual SHA). A11y covered by Vitest focus/trap/restore cases. |
+| Limitations | Emulated viewports only — physical tablet confirmation after deploy. Konva croquis is canvas-drawn (no separate img rect); paper frame used as visible page bounds. iPad Pro landscape (1366×1024) uses desktop sidebar Models (by design). Drawing stroke/export regression covered by existing Vitest, not re-paid-AI. |
+| Issue #42 | **Not** implemented |
+| Paid OpenAI | **0** |
+| Production | FE **`dfcaa609`** · BE+worker **`2cbc1ad0`** · Alembic **`005`** |
+| Follow-on | P1 #51 Hand→Pencil hotfix (active) |
+
+## WEB-V4F verification (PR #37 — color picker + Magic preview + tablet layout; FE deployed)
+
+| Gate | Result |
+|------|--------|
+| Scope | Frontend-only; no backend / worker / Nginx / AI / Magic prompts; **no WEB-V4G** brush/gradient features |
+| Base | `main` @ `2cbc1ad0` (production baseline) |
+| Color picker | Built-in HSV professional picker (SV square, hue, HEX/RGB sync, Apply/Cancel, portal modal) |
+| Magic modal | Full-image `object-fit: contain`; notes collapsible; actions remain accessible |
+| Tablet Focus bug (768×1024) | **Fixed** — `.focusMode .center` no longer overrides narrow one-column/two-row grid; paper keeps nonzero 3:4 box; single Exit Focus via dock |
+| Tablet materials sheet | **Fixed** — fixed `min(48vh,420px)` sheet for Colors/Fabrics/Gradients; Done + opaque scrim; tab heights stable (420/420/420) |
+| Compact thumbs | Gradients **64px** high (56–72 clamp), **4/row** on Mini sheet (≈744px panel); **2/row** in narrow panels/phones; fabrics capped **≤100px**; container-query density |
+| Tall-tablet paper | Raised mid-width `--paper-max-w` (was 380px); iPad Pro 13 portrait paper ~524×699 (3:4) |
+| CreatorWorkspace browser QA | DEV `/_design/studio-layout`: Focus + materials + measured thumb rects (Mini 4×64px gradients; mobile/desktop 2×64px; fabrics maxH 100) |
+| Frontend tests | see latest PR head |
+| Paid OpenAI during implementation | **0** |
+| Operator authenticated acceptance | **5/5 PASS** |
+| Merge / deploy | FE **deployed** @ `1aa5dc5a` (backend/worker unchanged) |
+| Outstanding | Production FE `dfcaa609`; **P1 #51 hotfix draft**; Issue #42 / V4J suspended; Magic pose Issue #39 / PR #41 not deployed |
+
+## WEB-V4J Front/Back production release verification (2026-10-25)
+
+| Check | Result |
+|---|---|
+| Preflight BE baseline | **PASS** — live `12f7acdf` (Stage A maint) before cutover; FE `a740a9b7`; Alembic `005`; api/worker/nginx/postgres active |
+| Stage B BE deploy | **PASS** — `6b253cb52beb9524f976ba805049bf3de2506985`; no polish-dual in tree; `/health`+`/ready` ok; Alembic still `005` |
+| FE deploy (PR #69 + Dual Magic gate) | **PASS** — `/var/www/fashionrise/releases/4589a62d`; `FRONT_BACK=true`, `DUAL_MAGIC=false`, `MAGIC_UI=true` |
+| Dual Magic BE PR #70 | **NOT DEPLOYED** (held) |
+| Front/Back smoke | **PASS** — female-straight Front draw → Flip → Back draw |
+| Save / reopen | **PASS** — draft.v2 + saved design both sides ink preserved after refresh |
+| Nine Back models | **PASS** — 9/9 `*-back.png` `image/png`; `female-atelier` Front-only (no real back PNG) |
+| Existing Front Magic | **PASS** — Front-only still attempts `/ai/sketch/polish` (smoke-blocked; **0** paid jobs) |
+| Dual Magic safely disabled | **PASS** — Back ink → “Front/Back Magic coming soon”; polish-dual requests **0**; API polish-dual **404** |
+| Backup | `/var/backups/fashionrise/v4j-frontback-deploy-20261025T174543Z` |
+| Unresolved | None for this scoped release. Dual Magic remains gated pending PR #70 authorize. |
+
+## Undo→autosave conflict fix (2026-10-26)
+
+| Check | Result |
+|---|---|
+| Root cause | Back undo emptied ink without `clearBackIntent` → BE OCC 409; stale in-flight draw save vs authoritative undo opened false Draft recovery |
+| Fix | FE-only: stamp `clearBackIntent` on Back undo/redo empty; same-content + authoritative-match 409 ACK in `flushCloudSave` / `persistStudioDraft`; multi-tab foreign content still conflicts |
+| Vitest | **29/29 PASS** (undoAutosave + frontBack + queue + draftPersistence) |
+| Playwright persistence | Undo→Save Front **PASS** · Undo→Save Back **PASS** · multi-tab conflict **PASS** · `clearBackIntent` seen |
+| Deployed FE | **`c99c2c86`** (`c99c2c86739f6a76d40231079bf1b861e83cbfca`) · PR [#79](https://github.com/perielad2-netizen/FashionRise/pull/79) |
+| BE / worker / Alembic / flags | **Unchanged** (`c103ee8d` / `005` / Dual Magic ON) |
+| Backup / rollback | `/var/backups/fashionrise/v4j-undo-autosave-fe-deploy-20261026T120935Z` → `db11bf66` |
+| Paid AI | **0** |
+
+## Magic polish + color-authority fix (2026-10-26)
+
+| Check | Result |
+|---|---|
+| Regression | Alphabetical `shared_garment_spec` JSON truncated to 320 chars dropped `main_colors` after lengthy FE `details` |
+| Fix | BE ordered whitelist serialization (`main_colors`/`materials` first; optional notes/details last; complete JSON only) + FE garment-spec color/cleanup locks |
+| Prompt tests | Gray `#9CA3AF` authoritative in final `_build_image_prompt` Front/Back; largest patterned side payload ≤ 4500; Magic quality/coverage suites **PASS** |
+| Deployed FE | **`ec0ad13a`** (`ec0ad13ae00d854d44a1bf3d6d8ee23364d56841`) · PR [#80](https://github.com/perielad2-netizen/FashionRise/pull/80) |
+| Deployed BE/worker | **`18344e6a`** (`18344e6a444dae7aa06f36325bece139997cd44d`) · PR [#81](https://github.com/perielad2-netizen/FashionRise/pull/81) |
+| Flags / Alembic | Front/Back **ON**, Dual Magic **ON**, pattern fidelity path live · Alembic **`005`** |
+| Backup / rollback | `/var/backups/fashionrise/v4j-magic-polish-deploy-20261026T123621Z` → FE `c99c2c86` / BE `c103ee8d` |
+| Paid Dual sample | **1** operation · Front job `378ed560…` + Back job `eda3327a…` · `image_inputs=1` each · **no retries** |
+| Visual — invented colors | **PASS** (solid gray only; no pink/blue accents / decorative panels) |
+| Visual — uneven strap cleanup | **PASS** (Front asymmetric drape normalized professionally; Back straps cleaned into intentional V/cord back) |
+| Visual — render quality | **PASS** (polished non-photoreal fashion illustration retained) |
+| Fabric patterns | **N/A** this sample (solid fill; no swatch). Prior pattern-fidelity path unchanged. |
+
+
+## Create Real Design / techpack PDF (2026-10-26) DEPLOYED — Issue #83
+
+| Field | Value |
+|---|---|
+| Scope | My Looks → Create Real Design editable tech-pack form → preview → authenticated PDF. Owner-scoped drafts independent of look delete. Every export **DRAFT / UNVERIFIED**. FR-5608 fixes: Page N of M, Height once, cutting reuses Magic looks. AI draft assist disabled. **0 paid AI**. No monetization. |
+| BE | PR [#91](https://github.com/perielad2-netizen/FashionRise/pull/91) `b4a0976c` · Alembic `008` |
+| FE | PR [#92](https://github.com/perielad2-netizen/FashionRise/pull/92) `3ef29bc4` · release `/var/www/fashionrise/releases/3ef29bc4` |
+| Smoke | Authenticated create→export→PDF **PASS** (5 pages, ~3.3MB, DRAFT/UNVERIFIED, Height count=1) |
+| Backup | `/var/backups/fashionrise/techpack-deploy-20261026T163802Z` |
+
+## My Looks Delete (2026-10-26) DEPLOYED
+
+| Check | Result |
+|---|---|
+| Scope | Permanent Delete Look (tombstone). Archive/restore unchanged. No PDF/#83, **0 paid AI**, no erasure of AI job image files. |
+| BE | `DELETE /api/v1/looks/{id}` → `magic_look_meta.is_deleted`; excluded from list/get/patch; idempotent; cross-account 404 |
+| FE | Card + detail Delete; ConfirmDialog cancel/busy/retry; reconcile 404/uncertain before success |
+| Nginx | Looks `{uuid}` `limit_except GET PATCH DELETE` |
+| Tests | BE pytest delete + nginx **PASS**; FE Vitest cancel/confirm/retry + looksApi **PASS**; tsc/build/SW **PASS** |
+| Prod API smoke | **PASS** — single + dual delete, no resurrection, keep sibling, image retained, designs/my OK, cross-account 404 |
+| Deployed FE | **`6be1cf2d`** · PR [#90](https://github.com/perielad2-netizen/FashionRise/pull/90) |
+| Deployed BE | **`26a374d5`** · PR [#89](https://github.com/perielad2-netizen/FashionRise/pull/89) |
+| Alembic | **`007`** |
+| Backup / rollback | `/var/backups/fashionrise/my-looks-delete-deploy-20261026T160605Z` → FE `811ffc52` / BE `ba013fdf` |
+| Limitation | Access UI not automatable from this agent; owner should click Cancel + Delete once in browser |
+
+## My Looks — persistent Magic gallery (2026-10-26) DEPLOYED
+
+| Check | Result |
+|---|---|
+| Scope | Owner-scoped gallery of completed Magic (`sketch_polish`) looks; Front/Back grouping; rename/favorite/archive; Magic **View in My Looks**. No PDF/#83, no Magic prompt/generation changes, **0 paid AI**. |
+| Look identity | Dual: `magic_operation_id`; single: job id. Metadata in `magic_look_meta` (Alembic **006**). Images remain `ai_jobs` + storage files via auth `/ai/jobs/{id}/image`. |
+| BE | `GET/PATCH /api/v1/looks` — pagination, search, All/Favorites/Archived; prefer successful image over failed retry; skip looks with missing files |
+| FE | `/studio/looks` portfolio gallery + detail dialog; lazy auth thumbnails; Studio drafts untouched |
+| Nginx | Exact `GET /api/v1/looks` + `GET\|PATCH /api/v1/looks/{uuid}` only |
+| Tests | BE pytest looks + nginx allowlist **PASS**; FE Vitest looksApi/MyLooksScreen/MagicLookPanel/StudioPage **PASS**; tsc + build + SW safety **PASS** |
+| Prod API smoke | **PASS** — historical+new synthetic looks, dual grouping, rename/favorite/archive/restore, cross-account 404, image owner-scope, designs/my healthy |
+| Deployed FE | **`811ffc52`** · PR [#88](https://github.com/perielad2-netizen/FashionRise/pull/88) |
+| Deployed BE | **`ba013fdf`** · PR [#87](https://github.com/perielad2-netizen/FashionRise/pull/87) |
+| Flags / Alembic | Front/Back **ON**, Dual Magic **ON**, Magic UI **ON**, Registration UI **ON** · Alembic **`006`** |
+| Backup / rollback | `/var/backups/fashionrise/my-looks-deploy-20261026T151741Z` → FE `129e57dd` / BE `108db149` (+ nginx restore; optional `alembic downgrade 005`) |
+| Limitations | Cloudflare Access blocks unattended public browser automation from this agent; owner should confirm UI in Access session. Smoke-loopback FE root not switched (prod `fashionrise.app` was). |
+| Paid AI | **0** |
+
+## Issue #17 — Delete saved design (2026-10-26) DEPLOYED
+
+| Check | Result |
+|---|---|
+| Scope | My Designs Delete + saved-only BE route + narrow Nginx DELETE allowlist. No PDF/#83, no Magic changes, no migration. |
+| BE | `DELETE /api/v1/designs/saved/{id}` — private `fashionrise.saved_design.v1`/`v2` only; owner 404 cross-user; 422 working draft/unknown/damaged; generic `DELETE /designs/{id}` unchanged |
+| FE | Accessible Delete on each valid card; permanent-delete confirm; Cancel no-op; offline/ambiguous reconcile; preview `release`; Studio draft untouched |
+| Nginx | Exact saved DELETE proxied; generic designs DELETE denied at edge (`limit_except GET POST PUT`) |
+| BE tests | `test_delete_saved_design.py` + nginx allowlist script **PASS** (owner V1/V2, cross-user, draft protect, nonexistent, unknown/damaged, siblings) |
+| FE tests | `savedDesignsApi` + `StudioPage.designs` delete suite **PASS** |
+| Prod API smoke | **PASS** — delete V2, keep V1, draft 422, cross-user 404, idempotent 404 |
+| Browser smoke | **PASS** — save two → cancel → delete one → reload; remaining + working draft preserved |
+| Owner production acceptance | **PASS** — 4 saved → 3 after delete; Studio working draft intact |
+| Deployed FE | **`4095e0ac`** · PR [#86](https://github.com/perielad2-netizen/FashionRise/pull/86) |
+| Deployed BE | **`108db149`** · PR [#85](https://github.com/perielad2-netizen/FashionRise/pull/85) |
+| Flags / Alembic | Front/Back **ON**, Dual Magic **ON** · Alembic **`005`** |
+| Backup / rollback | `/var/backups/fashionrise/issue17-delete-saved-20261026T134249Z` → FE `c052e075` / BE `18344e6a` |
+| Paid AI | **0** |
+
+## Issue #17 — post-release delete 404 hardening (2026-10-26) PREPARED — not deployed
+
+| Check | Result |
+|---|---|
+| Production (unchanged) | FE **`4095e0ac`** · BE **`108db149`** · Alembic **`005`** · Dual Magic **ON** · Nginx saved-DELETE allowlist live |
+| Owner acceptance of live Delete | **PASS** (4→3, draft intact) — feature not reimplemented |
+| Exact fix | `deleteSavedDesign`: DELETE HTTP **404** no longer auto-success; reconcile via fresh `listMyDesigns` / `getDesign` using **raw** `row.id` + `user_id` (not `parseSavedDesign` success). Success only when deleted (204) or confirmed **absent**; if still present or verification unavailable → keep card + accurate error |
+| Scope | FE-only (`savedDesignsApi.ts` + tests + status). No Magic / drafts / Front/Back / fabric / Nginx / BE |
+| Tests | Vitest focused cases: 404+present (incl. unparseable raw id), 404+absent, 404+unavailable verification; delete suite still green (**47** in designs/api files) |
+| Gates | oxlint warnings-only (pre-existing) · `tsc -b` PASS · production build + `check:sw` ok |
+| PR status | [#86](https://github.com/perielad2-netizen/FashionRise/pull/86) OPEN / MERGEABLE vs `main` (lineage tip). [#85](https://github.com/perielad2-netizen/FashionRise/pull/85) OPEN / **CONFLICTING** vs stale `main` (BE already live at `108db149`) |
+| Blockers | **STOP for review** — authorize FE-only hardening deploy before changing prod FE root |
+| Next action | After approval: build PR #86 tip with current Vite flags → new `/var/www/fashionrise/releases/<sha>` → point FashionRise nginx `root` only → reload nginx → smoke one delete 404-reconcile path. Leave BE/Nginx allowlist/worker untouched |
+| Paid AI | **0** |
 
 ## Changelog (handoff doc only)
 
 | Date | Summary |
 |------|---------|
+| 2026-10-27 | **Professional AI Technical Pack quality audit (docs only):** inspected real PDFs FR-7182 / FR-D47D / FR-CF5A vs Magic Looks; FR-3958 NOT EVALUABLE; offline pytest **20 passed**; decision **NEEDS IMPROVEMENT** (P0 multi-piece collapse + `approved_template` overclaim); deliverable `docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`; FE/BE/worker/Alembic **unchanged**; **0 paid AI**; **STOP for PM** — no fix/deploy. |
+| 2026-10-27 | **OWNER ACCEPTANCE PASS — Measurements & Details** on FE `69b83c01` (PR #114): idle editor, Done save, reopen persistence, Generate-not-stale-Download after edit with existing Professional PDF. Production lineage preserved (`732bda9f` / worker / Alembic `011`). |
+| 2026-10-27 | **PR #114 Done/save race FE LIVE** @ `69b83c01` (quiet autosave + PDF validity retained); BE `732bda9f` unchanged; **0 paid AI**. |
 | 2026-10-26 | **Create Real Design mobile UX + provenance DEPLOYED** FE `5f519734` (PR [#98](https://github.com/perielad2-netizen/FashionRise/pull/98)) + BE `08b66ca2` (PR [#97](https://github.com/perielad2-netizen/FashionRise/pull/97)); Alembic `010` unchanged; Android Edit Measurements sheet; Stage 4 Basic vs Professional clarity; PDF Basic/No-AI labeling; smoke PASS (heuristic provenance, **0 paid**); backup `techpack-mobile-ux-deploy-20261026T201157Z`. Owner first paid AI test still pending. |
 | 2026-10-26 | **Create Real Design V3 DEPLOYED** FE `75a8e8ca` (PR [#96](https://github.com/perielad2-netizen/FashionRise/pull/96)) + BE `5fd4b843` (PR [#95](https://github.com/perielad2-netizen/FashionRise/pull/95)); Alembic `010` `techpack_ai_artifacts`; Nginx artifacts image route; owner-allowlist AI gates ON (ceiling `$15`, max `$8`/run, `$20`/day); non-AI smoke PASS (heuristic `$0`, professional confirm only); mocked CI + FR-7182 fixture PDF; Dual Magic ON; **0 paid generate by Cursor**; backup `techpack-v3-deploy-20261026T190439Z`. Owner to run first live AI Professional test. No monetization. |
 | 2026-10-26 | **Create Real Design V2 DEPLOYED** FE `e2416ed0` (PR [#94](https://github.com/perielad2-netizen/FashionRise/pull/94)) + BE `f2433513` (PR [#93](https://github.com/perielad2-netizen/FashionRise/pull/93)); Alembic `009` `techpack_ai_runs`; Nginx AI allowlist; multi-piece PDF + flats/schematics; smoke PASS (heuristic `$0`, paid AI 403); Dual Magic ON; **0 paid AI**; backup `techpack-v2-deploy-20261026T181418Z`. No monetization. |

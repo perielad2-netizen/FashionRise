@@ -230,6 +230,16 @@ def detect_pieces_from_evidence(
                 units=units,
             )
         )
+        return {
+            "piece_count": len(pieces),
+            "pieces": pieces,
+            "detection_confidence": "heuristic_fallback",
+            "needs_user_confirm": True,
+            "note": (
+                "Garment category could not be determined from Magic evidence — "
+                "confirm categories in Measurements & details before Professional generation."
+            ),
+        }
 
     return {
         "piece_count": len(pieces),

@@ -25,10 +25,14 @@ from app.services.techpack_ai_professional import (
 )
 from app.services.techpack_ai_worker import run_techpack_worker_tick
 from app.services.techpack_compatibility import filter_pattern_inventory
+from app.services.techpack_detect import detect_pieces_from_evidence
 from app.services.techpack_pdf import build_techpack_pdf
 from app.services.techpack_structure import (
+    is_inconclusive_piece,
     plan_professional_image_kinds,
     prepare_professional_outfit,
+    professional_input_fingerprint,
+    run_matches_authorized_inputs,
     validate_professional_pieces,
 )
 from app.storage.local import LocalStorageBackend
@@ -513,3 +517,412 @@ def test_prepare_blocks_designer_conflict(db_session, client):
     with pytest.raises(ValidationAppError) as ei:
         prepare_professional_outfit(db_session, draft, spec, persist_repair=False)
     assert "conflict" in str(ei.value).lower() or "confirm" in str(ei.value).lower()
+
+
+def test_detect_fallback_is_inconclusive_not_validated():
+    detection = detect_pieces_from_evidence(look_summary="an abstract fashion photo", units="cm")
+    assert detection["detection_confidence"] == "heuristic_fallback"
+    assert len(detection["pieces"]) == 1
+    piece = detection["pieces"][0]
+    assert piece["category"] == "other"
+    assert is_inconclusive_piece(piece) is True
+
+
+def test_prepare_rejects_empty_draft_without_credible_evidence(db_session, client):
+    tokens = register_with_invite(client, db_session, "p0_empty@example.com", "p0_empty")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image(),
+        summary="soft lighting studio backdrop",
+        design_identity={"main_colors": ["#aaa"]},
+    )
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "Empty evidence"},
+    )
+    from app.models.techpack_draft import TechpackDraft
+
+    draft = db_session.get(TechpackDraft, uuid.UUID(created.json()["id"]))
+    assert draft
+    spec = {
+        "schema_version": "2.0",
+        "look_notes": "soft lighting studio backdrop",
+        "look_design_identity": {"main_colors": ["#aaa"]},
+        "outfit": {"piece_count": 0, "pieces": []},
+    }
+    with pytest.raises(ValidationAppError) as ei:
+        prepare_professional_outfit(db_session, draft, spec, persist_repair=False)
+    msg = str(ei.value).lower()
+    assert "confirm" in msg
+    assert "categor" in msg
+
+
+def test_prepare_rejects_generic_other_piece(db_session, client):
+    tokens = register_with_invite(client, db_session, "p0_other@example.com", "p0_other")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image(),
+        summary="unclear silhouette",
+    )
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "Other garment"},
+    )
+    from app.models.techpack_draft import TechpackDraft
+
+    draft = db_session.get(TechpackDraft, uuid.UUID(created.json()["id"]))
+    assert draft
+    spec = {
+        "schema_version": "2.0",
+        "look_notes": "unclear silhouette",
+        "outfit": {
+            "piece_count": 1,
+            "pieces": [
+                {
+                    "id": "piece-fallback",
+                    "category": "other",
+                    "label": "Garment (confirm category)",
+                    "detection_source": "heuristic_fallback",
+                }
+            ],
+        },
+    }
+    with pytest.raises(ValidationAppError) as ei:
+        prepare_professional_outfit(db_session, draft, spec, persist_repair=False)
+    assert "inconclusive" in str(ei.value).lower() or "confirm" in str(ei.value).lower()
+
+
+def test_prepare_preserves_designer_confirmed_despite_weak_other_detector(db_session, client):
+    tokens = register_with_invite(client, db_session, "p0_keep@example.com", "p0_keep")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    # Magic evidence is deliberately inconclusive (no garment words).
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image(),
+        summary="studio backdrop soft light",
+        design_identity={"main_colors": ["#111"]},
+    )
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "Designer locked top"},
+    )
+    from app.models.techpack_draft import TechpackDraft
+
+    draft = db_session.get(TechpackDraft, uuid.UUID(created.json()["id"]))
+    assert draft
+    spec = {
+        "schema_version": "2.0",
+        "units": "cm",
+        "look_notes": "studio backdrop soft light",
+        "look_design_identity": {"main_colors": ["#111"]},
+        "outfit": {
+            "piece_count": 1,
+            "pieces": [
+                {
+                    "id": "top-confirmed",
+                    "category": "top",
+                    "label": "Black tunic",
+                    "role": "top",
+                    "detection_source": "designer",
+                    "category_user_confirmed": True,
+                    "materials": {
+                        "shell": {"name": "silk", "composition": "", "source": "designer"}
+                    },
+                    "finished_measurements": {
+                        "garment_length": {"value": 70, "unit": "cm", "source": "designer"}
+                    },
+                }
+            ],
+        },
+    }
+    out_spec, pieces, meta = prepare_professional_outfit(
+        db_session, draft, spec, persist_repair=False
+    )
+    assert len(pieces) == 1
+    assert pieces[0]["id"] == "top-confirmed"
+    assert pieces[0]["category"] == "top"
+    assert meta["input_fingerprint"]
+    assert meta["structure_fingerprint"]
+    # Fingerprint stable across harmless bookkeeping
+    fp2 = professional_input_fingerprint(out_spec, pieces)
+    assert fp2 == meta["input_fingerprint"]
+
+
+def test_queued_run_rejects_measurement_drift_before_provider(client, db_session, monkeypatch):
+    tokens = register_with_invite(client, db_session, "p0_drift@example.com", "p0_drift")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    monkeypatch.setenv("TECHPACK_AI_ENABLED", "true")
+    monkeypatch.setenv("TECHPACK_AI_SPEND_CEILING_USD", "20")
+    monkeypatch.setenv("TECHPACK_AI_MAX_USD_PER_RUN", "8")
+    monkeypatch.setenv("TECHPACK_AI_OWNER_ALLOWLIST", me["email"])
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-used")
+    get_settings.cache_clear()
+
+    class CountingMock(MockProfessionalProvider):
+        provider_calls = 0
+
+        def analyze_garment(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            type(self).provider_calls += 1
+            return super().analyze_garment(*args, **kwargs)
+
+        def generate_technical_flat(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            type(self).provider_calls += 1
+            return super().generate_technical_flat(*args, **kwargs)
+
+        def generate_detail_or_pattern(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            type(self).provider_calls += 1
+            return super().generate_detail_or_pattern(*args, **kwargs)
+
+    CountingMock.provider_calls = 0
+    set_professional_provider_override(CountingMock())
+
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image(),
+        summary=TUNICS_TROUSERS_SUMMARY,
+        design_identity=TUNICS_IDENTITY,
+    )
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "Drift test"},
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()
+    # Confirm concrete pieces so authorize succeeds with stable IDs.
+    patched = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={
+            "spec": {
+                "look_notes": TUNICS_TROUSERS_SUMMARY,
+                "look_design_identity": TUNICS_IDENTITY,
+                "outfit": {
+                    "piece_count": 2,
+                    "pieces": [
+                        {
+                            "id": "tunic-1",
+                            "category": "top",
+                            "label": "Black tunic",
+                            "role": "top",
+                            "detection_source": "designer",
+                            "category_user_confirmed": True,
+                            "materials": {
+                                "shell": {
+                                    "name": "silk",
+                                    "composition": "100% silk",
+                                    "source": "designer",
+                                }
+                            },
+                            "finished_measurements": {
+                                "garment_length": {
+                                    "value": 72,
+                                    "unit": "cm",
+                                    "source": "designer",
+                                }
+                            },
+                        },
+                        {
+                            "id": "tr-1",
+                            "category": "trousers",
+                            "label": "Cream trousers",
+                            "role": "bottom",
+                            "detection_source": "designer",
+                            "category_user_confirmed": True,
+                            "materials": {
+                                "shell": {
+                                    "name": "wool",
+                                    "composition": "100% wool",
+                                    "source": "designer",
+                                }
+                            },
+                            "finished_measurements": {
+                                "inseam": {"value": 78, "unit": "cm", "source": "designer"}
+                            },
+                        },
+                    ],
+                },
+            }
+        },
+    )
+    assert patched.status_code == 200, patched.text
+
+    idem = f"idem-drift-{uuid.uuid4().hex}"
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": idem, "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    run_row = db_session.get(TechpackAIRun, uuid.UUID(run_id))
+    assert run_row is not None
+    assert run_row.status == "queued"
+    req = run_row.request if isinstance(run_row.request, dict) else {}
+    assert req.get("input_fingerprint")
+    assert req.get("structure_fingerprint")
+
+    # Change a measurement while keeping the same piece IDs/categories.
+    drift = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={
+            "spec": {
+                "outfit": {
+                    "piece_count": 2,
+                    "pieces": [
+                        {
+                            "id": "tunic-1",
+                            "category": "top",
+                            "label": "Black tunic",
+                            "role": "top",
+                            "detection_source": "designer",
+                            "category_user_confirmed": True,
+                            "materials": {
+                                "shell": {
+                                    "name": "silk",
+                                    "composition": "100% silk",
+                                    "source": "designer",
+                                }
+                            },
+                            "finished_measurements": {
+                                "garment_length": {
+                                    "value": 99,
+                                    "unit": "cm",
+                                    "source": "designer",
+                                }
+                            },
+                        },
+                        {
+                            "id": "tr-1",
+                            "category": "trousers",
+                            "label": "Cream trousers",
+                            "role": "bottom",
+                            "detection_source": "designer",
+                            "category_user_confirmed": True,
+                            "materials": {
+                                "shell": {
+                                    "name": "cotton",
+                                    "composition": "100% cotton",
+                                    "source": "designer",
+                                }
+                            },
+                            "finished_measurements": {
+                                "inseam": {"value": 78, "unit": "cm", "source": "designer"}
+                            },
+                        },
+                    ],
+                }
+            }
+        },
+    )
+    assert drift.status_code == 200, drift.text
+
+    ticks = run_techpack_worker_tick(db_session, limit=2)
+    assert ticks == 1
+    settled = client.get(
+        f"/api/v1/techpacks/ai/runs/{run_id}",
+        headers=_auth(tokens),
+    ).json()
+    assert settled["status"] == "failed"
+    assert int(settled.get("actual_cost_usd_cents") or settled.get("cost_usd_cents") or 0) == 0
+    err = (settled.get("error_message") or "").lower()
+    assert "changed" in err or "generate again" in err
+    assert CountingMock.provider_calls == 0
+
+
+def test_queued_run_unchanged_inputs_complete_with_mock(client, db_session, monkeypatch):
+    tokens = register_with_invite(client, db_session, "p0_stable@example.com", "p0_stable")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    monkeypatch.setenv("TECHPACK_AI_ENABLED", "true")
+    monkeypatch.setenv("TECHPACK_AI_SPEND_CEILING_USD", "20")
+    monkeypatch.setenv("TECHPACK_AI_MAX_USD_PER_RUN", "8")
+    monkeypatch.setenv("TECHPACK_AI_OWNER_ALLOWLIST", me["email"])
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-used")
+    get_settings.cache_clear()
+    set_professional_provider_override(MockProfessionalProvider())
+
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image((30, 30, 120)),
+        summary=TUNICS_TROUSERS_SUMMARY,
+        design_identity=TUNICS_IDENTITY,
+    )
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "Stable inputs"},
+    )
+    draft = created.json()
+    client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={
+            "spec": {
+                "look_notes": TUNICS_TROUSERS_SUMMARY,
+                "look_design_identity": TUNICS_IDENTITY,
+                "outfit": {
+                    "piece_count": 2,
+                    "pieces": [
+                        {
+                            "id": "tunic-1",
+                            "category": "top",
+                            "label": "Black tunic",
+                            "detection_source": "designer",
+                            "category_user_confirmed": True,
+                        },
+                        {
+                            "id": "tr-1",
+                            "category": "trousers",
+                            "label": "Cream trousers",
+                            "detection_source": "designer",
+                            "category_user_confirmed": True,
+                        },
+                    ],
+                },
+            }
+        },
+    )
+    idem = f"idem-stable-{uuid.uuid4().hex}"
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": idem, "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    run_row = db_session.get(TechpackAIRun, uuid.UUID(gen.json()["run_id"]))
+    assert run_row is not None
+    req = run_row.request if isinstance(run_row.request, dict) else {}
+    assert req.get("input_fingerprint")
+    # Harmless server bookkeeping alone must not drift the fingerprint.
+    from app.models.techpack_draft import TechpackDraft
+
+    draft_row = db_session.get(TechpackDraft, uuid.UUID(draft["id"]))
+    assert draft_row
+    spec = dict(draft_row.spec or {})
+    ai = dict(spec.get("ai") or {})
+    ai["touch_marker"] = "bookkeeping-only"
+    spec["ai"] = ai
+    draft_row.spec = spec
+    db_session.add(draft_row)
+    db_session.commit()
+    pieces = (spec.get("outfit") or {}).get("pieces") or []
+    assert run_matches_authorized_inputs(req, spec=spec, pieces=pieces) is True
+
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    settled = client.get(
+        f"/api/v1/techpacks/ai/runs/{gen.json()['run_id']}",
+        headers=_auth(tokens),
+    ).json()
+    assert settled["status"] == "completed"
+    assert settled.get("pdf_ready") is True
