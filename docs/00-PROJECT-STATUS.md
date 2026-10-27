@@ -3,23 +3,55 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**PR #114 Done/save race LIVE** — FE `69b83c01`. Quiet autosave + PDF validity retained. Backend **`732bda9f`** / worker unchanged / Alembic **`011`**. **0 paid AI calls**. **Owner acceptance PENDING.**)
+**Last updated:** 2026-10-27 (**OWNER ACCEPTANCE PASS** — Measurements & Details FE `69b83c01` / PR #114. Professional AI Technical Pack **quality audit complete** → **NEEDS IMPROVEMENT**. Backend **`732bda9f`** / worker unchanged / Alembic **`011`**. **0 paid AI calls**. Docs-only analysis branch — **no deploy**.)
 
-**Phase:** Protected family beta. Create Real Design main workflow unchanged. Responsive editor + quiet autosave + PDF validity + Done flush race hardening.
+**Phase:** Protected family beta. Create Real Design main workflow unchanged. Editor acceptance closed; Professional PDF quality gated on PM review of audit evidence.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`69b83c01`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/69b83c01`. Done closes only after latest editable snapshot is clean. Prior: `af1ddbb5` (PDF validity) ← `31c1de01` (quiet autosave) ← `ce752b43` (#113). |
-| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged**. |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged** (hash-matched `techpack_pdf.py` / `techpack_ai_professional.py` during audit). |
 | AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
 | Deploy backup | `/var/backups/fashionrise/done-race-fe-deploy-20261027T164012Z` (rollback → prior FE `af1ddbb5`) |
-| AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
+| AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Audit paid calls: 0.** |
 
-## Quiet autosave + PDF validity + Done race (2026-10-27) LIVE — stop for owner verification
+## OWNER ACCEPTANCE PASS — 2026-10-27 (Measurements & Details)
+
+Owner confirmed PASS on production FE **`69b83c01`** for all four scenarios:
+
+1. Open editor without flicker / write loops.  
+2. Edit a measurement and close with Done.  
+3. Reopen and confirm the saved value.  
+4. Edit a design that already has a Professional PDF → UI shows **Generate AI PDF** (not stale Download).
+
+Quiet autosave + PDF validity + Done/save race (PR #114) remain LIVE. **No further editor work** unless a new regression appears.
+
+## Professional AI Technical Pack quality audit — 2026-10-27 (docs only)
+
+| Item | Detail |
+|---|---|
+| Deliverable | [`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`](./TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md) |
+| Branch | `cursor/techpack-quality-audit-77c6` (from docs tip `ac76632a` / production FE lineage) |
+| Decision | **NEEDS IMPROVEMENT** |
+| Real PDFs inspected | **FR-7182** (pink striped dress, V3.1), **FR-D47D** (Magic = tunic+trousers but PDF = 1× dress), **FR-CF5A** (burgundy slip, V2 footer) |
+| Not evaluable | **FR-3958** lavender hoodie + yellow shorts — draft only, **no** Professional export |
+| Offline tests | `test_techpack_v3_professional` + `v31_one_tap` + `v2_pdf_fixtures` + `provenance` → **20 passed** (mock provider, $0) |
+| Top P0 | Multi-piece identity collapse (FR-D47D); AI pattern rows labeled `approved_template` |
+| Top P1 | silk≠cotton without REVIEW on stored FR-CF5A; sleeveless + sleeve length 60; long-sleeve assumption on ¾ tunic |
+| Safety | No production code/deploy/migration; private PDFs not committed; **0 paid AI** |
+| Blocked / unapproved | Fixes, regenerations, deploys, merges of stale `main` / unrelated PRs |
+
+### Exact next action (PM)
+
+1. Read the audit scorecards (especially FR-D47D P0 and FR-7182 `approved_template`).  
+2. Choose: **targeted fix** (multi-piece generate gate + review_state default + PDF REVIEW/sleeve guards) **or** owner visual review of FR-7182 pages 1/3/5 first.  
+3. Do **not** authorize paid Professional regenerations until that choice is explicit.
+
+## Quiet autosave + PDF validity + Done race (2026-10-27) LIVE — owner accepted
 
 | Item | Detail |
 |---|---|
@@ -31,14 +63,8 @@
 | Tests (StrictMode, 390/768/1366) | Clean Done **0** PATCH; dirty Done **1**; A→Done→edit B mid-flight → B persisted before close (`maxInFlight=1`); B fail → stay open; Done during background PATCH → no overlap; repeated Done/Escape → no duplicate writes; prior quiet/PDF suites green (**73** related tests) |
 | Production verify | `current`→`69b83c01`; version.json full SHA; health/ready OK; BE still `732bda9f` |
 | Safety | FE-only; BE/worker untouched; **0 paid AI** |
+| Owner acceptance | **PASS — 2026-10-27** |
 | Rollback | `ln -sfn /var/www/fashionrise/releases/af1ddbb5 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` · or `done-race-fe-deploy-…/ROLLBACK.sh` |
-
-### Next recommended action (owner)
-
-1. Hard-refresh → confirm build **`69b83c01`**.
-2. Open Measurements & details → leave idle (no flicker / write loop).
-3. Edit → Done while typing again mid-save → editor must not close until the latest value is saved; no duplicate network writes.
-4. With an existing Professional PDF: edit measurement → Generate (not stale Download).
 
 ## V3.1 — what shipped (2026-10-27)
 
@@ -812,6 +838,9 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-27 | **Professional AI Technical Pack quality audit (docs only):** inspected real PDFs FR-7182 / FR-D47D / FR-CF5A vs Magic Looks; FR-3958 NOT EVALUABLE; offline pytest **20 passed**; decision **NEEDS IMPROVEMENT** (P0 multi-piece collapse + `approved_template` overclaim); deliverable `docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`; FE/BE/worker/Alembic **unchanged**; **0 paid AI**; **STOP for PM** — no fix/deploy. |
+| 2026-10-27 | **OWNER ACCEPTANCE PASS — Measurements & Details** on FE `69b83c01` (PR #114): idle editor, Done save, reopen persistence, Generate-not-stale-Download after edit with existing Professional PDF. Production lineage preserved (`732bda9f` / worker / Alembic `011`). |
+| 2026-10-27 | **PR #114 Done/save race FE LIVE** @ `69b83c01` (quiet autosave + PDF validity retained); BE `732bda9f` unchanged; **0 paid AI**. |
 | 2026-10-26 | **Create Real Design mobile UX + provenance DEPLOYED** FE `5f519734` (PR [#98](https://github.com/perielad2-netizen/FashionRise/pull/98)) + BE `08b66ca2` (PR [#97](https://github.com/perielad2-netizen/FashionRise/pull/97)); Alembic `010` unchanged; Android Edit Measurements sheet; Stage 4 Basic vs Professional clarity; PDF Basic/No-AI labeling; smoke PASS (heuristic provenance, **0 paid**); backup `techpack-mobile-ux-deploy-20261026T201157Z`. Owner first paid AI test still pending. |
 | 2026-10-26 | **Create Real Design V3 DEPLOYED** FE `75a8e8ca` (PR [#96](https://github.com/perielad2-netizen/FashionRise/pull/96)) + BE `5fd4b843` (PR [#95](https://github.com/perielad2-netizen/FashionRise/pull/95)); Alembic `010` `techpack_ai_artifacts`; Nginx artifacts image route; owner-allowlist AI gates ON (ceiling `$15`, max `$8`/run, `$20`/day); non-AI smoke PASS (heuristic `$0`, professional confirm only); mocked CI + FR-7182 fixture PDF; Dual Magic ON; **0 paid generate by Cursor**; backup `techpack-v3-deploy-20261026T190439Z`. Owner to run first live AI Professional test. No monetization. |
 | 2026-10-26 | **Create Real Design V2 DEPLOYED** FE `e2416ed0` (PR [#94](https://github.com/perielad2-netizen/FashionRise/pull/94)) + BE `f2433513` (PR [#93](https://github.com/perielad2-netizen/FashionRise/pull/93)); Alembic `009` `techpack_ai_runs`; Nginx AI allowlist; multi-piece PDF + flats/schematics; smoke PASS (heuristic `$0`, paid AI 403); Dual Magic ON; **0 paid AI**; backup `techpack-v2-deploy-20261026T181418Z`. No monetization. |
