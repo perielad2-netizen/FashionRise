@@ -59,10 +59,25 @@ def _clear_provider():
     set_professional_provider_override(None)
 
 
-def test_professional_fail_closed_without_allowlist(client, db_session, monkeypatch):
+def test_professional_available_without_owner_allowlist(client, db_session, monkeypatch):
+    """Allowlist is no longer a gate — authenticated users with key + ceiling may use Pro."""
     monkeypatch.setenv("TECHPACK_AI_ENABLED", "true")
     monkeypatch.setenv("TECHPACK_AI_SPEND_CEILING_USD", "15")
     monkeypatch.setenv("TECHPACK_AI_OWNER_ALLOWLIST", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-used")
+    get_settings.cache_clear()
+    tokens = register_with_invite(client, db_session, "v3_any@example.com", "v3_any")
+    status = client.get("/api/v1/techpacks/ai/status", headers=_auth(tokens)).json()
+    assert status["professional_available"] is True
+    assert status["owner_allowlisted"] is True
+    assert status["api_key_present"] is True
+    get_settings.cache_clear()
+
+
+def test_professional_fail_closed_without_api_key(client, db_session, monkeypatch):
+    monkeypatch.setenv("TECHPACK_AI_ENABLED", "true")
+    monkeypatch.setenv("TECHPACK_AI_SPEND_CEILING_USD", "15")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
     get_settings.cache_clear()
     tokens = register_with_invite(client, db_session, "v3_deny@example.com", "v3_deny")
     me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()

@@ -113,6 +113,9 @@ class Settings(BaseSettings):
     cf_access_jwt_validation: bool = False
     cf_access_team_domain: str = ""
     cf_access_aud: str = ""
+    # Optional seamless app login: verify Access JWT → map email to existing User → issue tokens.
+    # Requires team domain + AUD. Never auto-provisions users. Default off until AUD is configured.
+    cf_access_sso_login: bool = False
 
     @field_validator("cors_origins", mode="before")
     @classmethod

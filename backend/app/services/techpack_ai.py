@@ -56,6 +56,7 @@ def _owned_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraft:
 
 
 def _normalize_allowlist() -> set[str]:
+    """Legacy helper — allowlist is no longer a feature gate (kept for ops introspection)."""
     settings = get_settings()
     raw = (settings.techpack_ai_owner_allowlist or "").strip()
     if not raw:
@@ -64,13 +65,13 @@ def _normalize_allowlist() -> set[str]:
 
 
 def user_on_owner_allowlist(user: User) -> bool:
-    allow = _normalize_allowlist()
-    if not allow:
-        return False
-    email = (getattr(user, "email", None) or "").strip().lower()
-    uid = str(user.id).lower()
-    username = (getattr(user, "username", None) or "").strip().lower()
-    return email in allow or uid in allow or (username and username in allow)
+    """Deprecated: AI Professional no longer requires a separate owner allowlist.
+
+    Cloudflare Access already gates the private app. Authenticated FashionRise users
+    may use Professional subject to enablement + spend ceilings.
+    """
+    _ = user
+    return True
 
 
 def ai_status(user: User | None = None) -> dict[str, Any]:
@@ -78,8 +79,10 @@ def ai_status(user: User | None = None) -> dict[str, Any]:
     key_present = bool((settings.openai_api_key or "").strip())
     enabled_flag = bool(settings.techpack_ai_enabled or settings.techpack_ai_draft_enabled)
     ceiling = float(settings.techpack_ai_spend_ceiling_usd or 0)
-    allowlisted = user_on_owner_allowlist(user) if user is not None else False
-    professional_available = bool(enabled_flag and key_present and ceiling > 0 and allowlisted)
+    # Any authenticated FashionRise account (CF Access already gates the private app).
+    # Spend / concurrency gates still enforce in _assert_professional_allowed.
+    _ = user
+    professional_available = bool(enabled_flag and key_present and ceiling > 0)
     lo, hi = estimate_professional_cents(piece_count=1, propose_back=False, has_back_image=False)
     return {
         "enabled": professional_available,  # FE treats enabled as paid-professional available
@@ -92,15 +95,16 @@ def ai_status(user: User | None = None) -> dict[str, Any]:
         "estimate_professional_cents_min": lo,
         "estimate_professional_cents_max": hi,
         "professional_available": professional_available,
-        "owner_allowlisted": allowlisted,
+        # Always true for API compat — allowlist is no longer a gate.
+        "owner_allowlisted": True,
         "requires_entitlement": bool(settings.techpack_ai_requires_entitlement),
         "model": settings.openai_model,
         "vision_model": settings.openai_model,
         "image_model": settings.openai_image_model,
         "note": (
             "AI Professional analyzes the Magic look image and generates design-specific technical "
-            "illustrations (paid). Basic heuristic pack remains free. "
-            "Paid runs require operator enablement, spend ceiling, and owner allowlist."
+            "illustrations (paid). Available to authenticated FashionRise accounts when enabled "
+            "with a spend ceiling; per-run / daily / operator ceilings still apply."
         ),
     }
 
@@ -133,8 +137,8 @@ def create_confirm_challenge(
             f"(max ${status['max_usd_per_run']:.2f}/run). Uses vision + image models on your Magic look."
             if available
             else (
-                "AI Professional is not available for this account yet "
-                "(enable flag, spend ceiling, and owner allowlist required). Basic pack stays free."
+                "AI Professional is not available yet "
+                "(enable flag, API key, and spend ceiling required)."
             )
         )
         return {
@@ -175,7 +179,7 @@ def _assert_professional_allowed(db: Session, user: User, *, estimate_cents: int
     status = ai_status(user)
     if not status["professional_available"]:
         raise ForbiddenError(
-            "AI Professional is disabled, spend ceiling unset, or account not on owner allowlist"
+            "AI Professional is disabled, OpenAI key missing, or spend ceiling unset"
         )
     max_run = int(round(float(settings.techpack_ai_max_usd_per_run) * 100))
     if estimate_cents > max_run > 0:
