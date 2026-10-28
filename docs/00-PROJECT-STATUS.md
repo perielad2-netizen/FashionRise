@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-28 (**Issue #127 P0 sketch fill reliability** — FE branch `cursor/web-sketch-fill-reliability-77c6` · sealed-tip barrier + bounded endpoint joint seal + Close small gaps + gap hint · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM**.)
+**Last updated:** 2026-10-28 (**Issue #127 P0 sketch fill reliability** — tip  branch  · sealed-tip barrier + bounded endpoint joint seal + Close small gaps + gap hint · **HOLD / NOT DEPLOYED** · prod FE  / BE  · Alembic  · **0 paid AI** · **STOP for Technical PM**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -34,6 +34,7 @@
 
 | Item | Detail |
 |---|---|
+| Tip |  |
 | Trigger | Owner mobile fill of complex freehand shirt outline (1.75 px, ~62% zoom) repeatedly failed with open-outline / “dress” copy |
 | Root cause | Fill barrier used the same tapered perfect-freehand paths as visible ink (`start/end taper` up to 6–10 px on thin brushes). Multi-stroke joins that look closed still leak in the alpha>12 raster; fixed `gapClose=2` dilation cannot bridge tip gaps. Flood then escapes to paper edge → `open_outline`. |
 | Fix | Barrier-only `sealTips` freehand paths; bounded endpoint joint seal (5 px auto / 12 px Close small gaps); gap hint marker; messages without “dress”; explicit **Gaps** tool-rail action (one-shot stronger seal — does not silently merge intentional openings) |
