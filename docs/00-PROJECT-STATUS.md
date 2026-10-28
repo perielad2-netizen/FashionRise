@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**Issue #128 P0 measurement data-loss correction** — tip `6ac13dc3` / base `311e259a` · branch `cursor/web-techpack-meas-preserve-77c6` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 remains HOLD** · **STOP for Technical PM acceptance**.)
+**Last updated:** 2026-10-28 (**Issue #128 P0 measurement data-loss correction** — tip `98abc804` / code `6ac13dc3` · base `311e259a` · branch `cursor/web-techpack-meas-preserve-77c6` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 remains HOLD** · **STOP for Technical PM acceptance**.)
 
 **Phase:** Protected family beta. Issue #128 fixes Professional/heuristic enrichment dropping designer finished POMs (outseam/thigh/waistband). No restore of FR-3958 values without owner authorization.
 
@@ -22,6 +22,7 @@
 
 | Item | Detail |
 |---|---|
+| Tip | `98abc804e184082e26a6e6bda6b06318939ea057` (code `6ac13dc34903e03aa992769fb48721647abd4620`, base `311e259a`) |
 | Branch / base | `cursor/web-techpack-meas-preserve-77c6` from deployed BE **`311e259a`** |
 | Trigger | FR-3958 shorts: designer outseam / thigh / waistband missing after Professional generation |
 | Root cause | `_persist_professional_result` → `enrich_spec_heuristic` → `_propose_finished_measurements` rebuilds from `empty_finished_measurements()` and only copies prior cells inside `set_calc` keys. Shorts POMs **outseam / thigh / waistband** are never passed to `set_calc`, so nonempty designer cells were replaced with empty shells. |
