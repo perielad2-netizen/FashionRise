@@ -89,7 +89,7 @@ Technical PM reviewed prior PR #122 @ `8794583f` → **HOLD / CHANGES REQUIRED**
 | PR | Scope | Tip |
 |---|---|---|
 | [#126](https://github.com/perielad2-netizen/FashionRise/pull/126) FE measure decimal | `cursor/web-techpack-measure-decimal-77c6` | `bfbdd03f` |
-| [#125](https://github.com/perielad2-netizen/FashionRise/pull/125) BE fidelity (closure/gradient) | `cursor/web-techpack-fidelity-b9f9-77c6` | `a9a0bb77` |
+| [#125](https://github.com/perielad2-netizen/FashionRise/pull/125) BE fidelity (closure/gradient) | `cursor/web-techpack-fidelity-b9f9-77c6` | `05118592` |
 
 ### Blocked / exact proposed deployment sequence (after Technical PM accept)
 
