@@ -225,6 +225,28 @@ def _look_evidence(db: Session, look) -> tuple[str | None, dict | None]:
     return summary, identity
 
 
+def _studio_design_data_for_look(db: Session, look) -> dict | None:
+    """Load Studio design_data (fills) linked to a Magic look — zero paid AI."""
+    design_id = getattr(look, "design_id", None)
+    if design_id is None:
+        return None
+    from app.models.garment_design import GarmentDesign
+
+    design = db.get(GarmentDesign, design_id)
+    if design is None or not isinstance(design.design_data, dict):
+        return None
+    return design.design_data
+
+
+def _apply_studio_color_provenance(spec: dict, design_data: dict | None) -> dict:
+    """Map Studio fills → piece.color_treatment across draft create / autosave."""
+    from app.services.techpack_spec_fidelity import apply_studio_fills_to_spec
+
+    if not isinstance(spec, dict):
+        return spec
+    return apply_studio_fills_to_spec(spec, design_data)
+
+
 def create_draft(db: Session, user: User, data: TechpackCreate) -> TechpackDraftRead:
     look = looks_service.get_look(db, user, data.look_id)
     if not ((look.front and look.front.has_image) or (look.back and look.back.has_image)):
@@ -241,6 +263,10 @@ def create_draft(db: Session, user: User, data: TechpackCreate) -> TechpackDraft
     if style_code in existing_codes:
         style_code = f"{style_code}-{uuid.uuid4().hex[:4].upper()}"
 
+    spec = default_spec(look_summary=summary, design_identity=design_identity)
+    # End-to-end: Studio gradient selection → structured piece.color_treatment.
+    spec = _apply_studio_color_provenance(spec, _studio_design_data_for_look(db, look))
+
     draft = TechpackDraft(
         id=uuid.uuid4(),
         user_id=user.id,
@@ -251,7 +277,7 @@ def create_draft(db: Session, user: User, data: TechpackCreate) -> TechpackDraft
         revision=1,
         status="DRAFT",
         verification="UNVERIFIED",
-        spec=default_spec(look_summary=summary, design_identity=design_identity),
+        spec=spec,
         front_job_id=look.front.job_id if look.front and look.front.has_image else None,
         back_job_id=look.back.job_id if look.back and look.back.has_image else None,
     )
@@ -440,6 +466,17 @@ def update_draft(db: Session, user: User, draft_id: uuid.UUID, data: TechpackUpd
         if not isinstance(data.spec, dict):
             raise ValidationAppError("spec must be an object")
         draft.spec = merge_spec(prior_spec, data.spec)
+        # Re-stamp Studio fill → color_treatment so autosave cannot flatten a
+        # confirmed gradient behind a red-only color_hint.
+        design_data = None
+        if draft.design_id is not None:
+            from app.models.garment_design import GarmentDesign
+
+            design_row = db.get(GarmentDesign, draft.design_id)
+            if design_row is not None and isinstance(design_row.design_data, dict):
+                design_data = design_row.design_data
+        if isinstance(draft.spec, dict):
+            draft.spec = _apply_studio_color_provenance(draft.spec, design_data)
         # Mark dirty when designer edits after a completed Professional run so Generate
         # cannot silently reuse the previous paid PDF for changed inputs.
         if had_professional:

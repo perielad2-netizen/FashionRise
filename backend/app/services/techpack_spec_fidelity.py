@@ -56,15 +56,39 @@ def _text_blob(*parts: Any) -> str:
     return " ".join(bits).strip().lower()
 
 
+_CONFIRMED_SOURCES = frozenset(
+    {"designer", "designer_confirmed", "user", "confirmed", "studio_fill", "studio_fills"}
+)
+_REJECTED_ART_STATES = frozenset(
+    {"rejected_category_mismatch", "excluded_mismatch", "rejected"}
+)
+_GRADIENT_TEXT_RE = re.compile(r"\b(gradient|ombre|ombr[eé]|blend|ombre)\b", re.I)
+_TWO_TONE_TEXT_RE = re.compile(
+    r"\b(two[-\s]?tone|color[-\s]?block|hard\s+split|split\s+color)\b", re.I
+)
+_SINGLE_HUE_RE = re.compile(
+    r"^(?:a\s+|the\s+)?"
+    r"(red|black|burgundy|navy|blue|green|white|yellow|purple|pink|cream|beige|"
+    r"grey|gray|brown|tan|khaki|ivory|maroon|olive|teal|coral|orange)"
+    r"(?:\s+(?:solid|color|colour|hue|shade|tone))?$",
+    re.I,
+)
+
+
 def normalize_color_treatment(raw: Any) -> dict[str, Any] | None:
     """Normalize per-garment color-treatment intent (gradient / block / solid).
 
     Preserves designer confirmation + provenance. Returns None when absent.
+    Empty/unknown shells become an explicit unconfirmed record only when
+    ``mode`` is set to ``unknown`` / ``unconfirmed``.
     """
     if not isinstance(raw, dict):
         return None
+    mode = str(raw.get("mode") or raw.get("type") or "").strip().lower() or None
+    provenance = str(raw.get("provenance") or "").strip().lower() or None
+    source = str(raw.get("source") or "").strip() or None
     out = {
-        "mode": str(raw.get("mode") or raw.get("type") or "").strip().lower() or None,
+        "mode": mode,
         "stops": list(raw.get("stops") or raw.get("colors") or [])
         if isinstance(raw.get("stops") or raw.get("colors"), list)
         else [],
@@ -74,10 +98,18 @@ def normalize_color_treatment(raw: Any) -> dict[str, Any] | None:
         "direction": str(raw.get("direction") or "").strip() or None,
         "placement": str(raw.get("placement") or "").strip() or None,
         "designer_confirmed": bool(raw.get("designer_confirmed")),
-        "source": str(raw.get("source") or "").strip() or None,
+        "source": source,
+        "provenance": provenance
+        or (
+            "confirmed"
+            if raw.get("designer_confirmed") or (source or "").lower() in _CONFIRMED_SOURCES
+            else ("inferred" if mode and mode not in {"", "unknown", "unconfirmed", "empty"} else "unknown")
+        ),
         "notes": str(raw.get("notes") or "").strip() or None,
+        "gradient_id": str(raw.get("gradient_id") or "").strip() or None,
+        "angle": raw.get("angle") if isinstance(raw.get("angle"), (int, float)) else None,
     }
-    # Drop empty shells.
+    # Drop empty shells (no mode and no useful payload).
     if not any(
         [
             out["mode"],
@@ -86,22 +118,187 @@ def normalize_color_treatment(raw: Any) -> dict[str, Any] | None:
             out["direction"],
             out["placement"],
             out["notes"],
+            out["gradient_id"],
         ]
     ):
         return None
     return out
 
 
+def _angle_to_direction(angle: Any) -> str | None:
+    if not isinstance(angle, (int, float)):
+        return None
+    # Studio: 0 = left→right, 90 = top→bottom (matches web-ui FillStyle).
+    a = float(angle) % 360.0
+    if 45 <= a < 135:
+        return "top-to-bottom"
+    if 135 <= a < 225:
+        return "right-to-left"
+    if 225 <= a < 315:
+        return "bottom-to-top"
+    return "left-to-right"
+
+
+def color_treatment_from_studio_fill_style(style: Any) -> dict[str, Any] | None:
+    """Map one Studio fill style (real upstream shape) → structured color_treatment.
+
+    Confirmed when ``kind`` is present on a valid fill. Does **not** invent a
+    gradient when the style is absent or unknown.
+    """
+    if not isinstance(style, dict):
+        return None
+    kind = str(style.get("kind") or "").strip().lower()
+    if kind == "gradient":
+        colors = style.get("colors") if isinstance(style.get("colors"), list) else []
+        stops = [str(c) for c in colors if c is not None][:8]
+        angle = style.get("angle") if isinstance(style.get("angle"), (int, float)) else None
+        return normalize_color_treatment(
+            {
+                "mode": "gradient",
+                "stops": stops,
+                "named_colors": stops,
+                "direction": _angle_to_direction(angle),
+                "placement": "garment_fill",
+                "designer_confirmed": True,
+                "source": "studio_fill",
+                "provenance": "confirmed",
+                "gradient_id": str(style.get("gradientId") or style.get("gradient_id") or "") or None,
+                "angle": angle,
+                "notes": f"studio gradient {style.get('gradientId') or style.get('gradient_id') or ''}".strip(),
+            }
+        )
+    if kind == "solid":
+        color = str(style.get("color") or "").strip()
+        return normalize_color_treatment(
+            {
+                "mode": "solid",
+                "stops": [color] if color else [],
+                "named_colors": [color] if color else [],
+                "designer_confirmed": True,
+                "source": "studio_fill",
+                "provenance": "confirmed",
+                "placement": "garment_fill",
+            }
+        )
+    if kind in {"fabric", "uploaded-fabric"}:
+        return normalize_color_treatment(
+            {
+                "mode": "fabric",
+                "designer_confirmed": True,
+                "source": "studio_fill",
+                "provenance": "confirmed",
+                "placement": "garment_fill",
+                "notes": str(style.get("fabricId") or style.get("assetId") or kind),
+            }
+        )
+    return None
+
+
+def collect_studio_fills(design_data: Any) -> list[dict[str, Any]]:
+    """Collect front + back Studio fills from design_data (real upstream field)."""
+    data = design_data if isinstance(design_data, dict) else {}
+    fills: list[dict[str, Any]] = []
+    for item in data.get("fills") or []:
+        if isinstance(item, dict):
+            fills.append(item)
+    back = data.get("back") if isinstance(data.get("back"), dict) else {}
+    for item in back.get("fills") or []:
+        if isinstance(item, dict):
+            fills.append(item)
+    return fills
+
+
+def color_treatment_from_studio_fills(fills: Any) -> dict[str, Any] | None:
+    """Aggregate Studio fills into a single per-garment structured intent.
+
+    Prefer a confirmed gradient when any fill is a gradient. If fills exist but
+    none map, return explicit ``unknown`` rather than inventing a finish.
+    """
+    rows = fills if isinstance(fills, list) else []
+    mapped: list[dict[str, Any]] = []
+    for fill in rows:
+        if not isinstance(fill, dict):
+            continue
+        style = fill.get("style") if isinstance(fill.get("style"), dict) else fill
+        ct = color_treatment_from_studio_fill_style(style)
+        if ct:
+            mapped.append(ct)
+    if not mapped:
+        if rows:
+            return normalize_color_treatment(
+                {
+                    "mode": "unknown",
+                    "designer_confirmed": False,
+                    "source": "studio_fills",
+                    "provenance": "unknown",
+                    "notes": "Studio fills present but treatment could not be confirmed",
+                }
+            )
+        return None
+    gradients = [m for m in mapped if m.get("mode") == "gradient"]
+    if gradients:
+        return gradients[0]
+    return mapped[0]
+
+
+def unconfirmed_color_treatment(*, reason: str = "no upstream studio fill") -> dict[str, Any]:
+    """Explicit unknown/unconfirmed treatment — never invent a finish."""
+    return {
+        "mode": "unknown",
+        "stops": [],
+        "named_colors": [],
+        "direction": None,
+        "placement": None,
+        "designer_confirmed": False,
+        "source": None,
+        "provenance": "unconfirmed",
+        "notes": reason,
+        "gradient_id": None,
+        "angle": None,
+    }
+
+
 def piece_color_treatment(piece: dict[str, Any]) -> dict[str, Any] | None:
-    """Resolve color-treatment from piece materials / explicit field / color_hint."""
+    """Resolve color-treatment from structured fields, studio fills, or color_hint.
+
+    Priority: designer-confirmed structured → studio/upstream fills → nested
+    materials → color_hint keywords. A red-only ``color_hint`` must not hide an
+    upstream confirmed gradient.
+    """
     direct = normalize_color_treatment(piece.get("color_treatment"))
-    if direct:
+    if direct and direct.get("mode") not in {None, "", "unknown", "unconfirmed", "empty"}:
+        # Upstream gradient wins over a flattened red-only structured solid when
+        # the solid was not designer-confirmed.
+        if (
+            direct.get("mode") in {"solid", "flat"}
+            and not direct.get("designer_confirmed")
+            and str(direct.get("provenance") or "") in {"inferred", "unknown", "unconfirmed", ""}
+        ):
+            upstream = color_treatment_from_studio_fills(
+                piece.get("studio_fills") or piece.get("upstream_fills")
+            )
+            if upstream and upstream.get("mode") == "gradient":
+                return upstream
         return direct
+
+    upstream = color_treatment_from_studio_fills(
+        piece.get("studio_fills") or piece.get("upstream_fills")
+    )
+    if upstream and upstream.get("mode") not in {None, "", "unknown", "unconfirmed"}:
+        return upstream
+
     mats = _as_dict(piece.get("materials"))
     shell = _as_dict(mats.get("shell"))
     nested = normalize_color_treatment(shell.get("color_treatment") or mats.get("color_treatment"))
-    if nested:
+    if nested and nested.get("mode") not in {None, "", "unknown", "unconfirmed", "empty"}:
         return nested
+
+    # Spec-level / piece-attached studio source dict (already structured).
+    for key in ("studio_color_treatment", "upstream_color_treatment"):
+        attached = normalize_color_treatment(piece.get(key))
+        if attached and attached.get("mode") not in {None, "", "unknown", "unconfirmed", "empty"}:
+            return attached
+
     hint = str(piece.get("color_hint") or "").strip()
     lower = hint.lower()
     if "gradient" in lower or "ombre" in lower or "ombré" in lower:
@@ -113,7 +310,10 @@ def piece_color_treatment(piece: dict[str, Any]) -> dict[str, Any] | None:
             "placement": None,
             "designer_confirmed": False,
             "source": str(piece.get("color_hint_source") or "color_hint"),
+            "provenance": "inferred",
             "notes": hint or None,
+            "gradient_id": None,
+            "angle": None,
         }
     if "two-tone" in lower or "two tone" in lower or "color-block" in lower or "color block" in lower:
         return {
@@ -124,9 +324,88 @@ def piece_color_treatment(piece: dict[str, Any]) -> dict[str, Any] | None:
             "placement": None,
             "designer_confirmed": False,
             "source": str(piece.get("color_hint_source") or "color_hint"),
+            "provenance": "inferred",
             "notes": hint or None,
+            "gradient_id": None,
+            "angle": None,
         }
+    # Red-only hint with upstream gradient already handled above. Without
+    # upstream evidence, do not invent a treatment from a single hue word.
+    if direct and direct.get("mode") in {"unknown", "unconfirmed"}:
+        return direct
     return None
+
+
+def apply_studio_fills_to_piece(
+    piece: dict[str, Any],
+    fills: Any,
+    *,
+    overwrite_unconfirmed: bool = True,
+) -> dict[str, Any]:
+    """Stamp Studio-fill-derived color_treatment onto a piece (non-destructive)."""
+    out = deepcopy(piece)
+    if isinstance(fills, list) and fills:
+        out["studio_fills"] = fills
+    derived = color_treatment_from_studio_fills(fills)
+    if not derived:
+        # Expose unknown rather than inventing when caller asked and no source.
+        existing = normalize_color_treatment(out.get("color_treatment"))
+        if not existing and overwrite_unconfirmed:
+            # Leave absent — unknown only when we know fills were empty/missing
+            # is handled by callers that want an explicit record.
+            return out
+        return out
+
+    existing = normalize_color_treatment(out.get("color_treatment"))
+    locked = bool(
+        existing
+        and existing.get("designer_confirmed")
+        and str(existing.get("source") or "").lower() in _CONFIRMED_SOURCES - {"studio_fill", "studio_fills"}
+        and existing.get("mode") not in {None, "", "unknown", "unconfirmed", "empty"}
+    )
+    if locked:
+        out["upstream_color_treatment"] = derived
+        return out
+    if existing and existing.get("mode") not in {None, "", "unknown", "unconfirmed", "empty", "solid", "flat"}:
+        if not overwrite_unconfirmed and existing.get("designer_confirmed"):
+            out["upstream_color_treatment"] = derived
+            return out
+    # Prefer confirmed studio gradient over flattened red-only / empty shells.
+    out["color_treatment"] = derived
+    out["upstream_color_treatment"] = derived
+    return out
+
+
+def apply_studio_fills_to_spec(spec: dict[str, Any], design_data: Any) -> dict[str, Any]:
+    """Propagate Studio fills → each outfit piece color_treatment (draft create/autosave)."""
+    out = deepcopy(spec) if isinstance(spec, dict) else {}
+    fills = collect_studio_fills(design_data)
+    if not fills:
+        # Record that upstream was inspected and empty — do not invent finishes.
+        out["studio_color_treatment_source"] = {
+            "inspected": True,
+            "fill_count": 0,
+            "provenance": "unconfirmed",
+        }
+        return out
+    derived = color_treatment_from_studio_fills(fills)
+    out["studio_color_treatment_source"] = {
+        "inspected": True,
+        "fill_count": len(fills),
+        "provenance": (derived or {}).get("provenance") or "unknown",
+        "mode": (derived or {}).get("mode"),
+        "gradient_id": (derived or {}).get("gradient_id"),
+    }
+    outfit = _as_dict(out.get("outfit"))
+    pieces_out: list[Any] = []
+    for piece in outfit.get("pieces") or []:
+        if not isinstance(piece, dict):
+            pieces_out.append(piece)
+            continue
+        pieces_out.append(apply_studio_fills_to_piece(piece, fills))
+    outfit["pieces"] = pieces_out
+    out["outfit"] = outfit
+    return out
 
 
 def color_treatment_prompt_contract(piece: dict[str, Any]) -> str:
@@ -289,7 +568,9 @@ def detect_closure_caption_mismatch(
     if not text:
         return None
 
-    if req == "buttons" and _caption_implies_zipper_fly(text) and not _caption_implies_buttons(text):
+    if req == "buttons" and _caption_implies_zipper_fly(text):
+        # Forbidden zipper-fly references flag even when button tokens also appear
+        # on the same sheet (e.g. "WAISTBAND & BUTTON" + "FLY (ZIPPER)").
         return {
             "code": "closure_caption_mismatch",
             "designer_requirement": "buttons",
@@ -303,20 +584,19 @@ def detect_closure_caption_mismatch(
             "review_state": "proposed_unverified",
         }
     if req == "zipper" and _caption_implies_buttons(text) and not _caption_implies_zipper_fly(text):
-        # Soft: buttons mentioned without zipper when zipper required.
-        if "button" in text and "zipper" not in text and "zip" not in text:
-            return {
-                "code": "closure_caption_mismatch",
-                "designer_requirement": "zipper",
-                "generated_implies": "buttons",
-                "message": (
-                    "Structured designer closure requires a zipper, but generated "
-                    "captions/annotations describe buttons instead. "
-                    "Artwork must be reviewed — text checks do not prove pixels."
-                ),
-                "manufacturing_evidence": False,
-                "review_state": "proposed_unverified",
-            }
+        # Conflicting button-only evidence when designer requires zipper.
+        return {
+            "code": "closure_caption_mismatch",
+            "designer_requirement": "zipper",
+            "generated_implies": "buttons",
+            "message": (
+                "Structured designer closure requires a zipper, but generated "
+                "captions/annotations describe buttons instead. "
+                "Artwork must be reviewed — text checks do not prove pixels."
+            ),
+            "manufacturing_evidence": False,
+            "review_state": "proposed_unverified",
+        }
     return None
 
 
@@ -326,28 +606,75 @@ def detect_color_treatment_text_mismatch(
     rendered_color_text: str | None = None,
     analysis: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Flag when structured gradient intent is flattened to a single unrelated color label."""
+    """Flag when structured gradient intent is flattened or misdescribed in text.
+
+    Catches single-hue labels **and** two-tone / color-block descriptive text that
+    evade the older exact-color-word check when the source treatment is a
+    structured gradient.
+    """
     ct = piece_color_treatment(piece)
     if not ct or ct.get("mode") not in {"gradient", "ombre", "ombré"}:
         return None
+    # Do NOT fold piece.color_hint into the blob — a correct designer hint
+    # (e.g. "… gradient") must not mask flattened rendered/PDF color text.
     blob = _text_blob(
         rendered_color_text,
         (analysis or {}).get("colors") if isinstance(analysis, dict) else None,
+        (analysis or {}).get("color_treatment") if isinstance(analysis, dict) else None,
         piece.get("garment_color"),
     )
     if not blob:
         return None
-    # Flattened single hue with no gradient language while designer required gradient.
-    if "gradient" not in blob and "ombre" not in blob and "ombré" not in blob:
-        if re.fullmatch(r"red|black|burgundy|navy|blue|green|white|yellow|purple", blob.strip()):
+    if _GRADIENT_TEXT_RE.search(blob):
+        return None
+
+    rendered = blob.strip()
+    # Two-tone / hard-split language without gradient terms — still a mismatch
+    # when the designer/source treatment is a structured gradient.
+    if _TWO_TONE_TEXT_RE.search(rendered):
+        return {
+            "code": "color_treatment_simplified",
+            "designer_mode": ct.get("mode"),
+            "rendered": rendered[:160],
+            "message": (
+                f"Designer color treatment is {ct.get('mode')}, but rendered/spec color "
+                f"text describes a two-tone/color-block finish (“{rendered[:80]}”) without "
+                "gradient language. Flag for manual review — do not silently accept a "
+                "different finish."
+            ),
+            "manufacturing_evidence": False,
+            "review_state": "proposed_unverified",
+        }
+
+    # Flattened single hue (optionally with filler words) and no gradient language.
+    if _SINGLE_HUE_RE.fullmatch(rendered) or re.fullmatch(
+        r"red|black|burgundy|navy|blue|green|white|yellow|purple", rendered
+    ):
+        return {
+            "code": "color_treatment_simplified",
+            "designer_mode": ct.get("mode"),
+            "rendered": rendered,
+            "message": (
+                f"Designer color treatment is {ct.get('mode')}, but rendered/spec color "
+                f"text simplified to “{rendered}”. Flag for manual review — "
+                "do not silently accept a different finish."
+            ),
+            "manufacturing_evidence": False,
+            "review_state": "proposed_unverified",
+        }
+
+    # Multi-word color lists without gradient language still count as flattened
+    # when upstream gradient was confirmed (e.g. "near-black, burgundy").
+    if ct.get("designer_confirmed") or str(ct.get("provenance") or "") == "confirmed":
+        if "," in rendered or " and " in rendered:
             return {
                 "code": "color_treatment_simplified",
                 "designer_mode": ct.get("mode"),
-                "rendered": blob.strip(),
+                "rendered": rendered[:160],
                 "message": (
-                    f"Designer color treatment is {ct.get('mode')}, but rendered/spec color "
-                    f"text simplified to “{blob.strip()}”. Flag for manual review — "
-                    "do not silently accept a different finish."
+                    f"Designer color treatment is confirmed {ct.get('mode')}, but rendered/"
+                    f"spec color text (“{rendered[:80]}”) omits gradient language. "
+                    "Flag for manual review."
                 ),
                 "manufacturing_evidence": False,
                 "review_state": "proposed_unverified",
@@ -384,21 +711,41 @@ def apply_fidelity_gates_to_artifact_meta(
 
     out["fidelity_mismatches"] = mismatches
     out["manufacturing_evidence"] = False
-    # Keep include=True so owners can see and review; never claim manufacturing evidence.
     prior = str(out.get("review_state") or "").strip().lower()
-    if prior not in {"rejected_category_mismatch", "excluded_mismatch", "rejected"}:
+    already_rejected = prior in _REJECTED_ART_STATES or out.get("preview_include") is False
+    if already_rejected:
+        # Rejection is authoritative — never revive preview_include.
+        out["preview_include"] = False
+        if prior not in _REJECTED_ART_STATES and out.get("preview_include") is False:
+            # Keep existing rejected-ish review_state when present.
+            pass
+    else:
+        # Keep include=True so owners can see and review; never claim manufacturing evidence.
         out["review_state"] = "proposed_unverified"
+        out["preview_include"] = True
     out["review_message"] = mismatches[0]["message"]
-    out["preview_include"] = True
     return out
 
 
 def stamp_color_treatment_onto_piece(piece: dict[str, Any]) -> dict[str, Any]:
-    """Ensure color_treatment is explicitly present when inferable (non-destructive)."""
+    """Ensure color_treatment is explicitly present when inferable (non-destructive).
+
+    Prefer studio/upstream fills over a flattened red-only hint. Never invent a
+    finish when no source exists.
+    """
     out = deepcopy(piece)
+    if out.get("studio_fills") or out.get("upstream_fills"):
+        out = apply_studio_fills_to_piece(
+            out, out.get("studio_fills") or out.get("upstream_fills")
+        )
     existing = normalize_color_treatment(out.get("color_treatment"))
-    if existing:
-        out["color_treatment"] = existing
+    if existing and existing.get("mode") not in {None, "", "empty"}:
+        # Re-resolve so upstream gradient can replace flattened solid.
+        resolved = piece_color_treatment(out)
+        if resolved:
+            out["color_treatment"] = resolved
+        else:
+            out["color_treatment"] = existing
         return out
     inferred = piece_color_treatment(out)
     if inferred:
@@ -411,15 +758,26 @@ def format_color_treatment_for_pdf(piece: dict[str, Any]) -> str:
     ct = piece_color_treatment(piece)
     if not ct:
         hint = str(piece.get("color_hint") or "").strip()
-        return hint or "—"
+        if hint:
+            return f"{hint} · provenance: unconfirmed (no structured treatment)"
+        return "— · provenance: unconfirmed"
     mode = ct.get("mode") or "unspecified"
     named = ", ".join(str(x) for x in (ct.get("named_colors") or ct.get("stops") or [])[:8]) or "—"
     direction = ct.get("direction") or "—"
     placement = ct.get("placement") or "—"
-    confirmed = "designer-confirmed" if ct.get("designer_confirmed") else (ct.get("source") or "specified")
+    provenance = ct.get("provenance") or (
+        "confirmed" if ct.get("designer_confirmed") else (ct.get("source") or "unconfirmed")
+    )
+    confirmed = (
+        "designer-confirmed"
+        if ct.get("designer_confirmed")
+        else str(provenance)
+    )
     line = (
         f"{mode} · colors: {named} · direction: {direction} · placement: {placement} · {confirmed}"
     )
+    if ct.get("gradient_id"):
+        line += f" · gradient_id: {ct['gradient_id']}"
     if ct.get("notes"):
         line += f" · {ct['notes'][:120]}"
     return line

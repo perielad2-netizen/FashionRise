@@ -1,0 +1,22 @@
+{
+  "_comment": "Bounded offline fixture — real Studio V1 fill shape (no customer PDF/image bytes).",
+  "schema": "fashionrise.studio.draft/v1",
+  "fills": [
+    {
+      "id": "fill-shirt-gradient-1",
+      "contour": [40, 60, 180, 60, 180, 260, 40, 260],
+      "style": {
+        "kind": "gradient",
+        "gradientId": "near-black-burgundy",
+        "colors": ["#1a0a0a", "#6b1c2a"],
+        "angle": 90
+      },
+      "seedX": 110,
+      "seedY": 140
+    }
+  ],
+  "back": {
+    "strokes": [],
+    "fills": []
+  }
+}
