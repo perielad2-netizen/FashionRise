@@ -41,6 +41,13 @@ from app.services.techpack_flats import (
     pattern_inventory_for_category,
 )
 from app.services.techpack_garments import POM_LABELS
+from app.services.techpack_manufacturing import (
+    READINESS_LABELS,
+    enrich_spec_for_manufacturing_preview,
+    evaluate_artifact_for_piece,
+    normalize_closure_display,
+    normalize_shell_material,
+)
 from app.services.techpack_spec import ensure_v2
 from app.storage.local import LocalStorageBackend
 
@@ -344,21 +351,48 @@ def _side_cell(label: str, path: Path | None, styles: dict[str, ParagraphStyle],
 
 
 def _cutting_layout_schematic(category: str) -> Drawing:
-    """Deterministic fabric-width / grain / fold planning sketch — NOT TO SCALE."""
+    """Deterministic fabric-width / grain / fold planning sketch — NOT TO SCALE.
+
+    Intentionally avoids generic Piece A/B/C rectangles presented as cutting layouts.
+    """
     d = Drawing(420, 160)
     d.add(Rect(20, 20, 380, 120, strokeColor=INK, strokeWidth=1.2, fillColor=CREAM))
-    d.add(String(28, 128, f"CUTTING LAYOUT EXAMPLE — {category.upper()}", fontName="Helvetica-Bold", fontSize=8, fillColor=INK))
-    d.add(String(28, 112, "Fabric width (example 140–150 cm) · fold edge marked · grainline arrows", fontName="Helvetica", fontSize=7, fillColor=MUTED))
+    d.add(
+        String(
+            28,
+            128,
+            f"PATTERN PLANNING AID — {category.upper()} (NOT A CUTTING PATTERN)",
+            fontName="Helvetica-Bold",
+            fontSize=8,
+            fillColor=INK,
+        )
+    )
+    d.add(
+        String(
+            28,
+            112,
+            "Shows fabric width / fold / grain concepts only. No nested cut pieces are supplied.",
+            fontName="Helvetica",
+            fontSize=7,
+            fillColor=MUTED,
+        )
+    )
     d.add(Line(40, 40, 40, 100, strokeColor=ACCENT, strokeWidth=1.2))
-    d.add(String(44, 70, "grain", fontName="Helvetica", fontSize=6, fillColor=ACCENT))
-    d.add(Rect(80, 50, 70, 50, strokeColor=INK, strokeWidth=1, fillColor=colors.white))
-    d.add(String(88, 70, "Piece A", fontName="Helvetica", fontSize=7, fillColor=INK))
-    d.add(Rect(170, 45, 55, 60, strokeColor=INK, strokeWidth=1, fillColor=colors.white))
-    d.add(String(178, 70, "Piece B", fontName="Helvetica", fontSize=7, fillColor=INK))
-    d.add(Rect(250, 55, 90, 40, strokeColor=INK, strokeWidth=1, fillColor=colors.white))
-    d.add(String(262, 70, "Piece C ×2", fontName="Helvetica", fontSize=7, fillColor=INK))
-    d.add(Line(20, 30, 400, 30, strokeColor=MUTED, strokeWidth=0.8, strokeDashArray=[3, 2]))
-    d.add(String(28, 22, "FOLD →  ·  PATTERN DEVELOPMENT SCHEMATIC — NOT TO SCALE / NOT A CUTTER", fontName="Helvetica", fontSize=6.5, fillColor=MUTED))
+    d.add(String(44, 70, "grain →", fontName="Helvetica", fontSize=6, fillColor=ACCENT))
+    d.add(Line(60, 95, 360, 95, strokeColor=MUTED, strokeWidth=0.8, strokeDashArray=[4, 3]))
+    d.add(String(64, 82, "fold edge (planning)", fontName="Helvetica", fontSize=7, fillColor=MUTED))
+    d.add(Rect(70, 40, 280, 8, strokeColor=INK, strokeWidth=0.8, fillColor=colors.white))
+    d.add(String(76, 42, "fabric width example 140–150 cm", fontName="Helvetica", fontSize=6, fillColor=INK))
+    d.add(
+        String(
+            28,
+            22,
+            "NOT TO SCALE · NOT A CUTTER MARKER · Patternmaker must develop the sewing pattern",
+            fontName="Helvetica",
+            fontSize=6.5,
+            fillColor=MUTED,
+        )
+    )
     return d
 
 
@@ -522,28 +556,61 @@ def _piece_sections(
         )
     )
 
-    mats = piece.get("materials") if isinstance(piece.get("materials"), dict) else {}
+    piece_norm = normalize_shell_material(piece)
+    mats = piece_norm.get("materials") if isinstance(piece_norm.get("materials"), dict) else {}
     shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
     lining = mats.get("lining") if isinstance(mats.get("lining"), dict) else {}
-    closures = piece.get("closures") if isinstance(piece.get("closures"), dict) else {}
+    rib = mats.get("rib") if isinstance(mats.get("rib"), dict) else {}
+    closures = normalize_closure_display(
+        piece_norm.get("closures") if isinstance(piece_norm.get("closures"), dict) else {}
+    )
     fit = piece.get("fit") if isinstance(piece.get("fit"), dict) else {}
     story.append(Paragraph("Materials & construction identity", styles["h3"]))
     shell_name = str(shell.get("name") or shell.get("suggestion") or "—")
     composition = str(shell.get("composition") or "Unknown / not confirmed")
+    garment_color = str(piece_norm.get("color_hint") or piece.get("color_hint") or "—")
+    colorway_note = str(shell.get("colorway_note") or "")
     story.append(
         _kv_table(
             [
-                ("Shell fabric", shell_name),
+                ("Garment color", garment_color),
+                ("Shell material", shell_name if shell_name.strip() not in ("", "—") else "Not confirmed"),
                 ("Composition", composition),
+                ("Fabric structure", str(shell.get("fabric_structure") or "knit/woven — not confirmed")),
+                ("Stretch", str(shell.get("stretch") or "not confirmed")),
+                ("Weight / GSM", str(shell.get("weight_gsm") or shell.get("gsm") or "not confirmed")),
                 ("Lining", str(lining.get("name") or "—")),
-                ("Closure", str(closures.get("type") or closures.get("suggestion") or "—")),
+                ("Rib / band", str(rib.get("name") or "—")),
+                ("Closure / fastener", str(closures.get("display_type") or "—")),
+                ("Closure notes", str(closures.get("notes") or "—")),
                 ("Silhouette", str(fit.get("silhouette") or fit.get("suggestion") or "—")),
+                ("Length style", str(fit.get("length_style") or "—")),
                 ("Ease note", str(fit.get("ease_note") or "—")),
-                ("Seam allowance", _fmt_value(piece.get("seam_allowance"))),
+                (
+                    "Seam allowance",
+                    _fmt_value(piece.get("seam_allowance"))
+                    + " (default draft SA — not designer-approved unless confirmed)",
+                ),
             ],
             styles,
         )
     )
+    if colorway_note:
+        story.append(
+            Paragraph(
+                f"<b>REVIEW:</b> Outfit color list was previously stored as shell name "
+                f"(“{colorway_note[:120]}”). Color and fabric are separated above — confirm shell quality.",
+                styles["warn"],
+            )
+        )
+    if str(closures.get("review_status") or "") == "needs_review":
+        story.append(
+            Paragraph(
+                "<b>REVIEW:</b> Closure must be named (zipper type/length, button, elastic, etc.). "
+                "Boolean placeholders such as “True” are not manufacturing specifications.",
+                styles["warn"],
+            )
+        )
     contrad = material_contradiction(shell_name, composition)
     if contrad:
         story.append(Paragraph(f"<b>REVIEW:</b> {contrad}", styles["warn"]))
@@ -557,10 +624,32 @@ def _piece_sections(
         meta = arts.get(kind) if isinstance(arts.get(kind), dict) else None
         if not meta:
             return None
+        decision = evaluate_artifact_for_piece(piece, kind=kind, artifact_meta=meta)
+        if not decision.get("include", True) or meta.get("preview_include") is False:
+            return None
         key = meta.get("storage_key")
         if not isinstance(key, str) or not key:
             return None
         return storage.resolve_private_techpack_file(key=key)
+
+    def _art_exclusion_note(kind: str) -> str | None:
+        meta = arts.get(kind) if isinstance(arts.get(kind), dict) else None
+        if not isinstance(meta, dict):
+            return None
+        decision = evaluate_artifact_for_piece(piece, kind=kind, artifact_meta=meta)
+        rejected = (
+            not decision.get("include", True)
+            or meta.get("preview_include") is False
+            or str(meta.get("review_state") or "").lower()
+            in {"rejected_category_mismatch", "excluded_mismatch", "rejected"}
+        )
+        if not rejected:
+            return None
+        return str(
+            decision.get("reason")
+            or meta.get("review_message")
+            or f"{kind} excluded from corrected preview (original preserved)."
+        )
 
     front_art = _art_path("flat_front")
     back_art = _art_path("flat_back") or _art_path("flat_back_proposed")
@@ -615,10 +704,36 @@ def _piece_sections(
         )
         flats.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
         story.append(flats)
+        if arts.get("flat_back_proposed") and not arts.get("flat_back"):
+            story.append(
+                Paragraph(
+                    "<b>PROPOSED BACK:</b> No real Magic back image was available. "
+                    "Back construction is proposed for designer confirmation — not confirmed rear detailing.",
+                    styles["warn"],
+                )
+            )
+        detail_excl = _art_exclusion_note("detail_callouts")
         if detail_art:
             story.append(Paragraph("Garment detail illustrations", styles["h3"]))
             # Use nearly full content width so detail sheets are legible (not tiny top-left).
-            story.append(_look_image(detail_art, 170 * mm, 130 * mm, styles))
+            story.append(_look_image(detail_art, 170 * mm, 145 * mm, styles))
+        elif detail_excl:
+            story.append(Paragraph("Garment detail illustrations", styles["h3"]))
+            story.append(
+                Paragraph(
+                    f"<b>MISSING / EXCLUDED:</b> {detail_excl} "
+                    "Original file and provenance are preserved; another garment’s artwork was not substituted.",
+                    styles["warn"],
+                )
+            )
+        else:
+            story.append(Paragraph("Garment detail illustrations", styles["h3"]))
+            story.append(
+                Paragraph(
+                    "No category-confirmed detail callout sheet is available for this component.",
+                    styles["muted"],
+                )
+            )
     else:
         story.append(
             Paragraph(
@@ -636,6 +751,17 @@ def _piece_sections(
             TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER")])
         )
         story.append(KeepTogether([flats]))
+        # Still surface excluded Professional detail sheets (original preserved, not substituted).
+        detail_excl = _art_exclusion_note("detail_callouts")
+        if detail_excl:
+            story.append(Paragraph("Garment detail illustrations", styles["h3"]))
+            story.append(
+                Paragraph(
+                    f"<b>MISSING / EXCLUDED:</b> {detail_excl} "
+                    "Original file and provenance are preserved; another garment’s artwork was not substituted.",
+                    styles["warn"],
+                )
+            )
 
     story.append(PageBreak())
     story.append(Paragraph(f"Measurement specification — {heading}", styles["h2"]))
@@ -787,6 +913,14 @@ def _piece_sections(
     story.append(pat_table)
     story.append(Spacer(1, 8))
     story.append(Paragraph("Cutting layout / pattern development", styles["h3"]))
+    story.append(
+        Paragraph(
+            "Sample development: an actual sewing pattern is <b>not</b> supplied with this pack. "
+            "A patternmaker must develop the pattern from confirmed POMs and construction. "
+            "NOT-TO-SCALE schematics are planning aids only — not usable cutting patterns.",
+            styles["warn"],
+        )
+    )
     if professional and pattern_art is not None:
         story.append(
             Paragraph(
@@ -796,9 +930,26 @@ def _piece_sections(
         )
         story.append(_look_image(pattern_art, 160 * mm, 110 * mm, styles))
     else:
+        # Honest about skipped pattern-sheet generation (budget/optional) — do not imply a cutter.
+        skipped = bool(professional and pattern_art is None)
+        if skipped:
+            story.append(
+                Paragraph(
+                    "Pattern-sheet illustration was not generated for this run (optional budget skip or unavailable). "
+                    "This is not a completed cutting layout.",
+                    styles["muted"],
+                )
+            )
         story.append(_cutting_layout_schematic(cat))
 
     story.append(Paragraph("Construction process", styles["h3"]))
+    story.append(
+        Paragraph(
+            "Default seam allowances and generic sewing steps are draft aids only — not designer-approved "
+            "construction unless explicitly confirmed.",
+            styles["muted"],
+        )
+    )
     steps = piece.get("construction_steps") if isinstance(piece.get("construction_steps"), list) else []
     if not steps:
         steps = default_construction_steps(cat)
@@ -834,10 +985,18 @@ def _build_story_v2(
     spec: dict[str, Any],
     styles: dict[str, ParagraphStyle],
 ) -> list[Any]:
-    v2 = ensure_v2(spec)
+    v2 = enrich_spec_for_manufacturing_preview(ensure_v2(spec))
     units = str(v2.get("units") or "cm")
     outfit = v2.get("outfit") if isinstance(v2.get("outfit"), dict) else {}
     pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+    mfg = (
+        (v2.get("ai") or {}).get("manufacturing_readiness")
+        if isinstance(v2.get("ai"), dict)
+        else {}
+    )
+    if not isinstance(mfg, dict):
+        mfg = {}
+    readiness_label = str(mfg.get("label") or READINESS_LABELS.get("DESIGN_CONCEPT", "DESIGN CONCEPT / DRAFT"))
     story: list[Any] = []
 
     # A. Cover
@@ -846,7 +1005,8 @@ def _build_story_v2(
     cover_prov = resolve_generation_provenance(v2)
     story.append(
         Paragraph(
-            f"<b>Pack type:</b> {cover_prov['label']} · DRAFT / UNVERIFIED · Schematics NOT TO SCALE",
+            f"<b>Pack type:</b> {cover_prov['label']} · <b>Readiness:</b> {readiness_label} · "
+            "Schematics NOT TO SCALE · AI completion ≠ sample-development ready",
             styles["body"],
         )
     )
@@ -983,15 +1143,69 @@ def _build_story_v2(
     for piece in pieces:
         story.extend(_piece_sections(piece, styles=styles, units=units))
 
-    # H. Review / readiness
-    story.append(Paragraph("Review and production readiness", styles["h2"]))
+    # H. Review / readiness (manufacturing gate)
+    story.append(Paragraph("Manufacturing readiness & review", styles["h2"]))
     story.append(
         Paragraph(
-            "Unresolved items and approval checklist. Failed AI runs never overwrite prior good drafts.",
+            f"<b>Current readiness:</b> {readiness_label}. "
+            "Levels: DESIGN CONCEPT / DRAFT → SAMPLE-DEVELOPMENT READY → PRODUCTION APPROVED "
+            "(reserved for separately verified approval). "
+            "AI completion alone never grants SAMPLE-DEVELOPMENT READY or PRODUCTION APPROVED.",
+            styles["body"],
+        )
+    )
+    pattern_status = mfg.get("pattern_status") if isinstance(mfg.get("pattern_status"), dict) else {}
+    story.append(
+        Paragraph(
+            str(
+                pattern_status.get("message")
+                or (
+                    "No production sewing pattern is supplied. Patternmaker must develop the sample pattern."
+                )
+            ),
+            styles["warn"],
+        )
+    )
+    missing = mfg.get("missing_required") if isinstance(mfg.get("missing_required"), list) else []
+    if missing:
+        story.append(Paragraph("Missing requirements for SAMPLE-DEVELOPMENT READY", styles["h3"]))
+        for item in missing[:40]:
+            story.append(Paragraph(f"• {item}", styles["warn"]))
+    # Per-garment completeness
+    story.append(Paragraph("Per-garment completeness", styles["h3"]))
+    for piece in pieces:
+        pid = str(piece.get("id") or "")
+        label = str(piece.get("label") or piece.get("category") or pid)
+        piece_issues = [
+            w
+            for w in (v2.get("warnings") if isinstance(v2.get("warnings"), list) else [])
+            if isinstance(w, dict) and str(w.get("piece_id") or "") == pid
+        ]
+        status = "NEEDS REVIEW" if piece_issues else "No blocking findings on this pass (still draft)"
+        story.append(Paragraph(f"<b>{label}</b> ({piece.get('category')}) — {status}", styles["body"]))
+        for w in piece_issues[:12]:
+            story.append(Paragraph(f"  • {w.get('message') or w}", styles["warn"]))
+        # Confirmed vs proposed vs unresolved legend
+        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        if arts.get("flat_back_proposed") and not arts.get("flat_back"):
+            story.append(
+                Paragraph(
+                    "  • Back flat is PROPOSED (no real Magic back) — designer confirmation required.",
+                    styles["muted"],
+                )
+            )
+    story.append(Paragraph("Legend", styles["h3"]))
+    story.append(
+        Paragraph(
+            "<b>Confirmed</b> = designer-entered / checklist-checked. "
+            "<b>Proposed</b> = AI or default draft (backs, generic SA, inferred closures). "
+            "<b>Unresolved</b> = blocking SAMPLE-DEVELOPMENT READY until corrected.",
             styles["muted"],
         )
     )
     qc = v2.get("qc_checklist") if isinstance(v2.get("qc_checklist"), list) else []
+    story.append(Paragraph("Designer confirmation checklist", styles["h3"]))
     for row in qc[:30]:
         if not isinstance(row, dict):
             continue
@@ -1002,7 +1216,8 @@ def _build_story_v2(
         Paragraph(
             "Coordination notes: for multi-piece outfits, keep colorways and size consistency "
             "aligned across components. Patternmaker must validate seam allowances, notches, "
-            "and graded sizes before any production cut.",
+            "and graded sizes before any production cut. "
+            "Do not treat default construction steps as approved manufacturing instructions.",
             styles["body"],
         )
     )

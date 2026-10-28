@@ -382,4 +382,26 @@ def collect_measurement_warnings(spec: dict[str, Any]) -> list[dict[str, Any]]:
                 )
                 cell["review_status"] = "needs_review"
                 cell["confidence"] = "low"
+    # Category-aware manufacturing contradictions (body vs finished, silhouette bands).
+    # Never silently corrects designer values — only flags NEEDS REVIEW.
+    try:
+        from app.services.techpack_manufacturing import (
+            assess_manufacturing_readiness,
+            validate_piece_measurements,
+            validate_sample_size,
+        )
+
+        body = spec.get("body") if isinstance(spec.get("body"), dict) else {}
+        prefs = spec.get("preferences") if isinstance(spec.get("preferences"), dict) else {}
+        for issue in validate_sample_size(spec):
+            warnings.append(issue)
+        for piece in pieces:
+            if not isinstance(piece, dict):
+                continue
+            for issue in validate_piece_measurements(piece, body=body, preferences=prefs):
+                warnings.append(issue)
+        # Keep assessment available for callers that only collect warnings.
+        _ = assess_manufacturing_readiness
+    except Exception:  # noqa: BLE001 — never break draft load on review helpers
+        pass
     return warnings

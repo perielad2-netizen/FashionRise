@@ -165,5 +165,8 @@ def test_long_multipage_two_piece_document():
         text, pages, pdf = _pdf_text(spec, front=front, back=back)
         assert pages >= 8
         assert len(pdf) > 2000
-        assert "Review and production readiness" in text
+        assert (
+            "Review and production readiness" in text
+            or "Manufacturing readiness" in text
+        )
         assert "Create Real Design V2" not in text or "FashionRise" in text

@@ -281,13 +281,23 @@ class OpenAIProfessionalProvider:
 
     @staticmethod
     def _detail_prompt(analysis: dict[str, Any], *, piece: dict[str, Any]) -> str:
+        cat = str(piece.get("category") or "garment")
+        label = str(piece.get("label") or cat)
         return (
-            "Create a professional fashion technical DETAIL callout sheet for THIS garment from the "
-            "reference photo. White background. Show close-up construction callouts for neckline, "
-            "sleeve/cuff, hem, and any visible seams or pattern direction. "
+            "Create a professional fashion technical DETAIL callout sheet for ONE garment only: "
+            f"category={cat}, label={label}. "
+            "Do NOT include construction details from any other garment in the outfit "
+            "(e.g. never put hoodie zippers/hood/drawcord on a shorts detail sheet, and never put "
+            "waistband/inseam/leg-opening callouts on a top detail sheet). "
+            "White background. Show close-up construction callouts that belong to THIS category "
+            "(neckline/sleeve/cuff/hem/zipper for tops; waistband/pockets/hem/fly for bottoms). "
             f"Neckline={analysis.get('neckline')}; sleeves={analysis.get('sleeves')}; "
-            f"pattern={analysis.get('fabric_pattern')} {analysis.get('stripe_direction')}. "
-            "No model body. Label callouts briefly. Not a photo — a technical illustration."
+            f"pattern={analysis.get('fabric_pattern')} {analysis.get('stripe_direction')}; "
+            f"silhouette={analysis.get('silhouette')}. "
+            "If a detail is not visible on this garment, omit it rather than inventing another garment's parts. "
+            "No model body. Label callouts briefly. Not a photo — a technical illustration. "
+            "If you cannot produce category-correct details, leave callouts blank rather than borrowing "
+            "from a different garment — failures require designer review, not silent approval."
         )
 
     @staticmethod
