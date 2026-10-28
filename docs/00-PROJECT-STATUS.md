@@ -3,8 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**Issue #124 BE fidelity on #123** — branch `cursor/web-techpack-fidelity-on-123-77c6` @ **`e773ea8d`** · base PR #123 tip `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · **0 paid AI** · **STOP for Technical PM**.)
-**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 review→PDF invalidation is preserved. This tip adds FR-B9F9 designer-spec fidelity gates (closure + gradient provenance) **on top of** #123. **Do not auto-regen paid FR-B9F9.** Prefer review exclusion + Update PDF (No AI) for existing mismatched details.
+**Last updated:** 2026-10-28 (**Issue #124 BE fidelity on #123** — branch `cursor/web-techpack-fidelity-on-123-77c6` @ **`2335e916`** · base PR #123 tip `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · **0 paid AI** · **STOP for Technical PM**.)**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 review→PDF invalidation is preserved. This tip adds FR-B9F9 designer-spec fidelity gates (closure + gradient provenance) **on top of** #123. **Do not auto-regen paid FR-B9F9.** Prefer review exclusion + Update PDF (No AI) for existing mismatched details.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -1159,7 +1158,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-28 | **Issue #124 BE fidelity integrated onto #123 (PR #125)** @ `e773ea8d`: mixed caption zipper false-negative fix; studio gradient → `color_treatment` provenance; rejection `preview_include` consistency; base `311e259a`; offline **92** pytest; Alembic none; **0 paid AI**; **STOP for Technical PM — do not deploy**. |
+| 2026-10-28 | **Issue #124 BE fidelity integrated onto #123 (PR #125)** @ `2335e916`: mixed caption zipper false-negative fix; studio gradient → `color_treatment` provenance; rejection `preview_include` consistency; base `311e259a`; offline **92** pytest; Alembic none; **0 paid AI**; **STOP for Technical PM — do not deploy**. |
 | 2026-10-28 | **PR #123 review-guard closure:** fail-closed non-Professional stage + current `last_run_id` + outfit-referenced artifact checks; legacy blank stage only with Professional draft evidence; **69** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. |
 | 2026-10-28 | **PR #123 clean replacement for #122 (CHANGES REQUIRED closure)** @ `80e86f90`/`43c8d376`: review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git; production unchanged; superseded tip by review-guard closure above. |
 | 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
