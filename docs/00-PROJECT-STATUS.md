@@ -3,22 +3,42 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**P0 login incident after PR #119/#120 FE deploy** — FE `13b26c3a` **BROKEN for API** · BE `005034d5` healthy · **STOP for Technical PM** — no autonomous rollback/hotfix.)
+**Last updated:** 2026-10-28 (**P0 login recovery FE fix-forward DEPLOYED** — `releases/13b26c3a-apifix` from source `13b26c3a` + `VITE_API_BASE_URL=/api/v1` · BE `005034d5` **unchanged/no restart** · **STOP** — owner login + PDF smoke still for owner.)
 
-**Phase:** Protected family beta. Owner acceptance of completed-look rollout is **BLOCKED** by login failure on FE `13b26c3a`. Backend/API/nginx remain healthy; root cause is a bad FE production build missing `VITE_API_BASE_URL`.
+**Phase:** Protected family beta. Login API-base P0 recovered via FE-only rebuild. Owner must hard-refresh, confirm login, then resume completed-look PDF smoke. Owner PDF acceptance remains **PENDING**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`13b26c3a`** — Nginx `current` → `releases/13b26c3a` (**P0: API base not baked**). Prior working `69b83c01` preserved on disk. |
-| Backend (FastAPI + PostgreSQL) | **`005034d5`** (PR #119). Alembic **`011`**. `/health`+`/ready` **ok**. |
-| AI worker | `fashionrise-ai-worker` @ **`005034d5`** · **active** · 0 restarts since cutover |
-| Database | `fashionrise_beta` — Alembic **`011`** · users/exports/runs counts unchanged (16 / 17 / 11) |
-| Nginx | Unchanged vs rollout backup · AOP + auth allowlist intact |
+| Frontend (`web-ui`) | **`13b26c3a-apifix`** — Nginx `current` → `releases/13b26c3a-apifix` (source SHA `13b26c3a…`, rebuilt with `/api/v1`). Broken `releases/13b26c3a` **preserved**. Rollback `releases/69b83c01` **preserved**. |
+| Backend (FastAPI + PostgreSQL) | **`005034d5`** (PR #119). Alembic **`011`**. `/health`+`/ready` **ok**. **No restart** this recovery (MainPID unchanged since 12:51:28 UTC). |
+| AI worker | `fashionrise-ai-worker` @ **`005034d5`** · **active** · not restarted |
+| Database | `fashionrise_beta` — Alembic **`011`** · exports **17** · techpack runs **11** unchanged |
+| Nginx | FE symlink only · AOP + auth allowlist untouched |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
-## P0 — Production login blocked after FE `13b26c3a` (2026-10-28) — STOP for Technical PM
+## P0 login recovery — FE-only fix-forward (2026-10-28) — STOP for owner verify
+
+Technical PM **APPROVED** narrowly scoped FE recovery. Executed fix-forward (not BE rollback).
+
+| Item | Detail |
+|---|---|
+| Source SHA | `13b26c3a61bf30041eb4726c50b866025e040c5b` (exact approved FE tip) |
+| Build env | Explicit `VITE_API_BASE_URL=/api/v1` (+ registration off / Magic+FrontBack+DualMagic flags from `.env.production.example`) |
+| Gates | `npm run build` **PASS** · `assert-sw-access-safe` **ok** · `assert-prod-api-base` **ok** · packaged JS: `` return\`/api/v1\` `` present · `VITE_API_BASE_URL is not configured` **absent** · on-disk release re-checked before switch |
+| Shell discipline | Deploy/build used `set -euo pipefail`; **no** `tee`/`tail` pipeline masking assert exit |
+| New release | `/var/www/fashionrise/releases/13b26c3a-apifix` · bundle `index-Cowb-TlD.js` · `version.json` sha = source tip · `RELEASE_NOTE.json` |
+| Atomic switch | `ln -sfn …/13b26c3a-apifix /var/www/fashionrise/current` · `nginx -t` · reload · **15:20 UTC / 17:20 Asia/Jerusalem** |
+| Preserved | Broken `releases/13b26c3a` (diagnostic) · working rollback `releases/69b83c01` |
+| BE | **Unchanged** `005034d5` · **not** restarted · health/ready ok |
+| Login path verify | Loopback `POST /api/v1/auth/login` → **401** `Invalid email or password` · FastAPI journal `15:20:25Z` · proves request reaches `/api/v1/auth/login` (safe synthetic credentials only) |
+| Public CF without Access JWT | Expected **302** Cloudflare Access challenge (unchanged trust boundary) |
+| Paid AI / DB / Nginx / CF | **0** paid AI · no migration · no nginx/CF/password/user-data edits · no historical PDF change |
+| Rollback if needed | `ln -sfn /var/www/fashionrise/releases/69b83c01 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Exact next action | Owner: hard-refresh (bypass SW cache) → login → confirm studio loads → then PDF A→B smoke. **STOP** for owner verification. |
+
+## P0 — Production login blocked after FE `13b26c3a` (2026-10-28) — triage (superseded by recovery)
 
 ### Owner report
 
@@ -1153,6 +1173,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-28 | **P0 login recovery FE fix-forward LIVE:** rebuilt source `13b26c3a` with `VITE_API_BASE_URL=/api/v1` → `/var/www/fashionrise/releases/13b26c3a-apifix`; assert-sw + assert-api-base + on-disk JS gates PASS; BE `005034d5` untouched; synthetic login **401** reaches API; broken `13b26c3a` + rollback `69b83c01` preserved; **STOP for owner login + PDF smoke**. |
 | 2026-10-28 | **P0 login incident after FE `13b26c3a`:** owner sees "Unable to reach FashionRise"; API/nginx healthy; **zero** origin login POSTs; live bundle throws `VITE_API_BASE_URL is not configured` (build missing `/api/v1`); assert failed but exit masked by deploy pipeline; recommend FE rollback to `69b83c01` or rebuild with `.env.production`; **STOP for Technical PM** — no autonomous fix. |
 | 2026-10-28 | **PR #119 + #120 controlled production rollout DEPLOYED:** BE tip `005034d5` (14:51 Asia/Jerusalem) + FE `13b26c3a` (14:52); Alembic `011`; ceiling `$50` / `$8` / `$20` / 6 images unchanged; 17 historical PDFs intact; 0 new AI runs/provider calls; backup `techpack-noai-pdf-deploy-20261028T124741Z`; **STOP for owner smoke** — do not claim owner acceptance; no additional paid AI. |
 | 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
