@@ -7,17 +7,28 @@ export type FloodFillErr = {
   ok: false
   reason: 'open_outline' | 'empty_region' | 'outside' | 'too_large'
   message: string
+  /** Approximate leak / gap location in design space when detectable. */
+  gapHint?: { x: number; y: number }
+  /** True when a bounded Close-small-gaps seal would likely close this outline. */
+  suggestCloseGaps?: boolean
 }
 export type FloodFillResult = FloodFillOk | FloodFillErr
 
 /** Soft cap so a leak cannot paint the whole paper. */
 export const MAX_FILL_PIXELS = Math.floor(DESIGN_WIDTH * DESIGN_HEIGHT * 0.42)
 
+/** Default morphological dilate (design px) after sealed-tip rasterization. */
+export const DEFAULT_GAP_CLOSE_PX = 2
+/** Automatic endpoint joint seal — closes multi-stroke tips without merging panels. */
+export const DEFAULT_ENDPOINT_SEAL_PX = 5
+/** Explicit "Close small gaps" seal radius (still bounded; will not span armholes). */
+export const STRONG_ENDPOINT_SEAL_PX = 12
+
 /**
  * Flood-fill a closed ink region. Barriers are the **effective visible ink** after
- * draw/erase compositing (same destination-out rules as the canvas). Model
- * reference and fill contours are not barriers — garment parts are defined by
- * the ink the designer can still see.
+ * draw/erase compositing (same destination-out rules as the canvas), painted with
+ * seal-tip freehand paths so tapered joins that look closed do not leak. Model
+ * reference and fill contours are not barriers.
  */
 export function floodFillRegion(input: {
   strokes: Stroke[]
@@ -26,14 +37,56 @@ export function floodFillRegion(input: {
   style: FillStyle
   /** Dilate ink barriers by this many pixels to close tiny gaps. */
   gapClose?: number
+  /**
+   * When true, apply a stronger but still bounded endpoint seal (Close small gaps).
+   * Does not silently bridge large intentional openings.
+   */
+  closeSmallGaps?: boolean
 }): FloodFillResult {
-  const barrier = buildInkBarrierMask(input.strokes, input.gapClose ?? 2)
-  return floodFillAgainstBarrier({
+  const endpointSeal = input.closeSmallGaps ? STRONG_ENDPOINT_SEAL_PX : DEFAULT_ENDPOINT_SEAL_PX
+  const gapClose = input.gapClose ?? DEFAULT_GAP_CLOSE_PX
+  const barrier = buildInkBarrierMask(input.strokes, gapClose, { endpointSealPx: endpointSeal })
+  const result = floodFillAgainstBarrier({
     barrier,
     x: input.x,
     y: input.y,
     style: input.style,
   })
+  if (result.ok || result.reason !== 'open_outline' || input.closeSmallGaps) {
+    return result
+  }
+
+  // Diagnose whether a bounded stronger seal would help — do not apply it silently.
+  const strong = buildInkBarrierMask(input.strokes, Math.max(gapClose, 3), {
+    endpointSealPx: STRONG_ENDPOINT_SEAL_PX,
+  })
+  const probe = floodFillAgainstBarrier({
+    barrier: strong,
+    x: input.x,
+    y: input.y,
+    style: input.style,
+  })
+  if (probe.ok) {
+    const hint = locateGapHint(barrier, input.x, input.y) ?? result.gapHint
+    return {
+      ok: false,
+      reason: 'open_outline',
+      message:
+        'Outline has a small gap. Use Close small gaps, then tap Fill again — or close the join with the pencil.',
+      gapHint: hint,
+      suggestCloseGaps: true,
+    }
+  }
+
+  const hint = locateGapHint(barrier, input.x, input.y) ?? result.gapHint
+  return {
+    ...result,
+    gapHint: hint,
+    suggestCloseGaps: false,
+    message: hint
+      ? 'Outline looks open near the highlighted spot — close it so the fill stays inside the shape.'
+      : 'Outline looks open — close the shape so the fill stays inside.',
+  }
 }
 
 /** Core flood-fill against a prebuilt barrier mask (testable without Canvas 2D). */
@@ -73,6 +126,8 @@ export function floodFillAgainstBarrier(input: {
   let minY = sy
   let maxX = sx
   let maxY = sy
+  let edgeX = -1
+  let edgeY = -1
 
   while (sp > 0) {
     sp -= 1
@@ -80,12 +135,15 @@ export function floodFillAgainstBarrier(input: {
     const cy = stackY[sp]!
     count += 1
     if (cx === 0 || cy === 0 || cx === DESIGN_WIDTH - 1 || cy === DESIGN_HEIGHT - 1) {
+      edgeX = cx
+      edgeY = cy
       // Fail closed as soon as the flood escapes to the paper edge — do not keep
       // expanding until MAX_FILL_PIXELS (which would mis-report open outlines).
       return {
         ok: false,
         reason: 'open_outline',
-        message: 'Outline looks open — close the shape so the fill stays inside the dress.',
+        message: 'Outline looks open — close the shape so the fill stays inside.',
+        gapHint: { x: edgeX, y: edgeY },
       }
     }
     if (count > MAX_FILL_PIXELS) {
@@ -145,11 +203,21 @@ export function floodFillAgainstBarrier(input: {
   }
 }
 
+export type BarrierMaskOptions = {
+  /** Max distance (design px) to bridge stroke endpoints / self-close tips. */
+  endpointSealPx?: number
+}
+
 /**
- * Rasterize draw+erase strokes into a barrier mask matching what the user sees.
+ * Rasterize draw+erase strokes into a barrier mask matching what the user sees,
+ * with seal-tip freehand paths plus a bounded endpoint joint seal.
  * Exported for regression tests (erased seams must not remain invisible barriers).
  */
-export function buildInkBarrierMask(strokes: Stroke[], gapClose = 3): Uint8Array {
+export function buildInkBarrierMask(
+  strokes: Stroke[],
+  gapClose = DEFAULT_GAP_CLOSE_PX,
+  options?: BarrierMaskOptions,
+): Uint8Array {
   const canvas = document.createElement('canvas')
   canvas.width = DESIGN_WIDTH
   canvas.height = DESIGN_HEIGHT
@@ -157,21 +225,134 @@ export function buildInkBarrierMask(strokes: Stroke[], gapClose = 3): Uint8Array
   if (!ctx) return new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
 
   ctx.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-  // Same ink compositing as Konva/PNG: erase uses destination-out on ink only.
-  paintInkStrokes(ctx, strokes)
+  // Seal-tip paths for draw ink so tapered pencil tips do not open joins in the mask.
+  paintInkStrokes(ctx, strokes, { sealTips: true })
 
   const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
   const raw = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
   for (let i = 0, p = 0; i < raw.length; i += 1, p += 4) {
     raw[i] = img.data[p + 3]! > 12 ? 1 : 0
   }
+
+  const sealPx = options?.endpointSealPx ?? DEFAULT_ENDPOINT_SEAL_PX
+  if (sealPx > 0) {
+    sealStrokeJoints(raw, strokes, sealPx)
+  }
+
   // Morphological dilate closes freehand hairline gaps at corners while staying
-  // derived from rendered ink (not inventing invisible seams).
+  // derived from rendered ink (not inventing invisible seams across panels).
   if (gapClose <= 0) return raw
   return dilateMask(raw, gapClose)
 }
 
-function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
+/** Collect first/last design-space points of draw strokes (stride-3 freehand). */
+export function collectDrawStrokeEndpoints(strokes: Stroke[]): {
+  x: number
+  y: number
+  size: number
+  strokeId: string
+  which: 'start' | 'end'
+}[] {
+  const out: {
+    x: number
+    y: number
+    size: number
+    strokeId: string
+    which: 'start' | 'end'
+  }[] = []
+  for (const stroke of strokes) {
+    if (stroke.tool !== 'draw') continue
+    const pts: { x: number; y: number }[] = []
+    for (let i = 0; i + 1 < stroke.points.length; i += 3) {
+      const x = stroke.points[i]
+      const y = stroke.points[i + 1]
+      if (x === undefined || y === undefined) continue
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+      pts.push({ x, y })
+    }
+    if (pts.length === 0) continue
+    const first = pts[0]!
+    const last = pts[pts.length - 1]!
+    out.push({ x: first.x, y: first.y, size: stroke.size, strokeId: stroke.id, which: 'start' })
+    if (pts.length > 1) {
+      out.push({ x: last.x, y: last.y, size: stroke.size, strokeId: stroke.id, which: 'end' })
+    }
+  }
+  return out
+}
+
+/**
+ * Bridge nearby stroke endpoints into the barrier mask only.
+ * Bounded by maxGapPx so intentional openings (armholes, panel gaps) stay open.
+ */
+export function sealStrokeJoints(mask: Uint8Array, strokes: Stroke[], maxGapPx: number): void {
+  if (maxGapPx <= 0) return
+  const ends = collectDrawStrokeEndpoints(strokes)
+  // Self-close nearly finished single strokes (start≈end).
+  const byStroke = new Map<string, typeof ends>()
+  for (const e of ends) {
+    const list = byStroke.get(e.strokeId) ?? []
+    list.push(e)
+    byStroke.set(e.strokeId, list)
+  }
+  for (const list of byStroke.values()) {
+    const start = list.find((e) => e.which === 'start')
+    const end = list.find((e) => e.which === 'end')
+    if (!start || !end) continue
+    const d = Math.hypot(start.x - end.x, start.y - end.y)
+    if (d > 0.5 && d <= maxGapPx) {
+      const r = Math.max(2, Math.ceil(Math.max(start.size, end.size) / 2) + 1)
+      stampCapsule(mask, start.x, start.y, end.x, end.y, r)
+    }
+  }
+  // Cross-stroke joins (multi-stroke outlines).
+  for (let i = 0; i < ends.length; i += 1) {
+    for (let j = i + 1; j < ends.length; j += 1) {
+      const a = ends[i]!
+      const b = ends[j]!
+      if (a.strokeId === b.strokeId) continue
+      const d = Math.hypot(a.x - b.x, a.y - b.y)
+      if (d > maxGapPx) continue
+      const r = Math.max(2, Math.ceil((a.size + b.size) / 4) + 1)
+      stampCapsule(mask, a.x, a.y, b.x, b.y, r)
+    }
+  }
+}
+
+function stampCapsule(
+  mask: Uint8Array,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  radius: number,
+): void {
+  const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)))
+  for (let s = 0; s <= steps; s += 1) {
+    const t = s / steps
+    stampDisk(mask, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, radius)
+  }
+}
+
+function stampDisk(mask: Uint8Array, cx: number, cy: number, radius: number): void {
+  const r = Math.max(1, Math.round(radius))
+  const xMid = Math.round(cx)
+  const yMid = Math.round(cy)
+  const r2 = r * r
+  for (let y = yMid - r; y <= yMid + r; y += 1) {
+    if (y < 0 || y >= DESIGN_HEIGHT) continue
+    for (let x = xMid - r; x <= xMid + r; x += 1) {
+      if (x < 0 || x >= DESIGN_WIDTH) continue
+      const dx = x - xMid
+      const dy = y - yMid
+      if (dx * dx + dy * dy <= r2) {
+        mask[y * DESIGN_WIDTH + x] = 1
+      }
+    }
+  }
+}
+
+export function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
   if (radius <= 0) return mask
   const out = new Uint8Array(mask.length)
   for (let y = 0; y < DESIGN_HEIGHT; y += 1) {
@@ -189,6 +370,83 @@ function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
     }
   }
   return out
+}
+
+/**
+ * Find an approximate gap location: first paper-edge escape from the seed, then
+ * the nearest barrier pixel (the missing outline join).
+ */
+export function locateGapHint(
+  barrier: Uint8Array,
+  seedX: number,
+  seedY: number,
+): { x: number; y: number } | null {
+  const sx = Math.round(seedX)
+  const sy = Math.round(seedY)
+  if (sx < 0 || sy < 0 || sx >= DESIGN_WIDTH || sy >= DESIGN_HEIGHT) return null
+  if (barrier[sy * DESIGN_WIDTH + sx]) return null
+
+  const visited = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const qx = new Int32Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const qy = new Int32Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  let head = 0
+  let tail = 0
+  qx[tail] = sx
+  qy[tail] = sy
+  tail += 1
+  visited[sy * DESIGN_WIDTH + sx] = 1
+  let edgeX = -1
+  let edgeY = -1
+  let steps = 0
+  const limit = Math.min(MAX_FILL_PIXELS, DESIGN_WIDTH * DESIGN_HEIGHT)
+
+  while (head < tail && steps < limit) {
+    const cx = qx[head]!
+    const cy = qy[head]!
+    head += 1
+    steps += 1
+    if (cx === 0 || cy === 0 || cx === DESIGN_WIDTH - 1 || cy === DESIGN_HEIGHT - 1) {
+      edgeX = cx
+      edgeY = cy
+      break
+    }
+    const neighbors = [
+      [cx + 1, cy],
+      [cx - 1, cy],
+      [cx, cy + 1],
+      [cx, cy - 1],
+    ] as const
+    for (const [nx, ny] of neighbors) {
+      if (nx < 0 || ny < 0 || nx >= DESIGN_WIDTH || ny >= DESIGN_HEIGHT) continue
+      const i = ny * DESIGN_WIDTH + nx
+      if (visited[i] || barrier[i]) continue
+      visited[i] = 1
+      qx[tail] = nx
+      qy[tail] = ny
+      tail += 1
+    }
+  }
+  if (edgeX < 0) return null
+
+  // Walk from the edge contact back toward ink — first barrier neighbor near the
+  // flooded path is the visual gap mouth.
+  let best: { x: number; y: number; d: number } | null = null
+  for (let y = Math.max(0, edgeY - 40); y <= Math.min(DESIGN_HEIGHT - 1, edgeY + 40); y += 1) {
+    for (let x = Math.max(0, edgeX - 40); x <= Math.min(DESIGN_WIDTH - 1, edgeX + 40); x += 1) {
+      if (!visited[y * DESIGN_WIDTH + x]) continue
+      // empty flooded cell adjacent to barrier → candidate gap mouth
+      const adj =
+        (x > 0 && barrier[y * DESIGN_WIDTH + (x - 1)]) ||
+        (x + 1 < DESIGN_WIDTH && barrier[y * DESIGN_WIDTH + (x + 1)]) ||
+        (y > 0 && barrier[(y - 1) * DESIGN_WIDTH + x]) ||
+        (y + 1 < DESIGN_HEIGHT && barrier[(y + 1) * DESIGN_WIDTH + x])
+      if (!adj) continue
+      const d = Math.hypot(x - edgeX, y - edgeY)
+      if (!best || d < best.d) best = { x, y, d }
+    }
+  }
+  if (best) return { x: best.x, y: best.y }
+  return { x: edgeX, y: edgeY }
 }
 
 /** Moore-neighbour boundary walk → flat [x,y,...] contour. */

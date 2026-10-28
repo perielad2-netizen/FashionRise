@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-28 (**PR #126 OWNER ACCEPTED** · live release `bfbdd03f-decimal` · UI label incorrectly baked as `App b2fbd043` via stale `VITE_BUILD_SHA` env — **assets are #126** · measurement investigation: **0 filled-value losses** vs pre-FE SQL backup · BE `311e259a` · Alembic `011` · PR #125 HOLD · **STOP for Technical PM** · 0 paid AI.)
+**Last updated:** 2026-10-28 (**Issue #127 P0 sketch fill reliability** — FE branch `cursor/web-sketch-fill-reliability-77c6` · sealed-tip barrier + bounded endpoint joint seal + Close small gaps + gap hint · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -27,6 +27,19 @@
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+
+
+## Issue #127 — sketch fill reliability (thin multi-stroke outlines) — STOP (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Trigger | Owner mobile fill of complex freehand shirt outline (1.75 px, ~62% zoom) repeatedly failed with open-outline / “dress” copy |
+| Root cause | Fill barrier used the same tapered perfect-freehand paths as visible ink (`start/end taper` up to 6–10 px on thin brushes). Multi-stroke joins that look closed still leak in the alpha>12 raster; fixed `gapClose=2` dilation cannot bridge tip gaps. Flood then escapes to paper edge → `open_outline`. |
+| Fix | Barrier-only `sealTips` freehand paths; bounded endpoint joint seal (5 px auto / 12 px Close small gaps); gap hint marker; messages without “dress”; explicit **Gaps** tool-rail action (one-shot stronger seal — does not silently merge intentional openings) |
+| Preserved | Eraser destination-out barriers, gradient/fabric fills, undo, autosave, Magic export, croquis not a barrier |
+| Tests | `floodFill.joints` + sealTips + existing floodFill/barrier suites **PASS**; full Vitest 619 pass / 6 pre-existing unrelated fail on tip; oxlint warnings-only; `tsc -b` + production build with `/api/v1` **PASS** |
+| Deploy | **STOP — not deployed**. No migration, no paid AI |
 
 
 ## PR #126 owner acceptance + measurement/version investigation — STOP (2026-10-28)

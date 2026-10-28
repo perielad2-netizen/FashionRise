@@ -667,6 +667,10 @@ export function useStudioEditor() {
     [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags],
   )
 
+  const [fillCloseSmallGaps, setFillCloseSmallGaps] = useState(false)
+  const [fillGapHint, setFillGapHint] = useState<{ x: number; y: number } | null>(null)
+  const [showCloseSmallGaps, setShowCloseSmallGaps] = useState(false)
+
   const onFillComplete = useCallback(
     (fill: FillOp) => {
       // Keep saved designs recoverable: refuse fills past the snapshot limit.
@@ -709,17 +713,43 @@ export function useStudioEditor() {
         backStrokes: patch.backStrokes,
         backFills: patch.backFills,
       })
+      setFillGapHint(null)
+      setShowCloseSmallGaps(false)
+      setFillCloseSmallGaps(false)
       publishStudioNotice('Region filled. Undo if you need to try again.')
     },
     [activeHistory, artwork, commitFromEditor, editorSideState, publishStudioNotice, syncHistoryFlags],
   )
 
   const onFillError = useCallback(
-    (message: string) => {
+    (
+      message: string,
+      detail?: {
+        reason: string
+        gapHint?: { x: number; y: number }
+        suggestCloseGaps?: boolean
+      },
+    ) => {
       publishStudioNotice(message)
+      if (detail?.gapHint) setFillGapHint(detail.gapHint)
+      else setFillGapHint(null)
+      if (detail?.reason === 'open_outline') {
+        setShowCloseSmallGaps(true)
+        if (detail.suggestCloseGaps) setFillCloseSmallGaps(false)
+      }
     },
     [publishStudioNotice],
   )
+
+  const armCloseSmallGaps = useCallback(() => {
+    setFillCloseSmallGaps(true)
+    setTool('fill')
+    publishStudioNotice('Close small gaps armed — tap Fill inside the outline.')
+  }, [publishStudioNotice])
+
+  const onFillCloseSmallGapsConsumed = useCallback(() => {
+    setFillCloseSmallGaps(false)
+  }, [])
 
   const onEyedropperSample = useCallback(
     (sampled: string) => {
@@ -2246,6 +2276,11 @@ export function useStudioEditor() {
     onStrokeComplete,
     onFillComplete,
     onFillError,
+    fillCloseSmallGaps,
+    fillGapHint,
+    showCloseSmallGaps,
+    armCloseSmallGaps,
+    onFillCloseSmallGapsConsumed,
     onEyedropperSample,
     undo,
     redo,

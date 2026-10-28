@@ -347,7 +347,7 @@ export function ColorAndMaterialsPanel({
                 Add Fabric
               </button>
             </div>
-            <p className={styles.note}>Select a fabric, then use Fill on a closed dress region.</p>
+            <p className={styles.note}>Select a fabric, then use Fill on a closed outline.</p>
             <input
               ref={fileInputRef}
               type="file"

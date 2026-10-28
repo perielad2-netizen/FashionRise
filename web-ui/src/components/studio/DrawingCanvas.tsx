@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Stage, Layer, Image as KonvaImage, Path, Rect } from 'react-konva'
+import { Stage, Layer, Image as KonvaImage, Path, Rect, Circle } from 'react-konva'
 import type Konva from 'konva'
 import { appendPoint, strokeToSvgPath } from '@/lib/freehand'
 import { decidePointer, pressureForPointer } from '@/lib/pointerSession'
@@ -46,7 +46,19 @@ type Props = {
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
   onFillComplete?: (fill: FillOp) => void
-  onFillError?: (message: string) => void
+  onFillError?: (
+    message: string,
+    detail?: {
+      reason: string
+      gapHint?: { x: number; y: number }
+      suggestCloseGaps?: boolean
+    },
+  ) => void
+  /** One-shot stronger joint seal for the next fill tap (Close small gaps). */
+  fillCloseSmallGaps?: boolean
+  onFillCloseSmallGapsConsumed?: () => void
+  /** Optional gap marker in design space after an open-outline failure. */
+  fillGapHint?: { x: number; y: number } | null
   onEyedropperSample?: (color: string) => void
   /** Optional: Alt + mouse wheel adjusts brush size without drawing. */
   onBrushSize?: (px: number) => void
@@ -98,6 +110,9 @@ export function DrawingCanvas({
   onStrokeComplete,
   onFillComplete,
   onFillError,
+  fillCloseSmallGaps = false,
+  onFillCloseSmallGapsConsumed,
+  fillGapHint = null,
   onEyedropperSample,
   onBrushSize,
   framed = true,
@@ -590,14 +605,28 @@ export function DrawingCanvas({
   const applyFillAt = useCallback(
     (x: number, y: number) => {
       const style = fillStyle ?? { kind: 'solid' as const, color: brushColor }
-      const result = floodFillRegion({ strokes, x, y, style })
+      const closeSmallGaps = fillCloseSmallGaps
+      if (closeSmallGaps) onFillCloseSmallGapsConsumed?.()
+      const result = floodFillRegion({ strokes, x, y, style, closeSmallGaps })
       if (!result.ok) {
-        onFillError?.(result.message)
+        onFillError?.(result.message, {
+          reason: result.reason,
+          gapHint: result.gapHint,
+          suggestCloseGaps: result.suggestCloseGaps,
+        })
         return
       }
       onFillComplete?.(result.fill)
     },
-    [brushColor, fillStyle, onFillComplete, onFillError, strokes],
+    [
+      brushColor,
+      fillCloseSmallGaps,
+      fillStyle,
+      onFillCloseSmallGapsConsumed,
+      onFillComplete,
+      onFillError,
+      strokes,
+    ],
   )
 
   const sampleAt = useCallback(
@@ -966,6 +995,18 @@ export function DrawingCanvas({
             />
           )
         })}
+        {fillGapHint ? (
+          <Circle
+            x={fillGapHint.x}
+            y={fillGapHint.y}
+            radius={10}
+            stroke="#C2410C"
+            strokeWidth={2.5}
+            dash={[4, 3]}
+            listening={false}
+            perfectDrawEnabled={false}
+          />
+        ) : null}
       </Layer>
     </>
   )

@@ -19,7 +19,17 @@ type Props = {
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
   onFillComplete: (fill: FillOp) => void
-  onFillError: (message: string) => void
+  onFillError: (
+    message: string,
+    detail?: {
+      reason: string
+      gapHint?: { x: number; y: number }
+      suggestCloseGaps?: boolean
+    },
+  ) => void
+  fillCloseSmallGaps?: boolean
+  onFillCloseSmallGapsConsumed?: () => void
+  fillGapHint?: { x: number; y: number } | null
   onEyedropperSample: (color: string) => void
   onBrushSize?: (px: number) => void
   immersive?: boolean
@@ -50,6 +60,9 @@ export function DrawingWorkspace({
   onStrokeComplete,
   onFillComplete,
   onFillError,
+  fillCloseSmallGaps = false,
+  onFillCloseSmallGapsConsumed,
+  fillGapHint = null,
   onEyedropperSample,
   onBrushSize,
   immersive = false,
@@ -110,6 +123,9 @@ export function DrawingWorkspace({
           onStrokeComplete={onStrokeComplete}
           onFillComplete={onFillComplete}
           onFillError={onFillError}
+          fillCloseSmallGaps={fillCloseSmallGaps}
+          onFillCloseSmallGapsConsumed={onFillCloseSmallGapsConsumed}
+          fillGapHint={fillGapHint}
           onEyedropperSample={onEyedropperSample}
           onBrushSize={onBrushSize}
           framed={false}
