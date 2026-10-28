@@ -3,17 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #123** review-guard closure @ **`e061aaea`** / code `74044c0f` · branch `cursor/web-techpack-pdf-qa-clean-77c6` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**. Separate issue #124 FE decimal + fidelity PRs in flight — not this deploy.)
+**Last updated:** 2026-10-28 (**PR #123 DEPLOYED** @ **`311e259a`** · FE **`bfbdd03f-decimal`** (PR #126) · Alembic **`011`** · FR-3958 Rev3 pdf_only B · rollback BE `005034d5` · FE `13b26c3a-apifix` · **0 paid AI** · PR #125 amend `c430a7c7` HOLD / not deployed · **STOP — FE owner browser smoke PENDING**.)
 
-**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 closes review→PDF invalidation with fail-closed Professional/source-pack guards. **Do not deploy** until Technical PM accepts. Issue #124 (measurement decimals + FR-B9F9 closure/gradient fidelity) stays out of this PR.
+**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 closes review→PDF invalidation with fail-closed Professional/source-pack guards. PR #123 is **deployed** at `311e259a`. PR #126 FE decimal is **deployed**. Issue #124 BE fidelity remains on PR #125 (`c430a7c7`) — **HOLD / not deployed**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`13b26c3a-apifix`** — Nginx `current` → `releases/13b26c3a-apifix` (PR #120 tip + `VITE_API_BASE_URL=/api/v1` rebuild). Prior broken `13b26c3a` release preserved; rollback `69b83c01`. |
-| Backend (FastAPI + PostgreSQL) | **`005034d5`** (PR #119 tip — provenance gate + docs). Alembic **`011`**. |
-| AI worker | `fashionrise-ai-worker` @ **`005034d5`** |
+| Frontend (`web-ui`) | **`bfbdd03f-decimal`** — PR #126 tip `bfbdd03f` + `/api/v1`. Rollback `13b26c3a-apifix` / `69b83c01`. |
+| Backend (FastAPI + PostgreSQL) | **`311e259a`** (PR #123 accepted tip). Alembic **`011`**. Rollback → `005034d5`. |
+| AI worker | `fashionrise-ai-worker` @ **`311e259a`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
