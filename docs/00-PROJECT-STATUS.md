@@ -3,30 +3,30 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-28 (**Issue #124 FE** — measurement decimal input buffer on `cursor/web-techpack-measure-decimal-77c6`, based on production FE tip `13b26c3a`. Separate from PDF QA / PR #123. **Not deployed.** **0 paid AI.** Prior LIVE: PR #114 Done/save race FE `69b83c01`.)
+**Last updated:** 2026-10-28 (**Issue #124 FE** — measurement decimal buffer @ `7975f085` · branch `cursor/web-techpack-measure-decimal-77c6` from `13b26c3a` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE `005034d5` · Alembic `011` · **0 paid AI** · isolated from PR #123.)
 
-**Phase:** Protected family beta. Create Real Design main workflow unchanged. Responsive editor + quiet autosave + PDF validity + Done flush race hardening.
+**Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
-### Issue #124 — measurement decimal input (FE-only, open)
+### Issue #124 — measurement decimal input (FE-only) — STOP for Technical PM
 
 | Item | Detail |
 |---|---|
-| Branch | `cursor/web-techpack-measure-decimal-77c6` (from FE tip `13b26c3a`) |
-| Fix | `MeasuredField` local edit buffer preserves `25.` / `0.` / `.5` / `25,5`; commit on complete parse / blur; user edits → `source: 'designer'` (no manufacturing auto-approval); empty → `null` + `empty` |
-| Scope | FE only — do **not** conflate with PR #123 PDF QA / BE hold |
-| Deploy | **No** — Technical PM review first |
+| Branch / tip | `cursor/web-techpack-measure-decimal-77c6` @ **`7975f085`** (from FE tip `13b26c3a`) |
+| Fix | `measuredDecimalInput` + `MeasuredField` local edit buffer preserves `25.` / `0.` / `.5` / `25,5`; commit on complete parse / blur; user edits → `source: 'designer'` (no manufacturing auto-approval); empty → `null` + `empty`; no silent 0 / integer truncation |
+| Tests | Vitest **25 passed** (`measuredDecimalInput` + `MeasuredField` + `MeasurementsSheet` body/finished + compact Android `inputMode=decimal`) |
+| Scope | FE only — do **not** conflate with PR #123 PDF QA / BE hold or FR-B9F9 fidelity |
+| Deploy | **No** — after accept: FE-only rebuild from tip with `VITE_API_BASE_URL=/api/v1` (apifix pattern). BE unchanged |
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`69b83c01`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/69b83c01`. Done closes only after latest editable snapshot is clean. Prior: `af1ddbb5` (PDF validity) ← `31c1de01` (quiet autosave) ← `ce752b43` (#113). |
-| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged**. |
-| AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
+| Frontend (`web-ui`) | **`13b26c3a-apifix`** — Nginx `current` → `releases/13b26c3a-apifix`. Rollback `69b83c01`. |
+| Backend (FastAPI + PostgreSQL) | **`005034d5`** — **unchanged** by this FE PR. |
+| AI worker | `fashionrise-ai-worker` @ **`005034d5`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
-| Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
-| Deploy backup | `/var/backups/fashionrise/done-race-fe-deploy-20261027T164012Z` (rollback → prior FE `af1ddbb5`) |
-| AI spend | Unchanged: ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Cursor did not run paid generate.** |
+| Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
+| AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 ## Quiet autosave + PDF validity + Done race (2026-10-27) LIVE — stop for owner verification
 
