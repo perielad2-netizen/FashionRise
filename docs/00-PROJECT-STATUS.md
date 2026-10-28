@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #122 replacement — clean PDF QA closure** · branch `cursor/web-techpack-pdf-qa-clean-77c6` from prod BE `005034d5` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**.)
+**Last updated:** 2026-10-28 (**PR #123** clean PDF QA closure @ **`80e86f90`** · branch `cursor/web-techpack-pdf-qa-clean-77c6` from prod BE `005034d5` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**.)
 
 **Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. Owner Rev 2 still embeds wrong shorts detail; clean replacement PR closes the production review→PDF invalidation path and removes private FR-3958 blobs from GitHub history. **Do not deploy** until Technical PM accepts.
 
@@ -43,7 +43,7 @@ Technical PM reviewed prior PR #122 @ `8794583f` → **HOLD / CHANGES REQUIRED**
 
 | Item | Detail |
 |---|---|
-| Branch | `cursor/web-techpack-pdf-qa-clean-77c6` — **exact descendant of prod BE `005034d5`**; no private PDF/PNG/QA JSON in commits |
+| Branch / PR | `cursor/web-techpack-pdf-qa-clean-77c6` · [#123](https://github.com/perielad2-netizen/FashionRise/pull/123) @ **`80e86f90`** — descendant of prod BE `005034d5` (+ deploy docs); no private PDF/PNG/QA JSON in commits |
 | Supersedes | Prior PR #122 / `cursor/web-techpack-pdf-qa-77c6` @ `8794583f` (private blobs in history — do not merge) |
 | P0 review→PDF | `record_owned_artifact_review`: auth ownership checks → audit decision with **server-derived** `reviewer_user_id`/`username` → atomic `dirty_since_generation` + `outdated_export_id` + revision bump + `artifact_review_version` |
 | P0 fingerprint | `_pdf_only_content_fingerprint` includes authoritative `TechpackAIArtifact` review tokens so PDF-only cannot reuse a pre-review export |
@@ -1121,7 +1121,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-28 | **PR #122 clean replacement (CHANGES REQUIRED closure):** review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git (`/opt/cursor/artifacts/fr3958-pdf-qa-clean/`); **65** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. Prior PR #122 @ `8794583f` superseded (private blobs in history). |
+| 2026-10-28 | **PR #123 clean replacement for #122 (CHANGES REQUIRED closure)** @ `80e86f90`: review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git (`/opt/cursor/artifacts/fr3958-pdf-qa-clean/`); **65** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. Prior PR #122 @ `8794583f` superseded (private blobs in history). |
 | 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
 | 2026-10-28 | **PR #118 PM amendment (CHANGES REQUIRED):** fail-closed SAMPLE-READY gates; conservative unverified detail art (no pixel trust); `_SizedImage` immutable wrap + BOM color-list normalization + dedicated detail pages; negative trousers/hoodie + positive complete + unmarked wrong-garment tests; private FR-3958 Magic+6-artifact visual QA (14 pages); production FE `69b83c01` / BE+worker `7af9c809` / Alembic `011` unchanged; **0 paid AI**; Technical PM CONDITIONAL PASS + HOLD for readiness-gate closure. |
 | 2026-10-28 | **Manufacturing-ready Sample-Development Tech Pack foundation** draft PR #118 @ `bfaf4651`: readiness levels, POM contradiction flags, artifact exclusion, offline FR-3958 preview; production unchanged; **0 paid AI**; Technical PM returned **CHANGES REQUIRED** (see amendment row above). |
