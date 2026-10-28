@@ -18,6 +18,18 @@
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
+
+## PR #126 owner acceptance + measurement/version investigation — STOP (2026-10-28)
+
+| Item | Result |
+|---|---|
+| Owner acceptance | **ACCEPTED** on live decimal FE |
+| Version label | UI shows `App b2fbd043` (stale `VITE_BUILD_SHA`); assets are `bfbdd03f-decimal` (`index-CxaD09Yn.js`) |
+| Measurements | Pre-FE SQL backup vs live: **0 filled-value losses**; blanks pre-existed as empty/partial POMs |
+| Artifact | `/opt/cursor/artifacts/controlled-rollout-123-126/MEASUREMENT_AND_VERSION_INVESTIGATION.md` |
+| PR #125 | HOLD / not deployed |
+
+
 ## PR #123 review-guard closure — STOP for Technical PM (2026-10-28)
 
 Technical PM reviewed clean PR #123 @ `43c8d376` → **HOLD — one focused P0 guard correction**. Prior invalidation/fingerprint/reviewer work stood; this tip closes the fail-closed source-pack guards.
