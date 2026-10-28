@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #123** review-guard closure · branch `cursor/web-techpack-pdf-qa-clean-77c6` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**. Separate issue #124 FE decimal + fidelity PRs in flight — not this deploy.)
+**Last updated:** 2026-10-28 (**PR #123** review-guard closure @ **`74044c0f`** · branch `cursor/web-techpack-pdf-qa-clean-77c6` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**. Separate issue #124 FE decimal + fidelity PRs in flight — not this deploy.)
 
 **Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 closes review→PDF invalidation with fail-closed Professional/source-pack guards. **Do not deploy** until Technical PM accepts. Issue #124 (measurement decimals + FR-B9F9 closure/gradient fidelity) stays out of this PR.
 
