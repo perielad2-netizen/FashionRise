@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #119/#120 cross-layer safety amendments** — CHANGES REQUIRED closure ready for PM re-review · **HOLD / NOT DEPLOYED** · prod FE `69b83c01` / BE+worker `2c8cb88e` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP**.)
+**Last updated:** 2026-10-28 (**PR #119 artwork provenance gate** — final P0 ownership/artifact authorization · **HOLD / NOT DEPLOYED** · FE PR #120 ENGINEERING ACCEPTED @ `13b26c3a` · prod FE `69b83c01` / BE+worker `2c8cb88e` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP**.)
 
-**Phase:** Protected family beta. Production still **Generate AI PDF → Wait → Download PDF** on FE `69b83c01` + BE `2c8cb88e` (PR #118 manufacturing). Draft PRs #119/#120 remain on **HOLD** after Technical PM CHANGES REQUIRED; safety amendments below await acceptance.
+**Phase:** Protected family beta. Production still **Generate AI PDF → Wait → Download PDF** on FE `69b83c01` + BE `2c8cb88e` (PR #118 manufacturing). FE PR #120 accepted; BE PR #119 remains **HOLD** pending PM acceptance of the artwork provenance gate.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -18,24 +18,44 @@
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
-## Completed-look UX + Update PDF (No AI) — safety amendments STOP for PM (2026-10-28)
-
-Technical PM: **CHANGES REQUIRED / HOLD** on PR #119 (`978719a3`) + PR #120 (`3ca3b4ff`). Cross-layer safety amendments implemented; both PRs remain **not deployable** until acceptance.
+## Completed-look UX + Update PDF (No AI) — STOP for PM (2026-10-28)
 
 | Item | Detail |
 |---|---|
-| FE branch / tip | `cursor/web-techpack-noai-pdf-fe-77c6` @ **`13b26c3a`** — **5-file** delta from prod lineage `69b83c01` / PR base `cursor/web-techpack-autosave-quiet-77c6` (retargeted off bloated `main` scope) |
-| BE branch / tip | `cursor/web-techpack-noai-pdf-be-77c6` @ **`51422502`** (docs tip may move +1; implementation amendment on `978719a3`) |
-| Production | **Unchanged** — do **not** deploy until PM acceptance |
-| Paid AI | **0** — MockProfessionalProvider / PDF-only path makes **zero** provider calls; no new paid AI run row |
-| P0 Current PDF wins | FE completed-run recovery no longer clobbers `draft.spec.ai.export_id` with historical run export. Both async orderings covered: hydrate-B-then-run-A and run-A-then-hydrate-B → Download serves PDF B |
-| P0 Magic-source identity | Compatibility uses `run.request` front/back stamps when present; else original Professional **export metadata**; legacy unknown provenance **fail-closed**. New enqueue stamps `front_job_id`/`back_job_id`. Tests: front change, back change, absent front, category change, legacy, export-meta path |
-| P0 Concurrent / revision | Draft `SELECT FOR UPDATE` + revision/fingerprint CAS around assembly; identical races converge on one PDF-only export; edit-during-assembly → 409 without binding stale PDF; failed bind cleans orphan private PDF; historical files preserved |
-| P1 Honest cost | PDF-only metadata: `assembly_cost_usd_cents=0`, `actual_cost_usd_cents=0`, `paid_sections=[]`, `new_paid_ai_run=false`; source-run cost kept as `source_run_cost_usd_cents` / `source_run_paid_sections` |
-| A–D product path | Unchanged intent: completed reopen editable; **Update PDF (No AI)** vs paid Generate; historical PDFs + AI illustrations preserved; `ensure_professional_pdf_for_run` will not clobber newer PDF-only current |
-| Tests | BE: pdf-only + manufacturing + P0 + V2 fixtures + pdf-ready (**63 passed**). FE TechpackScreen suites (**71 passed**). Ruff clean on amended BE files. FE `tsc` + oxlint + prod build (`VITE_API_BASE_URL=/api/v1`) OK |
-| Blocked | Deploy / merge / paid AI / migrations / historical PDF rewrite / spending-limit change. FE must **not** blind-merge into tip-of-`main` (unrelated Studio). |
-| Exact next action | Technical PM re-review of amended #119+#120. **Do not deploy.** After accept: deploy BE+worker then FE 5-file release from verified SHA; smoke Edit → Update PDF (No AI) → Reopen → Download B. Rollback → `2c8cb88e` / `69b83c01`. |
+| FE PR #120 | **ENGINEERING ACCEPTED** @ **`13b26c3a`** (5-file delta; base `cursor/web-techpack-autosave-quiet-77c6`). Not deployed. |
+| BE PR #119 tip | `cursor/web-techpack-noai-pdf-be-77c6` — artwork provenance amendment on `51422502` (tip SHA after push). |
+| Production | **Unchanged** — FE `69b83c01` / BE+worker `2c8cb88e` / Alembic `011` / ceiling `$50` |
+| Paid AI | **0** — PDF-only path makes zero provider calls; no new paid AI run |
+
+### PR #119 final P0 — artwork provenance / ownership gate
+
+Technical PM: prior CAS/Magic/cost fixes verified; **one remaining P0** — trusted run/artifact ownership before PDF reuse.
+
+| Control | Behavior |
+|---|---|
+| Source run | Claimed `last_run_id` must resolve to completed Professional `TechpackAIRun` with `user_id` + `draft_id` matching the authenticated owner and current draft; cross-draft / cross-user claims rejected without mutating history |
+| Illustrations | Every reused Professional artifact resolved from `TechpackAIArtifact`; verify user, draft, run, piece_id, kind, and storage_key match. Storage path alone never authorizes. Incomplete legacy piece association → fail closed with actionable message |
+| PDF assembly | After assess, illustration refs rewritten from server-owned artifact rows before `build_techpack_pdf` (client paths not opened as auth) |
+| UNVERIFIED policy | Existing manufacturing visual-review / UNVERIFIED detail policy unchanged |
+| Concurrent note | Nested HTTP race test shares one TestClient session (assembly overlap simulation). Production uses `SELECT FOR UPDATE` + CAS; fixture harness cannot observe uncommitted rows from independent sessions — documented in tests |
+
+### Prior safety amendments (still in tip)
+
+Current PDF wins over historical run export (FE accepted); Magic front/back from request stamps or original export meta; revision/fingerprint CAS; honest `$0` assembly cost vs `source_run_cost_usd_cents`.
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| BE pdf-only + manufacturing + P0 + V2 fixtures + pdf-ready | **71 passed** |
+| Ruff (amended BE files) | clean |
+| mypy `techpack_service.py` | pre-existing union noise (~55); no new blocker class beyond prior tip |
+| FE | unchanged this turn (accepted `13b26c3a`) |
+
+### Blocked / next
+
+- **Do not deploy.** No paid AI, migration, historical rewrite, spending-limit change, or FE edits.
+- Exact next action: Technical PM acceptance of BE #119 provenance gate. After accept: deploy BE+worker then FE `13b26c3a`; smoke Edit → Update PDF (No AI) → Reopen → Download current PDF B (old PDF + original AI arts preserved). Rollback → `2c8cb88e` / `69b83c01`.
 
 ## PR #118 controlled deployment (2026-10-28) — STOP
 

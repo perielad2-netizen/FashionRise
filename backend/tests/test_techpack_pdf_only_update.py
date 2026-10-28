@@ -524,7 +524,13 @@ def test_pdf_only_uses_export_meta_when_request_lacks_source_ids(
 
 
 def test_pdf_only_concurrent_identical_converges_one_export(client, db_session, monkeypatch):
-    """Losers of a same-content race adopt the winner export; history stays singular."""
+    """Losers of a same-content race adopt the winner export; history stays singular.
+
+    Limitation: this nests two HTTP export calls inside one shared TestClient /
+    db_session (overlapping assembly simulation), not two independent PostgreSQL
+    transactions. Production serialization relies on ``SELECT FOR UPDATE`` + CAS in
+    ``export_pdf_only_update``; see ``test_pdf_only_draft_row_lock_serializes_independent_sessions``.
+    """
     from app.models.techpack_draft import TechpackExport
     from app.services import techpack_service
 
@@ -693,3 +699,353 @@ def test_pdf_only_failed_bind_cleans_orphan_file(client, db_session, monkeypatch
     assert paid is not None
     assert storage.resolve_private_techpack_file(key=paid.storage_key) is not None
     _ = real_bind  # restored implicitly when monkeypatch fixture tears down
+
+
+def _dirty_for_pdf_only(client, tokens, draft_id: str) -> None:
+    patched = client.patch(
+        f"/api/v1/techpacks/{draft_id}",
+        headers=_auth(tokens),
+        json={"spec": {"preferences": {"notes": f"pdf-only-{uuid.uuid4().hex[:8]}"}}},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["spec"]["ai"].get("dirty_since_generation") is True
+
+
+def _piece_arts(draft_json: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for p in draft_json["spec"]["outfit"]["pieces"]:
+        ill = p.get("illustrations") or {}
+        arts = ill.get("artifacts") or {}
+        out[str(p.get("id"))] = {k: dict(v) for k, v in arts.items() if isinstance(v, dict)}
+    return out
+
+
+def test_pdf_only_reuses_valid_original_professional_artifacts(
+    client, db_session, monkeypatch
+):
+    tokens = register_with_invite(client, db_session, "pdfartok@example.com", "pdfartok")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    CountingMock = _counting_mock()
+    set_professional_provider_override(CountingMock())
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Valid arts")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    first_export_id = settled["export_id"]
+    calls_after = CountingMock.provider_calls
+    _dirty_for_pdf_only(client, tokens, draft["id"])
+
+    updated = client.post(
+        f"/api/v1/techpacks/{draft['id']}/export",
+        headers=_auth(tokens),
+        json={"mode": "pdf_only_update"},
+    )
+    assert updated.status_code == 201, updated.text
+    assert updated.json()["id"] != first_export_id
+    assert updated.json()["metadata"].get("new_paid_ai_run") is False
+    assert CountingMock.provider_calls == calls_after
+
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert after["spec"]["ai"].get("export_id") == updated.json()["id"]
+    old_pdf = client.get(
+        f"/api/v1/techpacks/exports/{first_export_id}/pdf", headers=_auth(tokens)
+    )
+    new_pdf = client.get(
+        f"/api/v1/techpacks/exports/{updated.json()['id']}/pdf", headers=_auth(tokens)
+    )
+    assert old_pdf.status_code == 200
+    assert new_pdf.status_code == 200
+
+
+def test_pdf_only_rejects_run_from_another_draft_same_user(client, db_session, monkeypatch):
+    tokens = register_with_invite(client, db_session, "pdfxdraft@example.com", "pdfxdraft")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft_a = _seed_two_piece_draft(client, db_session, tokens, me, title="Draft A")
+    settled_a = _complete_professional(client, db_session, tokens, draft_a["id"])
+    draft_b = _seed_two_piece_draft(client, db_session, tokens, me, title="Draft B")
+    settled_b = _complete_professional(client, db_session, tokens, draft_b["id"])
+    first_b = settled_b["export_id"]
+
+    live = client.get(f"/api/v1/techpacks/{draft_b['id']}", headers=_auth(tokens)).json()
+    # Substitute draft B's last_run_id with draft A's completed run (same user).
+    forged = client.patch(
+        f"/api/v1/techpacks/{draft_b['id']}",
+        headers=_auth(tokens),
+        json={
+            "spec": {
+                "preferences": {"notes": "cross-draft run"},
+                "ai": {
+                    **(live["spec"].get("ai") or {}),
+                    "last_run_id": settled_a["id"],
+                    "last_mode": "professional",
+                },
+            }
+        },
+    )
+    assert forged.status_code == 200, forged.text
+
+    refused = client.post(
+        f"/api/v1/techpacks/{draft_b['id']}/export",
+        headers=_auth(tokens),
+        json={"mode": "pdf_only_update"},
+    )
+    assert refused.status_code == 422, refused.text
+    detail = str(refused.json().get("detail") or "").lower()
+    assert "different draft" in detail or "another design" in detail or "not owned" in detail
+    after = client.get(f"/api/v1/techpacks/{draft_b['id']}", headers=_auth(tokens)).json()
+    assert after["spec"]["ai"].get("export_id") == first_b
+    hist = client.get(f"/api/v1/techpacks/exports/{first_b}/pdf", headers=_auth(tokens))
+    assert hist.status_code == 200
+
+
+def test_pdf_only_rejects_run_from_another_user(client, db_session, monkeypatch):
+    tokens_a = register_with_invite(client, db_session, "pdfuserA@example.com", "pdfuserA")
+    me_a = client.get("/api/v1/auth/me", headers=_auth(tokens_a)).json()
+    _enable_professional(monkeypatch, me_a["email"])
+    draft_a = _seed_two_piece_draft(client, db_session, tokens_a, me_a, title="User A")
+    settled_a = _complete_professional(client, db_session, tokens_a, draft_a["id"])
+
+    tokens_b = register_with_invite(client, db_session, "pdfuserB@example.com", "pdfuserB")
+    me_b = client.get("/api/v1/auth/me", headers=_auth(tokens_b)).json()
+    _enable_professional(monkeypatch, me_b["email"])
+    draft_b = _seed_two_piece_draft(client, db_session, tokens_b, me_b, title="User B")
+    settled_b = _complete_professional(client, db_session, tokens_b, draft_b["id"])
+    first_b = settled_b["export_id"]
+
+    live = client.get(f"/api/v1/techpacks/{draft_b['id']}", headers=_auth(tokens_b)).json()
+    forged = client.patch(
+        f"/api/v1/techpacks/{draft_b['id']}",
+        headers=_auth(tokens_b),
+        json={
+            "spec": {
+                "preferences": {"notes": "cross-user run"},
+                "ai": {
+                    **(live["spec"].get("ai") or {}),
+                    "last_run_id": settled_a["id"],
+                    "last_mode": "professional",
+                },
+            }
+        },
+    )
+    assert forged.status_code == 200, forged.text
+    refused = client.post(
+        f"/api/v1/techpacks/{draft_b['id']}/export",
+        headers=_auth(tokens_b),
+        json={"mode": "pdf_only_update"},
+    )
+    assert refused.status_code == 422, refused.text
+    detail = str(refused.json().get("detail") or "").lower()
+    assert "not owned" in detail or "another account" in detail or "authenticated user" in detail
+    after = client.get(f"/api/v1/techpacks/{draft_b['id']}", headers=_auth(tokens_b)).json()
+    assert after["spec"]["ai"].get("export_id") == first_b
+
+
+def test_pdf_only_rejects_flat_front_substituted_from_other_garment(
+    client, db_session, monkeypatch
+):
+    tokens = register_with_invite(client, db_session, "pdfswap@example.com", "pdfswap")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Swap garment art")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    first_export_id = settled["export_id"]
+
+    live = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    arts = _piece_arts(live)
+    tunic_front = arts["tunic-1"]["flat_front"]
+    trousers_front = arts["tr-1"]["flat_front"]
+    assert tunic_front.get("artifact_id") != trousers_front.get("artifact_id")
+
+    pieces = []
+    for p in live["spec"]["outfit"]["pieces"]:
+        copy = dict(p)
+        if p.get("id") == "tr-1":
+            ill = dict(copy.get("illustrations") or {})
+            art = dict(ill.get("artifacts") or {})
+            # Substitute trousers flat_front with the tunic's artifact.
+            art["flat_front"] = dict(tunic_front)
+            ill["artifacts"] = art
+            ill["mode"] = "professional"
+            copy["illustrations"] = ill
+        pieces.append(copy)
+
+    forged = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={
+            "spec": {
+                "preferences": {"notes": "swap flat_front"},
+                "outfit": {"piece_count": 2, "pieces": pieces},
+            }
+        },
+    )
+    assert forged.status_code == 200, forged.text
+    refused = client.post(
+        f"/api/v1/techpacks/{draft['id']}/export",
+        headers=_auth(tokens),
+        json={"mode": "pdf_only_update"},
+    )
+    assert refused.status_code == 422, refused.text
+    detail = str(refused.json().get("detail") or "").lower()
+    assert "different garment" in detail or "substituted" in detail
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert after["spec"]["ai"].get("export_id") == first_export_id
+    hist = client.get(
+        f"/api/v1/techpacks/exports/{first_export_id}/pdf", headers=_auth(tokens)
+    )
+    assert hist.status_code == 200
+
+
+def test_pdf_only_rejects_artifact_id_storage_key_mismatch(client, db_session, monkeypatch):
+    tokens = register_with_invite(client, db_session, "pdfmismatch@example.com", "pdfmismatch")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Key mismatch")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    first_export_id = settled["export_id"]
+
+    live = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    pieces = []
+    for p in live["spec"]["outfit"]["pieces"]:
+        copy = dict(p)
+        if p.get("id") == "tunic-1":
+            ill = dict(copy.get("illustrations") or {})
+            art = dict(ill.get("artifacts") or {})
+            flat = dict(art.get("flat_front") or {})
+            flat["storage_key"] = "forged/not/the/authorized/key.png"
+            art["flat_front"] = flat
+            ill["artifacts"] = art
+            copy["illustrations"] = ill
+        pieces.append(copy)
+
+    forged = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={
+            "spec": {
+                "preferences": {"notes": "key mismatch"},
+                "outfit": {"piece_count": 2, "pieces": pieces},
+            }
+        },
+    )
+    assert forged.status_code == 200, forged.text
+    refused = client.post(
+        f"/api/v1/techpacks/{draft['id']}/export",
+        headers=_auth(tokens),
+        json={"mode": "pdf_only_update"},
+    )
+    assert refused.status_code == 422, refused.text
+    detail = str(refused.json().get("detail") or "").lower()
+    assert "storage key" in detail or "path-substituted" in detail or "match" in detail
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert after["spec"]["ai"].get("export_id") == first_export_id
+
+
+def test_pdf_only_accepts_legacy_export_with_verifiable_ownership(
+    client, db_session, monkeypatch
+):
+    """Legacy runs without request front/back stamps still work via export-meta + owned arts."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.models.techpack_ai_run import TechpackAIRun
+
+    tokens = register_with_invite(client, db_session, "pdflegok@example.com", "pdflegok")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Legacy owned")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    first_export_id = settled["export_id"]
+    run = db_session.get(TechpackAIRun, uuid.UUID(settled["id"]))
+    assert run is not None
+    req = dict(run.request or {})
+    req.pop("front_job_id", None)
+    req.pop("back_job_id", None)
+    run.request = req
+    flag_modified(run, "request")
+    db_session.add(run)
+    db_session.commit()
+
+    _dirty_for_pdf_only(client, tokens, draft["id"])
+    updated = client.post(
+        f"/api/v1/techpacks/{draft['id']}/export",
+        headers=_auth(tokens),
+        json={"mode": "pdf_only_update"},
+    )
+    assert updated.status_code == 201, updated.text
+    assert updated.json()["id"] != first_export_id
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert after["spec"]["ai"].get("export_id") == updated.json()["id"]
+    hist = client.get(
+        f"/api/v1/techpacks/exports/{first_export_id}/pdf", headers=_auth(tokens)
+    )
+    assert hist.status_code == 200
+
+
+def test_pdf_only_unverifiable_historical_artifact_fails_without_destroying_history(
+    client, db_session, monkeypatch
+):
+
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+
+    tokens = register_with_invite(client, db_session, "pdfunv@example.com", "pdfunv")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Unverifiable art")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    first_export_id = settled["export_id"]
+    run_id = uuid.UUID(settled["id"])
+
+    arts = (
+        db_session.query(TechpackAIArtifact)
+        .filter(
+            TechpackAIArtifact.run_id == run_id,
+            TechpackAIArtifact.kind == "flat_front",
+        )
+        .all()
+    )
+    assert arts, "expected flat_front artifacts from Professional completion"
+    for row in arts:
+        row.piece_id = None  # incomplete historical metadata
+        db_session.add(row)
+    db_session.commit()
+
+    _dirty_for_pdf_only(client, tokens, draft["id"])
+    refused = client.post(
+        f"/api/v1/techpacks/{draft['id']}/export",
+        headers=_auth(tokens),
+        json={"mode": "pdf_only_update"},
+    )
+    assert refused.status_code == 422, refused.text
+    detail = str(refused.json().get("detail") or "").lower()
+    assert "incomplete" in detail or "provenance" in detail or "failing closed" in detail
+
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert after["spec"]["ai"].get("export_id") == first_export_id
+    hist = client.get(
+        f"/api/v1/techpacks/exports/{first_export_id}/pdf", headers=_auth(tokens)
+    )
+    assert hist.status_code == 200
+    # Original AI illustrations remain on the draft (not wiped by the refusal).
+    live_arts = _piece_arts(after)
+    assert live_arts["tunic-1"]["flat_front"].get("artifact_id")
+
+
+def test_pdf_only_draft_row_lock_uses_select_for_update():
+    """Document + assert the production lock primitive (independent-session caveat).
+
+    The HTTP concurrent regression nests overlapping exports inside one shared
+    TestClient ``db_session`` (connection-bound outer transaction). Independent
+    PostgreSQL sessions cannot observe those uncommitted fixture rows, so a true
+    two-connection lock-wait assertion is not practical under the current test DB
+    harness. Production ``export_pdf_only_update`` still serializes via
+    ``SELECT … FOR UPDATE`` on the draft row plus revision/fingerprint CAS.
+    """
+    import inspect
+
+    from app.services import techpack_service
+
+    src = inspect.getsource(techpack_service._lock_owned_draft)
+    assert "with_for_update" in src
+    src_export = inspect.getsource(techpack_service.export_pdf_only_update)
+    assert "_lock_owned_draft" in src_export
+    assert "draft_revision_changed" in src_export or "fingerprint" in src_export

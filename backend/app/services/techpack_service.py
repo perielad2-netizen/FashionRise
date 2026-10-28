@@ -643,6 +643,238 @@ def resolve_authorized_magic_source_ids(
     return None, None, "missing"
 
 
+def _resolve_owned_professional_source_run(
+    db: Session,
+    owner: User,
+    draft: TechpackDraft,
+    *,
+    claimed_run_id: str,
+) -> tuple[Any | None, list[str]]:
+    """Load the claimed Professional run and require user+draft ownership.
+
+    ``draft.spec.ai.last_run_id`` is only a claim — authorization comes from the
+    ``TechpackAIRun`` row matching the authenticated owner and current draft.
+    """
+    from app.models.techpack_ai_run import TechpackAIRun
+
+    reasons: list[str] = []
+    try:
+        run = db.get(TechpackAIRun, uuid.UUID(str(claimed_run_id)))
+    except (TypeError, ValueError):
+        run = None
+    if run is None:
+        reasons.append(
+            "The bound Professional run is missing or malformed. "
+            "Generate AI PDF again to refresh illustrations."
+        )
+        return None, reasons
+    if run.user_id != owner.id:
+        reasons.append(
+            "The Professional AI run is not owned by the authenticated user. "
+            "Update PDF (No AI) cannot reuse another account’s illustrations."
+        )
+        return None, reasons
+    if run.draft_id != draft.id:
+        reasons.append(
+            "The Professional AI run belongs to a different draft. "
+            "Update PDF (No AI) cannot reuse illustrations from another design."
+        )
+        return None, reasons
+    if run.stage != "professional" or run.status != "completed":
+        reasons.append(
+            "The bound Professional run is missing or incomplete. "
+            "Generate AI PDF again to refresh illustrations."
+        )
+        return None, reasons
+    return run, []
+
+
+def _validate_professional_illustration_artifacts(
+    db: Session,
+    owner: User,
+    draft: TechpackDraft,
+    run: Any,
+    pieces: list[dict[str, Any]],
+) -> tuple[list[str], dict[str, Any]]:
+    """Verify every reused Professional illustration against ``TechpackAIArtifact``.
+
+    Returns ``(blocking_reasons, verified_by_piece_kind)`` where the map values are
+    server-owned artifact rows keyed as ``"{piece_id}:{kind}"``. Client storage
+    paths alone never authorize reuse.
+    """
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+
+    reasons: list[str] = []
+    verified: dict[str, Any] = {}
+    owned_rows = list(
+        db.scalars(
+            select(TechpackAIArtifact).where(
+                TechpackAIArtifact.run_id == run.id,
+                TechpackAIArtifact.draft_id == draft.id,
+                TechpackAIArtifact.user_id == owner.id,
+            )
+        ).all()
+    )
+    by_id = {str(row.id): row for row in owned_rows}
+
+    for piece in pieces:
+        pid = piece_id_safe(piece) or "(unnamed)"
+        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        if str(ill.get("mode") or "") != "professional":
+            reasons.append(
+                f"Professional illustrations are missing for garment “{pid}”. "
+                "Generate AI PDF to restore artwork before a no-AI PDF update."
+            )
+            continue
+        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        if not arts:
+            reasons.append(
+                f"Professional illustration artifacts are missing for garment “{pid}”. "
+                "Generate AI PDF to restore artwork before a no-AI PDF update."
+            )
+            continue
+        if "flat_front" not in arts or not isinstance(arts.get("flat_front"), dict):
+            reasons.append(
+                f"Professional front illustration is missing for garment “{pid}”. "
+                "Generate AI PDF to restore artwork before a no-AI PDF update."
+            )
+            continue
+
+        for kind, meta in arts.items():
+            kind_s = str(kind or "").strip()
+            if not kind_s:
+                reasons.append(
+                    f"Garment “{pid}” has an illustration with an empty artwork kind. "
+                    "Remove the forged entry or Generate AI PDF again."
+                )
+                continue
+            if not isinstance(meta, dict):
+                reasons.append(
+                    f"Garment “{pid}” illustration “{kind_s}” is not a valid artifact reference."
+                )
+                continue
+            aid_raw = str(meta.get("artifact_id") or meta.get("id") or "").strip()
+            client_key = str(meta.get("storage_key") or "").strip()
+            if not aid_raw:
+                reasons.append(
+                    f"Garment “{pid}” illustration “{kind_s}” has no artifact id. "
+                    "Storage paths alone cannot authorize PDF-only reuse — "
+                    "Generate AI PDF again or restore the original Professional pack."
+                )
+                continue
+            row = by_id.get(aid_raw)
+            if row is None:
+                try:
+                    candidate = db.get(TechpackAIArtifact, uuid.UUID(aid_raw))
+                except (TypeError, ValueError):
+                    candidate = None
+                if candidate is None:
+                    reasons.append(
+                        f"Garment “{pid}” illustration “{kind_s}” references an unknown artifact. "
+                        "Refusing substituted artwork for Update PDF (No AI)."
+                    )
+                    continue
+                # Present in DB but not in the owned source-run set — cross-boundary.
+                if (
+                    candidate.user_id != owner.id
+                    or candidate.draft_id != draft.id
+                    or candidate.run_id != run.id
+                ):
+                    reasons.append(
+                        f"Garment “{pid}” illustration “{kind_s}” is not from the authorized "
+                        "Professional run for this draft. "
+                        "Update PDF (No AI) cannot reuse another design’s or user’s artwork."
+                    )
+                    continue
+                row = candidate
+
+            if row.user_id != owner.id or row.draft_id != draft.id or row.run_id != run.id:
+                reasons.append(
+                    f"Garment “{pid}” illustration “{kind_s}” failed ownership checks. "
+                    "Refusing unauthorized Professional artwork reuse."
+                )
+                continue
+            row_piece = str(row.piece_id or "").strip()
+            if not row_piece:
+                reasons.append(
+                    f"Garment “{pid}” illustration “{kind_s}” has incomplete server provenance "
+                    "(missing piece association). Failing closed without rewriting history — "
+                    "Generate AI PDF again if you need a fresh authorized pack."
+                )
+                continue
+            if row_piece != pid:
+                reasons.append(
+                    f"Garment “{pid}” illustration “{kind_s}” belongs to a different garment "
+                    f"(“{row_piece}”). Refusing substituted Professional artwork."
+                )
+                continue
+            if str(row.kind or "").strip() != kind_s:
+                reasons.append(
+                    f"Garment “{pid}” illustration “{kind_s}” does not match the stored artwork kind "
+                    f"(“{row.kind}”). Refusing mismatched Professional artwork."
+                )
+                continue
+            if client_key and client_key != str(row.storage_key or ""):
+                reasons.append(
+                    f"Garment “{pid}” illustration “{kind_s}” storage key does not match the "
+                    "authorized artifact record. Refusing path-substituted artwork."
+                )
+                continue
+            verified[f"{pid}:{kind_s}"] = row
+
+    return reasons, verified
+
+
+def apply_server_owned_illustration_artifacts(
+    render_spec: dict[str, Any],
+    verified: dict[str, Any],
+) -> dict[str, Any]:
+    """Rewrite illustration artifact refs to server-owned ids/keys before PDF assembly."""
+    from copy import deepcopy
+
+    out: dict[str, Any] = deepcopy(render_spec)
+    raw_outfit = out.get("outfit")
+    outfit: dict[str, Any] = raw_outfit if isinstance(raw_outfit, dict) else {}
+    raw_pieces = outfit.get("pieces")
+    pieces: list[Any] = raw_pieces if isinstance(raw_pieces, list) else []
+    for piece in pieces:
+        if not isinstance(piece, dict):
+            continue
+        pid = piece_id_safe(piece)
+        raw_ill = piece.get("illustrations")
+        ill: dict[str, Any] = raw_ill if isinstance(raw_ill, dict) else {}
+        raw_arts = ill.get("artifacts")
+        arts: dict[str, Any] = raw_arts if isinstance(raw_arts, dict) else {}
+        if not arts:
+            continue
+        rewritten: dict[str, Any] = {}
+        for kind, meta in arts.items():
+            kind_s = str(kind or "").strip()
+            row = verified.get(f"{pid}:{kind_s}")
+            if row is None:
+                # Leave excluded; assess already blocked unknown entries.
+                if isinstance(meta, dict):
+                    rewritten[kind_s] = dict(meta)
+                continue
+            base: dict[str, Any] = dict(meta) if isinstance(meta, dict) else {}
+            base["artifact_id"] = str(row.id)
+            base["id"] = str(row.id)
+            base["storage_key"] = str(row.storage_key)
+            base["url_path"] = f"/techpacks/artifacts/{row.id}/image"
+            base["review_state"] = str(row.review_state or base.get("review_state") or "proposed")
+            # Never treat client path as authoritative once rewritten.
+            base["server_owned"] = True
+            rewritten[kind_s] = base
+        ill = dict(ill)
+        ill["artifacts"] = rewritten
+        ill["mode"] = "professional"
+        piece["illustrations"] = ill
+    outfit = dict(outfit)
+    outfit["pieces"] = pieces
+    out["outfit"] = outfit
+    return out
+
+
 def assess_pdf_only_update_compatibility(
     db: Session,
     draft: TechpackDraft,
@@ -652,9 +884,9 @@ def assess_pdf_only_update_compatibility(
     """Return (ok, blocking_reasons, source_run) for a no-AI PDF refresh.
 
     Fail closed when garment identity or Professional illustrations cannot be reused safely.
-    Never calls a paid provider.
+    Never calls a paid provider. Authorizes the source run and each illustration via
+    server-owned ``TechpackAIRun`` / ``TechpackAIArtifact`` rows — not client paths.
     """
-    from app.models.techpack_ai_run import TechpackAIRun
     from app.services.techpack_structure import (
         list_outfit_pieces,
         run_matches_draft_structure,
@@ -678,16 +910,13 @@ def assess_pdf_only_update_compatibility(
             "Generate AI PDF once before using Update PDF (No AI)."
         )
         return False, reasons, None
-    try:
-        run = db.get(TechpackAIRun, uuid.UUID(run_id))
-    except (TypeError, ValueError):
-        run = None
-    if run is None or run.stage != "professional" or run.status != "completed":
-        reasons.append(
-            "The bound Professional run is missing or incomplete. "
-            "Generate AI PDF again to refresh illustrations."
-        )
-        return False, reasons, None
+
+    run, run_reasons = _resolve_owned_professional_source_run(
+        db, owner, draft, claimed_run_id=run_id
+    )
+    if run is None:
+        return False, run_reasons, None
+
     req = run.request if isinstance(run.request, dict) else {}
     if not run_matches_draft_structure(req, pieces):
         reasons.append(
@@ -746,23 +975,11 @@ def assess_pdf_only_update_compatibility(
             )
         return False, reasons, run
 
-    missing_front: list[str] = []
-    for piece in pieces:
-        pid = piece_id_safe(piece) or "(unnamed)"
-        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
-        if str(ill.get("mode") or "") != "professional":
-            missing_front.append(pid)
-            continue
-        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
-        flat = arts.get("flat_front") if isinstance(arts.get("flat_front"), dict) else None
-        if not flat or not (flat.get("artifact_id") or flat.get("id") or flat.get("storage_key")):
-            missing_front.append(pid)
-    if missing_front:
-        reasons.append(
-            "Professional front illustrations are missing for: "
-            + ", ".join(missing_front)
-            + ". Generate AI PDF to restore artwork before a no-AI PDF update."
-        )
+    art_reasons, _verified = _validate_professional_illustration_artifacts(
+        db, owner, draft, run, pieces
+    )
+    if art_reasons:
+        reasons.extend(art_reasons)
         return False, reasons, run
     return True, [], run
 
@@ -871,13 +1088,28 @@ def export_pdf_only_update(
         # Do not session.rollback() here — shared test transactions and later
         # request work on the same Session must keep prior committed rows.
         raise ValidationAppError(" ".join(reasons) or "PDF-only update is not available for this draft.")
+    if source_run is None:
+        raise ValidationAppError("PDF-only update is not available for this draft.")
 
     revision_snapshot = int(draft.revision or 1)
     render_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
     outfit = render_spec.get("outfit") if isinstance(render_spec.get("outfit"), dict) else {}
     raw_pieces = outfit.get("pieces") if isinstance(outfit.get("pieces"), list) else []
     pieces: list[dict[str, Any]] = [p for p in raw_pieces if isinstance(p, dict)]
+    # Fingerprint the saved draft content (pre-rewrite) so CAS compares designer
+    # edits — not server-owned artifact metadata normalization.
     fingerprint = _pdf_only_content_fingerprint(draft=draft, render_spec=render_spec, pieces=pieces)
+    # Re-resolve verified artifacts and rewrite storage refs from server-owned rows
+    # so PDF assembly never opens a client-supplied private path as authorization.
+    art_reasons, verified = _validate_professional_illustration_artifacts(
+        db, user, draft, source_run, pieces
+    )
+    if art_reasons:
+        raise ValidationAppError(" ".join(art_reasons))
+    render_spec = apply_server_owned_illustration_artifacts(render_spec, verified)
+    outfit = render_spec.get("outfit") if isinstance(render_spec.get("outfit"), dict) else {}
+    raw_pieces = outfit.get("pieces") if isinstance(outfit.get("pieces"), list) else []
+    pieces = [p for p in raw_pieces if isinstance(p, dict)]
 
     ai = render_spec.get("ai") if isinstance(render_spec.get("ai"), dict) else {}
     prior_export_id = str(ai.get("export_id") or "").strip() or None
