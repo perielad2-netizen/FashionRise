@@ -293,6 +293,44 @@ def test_studio_gradient_fill_maps_to_piece_color_treatment_with_provenance():
     assert snap["color_treatment"]["mode"] == "gradient"
 
 
+def test_studio_gradient_source_to_pdf_line_preserves_provenance():
+    """Offline source→PDF: Studio gradient fill survives red-only hint into PDF line."""
+    from app.services.techpack_spec_fidelity import format_color_treatment_for_pdf
+
+    design_data = json.loads(
+        (_FIXTURES / "studio_gradient_fill_upstream.json").read_text(encoding="utf-8")
+    )
+    spec = apply_studio_fills_to_spec(
+        {
+            "outfit": {
+                "pieces": [
+                    {
+                        "id": "shirt-1",
+                        "category": "shirt",
+                        "label": "Ombre shirt",
+                        "color_hint": "red",
+                        "color_hint_provenance": "outfit_raw_unconfirmed",
+                    }
+                ]
+            }
+        },
+        design_data,
+    )
+    piece = spec["outfit"]["pieces"][0]
+    pdf_line = format_color_treatment_for_pdf(piece)
+    assert "gradient" in pdf_line.lower()
+    assert "near-black-burgundy" in pdf_line.lower() or "#1a0a0a" in pdf_line.lower()
+    assert "confirmed" in pdf_line.lower() or "designer-confirmed" in pdf_line.lower()
+    # Red-only garment color text still trips the simplification gate used by PDF.
+    hit = detect_color_treatment_text_mismatch(piece, rendered_color_text=piece["color_hint"])
+    assert hit is not None
+    assert hit["code"] == "color_treatment_simplified"
+    # Prompt pipeline also keeps structured mode/stops (not invent / not flatten).
+    contract = color_treatment_prompt_contract(piece)
+    assert "mode=gradient" in contract
+    assert "#1a0a0a" in contract
+
+
 def test_red_only_hint_plus_upstream_gradient_does_not_flatten():
     piece = {
         "id": "shirt-1",
