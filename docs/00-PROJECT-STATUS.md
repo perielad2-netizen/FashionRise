@@ -3,36 +3,68 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**Issue #124 BE fidelity on #123** — branch `cursor/web-techpack-fidelity-on-123-77c6` @ **`1cea6a64`** · base PR #123 tip `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · **0 paid AI** · **STOP for Technical PM**.)**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 review→PDF invalidation is preserved. This tip adds FR-B9F9 designer-spec fidelity gates (closure + gradient provenance) **on top of** #123. **Do not auto-regen paid FR-B9F9.** Prefer review exclusion + Update PDF (No AI) for existing mismatched details.
+**Last updated:** 2026-10-28 (**Controlled rollout complete for PR #123 + PR #126** · BE+worker **`311e259a`** · FE **`bfbdd03f-decimal`** · Alembic **`011`** · FR-3958 Rev3 pdf_only B verified · **PR #125 amend tip `c430a7c7` HOLD / NOT DEPLOYED** · **0 paid AI this rollout** · **STOP — owner browser smoke for #126 still required; do not claim owner acceptance**.)
+
+**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 review→PDF invalidation is **deployed**. PR #126 measurement-decimal FE is **deployed** (immutable release). PR #125 fidelity amend is integrated on #123 lineage and awaits Technical PM re-review — **do not deploy #125**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`13b26c3a-apifix`** — Nginx `current` → `releases/13b26c3a-apifix` (PR #120 tip + `VITE_API_BASE_URL=/api/v1` rebuild). Prior broken `13b26c3a` release preserved; rollback `69b83c01`. |
-| Backend (FastAPI + PostgreSQL) | **`005034d5`** (PR #119 tip — provenance gate + docs). Alembic **`011`**. |
-| AI worker | `fashionrise-ai-worker` @ **`005034d5`** |
+| Frontend (`web-ui`) | **`bfbdd03f-decimal`** — Nginx `current` → `releases/bfbdd03f-decimal` (PR #126 tip `bfbdd03f` + `VITE_API_BASE_URL=/api/v1`). Rollback: `releases/13b26c3a-apifix` (script on release) or `69b83c01`. |
+| Backend (FastAPI + PostgreSQL) | **`311e259a`** (PR #123 accepted tip — review invalidation + fail-closed guards). Alembic **`011`**. Rollback → **`005034d5`** via `/var/backups/fashionrise/techpack-pdf-qa-123-deploy-20261028T175326Z/ROLLBACK.sh`. |
+| AI worker | `fashionrise-ai-worker` @ **`311e259a`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
-| Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
-| AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+| Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged · smoke loopback `:8099` |
+| AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** · **no new paid AI authorized/executed this rollout** |
 
-## Issue #124 — visual fidelity on #123 lineage — STOP for Technical PM (2026-10-28)
+## Controlled rollout — PR #123 BE+worker (2026-10-28) — DEPLOYED
+
+| Item | Result |
+|---|---|
+| Accepted tip | **`311e259aa6fa4a64b4688b818d7f6b319f45e492`** (exact GitHub tip at ENGINEERING ACCEPT) |
+| Backup | `/var/backups/fashionrise/techpack-pdf-qa-123-deploy-20261028T175326Z/` (+ SQL dump, unit files, PRIOR_SHA→`005034d5`) |
+| API / worker | `fashionrise-api` **active** · `fashionrise-ai-worker` **active** · `/health` ok |
+| Alembic | **`011` (head)** |
+| Active AI jobs at cutover | **0** |
+| FR-3958 auth review | Artifact `7298860c…` → `rejected_category_mismatch`, `preview_include=false` (source-run bound) |
+| Owner Update PDF (No AI) | Rev **3** export `6c25a85c…` · 14 pages · `pdf_only=true` · `provider_calls=0` · DESIGN CONCEPT · EXCLUDED/MISSING shorts detail · hoodie illustrations preserved · historical Rev2 `d19a5d0c…` retained · draft dirty=false |
+| Paid AI | **0** new provider calls |
+
+## Controlled rollout — PR #126 FE decimal (2026-10-28) — DEPLOYED (owner browser smoke PENDING)
+
+| Item | Result |
+|---|---|
+| Accepted tip | **`bfbdd03f9b1f658c5fd2d9804fde9f5a64f7230b`** |
+| Release dir | `/var/www/fashionrise/releases/bfbdd03f-decimal` (immutable; `version.json` pins `/api/v1`) |
+| Build gates | `set -euo pipefail` · `VITE_API_BASE_URL=/api/v1` · `assert-prod-api-base` · `assert-sw-access-safe` · packaged JS contains `/api/v1` |
+| Vitest (pre-cutover) | **14 passed** (`measuredDecimalInput` + `MeasuredField`) |
+| Smoke loopback | `:8099` index/version/assets/sw **200**; served JS has `/api/v1` |
+| Rollback | ` /var/www/fashionrise/releases/bfbdd03f-decimal/ROLLBACK.sh` → `13b26c3a-apifix` |
+| Owner browser smoke (REQUIRED — not claimed) | Type `25.5` / `25,5` body+finished → save/reopen numeric persistence · designer provenance on user-edited AI/calculated fields without auto manufacturing approval · login · historical PDF downloads · existing edits |
+
+## PR #125 fidelity amend on #123 — HOLD / NOT DEPLOYED (2026-10-28)
 
 | Item | Detail |
 |---|---|
-| Branch | `cursor/web-techpack-fidelity-on-123-77c6` (descendant of PR #123 tip `311e259a`) |
-| Trigger | FR-B9F9: structured jeans closure **buttons** but detail captions/drawings **FLY (ZIPPER)**; shirt **gradient** flattened toward hard split / `red` |
-| Contract | `techpack_spec_fidelity.py` — designer closure + `color_treatment` (gradient/block/stops/direction/provenance) injected into vision + flat + detail prompts; designer decisions override generic model defaults |
-| Deterministic gate | Caption/annotation text vs structured closure (e.g. buttons vs `FLY (ZIPPER)`), including mixed button+zipper captions → `proposed_unverified`, `manufacturing_evidence=False`. **Not pixel proof.** |
-| Color treatment | End-to-end studio fill gradient → `piece.color_treatment` with confirmed-vs-inferred provenance; flag simplification / two-tone evasion of structured gradients |
-| PDF / BOM / autofill | PDF prints structured color-treatment + #123 color evidence; BOM uses designer buttons (not generic zipper); autofill never overwrites designer-confirmed closures |
-| Existing paid FR-B9F9 | **No auto regen.** Owner artifact-review exclude mismatched details → Update PDF (No AI) may fix text/exclusion only — cannot repair wrong pixels |
-| #123 preserved | Review→PDF invalidation + fail-closed source-pack guards unchanged |
-| Migration | **None** — JSON `color_treatment` / artifact metadata only; Alembic stays `011` |
-| Tests | Offline pytest **92 passed** (`spec_fidelity` 14 + manufacturing + autofill + provenance + p0 + pdf_only + pdf_ready_binding); ruff F401/F821 clean on touched files; mypy clean on `techpack_spec_fidelity.py` |
-| Deploy | **STOP** — do not deploy until Technical PM accepts |
+| Tip | **`c430a7c7901ee40c5c42dfd80862006b95ae6263`** on `cursor/web-techpack-fidelity-b9f9-77c6` (= `cursor/web-techpack-fidelity-on-123-77c6`) |
+| Base lineage | Descendant of accepted/deployed PR #123 tip **`311e259a`** — does **not** overwrite #123 with older `005034d5` sibling |
+| Fix 1 mixed captions | `detect_closure_caption_mismatch`: designer buttons + zipper-fly captions flag even when button tokens also present on the same sheet |
+| Fix 2 gradient E2E | Studio/upstream fills → structured `piece.color_treatment` (mode/stops/direction/provenance); red-only hint must not flatten confirmed gradient; source→PDF offline fixture; stronger two-tone text mismatch |
+| Fix 3 lineage | Integrated on #123; `record_owned_artifact_review` / fingerprint / fail-closed guards preserved |
+| Rejection / preview_include | Already-rejected art keeps `preview_include=False` (never revived by fidelity gates) |
+| Tests (this verify) | `test_techpack_spec_fidelity` **15 passed** · combined pdf_only/manufacturing/p0+fidelity **84 passed** (+1 unrelated teardown deadlock flake) · Ruff F401/F821 clean · mypy clean on `techpack_spec_fidelity.py` |
+| Deploy | **STOP — do not deploy** until Technical PM re-accepts |
+
+## Issue #124 — visual fidelity on #123 lineage — archive note
+
+Prior sibling tip `ed986c0b` / code `05118592` on pre-#123 baseline is superseded by the on-123 amend tip above.
 
 ## PR #123 review-guard closure — preserved under this tip (2026-10-28)
+
+> **Production update:** PR #123 tip `311e259a` is now **deployed**. FR-3958 shorts detail is rejected + excluded in current Rev3 PDF B (`6c25a85c…`). Historical narrative below retains pre-deploy QA context.
+
+ (2026-10-28)
 
 Technical PM reviewed clean PR #123 @ `43c8d376` → **HOLD — one focused P0 guard correction**. Prior invalidation/fingerprint/reviewer work stood; this tip closes the fail-closed source-pack guards.
 
@@ -103,7 +135,7 @@ Technical PM reviewed prior PR #122 @ `8794583f` → **HOLD / CHANGES REQUIRED**
 | PR | Scope | Tip |
 |---|---|---|
 | [#126](https://github.com/perielad2-netizen/FashionRise/pull/126) FE measure decimal | `cursor/web-techpack-measure-decimal-77c6` | `bfbdd03f` |
-| [#125](https://github.com/perielad2-netizen/FashionRise/pull/125) BE fidelity (closure/gradient) | `cursor/web-techpack-fidelity-b9f9-77c6` | `05118592` |
+| [#125](https://github.com/perielad2-netizen/FashionRise/pull/125) BE fidelity (closure/gradient) on #123 | `cursor/web-techpack-fidelity-on-123-77c6` (supersedes sibling `…-fidelity-b9f9-77c6` @ `ed986c0b`) | `TIP_SHA_PLACEHOLDER` |
 
 ### Blocked / exact proposed deployment sequence (after Technical PM accept)
 
