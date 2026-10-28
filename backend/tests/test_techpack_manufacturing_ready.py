@@ -7,9 +7,6 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
-from pypdf import PdfReader
-from reportlab.lib.units import mm
-
 from app.services.techpack_manufacturing import (
     READINESS_DESIGN_CONCEPT,
     READINESS_SAMPLE_DEVELOPMENT,
@@ -24,6 +21,8 @@ from app.services.techpack_manufacturing import (
 )
 from app.services.techpack_pdf import _SizedImage, build_techpack_pdf
 from app.services.techpack_spec import default_spec
+from pypdf import PdfReader
+from reportlab.lib.units import mm
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 FR3958 = FIXTURES / "fr_3958_manufacturing_spec.json"
