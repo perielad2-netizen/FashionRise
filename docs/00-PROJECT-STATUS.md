@@ -3,59 +3,87 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #119 artwork provenance gate** — final P0 ownership/artifact authorization · **HOLD / NOT DEPLOYED** · FE PR #120 ENGINEERING ACCEPTED @ `13b26c3a` · prod FE `69b83c01` / BE+worker `2c8cb88e` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP**.)
+**Last updated:** 2026-10-28 (**Post-deploy PDF QA corrections** — P0 shorts-detail exclusion + P1 colors/layout/provenance · branch `cursor/web-techpack-pdf-qa-77c6` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM**.)
 
-**Phase:** Protected family beta. Production still **Generate AI PDF → Wait → Download PDF** on FE `69b83c01` + BE `2c8cb88e` (PR #118 manufacturing). FE PR #120 accepted; BE PR #119 remains **HOLD** pending PM acceptance of the artwork provenance gate.
+**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live in production after FE API-base recovery. Manufacturing/layout defects found in owner Rev 2; corrected offline PDF ready for PM review — **do not deploy** until accepted.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114). **OWNER ACCEPTANCE PASS — Measurements & Details.** |
-| Backend (FastAPI + PostgreSQL) | **`2c8cb88e`** (PR #118 manufacturing tip). Prior baseline **`7af9c809`** (PR #117). Alembic **`011`**. |
-| AI worker | `fashionrise-ai-worker` @ **`2c8cb88e`** |
+| Frontend (`web-ui`) | **`13b26c3a-apifix`** — Nginx `current` → `releases/13b26c3a-apifix` (PR #120 tip + `VITE_API_BASE_URL=/api/v1` rebuild). Prior broken `13b26c3a` release preserved; rollback `69b83c01`. |
+| Backend (FastAPI + PostgreSQL) | **`005034d5`** (PR #119 tip — provenance gate + docs). Alembic **`011`**. |
+| AI worker | `fashionrise-ai-worker` @ **`005034d5`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
-## Completed-look UX + Update PDF (No AI) — STOP for PM (2026-10-28)
+## Post-deploy PDF QA corrections — STOP for Technical PM (2026-10-28)
+
+### Owner smoke evidence (production)
+
+| Item | Result |
+|---|---|
+| Login after FE API-base fix | **PASS** — owner authenticated |
+| Reopen FR-3958 + saved measurements | **PASS** |
+| Update PDF (No AI) → `UpdatedNoAI.pdf` | **PASS** — Rev **2**, **15** pages, assembly **`$0`**, source run cost **250¢**, same **7** embedded image files as Rev 1 |
+| Paid provider calls | **0** |
+| Source AI run / Rev 1 PDF | **Unchanged** (run `6b3bf6c3…`, export `b2a1922a…`) |
+| Current export binding | Rev 2 export `d19a5d0c…` (pdf_only) — no duplicate/stale bind observed in owner smoke |
+| Login/API-base recovery | **Unaffected** by this QA branch (FE left at `13b26c3a-apifix`) |
+
+### PDF QA failures (Rev 2)
+
+| Sev | Defect |
+|---|---|
+| **P0** | Page 11 **BOTTOM — Shorts** detail showed purple **hoodie** construction (artifact `7298860c…`, `review_state=proposed`). Wrong image also in Rev 1. |
+| **P1** | Outfit-level `['Lavender-purple top', 'Golden-yellow shorts']` printed as **Garment color** for both pieces (and previously as shell name). |
+| **P1** | Caption/page-break separation; pattern inventory notes truncated at 80 chars; legend equated designer-entered with confirmed; PDF-only metadata looked like a fresh paid Professional run. |
+
+### This branch — offline corrections (NOT deployed)
 
 | Item | Detail |
 |---|---|
-| FE PR #120 | **ENGINEERING ACCEPTED** @ **`13b26c3a`** (5-file delta; base `cursor/web-techpack-autosave-quiet-77c6`). Not deployed. |
-| BE PR #119 tip | `cursor/web-techpack-noai-pdf-be-77c6` @ **`3ca0e393`** (artwork provenance gate; prior safety tip `51422502` / docs `6e129c91`) |
-| Production | **Unchanged** — FE `69b83c01` / BE+worker `2c8cb88e` / Alembic `011` / ceiling `$50` |
-| Paid AI | **0** — PDF-only path makes zero provider calls; no new paid AI run |
-
-### PR #119 final P0 — artwork provenance / ownership gate
-
-Technical PM: prior CAS/Magic/cost fixes verified; **one remaining P0** — trusted run/artifact ownership before PDF reuse.
-
-| Control | Behavior |
-|---|---|
-| Source run | Claimed `last_run_id` must resolve to completed Professional `TechpackAIRun` with `user_id` + `draft_id` matching the authenticated owner and current draft; cross-draft / cross-user claims rejected without mutating history |
-| Illustrations | Every reused Professional artifact resolved from `TechpackAIArtifact`; verify user, draft, run, piece_id, kind, and storage_key match. Storage path alone never authorizes. Incomplete legacy piece association → fail closed with actionable message |
-| PDF assembly | After assess, illustration refs rewritten from server-owned artifact rows before `build_techpack_pdf` (client paths not opened as auth) |
-| UNVERIFIED policy | Existing manufacturing visual-review / UNVERIFIED detail policy unchanged |
-| Concurrent note | Nested HTTP race test shares one TestClient session (assembly overlap simulation). Production uses `SELECT FOR UPDATE` + CAS; fixture harness cannot observe uncommitted rows from independent sessions — documented in tests |
-
-### Prior safety amendments (still in tip)
-
-Current PDF wins over historical run export (FE accepted); Magic front/back from request stamps or original export meta; revision/fingerprint CAS; honest `$0` assembly cost vs `source_run_cost_usd_cents`.
+| Branch | `cursor/web-techpack-pdf-qa-77c6` (from `005034d5`) |
+| P0 mechanism | `POST /techpacks/artifacts/{id}/review` + `record_owned_artifact_operator_review` — owner-scoped, auditable `operator_decisions` in artifact metadata, **bytes preserved**, other users 404/403 |
+| P0 FR-3958 mark | Offline `apply_fr3958_owner_qa_shorts_detail_rejection` → `rejected_category_mismatch` on `7298860c…` (prior_state preserved). **Production DB not written** this turn. |
+| P1 colors | `derive_piece_garment_color` — preserve `color_hint_raw`; derive Lavender/purple (top) / golden yellow (shorts) from analysis evidence; never treat color as composition |
+| P1 layout/meta | KeepTogether captions+art; full pattern Notes column; legend separates designer-entered vs confirmed; `pdf_only_update` cover/AI block shows **Assembly 0¢** vs **Source run 250¢** |
+| Offline corrected PDF | `artifacts/manufacturing_previews/FR-3958_corrected_pdf_qa_offline.pdf` — **14** pages, Rev 3 preview marker, readiness **DESIGN CONCEPT** |
+| Illustration identity | Hoodie detail `e81d203a…` embedded **1024×1536**, **0 pixel diffs** vs authorized source PNG. Rejected shorts detail **not embedded**. Shorts page shows MISSING/EXCLUDED + flats only. |
+| Page inspect | All 14 pages rasterized under `artifacts/manufacturing_previews/pages/` |
+| Tests | **42 passed** (`test_techpack_pdf_only_update` + `test_techpack_manufacturing_ready`) · **0 paid AI** |
+| Production FE/BE | **Preserved** at `13b26c3a-apifix` / `005034d5` — no deploy |
 
 ### Gates
 
 | Gate | Result |
 |---|---|
-| BE pdf-only + manufacturing + P0 + V2 fixtures + pdf-ready | **71 passed** |
-| Ruff (amended BE files) | clean |
-| mypy `techpack_service.py` | pre-existing union noise (~55); no new blocker class beyond prior tip |
-| FE | unchanged this turn (accepted `13b26c3a`) |
+| Offline corrected PDF + every-page inspect | **PASS** (DESIGN CONCEPT; shorts detail excluded; hoodie readable) |
+| Unit/API regressions (pdf-only + manufacturing) | **42 passed** |
+| Source run / original PDFs | Untouched |
+| Provider calls | **0** |
 
-### Blocked / next
+### Blocked / exact next action
 
-- **Do not deploy.** No paid AI, migration, historical rewrite, spending-limit change, or FE edits.
-- Exact next action: Technical PM acceptance of BE #119 provenance gate. After accept: deploy BE+worker then FE `13b26c3a`; smoke Edit → Update PDF (No AI) → Reopen → Download current PDF B (old PDF + original AI arts preserved). Rollback → `2c8cb88e` / `69b83c01`.
+- **STOP — do not deploy** this QA branch until Technical PM accepts.
+- Exact next action after accept: (1) persist owner review on artifact `7298860c…` via review API (or approved operator path); (2) deploy BE+worker tip of this branch; (3) owner re-run Update PDF (No AI) on FR-3958; (4) confirm Rev N excludes shorts hoodie detail, shows garment-specific colors + PDF-only `$0` metadata, remains DESIGN CONCEPT. FE stays `13b26c3a-apifix` unless separately approved. Rollback BE → `005034d5`.
+
+## Completed-look UX + Update PDF (No AI) — deployed baseline (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| FE PR #120 | Deployed as **`13b26c3a-apifix`** (API-base fix-forward after missing `VITE_API_BASE_URL`) |
+| BE PR #119 tip | Production **`005034d5`** (artwork provenance gate + docs) |
+| Paid AI | **0** on PDF-only path |
+
+### PR #119 artwork provenance / ownership gate (live)
+
+| Control | Behavior |
+|---|---|
+| Source run | Owned completed Professional `TechpackAIRun` only |
+| Illustrations | Server-owned `TechpackAIArtifact` rewrite before PDF assembly |
+| Cost honesty | `assembly_cost_usd_cents=0` vs `source_run_cost_usd_cents` (QA branch also stamps PDF body) |
 
 ## PR #118 controlled deployment (2026-10-28) — STOP
 

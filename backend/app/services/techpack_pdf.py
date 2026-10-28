@@ -57,7 +57,7 @@ MARGIN = 16 * mm
 
 
 def resolve_generation_provenance(spec: dict[str, Any]) -> dict[str, Any]:
-    """Derive truthful Basic vs AI Professional labels from draft spec (no secrets)."""
+    """Derive truthful Basic vs AI Professional vs PDF-only labels from draft spec (no secrets)."""
     v2 = ensure_v2(spec if isinstance(spec, dict) else {})
     ai = v2.get("ai") if isinstance(v2.get("ai"), dict) else {}
     outfit = v2.get("outfit") if isinstance(v2.get("outfit"), dict) else {}
@@ -70,12 +70,22 @@ def resolve_generation_provenance(spec: dict[str, Any]) -> dict[str, Any]:
         if str(ill.get("mode") or "") == "professional" and arts:
             professional_pieces += 1
             for kind, meta in arts.items():
-                if isinstance(meta, dict) and meta.get("storage_key"):
+                if isinstance(meta, dict) and (meta.get("storage_key") or meta.get("artifact_id")):
                     artifact_kinds.append(str(kind))
     mode = str(ai.get("last_mode") or "").strip().lower() or "none"
+    pdf_only = bool(ai.get("pdf_only_update"))
     # Only claim Professional when mode matches and at least one illustration artifact exists.
-    is_professional = mode == "professional" and professional_pieces > 0
-    if is_professional:
+    is_professional = (mode == "professional" or pdf_only) and professional_pieces > 0
+    source_run_cents = int(ai.get("source_run_cost_usd_cents") or 0)
+    if not source_run_cents and is_professional and not pdf_only:
+        source_run_cents = int(ai.get("actual_cost_usd_cents") or 0)
+    assembly_cents = int(ai.get("assembly_cost_usd_cents") or 0) if pdf_only else int(
+        ai.get("actual_cost_usd_cents") or 0
+    )
+    if pdf_only and is_professional:
+        label = "PDF-only update ($0 assembly · reused AI Professional arts)"
+        short = "pdf_only_update"
+    elif is_professional:
         label = "AI Professional"
         short = "professional"
     elif mode in ("heuristic", "ai"):
@@ -88,13 +98,21 @@ def resolve_generation_provenance(spec: dict[str, Any]) -> dict[str, Any]:
         "mode": short,
         "label": label,
         "is_professional": is_professional,
+        "pdf_only_update": pdf_only,
         "run_id": str(ai.get("last_run_id") or "") if is_professional else "",
         "vision_model": str(ai.get("vision_model") or "") if is_professional else "",
         "image_model": str(ai.get("image_model") or "") if is_professional else "",
-        "actual_cost_usd_cents": int(ai.get("actual_cost_usd_cents") or 0) if is_professional else 0,
-        "paid_sections": list(ai.get("paid_sections") or []) if is_professional else [],
+        "actual_cost_usd_cents": assembly_cents if pdf_only else (source_run_cents if is_professional else 0),
+        "assembly_cost_usd_cents": 0 if pdf_only else assembly_cents,
+        "source_run_cost_usd_cents": source_run_cents if is_professional else 0,
+        "paid_sections": (
+            list(ai.get("source_run_paid_sections") or ai.get("paid_sections") or [])
+            if is_professional
+            else []
+        ),
         "artifact_kinds": sorted(set(artifact_kinds)),
         "professional_piece_count": professional_pieces,
+        "new_paid_ai_run": False if pdf_only else bool(ai.get("new_paid_ai_run", is_professional)),
     }
 
 INK = colors.HexColor("#1a2233")
@@ -563,17 +581,22 @@ def _piece_sections(
     cat = str(piece.get("category") or "other")
     label = str(piece.get("label") or cat.title())
     role = str(piece.get("role") or "").upper()
-    color = str(piece.get("color_hint") or "")
     heading = f"{role + ' — ' if role else ''}{label}".strip(" —")
     story.append(Paragraph(f"Component: {heading}", styles["h2"]))
+
+    piece_norm = normalize_shell_material(piece)
+    # Prefer enrich-time derived garment color when present on the piece already.
+    if piece.get("color_hint") and not piece_norm.get("color_hint"):
+        piece_norm["color_hint"] = piece.get("color_hint")
+        piece_norm["color_hint_raw"] = piece.get("color_hint_raw")
+        piece_norm["color_hint_provenance"] = piece.get("color_hint_provenance")
+    color = str(piece_norm.get("color_hint") or piece.get("color_hint") or "")
     story.append(
         Paragraph(
-            f"Category: {cat} · Color hint: {color or '—'} · Detection: {piece.get('detection_source') or '—'}",
+            f"Category: {cat} · Garment color: {color or '—'} · Detection: {piece.get('detection_source') or '—'}",
             styles["muted"],
         )
     )
-
-    piece_norm = normalize_shell_material(piece)
     mats = piece_norm.get("materials") if isinstance(piece_norm.get("materials"), dict) else {}
     shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
     lining = mats.get("lining") if isinstance(mats.get("lining"), dict) else {}
@@ -585,12 +608,22 @@ def _piece_sections(
     story.append(Paragraph("Materials & construction identity", styles["h3"]))
     shell_name = str(shell.get("name") or shell.get("suggestion") or "—")
     composition = str(shell.get("composition") or "Unknown / not confirmed")
-    garment_color = str(piece_norm.get("color_hint") or piece.get("color_hint") or "—")
+    garment_color = str(piece_norm.get("color_hint") or "").strip() or "— (not derived)"
+    color_raw = piece_norm.get("color_hint_raw")
+    if isinstance(color_raw, (list, tuple)):
+        color_raw_txt = ", ".join(str(x) for x in color_raw)
+    else:
+        color_raw_txt = str(color_raw or "").strip()
+    color_prov = str(piece_norm.get("color_hint_provenance") or "")
     colorway_note = str(shell.get("colorway_note") or "")
     story.append(
         _kv_table(
             [
                 ("Garment color", garment_color),
+                (
+                    "Color evidence",
+                    color_prov.replace("_", " ") if color_prov else "—",
+                ),
                 ("Shell material", shell_name if shell_name.strip() not in ("", "—") else "Not confirmed"),
                 ("Composition", composition),
                 ("Fabric structure", str(shell.get("fabric_structure") or "knit/woven — not confirmed")),
@@ -612,6 +645,15 @@ def _piece_sections(
             styles,
         )
     )
+    if color_raw_txt:
+        story.append(
+            Paragraph(
+                f"<b>REVIEW:</b> Historical outfit-level color input preserved "
+                f"(“{color_raw_txt[:140]}”). Displayed garment color is derived only where "
+                "visual/structured evidence supports a piece-specific value — not material composition.",
+                styles["warn"],
+            )
+        )
     if colorway_note:
         story.append(
             Paragraph(
@@ -720,7 +762,8 @@ def _piece_sections(
             colWidths=[88 * mm, 88 * mm],
         )
         flats.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-        story.append(flats)
+        # Keep captions with their illustrations — avoid orphan caption page breaks.
+        story.append(KeepTogether([flats]))
         if arts.get("flat_back_proposed") and not arts.get("flat_back"):
             story.append(
                 Paragraph(
@@ -740,9 +783,11 @@ def _piece_sections(
         if detail_art or (has_detail_meta and detail_decision.get("include") and not detail_excl):
             # Dedicated page so detail callouts stay readable (not tiny beside flats).
             story.append(PageBreak())
-            story.append(Paragraph(f"Garment detail illustrations — {heading}", styles["h2"]))
+            detail_block: list[Any] = [
+                Paragraph(f"Garment detail illustrations — {heading}", styles["h2"])
+            ]
             if not detail_decision.get("manufacturing_evidence"):
-                story.append(
+                detail_block.append(
                     Paragraph(
                         "<b>UNVERIFIED DETAIL ART:</b> "
                         + str(
@@ -758,22 +803,29 @@ def _piece_sections(
                 )
             if detail_art:
                 # Near full-page readable size on the dedicated detail sheet.
-                story.append(_look_image(detail_art, 175 * mm, 210 * mm, styles))
+                detail_block.append(_look_image(detail_art, 175 * mm, 200 * mm, styles))
             else:
-                story.append(
+                detail_block.append(
                     Paragraph(
                         "Detail artwork metadata is present but the stored image file is unavailable "
                         "in this preview environment. Original bytes are preserved — not substituted.",
                         styles["muted"],
                     )
                 )
+            story.append(KeepTogether(detail_block))
         elif detail_excl:
-            story.append(Paragraph("Garment detail illustrations", styles["h3"]))
+            # Inline exclusion — do not open an empty detail page for rejected artwork.
             story.append(
-                Paragraph(
-                    f"<b>MISSING / EXCLUDED:</b> {detail_excl} "
-                    "Original file and provenance are preserved; another garment’s artwork was not substituted.",
-                    styles["warn"],
+                KeepTogether(
+                    [
+                        Paragraph("Garment detail illustrations", styles["h3"]),
+                        Paragraph(
+                            f"<b>MISSING / EXCLUDED:</b> {detail_excl} "
+                            "Original file and provenance are preserved; another garment’s artwork "
+                            "was not substituted.",
+                            styles["warn"],
+                        ),
+                    ]
                 )
             )
         else:
@@ -811,19 +863,26 @@ def _piece_sections(
             piece, kind="detail_callouts", artifact_meta=detail_meta
         )
         if detail_excl:
-            story.append(Paragraph("Garment detail illustrations", styles["h3"]))
             story.append(
-                Paragraph(
-                    f"<b>MISSING / EXCLUDED:</b> {detail_excl} "
-                    "Original file and provenance are preserved; another garment’s artwork was not substituted.",
-                    styles["warn"],
+                KeepTogether(
+                    [
+                        Paragraph("Garment detail illustrations", styles["h3"]),
+                        Paragraph(
+                            f"<b>MISSING / EXCLUDED:</b> {detail_excl} "
+                            "Original file and provenance are preserved; another garment’s artwork "
+                            "was not substituted.",
+                            styles["warn"],
+                        ),
+                    ]
                 )
             )
         elif isinstance(arts.get("detail_callouts"), dict) and detail_decision.get("include"):
             story.append(PageBreak())
-            story.append(Paragraph(f"Garment detail illustrations — {heading}", styles["h2"]))
+            detail_block = [
+                Paragraph(f"Garment detail illustrations — {heading}", styles["h2"])
+            ]
             if not detail_decision.get("manufacturing_evidence"):
-                story.append(
+                detail_block.append(
                     Paragraph(
                         "<b>UNVERIFIED DETAIL ART:</b> "
                         + str(
@@ -835,15 +894,16 @@ def _piece_sections(
                     )
                 )
             if detail_art:
-                story.append(_look_image(detail_art, 175 * mm, 210 * mm, styles))
+                detail_block.append(_look_image(detail_art, 175 * mm, 200 * mm, styles))
             else:
-                story.append(
+                detail_block.append(
                     Paragraph(
                         "Detail artwork metadata is present but the stored image file is unavailable "
                         "in this preview environment. Original bytes are preserved — not substituted.",
                         styles["muted"],
                     )
                 )
+            story.append(KeepTogether(detail_block))
 
     story.append(PageBreak())
     story.append(Paragraph(f"Measurement specification — {heading}", styles["h2"]))
@@ -971,6 +1031,7 @@ def _piece_sections(
             Paragraph("<b>Fabric</b>", styles["small"]),
             Paragraph("<b>Grain / fold</b>", styles["small"]),
             Paragraph("<b>Review</b>", styles["small"]),
+            Paragraph("<b>Notes</b>", styles["small"]),
         ]
     ]
     for row in patterns[:30]:
@@ -989,10 +1050,8 @@ def _piece_sections(
             "designer_confirmed": "Designer confirmed",
         }
         review_txt = review_labels.get(review.lower(), review.replace("_", " "))
-        notes = str(row.get("notes") or "")
+        notes = str(row.get("notes") or "").strip() or "—"
         name_txt = str(row.get("name") or "—")
-        if notes:
-            name_txt = f"{name_txt} — {notes[:80]}"
         pat_data.append(
             [
                 Paragraph(str(row.get("id") or "—"), styles["small"]),
@@ -1004,10 +1063,15 @@ def _piece_sections(
                     styles["small"],
                 ),
                 Paragraph(review_txt, styles["small"]),
+                # Full notes — do not truncate mid-description.
+                Paragraph(notes, styles["small"]),
             ]
         )
-    # Wider review column so status text wraps cleanly (no mid-word clip).
-    pat_table = Table(pat_data, colWidths=[14 * mm, 40 * mm, 12 * mm, 18 * mm, 40 * mm, 36 * mm])
+    # Name + Notes share width so inventory descriptions wrap fully.
+    pat_table = Table(
+        pat_data,
+        colWidths=[12 * mm, 28 * mm, 10 * mm, 14 * mm, 28 * mm, 28 * mm, 50 * mm],
+    )
     pat_table.setStyle(
         TableStyle(
             [
@@ -1309,9 +1373,12 @@ def _build_story_v2(
     story.append(Paragraph("Legend", styles["h3"]))
     story.append(
         Paragraph(
-            "<b>Confirmed</b> = designer-entered / checklist-checked. "
+            "<b>Designer-entered</b> = value present from the designer (provenance only — "
+            "not manufacturing approval). "
+            "<b>Confirmed</b> = explicitly designer-confirmed / visual-QA accepted for sample development. "
             "<b>Proposed</b> = AI or default draft (backs, generic SA, inferred closures). "
-            "<b>Unresolved</b> = blocking SAMPLE-DEVELOPMENT READY until corrected.",
+            "<b>Unresolved</b> = blocking SAMPLE-DEVELOPMENT READY until corrected. "
+            "Designer-entered values are <b>not</b> automatically confirmed specifications.",
             styles["muted"],
         )
     )
@@ -1334,7 +1401,43 @@ def _build_story_v2(
     )
     prov = resolve_generation_provenance(v2)
     story.append(Paragraph("AI generation identification", styles["h3"]))
-    if prov["is_professional"]:
+    if prov.get("pdf_only_update") and prov["is_professional"]:
+        story.append(
+            Paragraph(
+                "This export is a <b>PDF-only update</b>: $0 assembly that reuses stored AI Professional "
+                "illustrations from a historical paid source run. No new provider calls. "
+                "Still DRAFT / UNVERIFIED. Pattern sheets NOT TO SCALE.",
+                styles["body"],
+            )
+        )
+        story.append(
+            _kv_table(
+                [
+                    ("Generation mode", prov["label"]),
+                    ("Assembly cost (¢)", "0"),
+                    (
+                        "Source run cost (¢)",
+                        str(prov.get("source_run_cost_usd_cents") or "—"),
+                    ),
+                    ("New paid AI run", "No"),
+                    ("Source AI run reference", prov["run_id"] or "—"),
+                    ("Vision model (source)", prov["vision_model"] or "—"),
+                    ("Image model (source)", prov["image_model"] or "—"),
+                    (
+                        "Source paid sections",
+                        ", ".join(prov["paid_sections"]) if prov["paid_sections"] else "—",
+                    ),
+                    (
+                        "Illustration kinds",
+                        ", ".join(prov["artifact_kinds"]) if prov["artifact_kinds"] else "—",
+                    ),
+                    ("Draft revision", str(revision)),
+                    ("Notices", "DRAFT / UNVERIFIED · NOT TO SCALE · DESIGN CONCEPT until manufacturing issues resolve"),
+                ],
+                styles,
+            )
+        )
+    elif prov["is_professional"]:
         story.append(
             Paragraph(
                 "This export includes AI Professional technical illustrations from a completed "
@@ -1389,13 +1492,23 @@ def _build_story_v2(
                 styles,
             )
         )
-    story.append(
-        Paragraph(
-            f"Generation mode: {prov['mode']} · Paid sections: "
-            f"{', '.join(prov['paid_sections']) or 'none'}",
-            styles["muted"],
+    if prov.get("pdf_only_update"):
+        story.append(
+            Paragraph(
+                f"Generation mode: {prov['mode']} · Assembly cost: $0 · "
+                f"Source-run paid sections: {', '.join(prov['paid_sections']) or 'none'} · "
+                "No new paid AI run for this PDF.",
+                styles["muted"],
+            )
         )
-    )
+    else:
+        story.append(
+            Paragraph(
+                f"Generation mode: {prov['mode']} · Paid sections: "
+                f"{', '.join(prov['paid_sections']) or 'none'}",
+                styles["muted"],
+            )
+        )
     return story
 
 

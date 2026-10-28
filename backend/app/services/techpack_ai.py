@@ -2001,3 +2001,79 @@ def resolve_artifact_image(db: Session, user: User, artifact_id: uuid.UUID) -> t
     if path is None:
         raise NotFoundError("Techpack artifact file missing")
     return path, row
+
+
+_ALLOWED_OPERATOR_REVIEW_STATES = frozenset(
+    {
+        "rejected_category_mismatch",
+        "excluded_mismatch",
+        "rejected",
+        "proposed",
+        "proposed_unverified",
+        "designer_confirmed",
+        "visual_qa_confirmed",
+        "owner_accepted",
+        "confirmed",
+    }
+)
+
+
+def record_owned_artifact_operator_review(
+    db: Session,
+    user: User,
+    artifact_id: uuid.UUID,
+    *,
+    review_state: str,
+    review_message: str,
+    operator: str = "owner_qa",
+) -> dict[str, Any]:
+    """Persist an auditable operator review on one owned artifact. Never deletes bytes.
+
+    Scoped to the authenticated owner only — other users' artifacts are not visible
+    or mutable. Storage keys and image files are left untouched.
+    """
+    from datetime import datetime, timezone
+
+    row = db.get(TechpackAIArtifact, artifact_id)
+    if row is None or row.user_id != user.id:
+        raise NotFoundError("Techpack artifact not found")
+    state = str(review_state or "").strip().lower()
+    if state not in _ALLOWED_OPERATOR_REVIEW_STATES:
+        raise ValidationAppError(f"Unsupported artifact review_state “{review_state}”.")
+    message = str(review_message or "").strip()
+    if not message:
+        raise ValidationAppError("review_message is required for an auditable operator decision.")
+    when = datetime.now(timezone.utc).isoformat()
+    prior = str(row.review_state or "")
+    meta = dict(row.metadata_) if isinstance(row.metadata_, dict) else {}
+    decisions = list(meta.get("operator_decisions") or [])
+    decisions.append(
+        {
+            "operator": str(operator or "owner_qa"),
+            "review_state": state,
+            "review_message": message,
+            "decided_at": when,
+            "prior_review_state": prior,
+            "bytes_preserved": True,
+            "substituted": False,
+            "storage_key": str(row.storage_key),
+            "piece_id": row.piece_id,
+            "kind": row.kind,
+        }
+    )
+    meta["operator_decisions"] = decisions
+    meta["last_operator_decision"] = decisions[-1]
+    if state in {"rejected_category_mismatch", "excluded_mismatch", "rejected"}:
+        meta["preview_include"] = False
+        meta["manufacturing_evidence"] = False
+    row.review_state = state
+    row.metadata_ = meta
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        **_artifact_read(row),
+        "operator_decision": decisions[-1],
+        "bytes_preserved": True,
+        "file_deleted": False,
+    }

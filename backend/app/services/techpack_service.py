@@ -862,6 +862,19 @@ def apply_server_owned_illustration_artifacts(
             base["storage_key"] = str(row.storage_key)
             base["url_path"] = f"/techpacks/artifacts/{row.id}/image"
             base["review_state"] = str(row.review_state or base.get("review_state") or "proposed")
+            row_meta = row.metadata_ if isinstance(row.metadata_, dict) else {}
+            if row_meta.get("review_message") and not base.get("review_message"):
+                base["review_message"] = row_meta.get("review_message")
+            if "preview_include" in row_meta:
+                base["preview_include"] = bool(row_meta.get("preview_include"))
+            elif str(base["review_state"]).lower() in {
+                "rejected_category_mismatch",
+                "excluded_mismatch",
+                "rejected",
+            }:
+                base["preview_include"] = False
+            if row_meta.get("last_operator_decision"):
+                base["operator_decision"] = row_meta.get("last_operator_decision")
             # Never treat client path as authoritative once rewritten.
             base["server_owned"] = True
             rewritten[kind_s] = base
@@ -1142,14 +1155,6 @@ def export_pdf_only_update(
     if front_path is None and back_path is None:
         raise ValidationAppError("Cannot export PDF without at least one Magic look image")
 
-    provenance = resolve_generation_provenance(render_spec)
-    provenance = {
-        **provenance,
-        "mode": "professional",
-        "label": "AI Professional",
-        "is_professional": True,
-        "run_id": source_run_id or provenance.get("run_id") or "",
-    }
     # Historical source-run cost stays attributed to the paid run — not this $0 assembly.
     source_run_cents = 0
     if source_run is not None:
@@ -1157,8 +1162,35 @@ def export_pdf_only_update(
     if not source_run_cents:
         source_run_cents = int(ai.get("actual_cost_usd_cents") or 0)
     source_paid_sections = list(
-        ai.get("paid_sections") or provenance.get("paid_sections") or []
+        ai.get("paid_sections") or []
     )
+    # Stamp PDF-only provenance onto the render spec so cover/footer metadata
+    # distinguish $0 assembly from the historical paid source run.
+    ai_stamp = dict(ai)
+    ai_stamp["pdf_only_update"] = True
+    ai_stamp["assembly_cost_usd_cents"] = 0
+    ai_stamp["actual_cost_usd_cents"] = 0
+    ai_stamp["source_run_cost_usd_cents"] = source_run_cents
+    ai_stamp["source_run_paid_sections"] = source_paid_sections
+    ai_stamp["new_paid_ai_run"] = False
+    ai_stamp["last_mode"] = "professional"
+    if source_run_id:
+        ai_stamp["last_run_id"] = source_run_id
+    render_spec = dict(render_spec)
+    render_spec["ai"] = ai_stamp
+
+    provenance = resolve_generation_provenance(render_spec)
+    provenance = {
+        **provenance,
+        "mode": "pdf_only_update",
+        "label": provenance.get("label")
+        or "PDF-only update ($0 assembly · reused AI Professional arts)",
+        "is_professional": True,
+        "pdf_only_update": True,
+        "run_id": source_run_id or provenance.get("run_id") or "",
+        "assembly_cost_usd_cents": 0,
+        "source_run_cost_usd_cents": source_run_cents,
+    }
 
     # Snapshot fields needed after we release the row lock for slow PDF render.
     title = draft.title
@@ -1271,8 +1303,9 @@ def export_pdf_only_update(
                 "cutting_uses_schematics": True,
                 "cutting_reuses_magic_looks": False,
                 "magic_looks_on_cover_overview_only": True,
-                "generation_mode": "professional",
-                "generation_label": "AI Professional",
+                "generation_mode": "pdf_only_update",
+                "generation_label": provenance.get("label")
+                or "PDF-only update ($0 assembly · reused AI Professional arts)",
                 "is_professional": True,
                 # Provenance of illustrations — NOT a new paid AI run id for billing.
                 "ai_run_id": source_run_id,

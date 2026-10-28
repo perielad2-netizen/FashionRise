@@ -37,6 +37,28 @@ class TechpackExportRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, max_length=128)
 
 
+class TechpackArtifactReviewRequest(BaseModel):
+    """Owner-scoped operator review for one persisted illustration artifact.
+
+    Never deletes storage bytes. Used to exclude mismatched artwork from PDF-only
+    assembly while preserving provenance.
+    """
+
+    review_state: Literal[
+        "rejected_category_mismatch",
+        "excluded_mismatch",
+        "rejected",
+        "proposed",
+        "proposed_unverified",
+        "designer_confirmed",
+        "visual_qa_confirmed",
+        "owner_accepted",
+        "confirmed",
+    ]
+    review_message: str = Field(min_length=8, max_length=2000)
+    operator: str = Field(default="owner_qa", max_length=64)
+
+
 class TechpackExportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

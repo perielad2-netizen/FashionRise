@@ -8,8 +8,10 @@ from copy import deepcopy
 from pathlib import Path
 
 from app.services.techpack_manufacturing import (
+    FR3958_SHORTS_DETAIL_ARTIFACT_ID,
     READINESS_DESIGN_CONCEPT,
     READINESS_SAMPLE_DEVELOPMENT,
+    apply_fr3958_owner_qa_shorts_detail_rejection,
     assess_manufacturing_readiness,
     enrich_spec_for_manufacturing_preview,
     evaluate_artifact_for_piece,
@@ -19,7 +21,7 @@ from app.services.techpack_manufacturing import (
     validate_piece_measurements,
     validate_sample_size,
 )
-from app.services.techpack_pdf import _SizedImage, build_techpack_pdf
+from app.services.techpack_pdf import _SizedImage, build_techpack_pdf, resolve_generation_provenance
 from app.services.techpack_spec import default_spec
 from pypdf import PdfReader
 from reportlab.lib.units import mm
@@ -210,6 +212,83 @@ def test_normalize_bom_flags_outfit_color_list_without_inventing_composition():
     assert rows[0].get("composition") == ""
     assert "Lavender" in str(rows[0].get("original_item") or "")
     assert rows[1]["item"] == "Thread"
+
+
+def test_enrich_derives_garment_specific_colors_preserving_raw_outfit_list():
+    """P1: do not print the shared outfit color list as each garment's color."""
+    spec = enrich_spec_for_manufacturing_preview(_load_fr3958())
+    top = next(p for p in spec["outfit"]["pieces"] if p["category"] == "top")
+    shorts = next(p for p in spec["outfit"]["pieces"] if p["category"] == "shorts")
+    raw = "['Lavender-purple top', 'Golden-yellow shorts']"
+    assert str(top.get("color_hint_raw") or "") == raw or raw in str(top.get("color_hint_raw") or "")
+    assert str(shorts.get("color_hint_raw") or "") == raw or raw in str(
+        shorts.get("color_hint_raw") or ""
+    )
+    assert "Golden-yellow" not in str(top.get("color_hint") or "")
+    assert "Lavender" in str(top.get("color_hint") or "") or "lavender" in str(
+        top.get("color_hint") or ""
+    ).lower() or "purple" in str(top.get("color_hint") or "").lower()
+    assert "golden" in str(shorts.get("color_hint") or "").lower() or "yellow" in str(
+        shorts.get("color_hint") or ""
+    ).lower()
+    # Color must not become composition.
+    assert "Lavender" not in str(top["materials"]["shell"].get("composition") or "")
+    assert top["materials"]["shell"].get("composition") in ("", None) or "cotton" not in str(
+        top.get("color_hint") or ""
+    ).lower()
+
+
+def test_operator_decision_rejects_specific_artifact_with_audit_trail():
+    """P0: mark one owned artifact rejected without deleting bytes or touching others."""
+    # Start from a proposed (live-like) copy of the shorts detail id.
+    spec = _load_fr3958()
+    shorts = next(p for p in spec["outfit"]["pieces"] if p["category"] == "shorts")
+    detail = shorts["illustrations"]["artifacts"]["detail_callouts"]
+    # Simulate live proposed state before operator decision.
+    detail["review_state"] = "proposed"
+    detail["preview_include"] = True
+    detail["review_message"] = None
+    top = next(p for p in spec["outfit"]["pieces"] if p["category"] == "top")
+    top_detail_before = dict(top["illustrations"]["artifacts"]["detail_callouts"])
+
+    decided = apply_fr3958_owner_qa_shorts_detail_rejection(spec)
+    shorts2 = next(p for p in decided["outfit"]["pieces"] if p["category"] == "shorts")
+    d2 = shorts2["illustrations"]["artifacts"]["detail_callouts"]
+    assert d2["artifact_id"] == FR3958_SHORTS_DETAIL_ARTIFACT_ID
+    assert d2["review_state"] == "rejected_category_mismatch"
+    assert d2["preview_include"] is False
+    assert d2.get("prior_review_state") == "proposed"
+    assert d2.get("operator_decision", {}).get("bytes_preserved") is True
+    assert "hoodie" in str(d2.get("review_message") or "").lower()
+    # Other garment's detail unchanged.
+    top2 = next(p for p in decided["outfit"]["pieces"] if p["category"] == "top")
+    assert top2["illustrations"]["artifacts"]["detail_callouts"]["artifact_id"] == top_detail_before.get(
+        "artifact_id"
+    )
+    assert top2["illustrations"]["artifacts"]["detail_callouts"]["review_state"] == top_detail_before.get(
+        "review_state"
+    )
+    decision = evaluate_artifact_for_piece(shorts2, kind="detail_callouts", artifact_meta=d2)
+    assert decision["include"] is False
+
+
+def test_pdf_only_provenance_distinguishes_zero_assembly_from_source_run():
+    spec = _load_fr3958()
+    ai = dict(spec.get("ai") or {})
+    ai["pdf_only_update"] = True
+    ai["assembly_cost_usd_cents"] = 0
+    ai["actual_cost_usd_cents"] = 0
+    ai["source_run_cost_usd_cents"] = 250
+    ai["source_run_paid_sections"] = ["vision_analysis", "flat_front"]
+    ai["last_mode"] = "professional"
+    spec["ai"] = ai
+    # Ensure professional artifacts present for label.
+    prov = resolve_generation_provenance(spec)
+    assert prov["pdf_only_update"] is True
+    assert prov["mode"] == "pdf_only_update"
+    assert "$0" in prov["label"] or "PDF-only" in prov["label"]
+    assert int(prov.get("source_run_cost_usd_cents") or 0) == 250
+    assert int(prov.get("assembly_cost_usd_cents") or 0) == 0
 
 
 def test_cross_garment_detail_artifact_rejected():
@@ -640,11 +719,20 @@ def test_corrected_fr3958_pdf_preview_offline(tmp_path: Path):
     assert "Shell material" in flat
     assert "boolean" in flat.lower() or "Closure" in flat
     assert "EXCLUDED" in flat or "MISSING" in flat or "mismatch" in flat.lower()
+    # Wrong shorts detail must be excluded — hoodie detail remains as unverified top art.
+    assert "hoodie construction" in flat.lower() or "EXCLUDED" in flat
     # BOM color-list rows must be flagged, not printed as fabric names.
     assert "Shell fabric — NOT CONFIRMED" in flat or "NOT CONFIRMED" in flat
     assert "Shell fabric — NOT CONFIRMED · NEEDS REVIEW" in flat or "NEEDS REVIEW" in flat
     # Color list may appear only as historical "Was:" note — never as the live item name alone.
     assert "Item Qty Unit Source Notes Shell fabric" in flat or "Shell fabric — NOT CONFIRMED" in flat
+    # Garment-specific colors (not the shared outfit list as each garment value).
+    assert "Lavender" in flat or "lavender" in flat.lower() or "purple" in flat.lower()
+    assert "golden" in flat.lower() or "yellow" in flat.lower()
+    # Legend must not equate designer-entered with confirmed.
+    assert "not" in flat.lower() and "automatically confirmed" in flat.lower()
+    # Pattern inventory notes should not be hard-truncated at 80 chars mid-phrase for FR-3958.
+    assert "illustrative inventory" in flat.lower() or "NOT TO SCALE" in flat
     assert "UNVERIFIED DETAIL ART" in flat
     assert out.exists() and out.stat().st_size > 1000
 

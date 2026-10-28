@@ -1,0 +1,185 @@
+{
+  "pages": 14,
+  "bytes": 11044607,
+  "artifact_source_sha256": {
+    "dc316c7d-22f9-409a-9e26-1dc4e859b350": {
+      "kind": "flat_front",
+      "sha256": "db967b763af5640e66862078ab6d03cb848f60b75c8b444a07fe3b6a042662c9",
+      "path": "/tmp/fr3958_offline_arts/dc316c7d22f9409a9e261dc4e859b350_flat_front.png",
+      "key": "54880c4a1ef142c7aebee1afd42e9aef/3f8ff2b98a1c4025bc3461615a0900a0/ai/6b3bf6c307e849cb953ea44243f20c04/dc316c7d22f9409a9e261dc4e859b350_flat_front.png"
+    },
+    "e81d203a-6e65-43d0-9ac6-767a0a512130": {
+      "kind": "detail_callouts",
+      "sha256": "da3be653ef5898494e88b66932b83ce011c5dbe10c189cb9c530fe23a9bdd9e1",
+      "path": "/tmp/fr3958_offline_arts/e81d203a6e6543d09ac6767a0a512130_detail_callouts.png",
+      "key": "54880c4a1ef142c7aebee1afd42e9aef/3f8ff2b98a1c4025bc3461615a0900a0/ai/6b3bf6c307e849cb953ea44243f20c04/e81d203a6e6543d09ac6767a0a512130_detail_callouts.png"
+    },
+    "f5c6859f-08ef-483f-b4a7-5df053df6fbe": {
+      "kind": "flat_back_proposed",
+      "sha256": "e07fb5b64b072ab065f54ad1a3740cdd0ad7ff885ba781e250c1646d91ed1200",
+      "path": "/tmp/fr3958_offline_arts/f5c6859f08ef483fb4a75df053df6fbe_flat_back_proposed.png",
+      "key": "54880c4a1ef142c7aebee1afd42e9aef/3f8ff2b98a1c4025bc3461615a0900a0/ai/6b3bf6c307e849cb953ea44243f20c04/f5c6859f08ef483fb4a75df053df6fbe_flat_back_proposed.png"
+    },
+    "375e0eac-e472-43b6-a7aa-96fa1e572772": {
+      "kind": "flat_front",
+      "sha256": "94635acb0647a7a6b6a0abf7faea66a3fb5bd9782444b01364596a0b1e7b8f39",
+      "path": "/tmp/fr3958_offline_arts/375e0eace47243b6a7aa96fa1e572772_flat_front.png",
+      "key": "54880c4a1ef142c7aebee1afd42e9aef/3f8ff2b98a1c4025bc3461615a0900a0/ai/6b3bf6c307e849cb953ea44243f20c04/375e0eace47243b6a7aa96fa1e572772_flat_front.png"
+    },
+    "7298860c-9677-4d27-ac03-afce7a8f7305": {
+      "kind": "detail_callouts",
+      "sha256": "0c1d59ffb9e827384c52f50c47ed2028246dfb7047dc31da82a224000b20cf47",
+      "path": "/tmp/fr3958_offline_arts/7298860c96774d27ac03afce7a8f7305_detail_callouts.png",
+      "key": "54880c4a1ef142c7aebee1afd42e9aef/3f8ff2b98a1c4025bc3461615a0900a0/ai/6b3bf6c307e849cb953ea44243f20c04/7298860c96774d27ac03afce7a8f7305_detail_callouts.png"
+    },
+    "487a7637-a85a-49e5-9dc1-e8c219cd8f19": {
+      "kind": "flat_back_proposed",
+      "sha256": "1dfc02cd82f2a3136300ddf55c51a4d3bf14a1ef9023552233cd3509e243a353",
+      "path": "/tmp/fr3958_offline_arts/487a7637a85a49e59dc1e8c219cd8f19_flat_back_proposed.png",
+      "key": "54880c4a1ef142c7aebee1afd42e9aef/3f8ff2b98a1c4025bc3461615a0900a0/ai/6b3bf6c307e849cb953ea44243f20c04/487a7637a85a49e59dc1e8c219cd8f19_flat_back_proposed.png"
+    }
+  },
+  "embedded_image_sha256_unique": [
+    "1e2b9c124ec9ca1d8275d5b2dbf0aaaa22db53bd33ed975c71ddb6c7e63517f6",
+    "50ecd7d052cfc01b8d0051645146d1f85fae281dd960349c6db78d050ab71fc6",
+    "7ad7c827a523889b8a62331df7654a39c20234450a1ce49e8acd7491a9705a13",
+    "9e6c58b9fc91cf1bf6e061bccecec7dad9421325d130609590cd59b5ccf9a49a",
+    "e1de77968f3a4a330390b8c2b6878963b560ad6ab4d99e643eed992b20bfc10d",
+    "ef3d46bc629f017a1eb76d0e38e95382f173f0560f20583e4c39da5be625c120"
+  ],
+  "checks": {
+    "DESIGN_CONCEPT": true,
+    "shorts_excluded": true,
+    "no_shorts_detail_page_with_unverified_hoodie": true,
+    "garment_colors_split": true,
+    "outfit_list_not_as_both_colors": false,
+    "legend_not_equating": true,
+    "pdf_only_meta": true,
+    "source_run_cost": true,
+    "hoodie_detail_present": true,
+    "rejected_shorts_detail_not_embedded_exact": true,
+    "hoodie_detail_sha_in_sources": true
+  },
+  "page_reports": [
+    {
+      "page": 1,
+      "chars": 854,
+      "image_sha256s": [
+        "ef3d46bc629f017a1eb76d0e38e95382f173f0560f20583e4c39da5be625c120"
+      ],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 1 of 14 FashionRise \u00b7 Create Real Design Technical Pack Look \u00b7 Oct 25, 2026 Pack type: PDF-only update ($0 assembly "
+    },
+    {
+      "page": 2,
+      "chars": 1611,
+      "image_sha256s": [
+        "ef3d46bc629f017a1eb76d0e38e95382f173f0560f20583e4c39da5be625c120"
+      ],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 2 of 14 Design overview Authenticated Magic references only. Missing opposite sides are not invented. Technical flat"
+    },
+    {
+      "page": 3,
+      "chars": 2661,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 3 of 14 \u007f Shorts finished inseam = 80 cm while the silhouette describes mid-thigh / above-knee shorts. Confirm measu"
+    },
+    {
+      "page": 4,
+      "chars": 1977,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 4 of 14 Component: TOP \u2014 Top Category: top \u00b7 Garment color: Lavender/purple \u00b7 Detection: heuristic Materials & const"
+    },
+    {
+      "page": 5,
+      "chars": 297,
+      "image_sha256s": [
+        "9e6c58b9fc91cf1bf6e061bccecec7dad9421325d130609590cd59b5ccf9a49a",
+        "50ecd7d052cfc01b8d0051645146d1f85fae281dd960349c6db78d050ab71fc6"
+      ],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 5 of 14 FRONT \u2014 AI FLAT PROPOSED BACK \u2014 UNVERIFIED PROPOSED BACK: No real Magic back image was available. Back const"
+    },
+    {
+      "page": 6,
+      "chars": 331,
+      "image_sha256s": [
+        "e1de77968f3a4a330390b8c2b6878963b560ad6ab4d99e643eed992b20bfc10d"
+      ],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 6 of 14 Garment detail illustrations \u2014 TOP \u2014 Top UNVERIFIED DETAIL ART: Detail artwork has not been independently vi"
+    },
+    {
+      "page": 7,
+      "chars": 1129,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 7 of 14 Measurement specification \u2014 TOP \u2014 Top Finished-garment points of measure for this top only (cm). Body measur"
+    },
+    {
+      "page": 8,
+      "chars": 2893,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 8 of 14 Pattern piece development \u2014 TOP \u2014 Top PATTERN DEVELOPMENT SCHEMATICS \u2014 NOT TO SCALE. These are planning illu"
+    },
+    {
+      "page": 9,
+      "chars": 1622,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 9 of 14 Component: BOTTOM \u2014 Shorts Category: shorts \u00b7 Garment color: golden yellow \u00b7 Detection: heuristic Materials "
+    },
+    {
+      "page": 10,
+      "chars": 643,
+      "image_sha256s": [
+        "1e2b9c124ec9ca1d8275d5b2dbf0aaaa22db53bd33ed975c71ddb6c7e63517f6",
+        "7ad7c827a523889b8a62331df7654a39c20234450a1ce49e8acd7491a9705a13"
+      ],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 10 of 14 FRONT \u2014 AI FLAT PROPOSED BACK \u2014 UNVERIFIED PROPOSED BACK: No real Magic back image was available. Back cons"
+    },
+    {
+      "page": 11,
+      "chars": 1195,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 11 of 14 Measurement specification \u2014 BOTTOM \u2014 Shorts Finished-garment points of measure for this shorts only (cm). B"
+    },
+    {
+      "page": 12,
+      "chars": 2721,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 12 of 14 Pattern piece development \u2014 BOTTOM \u2014 Shorts PATTERN DEVELOPMENT SCHEMATICS \u2014 NOT TO SCALE. These are planni"
+    },
+    {
+      "page": 13,
+      "chars": 4517,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 13 of 14 Manufacturing readiness & review Current readiness: DESIGN CONCEPT / DRAFT. Levels: DESIGN CONCEPT / DRAFT "
+    },
+    {
+      "page": 14,
+      "chars": 2240,
+      "image_sha256s": [],
+      "head": "DRAFT / UNVERIFIED \u00b7 FR-3958 \u00b7 Rev 3 \u00b7 Schematics NOT TO SCALE FashionRise Create Real Design V3.1 Page 14 of 14 \u007f Owner QA: detail sheet linked to shorts ID visually shows hoodie construction (zipper/hood/sleeve). Origi"
+    }
+  ],
+  "provenance": {
+    "mode": "pdf_only_update",
+    "label": "PDF-only update ($0 assembly \u00b7 reused AI Professional arts)",
+    "is_professional": true,
+    "pdf_only_update": true,
+    "run_id": "6b3bf6c3-07e8-49cb-953e-a44243f20c04",
+    "vision_model": "gpt-6-luna",
+    "image_model": "gpt-image-2.5-sunburst",
+    "actual_cost_usd_cents": 0,
+    "assembly_cost_usd_cents": 0,
+    "source_run_cost_usd_cents": 250,
+    "paid_sections": [
+      "vision_analysis",
+      "technical_flats",
+      "pattern_sheet"
+    ],
+    "artifact_kinds": [
+      "detail_callouts",
+      "flat_back_proposed",
+      "flat_front"
+    ],
+    "professional_piece_count": 2,
+    "new_paid_ai_run": false
+  }
+}

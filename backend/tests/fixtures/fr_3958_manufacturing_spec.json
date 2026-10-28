@@ -280,8 +280,20 @@
             "silhouette",
             "sleeves",
             "stripe_direction"
-          ]
-        }
+          ],
+          "analysis": {
+            "category": "top",
+            "colors": [
+              "Lavender/purple body and hood",
+              "Matching lavender cuffs and hem band",
+              "Light-colored drawcords with dark metal eyelets and tips",
+              "Metallic center-front zipper"
+            ],
+            "silhouette": "Long-sleeve hooded sweatshirt",
+            "schema_version": "techpack_analysis_v3"
+          }
+        },
+        "color_hint": "['Lavender-purple top', 'Golden-yellow shorts']"
       },
       {
         "id": "piece-900064b0",
@@ -515,8 +527,17 @@
             "silhouette",
             "sleeves",
             "stripe_direction"
-          ]
-        }
+          ],
+          "analysis": {
+            "category": "shorts",
+            "colors": [
+              "golden yellow"
+            ],
+            "silhouette": "Straight-leg, relaxed shorts",
+            "schema_version": "techpack_analysis_v3"
+          }
+        },
+        "color_hint": "['Lavender-purple top', 'Golden-yellow shorts']"
       }
     ],
     "detection_confidence": "fixture"

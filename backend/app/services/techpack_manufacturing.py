@@ -275,6 +275,289 @@ def _looks_like_outfit_color_list_name(name: str) -> bool:
     )
 
 
+def _looks_like_outfit_color_hint(value: Any) -> bool:
+    """True when color_hint is an outfit-level multi-garment list, not one garment color."""
+    if isinstance(value, (list, tuple)):
+        return len(value) >= 2
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if re.search(r"^\s*\[.*(?:top|hoodie|short|trouser).*(?:top|hoodie|short|trouser)", text, flags=re.I):
+        return True
+    # e.g. "lavender hoodie and yellow shorts" shared across pieces
+    lower = text.lower()
+    garment_hits = sum(
+        1
+        for tok in ("top", "hoodie", "short", "trouser", "skirt", "dress", "jacket")
+        if tok in lower
+    )
+    return garment_hits >= 2 and (" and " in lower or "," in text or "[" in text)
+
+
+def _parse_outfit_color_tokens(value: Any) -> list[str]:
+    """Extract garment-tagged color tokens from a list-like outfit color dump."""
+    if isinstance(value, (list, tuple)):
+        return [str(x).strip() for x in value if str(x).strip()]
+    text = str(value or "").strip()
+    if not text:
+        return []
+    # Prefer bracketed list contents: ['Lavender-purple top', 'Golden-yellow shorts']
+    bracket = re.search(r"\[(.*)\]", text)
+    if bracket:
+        inner = bracket.group(1)
+        parts = re.findall(r"['\"]([^'\"]+)['\"]", inner)
+        if parts:
+            return [p.strip() for p in parts if p.strip()]
+        parts = [p.strip() for p in inner.split(",") if p.strip()]
+        if parts:
+            return parts
+    # Fallback: split on " and " / commas when multiple garment words present.
+    if " and " in text.lower():
+        return [p.strip() for p in re.split(r"\band\b", text, flags=re.I) if p.strip()]
+    return [text]
+
+
+def _primary_color_from_analysis(colors: list[Any] | None) -> str:
+    """Pick a short garment color label from visual/structured analysis colors."""
+    if not colors:
+        return ""
+    first = str(colors[0] or "").strip()
+    if not first:
+        return ""
+    # Prefer the body/main color clause before accessory clauses.
+    for sep in (" body", " and hood", ",", ";"):
+        if sep in first.lower():
+            idx = first.lower().index(sep)
+            head = first[:idx].strip(" -/")
+            if head:
+                return head[:80]
+    return first[:80]
+
+
+def _color_from_outfit_tokens(piece: dict[str, Any], tokens: list[str]) -> str:
+    """Match a token like 'Golden-yellow shorts' to this piece's category/role."""
+    cat = _effective_category(piece)
+    role = str(piece.get("role") or "").lower()
+    label = str(piece.get("label") or "").lower()
+    aliases = {
+        "top": ("top", "hoodie", "sweatshirt", "shirt", "jacket", "blouse"),
+        "hoodie": ("hoodie", "sweatshirt", "top", "zip"),
+        "shorts": ("short", "bottom", "bermuda"),
+        "trousers": ("trouser", "pant", "bottom"),
+        "skirt": ("skirt",),
+        "dress": ("dress",),
+        "jacket": ("jacket", "coat", "blazer"),
+        "shirt": ("shirt", "blouse", "top"),
+    }
+    keys = aliases.get(cat, (cat,))
+    for tok in tokens:
+        low = tok.lower()
+        if any(k in low for k in keys) or (role and role in low) or (label and label in low):
+            # Strip trailing garment word(s) to leave the color phrase.
+            cleaned = tok
+            for g in (
+                "hoodie",
+                "sweatshirt",
+                "shorts",
+                "short",
+                "trousers",
+                "pants",
+                "jacket",
+                "shirt",
+                "blouse",
+                "top",
+                "bottom",
+                "dress",
+                "skirt",
+            ):
+                cleaned = re.sub(rf"\b{g}s?\b", "", cleaned, flags=re.I)
+            cleaned = re.sub(r"\s+", " ", cleaned).strip(" -/,")
+            if cleaned:
+                return cleaned[:80]
+    return ""
+
+
+def _color_from_look_notes(piece: dict[str, Any], look_notes: str) -> str:
+    """Best-effort garment color from look notes when structured evidence is thin."""
+    notes = str(look_notes or "").strip()
+    if not notes:
+        return ""
+    cat = _effective_category(piece)
+    patterns: dict[str, tuple[str, ...]] = {
+        "top": (r"([A-Za-z][\w\-/]*(?:\s+[\w\-/]+){0,2})\s+(?:zip[-\s]?front\s+)?(?:hoodie|sweatshirt|top|shirt)",),
+        "hoodie": (r"([A-Za-z][\w\-/]*(?:\s+[\w\-/]+){0,2})\s+(?:zip[-\s]?front\s+)?(?:hoodie|sweatshirt)",),
+        "shorts": (r"([A-Za-z][\w\-/]*(?:\s+[\w\-/]+){0,2})\s+(?:mid-thigh\s+)?shorts",),
+        "trousers": (r"([A-Za-z][\w\-/]*(?:\s+[\w\-/]+){0,2})\s+(?:trousers|pants)",),
+    }
+    for pat in patterns.get(cat, ()):
+        m = re.search(pat, notes, flags=re.I)
+        if m:
+            return m.group(1).strip(" -/,")[:80]
+    return ""
+
+
+def derive_piece_garment_color(
+    piece: dict[str, Any],
+    *,
+    look_notes: str = "",
+    garment_analysis_piece: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Preserve raw outfit color input; derive a garment-specific color when evidence supports it.
+
+    Never invents fiber composition. Color is not treated as material.
+    """
+    out = deepcopy(piece)
+    raw_hint = out.get("color_hint")
+    raw_as_text = (
+        ", ".join(str(x) for x in raw_hint)
+        if isinstance(raw_hint, (list, tuple))
+        else str(raw_hint or "").strip()
+    )
+    ill = _as_dict(out.get("illustrations"))
+    analysis = _as_dict(ill.get("analysis"))
+    ga = _as_dict(garment_analysis_piece)
+    ga_analysis = _as_dict(ga.get("analysis")) if ga else {}
+
+    analysis_colors = analysis.get("colors") if isinstance(analysis.get("colors"), list) else None
+    if not analysis_colors:
+        analysis_colors = ga_analysis.get("colors") if isinstance(ga_analysis.get("colors"), list) else None
+
+    outfit_like = _looks_like_outfit_color_hint(raw_hint) or _looks_like_outfit_color_list_name(raw_as_text)
+    derived = ""
+    provenance = ""
+
+    if analysis_colors:
+        derived = _primary_color_from_analysis(analysis_colors)
+        if derived:
+            provenance = "visually_supported_analysis"
+
+    if not derived and outfit_like:
+        tokens = _parse_outfit_color_tokens(raw_hint if raw_hint is not None else raw_as_text)
+        derived = _color_from_outfit_tokens(out, tokens)
+        if derived:
+            provenance = "derived_from_outfit_color_list"
+
+    if not derived:
+        derived = _color_from_look_notes(out, look_notes)
+        if derived:
+            provenance = "derived_from_look_notes"
+
+    if outfit_like or (raw_as_text and derived and derived.lower() != raw_as_text.lower()):
+        # Preserve historical input; do not silently drop the outfit-level dump.
+        if raw_as_text and "color_hint_raw" not in out:
+            out["color_hint_raw"] = raw_hint if raw_hint is not None else raw_as_text
+        if derived:
+            out["color_hint"] = derived
+            out["color_hint_provenance"] = provenance
+            out["color_hint_review_status"] = "derived_needs_review"
+        elif outfit_like:
+            # No safe garment-specific evidence — clear misleading shared list from display.
+            out["color_hint"] = ""
+            out["color_hint_provenance"] = "outfit_list_cleared_pending_evidence"
+            out["color_hint_review_status"] = "needs_review"
+    elif not raw_as_text and derived:
+        out["color_hint"] = derived
+        out["color_hint_provenance"] = provenance
+        out["color_hint_review_status"] = "derived_needs_review"
+
+    return out
+
+
+# Known owner-QA rejection for FR-3958 shorts detail (hoodie artwork under shorts ID).
+# Bytes stay on disk; this is an auditable review decision only.
+FR3958_SHORTS_DETAIL_ARTIFACT_ID = "7298860c-9677-4d27-ac03-afce7a8f7305"
+FR3958_SHORTS_DETAIL_REJECTION_MESSAGE = (
+    "Owner QA: detail sheet linked to shorts ID visually shows hoodie construction "
+    "(zipper/hood/sleeve). Original file preserved; exclude from corrected preview — "
+    "do not treat as shorts manufacturing evidence."
+)
+
+
+def apply_artifact_operator_decision(
+    spec: dict[str, Any],
+    *,
+    artifact_id: str,
+    review_state: str,
+    review_message: str,
+    operator: str = "owner_qa",
+    decided_at: str | None = None,
+) -> dict[str, Any]:
+    """Mark one illustration artifact with an auditable operator review (in-memory, non-destructive).
+
+    Does not delete image bytes. Only mutates matching ``artifact_id`` entries.
+    """
+    from datetime import datetime, timezone
+
+    out = deepcopy(spec if isinstance(spec, dict) else {})
+    target = str(artifact_id or "").strip().lower()
+    if not target:
+        return out
+    state = str(review_state or "").strip().lower()
+    message = str(review_message or "").strip()
+    when = decided_at or datetime.now(timezone.utc).isoformat()
+    decision = {
+        "operator": operator,
+        "review_state": state,
+        "review_message": message,
+        "decided_at": when,
+        "bytes_preserved": True,
+        "substituted": False,
+    }
+    outfit = _as_dict(out.get("outfit"))
+    pieces_out: list[Any] = []
+    for piece in _as_list(outfit.get("pieces")):
+        if not isinstance(piece, dict):
+            pieces_out.append(piece)
+            continue
+        piece_out = dict(piece)
+        ill = _as_dict(piece_out.get("illustrations"))
+        arts = _as_dict(ill.get("artifacts"))
+        changed = False
+        for kind, meta in list(arts.items()):
+            if not isinstance(meta, dict):
+                continue
+            aid = str(meta.get("artifact_id") or meta.get("id") or "").strip().lower()
+            if aid != target:
+                continue
+            meta_out = dict(meta)
+            meta_out["review_state"] = state
+            meta_out["review_message"] = message
+            meta_out["preview_include"] = state not in _REJECTED_ART
+            meta_out["manufacturing_evidence"] = False if state in _REJECTED_ART else bool(
+                meta_out.get("manufacturing_evidence")
+            )
+            meta_out["operator_decision"] = decision
+            # Preserve prior state for audit trail.
+            if meta.get("review_state") and "prior_review_state" not in meta_out:
+                meta_out["prior_review_state"] = meta.get("review_state")
+            arts[str(kind)] = meta_out
+            changed = True
+        if changed:
+            ill["artifacts"] = arts
+            piece_out["illustrations"] = ill
+        pieces_out.append(piece_out)
+    outfit["pieces"] = pieces_out
+    out["outfit"] = outfit
+    # Record at pack level for offline/export audit without inventing new paid work.
+    ai = _as_dict(out.get("ai"))
+    log = list(ai.get("operator_artifact_decisions") or [])
+    log.append({**decision, "artifact_id": str(artifact_id)})
+    ai["operator_artifact_decisions"] = log
+    out["ai"] = ai
+    return out
+
+
+def apply_fr3958_owner_qa_shorts_detail_rejection(spec: dict[str, Any]) -> dict[str, Any]:
+    """Apply the FR-3958 P0 owner-QA rejection for the wrong shorts detail artwork."""
+    return apply_artifact_operator_decision(
+        spec,
+        artifact_id=FR3958_SHORTS_DETAIL_ARTIFACT_ID,
+        review_state="rejected_category_mismatch",
+        review_message=FR3958_SHORTS_DETAIL_REJECTION_MESSAGE,
+        operator="owner_qa_fr3958",
+    )
+
+
 def normalize_closure_display(closures: dict[str, Any] | None) -> dict[str, Any]:
     """Normalize boolean-ish closure text like ``True`` into reviewable unknowns."""
     raw = dict(closures) if isinstance(closures, dict) else {}
@@ -301,8 +584,13 @@ def normalize_shell_material(piece: dict[str, Any]) -> dict[str, Any]:
     mats = _as_dict(out.get("materials"))
     shell = _as_dict(mats.get("shell"))
     name = str(shell.get("name") or "")
-    color_hint = str(out.get("color_hint") or "")
-    # Detect list-like outfit color dump used as fabric name.
+    raw_hint = out.get("color_hint")
+    color_hint = (
+        ", ".join(str(x) for x in raw_hint)
+        if isinstance(raw_hint, (list, tuple))
+        else str(raw_hint or "")
+    )
+    # Detect list-like outfit color dump used as fabric name — never as composition.
     if _looks_like_outfit_color_list_name(name):
         shell["colorway_note"] = name
         shell["name"] = ""
@@ -311,9 +599,16 @@ def normalize_shell_material(piece: dict[str, Any]) -> dict[str, Any]:
             "Shell name looked like an outfit color list, not a fabric. "
             "Enter fiber content / fabric quality separately from garment color."
         )
-        if not color_hint:
-            # Prefer a short color token from the piece label/category context.
-            out["color_hint"] = out.get("label") or color_hint
+        # Do not invent composition from color lists.
+        if "composition" in shell and _looks_like_outfit_color_list_name(str(shell.get("composition") or "")):
+            shell["composition"] = ""
+    # Preserve outfit-level color dumps for later derivation; do not print them as this garment's color.
+    if _looks_like_outfit_color_hint(raw_hint) or _looks_like_outfit_color_list_name(color_hint):
+        if "color_hint_raw" not in out:
+            out["color_hint_raw"] = raw_hint if raw_hint is not None else color_hint
+        # Placeholder until derive_piece_garment_color runs (enrich / PDF).
+        out["color_hint"] = ""
+        out["color_hint_review_status"] = "needs_review"
     shell.setdefault("composition", shell.get("composition") or "")
     shell.setdefault("fabric_structure", shell.get("fabric_structure") or "")  # knit/woven
     shell.setdefault("stretch", shell.get("stretch") or "")
@@ -1282,11 +1577,25 @@ def enrich_spec_for_manufacturing_preview(spec: dict[str, Any]) -> dict[str, Any
     """Non-destructive enrichment used by corrected PDF preview and offline tests."""
     out = apply_artifact_reviews(deepcopy(spec) if isinstance(spec, dict) else {})
     outfit = _as_dict(out.get("outfit"))
+    look_notes = str(out.get("look_notes") or "")
+    ga = _as_dict(out.get("garment_analysis"))
+    ga_by_piece: dict[str, dict[str, Any]] = {}
+    for row in _as_list(ga.get("pieces")):
+        if isinstance(row, dict) and row.get("piece_id"):
+            ga_by_piece[str(row.get("piece_id"))] = row
     pieces: list[dict[str, Any]] = []
     for piece in _as_list(outfit.get("pieces")):
         if not isinstance(piece, dict):
             continue
-        pieces.append(normalize_shell_material(annotate_pom_definitions(piece)))
+        pid = str(piece.get("id") or "")
+        normalized = normalize_shell_material(annotate_pom_definitions(piece))
+        pieces.append(
+            derive_piece_garment_color(
+                normalized,
+                look_notes=look_notes,
+                garment_analysis_piece=ga_by_piece.get(pid),
+            )
+        )
     outfit["pieces"] = pieces
     out["outfit"] = outfit
 

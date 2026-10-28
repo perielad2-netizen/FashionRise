@@ -1049,3 +1049,88 @@ def test_pdf_only_draft_row_lock_uses_select_for_update():
     src_export = inspect.getsource(techpack_service.export_pdf_only_update)
     assert "_lock_owned_draft" in src_export
     assert "draft_revision_changed" in src_export or "fingerprint" in src_export
+
+
+def test_owner_artifact_review_excludes_detail_without_deleting_bytes(
+    client, db_session, monkeypatch
+):
+    """P0: owner review rejects one artifact; file preserved; other users blocked."""
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+
+    tokens = register_with_invite(client, db_session, "pdfreview@example.com", "pdfreview")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Review gate")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    run_id = settled["run_id"]
+
+    detail = (
+        db_session.query(TechpackAIArtifact)
+        .filter(
+            TechpackAIArtifact.run_id == run_id,
+            TechpackAIArtifact.kind == "detail_callouts",
+        )
+        .first()
+    )
+    assert detail is not None
+    artifact_id = str(detail.id)
+    storage_key = detail.storage_key
+    prior_state = detail.review_state
+
+    reviewed = client.post(
+        f"/api/v1/techpacks/artifacts/{artifact_id}/review",
+        headers=_auth(tokens),
+        json={
+            "review_state": "rejected_category_mismatch",
+            "review_message": (
+                "Owner QA: detail artwork does not match this garment category. "
+                "Original preserved; exclude from PDF-only preview."
+            ),
+            "operator": "owner_qa_test",
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    body = reviewed.json()
+    assert body["review_state"] == "rejected_category_mismatch"
+    assert body.get("bytes_preserved") is True
+    assert body.get("file_deleted") is False
+    assert body["operator_decision"]["prior_review_state"] == prior_state
+
+    db_session.refresh(detail)
+    assert detail.review_state == "rejected_category_mismatch"
+    assert detail.storage_key == storage_key
+    assert detail.metadata_.get("preview_include") is False
+
+    # Image still downloadable (not deleted).
+    img = client.get(
+        f"/api/v1/techpacks/artifacts/{artifact_id}/image",
+        headers=_auth(tokens),
+    )
+    assert img.status_code == 200
+    assert len(img.content) > 10
+
+    # Other user cannot review this artifact.
+    tokens_b = register_with_invite(client, db_session, "pdfreviewb@example.com", "pdfreviewb")
+    denied = client.post(
+        f"/api/v1/techpacks/artifacts/{artifact_id}/review",
+        headers=_auth(tokens_b),
+        json={
+            "review_state": "rejected",
+            "review_message": "Should not mutate another user's artifact.",
+        },
+    )
+    assert denied.status_code in (403, 404)
+
+    # PDF-only assembly still works and records pdf_only provenance.
+    _dirty_for_pdf_only(client, tokens, draft["id"])
+    updated = client.post(
+        f"/api/v1/techpacks/{draft['id']}/export",
+        headers=_auth(tokens),
+        json={"mode": "pdf_only_update"},
+    )
+    assert updated.status_code == 201, updated.text
+    meta = updated.json()["metadata"]
+    assert meta.get("pdf_only_update") is True
+    assert meta.get("assembly_cost_usd_cents") == 0
+    assert meta.get("generation_mode") == "pdf_only_update"
+    assert "PDF-only" in str(meta.get("generation_label") or "")
