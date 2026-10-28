@@ -42,7 +42,7 @@ Technical PM reviewed `bfaf4651` and required fail-closed readiness, conservativ
 | Item | Detail |
 |---|---|
 | Parent review commit | `bfaf4651` |
-| Amendment SHA | `77bdea735ab21e09e74d247ccbcc41b5009f6e57` |
+| Amendment SHA | `c411ed17e3bf46e43b866738d85a60ad1f239aec` |
 | Amendment branch / PR | `cursor/web-techpack-mfg-ready-77c6` · [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) |
 | Production | **Unchanged** — FE `69b83c01` · BE+worker `7af9c809` · Alembic `011` · ceiling `$50` · **no deploy** · **no migration** · **no historical export replacement** |
 | Paid AI | **0** |
