@@ -214,7 +214,12 @@ def default_construction_steps(category: str) -> list[dict[str, Any]]:
     return [{"step": i + 1, "instruction": s, "source": "estimate"} for i, s in enumerate(steps)]
 
 
-def default_bom(category: str, *, color_hint: str = "") -> list[dict[str, Any]]:
+def default_bom(
+    category: str,
+    *,
+    color_hint: str = "",
+    piece: dict | None = None,
+) -> list[dict[str, Any]]:
     shell_name = f"{color_hint} shell".strip() if color_hint else "Shell fabric"
     rows = [
         {"item": shell_name, "qty": "estimate TBD", "unit": "m", "source": "estimate", "notes": "Width/weight unknown until confirmed"},
@@ -222,9 +227,34 @@ def default_bom(category: str, *, color_hint: str = "") -> list[dict[str, Any]]:
         {"item": "Care / brand label", "qty": "1", "unit": "set", "source": "estimate", "notes": ""},
     ]
     cat = (category or "").lower()
+    closure_row = None
+    if isinstance(piece, dict):
+        from app.services.techpack_spec_fidelity import closure_bom_row
+
+        closure_row = closure_bom_row(piece)
     if cat in ("shirt", "jacket"):
-        rows.insert(1, {"item": "Buttons or zipper", "qty": "TBD", "unit": "pcs", "source": "estimate", "notes": "Confirm closure choice"})
+        rows.insert(
+            1,
+            closure_row
+            or {
+                "item": "Buttons or zipper",
+                "qty": "TBD",
+                "unit": "pcs",
+                "source": "estimate",
+                "notes": "Confirm closure choice",
+            },
+        )
         rows.insert(1, {"item": "Interfacing", "qty": "estimate TBD", "unit": "m", "source": "estimate", "notes": "Collar/placket as needed"})
     if cat in ("trousers", "shorts", "skirt"):
-        rows.insert(1, {"item": "Zipper / elastic / closure", "qty": "1", "unit": "pcs", "source": "estimate", "notes": "Confirm closure"})
+        rows.insert(
+            1,
+            closure_row
+            or {
+                "item": "Zipper / elastic / closure",
+                "qty": "1",
+                "unit": "pcs",
+                "source": "estimate",
+                "notes": "Confirm closure",
+            },
+        )
     return rows

@@ -346,7 +346,7 @@ def enrich_spec_heuristic(spec: dict[str, Any]) -> dict[str, Any]:
         if not p.get("construction_steps"):
             p["construction_steps"] = default_construction_steps(cat)
         if not p.get("bom"):
-            p["bom"] = default_bom(cat, color_hint=str(p.get("color_hint") or ""))
+            p["bom"] = default_bom(cat, color_hint=str(p.get("color_hint") or ""), piece=p)
         mats = p.get("materials") if isinstance(p.get("materials"), dict) else {}
         shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
         if not shell.get("name") and p.get("color_hint"):
@@ -510,8 +510,28 @@ def _persist_professional_result(
                     "neckline": analysis.get("neckline"),
                     "sleeves": analysis.get("sleeves"),
                     "fabric_pattern": analysis.get("fabric_pattern"),
+                    "closure_visible": analysis.get("closure_visible"),
+                    "colors": analysis.get("colors"),
+                    "analysis": {
+                        "closure_visible": analysis.get("closure_visible"),
+                        "distinctive_features": analysis.get("distinctive_features"),
+                        "construction_notes": analysis.get("construction_notes"),
+                        "colors": analysis.get("colors"),
+                    },
                 },
             )
+            # Deterministic caption/analysis vs designer-spec gates (not pixel proof).
+            from app.services.techpack_spec_fidelity import apply_fidelity_gates_to_artifact_meta
+
+            gated = apply_fidelity_gates_to_artifact_meta(
+                piece,
+                kind=str(kind),
+                artifact_meta=dict(row.metadata_ or {}),
+                analysis=analysis if isinstance(analysis, dict) else None,
+            )
+            row.metadata_ = gated
+            if gated.get("review_state"):
+                row.review_state = str(gated["review_state"])
             db.add(row)
             artifact_rows.append(row)
             artifact_reads.append(_artifact_read(row))
@@ -520,6 +540,9 @@ def _persist_professional_result(
                 "storage_key": key,
                 "url_path": f"/techpacks/artifacts/{art_id}/image",
                 "review_state": row.review_state,
+                "manufacturing_evidence": bool(gated.get("manufacturing_evidence", False)),
+                "fidelity_mismatches": gated.get("fidelity_mismatches") or [],
+                "review_message": gated.get("review_message"),
             }
         illust.update(
             {
@@ -539,6 +562,7 @@ def _persist_professional_result(
                         "fabric_pattern",
                         "stripe_direction",
                         "colors",
+                        "color_treatment",
                         "panels_seams",
                         "distinctive_features",
                         "confidence",
@@ -2001,3 +2025,23 @@ def resolve_artifact_image(db: Session, user: User, artifact_id: uuid.UUID) -> t
     if path is None:
         raise NotFoundError("Techpack artifact file missing")
     return path, row
+
+
+def record_owned_artifact_operator_review(
+    db: Session,
+    user: User,
+    artifact_id: uuid.UUID,
+    *,
+    review_state: str,
+    review_message: str,
+) -> dict[str, Any]:
+    """Delegate to the draft-bound review path (invalidates current PDF; no AI)."""
+    from app.services import techpack_service
+
+    return techpack_service.record_owned_artifact_review(
+        db,
+        user,
+        artifact_id,
+        review_state=review_state,
+        review_message=review_message,
+    )

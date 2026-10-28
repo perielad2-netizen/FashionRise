@@ -71,3 +71,6 @@ UpgradeLog.htm
 
 # Optional: uncomment if you prefer not to track VS Code workspace settings
 # .vscode/
+
+# Local manufacturing preview dumps (never commit customer PDFs)
+/artifacts/

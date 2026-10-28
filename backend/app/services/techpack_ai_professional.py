@@ -11,7 +11,6 @@ import base64
 import io
 import json
 import logging
-import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
@@ -138,20 +137,30 @@ class OpenAIProfessionalProvider:
         )
         cat = str(piece.get("category") or "other")
         label = str(piece.get("label") or cat)
+        from app.services.techpack_spec_fidelity import (
+            closure_prompt_contract,
+            color_treatment_prompt_contract,
+        )
+
+        contract = f"{closure_prompt_contract(piece)} {color_treatment_prompt_contract(piece)}"
         system = (
             "You are a fashion technical designer analyzing a finished fashion look photo. "
             "Return JSON only with keys: schema_version, category, silhouette, length, "
             "neckline, sleeves, fit, closure_visible, fabric_pattern, stripe_direction, "
-            "colors, panels_seams, distinctive_features (array of strings), "
+            "colors, color_treatment (gradient|solid|color_block|two_tone|unknown), "
+            "panels_seams, distinctive_features (array of strings), "
             "pattern_pieces_suggested (array of {id,name,cut_qty,notes}), "
             "construction_notes (array of strings), confidence (low|medium|high), "
             "assumptions (array of strings). "
             "Describe ONLY what is visually supported. Do not invent exact centimeters. "
+            "When the designer fidelity contract specifies a closure type or color treatment, "
+            "prefer that structured intent over generic defaults, and record conflicts in assumptions. "
             f"schema_version must be '{ANALYSIS_SCHEMA_VERSION}'."
         )
         user_text = (
             f"Garment tab: category={cat}, label={label}. "
             f"Look notes: {(look_notes or '')[:400]}. "
+            f"{contract} "
             "Extract construction-relevant features for a professional technical pack."
         )
         kwargs = chat_completion_kwargs(
@@ -258,12 +267,19 @@ class OpenAIProfessionalProvider:
 
     @staticmethod
     def _flat_prompt(analysis: dict[str, Any], *, view: str, piece: dict[str, Any]) -> str:
+        from app.services.techpack_spec_fidelity import (
+            closure_prompt_contract,
+            color_treatment_prompt_contract,
+        )
+
         features = ", ".join(str(x) for x in (analysis.get("distinctive_features") or [])[:12])
         unverified = ""
         if view == "back_proposed":
             unverified = (
                 " Label clearly as PROPOSED BACK — UNVERIFIED. Do not claim this is a photographed back."
             )
+        closure_contract = closure_prompt_contract(piece)
+        color_contract = color_treatment_prompt_contract(piece)
         return (
             "Create a professional fashion TECHNICAL FLAT illustration of THIS exact garment from the "
             f"reference photo. View: {view.replace('_', ' ')}.{unverified} "
@@ -275,14 +291,23 @@ class OpenAIProfessionalProvider:
             f"stripe_direction={analysis.get('stripe_direction')}, colors={analysis.get('colors')}, "
             f"features={features}. "
             f"Category hint: {piece.get('category')}. "
+            f"{closure_contract} {color_contract} "
+            "Explicit designer decisions (closure, color treatment) override generic image-model defaults. "
             "Do NOT draw a generic A-line dress if the source is fitted/bodycon with long sleeves or a deep V. "
             "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack."
         )
 
     @staticmethod
     def _detail_prompt(analysis: dict[str, Any], *, piece: dict[str, Any]) -> str:
+        from app.services.techpack_spec_fidelity import (
+            closure_prompt_contract,
+            color_treatment_prompt_contract,
+        )
+
         cat = str(piece.get("category") or "garment")
         label = str(piece.get("label") or cat)
+        closure_contract = closure_prompt_contract(piece)
+        color_contract = color_treatment_prompt_contract(piece)
         return (
             "Create a professional fashion technical DETAIL callout sheet for ONE garment only: "
             f"category={cat}, label={label}. "
@@ -290,29 +315,40 @@ class OpenAIProfessionalProvider:
             "(e.g. never put hoodie zippers/hood/drawcord on a shorts detail sheet, and never put "
             "waistband/inseam/leg-opening callouts on a top detail sheet). "
             "White background. Show close-up construction callouts that belong to THIS category "
-            "(neckline/sleeve/cuff/hem/zipper for tops; waistband/pockets/hem/fly for bottoms). "
+            "(neckline/sleeve/cuff/hem for tops; waistband/pockets/hem for bottoms). "
+            "Generic 'fly/zipper' bottoms defaults are FORBIDDEN when the designer specified buttons. "
+            f"{closure_contract} {color_contract} "
             f"Neckline={analysis.get('neckline')}; sleeves={analysis.get('sleeves')}; "
             f"pattern={analysis.get('fabric_pattern')} {analysis.get('stripe_direction')}; "
-            f"silhouette={analysis.get('silhouette')}. "
+            f"silhouette={analysis.get('silhouette')}; "
+            f"vision_closure_visible={analysis.get('closure_visible')}. "
             "If a detail is not visible on this garment, omit it rather than inventing another garment's parts. "
-            "No model body. Label callouts briefly. Not a photo — a technical illustration. "
+            "No model body. Label callouts briefly and consistently with the designer closure requirement. "
+            "Not a photo — a technical illustration. "
             "If you cannot produce category-correct details, leave callouts blank rather than borrowing "
             "from a different garment — failures require designer review, not silent approval."
         )
 
     @staticmethod
     def _pattern_prompt(analysis: dict[str, Any], *, piece: dict[str, Any]) -> str:
+        from app.services.techpack_spec_fidelity import (
+            closure_prompt_contract,
+            color_treatment_prompt_contract,
+        )
+
         pieces = analysis.get("pattern_pieces_suggested") or []
         names = ", ".join(
             str(p.get("name") or p.get("id")) for p in pieces if isinstance(p, dict)
         )[:300]
+        contract = f"{closure_prompt_contract(piece)} {color_treatment_prompt_contract(piece)}"
         return (
             "Create a PATTERN DEVELOPMENT SCHEMATIC sheet (NOT TO SCALE) for THIS garment. "
             "Show named pattern pieces with illustrative shapes matching the garment "
             f"(e.g. {names or 'front, back, sleeves'}), grainline arrows, fold marks, and cut quantities. "
             "White background. Do NOT use generic unlabeled rectangles labeled only Piece A/B/C. "
             "Include banner text: NOT TO SCALE — PATTERNMAKER VALIDATION REQUIRED. "
-            f"Silhouette={analysis.get('silhouette')}; sleeves={analysis.get('sleeves')}."
+            f"Silhouette={analysis.get('silhouette')}; sleeves={analysis.get('sleeves')}. "
+            f"{contract}"
         )
 
 
