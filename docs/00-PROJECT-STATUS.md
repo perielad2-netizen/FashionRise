@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**FR-D47D historical PDF validity & reuse hotfix deployed** · post-fix preflight **GO** for Download/reuse gates only · **0 paid AI**. Production FE `69b83c01` / BE+worker **`7af9c809`** / Alembic `011`.)
+**Last updated:** 2026-10-28 (**FR-D47D first authorized live Professional run completed** · run `cb4a8efc…` · recorded **$2.50** · human visual QA **pending**. Production FE `69b83c01` / BE+worker **`7af9c809`** / Alembic `011`.)
 
-**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) reliability accepted. Historical one-piece Download/reuse blockers for FR-D47D addressed by maintenance hotfix [#117](https://github.com/perielad2-netizen/FashionRise/pull/117). **First live paid Professional validation still requires explicit owner authorization — GO preflight ≠ spend authorization.**
+**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) accepted · hotfix [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) deployed. **One** owner-authorized live Professional validation for FR-D47D completed successfully (machine). **No second paid run authorized.**
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -16,7 +16,7 @@
 | AI worker | `fashionrise-ai-worker` @ **`7af9c809`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
-| AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. Recorded operator spend **`$4.55`** → remaining **`~$10.45`**. **This maintenance: $0 paid AI.** |
+| AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. Recorded operator spend **`$7.05`** (prior `$4.55` + this run `$2.50`) → remaining **`~$7.95`**. |
 
 ## OWNER ACCEPTANCE PASS — Measurements & Details (FE)
 
@@ -68,7 +68,29 @@ Preflight blockers (1)–(2) addressed by the historical-PDF validity maintenanc
 | Paid AI | **0** |
 | Backup / rollback | `/var/backups/fashionrise/techpack-hist-pdf-validity-deploy-20261028T071542Z/` · `ROLLBACK.sh` → **`0815433b`** |
 | Post-fix preflight | **GO** for Download/reuse gates on FR-D47D. **Not** authorization to spend. |
-| Exact next owner action | Issue an **explicit single paid-run** authorization for FR-D47D if proceeding with the first live two-piece Professional validation; otherwise leave Generate idle. |
+| Exact next owner action | **Superseded** — owner issued single-run authorization; see live validation section below. |
+
+## FR-D47D first authorized live Professional validation (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Authorization | **EXACTLY ONE** paid Professional run · draft `6bc071d3-e150-44bb-af3f-f0fed632d5fc` · style **FR-D47D** · owner-approved · no retries · no Magic · no budget/config/code changes |
+| Runtime lineage | FE `69b83c01` · BE+worker **`7af9c809`** · Alembic **`011`** · PR #116 PASS · PR #117 hotfix live |
+| Pre-submit | Dirty=true · pieces `piece-2df509ce` top + `piece-e51dce19` trousers · Magic front resolves · no back · fingerprint **v2** · plan **6** images · estimate **413–796¢** · user-day remaining `$20` · allowlisted · **0** active runs · **GO** |
+| Submit | Authenticated one-tap `generate-professional` · HTTP **202** · status **queued** (not reused) · auth TS **2026-10-28T07:40:53Z** · idempotency prefix `owner-auth-fr-d47d-live-20261028T074053Z-…` |
+| New run | **`cb4a8efc-ff36-45ca-9751-97d8ce10ba0e`** · input fingerprint version **2** · planned images **6** · estimate **796¢** |
+| Outcome | **completed** · `pdf_ready=true` · `current_for_draft=true` · progress ready · ~3.5 min wall time |
+| New export | **`d1478343-205e-4f03-b964-3bd477281099`** · piece_count **2** · **9** pages · **10,659,152** bytes · Professional |
+| Artifacts | 6/6 bound to correct piece IDs: front + proposed back + detail for top and trousers |
+| Historical PDF | `cffdfb8a…` **intact** (**7,585,753** bytes, piece_count=1) · retained as `outdated_export_id` / prior run `72d563cc…` |
+| Internal cost | Estimated **796¢** · recorded actual **250¢ ($2.50)** · billable status **recorded on run** |
+| Provider calls (worker logs) | **2**× `chat/completions` (vision) · **6**× `images/edits` · all HTTP 200 · no failed paid sections (pattern sheets budget-skipped only) |
+| OpenAI billing | Production key is `sk-proj-…` (project key). Dashboard credit balance **not readable** via API key (session/browser required). Owner starting screenshot **$14.17** (~09:36 Asia/Jerusalem). Ending balance **not captured here** — owner to supply post-run screenshot. Auto-reload settings **not modified**. Org/project title match to screenshot: **unconfirmed** (no org headers on Models API; balance comparison may not measure this run until owner confirms). |
+| Private preserve | `/var/lib/fashionrise/storage/private_qa/fr-d47d-live-validation-20261028T0741Z/` (+ backup mirror under `/var/backups/fashionrise/…`) — Magic front, 6 flats, new+historical PDFs, meta. **Not** committed to GitHub. |
+| Visual QA | **Ready for human review** · **NOT passed** merely because the run completed |
+| Quality blockers | Human visual review of tunic/trousers flats, proposed backs, detail sheets, and 9-page PDF still required |
+| Second run | **None** · STOP after this run |
+| Exact next owner action | (1) Open the new PDF/export `d1478343…` and perform visual QA. (2) Capture OpenAI billing balance screenshot and compare to `$14.17`. (3) Do **not** authorize another paid generate unless a separate explicit authorization is issued. |
 
 ## Professional Tech Pack P0/P1 reliability — PR #116 (landed)
 
