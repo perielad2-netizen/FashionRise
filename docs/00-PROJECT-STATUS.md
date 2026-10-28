@@ -23,7 +23,7 @@
 | Item | Detail |
 |---|---|
 | FE PR #120 | **ENGINEERING ACCEPTED** @ **`13b26c3a`** (5-file delta; base `cursor/web-techpack-autosave-quiet-77c6`). Not deployed. |
-| BE PR #119 tip | `cursor/web-techpack-noai-pdf-be-77c6` — artwork provenance amendment on `51422502` (tip SHA after push). |
+| BE PR #119 tip | `cursor/web-techpack-noai-pdf-be-77c6` @ **`3ca0e393`** (artwork provenance gate; prior safety tip `51422502` / docs `6e129c91`) |
 | Production | **Unchanged** — FE `69b83c01` / BE+worker `2c8cb88e` / Alembic `011` / ceiling `$50` |
 | Paid AI | **0** — PDF-only path makes zero provider calls; no new paid AI run |
 
