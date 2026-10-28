@@ -24,8 +24,8 @@ Technical PM: **CHANGES REQUIRED / HOLD** on PR #119 (`978719a3`) + PR #120 (`3c
 
 | Item | Detail |
 |---|---|
-| FE branch / tip | `cursor/web-techpack-noai-pdf-fe-77c6` — **5-file** delta from prod lineage `69b83c01` / base `cursor/web-techpack-autosave-quiet-77c6` (retargeted off bloated `main` scope). Tip SHA filled after push. |
-| BE branch / tip | `cursor/web-techpack-noai-pdf-be-77c6` — amendment on `978719a3` lineage. Tip SHA filled after push. |
+| FE branch / tip | `cursor/web-techpack-noai-pdf-fe-77c6` @ **`13b26c3a`** — **5-file** delta from prod lineage `69b83c01` / PR base `cursor/web-techpack-autosave-quiet-77c6` (retargeted off bloated `main` scope) |
+| BE branch / tip | `cursor/web-techpack-noai-pdf-be-77c6` @ **`51422502`** (docs tip may move +1; implementation amendment on `978719a3`) |
 | Production | **Unchanged** — do **not** deploy until PM acceptance |
 | Paid AI | **0** — MockProfessionalProvider / PDF-only path makes **zero** provider calls; no new paid AI run row |
 | P0 Current PDF wins | FE completed-run recovery no longer clobbers `draft.spec.ai.export_id` with historical run export. Both async orderings covered: hydrate-B-then-run-A and run-A-then-hydrate-B → Download serves PDF B |
