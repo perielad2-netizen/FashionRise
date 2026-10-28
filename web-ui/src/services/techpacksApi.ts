@@ -306,8 +306,32 @@ export async function updateTechpackDraft(
   })
 }
 
-export async function exportTechpackPdf(draftId: string): Promise<TechpackExport> {
-  return apiRequest<TechpackExport>(`/techpacks/${draftId}/export`, { method: 'POST' })
+export async function exportTechpackPdf(
+  draftId: string,
+  opts: { mode?: 'basic' | 'pdf_only_update'; idempotencyKey?: string } = {},
+): Promise<TechpackExport> {
+  const body =
+    opts.mode || opts.idempotencyKey
+      ? {
+          mode: opts.mode ?? 'basic',
+          idempotency_key: opts.idempotencyKey,
+        }
+      : undefined
+  return apiRequest<TechpackExport>(`/techpacks/${draftId}/export`, {
+    method: 'POST',
+    body,
+  })
+}
+
+/** Refresh Professional PDF tables/specs using persisted illustrations ($0 AI). */
+export async function exportTechpackPdfOnlyUpdate(
+  draftId: string,
+  idempotencyKey?: string,
+): Promise<TechpackExport> {
+  return exportTechpackPdf(draftId, {
+    mode: 'pdf_only_update',
+    idempotencyKey,
+  })
 }
 
 export async function fetchTechpackPdfBlob(exportId: string, signal?: AbortSignal): Promise<Blob> {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Sparkles } from 'lucide-react'
 import { useAuthJobImage } from '@/hooks/useAuthJobImage'
 import {
+  exportTechpackPdfOnlyUpdate,
   fetchTechpackPdfBlob,
   generateTechpackAiProfessionalOneTap,
   getLatestTechpackAiRun,
@@ -139,8 +140,10 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       }
       const ai = wrapped.spec.ai
       if (ai?.last_run_id) setLastRunId(String(ai.last_run_id))
+      // Keep export identity even when dirty so outdated/Update-PDF CTAs can reference history.
+      // Download gating uses hasReadyPdf (!dirtySinceGeneration), not mere presence of the id.
       const exportFromAi = ai && typeof ai === 'object' ? (ai as { export_id?: string }).export_id : null
-      if (exportFromAi && !ai?.dirty_since_generation) {
+      if (exportFromAi) {
         setReadyExportId(String(exportFromAi))
       }
       const latest = row.latest_export
@@ -153,6 +156,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         !ai?.dirty_since_generation
       ) {
         setReadyExportId(latest.id)
+        setReadyFilename(latest.filename)
+      } else if (latest && !exportFromAi) {
         setReadyFilename(latest.filename)
       }
     },
@@ -645,29 +650,30 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           setBusy(false)
         } else if (latest.status === 'completed' && latest.stage === 'professional') {
           setLastRunId(latest.id)
+          // Reopening a completed look must show the normal Create Real Design screen
+          // (Edit measurements & Download). Do NOT auto-open the blocking ready overlay.
+          // Progress overlay remains reserved for queued/running generation and explicit open.
+          //
+          // Authority: draft.spec.ai.export_id (hydrate) is the current Download pointer.
+          // The original AI run's export_id stays historical after a PDF-only update — never
+          // clobber a newer draft-bound export when completed-run recovery arrives later.
+          const adoptRunExportIfNeeded = (runExportId: string, filename: string | null) => {
+            setReadyExportId((prev) => {
+              // Hydrate (or PDF-only success) already bound a different current PDF — keep it.
+              if (prev && prev !== runExportId) return prev
+              if (filename) setReadyFilename(filename)
+              return runExportId
+            })
+          }
           if (latest.pdf_ready && latest.export_id) {
-            setReadyExportId(latest.export_id)
-            setReadyFilename(latest.pdf_filename ?? null)
-            // Show Download immediately when reopening a completed Professional design.
-            if (!dirtySinceGeneration) {
-              setProgressOpen(true)
-              setProgressReady(true)
-              setProgressPhase('ready')
-              setGenerateProgress('Your AI Technical Pack is ready')
-            }
+            adoptRunExportIfNeeded(latest.export_id, latest.pdf_filename ?? null)
           } else {
-            // Recover PDF from existing illustrations (zero AI).
+            // Recover PDF binding from existing illustrations (zero AI) — still no overlay.
+            // Used when the run completed but draft export_id was never bound (in-flight recovery).
             try {
               const recovered = await getTechpackAiRun(latest.id)
               if (!cancelled && recovered.pdf_ready && recovered.export_id) {
-                setReadyExportId(recovered.export_id)
-                setReadyFilename(recovered.pdf_filename ?? null)
-                if (!dirtySinceGeneration) {
-                  setProgressOpen(true)
-                  setProgressReady(true)
-                  setProgressPhase('ready')
-                  setGenerateProgress('Your AI Technical Pack is ready')
-                }
+                adoptRunExportIfNeeded(recovered.export_id, recovered.pdf_filename ?? null)
               }
             } catch {
               /* ignore */
@@ -684,6 +690,27 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId])
+
+  const hasProfessionalIllustrations = useMemo(() => {
+    return pieces.some((p) => {
+      const ill = (p as TechpackPiece & { illustrations?: { mode?: string; artifacts?: Record<string, unknown> } })
+        .illustrations
+      if (!ill || typeof ill !== 'object') return false
+      return (
+        ill.mode === 'professional' && Boolean(ill.artifacts && Object.keys(ill.artifacts).length)
+      )
+    })
+  }, [pieces])
+
+  // Prefer illustration evidence; fall back to Professional AI lineage so Update stays offered
+  // after reload even if a thin client patch omitted artifact blobs (server still has them).
+  // Only offer after saves (not mid-keystroke local dirty) so the primary CTA does not flicker.
+  const showUpdatePdfNoAi =
+    Boolean(spec?.ai?.dirty_since_generation) &&
+    !editorDirty &&
+    Boolean(readyExportId) &&
+    (hasProfessionalIllustrations ||
+      (spec?.ai?.last_mode === 'professional' && Boolean(spec?.ai?.last_run_id)))
 
   const downloadPdf = async () => {
     const exportId = readyExportId
@@ -705,8 +732,38 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       a.remove()
       URL.revokeObjectURL(url)
       setNotice('PDF downloaded.')
+      setProgressOpen(false)
+      setProgressReady(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not download PDF')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const updatePdfNoAi = async () => {
+    if (editorDirty) {
+      setError('Save your measurement changes first, then Update PDF (No AI).')
+      return
+    }
+    if (!readyExportId) {
+      setError('No previous Professional PDF is available to update.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const key = `pdf-only-${draftId}-r${draft?.revision ?? 0}`
+      const exported = await exportTechpackPdfOnlyUpdate(draftId, key)
+      // Refresh draft meta (dirty cleared, new export_id) without wiping form values.
+      const refreshed = await getTechpackDraft(draftId)
+      applyServerMetaOnly(refreshed)
+      setReadyExportId(exported.id)
+      setReadyFilename(exported.filename)
+      setNotice('PDF updated from your saved details — no AI charge.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update PDF without AI')
     } finally {
       setBusy(false)
     }
@@ -825,8 +882,12 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       ) : null}
       {notice ? <p className={styles.noticeBanner}>{notice}</p> : null}
       {dirtySinceGeneration && readyExportId ? (
-        <p className={styles.noticeBanner}>
-          Details changed since your last AI Technical Pack. Generate again to create an updated PDF.
+        <p className={styles.noticeBanner} data-testid="outdated-pdf-notice">
+          {editorDirty
+            ? 'Unsaved detail changes — save first. Your previous PDF stays available as history.'
+            : showUpdatePdfNoAi
+              ? 'Details changed since your last PDF. Update PDF (No AI) refreshes tables from saved specs without regenerating illustrations. Generate AI PDF only if garments or artwork must change.'
+              : 'Details changed since your last AI Technical Pack. Previous PDF remains available as history. Generate AI PDF if illustrations need to change.'}
         </p>
       ) : null}
 
@@ -852,14 +913,25 @@ export function TechpackScreen({ draftId, onBack }: Props) {
             type="button"
             className={styles.primaryCta}
             disabled={busy}
+            data-testid="download-pdf-main"
             onClick={() => {
-              setProgressOpen(true)
-              setProgressReady(true)
-              setProgressPhase('ready')
-              setGenerateProgress('Your AI Technical Pack is ready')
+              void downloadPdf()
             }}
           >
             <Sparkles size={18} aria-hidden /> Download PDF
+          </button>
+        ) : showUpdatePdfNoAi ? (
+          <button
+            type="button"
+            className={styles.primaryCta}
+            disabled={busy || editorDirty}
+            data-testid="update-pdf-no-ai"
+            onClick={() => {
+              void updatePdfNoAi()
+            }}
+          >
+            <Sparkles size={18} aria-hidden />
+            {busy ? 'Updating PDF…' : 'Update PDF (No AI)'}
           </button>
         ) : (
           <button
@@ -872,6 +944,18 @@ export function TechpackScreen({ draftId, onBack }: Props) {
             {busy && progressOpen && !progressReady ? 'Working…' : 'Generate AI PDF'}
           </button>
         )}
+
+        {showUpdatePdfNoAi ? (
+          <button
+            type="button"
+            className={styles.detailsLink}
+            disabled={busy || !professionalAvailable}
+            data-testid="generate-ai-pdf-secondary"
+            onClick={() => void runOneTapGenerate()}
+          >
+            Generate AI PDF (paid — new illustrations)
+          </button>
+        ) : null}
 
         {!professionalAvailable && professionalDisabledReason ? (
           <p className={styles.subtleHint}>{professionalDisabledReason}</p>
@@ -888,6 +972,12 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         busyActions={busy}
         onDownloadPdf={() => {
           void downloadPdf()
+        }}
+        onContinueEditing={() => {
+          setProgressOpen(false)
+          setProgressReady(false)
+          setProgressPhase(null)
+          setGenerateProgress(null)
         }}
         onBackToLooks={onBack}
       />

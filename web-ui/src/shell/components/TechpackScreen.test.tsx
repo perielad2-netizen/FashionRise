@@ -16,6 +16,8 @@ vi.mock('@/services/techpacksApi', () => ({
   getTechpackDraft: (...args: unknown[]) => getTechpackDraft(...args),
   updateTechpackDraft: (...args: unknown[]) => updateTechpackDraft(...args),
   exportTechpackPdf: (...args: unknown[]) => exportTechpackPdf(...args),
+  exportTechpackPdfOnlyUpdate: (...args: unknown[]) =>
+    exportTechpackPdf('pdf-only', { mode: 'pdf_only_update', idempotencyKey: String(args[1] ?? '') }),
   fetchTechpackPdfBlob: (...args: unknown[]) => fetchTechpackPdfBlob(...args),
   fetchTechpackArtifactBlob: (...args: unknown[]) => fetchTechpackArtifactBlob(...args),
   getTechpackAiStatus: (...args: unknown[]) => getTechpackAiStatus(...args),
@@ -344,12 +346,56 @@ describe('TechpackScreen simplified UX', () => {
     })
 
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    // Completed reopen shows the normal screen — no blocking ready overlay.
+    await screen.findByRole('button', { name: /Edit measurements & details/i })
     expect(
-      await screen.findByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('download-ai-pdf'))
+      screen.queryByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByTestId('download-pdf-main'))
     await waitFor(() => expect(fetchTechpackPdfBlob).toHaveBeenCalledWith('exp-pro-bound'))
     expect(fetchTechpackPdfBlob).not.toHaveBeenCalledWith('exp-basic-old')
+  })
+
+  it('reopening a completed Professional look does not block Edit behind the ready overlay', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
+    currentDraft = {
+      ...V2_DRAFT,
+      spec: {
+        ...V2_DRAFT.spec,
+        ai: {
+          last_run_id: 'run-pro',
+          last_mode: 'professional',
+          export_id: 'exp-pro-bound',
+          dirty_since_generation: false,
+          paid_sections: ['technical_flats'],
+        },
+      },
+    }
+    getLatestTechpackAiRun.mockResolvedValue({
+      id: 'run-pro',
+      draft_id: 'draft-1',
+      stage: 'professional',
+      status: 'completed',
+      cost_usd_cents: 72,
+      export_id: 'exp-pro-bound',
+      pdf_ready: true,
+      pdf_filename: 'FR-5608_professional.pdf',
+      artifacts: [],
+      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
+      result: { export_id: 'exp-pro-bound', pdf_ready: true },
+    })
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    expect(await screen.findByRole('button', { name: /Download PDF/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Edit measurements & details/i })).toBeEnabled()
+    expect(
+      screen.queryByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
+    ).not.toBeInTheDocument()
+    expect(generateTechpackAiProfessionalOneTap).not.toHaveBeenCalled()
   })
 
   it('reuses a stable one-tap idempotency key across double-clicks', async () => {
@@ -386,9 +432,17 @@ describe('TechpackScreen simplified UX', () => {
       progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
       result: { export_id: 'exp-1', pdf_ready: true },
     })
-    expect(
-      await screen.findByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
-    ).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', {
+      name: /Your AI Technical Pack Is Ready/i,
+    })
+    expect(within(dialog).getByTestId('continue-editing-ai-pdf')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByTestId('continue-editing-ai-pdf'))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: /Edit measurements & details/i })).toBeEnabled()
   })
 
   it('maps configuration errors from one-tap generate', async () => {
@@ -406,5 +460,228 @@ describe('TechpackScreen simplified UX', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Generate AI PDF/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/server configuration problem/i)
     expect(screen.queryByText(/OPENAI_REASONING_EFFORT/i)).not.toBeInTheDocument()
+  })
+
+  it('Download keeps PDF-only export B when historical run A arrives after hydrate', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      max_usd_cents: 8,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
+    let resolveLatest: (v: unknown) => void = () => undefined
+    getLatestTechpackAiRun.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLatest = resolve
+        }),
+    )
+    currentDraft = {
+      ...V2_DRAFT,
+      revision: 3,
+      latest_export: {
+        id: 'exp-pdf-B',
+        draft_id: 'draft-1',
+        filename: 'FR-5608_r3_techpack.pdf',
+        byte_size: 20,
+        page_count: 4,
+        revision: 3,
+        status: 'DRAFT',
+        verification: 'UNVERIFIED',
+        metadata: {
+          is_professional: true,
+          pdf_only_update: true,
+          new_paid_ai_run: false,
+        },
+        created_at: '2026-10-28T12:00:00Z',
+      },
+      spec: {
+        ...V2_DRAFT.spec,
+        ai: {
+          last_run_id: 'run-pro-A',
+          last_mode: 'professional',
+          export_id: 'exp-pdf-B',
+          dirty_since_generation: false,
+          outdated_export_id: 'exp-pro-A',
+          paid_sections: ['technical_flats'],
+        },
+      },
+    }
+    fetchTechpackPdfBlob.mockResolvedValue(new Blob(['pdf-b']))
+
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    // Hydrate binds B before historical run resolves.
+    expect(await screen.findByTestId('download-pdf-main')).toBeInTheDocument()
+    resolveLatest({
+      id: 'run-pro-A',
+      draft_id: 'draft-1',
+      stage: 'professional',
+      status: 'completed',
+      cost_usd_cents: 72,
+      export_id: 'exp-pro-A',
+      pdf_ready: true,
+      pdf_filename: 'FR-5608_r1_techpack.pdf',
+      artifacts: [],
+      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
+      result: { export_id: 'exp-pro-A', pdf_ready: true },
+    })
+    await waitFor(() => expect(getLatestTechpackAiRun).toHaveBeenCalled())
+    fireEvent.click(screen.getByTestId('download-pdf-main'))
+    await waitFor(() => expect(fetchTechpackPdfBlob).toHaveBeenCalledWith('exp-pdf-B'))
+    expect(fetchTechpackPdfBlob).not.toHaveBeenCalledWith('exp-pro-A')
+    expect(
+      screen.queryByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
+    ).not.toBeInTheDocument()
+    expect(generateTechpackAiProfessionalOneTap).not.toHaveBeenCalled()
+  })
+
+  it('Download keeps PDF-only export B when historical run A arrives before hydrate', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
+    let resolveDraft: (v: unknown) => void = () => undefined
+    getTechpackDraft.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDraft = resolve
+        }),
+    )
+    getLatestTechpackAiRun.mockResolvedValue({
+      id: 'run-pro-A',
+      draft_id: 'draft-1',
+      stage: 'professional',
+      status: 'completed',
+      cost_usd_cents: 72,
+      export_id: 'exp-pro-A',
+      pdf_ready: true,
+      pdf_filename: 'FR-5608_r1_techpack.pdf',
+      artifacts: [],
+      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
+      result: { export_id: 'exp-pro-A', pdf_ready: true },
+    })
+    fetchTechpackPdfBlob.mockResolvedValue(new Blob(['pdf-b']))
+
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    // Let completed-run recovery land first with historical A.
+    await waitFor(() => expect(getLatestTechpackAiRun).toHaveBeenCalled())
+    await waitFor(() => {
+      // readyExportId may briefly be A until hydrate wins with B.
+      expect(true).toBe(true)
+    })
+    resolveDraft({
+      ...V2_DRAFT,
+      revision: 3,
+      latest_export: {
+        id: 'exp-pdf-B',
+        draft_id: 'draft-1',
+        filename: 'FR-5608_r3_techpack.pdf',
+        byte_size: 20,
+        page_count: 4,
+        revision: 3,
+        status: 'DRAFT',
+        verification: 'UNVERIFIED',
+        metadata: {
+          is_professional: true,
+          pdf_only_update: true,
+          new_paid_ai_run: false,
+        },
+        created_at: '2026-10-28T12:00:00Z',
+      },
+      spec: {
+        ...V2_DRAFT.spec,
+        ai: {
+          last_run_id: 'run-pro-A',
+          last_mode: 'professional',
+          export_id: 'exp-pdf-B',
+          dirty_since_generation: false,
+          outdated_export_id: 'exp-pro-A',
+          paid_sections: ['technical_flats'],
+        },
+      },
+    })
+    expect(await screen.findByTestId('download-pdf-main')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('download-pdf-main'))
+    await waitFor(() => expect(fetchTechpackPdfBlob).toHaveBeenCalledWith('exp-pdf-B'))
+    expect(fetchTechpackPdfBlob).not.toHaveBeenCalledWith('exp-pro-A')
+    expect(generateTechpackAiProfessionalOneTap).not.toHaveBeenCalled()
+  })
+
+  it('Update PDF (No AI) appears after dirty save with professional illustrations and does not call Generate', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
+    currentDraft = {
+      ...V2_DRAFT,
+      revision: 2,
+      spec: {
+        ...V2_DRAFT.spec,
+        outfit: {
+          ...V2_DRAFT.spec.outfit,
+          pieces: [
+            {
+              ...V2_DRAFT.spec.outfit.pieces[0],
+              illustrations: {
+                mode: 'professional',
+                artifacts: {
+                  flat_front: { artifact_id: 'art-1', storage_key: 'k', review_state: 'approved' },
+                },
+              },
+            },
+          ],
+        },
+        ai: {
+          last_run_id: 'run-pro',
+          last_mode: 'professional',
+          export_id: 'exp-old',
+          dirty_since_generation: true,
+          outdated_export_id: 'exp-old',
+          paid_sections: ['technical_flats'],
+        },
+      },
+    }
+    exportTechpackPdf.mockImplementation(async () => {
+      currentDraft = {
+        ...currentDraft,
+        spec: {
+          ...currentDraft.spec,
+          ai: {
+            ...(currentDraft.spec.ai as object),
+            dirty_since_generation: false,
+            export_id: 'exp-new',
+            outdated_export_id: 'exp-old',
+            last_run_id: 'run-pro',
+            last_mode: 'professional',
+          },
+        },
+      }
+      return {
+        id: 'exp-new',
+        draft_id: 'draft-1',
+        filename: 'FR-5608_r2_techpack.pdf',
+        byte_size: 12,
+        page_count: 4,
+        revision: 2,
+        status: 'DRAFT',
+        verification: 'UNVERIFIED',
+        metadata: { pdf_only_update: true, new_paid_ai_run: false },
+        created_at: '2026-10-28T12:00:00Z',
+      }
+    })
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    expect(await screen.findByTestId('update-pdf-no-ai')).toBeInTheDocument()
+    expect(screen.getByTestId('outdated-pdf-notice')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Edit measurements & details/i })).toBeEnabled()
+    fireEvent.click(screen.getByTestId('update-pdf-no-ai'))
+    await waitFor(() => expect(exportTechpackPdf).toHaveBeenCalled())
+    expect(exportTechpackPdf.mock.calls[0][1]).toMatchObject({ mode: 'pdf_only_update' })
+    expect(generateTechpackAiProfessionalOneTap).not.toHaveBeenCalled()
+    expect(await screen.findByTestId('download-pdf-main')).toBeInTheDocument()
   })
 })

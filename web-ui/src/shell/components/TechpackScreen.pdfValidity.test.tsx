@@ -28,6 +28,11 @@ vi.mock('@/services/techpacksApi', () => ({
   getTechpackAiRun: (...args: unknown[]) => getTechpackAiRun(...args),
   fetchTechpackPdfBlob: (...args: unknown[]) => fetchTechpackPdfBlob(...args),
   exportTechpackPdf: (...args: unknown[]) => exportTechpackPdf(...args),
+  exportTechpackPdfOnlyUpdate: (...args: unknown[]) =>
+    exportTechpackPdf(String(args[0]), {
+      mode: 'pdf_only_update',
+      idempotencyKey: args[1] ? String(args[1]) : undefined,
+    }),
   fetchTechpackArtifactBlob: (...args: unknown[]) => fetchTechpackArtifactBlob(...args),
 }))
 
@@ -241,7 +246,7 @@ describe.each([
     expect(screen.getByRole('button', { name: /Generate AI PDF/i })).toBeInTheDocument()
   })
 
-  it('PATCH dirty_since_generation=true keeps Generate; syncing ai does not PATCH again', async () => {
+  it('PATCH dirty_since_generation=true offers Update PDF (No AI); syncing ai does not PATCH again', async () => {
     render(
       <StrictMode>
         <TechpackScreen draftId="draft-pdf" onBack={() => undefined} />
@@ -267,11 +272,12 @@ describe.each([
     })
     // Syncing server ai metadata must not re-arm autosave.
     expect(updateTechpackDraft).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: /Generate AI PDF/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Download PDF/i })).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/Details changed since your last AI Technical Pack/i),
-    ).toBeInTheDocument()
+    expect(screen.getByTestId('update-pdf-no-ai')).toBeInTheDocument()
+    expect(screen.getByTestId('generate-ai-pdf-secondary')).toBeInTheDocument()
+    expect(screen.queryByTestId('download-pdf-main')).not.toBeInTheDocument()
+    expect(screen.getByTestId('outdated-pdf-notice')).toHaveTextContent(
+      /Details changed since your last PDF/i,
+    )
   })
 
   it('edit during in-flight PATCH retains newer value and Done flushes it', async () => {

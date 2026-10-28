@@ -16,6 +16,7 @@ type Props = {
   ready?: boolean
   reconnecting?: boolean
   onDownloadPdf?: () => void
+  onContinueEditing?: () => void
   onBackToLooks?: () => void
   busyActions?: boolean
 }
@@ -49,6 +50,7 @@ export function GenerateAiPdfOverlay({
   ready = false,
   reconnecting = false,
   onDownloadPdf,
+  onContinueEditing,
   onBackToLooks,
   busyActions = false,
 }: Props) {
@@ -108,6 +110,17 @@ export function GenerateAiPdfOverlay({
             >
               Download PDF
             </button>
+            {onContinueEditing ? (
+              <button
+                type="button"
+                className={styles.ghost}
+                data-testid="continue-editing-ai-pdf"
+                disabled={busyActions}
+                onClick={onContinueEditing}
+              >
+                Continue Editing
+              </button>
+            ) : null}
             {onBackToLooks ? (
               <button type="button" className={styles.ghost} onClick={onBackToLooks}>
                 Back to My Looks
