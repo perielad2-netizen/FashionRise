@@ -1140,6 +1140,118 @@ _ALLOWED_ARTIFACT_REVIEW_STATES = frozenset(
 )
 
 
+def _techpack_run_stage(run: Any) -> str:
+    """Authoritative run stage/mode for review and PDF-only gates.
+
+    ``TechpackAIRun.stage`` is the column of record (``professional``, ``generate``,
+    etc.). Fall back to ``request.mode`` only when stage is blank so legacy rows
+    remain inspectable. Never treat a missing SQLAlchemy attribute as Professional.
+    """
+    stage = str(getattr(run, "stage", "") or "").strip().lower()
+    if stage:
+        return stage
+    request = getattr(run, "request", None)
+    if isinstance(request, dict):
+        return str(request.get("mode") or "").strip().lower()
+    return ""
+
+
+def _artifact_referenced_in_outfit(
+    spec: dict[str, Any],
+    *,
+    artifact_id: uuid.UUID | str,
+    piece_id: str | None,
+    kind: str | None,
+) -> bool:
+    """True when the draft outfit illustrations reference this artifact id."""
+    target = str(artifact_id).strip().lower()
+    if not target:
+        return False
+    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+    for piece in outfit.get("pieces") or []:
+        if not isinstance(piece, dict):
+            continue
+        if piece_id and piece_id_safe(piece) and piece_id_safe(piece) != str(piece_id):
+            continue
+        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        for art_kind, meta in arts.items():
+            if kind and str(art_kind) != str(kind):
+                continue
+            if not isinstance(meta, dict):
+                continue
+            aid = str(meta.get("artifact_id") or meta.get("id") or "").strip().lower()
+            if aid == target:
+                return True
+    return False
+
+
+def _assert_artifact_review_source_binding(
+    db: Session,
+    user: User,
+    draft: TechpackDraft,
+    row: Any,
+    *,
+    spec: dict[str, Any],
+) -> None:
+    """Fail closed unless the artifact belongs to the current Professional source pack.
+
+    Rules:
+    - Artifact run must be owned by the authenticated user + current draft.
+    - Run stage must be ``professional``. Legacy blank stage is allowed only when
+      the draft already records authoritative Professional evidence for this same
+      run (``ai.last_mode=professional`` and ``ai.last_run_id`` matches) — never for
+      ``basic`` / ``generate`` / other non-Professional stages on the same draft.
+    - Artifact ``run_id`` must equal the draft's current ``ai.last_run_id`` (historical
+      runs that are not the bound source pack cannot dirty the current export).
+    - Artifact must appear in the current outfit illustration refs for its piece/kind
+      (unreferenced rows cannot spuriously invalidate the pack).
+    """
+    from app.models.techpack_ai_run import TechpackAIRun
+
+    run = db.get(TechpackAIRun, row.run_id)
+    if run is None or run.user_id != user.id or run.draft_id != draft.id:
+        raise ValidationAppError(
+            "Artifact is not bound to an owned Professional run for this draft."
+        )
+
+    stage = _techpack_run_stage(run)
+    ai = spec.get("ai") if isinstance(spec.get("ai"), dict) else {}
+    last_run_id = str(ai.get("last_run_id") or "").strip()
+    last_mode = str(ai.get("last_mode") or "").strip().lower()
+    legacy_blank_ok = (
+        stage == ""
+        and last_mode == "professional"
+        and last_run_id
+        and last_run_id == str(run.id)
+        and str(getattr(run, "status", "") or "").strip().lower() == "completed"
+    )
+    if stage != "professional" and not legacy_blank_ok:
+        raise ValidationAppError(
+            "Artifact is not bound to an owned Professional run for this draft. "
+            f"Disallowed run stage “{stage or 'unknown'}” cannot authorize review "
+            "invalidation of the current Professional pack."
+        )
+
+    if not last_run_id or last_run_id != str(row.run_id):
+        raise ValidationAppError(
+            "Artifact belongs to a historical or unbound AI run that is not the "
+            "current Professional source pack. Review it only after it is part of "
+            "the active pack, or Generate AI PDF for a fresh authorized pack."
+        )
+
+    if not _artifact_referenced_in_outfit(
+        spec,
+        artifact_id=row.id,
+        piece_id=row.piece_id,
+        kind=str(row.kind or "") or None,
+    ):
+        raise ValidationAppError(
+            "Artifact is not referenced by the current draft garment illustrations. "
+            "Unreferenced historical artwork cannot invalidate the current PDF."
+        )
+
+
 def _stamp_artifact_review_into_draft_spec(
     spec: dict[str, Any],
     *,
@@ -1212,7 +1324,6 @@ def record_owned_artifact_review(
     from sqlalchemy.orm.attributes import flag_modified
 
     from app.models.techpack_ai_artifact import TechpackAIArtifact
-    from app.models.techpack_ai_run import TechpackAIRun
     from app.services.techpack_ai import _artifact_read
 
     row = db.get(TechpackAIArtifact, artifact_id)
@@ -1228,20 +1339,11 @@ def record_owned_artifact_review(
 
     # Serialize against concurrent PDF-only assembly on the same draft.
     draft = _lock_owned_draft(db, user, row.draft_id)
-    run = db.get(TechpackAIRun, row.run_id)
-    if (
-        run is None
-        or run.user_id != user.id
-        or run.draft_id != draft.id
-        or str(getattr(run, "mode", "") or "") not in {"professional", ""}
-    ):
-        # Fail closed when the artifact is not bound to this owner's draft run.
-        if run is None or run.user_id != user.id or run.draft_id != draft.id:
-            raise ValidationAppError(
-                "Artifact is not bound to an owned Professional run for this draft."
-            )
-
     spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    # Fail closed for disallowed stages (incl. same-user/same-draft non-Professional),
+    # historical runs not bound as the current source pack, and unreferenced artifacts.
+    # Legacy blank stage is allowed only with verified Professional draft evidence.
+    _assert_artifact_review_source_binding(db, user, draft, row, spec=spec)
     outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
     pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
     if row.piece_id:

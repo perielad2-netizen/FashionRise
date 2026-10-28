@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #123** clean PDF QA closure @ **`80e86f90`** · branch `cursor/web-techpack-pdf-qa-clean-77c6` from prod BE `005034d5` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**.)
+**Last updated:** 2026-10-28 (**PR #123** review-guard closure · branch `cursor/web-techpack-pdf-qa-clean-77c6` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**. Separate issue #124 FE decimal + fidelity PRs in flight — not this deploy.)
 
-**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. Owner Rev 2 still embeds wrong shorts detail; clean replacement PR closes the production review→PDF invalidation path and removes private FR-3958 blobs from GitHub history. **Do not deploy** until Technical PM accepts.
+**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 closes review→PDF invalidation with fail-closed Professional/source-pack guards. **Do not deploy** until Technical PM accepts. Issue #124 (measurement decimals + FR-B9F9 closure/gradient fidelity) stays out of this PR.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -18,7 +18,22 @@
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
-## PR #122 final production-path closure — STOP for Technical PM (2026-10-28)
+## PR #123 review-guard closure — STOP for Technical PM (2026-10-28)
+
+Technical PM reviewed clean PR #123 @ `43c8d376` → **HOLD — one focused P0 guard correction**. Prior invalidation/fingerprint/reviewer work stood; this tip closes the fail-closed source-pack guards.
+
+### Guard correction (this tip)
+
+| Control | Behavior |
+|---|---|
+| Run stage | `TechpackAIRun.stage` is authoritative (`professional` required). Disallowed stages (`basic`, `generate`, …) **fail closed** even for same-user/same-draft runs — no nested silent continue |
+| Legacy blank | Empty stage allowed **only** when draft `ai.last_mode=professional` + `ai.last_run_id` matches the artifact run + run `completed` |
+| Current source pack | Artifact `run_id` must equal draft `ai.last_run_id` (historical non-current Professional runs cannot dirty the pack) |
+| Outfit reference | Artifact must appear in current garment illustration refs (unreferenced rows cannot invalidate) |
+| Negatives | Non-Professional run · historical non-current run · unreferenced illustration — all 422, no revision bump |
+| Positives | Valid Professional pathway + legacy blank-with-evidence preserved; PDF A→review→B / idempotent / history / zero-provider unchanged |
+
+### Prior clean-replacement context (still in tip)
 
 Technical PM reviewed prior PR #122 @ `8794583f` → **HOLD / CHANGES REQUIRED**. This clean replacement branch answers those P0/P1 items without private artifacts in git history.
 
@@ -43,7 +58,7 @@ Technical PM reviewed prior PR #122 @ `8794583f` → **HOLD / CHANGES REQUIRED**
 
 | Item | Detail |
 |---|---|
-| Branch / PR | `cursor/web-techpack-pdf-qa-clean-77c6` · [#123](https://github.com/perielad2-netizen/FashionRise/pull/123) @ **`80e86f90`** — descendant of prod BE `005034d5` (+ deploy docs); no private PDF/PNG/QA JSON in commits |
+| Branch / PR | `cursor/web-techpack-pdf-qa-clean-77c6` · [#123](https://github.com/perielad2-netizen/FashionRise/pull/123) — descendant of prod BE `005034d5` (+ deploy docs); no private PDF/PNG/QA JSON in commits |
 | Supersedes | Prior PR #122 / `cursor/web-techpack-pdf-qa-77c6` @ `8794583f` (private blobs in history — do not merge) |
 | P0 review→PDF | `record_owned_artifact_review`: auth ownership checks → audit decision with **server-derived** `reviewer_user_id`/`username` → atomic `dirty_since_generation` + `outdated_export_id` + revision bump + `artifact_review_version` |
 | P0 fingerprint | `_pdf_only_content_fingerprint` includes authoritative `TechpackAIArtifact` review tokens so PDF-only cannot reuse a pre-review export |
@@ -60,8 +75,9 @@ Technical PM reviewed prior PR #122 @ `8794583f` → **HOLD / CHANGES REQUIRED**
 
 | Gate | Result |
 |---|---|
-| `test_techpack_pdf_only_update` + `test_techpack_manufacturing_ready` + `test_techpack_p0_reliability` | **65 passed** |
+| `test_techpack_pdf_only_update` + `test_techpack_manufacturing_ready` + `test_techpack_p0_reliability` | **69 passed** (includes 3 negative + 1 legacy-blank guard tests) |
 | Review→rebuild regression (wrong shorts art → reject → Update CTA → new PDF B excludes art; idempotent repeat; concurrent assembly; historical A; zero provider) | **PASS** |
+| Guard negatives (non-Professional / historical / unreferenced) + legacy blank Professional evidence | **PASS** |
 | Ruff F401/F821 on amended BE modules | **clean** |
 | mypy `techpack_manufacturing` / schemas / routes | **clean** |
 | mypy `techpack_service.py` | ~65 pre-existing union noise (no new blocker class) |
@@ -1121,7 +1137,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-28 | **PR #123 clean replacement for #122 (CHANGES REQUIRED closure)** @ `80e86f90`: review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git (`/opt/cursor/artifacts/fr3958-pdf-qa-clean/`); **65** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. Prior PR #122 @ `8794583f` superseded (private blobs in history). |
+| 2026-10-28 | **PR #123 review-guard closure:** fail-closed non-Professional stage + current `last_run_id` + outfit-referenced artifact checks; legacy blank stage only with Professional draft evidence; **69** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. Issue #124 (FE decimals + FR-B9F9 fidelity) tracked separately. |
+| 2026-10-28 | **PR #123 clean replacement for #122 (CHANGES REQUIRED closure)** @ `80e86f90`/`43c8d376`: review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git; production unchanged; superseded tip by review-guard closure above. |
 | 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
 | 2026-10-28 | **PR #118 PM amendment (CHANGES REQUIRED):** fail-closed SAMPLE-READY gates; conservative unverified detail art (no pixel trust); `_SizedImage` immutable wrap + BOM color-list normalization + dedicated detail pages; negative trousers/hoodie + positive complete + unmarked wrong-garment tests; private FR-3958 Magic+6-artifact visual QA (14 pages); production FE `69b83c01` / BE+worker `7af9c809` / Alembic `011` unchanged; **0 paid AI**; Technical PM CONDITIONAL PASS + HOLD for readiness-gate closure. |
 | 2026-10-28 | **Manufacturing-ready Sample-Development Tech Pack foundation** draft PR #118 @ `bfaf4651`: readiness levels, POM contradiction flags, artifact exclusion, offline FR-3958 preview; production unchanged; **0 paid AI**; Technical PM returned **CHANGES REQUIRED** (see amendment row above). |

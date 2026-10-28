@@ -1245,3 +1245,284 @@ def test_owner_artifact_review_invalidates_pdf_and_excludes_on_rebuild(
     db_session.refresh(detail)
     assert detail.metadata_.get("preview_include") is True
     assert detail.metadata_.get("manufacturing_evidence") is True
+
+
+def _insert_orphan_artifact(
+    db_session,
+    *,
+    user_id,
+    draft_id,
+    run_id,
+    piece_id: str,
+    kind: str = "detail_callouts",
+):
+    """Persist a TechpackAIArtifact row that may or may not be outfit-referenced."""
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+    from app.storage.local import LocalStorageBackend
+
+    storage = LocalStorageBackend()
+    key = f"{user_id.hex}/{draft_id.hex}/{uuid.uuid4().hex}.png"
+    storage.save_private_techpack_file(
+        key=key,
+        data=__import__("io").BytesIO(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00"
+            b"\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
+            b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        ),
+        content_type="image/png",
+    )
+    row = TechpackAIArtifact(
+        id=uuid.uuid4(),
+        run_id=run_id,
+        draft_id=draft_id,
+        user_id=user_id,
+        piece_id=piece_id,
+        kind=kind,
+        storage_key=key,
+        mime_type="image/png",
+        byte_size=68,
+        review_state="proposed",
+        metadata_={"synthetic": True},
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+    return row
+
+
+def test_artifact_review_rejects_non_professional_run(client, db_session, monkeypatch):
+    """Same-user/same-draft non-Professional stage must fail closed (no silent continue)."""
+    from app.models.techpack_draft import TechpackDraft
+    from app.models.user import User
+
+    tokens = register_with_invite(client, db_session, "revbasic@example.com", "revbasic")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Non-pro review")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    user = db_session.get(User, uuid.UUID(me["id"]))
+    row = db_session.get(TechpackDraft, uuid.UUID(draft["id"]))
+    assert user and row
+
+    basic_run = TechpackAIRun(
+        id=uuid.uuid4(),
+        draft_id=row.id,
+        user_id=user.id,
+        stage="basic",
+        status="completed",
+        confirm_token=f"tok-{uuid.uuid4().hex}",
+        idempotency_key=f"basic-{uuid.uuid4().hex}",
+        cost_usd_cents=0,
+        request={"mode": "basic"},
+        result={"note": "non-professional"},
+    )
+    db_session.add(basic_run)
+    db_session.commit()
+
+    piece_id = row.spec["outfit"]["pieces"][0]["id"]
+    orphan = _insert_orphan_artifact(
+        db_session,
+        user_id=user.id,
+        draft_id=row.id,
+        run_id=basic_run.id,
+        piece_id=piece_id,
+    )
+    # Even if we forge an outfit reference, non-Professional stage must fail.
+    live = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    pieces = live["spec"]["outfit"]["pieces"]
+    for p in pieces:
+        if p.get("id") != piece_id:
+            continue
+        ill = dict(p.get("illustrations") or {})
+        arts = dict(ill.get("artifacts") or {})
+        arts["detail_callouts"] = {
+            "artifact_id": str(orphan.id),
+            "storage_key": orphan.storage_key,
+        }
+        ill["artifacts"] = arts
+        p["illustrations"] = ill
+    # Keep last_run_id on the real Professional run so the pack stays valid;
+    # the basic-run artifact still fails the stage gate.
+    patched = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={"spec": {"outfit": {"piece_count": len(pieces), "pieces": pieces}}},
+    )
+    assert patched.status_code == 200, patched.text
+    prior_rev = patched.json()["revision"]
+
+    denied = client.post(
+        f"/api/v1/techpacks/artifacts/{orphan.id}/review",
+        headers=_auth(tokens),
+        json={
+            "review_state": "rejected",
+            "review_message": "Must not invalidate from a basic/non-Professional run.",
+        },
+    )
+    assert denied.status_code == 422, denied.text
+    msg = str((denied.json().get("detail") or {}).get("message") or "")
+    assert "Professional" in msg or "Disallowed" in msg
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert int(after["revision"]) == int(prior_rev)
+    assert after["spec"]["ai"].get("export_id") == settled["export_id"]
+    _ = settled  # paid pack preserved
+
+
+def test_artifact_review_rejects_historical_non_current_run(client, db_session, monkeypatch):
+    """Artifact from an older Professional run not bound as last_run_id must fail closed."""
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+    from app.models.techpack_draft import TechpackDraft
+    from app.models.user import User
+
+    tokens = register_with_invite(client, db_session, "revhist@example.com", "revhist")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Historical review")
+    first = _complete_professional(client, db_session, tokens, draft["id"])
+    first_run_id = first["run_id"]
+    first_details = (
+        db_session.query(TechpackAIArtifact)
+        .filter(
+            TechpackAIArtifact.run_id == first_run_id,
+            TechpackAIArtifact.kind == "detail_callouts",
+        )
+        .all()
+    )
+    assert first_details
+    historical = first_details[0]
+
+    # Dirty + regenerate so last_run_id points at a newer Professional run.
+    live = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    pieces = live["spec"]["outfit"]["pieces"]
+    edited = []
+    for p in pieces:
+        copy = dict(p)
+        fm = dict(copy.get("finished_measurements") or {})
+        fm["garment_length"] = {"value": 88, "unit": "cm", "source": "designer"}
+        copy["finished_measurements"] = fm
+        edited.append(copy)
+    patched = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={"spec": {"outfit": {"piece_count": len(edited), "pieces": edited}}},
+    )
+    assert patched.status_code == 200
+    second = _complete_professional(client, db_session, tokens, draft["id"])
+    assert second["run_id"] != first_run_id
+    bound = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert bound["spec"]["ai"].get("last_run_id") == second["run_id"]
+    prior_rev = bound["revision"]
+
+    denied = client.post(
+        f"/api/v1/techpacks/artifacts/{historical.id}/review",
+        headers=_auth(tokens),
+        json={
+            "review_state": "rejected_category_mismatch",
+            "review_message": "Historical artifact must not dirty the current pack.",
+        },
+    )
+    assert denied.status_code == 422, denied.text
+    detail = str((denied.json().get("detail") or {}).get("message") or "")
+    assert "historical" in detail.lower() or "unbound" in detail.lower() or "current" in detail.lower()
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert int(after["revision"]) == int(prior_rev)
+    assert after["spec"]["ai"].get("last_run_id") == second["run_id"]
+    user = db_session.get(User, uuid.UUID(me["id"]))
+    row = db_session.get(TechpackDraft, uuid.UUID(draft["id"]))
+    assert user and row
+
+
+def test_artifact_review_rejects_unreferenced_illustration(client, db_session, monkeypatch):
+    """Same current Professional run, but artifact not in outfit illustrations → fail closed."""
+    from app.models.techpack_draft import TechpackDraft
+    from app.models.user import User
+
+    tokens = register_with_invite(client, db_session, "revunref@example.com", "revunref")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Unreferenced review")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    user = db_session.get(User, uuid.UUID(me["id"]))
+    row = db_session.get(TechpackDraft, uuid.UUID(draft["id"]))
+    assert user and row
+    piece_id = row.spec["outfit"]["pieces"][0]["id"]
+    orphan = _insert_orphan_artifact(
+        db_session,
+        user_id=user.id,
+        draft_id=row.id,
+        run_id=uuid.UUID(settled["run_id"]),
+        piece_id=piece_id,
+        kind="detail_callouts",
+    )
+    prior = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    prior_rev = prior["revision"]
+
+    denied = client.post(
+        f"/api/v1/techpacks/artifacts/{orphan.id}/review",
+        headers=_auth(tokens),
+        json={
+            "review_state": "rejected",
+            "review_message": "Unreferenced illustration must not invalidate current PDF.",
+        },
+    )
+    assert denied.status_code == 422, denied.text
+    assert "not referenced" in str((denied.json().get("detail") or {}).get("message") or "").lower()
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert int(after["revision"]) == int(prior_rev)
+    assert after["spec"]["ai"].get("export_id") == settled["export_id"]
+
+
+def test_artifact_review_allows_legacy_blank_stage_with_professional_evidence(
+    client, db_session, monkeypatch
+):
+    """Blank stage is allowed only when draft last_mode/last_run_id prove Professional."""
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+    from app.models.techpack_draft import TechpackDraft
+    from app.models.user import User
+    from sqlalchemy.orm.attributes import flag_modified
+
+    tokens = register_with_invite(client, db_session, "revlegacy@example.com", "revlegacy")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Legacy blank stage")
+    settled = _complete_professional(client, db_session, tokens, draft["id"])
+    user = db_session.get(User, uuid.UUID(me["id"]))
+    row = db_session.get(TechpackDraft, uuid.UUID(draft["id"]))
+    assert user and row
+    run = db_session.get(TechpackAIRun, uuid.UUID(settled["run_id"]))
+    assert run is not None
+    # Simulate legacy blank stage while request.mode is also blank — draft AI evidence
+    # (last_mode + last_run_id) is the only Professional authorization.
+    run.stage = ""
+    run.request = dict(run.request or {})
+    run.request.pop("mode", None)
+    db_session.add(run)
+    db_session.commit()
+
+    detail = (
+        db_session.query(TechpackAIArtifact)
+        .filter(
+            TechpackAIArtifact.run_id == run.id,
+            TechpackAIArtifact.kind == "detail_callouts",
+        )
+        .first()
+    )
+    assert detail is not None
+    prior_rev = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()[
+        "revision"
+    ]
+    ok = client.post(
+        f"/api/v1/techpacks/artifacts/{detail.id}/review",
+        headers=_auth(tokens),
+        json={
+            "review_state": "rejected_category_mismatch",
+            "review_message": "Legacy blank-stage Professional evidence still authorizes review.",
+        },
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json().get("pdf_invalidated") is True
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert int(after["revision"]) == int(prior_rev) + 1
+    assert after["spec"]["ai"].get("dirty_since_generation") is True
+    flag_modified(row, "spec")
