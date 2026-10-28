@@ -29,6 +29,7 @@ from app.services.techpack_detect import detect_pieces_from_evidence
 from app.services.techpack_pdf import build_techpack_pdf
 from app.services.techpack_structure import (
     is_inconclusive_piece,
+    list_outfit_pieces,
     plan_professional_image_kinds,
     prepare_professional_outfit,
     professional_input_fingerprint,
@@ -651,8 +652,9 @@ def test_prepare_preserves_designer_confirmed_despite_weak_other_detector(db_ses
     assert pieces[0]["category"] == "top"
     assert meta["input_fingerprint"]
     assert meta["structure_fingerprint"]
+    assert meta["input_fingerprint_version"] == 2
     # Fingerprint stable across harmless bookkeeping
-    fp2 = professional_input_fingerprint(out_spec, pieces)
+    fp2 = professional_input_fingerprint(out_spec, pieces, draft=draft)
     assert fp2 == meta["input_fingerprint"]
 
 
@@ -769,6 +771,7 @@ def test_queued_run_rejects_measurement_drift_before_provider(client, db_session
     assert run_row.status == "queued"
     req = run_row.request if isinstance(run_row.request, dict) else {}
     assert req.get("input_fingerprint")
+    assert req.get("input_fingerprint_version") == 2
     assert req.get("structure_fingerprint")
 
     # Change a measurement while keeping the same piece IDs/categories.
@@ -904,6 +907,7 @@ def test_queued_run_unchanged_inputs_complete_with_mock(client, db_session, monk
     assert run_row is not None
     req = run_row.request if isinstance(run_row.request, dict) else {}
     assert req.get("input_fingerprint")
+    assert req.get("input_fingerprint_version") == 2
     # Harmless server bookkeeping alone must not drift the fingerprint.
     from app.models.techpack_draft import TechpackDraft
 
@@ -916,8 +920,12 @@ def test_queued_run_unchanged_inputs_complete_with_mock(client, db_session, monk
     draft_row.spec = spec
     db_session.add(draft_row)
     db_session.commit()
+    db_session.refresh(draft_row)
     pieces = (spec.get("outfit") or {}).get("pieces") or []
-    assert run_matches_authorized_inputs(req, spec=spec, pieces=pieces) is True
+    assert (
+        run_matches_authorized_inputs(req, spec=spec, pieces=pieces, draft=draft_row)
+        is True
+    )
 
     assert run_techpack_worker_tick(db_session, limit=2) == 1
     settled = client.get(
@@ -926,3 +934,291 @@ def test_queued_run_unchanged_inputs_complete_with_mock(client, db_session, monk
     ).json()
     assert settled["status"] == "completed"
     assert settled.get("pdf_ready") is True
+
+
+def _enable_professional(monkeypatch, email: str) -> None:
+    monkeypatch.setenv("TECHPACK_AI_ENABLED", "true")
+    monkeypatch.setenv("TECHPACK_AI_SPEND_CEILING_USD", "20")
+    monkeypatch.setenv("TECHPACK_AI_MAX_USD_PER_RUN", "8")
+    monkeypatch.setenv("TECHPACK_AI_OWNER_ALLOWLIST", email)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-used")
+    get_settings.cache_clear()
+
+
+def _counting_mock() -> type:
+    class CountingMock(MockProfessionalProvider):
+        provider_calls = 0
+
+        def analyze_garment(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            type(self).provider_calls += 1
+            return super().analyze_garment(*args, **kwargs)
+
+        def generate_technical_flat(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            type(self).provider_calls += 1
+            return super().generate_technical_flat(*args, **kwargs)
+
+        def generate_detail_or_pattern(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            type(self).provider_calls += 1
+            return super().generate_detail_or_pattern(*args, **kwargs)
+
+    CountingMock.provider_calls = 0
+    return CountingMock
+
+
+def _seed_two_piece_draft(client, db_session, tokens, me, *, title: str) -> dict[str, Any]:
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image(),
+        summary=TUNICS_TROUSERS_SUMMARY,
+        design_identity=TUNICS_IDENTITY,
+    )
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": title},
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()
+    patched = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={
+            "spec": {
+                "look_notes": TUNICS_TROUSERS_SUMMARY,
+                "look_design_identity": TUNICS_IDENTITY,
+                "size_system": "EU",
+                "sample_size": "M",
+                "body": {
+                    "waist": {"value": 70, "unit": "cm", "source": "designer"},
+                    "bust": {"value": 88, "unit": "cm", "source": "designer"},
+                    "hip": {"value": 94, "unit": "cm", "source": "designer"},
+                },
+                "preferences": {"fit_preference": "regular", "notes": ""},
+                "outfit": {
+                    "piece_count": 2,
+                    "pieces": [
+                        {
+                            "id": "tunic-1",
+                            "category": "top",
+                            "label": "Black tunic",
+                            "role": "top",
+                            "detection_source": "designer",
+                            "category_user_confirmed": True,
+                            "finished_measurements": {
+                                "garment_length": {
+                                    "value": 72,
+                                    "unit": "cm",
+                                    "source": "designer",
+                                }
+                            },
+                        },
+                        {
+                            "id": "tr-1",
+                            "category": "trousers",
+                            "label": "Cream trousers",
+                            "role": "bottom",
+                            "detection_source": "designer",
+                            "category_user_confirmed": True,
+                            "finished_measurements": {
+                                "inseam": {"value": 78, "unit": "cm", "source": "designer"}
+                            },
+                        },
+                    ],
+                },
+            }
+        },
+    )
+    assert patched.status_code == 200, patched.text
+    return patched.json()
+
+
+def test_queued_run_rejects_shared_body_waist_drift(client, db_session, monkeypatch):
+    tokens = register_with_invite(client, db_session, "p0_body@example.com", "p0_body")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    CountingMock = _counting_mock()
+    set_professional_provider_override(CountingMock())
+    draft = _seed_two_piece_draft(
+        client, db_session, tokens, me, title="Body waist drift"
+    )
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"idem-body-{uuid.uuid4().hex}", "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    # Change shared body waist only — garment IDs / finished POMs unchanged.
+    drift = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={"spec": {"body": {"waist": {"value": 75, "unit": "cm", "source": "designer"}}}},
+    )
+    assert drift.status_code == 200, drift.text
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    settled = client.get(
+        f"/api/v1/techpacks/ai/runs/{run_id}", headers=_auth(tokens)
+    ).json()
+    assert settled["status"] == "failed"
+    assert int(settled.get("actual_cost_usd_cents") or settled.get("cost_usd_cents") or 0) == 0
+    assert CountingMock.provider_calls == 0
+    assert "generate again" in (settled.get("error_message") or "").lower()
+
+
+def test_queued_run_rejects_fit_preference_drift(client, db_session, monkeypatch):
+    tokens = register_with_invite(client, db_session, "p0_fit@example.com", "p0_fit")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    CountingMock = _counting_mock()
+    set_professional_provider_override(CountingMock())
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Fit drift")
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"idem-fit-{uuid.uuid4().hex}", "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    drift = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={"spec": {"preferences": {"fit_preference": "relaxed", "notes": ""}}},
+    )
+    assert drift.status_code == 200, drift.text
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    settled = client.get(
+        f"/api/v1/techpacks/ai/runs/{run_id}", headers=_auth(tokens)
+    ).json()
+    assert settled["status"] == "failed"
+    assert CountingMock.provider_calls == 0
+    assert int(settled.get("cost_usd_cents") or 0) == 0
+
+
+def test_queued_run_rejects_sample_size_drift(client, db_session, monkeypatch):
+    tokens = register_with_invite(client, db_session, "p0_size@example.com", "p0_size")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    CountingMock = _counting_mock()
+    set_professional_provider_override(CountingMock())
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Sample size drift")
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"idem-size-{uuid.uuid4().hex}", "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    drift = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={"spec": {"sample_size": "L"}},
+    )
+    assert drift.status_code == 200, drift.text
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    settled = client.get(
+        f"/api/v1/techpacks/ai/runs/{run_id}", headers=_auth(tokens)
+    ).json()
+    assert settled["status"] == "failed"
+    assert CountingMock.provider_calls == 0
+    assert int(settled.get("cost_usd_cents") or 0) == 0
+
+
+def test_v1_fingerprint_algorithm_unchanged_and_stale_queue_rejected(
+    client, db_session, monkeypatch
+):
+    """v1 hash meaning stays frozen; queued v1 runs cannot start a paid call."""
+    tokens = register_with_invite(client, db_session, "p0_v1@example.com", "p0_v1")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    CountingMock = _counting_mock()
+    set_professional_provider_override(CountingMock())
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="V1 stale")
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"idem-v1-{uuid.uuid4().hex}", "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    run_row = db_session.get(TechpackAIRun, uuid.UUID(run_id))
+    assert run_row is not None
+    from app.models.techpack_draft import TechpackDraft
+
+    draft_row = db_session.get(TechpackDraft, uuid.UUID(draft["id"]))
+    assert draft_row
+    pieces = list_outfit_pieces(draft_row.spec if isinstance(draft_row.spec, dict) else {})
+    # Prove v1 algorithm remains deterministic for historical hashes.
+    v1_a = professional_input_fingerprint(
+        draft_row.spec, pieces, version=1, draft=draft_row
+    )
+    v1_b = professional_input_fingerprint(
+        draft_row.spec, pieces, version=1, draft=draft_row
+    )
+    assert v1_a == v1_b
+    v2 = professional_input_fingerprint(
+        draft_row.spec, pieces, version=2, draft=draft_row
+    )
+    assert v1_a != v2
+
+    # Downgrade the queued stamp to v1 → worker must fail closed ($0).
+    req = dict(run_row.request or {})
+    req["input_fingerprint"] = v1_a
+    req["input_fingerprint_version"] = 1
+    run_row.request = req
+    db_session.add(run_row)
+    db_session.commit()
+
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    settled = client.get(
+        f"/api/v1/techpacks/ai/runs/{run_id}", headers=_auth(tokens)
+    ).json()
+    assert settled["status"] == "failed"
+    assert CountingMock.provider_calls == 0
+    assert int(settled.get("cost_usd_cents") or 0) == 0
+    err = (settled.get("error_message") or "").lower()
+    assert "older input snapshot" in err or "generate again" in err
+
+
+def test_completed_historical_run_accessible_without_paid_retry(
+    client, db_session, monkeypatch
+):
+    tokens = register_with_invite(client, db_session, "p0_hist@example.com", "p0_hist")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    set_professional_provider_override(MockProfessionalProvider())
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Historical")
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"idem-hist-{uuid.uuid4().hex}", "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    done = client.get(
+        f"/api/v1/techpacks/ai/runs/{gen.json()['run_id']}", headers=_auth(tokens)
+    ).json()
+    assert done["status"] == "completed"
+    assert done.get("pdf_ready") is True
+    export_id = done.get("export_id")
+    assert export_id
+
+    from app.models.user import User
+
+    user = db_session.get(User, uuid.UUID(me["id"]))
+    run_row = db_session.get(TechpackAIRun, uuid.UUID(done["run_id"]))
+    assert user and run_row
+    # Recovery / accessibility must not start another paid provider call.
+    class Guard(MockProfessionalProvider):
+        def analyze_garment(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("paid provider must not run for historical recovery")
+
+    set_professional_provider_override(Guard())
+    recovered = ensure_professional_pdf_for_run(db_session, user, run_row)
+    assert recovered.status == "completed"
+    again = client.get(
+        f"/api/v1/techpacks/ai/runs/{done['run_id']}", headers=_auth(tokens)
+    ).json()
+    assert again["status"] == "completed"
+    assert again.get("pdf_ready") is True
+    assert again.get("export_id") == export_id

@@ -27,7 +27,9 @@ OPTIONAL_IMAGE_KIND_PHASES: tuple[str, ...] = (
 )
 
 # Versioned authorized-input snapshot for queued Professional runs.
-INPUT_FINGERPRINT_VERSION = 1
+# v1 = piece/materials/finished POMs + notes/units only (incomplete — do not authorize new runs).
+# v2 = + shared body, preferences, size/sample, draft title/style, Magic job refs.
+INPUT_FINGERPRINT_VERSION = 2
 
 _INCONCLUSIVE_CATEGORIES = frozenset({"", "other"})
 _INCONCLUSIVE_LABELS = frozenset(
@@ -226,16 +228,50 @@ def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def professional_input_fingerprint(
-    spec: dict[str, Any] | None,
+def _draft_source_refs(draft: Any | None) -> dict[str, str]:
+    """Magic look / job identity that can change after authorization."""
+    if draft is None:
+        return {
+            "title": "",
+            "style_code": "",
+            "look_id": "",
+            "front_job_id": "",
+            "back_job_id": "",
+        }
+    return {
+        "title": str(getattr(draft, "title", "") or "").strip(),
+        "style_code": str(getattr(draft, "style_code", "") or "").strip(),
+        "look_id": str(getattr(draft, "look_id", "") or "").strip(),
+        "front_job_id": str(getattr(draft, "front_job_id", "") or "").strip(),
+        "back_job_id": str(getattr(draft, "back_job_id", "") or "").strip(),
+    }
+
+
+def _body_input_snapshot(body: Any) -> dict[str, Any]:
+    body_d = _as_dict(body)
+    out: dict[str, Any] = {}
+    for key in sorted(body_d.keys(), key=lambda x: str(x)):
+        snap = _measurement_snapshot(body_d.get(key))
+        if snap is not None:
+            out[str(key)] = snap
+    return out
+
+
+def _preferences_input_snapshot(prefs: Any) -> dict[str, str]:
+    prefs_d = _as_dict(prefs)
+    return {
+        "fit_preference": str(prefs_d.get("fit_preference") or "").strip(),
+        "notes": str(prefs_d.get("notes") or "").strip(),
+    }
+
+
+def _fingerprint_payload_v1(
+    spec_d: dict[str, Any],
     pieces: list[dict[str, Any]],
-    *,
-    version: int = INPUT_FINGERPRINT_VERSION,
-) -> str:
-    """Stable hash of authorized Professional generation inputs (not draft.revision)."""
-    spec_d = spec if isinstance(spec, dict) else {}
-    payload = {
-        "v": int(version),
+) -> dict[str, Any]:
+    """Frozen v1 payload — kept only to document / verify historical hashes; not for new auth."""
+    return {
+        "v": 1,
         "units": str(spec_d.get("units") or "cm"),
         "look_notes": str(spec_d.get("look_notes") or "").strip(),
         "designer_notes": str(spec_d.get("designer_notes") or "").strip(),
@@ -244,6 +280,55 @@ def professional_input_fingerprint(
             for p in sorted(pieces, key=lambda x: piece_id(x))
         ],
     }
+
+
+def _fingerprint_payload_v2(
+    spec_d: dict[str, Any],
+    pieces: list[dict[str, Any]],
+    *,
+    draft: Any | None,
+) -> dict[str, Any]:
+    refs = _draft_source_refs(draft)
+    quantity = spec_d.get("quantity")
+    return {
+        "v": 2,
+        "units": str(spec_d.get("units") or "cm"),
+        "look_notes": str(spec_d.get("look_notes") or "").strip(),
+        "designer_notes": str(spec_d.get("designer_notes") or "").strip(),
+        "size_system": str(spec_d.get("size_system") or "").strip(),
+        "sample_size": str(spec_d.get("sample_size") or "").strip(),
+        "quantity": quantity if quantity is not None and quantity != "" else "",
+        "title": refs["title"],
+        "style_code": refs["style_code"],
+        "look_id": refs["look_id"],
+        "front_job_id": refs["front_job_id"],
+        "back_job_id": refs["back_job_id"],
+        "body": _body_input_snapshot(spec_d.get("body")),
+        "preferences": _preferences_input_snapshot(spec_d.get("preferences")),
+        "look_design_identity": _stable_jsonable(
+            _as_dict(spec_d.get("look_design_identity"))
+        ),
+        "pieces": [
+            _piece_input_snapshot(p)
+            for p in sorted(pieces, key=lambda x: piece_id(x))
+        ],
+    }
+
+
+def professional_input_fingerprint(
+    spec: dict[str, Any] | None,
+    pieces: list[dict[str, Any]],
+    *,
+    version: int = INPUT_FINGERPRINT_VERSION,
+    draft: Any | None = None,
+) -> str:
+    """Stable hash of authorized Professional generation inputs (not draft.revision)."""
+    spec_d = spec if isinstance(spec, dict) else {}
+    ver = int(version)
+    if ver <= 1:
+        payload = _fingerprint_payload_v1(spec_d, pieces)
+    else:
+        payload = _fingerprint_payload_v2(spec_d, pieces, draft=draft)
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -417,7 +502,9 @@ def prepare_professional_outfit(
     pieces = reject_inconclusive_professional_pieces(pieces)
     working = sync_outfit_piece_count(working, pieces)
     fingerprint = outfit_structure_fingerprint(pieces)
-    input_fp = professional_input_fingerprint(working, pieces)
+    input_fp = professional_input_fingerprint(
+        working, pieces, version=INPUT_FINGERPRINT_VERSION, draft=draft
+    )
     meta = {
         "structure_fingerprint": fingerprint,
         "input_fingerprint": input_fp,
@@ -568,31 +655,53 @@ def run_matches_draft_structure(run_request: dict[str, Any] | None, pieces: list
     return True
 
 
+def authorized_input_version(run_request: dict[str, Any] | None) -> int:
+    req = run_request if isinstance(run_request, dict) else {}
+    raw = req.get("input_fingerprint_version")
+    try:
+        return int(raw) if raw is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
 def run_matches_authorized_inputs(
     run_request: dict[str, Any] | None,
     *,
     spec: dict[str, Any] | None,
     pieces: list[dict[str, Any]],
+    draft: Any | None = None,
 ) -> bool:
     """Compare live draft inputs to the snapshot authorized when the run was queued.
 
-    Structure-only legacy runs (no input_fingerprint) still pass via structure match so
-    historical recovery / reconciliation stays intact. New runs always stamp
-    ``input_fingerprint`` at authorization time.
+    Fail closed before paid provider calls when:
+    - no input fingerprint was stamped, or
+    - the stamped version is older than the current algorithm (incomplete coverage).
+
+    Completed historical runs never reach this gate for a new provider call.
     """
     req = run_request if isinstance(run_request, dict) else {}
     authorized = str(req.get("input_fingerprint") or "").strip()
-    if not authorized:
-        return run_matches_draft_structure(req, pieces)
-    version = int(req.get("input_fingerprint_version") or INPUT_FINGERPRINT_VERSION)
-    current = professional_input_fingerprint(spec, pieces, version=version)
+    version = authorized_input_version(req)
+    if not authorized or version < INPUT_FINGERPRINT_VERSION:
+        return False
+    current = professional_input_fingerprint(
+        spec, pieces, version=version, draft=draft
+    )
     return authorized == current
 
 
 def authorized_input_drift_message() -> str:
     return (
         "This draft changed after Professional generation was authorized "
-        "(measurements, materials, or garment details). No paid generation was started — "
+        "(body measurements, fit preference, size, materials, or garment details). "
+        "No paid generation was started — reopen the draft and Generate again."
+    )
+
+
+def authorized_input_stale_version_message() -> str:
+    return (
+        "This Professional run was authorized with an older input snapshot that cannot "
+        "fully verify body measurements and preferences. No paid generation was started — "
         "reopen the draft and Generate again."
     )
 

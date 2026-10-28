@@ -1091,7 +1091,10 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
     sections = req.get("sections") if isinstance(req.get("sections"), list) else ["all"]
     estimate = int(req.get("estimate_cents") or 0)
     from app.services.techpack_structure import (
+        INPUT_FINGERPRINT_VERSION,
         authorized_input_drift_message,
+        authorized_input_stale_version_message,
+        authorized_input_version,
         plan_professional_image_kinds,
         prepare_professional_outfit,
         run_matches_authorized_inputs,
@@ -1123,7 +1126,16 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         )
         raise ValidationAppError(msg)
 
-    if not run_matches_authorized_inputs(req, spec=spec, pieces=pieces):
+    stamped_fp = str(req.get("input_fingerprint") or "").strip()
+    stamped_ver = authorized_input_version(req)
+    if not stamped_fp or stamped_ver < INPUT_FINGERPRINT_VERSION:
+        msg = authorized_input_stale_version_message()
+        _fail_run_preserve_cost(
+            db, run.id, error=msg, provider_called=False, force_zero_if_no_usage=True
+        )
+        raise ValidationAppError(msg)
+
+    if not run_matches_authorized_inputs(req, spec=spec, pieces=pieces, draft=draft):
         msg = authorized_input_drift_message()
         _fail_run_preserve_cost(
             db, run.id, error=msg, provider_called=False, force_zero_if_no_usage=True
