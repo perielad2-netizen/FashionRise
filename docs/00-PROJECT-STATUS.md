@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-28 (**PR #126 FE decimal DEPLOYED** as immutable release `bfbdd03f-decimal` @ tip `bfbdd03f` with `VITE_API_BASE_URL=/api/v1` · prod BE `311e259a` · Alembic `011` · rollback `13b26c3a-apifix` · **owner browser smoke PENDING — do not claim owner acceptance** · PR #125 fidelity amend `c430a7c7` HOLD / not deployed.)
+**Last updated:** 2026-10-28 (**PR #126 OWNER ACCEPTED** · live release `bfbdd03f-decimal` · UI label incorrectly baked as `App b2fbd043` via stale `VITE_BUILD_SHA` env — **assets are #126** · measurement investigation: **0 filled-value losses** vs pre-FE SQL backup · BE `311e259a` · Alembic `011` · PR #125 HOLD · **STOP for Technical PM** · 0 paid AI.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -27,6 +27,26 @@
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+
+## PR #126 owner acceptance + measurement/version investigation — STOP (2026-10-28)
+
+| Item | Result |
+|---|---|
+| Owner acceptance | **ACCEPTED** — decimal dot/comma, finished garment, empty, save/reopen, hard refresh, cross-design persistence |
+| Live release | `/var/www/fashionrise/releases/bfbdd03f-decimal` · packaging `version.json`/`REVISION` = `bfbdd03f` |
+| Version label discrepancy | UI/`index.html` show **`App b2fbd043`** because build env `VITE_BUILD_SHA=b2fbd043…` overrode git SHA in `vite.config.ts`; served JS `index-CxaD09Yn.js` ≠ old release `index-PLPsFUN5.js` and contains decimal-buffer code |
+| Verdict on version | **Label wrong, assets correct** — do not redeploy solely for the label |
+| Measurement backup | Pre-FE dump `techpack-pdf-qa-123-deploy-20261028T175326Z/fashionrise_beta.sql.gz` (17:53Z) vs live |
+| Filled-value losses | **0** across all 13 drafts |
+| Post-FE edits | Only draft `f24ef424…` (19:28Z) — additive designer fills on previously empty POMs; matches owner re-entry |
+| Pre-existing blanks | 5 drafts already body+finished empty in backup; many others have empty POM keys (`source=empty`) or partial `calculated` sets only |
+| Export snapshots | No `finished_measurements` in export metadata (0/20) |
+| Cause | Not deploy deletion. Blanks align with pre-existing empty/partial slots + garment-specific templates |
+| Recovery | No cutover restore indicated. Any future restore needs draft-level auth; avoid overwriting post-deploy designer edits |
+| Artifact | `/opt/cursor/artifacts/controlled-rollout-123-126/MEASUREMENT_AND_VERSION_INVESTIGATION.md` |
+| PR #125 | **HOLD / not deployed** |
+
 
 ## Quiet autosave + PDF validity + Done race (2026-10-27) LIVE — stop for owner verification
 
