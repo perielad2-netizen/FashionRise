@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #123 DEPLOYED** @ **`311e259a`** · FE **`bfbdd03f-decimal`** (PR #126) · Alembic **`011`** · FR-3958 Rev3 pdf_only B · rollback BE `005034d5` · FE `13b26c3a-apifix` · **0 paid AI** · PR #125 amend `c430a7c7` HOLD / not deployed · **STOP — FE owner browser smoke PENDING**.)
+**Last updated:** 2026-10-28 (**PR #126 OWNER ACCEPTED** · FE `bfbdd03f-decimal` live (UI label stale `b2fbd043` bake) · measurement probe: **0 filled losses** vs 17:53Z backup · BE `311e259a` · Alembic `011` · PR #125 HOLD · **STOP for Technical PM** · 0 paid AI.)
 
 **Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 closes review→PDF invalidation with fail-closed Professional/source-pack guards. PR #123 is **deployed** at `311e259a`. PR #126 FE decimal is **deployed**. Issue #124 BE fidelity remains on PR #125 (`c430a7c7`) — **HOLD / not deployed**.
 
