@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**Controlled rollout complete for PR #123 + PR #126** · BE+worker **`311e259a`** · FE **`bfbdd03f-decimal`** · Alembic **`011`** · FR-3958 Rev3 pdf_only B verified · **PR #125 amend tip `8fbe36b9` HOLD / NOT DEPLOYED** · **0 paid AI this rollout** · **STOP — owner browser smoke for #126 still required; do not claim owner acceptance**.)
+**Last updated:** 2026-10-28 (**Controlled rollout complete for PR #123 + PR #126** · BE+worker **`311e259a`** · FE **`bfbdd03f-decimal`** · Alembic **`011`** · FR-3958 Rev3 pdf_only B verified · **PR #125 amend tip `0fea7b87` HOLD / NOT DEPLOYED** · **0 paid AI this rollout** · **STOP — owner browser smoke for #126 still required; do not claim owner acceptance**.)
 
 **Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 review→PDF invalidation is **deployed**. PR #126 measurement-decimal FE is **deployed** (immutable release). PR #125 fidelity amend is integrated on #123 lineage and awaits Technical PM re-review — **do not deploy #125**.
 
@@ -47,7 +47,7 @@
 
 | Item | Detail |
 |---|---|
-| Tip | **`8fbe36b9`** on `cursor/web-techpack-fidelity-on-123-77c6` (also force-synced to PR head `cursor/web-techpack-fidelity-b9f9-77c6`) |
+| Tip | **`0fea7b87`** on `cursor/web-techpack-fidelity-on-123-77c6` (also force-synced to PR head `cursor/web-techpack-fidelity-b9f9-77c6`) |
 | Base lineage | Descendant of accepted/deployed PR #123 tip **`311e259a`** — does **not** overwrite #123 with older `005034d5` sibling |
 | Fix 1 mixed captions | `detect_closure_caption_mismatch`: designer buttons + zipper-fly captions flag even when button tokens also present on the same sheet |
 | Fix 2 gradient E2E | Studio/upstream fills → structured `piece.color_treatment` (mode/stops/direction/provenance); red-only hint must not flatten confirmed gradient; source→PDF offline fixture; stronger two-tone text mismatch |
@@ -133,7 +133,7 @@ Technical PM reviewed prior PR #122 @ `8794583f` → **HOLD / CHANGES REQUIRED**
 | PR | Scope | Tip |
 |---|---|---|
 | [#126](https://github.com/perielad2-netizen/FashionRise/pull/126) FE measure decimal | `cursor/web-techpack-measure-decimal-77c6` | `bfbdd03f` |
-| [#125](https://github.com/perielad2-netizen/FashionRise/pull/125) BE fidelity (closure/gradient) on #123 | `cursor/web-techpack-fidelity-on-123-77c6` (PR head also at `…-fidelity-b9f9-77c6`) | `8fbe36b9` |
+| [#125](https://github.com/perielad2-netizen/FashionRise/pull/125) BE fidelity (closure/gradient) on #123 | `cursor/web-techpack-fidelity-on-123-77c6` (PR head also at `…-fidelity-b9f9-77c6`) | `0fea7b87` |
 
 ### Blocked / exact proposed deployment sequence (after Technical PM accept)
 
@@ -1188,7 +1188,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-28 | **Issue #124 BE fidelity integrated onto #123 (PR #125)** @ `8fbe36b9`: mixed caption zipper false-negative fix; studio gradient → `color_treatment` provenance; rejection `preview_include` consistency; base `311e259a`; offline **93** pytest; Alembic none; **0 paid AI**; **STOP for Technical PM — do not deploy**. |
+| 2026-10-28 | **Issue #124 BE fidelity integrated onto #123 (PR #125)** @ `0fea7b87`: mixed caption zipper false-negative fix; studio gradient → `color_treatment` provenance; rejection `preview_include` consistency; base `311e259a`; offline **93** pytest; Alembic none; **0 paid AI**; **STOP for Technical PM — do not deploy**. |
 | 2026-10-28 | **PR #123 review-guard closure:** fail-closed non-Professional stage + current `last_run_id` + outfit-referenced artifact checks; legacy blank stage only with Professional draft evidence; **69** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. |
 | 2026-10-28 | **PR #123 clean replacement for #122 (CHANGES REQUIRED closure)** @ `80e86f90`/`43c8d376`: review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git; production unchanged; superseded tip by review-guard closure above. |
 | 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
