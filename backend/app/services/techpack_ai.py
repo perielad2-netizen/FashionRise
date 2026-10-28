@@ -2001,3 +2001,23 @@ def resolve_artifact_image(db: Session, user: User, artifact_id: uuid.UUID) -> t
     if path is None:
         raise NotFoundError("Techpack artifact file missing")
     return path, row
+
+
+def record_owned_artifact_operator_review(
+    db: Session,
+    user: User,
+    artifact_id: uuid.UUID,
+    *,
+    review_state: str,
+    review_message: str,
+) -> dict[str, Any]:
+    """Delegate to the draft-bound review path (invalidates current PDF; no AI)."""
+    from app.services import techpack_service
+
+    return techpack_service.record_owned_artifact_review(
+        db,
+        user,
+        artifact_id,
+        review_state=review_state,
+        review_message=review_message,
+    )

@@ -546,13 +546,56 @@ def piece_id_safe(piece: dict[str, Any]) -> str:
     return str(piece.get("id") or "").strip()
 
 
+_ARTIFACT_REVIEW_REJECTED = frozenset(
+    {"rejected_category_mismatch", "excluded_mismatch", "rejected"}
+)
+_ARTIFACT_REVIEW_CONFIRMED = frozenset(
+    {"designer_confirmed", "visual_qa_confirmed", "owner_accepted", "confirmed"}
+)
+
+
+def _authoritative_artifact_review_tokens(
+    db: Session,
+    user: User,
+    draft: TechpackDraft,
+) -> list[str]:
+    """Server-owned illustration review states that must affect PDF-only fingerprints."""
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+
+    rows = list(
+        db.scalars(
+            select(TechpackAIArtifact).where(
+                TechpackAIArtifact.draft_id == draft.id,
+                TechpackAIArtifact.user_id == user.id,
+            )
+        ).all()
+    )
+    tokens: list[str] = []
+    for row in rows:
+        meta = row.metadata_ if isinstance(row.metadata_, dict) else {}
+        state = str(row.review_state or "proposed").strip().lower()
+        if "preview_include" in meta:
+            include = bool(meta.get("preview_include"))
+        else:
+            include = state not in _ARTIFACT_REVIEW_REJECTED
+        tokens.append(
+            f"{row.piece_id or ''}:{row.kind}:{row.id}:{state}:{int(include)}"
+        )
+    return sorted(tokens)
+
+
 def _pdf_only_content_fingerprint(
     *,
     draft: TechpackDraft,
     render_spec: dict[str, Any],
     pieces: list[dict[str, Any]],
+    artifact_reviews: list[str] | None = None,
 ) -> str:
-    """Stable fingerprint for idempotent PDF-only updates (no provider involvement)."""
+    """Stable fingerprint for idempotent PDF-only updates (no provider involvement).
+
+    Includes authoritative illustration review tokens so owner reject/reapprove
+    decisions force a new assembly even when measurement specs are unchanged.
+    """
     # Exclude volatile AI bookkeeping so rebinding current export does not thrash.
     spec_for_hash = dict(render_spec)
     ai = dict(spec_for_hash.get("ai") if isinstance(spec_for_hash.get("ai"), dict) else {})
@@ -565,6 +608,14 @@ def _pdf_only_content_fingerprint(
         "actual_cost_usd_cents",
         "estimated_cost_usd_cents",
         "analysis_summary",
+        # Review version is mirrored via artifact_reviews tokens; keep out of ai blob.
+        "artifact_review_version",
+        "artifact_review_decisions",
+        "pdf_only_update",
+        "assembly_cost_usd_cents",
+        "source_run_cost_usd_cents",
+        "source_run_paid_sections",
+        "new_paid_ai_run",
     ):
         ai.pop(k, None)
     spec_for_hash["ai"] = ai
@@ -578,6 +629,7 @@ def _pdf_only_content_fingerprint(
         "look_id": str(draft.look_id),
         "spec": spec_for_hash,
         "illustration_artifacts": _illustration_artifact_ids(pieces),
+        "artifact_reviews": list(artifact_reviews or []),
     }
     blob = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -862,6 +914,19 @@ def apply_server_owned_illustration_artifacts(
             base["storage_key"] = str(row.storage_key)
             base["url_path"] = f"/techpacks/artifacts/{row.id}/image"
             base["review_state"] = str(row.review_state or base.get("review_state") or "proposed")
+            row_meta = row.metadata_ if isinstance(row.metadata_, dict) else {}
+            if row_meta.get("review_message") and not base.get("review_message"):
+                base["review_message"] = row_meta.get("review_message")
+            if "preview_include" in row_meta:
+                base["preview_include"] = bool(row_meta.get("preview_include"))
+            elif str(base["review_state"]).lower() in {
+                "rejected_category_mismatch",
+                "excluded_mismatch",
+                "rejected",
+            }:
+                base["preview_include"] = False
+            if row_meta.get("last_operator_decision"):
+                base["operator_decision"] = row_meta.get("last_operator_decision")
             # Never treat client path as authoritative once rewritten.
             base["server_owned"] = True
             rewritten[kind_s] = base
@@ -1060,6 +1125,354 @@ def _lock_owned_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackD
     return draft
 
 
+_ALLOWED_ARTIFACT_REVIEW_STATES = frozenset(
+    {
+        "rejected_category_mismatch",
+        "excluded_mismatch",
+        "rejected",
+        "proposed",
+        "proposed_unverified",
+        "designer_confirmed",
+        "visual_qa_confirmed",
+        "owner_accepted",
+        "confirmed",
+    }
+)
+
+
+def _techpack_run_stage(run: Any) -> str:
+    """Authoritative run stage/mode for review and PDF-only gates.
+
+    ``TechpackAIRun.stage`` is the column of record (``professional``, ``generate``,
+    etc.). Fall back to ``request.mode`` only when stage is blank so legacy rows
+    remain inspectable. Never treat a missing SQLAlchemy attribute as Professional.
+    """
+    stage = str(getattr(run, "stage", "") or "").strip().lower()
+    if stage:
+        return stage
+    request = getattr(run, "request", None)
+    if isinstance(request, dict):
+        return str(request.get("mode") or "").strip().lower()
+    return ""
+
+
+def _artifact_referenced_in_outfit(
+    spec: dict[str, Any],
+    *,
+    artifact_id: uuid.UUID | str,
+    piece_id: str | None,
+    kind: str | None,
+) -> bool:
+    """True when the draft outfit illustrations reference this artifact id."""
+    target = str(artifact_id).strip().lower()
+    if not target:
+        return False
+    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+    for piece in outfit.get("pieces") or []:
+        if not isinstance(piece, dict):
+            continue
+        if piece_id and piece_id_safe(piece) and piece_id_safe(piece) != str(piece_id):
+            continue
+        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        for art_kind, meta in arts.items():
+            if kind and str(art_kind) != str(kind):
+                continue
+            if not isinstance(meta, dict):
+                continue
+            aid = str(meta.get("artifact_id") or meta.get("id") or "").strip().lower()
+            if aid == target:
+                return True
+    return False
+
+
+def _assert_artifact_review_source_binding(
+    db: Session,
+    user: User,
+    draft: TechpackDraft,
+    row: Any,
+    *,
+    spec: dict[str, Any],
+) -> None:
+    """Fail closed unless the artifact belongs to the current Professional source pack.
+
+    Rules:
+    - Artifact run must be owned by the authenticated user + current draft.
+    - Run stage must be ``professional``. Legacy blank stage is allowed only when
+      the draft already records authoritative Professional evidence for this same
+      run (``ai.last_mode=professional`` and ``ai.last_run_id`` matches) — never for
+      ``basic`` / ``generate`` / other non-Professional stages on the same draft.
+    - Artifact ``run_id`` must equal the draft's current ``ai.last_run_id`` (historical
+      runs that are not the bound source pack cannot dirty the current export).
+    - Artifact must appear in the current outfit illustration refs for its piece/kind
+      (unreferenced rows cannot spuriously invalidate the pack).
+    """
+    from app.models.techpack_ai_run import TechpackAIRun
+
+    run = db.get(TechpackAIRun, row.run_id)
+    if run is None or run.user_id != user.id or run.draft_id != draft.id:
+        raise ValidationAppError(
+            "Artifact is not bound to an owned Professional run for this draft."
+        )
+
+    stage = _techpack_run_stage(run)
+    ai = spec.get("ai") if isinstance(spec.get("ai"), dict) else {}
+    last_run_id = str(ai.get("last_run_id") or "").strip()
+    last_mode = str(ai.get("last_mode") or "").strip().lower()
+    legacy_blank_ok = (
+        stage == ""
+        and last_mode == "professional"
+        and last_run_id
+        and last_run_id == str(run.id)
+        and str(getattr(run, "status", "") or "").strip().lower() == "completed"
+    )
+    if stage != "professional" and not legacy_blank_ok:
+        raise ValidationAppError(
+            "Artifact is not bound to an owned Professional run for this draft. "
+            f"Disallowed run stage “{stage or 'unknown'}” cannot authorize review "
+            "invalidation of the current Professional pack."
+        )
+
+    if not last_run_id or last_run_id != str(row.run_id):
+        raise ValidationAppError(
+            "Artifact belongs to a historical or unbound AI run that is not the "
+            "current Professional source pack. Review it only after it is part of "
+            "the active pack, or Generate AI PDF for a fresh authorized pack."
+        )
+
+    if not _artifact_referenced_in_outfit(
+        spec,
+        artifact_id=row.id,
+        piece_id=row.piece_id,
+        kind=str(row.kind or "") or None,
+    ):
+        raise ValidationAppError(
+            "Artifact is not referenced by the current draft garment illustrations. "
+            "Unreferenced historical artwork cannot invalidate the current PDF."
+        )
+
+
+def _stamp_artifact_review_into_draft_spec(
+    spec: dict[str, Any],
+    *,
+    artifact_id: str,
+    piece_id: str | None,
+    kind: str,
+    review_state: str,
+    review_message: str,
+    preview_include: bool,
+    manufacturing_evidence: bool,
+    decision: dict[str, Any],
+) -> dict[str, Any]:
+    """Mirror the authoritative artifact review onto draft.spec illustration refs."""
+    out = dict(spec)
+    outfit = dict(out.get("outfit") if isinstance(out.get("outfit"), dict) else {})
+    pieces_out: list[Any] = []
+    target = str(artifact_id).strip().lower()
+    for piece in outfit.get("pieces") or []:
+        if not isinstance(piece, dict):
+            pieces_out.append(piece)
+            continue
+        piece_out = dict(piece)
+        if piece_id and piece_id_safe(piece_out) and piece_id_safe(piece_out) != str(piece_id):
+            pieces_out.append(piece_out)
+            continue
+        ill = dict(piece_out.get("illustrations") if isinstance(piece_out.get("illustrations"), dict) else {})
+        arts = dict(ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {})
+        changed = False
+        for art_kind, meta in list(arts.items()):
+            if not isinstance(meta, dict):
+                continue
+            if kind and str(art_kind) != str(kind):
+                continue
+            aid = str(meta.get("artifact_id") or meta.get("id") or "").strip().lower()
+            if aid != target:
+                continue
+            meta_out = dict(meta)
+            if meta.get("review_state") and "prior_review_state" not in meta_out:
+                meta_out["prior_review_state"] = meta.get("review_state")
+            meta_out["review_state"] = review_state
+            meta_out["review_message"] = review_message
+            meta_out["preview_include"] = preview_include
+            meta_out["manufacturing_evidence"] = manufacturing_evidence
+            meta_out["operator_decision"] = decision
+            arts[str(art_kind)] = meta_out
+            changed = True
+        if changed:
+            ill["artifacts"] = arts
+            piece_out["illustrations"] = ill
+        pieces_out.append(piece_out)
+    outfit["pieces"] = pieces_out
+    out["outfit"] = outfit
+    return out
+
+
+def record_owned_artifact_review(
+    db: Session,
+    user: User,
+    artifact_id: uuid.UUID,
+    *,
+    review_state: str,
+    review_message: str,
+) -> dict[str, Any]:
+    """Persist an owner review and invalidate the current Professional PDF binding.
+
+    Verifies authenticated ownership of artifact, draft, and source run. Never deletes
+    illustration or PDF bytes. Never triggers AI. Reviewer identity is derived from
+    the authenticated principal (client cannot spoof operator).
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+    from app.services.techpack_ai import _artifact_read
+
+    row = db.get(TechpackAIArtifact, artifact_id)
+    if row is None or row.user_id != user.id:
+        raise NotFoundError("Techpack artifact not found")
+
+    state = str(review_state or "").strip().lower()
+    if state not in _ALLOWED_ARTIFACT_REVIEW_STATES:
+        raise ValidationAppError(f"Unsupported artifact review_state “{review_state}”.")
+    message = str(review_message or "").strip()
+    if not message:
+        raise ValidationAppError("review_message is required for an auditable owner decision.")
+
+    # Serialize against concurrent PDF-only assembly on the same draft.
+    draft = _lock_owned_draft(db, user, row.draft_id)
+    spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    # Fail closed for disallowed stages (incl. same-user/same-draft non-Professional),
+    # historical runs not bound as the current source pack, and unreferenced artifacts.
+    # Legacy blank stage is allowed only with verified Professional draft evidence.
+    _assert_artifact_review_source_binding(db, user, draft, row, spec=spec)
+    outfit = spec.get("outfit") if isinstance(spec.get("outfit"), dict) else {}
+    pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+    if row.piece_id:
+        piece_ids = {piece_id_safe(p) for p in pieces}
+        if str(row.piece_id) not in piece_ids:
+            raise ValidationAppError(
+                "Artifact piece association does not match the current draft outfit."
+            )
+
+    meta = dict(row.metadata_) if isinstance(row.metadata_, dict) else {}
+    prior_state = str(row.review_state or "")
+    last = meta.get("last_operator_decision") if isinstance(meta.get("last_operator_decision"), dict) else {}
+    identical = (
+        prior_state == state
+        and str(last.get("review_message") or "") == message
+        and str(last.get("reviewer_user_id") or "") == str(user.id)
+    )
+
+    when = datetime.now(UTC).isoformat()
+    rejected = state in _ARTIFACT_REVIEW_REJECTED
+    confirmed = state in _ARTIFACT_REVIEW_CONFIRMED
+    preview_include = False if rejected else True
+    manufacturing_evidence = bool(confirmed)
+    decision = {
+        "reviewer_user_id": str(user.id),
+        "reviewer_username": str(user.username or ""),
+        "role": "owner",
+        "review_state": state,
+        "review_message": message,
+        "decided_at": when,
+        "prior_review_state": prior_state,
+        "bytes_preserved": True,
+        "substituted": False,
+        "piece_id": row.piece_id,
+        "kind": row.kind,
+        "draft_id": str(draft.id),
+        "run_id": str(row.run_id),
+    }
+    if identical:
+        # Repeated identical review is a no-op for revision, but still report current validity.
+        ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+        db.commit()
+        return {
+            **_artifact_read(row),
+            "operator_decision": last or decision,
+            "bytes_preserved": True,
+            "file_deleted": False,
+            "idempotent": True,
+            "draft_id": str(draft.id),
+            "draft_revision": int(draft.revision or 1),
+            "dirty_since_generation": bool(ai.get("dirty_since_generation")),
+            "outdated_export_id": ai.get("outdated_export_id"),
+            "export_id": ai.get("export_id"),
+            "pdf_invalidated": bool(ai.get("dirty_since_generation")),
+        }
+
+    decisions = list(meta.get("operator_decisions") or [])
+    decisions.append(decision)
+    meta["operator_decisions"] = decisions
+    meta["last_operator_decision"] = decision
+    meta["preview_include"] = preview_include
+    meta["manufacturing_evidence"] = manufacturing_evidence
+    if message:
+        meta["review_message"] = message
+    row.review_state = state
+    row.metadata_ = meta
+    flag_modified(row, "metadata_")
+    db.add(row)
+
+    # Atomically invalidate the currently bound Professional PDF and bump revision so
+    # FE shows Update PDF (No AI) and PDF-only fingerprint cannot reuse the old export.
+    ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+    prior_export = str(ai.get("export_id") or "").strip()
+    if prior_export:
+        ai["outdated_export_id"] = prior_export
+    ai["dirty_since_generation"] = True
+    ai["artifact_review_version"] = int(ai.get("artifact_review_version") or 0) + 1
+    log = list(ai.get("artifact_review_decisions") or [])
+    # Audit log without private storage paths.
+    log.append(
+        {
+            "artifact_id": str(row.id),
+            "piece_id": row.piece_id,
+            "kind": row.kind,
+            "review_state": state,
+            "review_message": message,
+            "reviewer_user_id": str(user.id),
+            "decided_at": when,
+            "bytes_preserved": True,
+        }
+    )
+    ai["artifact_review_decisions"] = log[-20:]
+    stamped = _stamp_artifact_review_into_draft_spec(
+        spec,
+        artifact_id=str(row.id),
+        piece_id=row.piece_id,
+        kind=str(row.kind),
+        review_state=state,
+        review_message=message,
+        preview_include=preview_include,
+        manufacturing_evidence=manufacturing_evidence,
+        decision=decision,
+    )
+    stamped["ai"] = ai
+    draft.spec = stamped
+    draft.revision = int(draft.revision or 1) + 1
+    draft.updated_at = datetime.now(UTC)
+    flag_modified(draft, "spec")
+    db.add(draft)
+    db.commit()
+    db.refresh(row)
+    db.refresh(draft)
+
+    return {
+        **_artifact_read(row),
+        "operator_decision": decision,
+        "bytes_preserved": True,
+        "file_deleted": False,
+        "idempotent": False,
+        "draft_id": str(draft.id),
+        "draft_revision": int(draft.revision or 1),
+        "dirty_since_generation": True,
+        "outdated_export_id": ai.get("outdated_export_id"),
+        "export_id": ai.get("export_id"),
+        "pdf_invalidated": True,
+        "new_paid_ai_run": False,
+    }
+
+
 def _cleanup_orphan_pdf(storage: LocalStorageBackend, storage_key: str) -> None:
     try:
         storage.delete_private_techpack_file(key=storage_key)
@@ -1097,8 +1510,16 @@ def export_pdf_only_update(
     raw_pieces = outfit.get("pieces") if isinstance(outfit.get("pieces"), list) else []
     pieces: list[dict[str, Any]] = [p for p in raw_pieces if isinstance(p, dict)]
     # Fingerprint the saved draft content (pre-rewrite) so CAS compares designer
-    # edits — not server-owned artifact metadata normalization.
-    fingerprint = _pdf_only_content_fingerprint(draft=draft, render_spec=render_spec, pieces=pieces)
+    # edits — not server-owned artifact metadata normalization. Review tokens from
+    # authoritative TechpackAIArtifact rows are included so reject/reapprove forces
+    # a new assembly.
+    review_tokens = _authoritative_artifact_review_tokens(db, user, draft)
+    fingerprint = _pdf_only_content_fingerprint(
+        draft=draft,
+        render_spec=render_spec,
+        pieces=pieces,
+        artifact_reviews=review_tokens,
+    )
     # Re-resolve verified artifacts and rewrite storage refs from server-owned rows
     # so PDF assembly never opens a client-supplied private path as authorization.
     art_reasons, verified = _validate_professional_illustration_artifacts(
@@ -1142,14 +1563,6 @@ def export_pdf_only_update(
     if front_path is None and back_path is None:
         raise ValidationAppError("Cannot export PDF without at least one Magic look image")
 
-    provenance = resolve_generation_provenance(render_spec)
-    provenance = {
-        **provenance,
-        "mode": "professional",
-        "label": "AI Professional",
-        "is_professional": True,
-        "run_id": source_run_id or provenance.get("run_id") or "",
-    }
     # Historical source-run cost stays attributed to the paid run — not this $0 assembly.
     source_run_cents = 0
     if source_run is not None:
@@ -1157,8 +1570,35 @@ def export_pdf_only_update(
     if not source_run_cents:
         source_run_cents = int(ai.get("actual_cost_usd_cents") or 0)
     source_paid_sections = list(
-        ai.get("paid_sections") or provenance.get("paid_sections") or []
+        ai.get("paid_sections") or []
     )
+    # Stamp PDF-only provenance onto the render spec so cover/footer metadata
+    # distinguish $0 assembly from the historical paid source run.
+    ai_stamp = dict(ai)
+    ai_stamp["pdf_only_update"] = True
+    ai_stamp["assembly_cost_usd_cents"] = 0
+    ai_stamp["actual_cost_usd_cents"] = 0
+    ai_stamp["source_run_cost_usd_cents"] = source_run_cents
+    ai_stamp["source_run_paid_sections"] = source_paid_sections
+    ai_stamp["new_paid_ai_run"] = False
+    ai_stamp["last_mode"] = "professional"
+    if source_run_id:
+        ai_stamp["last_run_id"] = source_run_id
+    render_spec = dict(render_spec)
+    render_spec["ai"] = ai_stamp
+
+    provenance = resolve_generation_provenance(render_spec)
+    provenance = {
+        **provenance,
+        "mode": "pdf_only_update",
+        "label": provenance.get("label")
+        or "PDF-only update ($0 assembly · reused AI Professional arts)",
+        "is_professional": True,
+        "pdf_only_update": True,
+        "run_id": source_run_id or provenance.get("run_id") or "",
+        "assembly_cost_usd_cents": 0,
+        "source_run_cost_usd_cents": source_run_cents,
+    }
 
     # Snapshot fields needed after we release the row lock for slow PDF render.
     title = draft.title
@@ -1217,8 +1657,12 @@ def export_pdf_only_update(
         live_outfit = live_spec.get("outfit") if isinstance(live_spec.get("outfit"), dict) else {}
         live_raw = live_outfit.get("pieces") if isinstance(live_outfit.get("pieces"), list) else []
         live_pieces = [p for p in live_raw if isinstance(p, dict)]
+        live_reviews = _authoritative_artifact_review_tokens(db, user, draft)
         live_fp = _pdf_only_content_fingerprint(
-            draft=draft, render_spec=live_spec, pieces=live_pieces
+            draft=draft,
+            render_spec=live_spec,
+            pieces=live_pieces,
+            artifact_reviews=live_reviews,
         )
         if live_fp != fingerprint:
             raise ConflictError(
@@ -1271,8 +1715,9 @@ def export_pdf_only_update(
                 "cutting_uses_schematics": True,
                 "cutting_reuses_magic_looks": False,
                 "magic_looks_on_cover_overview_only": True,
-                "generation_mode": "professional",
-                "generation_label": "AI Professional",
+                "generation_mode": "pdf_only_update",
+                "generation_label": provenance.get("label")
+                or "PDF-only update ($0 assembly · reused AI Professional arts)",
                 "is_professional": True,
                 # Provenance of illustrations — NOT a new paid AI run id for billing.
                 "ai_run_id": source_run_id,
