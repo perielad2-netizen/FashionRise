@@ -27,9 +27,10 @@
 | Contract | `techpack_spec_fidelity.py` — designer closure + `color_treatment` (gradient/block/stops/direction/provenance) injected into vision + flat + detail prompts; designer decisions override generic model defaults |
 | Deterministic gate | Caption/annotation text vs structured closure (e.g. buttons vs `FLY (ZIPPER)`), including mixed button+zipper captions → `proposed_unverified`, `manufacturing_evidence=False`. **Not pixel proof.** |
 | Color treatment | End-to-end studio fill gradient → `piece.color_treatment` with confirmed-vs-inferred provenance; flag simplification / two-tone evasion of structured gradients |
+| PDF / BOM / autofill | PDF prints structured color-treatment + #123 color evidence; BOM uses designer buttons (not generic zipper); autofill never overwrites designer-confirmed closures |
 | Existing paid FR-B9F9 | **No auto regen.** Owner artifact-review exclude mismatched details → Update PDF (No AI) may fix text/exclusion only — cannot repair wrong pixels |
 | #123 preserved | Review→PDF invalidation + fail-closed source-pack guards unchanged |
-| Migration | **None** — JSON spec/metadata only |
+| Migration | **None** — JSON `color_treatment` / artifact metadata only; Alembic stays `011` |
 | Deploy | **STOP** — do not deploy until Technical PM accepts |
 
 ## PR #123 review-guard closure — preserved under this tip (2026-10-28)
@@ -1158,7 +1159,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-28 | **PR #123 review-guard closure:** fail-closed non-Professional stage + current `last_run_id` + outfit-referenced artifact checks; legacy blank stage only with Professional draft evidence; **69** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. Issue #124 (FE decimals + FR-B9F9 fidelity) tracked separately. |
+| 2026-10-28 | **Issue #124 BE fidelity integrated onto #123 (PR #125):** mixed caption zipper false-negative fix; studio gradient → `color_treatment` provenance; rejection `preview_include` consistency; base `311e259a`; Alembic none; **0 paid AI**; **STOP for Technical PM — do not deploy**. |
+| 2026-10-28 | **PR #123 review-guard closure:** fail-closed non-Professional stage + current `last_run_id` + outfit-referenced artifact checks; legacy blank stage only with Professional draft evidence; **69** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. |
 | 2026-10-28 | **PR #123 clean replacement for #122 (CHANGES REQUIRED closure)** @ `80e86f90`/`43c8d376`: review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git; production unchanged; superseded tip by review-guard closure above. |
 | 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
 | 2026-10-28 | **PR #118 PM amendment (CHANGES REQUIRED):** fail-closed SAMPLE-READY gates; conservative unverified detail art (no pixel trust); `_SizedImage` immutable wrap + BOM color-list normalization + dedicated detail pages; negative trousers/hoodie + positive complete + unmarked wrong-garment tests; private FR-3958 Magic+6-artifact visual QA (14 pages); production FE `69b83c01` / BE+worker `7af9c809` / Alembic `011` unchanged; **0 paid AI**; Technical PM CONDITIONAL PASS + HOLD for readiness-gate closure. |

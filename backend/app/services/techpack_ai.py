@@ -346,7 +346,7 @@ def enrich_spec_heuristic(spec: dict[str, Any]) -> dict[str, Any]:
         if not p.get("construction_steps"):
             p["construction_steps"] = default_construction_steps(cat)
         if not p.get("bom"):
-            p["bom"] = default_bom(cat, color_hint=str(p.get("color_hint") or ""))
+            p["bom"] = default_bom(cat, color_hint=str(p.get("color_hint") or ""), piece=p)
         mats = p.get("materials") if isinstance(p.get("materials"), dict) else {}
         shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
         if not shell.get("name") and p.get("color_hint"):
@@ -562,6 +562,7 @@ def _persist_professional_result(
                         "fabric_pattern",
                         "stripe_direction",
                         "colors",
+                        "color_treatment",
                         "panels_seams",
                         "distinctive_features",
                         "confidence",

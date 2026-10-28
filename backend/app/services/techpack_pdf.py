@@ -605,6 +605,12 @@ def _piece_sections(
         piece_norm.get("closures") if isinstance(piece_norm.get("closures"), dict) else {}
     )
     fit = piece.get("fit") if isinstance(piece.get("fit"), dict) else {}
+    from app.services.techpack_spec_fidelity import (
+        detect_color_treatment_text_mismatch,
+        format_color_treatment_for_pdf,
+    )
+
+    color_treatment_line = format_color_treatment_for_pdf(piece_norm)
     story.append(Paragraph("Materials & construction identity", styles["h3"]))
     shell_name = str(shell.get("name") or shell.get("suggestion") or "—")
     composition = str(shell.get("composition") or "Unknown / not confirmed")
@@ -624,6 +630,7 @@ def _piece_sections(
                     "Color evidence",
                     color_prov.replace("_", " ") if color_prov else "—",
                 ),
+                ("Color treatment", color_treatment_line),
                 ("Shell material", shell_name if shell_name.strip() not in ("", "—") else "Not confirmed"),
                 ("Composition", composition),
                 ("Fabric structure", str(shell.get("fabric_structure") or "knit/woven — not confirmed")),
@@ -651,6 +658,27 @@ def _piece_sections(
                 f"<b>REVIEW:</b> Historical outfit-level color input preserved "
                 f"(“{color_raw_txt[:140]}”). Displayed garment color is derived only where "
                 "visual/structured evidence supports a piece-specific value — not material composition.",
+                styles["warn"],
+            )
+        )
+    color_mismatch = detect_color_treatment_text_mismatch(
+        piece_norm, rendered_color_text=garment_color
+    )
+    if color_mismatch:
+        story.append(
+            Paragraph(
+                f"<b>REVIEW:</b> {color_mismatch['message']} "
+                "Update PDF (No AI) can correct labels/exclusion after artifact review — "
+                "it does not repair incorrect drawing pixels.",
+                styles["warn"],
+            )
+        )
+    fidelity = piece.get("fidelity") if isinstance(piece.get("fidelity"), dict) else {}
+    closure_check = fidelity.get("closure_check") if isinstance(fidelity.get("closure_check"), dict) else None
+    if closure_check and closure_check.get("message"):
+        story.append(
+            Paragraph(
+                f"<b>REVIEW:</b> {closure_check['message']}",
                 styles["warn"],
             )
         )
@@ -948,7 +976,7 @@ def _piece_sections(
     story.append(Paragraph("Bill of materials", styles["h3"]))
     bom = piece.get("bom") if isinstance(piece.get("bom"), list) else []
     if not bom:
-        bom = default_bom(cat, color_hint=color)
+        bom = default_bom(cat, color_hint=color, piece=piece)
     # Flag outfit-level color-list fabric names; never invent fiber composition.
     bom = normalize_bom_rows(bom, piece=piece)
     bom_data = [

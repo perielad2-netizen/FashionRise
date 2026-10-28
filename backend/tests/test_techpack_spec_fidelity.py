@@ -123,3 +123,69 @@ def test_normalize_color_treatment_and_closure_contract_helpers():
     ] == "color_block"
     piece = {"closures": {"type": "buttons"}}
     assert "BUTTONS" in closure_prompt_contract(piece).upper()
+
+
+def test_closure_bom_prefers_designer_buttons_over_generic_zipper():
+    from app.services.techpack_flats import default_bom
+    from app.services.techpack_spec_fidelity import closure_bom_row, format_color_treatment_for_pdf
+
+    jeans = {
+        "category": "trousers",
+        "closures": {
+            "type": "buttons",
+            "source": "designer",
+            "designer_confirmed": True,
+        },
+    }
+    row = closure_bom_row(jeans)
+    assert "button" in row["item"].lower()
+    assert "zipper" not in row["item"].lower()
+    bom = default_bom("trousers", piece=jeans)
+    items = " ".join(str(r.get("item") or "") for r in bom).lower()
+    assert "button" in items
+    assert "zipper / elastic / closure" not in items
+
+    shirt = {
+        "color_treatment": {
+            "mode": "gradient",
+            "named_colors": ["near-black", "burgundy"],
+            "direction": "top-to-bottom",
+            "designer_confirmed": True,
+            "source": "designer",
+        }
+    }
+    pdf_line = format_color_treatment_for_pdf(shirt)
+    assert "gradient" in pdf_line.lower()
+    assert "burgundy" in pdf_line.lower()
+    assert "designer-confirmed" in pdf_line.lower()
+
+
+def test_autofill_does_not_overwrite_designer_buttons():
+    from app.services.techpack_autofill import apply_visible_analysis_to_piece
+
+    piece = {
+        "id": "jeans-1",
+        "category": "trousers",
+        "closures": {
+            "type": "buttons",
+            "source": "designer",
+            "designer_confirmed": True,
+        },
+        "color_treatment": {
+            "mode": "gradient",
+            "stops": ["near-black", "burgundy"],
+            "designer_confirmed": True,
+            "source": "designer",
+        },
+    }
+    analysis = {
+        "closure_visible": "FLY (ZIPPER)",
+        "colors": ["red"],
+        "fabric_pattern": "solid",
+        "color_treatment": "solid",
+    }
+    out = apply_visible_analysis_to_piece(piece, analysis, only_empty=True)
+    assert out["closures"]["type"] == "buttons"
+    assert out["closures"].get("ai_observed_closure_visible")
+    assert out["color_treatment"]["mode"] == "gradient"
+    assert out["color_treatment"]["designer_confirmed"] is True

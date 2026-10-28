@@ -140,13 +140,34 @@ def apply_visible_analysis_to_piece(
             out["color_hint"] = ", ".join(colors)[:80]
             out["color_hint_provenance"] = "visually_supported"
 
+    from app.services.techpack_spec_fidelity import (
+        preserve_designer_closure,
+        stamp_color_treatment_onto_piece,
+    )
+
+    # Designer-confirmed closures must never be overwritten by vision guesses.
+    out = preserve_designer_closure(out, analysis if isinstance(analysis, dict) else None)
     closures = out.get("closures") if isinstance(out.get("closures"), dict) else {}
-    if analysis.get("closure_visible") and not (only_empty and closures.get("type")):
+    designer_locked = bool(
+        closures.get("designer_confirmed") is True
+        or str(closures.get("source") or "").lower()
+        in {"designer", "designer_confirmed", "user", "confirmed"}
+    )
+    if (
+        analysis.get("closure_visible")
+        and not designer_locked
+        and not (only_empty and closures.get("type"))
+    ):
         closures["type"] = str(analysis["closure_visible"])[:80]
         closures["source"] = "ai"
         closures["provenance"] = "ai_inferred"
         closures["notes"] = "Visible closure inference — confirm before production."
     out["closures"] = closures
+
+    # Preserve structured color_treatment; stamp from analysis only when empty.
+    if isinstance(analysis, dict) and analysis.get("color_treatment") and not out.get("color_treatment"):
+        out["color_treatment"] = analysis.get("color_treatment")
+    out = stamp_color_treatment_onto_piece(out)
 
     visible = out.get("visible_details") if isinstance(out.get("visible_details"), dict) else {}
     for key, prov in (

@@ -218,6 +218,11 @@ def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
             "finished_measurements": finished_snap,
             "closures_type": str(closures.get("type") or ""),
             "closures_notes": str(closures.get("notes") or ""),
+            "color_treatment": (
+                piece.get("color_treatment")
+                if isinstance(piece.get("color_treatment"), dict)
+                else {}
+            ),
             "fit_silhouette": str(fit.get("silhouette") or ""),
             "visible_details": {
                 k: visible[k]
