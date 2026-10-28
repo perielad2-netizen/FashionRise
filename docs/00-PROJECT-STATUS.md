@@ -3,28 +3,50 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #118 readiness-gate closure** · empty-outfit + provenance≠approval + scoped exceptions · mypy clean · **STOP for PM acceptance** · FE `69b83c01` / BE+worker **`7af9c809`** · Alembic `011` · **0 paid AI** · **not deployed**.)
+**Last updated:** 2026-10-28 (**PR #118 manufacturing foundation DEPLOYED** @ `2c8cb88e` · FE `69b83c01` unchanged · Alembic `011` · limits `$50`/`$8`/`$20`/6 images · FR-3958 still **DESIGN_CONCEPT** · historical PDFs preserved · **0 paid AI** · **STOP**.)
 
-**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged in production. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) / [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) live. Manufacturing-spec foundation PR [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) is conditionally accepted with **deployment HOLD** until readiness-gate closure review — **do not deploy or run paid AI**.
+**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) / [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) lineage retained; manufacturing-spec foundation PR [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) **accepted and deployed** via linear checkout from production baseline (GitHub PR base was stale/CONFLICTING — **not** used for merge).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114). **OWNER ACCEPTANCE PASS — Measurements & Details.** |
-| Backend (FastAPI + PostgreSQL) | **`7af9c809`** (PR #117 hist-pdf-validity) atop `0815433b` (PR #116). Prior **`270e87e2`** · P0 **`bae05c56`**. Alembic **`011`**. |
-| AI worker | `fashionrise-ai-worker` @ **`7af9c809`** |
+| Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114). **OWNER ACCEPTANCE PASS — Measurements & Details.** Unchanged this deploy. |
+| Backend (FastAPI + PostgreSQL) | **`2c8cb88e`** (PR #118 manufacturing tip). Prior baseline **`7af9c809`** (PR #117). Alembic **`011`**. |
+| AI worker | `fashionrise-ai-worker` @ **`2c8cb88e`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
-| AI spend | Ceiling **`$50.00`** (was `$15`) · max **`$8`/run** · **`$20`/user/day** · max images **6**. Recorded operator spend **`$7.05`** → remaining **`~$42.95`**. |
+| AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** — **unchanged** this deploy. |
 
-## Manufacturing-ready Tech Pack foundation (2026-10-28) — STOP for review
+## PR #118 controlled deployment (2026-10-28) — STOP
+
+Technical PM **ACCEPTED** manufacturing foundation. Deployed tip `2c8cb88e1571b01bd7ae6079e0543ddd754bfc7f` (reviewed closure `9ae1ead2` + docs/ruff tip commits) from production baseline `7af9c809` — **not** a blind GitHub merge into the stale PR base.
+
+| Item | Detail |
+|---|---|
+| Lineage | `7af9c809` → … → `9ae1ead2` → tip `2c8cb88e` (ancestor-descendant; BE/docs only; no FE / no Alembic) |
+| Deploy path | VPS `/opt/fashionrise/src` force-checkout tip · write `APP_REVISION`/`REVISION` · clear `__pycache__` · restart `fashionrise-api` + `fashionrise-ai-worker` |
+| Deploy time | 2026-10-28 **12:08 Asia/Jerusalem** (10:08 UTC) |
+| Health | `/health` ok · `/ready` database ok · both units **active** |
+| Backup | `/var/backups/fashionrise/techpack-mfg-ready-deploy-20261028T100449Z/` (env, db dump/SQL, PDF meta, prior services) |
+| Rollback | `…/ROLLBACK.sh` → **`7af9c809`** + restart API/worker |
+| Pre-deploy gates | **46 passed** (`test_techpack_manufacturing_ready` + V2 PDF fixtures + P0 reliability) · ruff clean on `techpack_manufacturing.py` · mypy clean on `techpack_manufacturing.py` |
+| Alembic | **`011`** confirmed post-deploy |
+| Limits | `$50` ceiling · `$8`/run · `$20`/user/day · **6** images/run — confirmed unchanged |
+| FR-3958 | Live draft assess → **`DESIGN_CONCEPT`** · **22** blocking/unresolved manufacturing issues (sample size, POM bands, ease, materials, closures, construction, unverified detail art, etc.) |
+| Historical preserve | FR-3958 export `b2a1922a…` (10p / 13 366 568 B) + FR-D47D exports `07c5e48a…`/`cffdfb8a…`/`d1478343…` byte+page match backup; Download associations unchanged; offline PdfReader validation only (**no** live provider / regen) |
+| Paid AI | **0** — no enqueue, no Professional generation, no historical PDF rewrite |
+| FE | **Unchanged** at `69b83c01` |
+| Blockers | FR-3958 remains DESIGN CONCEPT until designer confirms POMs/materials/closures/construction/sample size. No paid Professional regen authorized. |
+| Exact next action | Owner/PM: hard-refresh FE; confirm Download still serves preserved FR-3958 / FR-D47D PDFs. Do **not** authorize paid regen unless explicitly scoped. Rollback if needed via backup `ROLLBACK.sh`. |
+
+## Manufacturing-ready Tech Pack foundation (2026-10-28) — accepted & deployed
 
 | Item | Detail |
 |---|---|
 | Trigger | FR-3958 (purple zip hoodie + yellow shorts) failed sample-development acceptance: implausible POMs, color-list “fabrics”, boolean closure, cross-garment detail sheet, readiness overstated by AI completion |
-| Branch / PR | `cursor/web-techpack-mfg-ready-77c6` · [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) · base deployed lineage `7af9c809` |
-| Production | **Unchanged** — FE `69b83c01` · BE+worker `7af9c809` · Alembic `011` · ceiling `$50` · **not deployed** |
+| Branch / PR | `cursor/web-techpack-mfg-ready-77c6` · [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) · deployed from lineage `7af9c809` |
+| Production | **Deployed** — FE `69b83c01` · BE+worker **`2c8cb88e`** · Alembic `011` · ceiling `$50` |
 | Paid AI | **0** — offline fixtures + Mock paths only; existing FR-3958 / FR-D47D exports preserved |
 | P0 Measurement integrity | Category-aware POM bands + body-vs-finished ease checks; contradictions flagged **NEEDS REVIEW** (values not silently corrected); sample size required |
 | P0 Readiness levels | `DESIGN CONCEPT / DRAFT` · `SAMPLE-DEVELOPMENT READY` · `PRODUCTION APPROVED` (never auto). AI completion ≠ sample-ready |
@@ -33,7 +55,7 @@
 | Offline evidence | Fixture `backend/tests/fixtures/fr_3958_manufacturing_spec.json` · preview `backend/artifacts/manufacturing_previews/FR-3958_manufacturing_preview.pdf` |
 | Tests | `test_techpack_manufacturing_ready.py` + V2 PDF fixtures + P0 reliability |
 | Blockers for SAMPLE-READY on FR-3958 | Missing sample size; hoodie length 110 cm vs hip-length; shorts inseam 80 cm; waist 75 vs body 90 without stretch; zero-ease hip/chest with relaxed fit; shell/closure unconfirmed; shorts detail mismatch |
-| Exact next action | Technical PM + owner acceptance of PR #118 amendment. **Do not deploy** and **do not authorize paid regen**. |
+| Exact next action | Superseded by controlled deployment section above. |
 
 ## PR #118 PM amendment — CHANGES REQUIRED (2026-10-28) — STOP for acceptance
 
