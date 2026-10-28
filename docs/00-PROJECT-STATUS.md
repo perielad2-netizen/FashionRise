@@ -24,8 +24,8 @@ Owner smoke after PR #118 deploy: historical Download OK; AI correctly skipped f
 
 | Item | Detail |
 |---|---|
-| FE branch | `cursor/web-techpack-noai-pdf-fe-77c6` (from prod FE `69b83c01`) |
-| BE branch | `cursor/web-techpack-noai-pdf-be-77c6` (from manufacturing tip / prod BE `2c8cb88e` lineage) |
+| FE branch / tip | `cursor/web-techpack-noai-pdf-fe-77c6` @ **`3ca3b4ff`** (from prod FE `69b83c01`) |
+| BE branch / tip | `cursor/web-techpack-noai-pdf-be-77c6` @ **`978719a3`** (from manufacturing / prod BE `2c8cb88e` lineage) |
 | Production | **Unchanged** — do **not** deploy until PM acceptance |
 | Paid AI | **0** in implementation/tests (MockProfessionalProvider / no provider in PDF-only path) |
 | A — Overlay UX | Completed Professional reopen binds Download on the normal Create Real Design screen; **no auto-open** ready overlay. Queued/running progress overlay unchanged. Ready overlay (post-generate) gains **Continue Editing**. Edit always reachable. |
