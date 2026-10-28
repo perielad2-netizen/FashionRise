@@ -62,7 +62,7 @@ Technical PM CONDITIONAL PASS on `c411ed17` with **deployment HOLD** pending fai
 | Item | Detail |
 |---|---|
 | Parent amendment | `c411ed17` |
-| Closure tip |  |
+| Closure tip | `9ae1ead23fe1d58ed612c1f48c57165fb40ae4a3` |
 | Production | **Unchanged** — FE `69b83c01` · BE+worker `7af9c809` · Alembic `011` · ceiling `$50` · **no deploy** · **no migration** · **no historical PDF rewrite** |
 | Paid AI | **0** |
 | Outfit integrity | Empty / malformed / duplicate-id / unconfirmed-category outfits cannot reach SAMPLE-DEVELOPMENT READY |
