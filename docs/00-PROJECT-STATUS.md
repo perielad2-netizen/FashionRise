@@ -31,6 +31,7 @@
 | Existing paid FR-B9F9 | **No auto regen.** Owner artifact-review exclude mismatched details → Update PDF (No AI) may fix text/exclusion only — cannot repair wrong pixels |
 | #123 preserved | Review→PDF invalidation + fail-closed source-pack guards unchanged |
 | Migration | **None** — JSON `color_treatment` / artifact metadata only; Alembic stays `011` |
+| Tests | Offline pytest **92 passed** (`spec_fidelity` 14 + manufacturing + autofill + provenance + p0 + pdf_only + pdf_ready_binding); ruff F401/F821 clean on touched files; mypy clean on `techpack_spec_fidelity.py` |
 | Deploy | **STOP** — do not deploy until Technical PM accepts |
 
 ## PR #123 review-guard closure — preserved under this tip (2026-10-28)

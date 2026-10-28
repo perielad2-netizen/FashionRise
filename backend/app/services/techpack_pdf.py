@@ -673,8 +673,12 @@ def _piece_sections(
                 styles["warn"],
             )
         )
-    fidelity = piece.get("fidelity") if isinstance(piece.get("fidelity"), dict) else {}
-    closure_check = fidelity.get("closure_check") if isinstance(fidelity.get("closure_check"), dict) else None
+    fidelity_raw = piece.get("fidelity")
+    fidelity: dict[str, Any] = fidelity_raw if isinstance(fidelity_raw, dict) else {}
+    closure_check_raw = fidelity.get("closure_check")
+    closure_check: dict[str, Any] | None = (
+        closure_check_raw if isinstance(closure_check_raw, dict) else None
+    )
     if closure_check and closure_check.get("message"):
         story.append(
             Paragraph(

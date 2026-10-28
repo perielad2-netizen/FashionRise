@@ -149,7 +149,8 @@ def color_treatment_from_studio_fill_style(style: Any) -> dict[str, Any] | None:
         return None
     kind = str(style.get("kind") or "").strip().lower()
     if kind == "gradient":
-        colors = style.get("colors") if isinstance(style.get("colors"), list) else []
+        raw_colors = style.get("colors")
+        colors: list[Any] = list(raw_colors) if isinstance(raw_colors, list) else []
         stops = [str(c) for c in colors if c is not None][:8]
         angle = style.get("angle") if isinstance(style.get("angle"), (int, float)) else None
         return normalize_color_treatment(
@@ -196,15 +197,20 @@ def color_treatment_from_studio_fill_style(style: Any) -> dict[str, Any] | None:
 
 def collect_studio_fills(design_data: Any) -> list[dict[str, Any]]:
     """Collect front + back Studio fills from design_data (real upstream field)."""
-    data = design_data if isinstance(design_data, dict) else {}
+    data: dict[str, Any] = design_data if isinstance(design_data, dict) else {}
     fills: list[dict[str, Any]] = []
-    for item in data.get("fills") or []:
-        if isinstance(item, dict):
-            fills.append(item)
-    back = data.get("back") if isinstance(data.get("back"), dict) else {}
-    for item in back.get("fills") or []:
-        if isinstance(item, dict):
-            fills.append(item)
+    front_fills = data.get("fills")
+    if isinstance(front_fills, list):
+        for item in front_fills:
+            if isinstance(item, dict):
+                fills.append(item)
+    back_raw = data.get("back")
+    back: dict[str, Any] = back_raw if isinstance(back_raw, dict) else {}
+    back_fills = back.get("fills")
+    if isinstance(back_fills, list):
+        for item in back_fills:
+            if isinstance(item, dict):
+                fills.append(item)
     return fills
 
 
@@ -536,7 +542,8 @@ def collect_generated_caption_text(
         ana.get("assumptions"),
     ]
     # Nested illustration analysis often lives under meta["analysis"].
-    nested = meta.get("analysis") if isinstance(meta.get("analysis"), dict) else {}
+    nested_raw = meta.get("analysis")
+    nested: dict[str, Any] = nested_raw if isinstance(nested_raw, dict) else {}
     parts.extend(
         [
             nested.get("closure_visible"),
