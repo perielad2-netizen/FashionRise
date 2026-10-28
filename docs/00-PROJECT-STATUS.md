@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**Issue #128 P0 measurement data-loss correction** — code from deployed BE `311e259a` · branch `cursor/web-techpack-meas-preserve-77c6` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 remains HOLD** · **STOP for Technical PM acceptance**.)
+**Last updated:** 2026-10-28 (**Issue #128 P0 measurement data-loss correction** — tip `6ac13dc3` / base `311e259a` · branch `cursor/web-techpack-meas-preserve-77c6` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 remains HOLD** · **STOP for Technical PM acceptance**.)
 
 **Phase:** Protected family beta. Issue #128 fixes Professional/heuristic enrichment dropping designer finished POMs (outseam/thigh/waistband). No restore of FR-3958 values without owner authorization.
 
