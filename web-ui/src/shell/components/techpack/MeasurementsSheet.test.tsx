@@ -139,13 +139,16 @@ describe('MeasurementsSheet', () => {
     }
     const { onUpdatePiece } = renderSheet({ spec: aiSpec, pieces: [aiPiece] })
     fireEvent.click(screen.getByRole('tab', { name: /Finished · /i }))
-    const length = screen.getByLabelText(/Garment length/i)
+    const lengthInput = () =>
+      screen.getAllByLabelText(/Garment length/i).find((el) => el.tagName === 'INPUT') as HTMLInputElement
+    const length = lengthInput()
+    expect(length).toBeTruthy()
     expect(length).toHaveAttribute('inputMode', 'decimal')
     length.focus()
     fireEvent.change(length, { target: { value: '110.' } })
-    expect(screen.getByLabelText(/Garment length/i)).toHaveValue('110.')
-    fireEvent.change(screen.getByLabelText(/Garment length/i), { target: { value: '110.25' } })
-    expect(screen.getByLabelText(/Garment length/i)).toHaveValue('110.25')
+    expect(lengthInput()).toHaveValue('110.')
+    fireEvent.change(lengthInput(), { target: { value: '110.25' } })
+    expect(lengthInput()).toHaveValue('110.25')
     expect(onUpdatePiece).toHaveBeenCalled()
     const lastCall = onUpdatePiece.mock.calls.at(-1)
     expect(lastCall?.[0]).toBe('piece-1')
