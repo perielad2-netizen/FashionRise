@@ -45,6 +45,7 @@ from app.services.techpack_manufacturing import (
     READINESS_LABELS,
     enrich_spec_for_manufacturing_preview,
     evaluate_artifact_for_piece,
+    normalize_bom_rows,
     normalize_closure_display,
     normalize_shell_material,
 )
@@ -228,6 +229,8 @@ def _measurement_table(rows: list[tuple[str, Any]], styles: dict[str, ParagraphS
             review = str(cell.get("review_status") or "").lower()
             if review in {"needs_review", "proposed", "proposed_unverified"}:
                 point_label = f"{label} · REVIEW"
+            if isinstance(cell.get("definition"), str) and cell["definition"]:
+                parts.append(str(cell["definition"]))
             if isinstance(cell.get("note"), str) and cell["note"]:
                 parts.append(cell["note"])
             assumptions = cell.get("assumptions")
@@ -244,7 +247,8 @@ def _measurement_table(rows: list[tuple[str, Any]], styles: dict[str, ParagraphS
                 Paragraph(note or "—", styles["muted"]),
             ]
         )
-    table = Table(data, colWidths=[36 * mm, 22 * mm, 26 * mm, 24 * mm, 52 * mm])
+    # Wider note column so POM definitions / review text stay readable (no clip).
+    table = Table(data, colWidths=[34 * mm, 20 * mm, 24 * mm, 22 * mm, 60 * mm])
     table.setStyle(
         TableStyle(
             [
@@ -262,25 +266,38 @@ def _measurement_table(rows: list[tuple[str, Any]], styles: dict[str, ParagraphS
 
 
 class _SizedImage(Flowable):
-    """Image with explicit wrap size so 1×1 fixtures cannot explode layout."""
+    """Image with immutable preferred dimensions.
+
+    ReportLab may call ``wrap`` multiple times during reflow. Always recompute
+    the display size from the intended width/height so a tight first pass cannot
+    permanently shrink the image for later, roomier frames.
+    """
 
     def __init__(self, path: Path, width: float, height: float) -> None:
         super().__init__()
         self._path = path
-        self.drawWidth = width
-        self.drawHeight = height
+        self._intended_w = float(width)
+        self._intended_h = float(height)
+        self.drawWidth = self._intended_w
+        self.drawHeight = self._intended_h
 
-    def wrap(self, availWidth: float, availHeight: float) -> tuple[float, float]:  # noqa: N803
-        # Fit within available width while preserving intended aspect.
-        if availWidth and self.drawWidth > availWidth:
-            scale = availWidth / self.drawWidth
-            self.drawWidth = availWidth
-            self.drawHeight = self.drawHeight * scale
-        if availHeight and self.drawHeight > availHeight:
-            scale = availHeight / self.drawHeight
-            self.drawHeight = availHeight
-            self.drawWidth = self.drawWidth * scale
-        return self.drawWidth, self.drawHeight
+    @property
+    def intended_size(self) -> tuple[float, float]:
+        return self._intended_w, self._intended_h
+
+    def wrap(self, availWidth: float, availHeight: float) -> tuple[float, float]:
+        w, h = self._intended_w, self._intended_h
+        if availWidth and availWidth > 0 and w > availWidth:
+            scale = availWidth / w
+            w = availWidth
+            h = h * scale
+        if availHeight and availHeight > 0 and h > availHeight:
+            scale = availHeight / h
+            h = availHeight
+            w = w * scale
+        self.drawWidth = w
+        self.drawHeight = h
+        return w, h
 
     def draw(self) -> None:
         # Normalize to RGB via ImageReader so reportlab never chokes on odd PNG streams.
@@ -713,10 +730,43 @@ def _piece_sections(
                 )
             )
         detail_excl = _art_exclusion_note("detail_callouts")
-        if detail_art:
-            story.append(Paragraph("Garment detail illustrations", styles["h3"]))
-            # Use nearly full content width so detail sheets are legible (not tiny top-left).
-            story.append(_look_image(detail_art, 170 * mm, 145 * mm, styles))
+        detail_meta = (
+            arts.get("detail_callouts") if isinstance(arts.get("detail_callouts"), dict) else {}
+        )
+        detail_decision = evaluate_artifact_for_piece(
+            piece, kind="detail_callouts", artifact_meta=detail_meta
+        )
+        has_detail_meta = isinstance(arts.get("detail_callouts"), dict)
+        if detail_art or (has_detail_meta and detail_decision.get("include") and not detail_excl):
+            # Dedicated page so detail callouts stay readable (not tiny beside flats).
+            story.append(PageBreak())
+            story.append(Paragraph(f"Garment detail illustrations — {heading}", styles["h2"]))
+            if not detail_decision.get("manufacturing_evidence"):
+                story.append(
+                    Paragraph(
+                        "<b>UNVERIFIED DETAIL ART:</b> "
+                        + str(
+                            detail_decision.get("reason")
+                            or detail_meta.get("review_message")
+                            or "Visual content has not been independently confirmed. "
+                            "Artifact↔piece IDs and analysis text are not proof of correct image pixels. "
+                            "This illustration is reviewable but does not count as designer-approved "
+                            "manufacturing evidence."
+                        ),
+                        styles["warn"],
+                    )
+                )
+            if detail_art:
+                # Near full-page readable size on the dedicated detail sheet.
+                story.append(_look_image(detail_art, 175 * mm, 210 * mm, styles))
+            else:
+                story.append(
+                    Paragraph(
+                        "Detail artwork metadata is present but the stored image file is unavailable "
+                        "in this preview environment. Original bytes are preserved — not substituted.",
+                        styles["muted"],
+                    )
+                )
         elif detail_excl:
             story.append(Paragraph("Garment detail illustrations", styles["h3"]))
             story.append(
@@ -751,8 +801,15 @@ def _piece_sections(
             TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER")])
         )
         story.append(KeepTogether([flats]))
-        # Still surface excluded Professional detail sheets (original preserved, not substituted).
+        # Surface Professional detail decisions even when flats fell back to schematics
+        # (e.g. offline fixture without storage_key — still must show review state).
         detail_excl = _art_exclusion_note("detail_callouts")
+        detail_meta = (
+            arts.get("detail_callouts") if isinstance(arts.get("detail_callouts"), dict) else {}
+        )
+        detail_decision = evaluate_artifact_for_piece(
+            piece, kind="detail_callouts", artifact_meta=detail_meta
+        )
         if detail_excl:
             story.append(Paragraph("Garment detail illustrations", styles["h3"]))
             story.append(
@@ -762,6 +819,31 @@ def _piece_sections(
                     styles["warn"],
                 )
             )
+        elif isinstance(arts.get("detail_callouts"), dict) and detail_decision.get("include"):
+            story.append(PageBreak())
+            story.append(Paragraph(f"Garment detail illustrations — {heading}", styles["h2"]))
+            if not detail_decision.get("manufacturing_evidence"):
+                story.append(
+                    Paragraph(
+                        "<b>UNVERIFIED DETAIL ART:</b> "
+                        + str(
+                            detail_decision.get("reason")
+                            or "Visual content has not been independently confirmed. "
+                            "Artifact↔piece IDs and analysis text are not proof of correct image pixels."
+                        ),
+                        styles["warn"],
+                    )
+                )
+            if detail_art:
+                story.append(_look_image(detail_art, 175 * mm, 210 * mm, styles))
+            else:
+                story.append(
+                    Paragraph(
+                        "Detail artwork metadata is present but the stored image file is unavailable "
+                        "in this preview environment. Original bytes are preserved — not substituted.",
+                        styles["muted"],
+                    )
+                )
 
     story.append(PageBreak())
     story.append(Paragraph(f"Measurement specification — {heading}", styles["h2"]))
@@ -807,6 +889,8 @@ def _piece_sections(
     bom = piece.get("bom") if isinstance(piece.get("bom"), list) else []
     if not bom:
         bom = default_bom(cat, color_hint=color)
+    # Flag outfit-level color-list fabric names; never invent fiber composition.
+    bom = normalize_bom_rows(bom, piece=piece)
     bom_data = [
         [
             Paragraph("<b>Item</b>", styles["small"]),
@@ -819,22 +903,34 @@ def _piece_sections(
     for row in bom[:40]:
         if not isinstance(row, dict):
             continue
+        item_txt = str(row.get("item") or row.get("name") or "—")
+        notes_txt = str(row.get("notes") or "—")
+        if str(row.get("review_status") or "") == "needs_review":
+            item_txt = f"{item_txt} · NEEDS REVIEW"
+            if row.get("original_item"):
+                notes_txt = (
+                    f"Was: {str(row.get('original_item'))[:90]}. {notes_txt}"
+                ).strip()
         bom_data.append(
             [
-                Paragraph(str(row.get("item") or row.get("name") or "—"), styles["body"]),
+                Paragraph(item_txt, styles["body"]),
                 Paragraph(str(row.get("qty") or "—"), styles["body"]),
                 Paragraph(str(row.get("unit") or "—"), styles["muted"]),
                 Paragraph(_fmt_source(row), styles["muted"]),
-                Paragraph(str(row.get("notes") or "—"), styles["muted"]),
+                Paragraph(notes_txt, styles["muted"]),
             ]
         )
-    bom_table = Table(bom_data, colWidths=[48 * mm, 22 * mm, 18 * mm, 28 * mm, 44 * mm])
+    bom_table = Table(bom_data, colWidths=[48 * mm, 20 * mm, 16 * mm, 26 * mm, 50 * mm])
     bom_table.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
                 ("GRID", (0, 0), (-1, -1), 0.4, RULE),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]
         )
     )
@@ -883,30 +979,45 @@ def _piece_sections(
         cut = row.get("cut_qty")
         cut_txt = "—" if cut is None else str(cut)
         review = str(row.get("review_state") or row.get("source") or "—")
+        # Human-readable review labels (avoid mid-word clipping of long snake_case).
+        review_labels = {
+            "proposed_unverified": "Proposed · unverified",
+            "proposed": "Proposed",
+            "approved_template": "Approved template",
+            "needs_review": "Needs review",
+            "ai_suggested": "AI suggested",
+            "designer_confirmed": "Designer confirmed",
+        }
+        review_txt = review_labels.get(review.lower(), review.replace("_", " "))
         notes = str(row.get("notes") or "")
         name_txt = str(row.get("name") or "—")
         if notes:
             name_txt = f"{name_txt} — {notes[:80]}"
         pat_data.append(
             [
-                Paragraph(str(row.get("id") or "—"), styles["body"]),
-                Paragraph(name_txt, styles["body"]),
-                Paragraph(cut_txt, styles["body"]),
-                Paragraph(str(row.get("fabric") or "shell"), styles["muted"]),
+                Paragraph(str(row.get("id") or "—"), styles["small"]),
+                Paragraph(name_txt, styles["small"]),
+                Paragraph(cut_txt, styles["small"]),
+                Paragraph(str(row.get("fabric") or "shell"), styles["small"]),
                 Paragraph(
                     f"{row.get('grainline') or 'straight'} / {row.get('fold') or 'none'}",
-                    styles["muted"],
+                    styles["small"],
                 ),
-                Paragraph(review, styles["muted"]),
+                Paragraph(review_txt, styles["small"]),
             ]
         )
-    pat_table = Table(pat_data, colWidths=[18 * mm, 40 * mm, 14 * mm, 22 * mm, 50 * mm, 16 * mm])
+    # Wider review column so status text wraps cleanly (no mid-word clip).
+    pat_table = Table(pat_data, colWidths=[14 * mm, 40 * mm, 12 * mm, 18 * mm, 40 * mm, 36 * mm])
     pat_table.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
                 ("GRID", (0, 0), (-1, -1), 0.4, RULE),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]
         )
     )

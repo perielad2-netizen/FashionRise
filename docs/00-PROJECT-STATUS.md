@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**Manufacturing-ready tech pack foundation PR** · offline FR-3958 preview · **STOP for PM/owner review** · FE `69b83c01` / BE+worker **`7af9c809`** · Alembic `011` · **0 paid AI** · **not deployed**.)
+**Last updated:** 2026-10-28 (**PR #118 PM amendment — CHANGES REQUIRED addressed** · fail-closed readiness · private FR-3958 visual QA · **STOP for PM/owner acceptance** · FE `69b83c01` / BE+worker **`7af9c809`** · Alembic `011` · **0 paid AI** · **not deployed**.)
 
-**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged in production. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) / [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) live. Manufacturing-spec foundation is in review — **do not deploy or run paid AI until owner acceptance**.
+**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged in production. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) / [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) live. Manufacturing-spec foundation PR [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) amended after Technical PM **CHANGES REQUIRED** — **do not deploy or run paid AI until owner acceptance**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -23,17 +23,36 @@
 | Item | Detail |
 |---|---|
 | Trigger | FR-3958 (purple zip hoodie + yellow shorts) failed sample-development acceptance: implausible POMs, color-list “fabrics”, boolean closure, cross-garment detail sheet, readiness overstated by AI completion |
-| Branch / PR | `cursor/web-techpack-mfg-ready-77c6` · base deployed lineage `7af9c809` |
+| Branch / PR | `cursor/web-techpack-mfg-ready-77c6` · [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) · base deployed lineage `7af9c809` |
 | Production | **Unchanged** — FE `69b83c01` · BE+worker `7af9c809` · Alembic `011` · ceiling `$50` · **not deployed** |
 | Paid AI | **0** — offline fixtures + Mock paths only; existing FR-3958 / FR-D47D exports preserved |
 | P0 Measurement integrity | Category-aware POM bands + body-vs-finished ease checks; contradictions flagged **NEEDS REVIEW** (values not silently corrected); sample size required |
 | P0 Readiness levels | `DESIGN CONCEPT / DRAFT` · `SAMPLE-DEVELOPMENT READY` · `PRODUCTION APPROVED` (never auto). AI completion ≠ sample-ready |
 | P0 Artifact quality | Cross-garment detail rejection; originals preserved; corrected preview excludes mismatches (no substitution, no regen) |
 | P1 Materials / PDF | Color vs shell vs composition vs stretch/GSM; boolean closures normalized; larger detail sheets; no Piece A/B/C cutter rectangles; honest “no sewing pattern supplied” |
-| Offline evidence | Fixture `backend/tests/fixtures/fr_3958_manufacturing_spec.json` · preview `backend/artifacts/manufacturing_previews/FR-3958_manufacturing_preview.pdf` (11 pages; shorts detail **MISSING/EXCLUDED**) |
-| Tests | `test_techpack_manufacturing_ready.py` + V2 PDF fixtures + P0 reliability — **37 passed** |
+| Offline evidence | Fixture `backend/tests/fixtures/fr_3958_manufacturing_spec.json` · preview `backend/artifacts/manufacturing_previews/FR-3958_manufacturing_preview.pdf` |
+| Tests | `test_techpack_manufacturing_ready.py` + V2 PDF fixtures + P0 reliability |
 | Blockers for SAMPLE-READY on FR-3958 | Missing sample size; hoodie length 110 cm vs hip-length; shorts inseam 80 cm; waist 75 vs body 90 without stretch; zero-ease hip/chest with relaxed fit; shell/closure unconfirmed; shorts detail mismatch |
-| Exact next action | Technical PM + owner review offline FR-3958 preview and PR. **Do not deploy** and **do not authorize paid regen** until acceptance of manufacturing gates. |
+| Exact next action | Technical PM + owner acceptance of PR #118 amendment. **Do not deploy** and **do not authorize paid regen**. |
+
+## PR #118 PM amendment — CHANGES REQUIRED (2026-10-28) — STOP for acceptance
+
+Technical PM reviewed `bfaf4651` and required fail-closed readiness, conservative artwork review, PDF/BOM fixes, and **real** private FR-3958 visual verification (not 1×1 / artifact-ID-only).
+
+| Item | Detail |
+|---|---|
+| Parent review commit | `bfaf4651` |
+| Amendment branch / PR | `cursor/web-techpack-mfg-ready-77c6` · [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) |
+| Production | **Unchanged** — FE `69b83c01` · BE+worker `7af9c809` · Alembic `011` · ceiling `$50` · **no deploy** · **no migration** · **no historical export replacement** |
+| Paid AI | **0** |
+| Fail-closed readiness | `assess_manufacturing_readiness()` enforces category POMs + designer confirmation for finished measurements, fit/ease, materials, closures, construction, tolerances, conflict resolution. Checked QC checklist alone is **insufficient**. Never auto `PRODUCTION_APPROVED` |
+| Artwork policy | Unverified detail art remains reviewable (`include=True`) but `manufacturing_evidence=False`. Artifact↔piece IDs / analysis text are **not** pixel proof. Rejected shorts detail stays excluded; originals preserved |
+| PDF / BOM | `_SizedImage.wrap()` recomputes from immutable intended size; detail sheets on dedicated pages; BOM color-list rows → `Shell fabric — NOT CONFIRMED` (composition not invented); pattern review labels humanized |
+| Offline tests | Negative incomplete trousers + hoodie → `DESIGN_CONCEPT`; positive complete confirmed trousers → `SAMPLE_DEVELOPMENT_READY` + `production_approved=False`; unmarked wrong-garment detail stays unverified and blocks sample-ready |
+| Private visual QA | Real Magic `3958812c…` (1024×1536) + six stored artifacts from run `6b3bf6c3…`. Private PDF 14 pages rendered. Evidence under agent artifacts `fr-3958-mfg-private-qa/` (**not** committed to GitHub) |
+| Private QA results | Hoodie/shorts flats PASS · hoodie detail readable + UNVERIFIED banner PASS · rejected shorts detail excluded PASS · BOM NOT CONFIRMED PASS · measurement warnings PASS · readiness DESIGN CONCEPT PASS |
+| Known limitations | No automatic image-pixel garment classifier (conservative unverified state instead). Proposed backs remain unverified. FR-3958 still blocked for SAMPLE-READY until designer confirms POMs/materials/closures/construction/sample size |
+| Exact next action | **STOP** for Technical PM + owner acceptance of amendment SHA. Do not deploy. |
 
 ## OWNER ACCEPTANCE PASS — Measurements & Details (FE)
 
@@ -986,6 +1005,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-28 | **PR #118 PM amendment (CHANGES REQUIRED):** fail-closed SAMPLE-READY gates; conservative unverified detail art (no pixel trust); `_SizedImage` immutable wrap + BOM color-list normalization + dedicated detail pages; negative trousers/hoodie + positive complete + unmarked wrong-garment tests; private FR-3958 Magic+6-artifact visual QA (14 pages); production FE `69b83c01` / BE+worker `7af9c809` / Alembic `011` unchanged; **0 paid AI**; **STOP for PM/owner acceptance — no deploy**. |
+| 2026-10-28 | **Manufacturing-ready Sample-Development Tech Pack foundation** draft PR #118 @ `bfaf4651`: readiness levels, POM contradiction flags, artifact exclusion, offline FR-3958 preview; production unchanged; **0 paid AI**; Technical PM returned **CHANGES REQUIRED** (see amendment row above). |
 | 2026-10-27 | **Professional AI Technical Pack quality audit (docs only):** inspected real PDFs FR-7182 / FR-D47D / FR-CF5A vs Magic Looks; FR-3958 NOT EVALUABLE; offline pytest **20 passed**; decision **NEEDS IMPROVEMENT** (P0 multi-piece collapse + `approved_template` overclaim); deliverable `docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`; FE/BE/worker/Alembic **unchanged**; **0 paid AI**; **STOP for PM** — no fix/deploy. |
 | 2026-10-27 | **OWNER ACCEPTANCE PASS — Measurements & Details** on FE `69b83c01` (PR #114): idle editor, Done save, reopen persistence, Generate-not-stale-Download after edit with existing Professional PDF. Production lineage preserved (`732bda9f` / worker / Alembic `011`). |
 | 2026-10-27 | **PR #114 Done/save race FE LIVE** @ `69b83c01` (quiet autosave + PDF validity retained); BE `732bda9f` unchanged; **0 paid AI**. |
