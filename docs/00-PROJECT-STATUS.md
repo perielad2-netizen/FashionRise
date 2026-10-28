@@ -3,17 +3,17 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**FR-D47D historical PDF validity & reuse hotfix** · post-fix preflight **GO** for Download/reuse gates only · **0 paid AI**. Production FE `69b83c01` / BE+worker *(deploy SHA below)* / Alembic `011`.)
+**Last updated:** 2026-10-28 (**FR-D47D historical PDF validity & reuse hotfix deployed** · post-fix preflight **GO** for Download/reuse gates only · **0 paid AI**. Production FE `69b83c01` / BE+worker **`7af9c809`** / Alembic `011`.)
 
-**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) reliability accepted. Historical one-piece Download/reuse blockers for FR-D47D addressed by maintenance hotfix. **First live paid Professional validation still requires explicit owner authorization — GO preflight ≠ spend authorization.**
+**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) reliability accepted. Historical one-piece Download/reuse blockers for FR-D47D addressed by maintenance hotfix [#117](https://github.com/perielad2-netizen/FashionRise/pull/117). **First live paid Professional validation still requires explicit owner authorization — GO preflight ≠ spend authorization.**
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114). **OWNER ACCEPTANCE PASS — Measurements & Details.** |
-| Backend (FastAPI + PostgreSQL) | ***(hist-pdf-validity deploy SHA — see hotfix section)*** atop `0815433b` (PR #116). Prior **`270e87e2`** · P0 **`bae05c56`**. Alembic **`011`**. |
-| AI worker | `fashionrise-ai-worker` @ **same BE SHA** |
+| Backend (FastAPI + PostgreSQL) | **`7af9c809`** (PR #117 hist-pdf-validity) atop `0815433b` (PR #116). Prior **`270e87e2`** · P0 **`bae05c56`**. Alembic **`011`**. |
+| AI worker | `fashionrise-ai-worker` @ **`7af9c809`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. Recorded operator spend **`$4.55`** → remaining **`~$10.45`**. **This maintenance: $0 paid AI.** |
@@ -56,16 +56,18 @@ Preflight blockers (1)–(2) addressed by the historical-PDF validity maintenanc
 
 | Item | Detail |
 |---|---|
-| Branch / PR | `cursor/web-techpack-hist-pdf-validity-77c6` · maintenance PR (stack on PR #116 lineage `0815433b`) |
+| Branch / PR | [`#117`](https://github.com/perielad2-netizen/FashionRise/pull/117) · `cursor/web-techpack-hist-pdf-validity-77c6` · base PR #116 tip `0815433b` |
+| Commit / deploy | **`7af9c809`** · API + AI worker restarted · health OK |
 | Root causes (preflight NO-GO) | (A) Live 2-piece FR-D47D still had `dirty_since_generation=false` with 1-piece export as current Download. (B) Legacy completed run without fingerprints: `run_matches_draft_structure` returned **True** → unsafe `reused_completed`. (C) FE idempotency `one-tap-{draft}-r{rev}` could replay the stale completed run. |
 | Fix A | Authoritative `professional_pack_is_current_for_draft` + export `piece_count` contradiction; idempotent `reconcile_professional_export_validity` on GET draft / latest-run / enqueue |
 | Fix B | `run_matches_draft_structure` **fail-closed** without positive fingerprint/piece_ids; reuse requires current pack evidence; never clear dirty for legacy mismatch |
 | Fix C | Idempotency collision scopes a structure-bound key (`#s:{fp}`) for a new authorized intent; latest-run sets `pdf_ready=false` / `current_for_draft=false` while `historical_pdf_ready` remains |
-| Offline tests | MockProfessionalProvider · FR-D47D outdated reconcile · no write loop · legacy no-reuse · v2 reuse still works · collision → new queued intent · **$0** provider |
+| Offline tests | MockProfessionalProvider · `test_techpack_p0_reliability` + `pdf_ready_binding` **27 passed** · **$0** provider |
+| Production verify (FR-D47D `6bc071d3…`) | GET reconcile → `dirty_since_generation=true`, `outdated_export_id=cffdfb8a…`, revision still **1**; export file **7,585,753** bytes intact; legacy run `72d563cc…` completed / cost **165¢** unchanged; `run_matches_draft_structure=false`; latest-run `pdf_ready=false` / `current_for_draft=false` / `historical_pdf_ready=true`; **0** queued/running; second reconcile write **false** |
 | Migration | **None** — Alembic **`011`** |
 | Paid AI | **0** |
-| Backup / rollback | See deploy backup dir `techpack-hist-pdf-validity-deploy-*` · rollback → `0815433b` |
-| Post-fix preflight | **GO** for Download/reuse gates on FR-D47D (dirty=true, no stale reuse, historical PDF intact, no queued paid run). **Not** authorization to spend. |
+| Backup / rollback | `/var/backups/fashionrise/techpack-hist-pdf-validity-deploy-20261028T071542Z/` · `ROLLBACK.sh` → **`0815433b`** |
+| Post-fix preflight | **GO** for Download/reuse gates on FR-D47D. **Not** authorization to spend. |
 | Exact next owner action | Issue an **explicit single paid-run** authorization for FR-D47D if proceeding with the first live two-piece Professional validation; otherwise leave Generate idle. |
 
 ## Professional Tech Pack P0/P1 reliability — PR #116 (landed)
