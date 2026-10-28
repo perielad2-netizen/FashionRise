@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #123** review-guard closure @ **`e061aaea`** / code `74044c0f` · branch `cursor/web-techpack-pdf-qa-clean-77c6` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**. Separate issue #124 FE decimal + fidelity PRs in flight — not this deploy.)
+**Last updated:** 2026-10-28 (**Issue #124 BE fidelity on #123** — branch `cursor/web-techpack-fidelity-on-123-77c6` · base PR #123 tip `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · **0 paid AI** · **STOP for Technical PM**.)
 
-**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 closes review→PDF invalidation with fail-closed Professional/source-pack guards. **Do not deploy** until Technical PM accepts. Issue #124 (measurement decimals + FR-B9F9 closure/gradient fidelity) stays out of this PR.
+**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 review→PDF invalidation is preserved. This tip adds FR-B9F9 designer-spec fidelity gates (closure + gradient provenance) **on top of** #123. **Do not auto-regen paid FR-B9F9.** Prefer review exclusion + Update PDF (No AI) for existing mismatched details.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -18,7 +18,21 @@
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
-## PR #123 review-guard closure — STOP for Technical PM (2026-10-28)
+## Issue #124 — visual fidelity on #123 lineage — STOP for Technical PM (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Branch | `cursor/web-techpack-fidelity-on-123-77c6` (descendant of PR #123 tip `311e259a`) |
+| Trigger | FR-B9F9: structured jeans closure **buttons** but detail captions/drawings **FLY (ZIPPER)**; shirt **gradient** flattened toward hard split / `red` |
+| Contract | `techpack_spec_fidelity.py` — designer closure + `color_treatment` (gradient/block/stops/direction/provenance) injected into vision + flat + detail prompts; designer decisions override generic model defaults |
+| Deterministic gate | Caption/annotation text vs structured closure (e.g. buttons vs `FLY (ZIPPER)`), including mixed button+zipper captions → `proposed_unverified`, `manufacturing_evidence=False`. **Not pixel proof.** |
+| Color treatment | End-to-end studio fill gradient → `piece.color_treatment` with confirmed-vs-inferred provenance; flag simplification / two-tone evasion of structured gradients |
+| Existing paid FR-B9F9 | **No auto regen.** Owner artifact-review exclude mismatched details → Update PDF (No AI) may fix text/exclusion only — cannot repair wrong pixels |
+| #123 preserved | Review→PDF invalidation + fail-closed source-pack guards unchanged |
+| Migration | **None** — JSON spec/metadata only |
+| Deploy | **STOP** — do not deploy until Technical PM accepts |
+
+## PR #123 review-guard closure — preserved under this tip (2026-10-28)
 
 Technical PM reviewed clean PR #123 @ `43c8d376` → **HOLD — one focused P0 guard correction**. Prior invalidation/fingerprint/reviewer work stood; this tip closes the fail-closed source-pack guards.
 

@@ -990,8 +990,25 @@ def evaluate_artifact_for_piece(
     Does **not** inspect image pixels. Piece IDs and analysis text alone are not
     proof of correct visual content. Unverified detail art stays reviewable but
     never counts as designer-approved manufacturing evidence.
+
+    Deterministic caption/annotation contradictions vs structured designer
+    closures (e.g. buttons vs FLY (ZIPPER) text) force ``proposed_unverified``
+    and strip manufacturing evidence — still not a pixel proof.
     """
+    from app.services.techpack_spec_fidelity import (
+        apply_fidelity_gates_to_artifact_meta,
+        detect_closure_caption_mismatch,
+    )
+
     meta = dict(artifact_meta) if isinstance(artifact_meta, dict) else {}
+    ill = _as_dict(piece.get("illustrations"))
+    analysis = meta.get("analysis") if isinstance(meta.get("analysis"), dict) else None
+    if analysis is None:
+        analysis = ill.get("analysis") if isinstance(ill.get("analysis"), dict) else None
+    # Apply text-level fidelity gates before inclusion decisions.
+    meta = apply_fidelity_gates_to_artifact_meta(
+        piece, kind=str(kind), artifact_meta=meta, analysis=analysis
+    )
     review = str(meta.get("review_state") or "").strip().lower()
 
     if review in _REJECTED_ART:
@@ -1004,6 +1021,24 @@ def evaluate_artifact_for_piece(
                 or "Marked mismatched — excluded from corrected preview."
             ),
             "review_state": review,
+        }
+
+    closure_mismatch = detect_closure_caption_mismatch(
+        piece, artifact_meta=meta, analysis=analysis
+    )
+    if closure_mismatch or meta.get("fidelity_mismatches"):
+        reason = str(
+            (closure_mismatch or {}).get("message")
+            or meta.get("review_message")
+            or "Structured designer specification contradicts generated captions/annotations."
+        )
+        return {
+            "include": True,
+            "manufacturing_evidence": False,
+            "reason": reason,
+            "review_state": "proposed_unverified",
+            "fidelity_mismatches": meta.get("fidelity_mismatches")
+            or ([closure_mismatch] if closure_mismatch else []),
         }
 
     if review in _VISUAL_CONFIRMED or meta.get("designer_confirmed") is True:
@@ -1033,6 +1068,8 @@ def evaluate_artifact_for_piece(
 
 def apply_artifact_reviews(spec: dict[str, Any]) -> dict[str, Any]:
     """Annotate illustration artifacts with include/evidence decisions (non-destructive)."""
+    from app.services.techpack_spec_fidelity import apply_piece_fidelity_summary
+
     out = deepcopy(spec)
     outfit = _as_dict(out.get("outfit"))
     pieces_raw = _as_list(outfit.get("pieces"))
@@ -1041,19 +1078,28 @@ def apply_artifact_reviews(spec: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(piece, dict):
             pieces.append(piece)
             continue
-        piece_out = dict(piece)
+        piece_out = apply_piece_fidelity_summary(dict(piece))
         ill = _as_dict(piece_out.get("illustrations"))
         arts = _as_dict(ill.get("artifacts"))
+        analysis = ill.get("analysis") if isinstance(ill.get("analysis"), dict) else None
         for kind, meta in list(arts.items()):
             if not isinstance(meta, dict):
                 continue
-            decision = evaluate_artifact_for_piece(piece_out, kind=str(kind), artifact_meta=meta)
-            meta_out = dict(meta)
+            # Prefer piece analysis when artifact meta lacks nested analysis.
+            meta_in = dict(meta)
+            if analysis and not isinstance(meta_in.get("analysis"), dict):
+                meta_in["analysis"] = analysis
+            decision = evaluate_artifact_for_piece(
+                piece_out, kind=str(kind), artifact_meta=meta_in
+            )
+            meta_out = dict(meta_in)
             meta_out["preview_include"] = decision["include"]
             meta_out["manufacturing_evidence"] = bool(decision.get("manufacturing_evidence"))
             meta_out["review_state"] = decision["review_state"]
             if decision.get("reason"):
                 meta_out["review_message"] = decision["reason"]
+            if decision.get("fidelity_mismatches"):
+                meta_out["fidelity_mismatches"] = decision["fidelity_mismatches"]
             arts[str(kind)] = meta_out
         ill["artifacts"] = arts
         piece_out["illustrations"] = ill

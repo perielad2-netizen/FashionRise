@@ -510,8 +510,28 @@ def _persist_professional_result(
                     "neckline": analysis.get("neckline"),
                     "sleeves": analysis.get("sleeves"),
                     "fabric_pattern": analysis.get("fabric_pattern"),
+                    "closure_visible": analysis.get("closure_visible"),
+                    "colors": analysis.get("colors"),
+                    "analysis": {
+                        "closure_visible": analysis.get("closure_visible"),
+                        "distinctive_features": analysis.get("distinctive_features"),
+                        "construction_notes": analysis.get("construction_notes"),
+                        "colors": analysis.get("colors"),
+                    },
                 },
             )
+            # Deterministic caption/analysis vs designer-spec gates (not pixel proof).
+            from app.services.techpack_spec_fidelity import apply_fidelity_gates_to_artifact_meta
+
+            gated = apply_fidelity_gates_to_artifact_meta(
+                piece,
+                kind=str(kind),
+                artifact_meta=dict(row.metadata_ or {}),
+                analysis=analysis if isinstance(analysis, dict) else None,
+            )
+            row.metadata_ = gated
+            if gated.get("review_state"):
+                row.review_state = str(gated["review_state"])
             db.add(row)
             artifact_rows.append(row)
             artifact_reads.append(_artifact_read(row))
@@ -520,6 +540,9 @@ def _persist_professional_result(
                 "storage_key": key,
                 "url_path": f"/techpacks/artifacts/{art_id}/image",
                 "review_state": row.review_state,
+                "manufacturing_evidence": bool(gated.get("manufacturing_evidence", False)),
+                "fidelity_mismatches": gated.get("fidelity_mismatches") or [],
+                "review_message": gated.get("review_message"),
             }
         illust.update(
             {
