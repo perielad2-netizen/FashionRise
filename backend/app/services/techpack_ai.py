@@ -233,10 +233,25 @@ def _assert_professional_allowed(db: Session, user: User, *, estimate_cents: int
         raise ForbiddenError("Too many concurrent techpack AI runs — retry shortly")
 
 
+def _measurement_cell_empty(cell: Any) -> bool:
+    """True when a finished-measurement cell has no numeric/text value to preserve."""
+    if not isinstance(cell, dict):
+        return True
+    return cell.get("value") in (None, "")
+
+
 def _propose_finished_measurements(piece: dict[str, Any], body: dict[str, Any], fit: str) -> dict[str, Any]:
     units = "cm"
     category = str(piece.get("category") or "other")
+    # Start from the category POM skeleton, then overlay the entire existing dict so
+    # designer-entered keys never touched by set_calc (outseam/thigh/waistband/…)
+    # are not silently dropped during Professional / heuristic enrichment.
     finished = empty_finished_measurements(category, units)
+    prev_raw = piece.get("finished_measurements")
+    prev_all: dict[str, Any] = prev_raw if isinstance(prev_raw, dict) else {}
+    for key, cell in prev_all.items():
+        if isinstance(cell, dict):
+            finished[key] = dict(cell)
     ease = {"slim": 2, "fitted": 3, "regular": 4, "relaxed": 6, "oversized": 10}.get(fit, 4)
 
     def body_val(key: str) -> float | None:
@@ -254,9 +269,9 @@ def _propose_finished_measurements(piece: dict[str, Any], body: dict[str, Any], 
     def set_calc(key: str, value: float | None, assumptions: list[str]) -> None:
         if key not in finished:
             return
-        prev = piece.get("finished_measurements", {}).get(key) if isinstance(piece.get("finished_measurements"), dict) else None
-        if isinstance(prev, dict) and prev.get("source") == "designer" and prev.get("value") not in (None, ""):
-            finished[key] = prev
+        # Never overwrite or remove a nonempty measurement (designer or otherwise).
+        # Proposals apply only to genuinely empty fields.
+        if not _measurement_cell_empty(finished.get(key)):
             return
         if value is None:
             finished[key] = {

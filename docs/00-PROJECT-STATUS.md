@@ -3,20 +3,33 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #123** review-guard closure @ **`e061aaea`** / code `74044c0f` · branch `cursor/web-techpack-pdf-qa-clean-77c6` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE+worker `005034d5` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP for Technical PM acceptance**. Separate issue #124 FE decimal + fidelity PRs in flight — not this deploy.)
+**Last updated:** 2026-10-28 (**Issue #128 P0 measurement data-loss correction** — code from deployed BE `311e259a` · branch `cursor/web-techpack-meas-preserve-77c6` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 remains HOLD** · **STOP for Technical PM acceptance**.)
 
-**Phase:** Protected family beta. PDF-only Update PDF (No AI) is live. PR #123 closes review→PDF invalidation with fail-closed Professional/source-pack guards. **Do not deploy** until Technical PM accepts. Issue #124 (measurement decimals + FR-B9F9 closure/gradient fidelity) stays out of this PR.
+**Phase:** Protected family beta. Issue #128 fixes Professional/heuristic enrichment dropping designer finished POMs (outseam/thigh/waistband). No restore of FR-3958 values without owner authorization.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`13b26c3a-apifix`** — Nginx `current` → `releases/13b26c3a-apifix` (PR #120 tip + `VITE_API_BASE_URL=/api/v1` rebuild). Prior broken `13b26c3a` release preserved; rollback `69b83c01`. |
-| Backend (FastAPI + PostgreSQL) | **`005034d5`** (PR #119 tip — provenance gate + docs). Alembic **`011`**. |
-| AI worker | `fashionrise-ai-worker` @ **`005034d5`** |
+| Frontend (`web-ui`) | **`bfbdd03f-decimal`** — PR #126 tip + `/api/v1`. UI App pill may still show `b2fbd043` (bake-time `VITE_BUILD_SHA`); assets are decimal build. |
+| Backend (FastAPI + PostgreSQL) | **`311e259a`** (PR #123). Alembic **`011`**. |
+| AI worker | `fashionrise-ai-worker` @ **`311e259a`** lineage / prior pin as deployed |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+## Issue #128 — measurement data-loss correction — STOP (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Branch / base | `cursor/web-techpack-meas-preserve-77c6` from deployed BE **`311e259a`** |
+| Trigger | FR-3958 shorts: designer outseam / thigh / waistband missing after Professional generation |
+| Root cause | `_persist_professional_result` → `enrich_spec_heuristic` → `_propose_finished_measurements` rebuilds from `empty_finished_measurements()` and only copies prior cells inside `set_calc` keys. Shorts POMs **outseam / thigh / waistband** are never passed to `set_calc`, so nonempty designer cells were replaced with empty shells. |
+| Fix | Overlay **entire** existing `finished_measurements` dict before proposals; propose only when `value` is genuinely empty; preserve unit/source/review/note/definition. Autofill category-swap also keeps nonempty POM cells. |
+| Other paths | Manufacturing annotate / PDF assembly read-only on cells (no wipe). AI run request stores fingerprints only (no pre-spec snapshot). Concurrent draft updates still replace `draft.spec` wholesale after enrich — fixed enrich removes the wipe. |
+| FR-3958 forensics (read-only) | Live + post-gen backups (mfg 10:04Z, noai 12:49Z, pdf-qa 17:53Z) and PDFs r1–r3 all show outseam/thigh/waistband **Empty**. No pre-Professional (08:11Z) full draft dump found. Export metadata has no FM values. **Not recoverable from available artifacts — do not invent; restore only with explicit owner authorization.** |
+| Tests | `test_techpack_meas_preserve` (shorts all POMs + reopen + empty-only propose + autofill category swap) + related autofill/v2/provenance **19 passed**. Pre-existing ruff findings on `techpack_ai.py` unchanged. |
+| Safety | **No deploy · no migration · no paid AI · no customer-data write · no historical PDF rewrite · #125 HOLD** |
 
 ## PR #123 review-guard closure — STOP for Technical PM (2026-10-28)
 
