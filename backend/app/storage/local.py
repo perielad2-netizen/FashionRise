@@ -64,6 +64,12 @@ class LocalStorageBackend:
         if path.is_file():
             path.unlink()
 
+    def delete_private_techpack_file(self, *, key: str) -> None:
+        """Best-effort remove of an uncommitted / orphaned private tech-pack PDF."""
+        path = self.resolve_private_techpack_file(key=key)
+        if path is not None and path.is_file():
+            path.unlink()
+
     def key_from_public_url(self, url: str | None) -> str | None:
         """Map a stored public upload URL back to a storage key (no network)."""
         if not url or not isinstance(url, str):

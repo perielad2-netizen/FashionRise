@@ -872,6 +872,7 @@ def enqueue_generate_one_tap_professional(
     if not idempotency_key or len(idempotency_key) < 8:
         raise ValidationAppError("idempotency_key required")
 
+    from app.services.techpack_service import reconcile_professional_export_validity
     from app.services.techpack_structure import (
         list_outfit_pieces,
         plan_professional_image_kinds,
@@ -879,7 +880,6 @@ def enqueue_generate_one_tap_professional(
         professional_pack_is_current_for_draft,
         scoped_idempotency_key,
     )
-    from app.services.techpack_service import reconcile_professional_export_validity
 
     # Resolve/validate outfit BEFORE spend gates or queue insert (fail closed, $0).
     # Also reconcile outdated historical Download so reuse cannot clear a stale pack.
@@ -1120,6 +1120,9 @@ def enqueue_generate_one_tap_professional(
             "piece_ids": structure_meta["piece_ids"],
             "piece_count": structure_meta["piece_count"],
             "draft_revision": structure_meta["draft_revision"],
+            # Immutable Magic-source snapshot for later PDF-only compatibility checks.
+            "front_job_id": str(draft.front_job_id) if draft.front_job_id else None,
+            "back_job_id": str(draft.back_job_id) if draft.back_job_id else None,
             "progress": {
                 "phase": "preparing",
                 "message": "Preparing your design",
@@ -1801,6 +1804,8 @@ def run_generate(
             "piece_ids": structure_meta.get("piece_ids"),
             "piece_count": structure_meta.get("piece_count") or len(pieces),
             "draft_revision": int(draft.revision or 1),
+            "front_job_id": str(draft.front_job_id) if draft.front_job_id else None,
+            "back_job_id": str(draft.back_job_id) if draft.back_job_id else None,
             "progress": {
                 "phase": "preparing",
                 "message": "Preparing your design",

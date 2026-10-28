@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**Completed-look UX + Update PDF (No AI)** — implementation ready for PM review · **NOT DEPLOYED** · prod FE `69b83c01` / BE+worker `2c8cb88e` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP**.)
+**Last updated:** 2026-10-28 (**PR #119/#120 cross-layer safety amendments** — CHANGES REQUIRED closure ready for PM re-review · **HOLD / NOT DEPLOYED** · prod FE `69b83c01` / BE+worker `2c8cb88e` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP**.)
 
-**Phase:** Protected family beta. Production still **Generate AI PDF → Wait → Download PDF** on FE `69b83c01` + BE `2c8cb88e` (PR #118 manufacturing). Draft PRs add non-blocking completed-look editing + PDF-only refresh without paid AI — **awaiting Technical PM review before deploy**.
+**Phase:** Protected family beta. Production still **Generate AI PDF → Wait → Download PDF** on FE `69b83c01` + BE `2c8cb88e` (PR #118 manufacturing). Draft PRs #119/#120 remain on **HOLD** after Technical PM CHANGES REQUIRED; safety amendments below await acceptance.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -18,23 +18,24 @@
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
-## Completed-look UX + Update PDF (No AI) — STOP for PM review (2026-10-28)
+## Completed-look UX + Update PDF (No AI) — safety amendments STOP for PM (2026-10-28)
 
-Owner smoke after PR #118 deploy: historical Download OK; AI correctly skipped for completed designs; **FAIL** — reopening a completed look auto-opened the full-screen ready overlay (Download / Back to My Looks only), blocking **Edit measurements & details**.
+Technical PM: **CHANGES REQUIRED / HOLD** on PR #119 (`978719a3`) + PR #120 (`3ca3b4ff`). Cross-layer safety amendments implemented; both PRs remain **not deployable** until acceptance.
 
 | Item | Detail |
 |---|---|
-| FE branch / tip | `cursor/web-techpack-noai-pdf-fe-77c6` @ **`3ca3b4ff`** (from prod FE `69b83c01`) |
-| BE branch / tip | `cursor/web-techpack-noai-pdf-be-77c6` @ **`978719a3`** (from manufacturing / prod BE `2c8cb88e` lineage) |
+| FE branch / tip | `cursor/web-techpack-noai-pdf-fe-77c6` — **5-file** delta from prod lineage `69b83c01` / base `cursor/web-techpack-autosave-quiet-77c6` (retargeted off bloated `main` scope). Tip SHA filled after push. |
+| BE branch / tip | `cursor/web-techpack-noai-pdf-be-77c6` — amendment on `978719a3` lineage. Tip SHA filled after push. |
 | Production | **Unchanged** — do **not** deploy until PM acceptance |
-| Paid AI | **0** in implementation/tests (MockProfessionalProvider / no provider in PDF-only path) |
-| A — Overlay UX | Completed Professional reopen binds Download on the normal Create Real Design screen; **no auto-open** ready overlay. Queued/running progress overlay unchanged. Ready overlay (post-generate) gains **Continue Editing**. Edit always reachable. |
-| B — Spec edit | Measurements & details open after completion; saves mark `dirty_since_generation` + `outdated_export_id`; illustrations preserved; no automatic AI |
-| C — Update PDF (No AI) | `POST /techpacks/{id}/export` with `{"mode":"pdf_only_update"}` regenerates PDF from saved spec + persisted Professional artwork; new versioned export; historical PDFs + run/cost metadata preserved; binds current only after success; content fingerprint idempotency; garment/source identity fail-closed; `ensure_professional_pdf_for_run` will not clobber a newer PDF-only current |
-| D — FE CTAs | Current → **Download PDF** + Edit. Outdated + compatible illustrations → **Update PDF (No AI)** (+ separate paid Generate). Paid Generate remains explicit |
-| Tests | BE: `test_techpack_pdf_only_update` + manufacturing/V2/P0/pdf-ready (**53 passed**). FE: TechpackScreen suites (**68+ passed**). FE `tsc` + prod build (`VITE_API_BASE_URL=/api/v1`) OK |
-| Limitations | PDF-only requires compatible Professional illustrations + structure match. Identity drift forces paid Generate. Manufacturing readiness still fail-closed (FR-3958 stays DESIGN CONCEPT until issues resolved). No Nginx route change (reuses `/export`) |
-| Exact next action | Technical PM review of FE+BE PRs. **Do not deploy.** After accept: deploy BE+worker then FE release; smoke completed-look Edit + Update PDF (No AI) on a non-critical draft. Rollback → `2c8cb88e` / `69b83c01`. |
+| Paid AI | **0** — MockProfessionalProvider / PDF-only path makes **zero** provider calls; no new paid AI run row |
+| P0 Current PDF wins | FE completed-run recovery no longer clobbers `draft.spec.ai.export_id` with historical run export. Both async orderings covered: hydrate-B-then-run-A and run-A-then-hydrate-B → Download serves PDF B |
+| P0 Magic-source identity | Compatibility uses `run.request` front/back stamps when present; else original Professional **export metadata**; legacy unknown provenance **fail-closed**. New enqueue stamps `front_job_id`/`back_job_id`. Tests: front change, back change, absent front, category change, legacy, export-meta path |
+| P0 Concurrent / revision | Draft `SELECT FOR UPDATE` + revision/fingerprint CAS around assembly; identical races converge on one PDF-only export; edit-during-assembly → 409 without binding stale PDF; failed bind cleans orphan private PDF; historical files preserved |
+| P1 Honest cost | PDF-only metadata: `assembly_cost_usd_cents=0`, `actual_cost_usd_cents=0`, `paid_sections=[]`, `new_paid_ai_run=false`; source-run cost kept as `source_run_cost_usd_cents` / `source_run_paid_sections` |
+| A–D product path | Unchanged intent: completed reopen editable; **Update PDF (No AI)** vs paid Generate; historical PDFs + AI illustrations preserved; `ensure_professional_pdf_for_run` will not clobber newer PDF-only current |
+| Tests | BE: pdf-only + manufacturing + P0 + V2 fixtures + pdf-ready (**63 passed**). FE TechpackScreen suites (**71 passed**). Ruff clean on amended BE files. FE `tsc` + oxlint + prod build (`VITE_API_BASE_URL=/api/v1`) OK |
+| Blocked | Deploy / merge / paid AI / migrations / historical PDF rewrite / spending-limit change. FE must **not** blind-merge into tip-of-`main` (unrelated Studio). |
+| Exact next action | Technical PM re-review of amended #119+#120. **Do not deploy.** After accept: deploy BE+worker then FE 5-file release from verified SHA; smoke Edit → Update PDF (No AI) → Reopen → Download B. Rollback → `2c8cb88e` / `69b83c01`. |
 
 ## PR #118 controlled deployment (2026-10-28) — STOP
 

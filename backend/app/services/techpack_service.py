@@ -15,7 +15,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import ForbiddenError, NotFoundError, ValidationAppError
+from app.core.errors import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationAppError,
+)
 from app.models.techpack_draft import TechpackDraft, TechpackExport
 from app.models.user import User
 from app.schemas.techpack import (
@@ -578,8 +583,71 @@ def _pdf_only_content_fingerprint(
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def _norm_job_id(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def resolve_authorized_magic_source_ids(
+    db: Session,
+    user: User,
+    draft: TechpackDraft,
+    run: Any,
+) -> tuple[str | None, str | None, str]:
+    """Resolve authorized Magic front/back job ids for PDF-only compatibility.
+
+    Preference order:
+    1. Immutable snapshot stamped on ``run.request`` (future / newly enqueued runs).
+    2. Original Professional export metadata for that run (trusted paid-assembly stamp).
+    3. ``missing`` — caller must fail closed (legacy / incomplete provenance).
+    """
+    req = run.request if isinstance(getattr(run, "request", None), dict) else {}
+    req_front = _norm_job_id(req.get("front_job_id"))
+    req_back = _norm_job_id(req.get("back_job_id"))
+    # Only trust request stamps when at least one side was explicitly recorded.
+    # Absent keys on legacy constructors must NOT silently authorize any draft.
+    if "front_job_id" in req or "back_job_id" in req:
+        return req_front, req_back, "request"
+
+    want = str(run.id)
+    rows = list(
+        db.scalars(
+            select(TechpackExport)
+            .where(TechpackExport.draft_id == draft.id, TechpackExport.user_id == user.id)
+            .order_by(TechpackExport.created_at.asc())
+        ).all()
+    )
+    fallback_front: str | None = None
+    fallback_back: str | None = None
+    saw_matching_export = False
+    for row in rows:
+        meta = row.metadata_ if isinstance(row.metadata_, dict) else {}
+        if not bool(meta.get("is_professional")):
+            continue
+        run_ref = _norm_job_id(meta.get("ai_run_id")) or _norm_job_id(meta.get("source_ai_run_id"))
+        if run_ref != want:
+            continue
+        saw_matching_export = True
+        front = _norm_job_id(meta.get("front_job_id"))
+        back = _norm_job_id(meta.get("back_job_id"))
+        # Prefer the original paid Professional assembly over later PDF-only rows.
+        if not bool(meta.get("pdf_only_update")) and (front is not None or back is not None):
+            return front, back, "export_meta"
+        if fallback_front is None and fallback_back is None and (front is not None or back is not None):
+            fallback_front, fallback_back = front, back
+    if fallback_front is not None or fallback_back is not None:
+        return fallback_front, fallback_back, "export_meta"
+    if saw_matching_export:
+        # Matching Professional export exists but carries no Magic source ids — legacy unknown.
+        return None, None, "missing"
+    return None, None, "missing"
+
+
 def assess_pdf_only_update_compatibility(
-    db: Session, draft: TechpackDraft
+    db: Session,
+    draft: TechpackDraft,
+    *,
+    user: User | None = None,
 ) -> tuple[bool, list[str], Any | None]:
     """Return (ok, blocking_reasons, source_run) for a no-AI PDF refresh.
 
@@ -593,6 +661,13 @@ def assess_pdf_only_update_compatibility(
     )
 
     reasons: list[str] = []
+    owner = user
+    if owner is None:
+        owner = db.get(User, draft.user_id)
+    if owner is None:
+        reasons.append("Draft owner is missing; cannot authorize a PDF-only update.")
+        return False, reasons, None
+
     spec = draft.spec if isinstance(draft.spec, dict) else {}
     ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
     pieces = list_outfit_pieces(spec)
@@ -617,19 +692,60 @@ def assess_pdf_only_update_compatibility(
     if not run_matches_draft_structure(req, pieces):
         reasons.append(
             "Garment identity changed since the Professional illustrations were created "
-            "(piece count or piece IDs no longer match). "
+            "(piece count, piece IDs, or category no longer match). "
             "Review garments and Generate AI PDF to refresh illustrations — "
             "old artwork will not be reused silently."
         )
         return False, reasons, run
-    # Source Magic look must still match the authorized run when stamped.
-    auth_front = str(req.get("front_job_id") or "").strip()
-    if auth_front and draft.front_job_id and str(draft.front_job_id) != auth_front:
+
+    auth_front, auth_back, provenance = resolve_authorized_magic_source_ids(
+        db, owner, draft, run
+    )
+    if provenance == "missing":
         reasons.append(
-            "The Magic look front image changed since Professional generation. "
-            "Generate AI PDF to create illustrations for the new look."
+            "Original Magic source identity for this Professional pack is unknown "
+            "(legacy run without trusted export provenance). "
+            "Generate AI PDF again before using Update PDF (No AI)."
         )
         return False, reasons, run
+
+    draft_front = _norm_job_id(draft.front_job_id)
+    draft_back = _norm_job_id(draft.back_job_id)
+    if auth_front != draft_front:
+        if auth_front and not draft_front:
+            reasons.append(
+                "The Magic look front image is missing. "
+                "Restore the original look or Generate AI PDF for the new source."
+            )
+        elif not auth_front and draft_front:
+            reasons.append(
+                "A Magic look front image was added after Professional generation. "
+                "Generate AI PDF to create illustrations for the new look."
+            )
+        else:
+            reasons.append(
+                "The Magic look front image changed since Professional generation. "
+                "Generate AI PDF to create illustrations for the new look."
+            )
+        return False, reasons, run
+    if auth_back != draft_back:
+        if auth_back and not draft_back:
+            reasons.append(
+                "The Magic look back image is missing. "
+                "Restore the original look or Generate AI PDF for the new source."
+            )
+        elif not auth_back and draft_back:
+            reasons.append(
+                "A Magic look back image was added after Professional generation. "
+                "Generate AI PDF to create illustrations for the new look."
+            )
+        else:
+            reasons.append(
+                "The Magic look back image changed since Professional generation. "
+                "Generate AI PDF to create illustrations for the new look."
+            )
+        return False, reasons, run
+
     missing_front: list[str] = []
     for piece in pieces:
         pid = piece_id_safe(piece) or "(unnamed)"
@@ -652,7 +768,12 @@ def assess_pdf_only_update_compatibility(
 
 
 def find_export_by_pdf_only_fingerprint(
-    db: Session, user: User, *, draft_id: uuid.UUID, fingerprint: str
+    db: Session,
+    user: User,
+    *,
+    draft_id: uuid.UUID,
+    fingerprint: str,
+    revision: int | None = None,
 ) -> TechpackExport | None:
     if not fingerprint:
         return None
@@ -665,12 +786,16 @@ def find_export_by_pdf_only_fingerprint(
     )
     for row in rows:
         meta = row.metadata_ if isinstance(row.metadata_, dict) else {}
-        if (
-            bool(meta.get("pdf_only_update"))
-            and str(meta.get("pdf_only_fingerprint") or "") == fingerprint
-            and int(meta.get("draft_revision") or -1) == int(row.revision or -2)
-        ):
-            return row
+        if not bool(meta.get("pdf_only_update")):
+            continue
+        if str(meta.get("pdf_only_fingerprint") or "") != fingerprint:
+            continue
+        row_rev = int(meta.get("draft_revision") or row.revision or -2)
+        if revision is not None and row_rev != int(revision):
+            continue
+        if revision is None and row_rev != int(row.revision or -2):
+            continue
+        return row
     return None
 
 
@@ -681,6 +806,7 @@ def _bind_current_professional_export(
     export: TechpackExport,
     source_run_id: str | None,
     prior_export_id: str | None,
+    commit: bool = True,
 ) -> TechpackDraft:
     """Mark *export* as the current Download without creating a paid AI run."""
     from sqlalchemy.orm.attributes import flag_modified
@@ -700,9 +826,28 @@ def _bind_current_professional_export(
     draft.updated_at = datetime.now(UTC)
     flag_modified(draft, "spec")
     db.add(draft)
-    db.commit()
-    db.refresh(draft)
+    if commit:
+        db.commit()
+        db.refresh(draft)
     return draft
+
+
+def _lock_owned_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraft:
+    draft = db.scalars(
+        select(TechpackDraft)
+        .where(TechpackDraft.id == draft_id, TechpackDraft.user_id == user.id)
+        .with_for_update()
+    ).one_or_none()
+    if draft is None:
+        raise NotFoundError("Techpack draft not found")
+    return draft
+
+
+def _cleanup_orphan_pdf(storage: LocalStorageBackend, storage_key: str) -> None:
+    try:
+        storage.delete_private_techpack_file(key=storage_key)
+    except OSError:  # pragma: no cover — best-effort cleanup
+        pass
 
 
 def export_pdf_only_update(
@@ -717,38 +862,47 @@ def export_pdf_only_update(
     Creates a NEW versioned export when content changed. Preserves historical PDFs and
     the original Professional run/cost metadata. Binds the new export as current only
     after successful assembly. Idempotent for identical revision-bound content.
+    Concurrent identical requests serialize on the draft row and converge on one export.
     """
-    draft = _owned_draft(db, user, draft_id)
-    ok, reasons, source_run = assess_pdf_only_update_compatibility(db, draft)
+    # Serialize PDF-only decisions for this draft (duplicate posts + bind CAS).
+    draft = _lock_owned_draft(db, user, draft_id)
+    ok, reasons, source_run = assess_pdf_only_update_compatibility(db, draft, user=user)
     if not ok:
+        # Do not session.rollback() here — shared test transactions and later
+        # request work on the same Session must keep prior committed rows.
         raise ValidationAppError(" ".join(reasons) or "PDF-only update is not available for this draft.")
 
+    revision_snapshot = int(draft.revision or 1)
     render_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
     outfit = render_spec.get("outfit") if isinstance(render_spec.get("outfit"), dict) else {}
     raw_pieces = outfit.get("pieces") if isinstance(outfit.get("pieces"), list) else []
     pieces: list[dict[str, Any]] = [p for p in raw_pieces if isinstance(p, dict)]
     fingerprint = _pdf_only_content_fingerprint(draft=draft, render_spec=render_spec, pieces=pieces)
 
-    # Idempotency: reuse an existing identical PDF-only export and rebind as current.
-    existing = find_export_by_pdf_only_fingerprint(
-        db, user, draft_id=draft.id, fingerprint=fingerprint
-    )
-    prior_export_id = None
     ai = render_spec.get("ai") if isinstance(render_spec.get("ai"), dict) else {}
     prior_export_id = str(ai.get("export_id") or "").strip() or None
+    source_run_id = str(source_run.id) if source_run is not None else None
+
+    # Idempotency: reuse an existing identical PDF-only export and rebind as current.
+    existing = find_export_by_pdf_only_fingerprint(
+        db, user, draft_id=draft.id, fingerprint=fingerprint, revision=revision_snapshot
+    )
     if existing is not None:
         if prior_export_id != str(existing.id) or bool(ai.get("dirty_since_generation")):
             _bind_current_professional_export(
                 db,
                 draft,
                 export=existing,
-                source_run_id=str(source_run.id) if source_run is not None else None,
+                source_run_id=source_run_id,
                 prior_export_id=prior_export_id,
+                commit=True,
             )
+        else:
+            db.commit()
         return _export_read(existing)
 
-    # Client-supplied idempotency key (optional): collapse concurrent identical posts.
-    _ = idempotency_key  # reserved for future durable request ledger; fingerprint is authoritative
+    # Fingerprint is authoritative; client idempotency_key collapses only via that content key.
+    _ = idempotency_key
 
     storage = LocalStorageBackend()
     front_path = _resolve_job_image(storage, draft.front_job_id, db)
@@ -757,8 +911,6 @@ def export_pdf_only_update(
         raise ValidationAppError("Cannot export PDF without at least one Magic look image")
 
     provenance = resolve_generation_provenance(render_spec)
-    source_run_id = str(source_run.id) if source_run is not None else None
-    # Force Professional provenance from the existing paid run — do not claim a new paid run.
     provenance = {
         **provenance,
         "mode": "professional",
@@ -766,82 +918,170 @@ def export_pdf_only_update(
         "is_professional": True,
         "run_id": source_run_id or provenance.get("run_id") or "",
     }
-    # Inherit recorded cost from the source run / draft AI block (historical attribution).
-    recorded_cents = int(ai.get("actual_cost_usd_cents") or 0)
+    # Historical source-run cost stays attributed to the paid run — not this $0 assembly.
+    source_run_cents = 0
     if source_run is not None:
-        recorded_cents = int(source_run.cost_usd_cents or recorded_cents or 0)
+        source_run_cents = int(source_run.cost_usd_cents or 0)
+    if not source_run_cents:
+        source_run_cents = int(ai.get("actual_cost_usd_cents") or 0)
+    source_paid_sections = list(
+        ai.get("paid_sections") or provenance.get("paid_sections") or []
+    )
+
+    # Snapshot fields needed after we release the row lock for slow PDF render.
+    title = draft.title
+    style_code = draft.style_code
+    look_id = draft.look_id
+    front_job_id = draft.front_job_id
+    back_job_id = draft.back_job_id
+    db.commit()  # release FOR UPDATE during render; re-lock + CAS before bind
 
     pdf_bytes, page_count = build_techpack_pdf(
-        title=draft.title,
-        style_code=draft.style_code,
-        revision=int(draft.revision or 1),
+        title=title,
+        style_code=style_code,
+        revision=revision_snapshot,
         status="DRAFT",
         verification="UNVERIFIED",
-        look_id=str(draft.look_id),
+        look_id=str(look_id),
         front_image=front_path,
         back_image=back_path,
         spec=render_spec,
     )
     export_id = uuid.uuid4()
-    filename = f"{draft.style_code}_r{draft.revision}_techpack.pdf".replace("/", "-")
-    storage_key = f"{user.id.hex}/{draft.id.hex}/{export_id.hex}.pdf"
-    storage.save_private_techpack_file(
-        key=storage_key,
-        data=io.BytesIO(pdf_bytes),
-        content_type="application/pdf",
-    )
-    row = TechpackExport(
-        id=export_id,
-        draft_id=draft.id,
-        user_id=user.id,
-        storage_key=storage_key,
-        filename=filename,
-        byte_size=len(pdf_bytes),
-        page_count=page_count,
-        revision=int(draft.revision or 1),
-        status="DRAFT",
-        verification="UNVERIFIED",
-        metadata_={
-            "look_id": str(draft.look_id),
-            "front_job_id": str(draft.front_job_id) if draft.front_job_id else None,
-            "back_job_id": str(draft.back_job_id) if draft.back_job_id else None,
-            "front_image_present": front_path is not None,
-            "back_image_present": back_path is not None,
-            "height_rows": 1,
-            "schema_version": str(render_spec.get("schema_version") or "2.0"),
-            "piece_count": len(pieces),
-            "cutting_uses_schematics": True,
-            "cutting_reuses_magic_looks": False,
-            "magic_looks_on_cover_overview_only": True,
-            "generation_mode": "professional",
-            "generation_label": "AI Professional",
-            "is_professional": True,
-            # Provenance of illustrations — NOT a new paid AI run id for billing.
-            "ai_run_id": source_run_id,
-            "source_ai_run_id": source_run_id,
-            "pdf_only_update": True,
-            "pdf_only_fingerprint": fingerprint,
-            "new_paid_ai_run": False,
-            "vision_model": provenance.get("vision_model") or ai.get("vision_model"),
-            "image_model": provenance.get("image_model") or ai.get("image_model"),
-            "budget_recorded_usd_cents": recorded_cents,
-            "actual_cost_usd_cents": recorded_cents,
-            "paid_sections": list(ai.get("paid_sections") or provenance.get("paid_sections") or []),
-            "draft_revision": int(draft.revision or 1),
-        },
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
+    filename = f"{style_code}_r{revision_snapshot}_techpack.pdf".replace("/", "-")
+    storage_key = f"{user.id.hex}/{draft_id.hex}/{export_id.hex}.pdf"
+    wrote_pdf = False
+    try:
+        storage.save_private_techpack_file(
+            key=storage_key,
+            data=io.BytesIO(pdf_bytes),
+            content_type="application/pdf",
+        )
+        wrote_pdf = True
 
-    # Bind as current only after the export row + file succeeded.
-    _bind_current_professional_export(
-        db,
-        draft,
-        export=row,
-        source_run_id=source_run_id,
-        prior_export_id=prior_export_id,
-    )
+        # Re-lock and CAS: refuse to bind a stale-revision export over newer saved specs.
+        draft = _lock_owned_draft(db, user, draft_id)
+        live_revision = int(draft.revision or 1)
+        if live_revision != revision_snapshot:
+            raise ConflictError(
+                "Draft was edited during PDF assembly. Save settled — retry Update PDF (No AI).",
+                payload={
+                    "reason": "draft_revision_changed",
+                    "expected_revision": revision_snapshot,
+                    "current_revision": live_revision,
+                },
+            )
+        # Re-validate identity under the lock (Magic source / garment may have drifted).
+        ok2, reasons2, source_run2 = assess_pdf_only_update_compatibility(
+            db, draft, user=user
+        )
+        if not ok2:
+            raise ValidationAppError(
+                " ".join(reasons2) or "PDF-only update is not available for this draft."
+            )
+        source_run_id = str(source_run2.id) if source_run2 is not None else source_run_id
+
+        live_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+        live_outfit = live_spec.get("outfit") if isinstance(live_spec.get("outfit"), dict) else {}
+        live_raw = live_outfit.get("pieces") if isinstance(live_outfit.get("pieces"), list) else []
+        live_pieces = [p for p in live_raw if isinstance(p, dict)]
+        live_fp = _pdf_only_content_fingerprint(
+            draft=draft, render_spec=live_spec, pieces=live_pieces
+        )
+        if live_fp != fingerprint:
+            raise ConflictError(
+                "Draft content changed during PDF assembly. Retry Update PDF (No AI).",
+                payload={"reason": "pdf_only_fingerprint_changed"},
+            )
+
+        # Another concurrent identical assembly may have won while we rendered.
+        raced = find_export_by_pdf_only_fingerprint(
+            db, user, draft_id=draft.id, fingerprint=fingerprint, revision=revision_snapshot
+        )
+        live_ai = live_spec.get("ai") if isinstance(live_spec.get("ai"), dict) else {}
+        prior_export_id = str(live_ai.get("export_id") or "").strip() or prior_export_id
+        if raced is not None:
+            _cleanup_orphan_pdf(storage, storage_key)
+            wrote_pdf = False
+            if prior_export_id != str(raced.id) or bool(live_ai.get("dirty_since_generation")):
+                _bind_current_professional_export(
+                    db,
+                    draft,
+                    export=raced,
+                    source_run_id=source_run_id,
+                    prior_export_id=prior_export_id,
+                    commit=True,
+                )
+            else:
+                db.commit()
+            return _export_read(raced)
+
+        row = TechpackExport(
+            id=export_id,
+            draft_id=draft.id,
+            user_id=user.id,
+            storage_key=storage_key,
+            filename=filename,
+            byte_size=len(pdf_bytes),
+            page_count=page_count,
+            revision=revision_snapshot,
+            status="DRAFT",
+            verification="UNVERIFIED",
+            metadata_={
+                "look_id": str(look_id),
+                "front_job_id": str(front_job_id) if front_job_id else None,
+                "back_job_id": str(back_job_id) if back_job_id else None,
+                "front_image_present": front_path is not None,
+                "back_image_present": back_path is not None,
+                "height_rows": 1,
+                "schema_version": str(render_spec.get("schema_version") or "2.0"),
+                "piece_count": len(pieces),
+                "cutting_uses_schematics": True,
+                "cutting_reuses_magic_looks": False,
+                "magic_looks_on_cover_overview_only": True,
+                "generation_mode": "professional",
+                "generation_label": "AI Professional",
+                "is_professional": True,
+                # Provenance of illustrations — NOT a new paid AI run id for billing.
+                "ai_run_id": source_run_id,
+                "source_ai_run_id": source_run_id,
+                "pdf_only_update": True,
+                "pdf_only_fingerprint": fingerprint,
+                "new_paid_ai_run": False,
+                "provider_calls": 0,
+                "assembly_cost_usd_cents": 0,
+                # This PDF assembly cost nothing; keep source-run cost distinct.
+                "actual_cost_usd_cents": 0,
+                "budget_recorded_usd_cents": 0,
+                "paid_sections": [],
+                "source_run_cost_usd_cents": source_run_cents,
+                "source_run_paid_sections": source_paid_sections,
+                "vision_model": provenance.get("vision_model") or ai.get("vision_model"),
+                "image_model": provenance.get("image_model") or ai.get("image_model"),
+                "draft_revision": revision_snapshot,
+            },
+        )
+        db.add(row)
+        _bind_current_professional_export(
+            db,
+            draft,
+            export=row,
+            source_run_id=source_run_id,
+            prior_export_id=prior_export_id,
+            commit=False,
+        )
+        db.commit()
+        db.refresh(row)
+    except (ConflictError, ValidationAppError):
+        if wrote_pdf:
+            _cleanup_orphan_pdf(storage, storage_key)
+        raise
+    except Exception:
+        # Unexpected bind/commit failure — drop the uncommitted artifact.
+        if wrote_pdf:
+            _cleanup_orphan_pdf(storage, storage_key)
+        raise
+
     # Intentionally do NOT rewrite source_run.result.export_id — historical run PDF
     # stays on the run; draft.ai.export_id is the current Download pointer.
     return _export_read(row)
