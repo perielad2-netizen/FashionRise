@@ -15,6 +15,7 @@ from app.schemas.techpack import (
     TechpackAiConfirmRequest,
     TechpackAiGenerateRequest,
     TechpackAiOneTapRequest,
+    TechpackArtifactReviewRequest,
     TechpackCreate,
     TechpackDraftRead,
     TechpackExportRead,
@@ -56,6 +57,27 @@ def download_techpack_artifact(
         filename=f"{row.kind}_{row.id}.png",
         content_disposition_type="inline",
         headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.post("/artifacts/{artifact_id}/review")
+def review_techpack_artifact(
+    artifact_id: uuid.UUID,
+    data: TechpackArtifactReviewRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, Any]:
+    """Record an auditable owner review and invalidate the current PDF binding.
+
+    Does not delete illustration bytes and never triggers paid AI. Reviewer
+    identity is taken from the authenticated user.
+    """
+    return techpack_service.record_owned_artifact_review(
+        db,
+        user,
+        artifact_id,
+        review_state=data.review_state,
+        review_message=data.review_message,
     )
 
 

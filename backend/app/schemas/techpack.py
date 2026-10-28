@@ -37,6 +37,27 @@ class TechpackExportRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, max_length=128)
 
 
+class TechpackArtifactReviewRequest(BaseModel):
+    """Owner-scoped review for one persisted illustration artifact.
+
+    Never deletes storage bytes. Reviewer identity is derived server-side from
+    the authenticated principal — clients cannot spoof an operator string.
+    """
+
+    review_state: Literal[
+        "rejected_category_mismatch",
+        "excluded_mismatch",
+        "rejected",
+        "proposed",
+        "proposed_unverified",
+        "designer_confirmed",
+        "visual_qa_confirmed",
+        "owner_accepted",
+        "confirmed",
+    ]
+    review_message: str = Field(min_length=8, max_length=2000)
+
+
 class TechpackExportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

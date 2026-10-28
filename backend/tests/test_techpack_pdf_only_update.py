@@ -1049,3 +1049,199 @@ def test_pdf_only_draft_row_lock_uses_select_for_update():
     src_export = inspect.getsource(techpack_service.export_pdf_only_update)
     assert "_lock_owned_draft" in src_export
     assert "draft_revision_changed" in src_export or "fingerprint" in src_export
+
+
+def test_owner_artifact_review_invalidates_pdf_and_excludes_on_rebuild(
+    client, db_session, monkeypatch
+):
+    """P0 production path: clean PDF A → owner reject → dirty CTA → PDF-only B excludes art.
+
+    Also covers: auth-derived reviewer, idempotent repeat, historical A preserved,
+    zero provider calls, and other-user isolation.
+    """
+    import hashlib
+    import io
+
+    from app.models.techpack_ai_artifact import TechpackAIArtifact
+    from app.storage.local import LocalStorageBackend
+
+    tokens = register_with_invite(client, db_session, "pdfreview@example.com", "pdfreview")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    CountingMock = _counting_mock()
+    set_professional_provider_override(CountingMock())
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Review gate")
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"idem-review-{uuid.uuid4().hex}", "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    assert run_techpack_worker_tick(db_session, limit=4) >= 1
+    settled = client.get(f"/api/v1/techpacks/ai/runs/{run_id}", headers=_auth(tokens)).json()
+    assert settled["status"] == "completed", settled
+    assert settled.get("pdf_ready") is True
+    export_a_id = settled["export_id"]
+    calls_after_paid = CountingMock.provider_calls
+    assert calls_after_paid > 0
+
+    # Pick shorts/trousers detail if present; else any detail_callouts.
+    details = (
+        db_session.query(TechpackAIArtifact)
+        .filter(
+            TechpackAIArtifact.run_id == run_id,
+            TechpackAIArtifact.kind == "detail_callouts",
+        )
+        .all()
+    )
+    assert details
+    detail = next((d for d in details if (d.piece_id or "").endswith("2") or "short" in str(d.piece_id or "").lower()), details[-1])
+    artifact_id = str(detail.id)
+    storage_key = detail.storage_key
+    prior_state = detail.review_state
+    prior_revision = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()[
+        "revision"
+    ]
+    storage = LocalStorageBackend()
+    art_path = storage.resolve_private_techpack_file(key=storage_key)
+    assert art_path is not None and art_path.is_file()
+    rejected_sha = hashlib.sha256(art_path.read_bytes()).hexdigest()
+
+    # PDF A is current and clean (not dirty).
+    before = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert before["spec"]["ai"].get("dirty_since_generation") is False
+    assert before["spec"]["ai"].get("export_id") == export_a_id
+    pdf_a = client.get(f"/api/v1/techpacks/exports/{export_a_id}/pdf", headers=_auth(tokens))
+    assert pdf_a.status_code == 200
+    pages_a = len(PdfReader(io.BytesIO(pdf_a.content)).pages)
+
+    reviewed = client.post(
+        f"/api/v1/techpacks/artifacts/{artifact_id}/review",
+        headers=_auth(tokens),
+        json={
+            "review_state": "rejected_category_mismatch",
+            "review_message": (
+                "Owner QA: detail artwork does not match this garment category. "
+                "Original preserved; exclude from PDF-only preview."
+            ),
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    body = reviewed.json()
+    assert body["review_state"] == "rejected_category_mismatch"
+    assert body.get("bytes_preserved") is True
+    assert body.get("file_deleted") is False
+    assert body.get("pdf_invalidated") is True
+    assert body.get("dirty_since_generation") is True
+    assert body["operator_decision"]["prior_review_state"] == prior_state
+    # Reviewer identity is server-derived from auth — never a client operator string.
+    assert body["operator_decision"]["reviewer_user_id"] == me["id"]
+    assert body["operator_decision"]["role"] == "owner"
+    assert "operator" not in body["operator_decision"]
+
+    db_session.refresh(detail)
+    assert detail.review_state == "rejected_category_mismatch"
+    assert detail.storage_key == storage_key
+    assert detail.metadata_.get("preview_include") is False
+    assert art_path.is_file()  # bytes preserved
+
+    # GET draft shows outdated / Update PDF (No AI) gate.
+    after_review = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert after_review["spec"]["ai"].get("dirty_since_generation") is True
+    assert after_review["spec"]["ai"].get("outdated_export_id") == export_a_id
+    assert after_review["spec"]["ai"].get("export_id") == export_a_id
+    assert int(after_review["revision"]) == int(prior_revision) + 1
+
+    # Identical repeat is idempotent (no second revision bump).
+    repeat = client.post(
+        f"/api/v1/techpacks/artifacts/{artifact_id}/review",
+        headers=_auth(tokens),
+        json={
+            "review_state": "rejected_category_mismatch",
+            "review_message": (
+                "Owner QA: detail artwork does not match this garment category. "
+                "Original preserved; exclude from PDF-only preview."
+            ),
+        },
+    )
+    assert repeat.status_code == 200, repeat.text
+    assert repeat.json().get("idempotent") is True
+    again = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert int(again["revision"]) == int(after_review["revision"])
+
+    # Image still downloadable (not deleted).
+    img = client.get(
+        f"/api/v1/techpacks/artifacts/{artifact_id}/image",
+        headers=_auth(tokens),
+    )
+    assert img.status_code == 200
+    assert hashlib.sha256(img.content).hexdigest() == rejected_sha
+
+    # Other user cannot review this artifact.
+    tokens_b = register_with_invite(client, db_session, "pdfreviewb@example.com", "pdfreviewb")
+    denied = client.post(
+        f"/api/v1/techpacks/artifacts/{artifact_id}/review",
+        headers=_auth(tokens_b),
+        json={
+            "review_state": "rejected",
+            "review_message": "Should not mutate another user's artifact.",
+        },
+    )
+    assert denied.status_code in (403, 404)
+
+    # PDF-only B — uses latest review state; no provider calls.
+    updated = client.post(
+        f"/api/v1/techpacks/{draft['id']}/export",
+        headers=_auth(tokens),
+        json={"mode": "pdf_only_update"},
+    )
+    assert updated.status_code == 201, updated.text
+    export_b = updated.json()
+    assert export_b["id"] != export_a_id
+    meta = export_b["metadata"]
+    assert meta.get("pdf_only_update") is True
+    assert meta.get("assembly_cost_usd_cents") == 0
+    assert meta.get("new_paid_ai_run") is False
+    assert meta.get("generation_mode") == "pdf_only_update"
+    assert "PDF-only" in str(meta.get("generation_label") or "")
+    assert CountingMock.provider_calls == calls_after_paid
+
+    bound = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert bound["spec"]["ai"].get("export_id") == export_b["id"]
+    assert bound["spec"]["ai"].get("dirty_since_generation") is False
+
+    pdf_b = client.get(
+        f"/api/v1/techpacks/exports/{export_b['id']}/pdf", headers=_auth(tokens)
+    )
+    assert pdf_b.status_code == 200
+    text_b = "\n".join(
+        (p.extract_text() or "") for p in PdfReader(io.BytesIO(pdf_b.content)).pages
+    )
+    flat_b = " ".join(text_b.split())
+    assert "EXCLUDED" in flat_b or "MISSING" in flat_b
+    assert "does not match this garment category" in flat_b or "Original preserved" in flat_b
+    # Rejected source PNG must not be embedded as a full image object with identical sha
+    # (ReportLab may re-encode; still require exclusion copy + fewer-or-equal pages).
+    pages_b = len(PdfReader(io.BytesIO(pdf_b.content)).pages)
+    assert pages_b <= pages_a
+
+    # Historical A remains downloadable and unchanged.
+    hist = client.get(f"/api/v1/techpacks/exports/{export_a_id}/pdf", headers=_auth(tokens))
+    assert hist.status_code == 200
+    assert hist.content == pdf_a.content
+
+    # Reapproval restores inclusion for a subsequent PDF-only rebuild.
+    reapprove = client.post(
+        f"/api/v1/techpacks/artifacts/{artifact_id}/review",
+        headers=_auth(tokens),
+        json={
+            "review_state": "visual_qa_confirmed",
+            "review_message": "Owner visually confirmed this detail matches the garment.",
+        },
+    )
+    assert reapprove.status_code == 200, reapprove.text
+    assert reapprove.json().get("pdf_invalidated") is True
+    db_session.refresh(detail)
+    assert detail.metadata_.get("preview_include") is True
+    assert detail.metadata_.get("manufacturing_evidence") is True
