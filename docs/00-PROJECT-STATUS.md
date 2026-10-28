@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**FR-D47D first authorized live Professional run completed** · run `cb4a8efc…` · recorded **$2.50** · human visual QA **pending**. Production FE `69b83c01` / BE+worker **`7af9c809`** / Alembic `011`.)
+**Last updated:** 2026-10-28 (**Operator spend ceiling raised to $50** · FE `69b83c01` / BE+worker **`7af9c809`** / Alembic `011` · **0 paid AI** this change.)
 
-**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) accepted · hotfix [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) deployed. **One** owner-authorized live Professional validation for FR-D47D completed successfully (machine). **No second paid run authorized.**
+**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) accepted · hotfix [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) deployed. FR-D47D first live Professional run completed (machine). Owner may manually test additional designs under the raised ceiling — **no agent-enqueued paid runs**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -16,7 +16,7 @@
 | AI worker | `fashionrise-ai-worker` @ **`7af9c809`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
-| AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**. Recorded operator spend **`$7.05`** (prior `$4.55` + this run `$2.50`) → remaining **`~$7.95`**. |
+| AI spend | Ceiling **`$50.00`** (was `$15`) · max **`$8`/run** · **`$20`/user/day** · max images **6**. Recorded operator spend **`$7.05`** → remaining **`~$42.95`**. |
 
 ## OWNER ACCEPTANCE PASS — Measurements & Details (FE)
 
@@ -91,6 +91,21 @@ Preflight blockers (1)–(2) addressed by the historical-PDF validity maintenanc
 | Quality blockers | Human visual review of tunic/trousers flats, proposed backs, detail sheets, and 9-page PDF still required |
 | Second run | **None** · STOP after this run |
 | Exact next owner action | (1) Open the new PDF/export `d1478343…` and perform visual QA. (2) Capture OpenAI billing balance screenshot and compare to `$14.17`. (3) Do **not** authorize another paid generate unless a separate explicit authorization is issued. |
+
+## Operator spend ceiling raise — $15 → $50 (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Reason | UI showed “Operator techpack AI spend ceiling reached” because recorded spend **$7.05** + two-garment estimate upper **$7.96** ⇒ **$15.01** vs old ceiling **$15** |
+| Change | **Only** `TECHPACK_AI_SPEND_CEILING_USD=50.00` (was `15`) |
+| Unchanged | `TECHPACK_AI_MAX_USD_PER_RUN=8` · `TECHPACK_AI_MAX_USD_PER_USER_DAY=20` · `TECHPACK_AI_MAX_IMAGES_PER_RUN=6` · models · enablement/allowlist · all other env |
+| Code / migrate / FE | **None** — env-only · no merge · no paid enqueue |
+| Runtime after restart | API+worker healthy · settings report ceiling **50.0** · max run **8** · user day **20** · images **6** |
+| Read-only gate check | Recorded spend **705¢** + estimate hi **796¢** = **1501¢** ≤ ceiling **5000¢** · challenge `ai_enabled=true` · message no longer ceiling-blocked |
+| Paid AI this change | **0** |
+| Backup / rollback | `/var/backups/fashionrise/techpack-spend-ceiling-50-deploy-20261028T080703Z/` · `ROLLBACK.sh` restores prior `.env` (ceiling `$15`) and restarts API+worker |
+| Safety | Ceiling must not be set to `0` (disables Professional under current implementation) |
+| Exact next owner action | Manual Generate AI PDF from the web UI for additional designs as desired; agent does not enqueue paid runs. |
 
 ## Professional Tech Pack P0/P1 reliability — PR #116 (landed)
 
