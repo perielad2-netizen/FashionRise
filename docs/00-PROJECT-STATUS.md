@@ -3,9 +3,18 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**PR #114 Done/save race LIVE** — FE `69b83c01`. Quiet autosave + PDF validity retained. Backend **`732bda9f`** / worker unchanged / Alembic **`011`**. **0 paid AI calls**. **Owner acceptance PENDING.**)
+**Last updated:** 2026-10-28 (**Issue #124 FE** — measurement decimal input buffer on `cursor/web-techpack-measure-decimal-77c6`, based on production FE tip `13b26c3a`. Separate from PDF QA / PR #123. **Not deployed.** **0 paid AI.** Prior LIVE: PR #114 Done/save race FE `69b83c01`.)
 
 **Phase:** Protected family beta. Create Real Design main workflow unchanged. Responsive editor + quiet autosave + PDF validity + Done flush race hardening.
+
+### Issue #124 — measurement decimal input (FE-only, open)
+
+| Item | Detail |
+|---|---|
+| Branch | `cursor/web-techpack-measure-decimal-77c6` (from FE tip `13b26c3a`) |
+| Fix | `MeasuredField` local edit buffer preserves `25.` / `0.` / `.5` / `25,5`; commit on complete parse / blur; user edits → `source: 'designer'` (no manufacturing auto-approval); empty → `null` + `empty` |
+| Scope | FE only — do **not** conflate with PR #123 PDF QA / BE hold |
+| Deploy | **No** — Technical PM review first |
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 

@@ -106,6 +106,57 @@ describe('MeasurementsSheet', () => {
     expect(height).toHaveAttribute('inputMode', 'decimal')
   })
 
+  it('keeps body measurement decimal separators while typing (Android inputMode decimal)', () => {
+    const { onChangeSpec } = renderSheet()
+    const height = screen.getByLabelText(/^Height$/i)
+    expect(height).toHaveAttribute('inputMode', 'decimal')
+    height.focus()
+    fireEvent.change(height, { target: { value: '17' } })
+    fireEvent.change(screen.getByLabelText(/^Height$/i), { target: { value: '170.' } })
+    expect(screen.getByLabelText(/^Height$/i)).toHaveValue('170.')
+    fireEvent.change(screen.getByLabelText(/^Height$/i), { target: { value: '170.5' } })
+    expect(screen.getByLabelText(/^Height$/i)).toHaveValue('170.5')
+    expect(onChangeSpec).toHaveBeenCalled()
+    expect(baseSpec.body?.height).toMatchObject({ value: 170.5, source: 'designer' })
+  })
+
+  it('keeps finished POM decimals and marks AI edits as designer', () => {
+    const aiPiece: TechpackPiece = {
+      ...piece,
+      finished_measurements: {
+        chest_bust: { value: null, unit: 'cm', source: 'empty' },
+        garment_length: {
+          value: 110,
+          unit: 'cm',
+          source: 'ai',
+          review_status: 'open',
+        },
+      },
+    }
+    const aiSpec: TechpackSpecV2 = {
+      ...baseSpec,
+      outfit: { piece_count: 1, pieces: [aiPiece] },
+    }
+    const { onUpdatePiece } = renderSheet({ spec: aiSpec, pieces: [aiPiece] })
+    fireEvent.click(screen.getByRole('tab', { name: /Finished · /i }))
+    const length = screen.getByLabelText(/Garment length/i)
+    expect(length).toHaveAttribute('inputMode', 'decimal')
+    length.focus()
+    fireEvent.change(length, { target: { value: '110.' } })
+    expect(screen.getByLabelText(/Garment length/i)).toHaveValue('110.')
+    fireEvent.change(screen.getByLabelText(/Garment length/i), { target: { value: '110.25' } })
+    expect(screen.getByLabelText(/Garment length/i)).toHaveValue('110.25')
+    expect(onUpdatePiece).toHaveBeenCalled()
+    const lastCall = onUpdatePiece.mock.calls.at(-1)
+    expect(lastCall?.[0]).toBe('piece-1')
+    const updated = lastCall?.[1](aiPiece) as TechpackPiece
+    expect(updated.finished_measurements.garment_length).toMatchObject({
+      value: 110.25,
+      source: 'designer',
+      review_status: 'open',
+    })
+  })
+
   it('keeps unit/source behind a secondary toggle for everyday entry', () => {
     renderSheet()
     expect(screen.queryByLabelText(/^Height unit$/i)).not.toBeInTheDocument()

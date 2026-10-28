@@ -2,6 +2,12 @@ import { useId, useState } from 'react'
 import type { MeasuredValue } from '@/services/techpacksApi'
 import { FieldHelp } from '@/shell/components/techpack/FieldHelp'
 import { getFieldHelp } from '@/shell/components/techpack/fieldHelpContent'
+import {
+  commitMeasuredEdit,
+  formatCommittedDisplay,
+  isAllowedDecimalBuffer,
+  isCompleteMeasuredInput,
+} from '@/shell/components/techpack/measuredDecimalInput'
 import styles from './MeasuredField.module.css'
 
 type Props = {
@@ -17,17 +23,76 @@ export function MeasuredField({ label, value, onChange, helpKey, compact = false
   const help = helpKey ? getFieldHelp(helpKey) : null
   const uid = useId()
   const [metaOpen, setMetaOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const [draft, setDraft] = useState('')
   const unit = value.unit || 'cm'
 
-  const onValue = (rawInput: string) => {
-    const raw = rawInput.trim()
-    onChange({
-      ...value,
-      value: raw === '' ? null : Number.isFinite(Number(raw)) ? Number(raw) : raw,
-      source: raw === '' ? 'empty' : value.source === 'empty' ? 'designer' : value.source,
-      unit: value.unit || 'cm',
-    })
+  const committedText = formatCommittedDisplay(value.value)
+  const inputValue = focused ? draft : committedText
+
+  const commitDraft = (raw: string, opts?: { force?: boolean }) => {
+    const trimmed = raw.trim()
+    // Unchanged buffer while focused → leave AI/calculated provenance alone.
+    if (!opts?.force && trimmed === committedText.trim()) {
+      return true
+    }
+    const next = commitMeasuredEdit(value, raw)
+    if (!next) return false
+    onChange(next)
+    return true
   }
+
+  const onValueInput = (rawInput: string) => {
+    // Preserve intermediate strings (25., 0., .5, 25,5) in the local buffer.
+    if (!isAllowedDecimalBuffer(rawInput)) return
+    setDraft(rawInput)
+    if (isCompleteMeasuredInput(rawInput)) {
+      commitDraft(rawInput, { force: true })
+    }
+  }
+
+  const onValueBlur = () => {
+    if (!commitDraft(draft)) {
+      setDraft(committedText)
+    }
+    setFocused(false)
+  }
+
+  const onValueFocus = (target: HTMLInputElement) => {
+    setFocused(true)
+    setDraft(committedText)
+    // Keep focused field visible above Android keyboard when possible.
+    window.setTimeout(() => {
+      if (typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
+    }, 50)
+  }
+
+  const valueInput = (
+    <input
+      id={compact ? `${uid}-val` : undefined}
+      type="text"
+      inputMode="decimal"
+      enterKeyHint="next"
+      autoComplete="off"
+      value={inputValue}
+      placeholder={compact ? '—' : 'Leave empty if unknown'}
+      aria-label={label}
+      onChange={(e) => onValueInput(e.target.value)}
+      onFocus={(e) => onValueFocus(e.target)}
+      onBlur={onValueBlur}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          if (!commitDraft(draft)) {
+            setDraft(committedText)
+          }
+          ;(e.target as HTMLInputElement).blur()
+        }
+      }}
+    />
+  )
 
   if (compact) {
     return (
@@ -45,26 +110,7 @@ export function MeasuredField({ label, value, onChange, helpKey, compact = false
             ) : null}
           </div>
           <div className={styles.valueUnitGroup}>
-            <input
-              id={`${uid}-val`}
-              type="text"
-              inputMode="decimal"
-              enterKeyHint="next"
-              autoComplete="off"
-              value={value.value ?? ''}
-              placeholder="—"
-              aria-label={label}
-              onChange={(e) => onValue(e.target.value)}
-              onFocus={(e) => {
-                // Keep focused field visible above Android keyboard when possible.
-                const target = e.target
-                window.setTimeout(() => {
-                  if (typeof target.scrollIntoView === 'function') {
-                    target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                  }
-                }, 50)
-              }}
-            />
+            {valueInput}
             <span className={styles.unitBadge} aria-hidden>
               {unit}
             </span>
@@ -129,16 +175,7 @@ export function MeasuredField({ label, value, onChange, helpKey, compact = false
             />
           ) : null}
         </div>
-        <input
-          type="text"
-          inputMode="decimal"
-          enterKeyHint="next"
-          autoComplete="off"
-          value={value.value ?? ''}
-          placeholder="Leave empty if unknown"
-          aria-label={label}
-          onChange={(e) => onValue(e.target.value)}
-        />
+        {valueInput}
       </div>
       <div className={styles.field}>
         <label htmlFor={`unit-${label}`}>Unit</label>
