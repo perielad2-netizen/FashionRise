@@ -3,20 +3,38 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #118 manufacturing foundation DEPLOYED** @ `2c8cb88e` · FE `69b83c01` unchanged · Alembic `011` · limits `$50`/`$8`/`$20`/6 images · FR-3958 still **DESIGN_CONCEPT** · historical PDFs preserved · **0 paid AI** · **STOP**.)
+**Last updated:** 2026-10-28 (**Completed-look UX + Update PDF (No AI)** — implementation ready for PM review · **NOT DEPLOYED** · prod FE `69b83c01` / BE+worker `2c8cb88e` · Alembic `011` · ceiling `$50` · **0 paid AI** · **STOP**.)
 
-**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) / [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) lineage retained; manufacturing-spec foundation PR [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) **accepted and deployed** via linear checkout from production baseline (GitHub PR base was stale/CONFLICTING — **not** used for merge).
+**Phase:** Protected family beta. Production still **Generate AI PDF → Wait → Download PDF** on FE `69b83c01` + BE `2c8cb88e` (PR #118 manufacturing). Draft PRs add non-blocking completed-look editing + PDF-only refresh without paid AI — **awaiting Technical PM review before deploy**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114). **OWNER ACCEPTANCE PASS — Measurements & Details.** Unchanged this deploy. |
+| Frontend (`web-ui`) | **`69b83c01`** — Nginx `current` → `releases/69b83c01` (PR #114). **OWNER ACCEPTANCE PASS — Measurements & Details.** |
 | Backend (FastAPI + PostgreSQL) | **`2c8cb88e`** (PR #118 manufacturing tip). Prior baseline **`7af9c809`** (PR #117). Alembic **`011`**. |
 | AI worker | `fashionrise-ai-worker` @ **`2c8cb88e`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
-| AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** — **unchanged** this deploy. |
+| AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+## Completed-look UX + Update PDF (No AI) — STOP for PM review (2026-10-28)
+
+Owner smoke after PR #118 deploy: historical Download OK; AI correctly skipped for completed designs; **FAIL** — reopening a completed look auto-opened the full-screen ready overlay (Download / Back to My Looks only), blocking **Edit measurements & details**.
+
+| Item | Detail |
+|---|---|
+| FE branch | `cursor/web-techpack-noai-pdf-fe-77c6` (from prod FE `69b83c01`) |
+| BE branch | `cursor/web-techpack-noai-pdf-be-77c6` (from manufacturing tip / prod BE `2c8cb88e` lineage) |
+| Production | **Unchanged** — do **not** deploy until PM acceptance |
+| Paid AI | **0** in implementation/tests (MockProfessionalProvider / no provider in PDF-only path) |
+| A — Overlay UX | Completed Professional reopen binds Download on the normal Create Real Design screen; **no auto-open** ready overlay. Queued/running progress overlay unchanged. Ready overlay (post-generate) gains **Continue Editing**. Edit always reachable. |
+| B — Spec edit | Measurements & details open after completion; saves mark `dirty_since_generation` + `outdated_export_id`; illustrations preserved; no automatic AI |
+| C — Update PDF (No AI) | `POST /techpacks/{id}/export` with `{"mode":"pdf_only_update"}` regenerates PDF from saved spec + persisted Professional artwork; new versioned export; historical PDFs + run/cost metadata preserved; binds current only after success; content fingerprint idempotency; garment/source identity fail-closed; `ensure_professional_pdf_for_run` will not clobber a newer PDF-only current |
+| D — FE CTAs | Current → **Download PDF** + Edit. Outdated + compatible illustrations → **Update PDF (No AI)** (+ separate paid Generate). Paid Generate remains explicit |
+| Tests | BE: `test_techpack_pdf_only_update` + manufacturing/V2/P0/pdf-ready (**53 passed**). FE: TechpackScreen suites (**68+ passed**). FE `tsc` + prod build (`VITE_API_BASE_URL=/api/v1`) OK |
+| Limitations | PDF-only requires compatible Professional illustrations + structure match. Identity drift forces paid Generate. Manufacturing readiness still fail-closed (FR-3958 stays DESIGN CONCEPT until issues resolved). No Nginx route change (reuses `/export`) |
+| Exact next action | Technical PM review of FE+BE PRs. **Do not deploy.** After accept: deploy BE+worker then FE release; smoke completed-look Edit + Update PDF (No AI) on a non-critical draft. Rollback → `2c8cb88e` / `69b83c01`. |
 
 ## PR #118 controlled deployment (2026-10-28) — STOP
 

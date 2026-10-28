@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from app.schemas.techpack import (
     TechpackCreate,
     TechpackDraftRead,
     TechpackExportRead,
+    TechpackExportRequest,
     TechpackListResponse,
     TechpackUpdate,
 )
@@ -118,8 +119,21 @@ def export_techpack_pdf(
     draft_id: uuid.UUID,
     user: CurrentUser,
     db: Session = Depends(get_db),  # noqa: B008
+    data: TechpackExportRequest | None = Body(default=None),  # noqa: B008
 ) -> TechpackExportRead:
-    return techpack_service.export_pdf(db, user, draft_id)
+    """Assemble PDF from the current draft. Never calls a paid AI provider.
+
+    Pass ``{\"mode\":\"pdf_only_update\"}`` to refresh tables/specs while reusing
+    persisted Professional illustrations (fails closed when garment identity drifted).
+    """
+    body = data or TechpackExportRequest()
+    return techpack_service.export_pdf(
+        db,
+        user,
+        draft_id,
+        pdf_only_update=body.mode == "pdf_only_update",
+        idempotency_key=body.idempotency_key,
+    )
 
 
 @router.get("/{draft_id}/exports", response_model=list[TechpackExportRead])

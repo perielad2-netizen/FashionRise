@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -25,9 +28,13 @@ from app.schemas.techpack import (
 from app.services import looks_service
 from app.services.ai_service import extract_result_image_url
 from app.services.techpack_pdf import build_techpack_pdf, resolve_generation_provenance
-from app.services.techpack_spec import default_spec, ensure_v2, merge_spec, style_code_from_look
+from app.services.techpack_spec import (
+    default_spec,
+    ensure_v2,
+    merge_spec,
+    style_code_from_look,
+)
 from app.storage.local import LocalStorageBackend
-
 
 _TITLE_MAX = 160
 _STYLE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -450,6 +457,9 @@ def update_draft(db: Session, user: User, draft_id: uuid.UUID, data: TechpackUpd
                 if prior_ai.get(k) is not None and ai.get(k) is None:
                     ai[k] = prior_ai.get(k)
             ai["dirty_since_generation"] = True
+            prior_export = str(prior_ai.get("export_id") or ai.get("export_id") or "").strip()
+            if prior_export and not ai.get("outdated_export_id"):
+                ai["outdated_export_id"] = prior_export
             merged["ai"] = ai
             # Preserve piece illustrations that the client omitted/stale-cleared.
             outfit = merged.get("outfit") if isinstance(merged.get("outfit"), dict) else {}
@@ -469,9 +479,12 @@ def update_draft(db: Session, user: User, draft_id: uuid.UUID, data: TechpackUpd
                     continue
                 prior_ill = prior_piece.get("illustrations")
                 cur_ill = piece.get("illustrations")
-                if isinstance(prior_ill, dict) and prior_ill.get("mode") == "professional":
-                    if not isinstance(cur_ill, dict) or not cur_ill.get("artifacts"):
-                        piece["illustrations"] = prior_ill
+                if (
+                    isinstance(prior_ill, dict)
+                    and prior_ill.get("mode") == "professional"
+                    and (not isinstance(cur_ill, dict) or not cur_ill.get("artifacts"))
+                ):
+                    piece["illustrations"] = prior_ill
             outfit["pieces"] = pieces
             merged["outfit"] = outfit
             draft.spec = merged
@@ -509,6 +522,331 @@ def find_export_for_ai_run(
     return None
 
 
+def _illustration_artifact_ids(pieces: list[dict[str, Any]]) -> list[str]:
+    ids: list[str] = []
+    for piece in pieces:
+        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        for kind in sorted(arts.keys()):
+            entry = arts.get(kind)
+            if not isinstance(entry, dict):
+                continue
+            aid = str(entry.get("artifact_id") or entry.get("id") or "").strip()
+            if aid:
+                ids.append(f"{piece_id_safe(piece)}:{kind}:{aid}")
+    return ids
+
+
+def piece_id_safe(piece: dict[str, Any]) -> str:
+    return str(piece.get("id") or "").strip()
+
+
+def _pdf_only_content_fingerprint(
+    *,
+    draft: TechpackDraft,
+    render_spec: dict[str, Any],
+    pieces: list[dict[str, Any]],
+) -> str:
+    """Stable fingerprint for idempotent PDF-only updates (no provider involvement)."""
+    # Exclude volatile AI bookkeeping so rebinding current export does not thrash.
+    spec_for_hash = dict(render_spec)
+    ai = dict(spec_for_hash.get("ai") if isinstance(spec_for_hash.get("ai"), dict) else {})
+    for k in (
+        "dirty_since_generation",
+        "export_id",
+        "outdated_export_id",
+        "last_run_id",
+        "last_mode",
+        "actual_cost_usd_cents",
+        "estimated_cost_usd_cents",
+        "analysis_summary",
+    ):
+        ai.pop(k, None)
+    spec_for_hash["ai"] = ai
+    payload = {
+        "draft_id": str(draft.id),
+        "revision": int(draft.revision or 1),
+        "title": draft.title,
+        "style_code": draft.style_code,
+        "front_job_id": str(draft.front_job_id) if draft.front_job_id else None,
+        "back_job_id": str(draft.back_job_id) if draft.back_job_id else None,
+        "look_id": str(draft.look_id),
+        "spec": spec_for_hash,
+        "illustration_artifacts": _illustration_artifact_ids(pieces),
+    }
+    blob = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def assess_pdf_only_update_compatibility(
+    db: Session, draft: TechpackDraft
+) -> tuple[bool, list[str], Any | None]:
+    """Return (ok, blocking_reasons, source_run) for a no-AI PDF refresh.
+
+    Fail closed when garment identity or Professional illustrations cannot be reused safely.
+    Never calls a paid provider.
+    """
+    from app.models.techpack_ai_run import TechpackAIRun
+    from app.services.techpack_structure import (
+        list_outfit_pieces,
+        run_matches_draft_structure,
+    )
+
+    reasons: list[str] = []
+    spec = draft.spec if isinstance(draft.spec, dict) else {}
+    ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+    pieces = list_outfit_pieces(spec)
+    run_id = str(ai.get("last_run_id") or "").strip()
+    if str(ai.get("last_mode") or "") != "professional" or not run_id:
+        reasons.append(
+            "No completed Professional AI pack is bound to this draft. "
+            "Generate AI PDF once before using Update PDF (No AI)."
+        )
+        return False, reasons, None
+    try:
+        run = db.get(TechpackAIRun, uuid.UUID(run_id))
+    except (TypeError, ValueError):
+        run = None
+    if run is None or run.stage != "professional" or run.status != "completed":
+        reasons.append(
+            "The bound Professional run is missing or incomplete. "
+            "Generate AI PDF again to refresh illustrations."
+        )
+        return False, reasons, None
+    req = run.request if isinstance(run.request, dict) else {}
+    if not run_matches_draft_structure(req, pieces):
+        reasons.append(
+            "Garment identity changed since the Professional illustrations were created "
+            "(piece count or piece IDs no longer match). "
+            "Review garments and Generate AI PDF to refresh illustrations — "
+            "old artwork will not be reused silently."
+        )
+        return False, reasons, run
+    # Source Magic look must still match the authorized run when stamped.
+    auth_front = str(req.get("front_job_id") or "").strip()
+    if auth_front and draft.front_job_id and str(draft.front_job_id) != auth_front:
+        reasons.append(
+            "The Magic look front image changed since Professional generation. "
+            "Generate AI PDF to create illustrations for the new look."
+        )
+        return False, reasons, run
+    missing_front: list[str] = []
+    for piece in pieces:
+        pid = piece_id_safe(piece) or "(unnamed)"
+        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        if str(ill.get("mode") or "") != "professional":
+            missing_front.append(pid)
+            continue
+        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        flat = arts.get("flat_front") if isinstance(arts.get("flat_front"), dict) else None
+        if not flat or not (flat.get("artifact_id") or flat.get("id") or flat.get("storage_key")):
+            missing_front.append(pid)
+    if missing_front:
+        reasons.append(
+            "Professional front illustrations are missing for: "
+            + ", ".join(missing_front)
+            + ". Generate AI PDF to restore artwork before a no-AI PDF update."
+        )
+        return False, reasons, run
+    return True, [], run
+
+
+def find_export_by_pdf_only_fingerprint(
+    db: Session, user: User, *, draft_id: uuid.UUID, fingerprint: str
+) -> TechpackExport | None:
+    if not fingerprint:
+        return None
+    rows = list(
+        db.scalars(
+            select(TechpackExport)
+            .where(TechpackExport.draft_id == draft_id, TechpackExport.user_id == user.id)
+            .order_by(TechpackExport.created_at.desc())
+        ).all()
+    )
+    for row in rows:
+        meta = row.metadata_ if isinstance(row.metadata_, dict) else {}
+        if (
+            bool(meta.get("pdf_only_update"))
+            and str(meta.get("pdf_only_fingerprint") or "") == fingerprint
+            and int(meta.get("draft_revision") or -1) == int(row.revision or -2)
+        ):
+            return row
+    return None
+
+
+def _bind_current_professional_export(
+    db: Session,
+    draft: TechpackDraft,
+    *,
+    export: TechpackExport,
+    source_run_id: str | None,
+    prior_export_id: str | None,
+) -> TechpackDraft:
+    """Mark *export* as the current Download without creating a paid AI run."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    spec = dict(draft.spec) if isinstance(draft.spec, dict) else {}
+    ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+    if prior_export_id and prior_export_id != str(export.id):
+        ai["outdated_export_id"] = prior_export_id
+    ai["export_id"] = str(export.id)
+    ai["dirty_since_generation"] = False
+    if source_run_id:
+        ai["last_run_id"] = source_run_id
+    ai["last_mode"] = "professional"
+    # Do not invent a new paid cost — keep prior recorded cents if present.
+    spec["ai"] = ai
+    draft.spec = spec
+    draft.updated_at = datetime.now(UTC)
+    flag_modified(draft, "spec")
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+def export_pdf_only_update(
+    db: Session,
+    user: User,
+    draft_id: uuid.UUID,
+    *,
+    idempotency_key: str | None = None,
+) -> TechpackExportRead:
+    """Regenerate the Professional PDF from saved specs + persisted illustrations ($0 AI).
+
+    Creates a NEW versioned export when content changed. Preserves historical PDFs and
+    the original Professional run/cost metadata. Binds the new export as current only
+    after successful assembly. Idempotent for identical revision-bound content.
+    """
+    draft = _owned_draft(db, user, draft_id)
+    ok, reasons, source_run = assess_pdf_only_update_compatibility(db, draft)
+    if not ok:
+        raise ValidationAppError(" ".join(reasons) or "PDF-only update is not available for this draft.")
+
+    render_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    outfit = render_spec.get("outfit") if isinstance(render_spec.get("outfit"), dict) else {}
+    raw_pieces = outfit.get("pieces") if isinstance(outfit.get("pieces"), list) else []
+    pieces: list[dict[str, Any]] = [p for p in raw_pieces if isinstance(p, dict)]
+    fingerprint = _pdf_only_content_fingerprint(draft=draft, render_spec=render_spec, pieces=pieces)
+
+    # Idempotency: reuse an existing identical PDF-only export and rebind as current.
+    existing = find_export_by_pdf_only_fingerprint(
+        db, user, draft_id=draft.id, fingerprint=fingerprint
+    )
+    prior_export_id = None
+    ai = render_spec.get("ai") if isinstance(render_spec.get("ai"), dict) else {}
+    prior_export_id = str(ai.get("export_id") or "").strip() or None
+    if existing is not None:
+        if prior_export_id != str(existing.id) or bool(ai.get("dirty_since_generation")):
+            _bind_current_professional_export(
+                db,
+                draft,
+                export=existing,
+                source_run_id=str(source_run.id) if source_run is not None else None,
+                prior_export_id=prior_export_id,
+            )
+        return _export_read(existing)
+
+    # Client-supplied idempotency key (optional): collapse concurrent identical posts.
+    _ = idempotency_key  # reserved for future durable request ledger; fingerprint is authoritative
+
+    storage = LocalStorageBackend()
+    front_path = _resolve_job_image(storage, draft.front_job_id, db)
+    back_path = _resolve_job_image(storage, draft.back_job_id, db)
+    if front_path is None and back_path is None:
+        raise ValidationAppError("Cannot export PDF without at least one Magic look image")
+
+    provenance = resolve_generation_provenance(render_spec)
+    source_run_id = str(source_run.id) if source_run is not None else None
+    # Force Professional provenance from the existing paid run — do not claim a new paid run.
+    provenance = {
+        **provenance,
+        "mode": "professional",
+        "label": "AI Professional",
+        "is_professional": True,
+        "run_id": source_run_id or provenance.get("run_id") or "",
+    }
+    # Inherit recorded cost from the source run / draft AI block (historical attribution).
+    recorded_cents = int(ai.get("actual_cost_usd_cents") or 0)
+    if source_run is not None:
+        recorded_cents = int(source_run.cost_usd_cents or recorded_cents or 0)
+
+    pdf_bytes, page_count = build_techpack_pdf(
+        title=draft.title,
+        style_code=draft.style_code,
+        revision=int(draft.revision or 1),
+        status="DRAFT",
+        verification="UNVERIFIED",
+        look_id=str(draft.look_id),
+        front_image=front_path,
+        back_image=back_path,
+        spec=render_spec,
+    )
+    export_id = uuid.uuid4()
+    filename = f"{draft.style_code}_r{draft.revision}_techpack.pdf".replace("/", "-")
+    storage_key = f"{user.id.hex}/{draft.id.hex}/{export_id.hex}.pdf"
+    storage.save_private_techpack_file(
+        key=storage_key,
+        data=io.BytesIO(pdf_bytes),
+        content_type="application/pdf",
+    )
+    row = TechpackExport(
+        id=export_id,
+        draft_id=draft.id,
+        user_id=user.id,
+        storage_key=storage_key,
+        filename=filename,
+        byte_size=len(pdf_bytes),
+        page_count=page_count,
+        revision=int(draft.revision or 1),
+        status="DRAFT",
+        verification="UNVERIFIED",
+        metadata_={
+            "look_id": str(draft.look_id),
+            "front_job_id": str(draft.front_job_id) if draft.front_job_id else None,
+            "back_job_id": str(draft.back_job_id) if draft.back_job_id else None,
+            "front_image_present": front_path is not None,
+            "back_image_present": back_path is not None,
+            "height_rows": 1,
+            "schema_version": str(render_spec.get("schema_version") or "2.0"),
+            "piece_count": len(pieces),
+            "cutting_uses_schematics": True,
+            "cutting_reuses_magic_looks": False,
+            "magic_looks_on_cover_overview_only": True,
+            "generation_mode": "professional",
+            "generation_label": "AI Professional",
+            "is_professional": True,
+            # Provenance of illustrations — NOT a new paid AI run id for billing.
+            "ai_run_id": source_run_id,
+            "source_ai_run_id": source_run_id,
+            "pdf_only_update": True,
+            "pdf_only_fingerprint": fingerprint,
+            "new_paid_ai_run": False,
+            "vision_model": provenance.get("vision_model") or ai.get("vision_model"),
+            "image_model": provenance.get("image_model") or ai.get("image_model"),
+            "budget_recorded_usd_cents": recorded_cents,
+            "actual_cost_usd_cents": recorded_cents,
+            "paid_sections": list(ai.get("paid_sections") or provenance.get("paid_sections") or []),
+            "draft_revision": int(draft.revision or 1),
+        },
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    # Bind as current only after the export row + file succeeded.
+    _bind_current_professional_export(
+        db,
+        draft,
+        export=row,
+        source_run_id=source_run_id,
+        prior_export_id=prior_export_id,
+    )
+    # Intentionally do NOT rewrite source_run.result.export_id — historical run PDF
+    # stays on the run; draft.ai.export_id is the current Download pointer.
+    return _export_read(row)
+
+
 def export_pdf(
     db: Session,
     user: User,
@@ -516,12 +854,22 @@ def export_pdf(
     *,
     ai_run_id: uuid.UUID | None = None,
     require_professional: bool = False,
+    pdf_only_update: bool = False,
+    idempotency_key: str | None = None,
 ) -> TechpackExportRead:
     """Assemble a private PDF from the current draft (no OpenAI calls).
 
     When *ai_run_id* is set, bind metadata to that run and reuse an existing matching
     Professional export instead of creating a duplicate.
+
+    When *pdf_only_update* is True, regenerate from persisted Professional illustrations,
+    create a new versioned export, and bind it as current (see ``export_pdf_only_update``).
     """
+    if pdf_only_update:
+        return export_pdf_only_update(
+            db, user, draft_id, idempotency_key=idempotency_key
+        )
+
     draft = _owned_draft(db, user, draft_id)
     if ai_run_id is not None:
         existing = find_export_for_ai_run(db, user, draft_id=draft.id, ai_run_id=ai_run_id)

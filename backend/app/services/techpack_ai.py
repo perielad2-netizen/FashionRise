@@ -755,7 +755,12 @@ def ensure_professional_pdf_for_run(
             # Never clear dirty_since_generation / rebind Download when structure drifted.
             if not structure_ok or ai.get("dirty_since_generation"):
                 return run
-            if ai.get("export_id") != str(export_id_raw):
+            current_export = str(ai.get("export_id") or "").strip()
+            # A newer PDF-only update (or other current binding) must not be replaced by
+            # recovering this run's historical export.
+            if current_export and current_export != str(export_id_raw):
+                return run
+            if not current_export:
                 ai["export_id"] = str(export_id_raw)
                 ai["last_run_id"] = str(run.id)
                 ai["last_mode"] = "professional"
@@ -772,6 +777,14 @@ def ensure_professional_pdf_for_run(
 
     if not structure_ok:
         # Historical PDF may exist on the run, but must not become current Download.
+        return run
+
+    ai_pre = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+    # Never rebuild/rebind over a dirty draft or a newer current PDF-only export.
+    if ai_pre.get("dirty_since_generation"):
+        return run
+    current_export = str(ai_pre.get("export_id") or "").strip()
+    if current_export and export_id_raw and current_export != str(export_id_raw):
         return run
 
     arts = list(
@@ -795,6 +808,10 @@ def ensure_professional_pdf_for_run(
         dict(run.request) if isinstance(run.request, dict) else {},
         list_outfit_pieces(spec),
     ):
+        # Do not clobber a newer current export that appeared during assembly.
+        live_current = str(ai.get("export_id") or "").strip()
+        if live_current and live_current != str(exported.id) and not ai.get("dirty_since_generation"):
+            return run
         ai["export_id"] = str(exported.id)
         ai["dirty_since_generation"] = False
         ai["last_run_id"] = str(run.id)

@@ -26,6 +26,17 @@ class TechpackUpdate(BaseModel):
     bump_revision: bool = False
 
 
+class TechpackExportRequest(BaseModel):
+    """Optional body for POST /techpacks/{id}/export.
+
+    Default (empty/omitted) keeps legacy Basic assembly. ``pdf_only_update`` regenerates
+    the Professional PDF from persisted illustrations with $0 provider calls.
+    """
+
+    mode: Literal["basic", "pdf_only_update"] = "basic"
+    idempotency_key: str | None = Field(default=None, max_length=128)
+
+
 class TechpackExportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
