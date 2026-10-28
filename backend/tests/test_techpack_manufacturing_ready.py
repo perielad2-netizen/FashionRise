@@ -63,8 +63,9 @@ def _check_all_qc(spec: dict) -> None:
 
 
 def _complete_trousers_piece(piece: dict) -> dict:
-    """Genuinely complete, designer-confirmed trousers — SAMPLE-READY eligible."""
+    """Genuinely complete, explicitly review-confirmed trousers — SAMPLE-READY eligible."""
     piece = deepcopy(piece)
+    piece["id"] = str(piece.get("id") or "piece-trousers-complete")
     piece["category"] = "trousers"
     piece["label"] = "Trousers"
     piece["materials"] = {
@@ -75,6 +76,7 @@ def _complete_trousers_piece(piece: dict) -> dict:
             "stretch": "none",
             "source": "designer",
             "designer_confirmed": True,
+            "review_status": "confirmed",
         }
     }
     piece["closures"] = {
@@ -82,6 +84,7 @@ def _complete_trousers_piece(piece: dict) -> dict:
         "notes": "Metal zip, horn button",
         "source": "designer",
         "designer_confirmed": True,
+        "review_status": "confirmed",
     }
     piece["fit"] = {
         "suggestion": "regular",
@@ -104,6 +107,7 @@ def _complete_trousers_piece(piece: dict) -> dict:
         "default_cm": 0.5,
         "source": "designer",
         "designer_confirmed": True,
+        "review_status": "confirmed",
     }
     piece["construction_steps"] = [
         {
@@ -111,12 +115,14 @@ def _complete_trousers_piece(piece: dict) -> dict:
             "instruction": "Join fronts at zip fly; set waistband with confirmed 0.5 cm SA.",
             "source": "designer",
             "designer_confirmed": True,
+            "review_status": "confirmed",
         },
         {
             "step": 2,
             "instruction": "Sew inseams and side seams; finish hem at marked inseam.",
             "source": "designer",
             "designer_confirmed": True,
+            "review_status": "confirmed",
         },
     ]
     piece["construction_confirmed"] = True
@@ -424,6 +430,151 @@ def test_sample_ready_requires_genuinely_complete_confirmed_specs():
     assert assessment["readiness_level"] == READINESS_SAMPLE_DEVELOPMENT, assessment["missing_required"]
     assert assessment["production_approved"] is False
     assert assessment["designer_confirmed"] is True
+
+
+def test_empty_outfit_never_reaches_sample_ready():
+    """Negative: sample size + checked checklist + empty pieces stays DESIGN CONCEPT."""
+    spec = default_spec(look_summary="navy cotton trousers")
+    spec["outfit"]["pieces"] = []
+    spec["sample_size"] = "M"
+    _check_all_qc(spec)
+    assessment = assess_manufacturing_readiness(spec)
+    assert assessment["readiness_level"] == READINESS_DESIGN_CONCEPT
+    assert assessment["production_approved"] is False
+    assert assessment["checklist_complete"] is True
+    assert any(i.get("code") == "outfit_empty" for i in assessment["issues"])
+    assert "outfit_pieces" in assessment["missing_required"] or any(
+        "outfit" in m for m in assessment["missing_required"]
+    )
+
+
+def test_duplicate_or_unconfirmed_piece_identity_blocks_sample_ready():
+    spec = default_spec(look_summary="navy cotton trousers")
+    complete = _complete_trousers_piece(spec["outfit"]["pieces"][0])
+    dup = deepcopy(complete)
+    dup["id"] = complete["id"]
+    other = deepcopy(complete)
+    other["id"] = ""
+    other["category"] = "other"
+    spec["outfit"]["pieces"] = [complete, dup, other]
+    spec["sample_size"] = "M"
+    _check_all_qc(spec)
+    assessment = assess_manufacturing_readiness(spec)
+    assert assessment["readiness_level"] == READINESS_DESIGN_CONCEPT
+    codes = {i.get("code") for i in assessment["issues"]}
+    assert "piece_id_duplicate" in codes
+    assert "piece_id_missing" in codes or "piece_category_unconfirmed" in codes
+
+
+def test_designer_source_open_review_is_not_approval():
+    """Negative: plausible designer-sourced values with review_status=open stay DESIGN CONCEPT.
+
+    Completing the generic QC checklist must not elevate provenance into approval.
+    """
+    spec = default_spec(look_summary="navy cotton trousers")
+    piece = _complete_trousers_piece(spec["outfit"]["pieces"][0])
+    # Strip explicit confirmation — leave FR-3958-style designer provenance + open review.
+    for pom, cell in piece["finished_measurements"].items():
+        cell["source"] = "designer"
+        cell["designer_confirmed"] = False
+        cell["review_status"] = "open"
+        _ = pom
+    piece["materials"]["shell"].update(
+        {"source": "designer", "designer_confirmed": False, "review_status": "open"}
+    )
+    piece["closures"].update(
+        {"source": "designer", "designer_confirmed": False, "review_status": "open"}
+    )
+    piece["fit"].update(
+        {"source": "designer", "designer_confirmed": False, "review_status": "open"}
+    )
+    piece["pom_tolerances"].update(
+        {"source": "designer", "designer_confirmed": False, "review_status": "open"}
+    )
+    for step in piece["construction_steps"]:
+        step.update({"source": "designer", "designer_confirmed": False, "review_status": "open"})
+    piece["construction_confirmed"] = False
+    spec["outfit"]["pieces"] = [piece]
+    spec["sample_size"] = "M"
+    spec["body"] = {
+        "height": {"value": 170, "unit": "cm"},
+        "bust": {"value": 90, "unit": "cm"},
+        "waist": {"value": 74, "unit": "cm"},
+        "hip": {"value": 96, "unit": "cm"},
+        "inseam": {"value": 78, "unit": "cm"},
+    }
+    _check_all_qc(spec)
+    assessment = assess_manufacturing_readiness(spec)
+    assert assessment["readiness_level"] == READINESS_DESIGN_CONCEPT
+    assert assessment["production_approved"] is False
+    assert assessment["checklist_complete"] is True
+    assert any("finished_poms" in m for m in assessment["missing_required"])
+    assert any(i.get("code") == "finished_poms_unconfirmed" for i in assessment["issues"])
+
+
+def test_narrow_measurement_exception_covers_only_matching_finding():
+    """Positive/negative pair: evidence-backed exception is scoped to one issue/value."""
+    spec = default_spec(look_summary="navy cotton trousers")
+    piece = _complete_trousers_piece(spec["outfit"]["pieces"][0])
+    # Push inseam outside trousers band (55–95) while keeping other POMs clean.
+    piece["finished_measurements"]["inseam"] = _pom(120)
+    piece["measurement_exceptions"] = [
+        {
+            "code": "pom_outside_category_band",
+            "piece_id": piece["id"],
+            "pom": "inseam",
+            "value_cm": 120,
+            "revision": 1,
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+            "rationale": "Intentional long-rise theatrical trouser inseam confirmed by patternmaker.",
+        }
+    ]
+    spec["revision"] = 1
+    spec["outfit"]["pieces"] = [piece]
+    spec["sample_size"] = "M"
+    spec["body"] = {
+        "height": {"value": 170, "unit": "cm"},
+        "bust": {"value": 90, "unit": "cm"},
+        "waist": {"value": 74, "unit": "cm"},
+        "hip": {"value": 96, "unit": "cm"},
+        "inseam": {"value": 78, "unit": "cm"},
+    }
+    _check_all_qc(spec)
+    assessment = assess_manufacturing_readiness(spec)
+    assert assessment["readiness_level"] == READINESS_SAMPLE_DEVELOPMENT, (
+        assessment["missing_required"],
+        [i for i in assessment["issues"] if i.get("blocks_sample_ready")],
+    )
+    assert any(i.get("exception_applied") for i in assessment["issues"])
+
+    # Blanket / mismatched exception must not suppress the conflict.
+    piece2 = deepcopy(piece)
+    piece2["measurement_exceptions"] = [
+        {
+            "approve_all": True,
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+            "rationale": "Approve everything",
+        },
+        {
+            "code": "pom_outside_category_band",
+            "piece_id": piece2["id"],
+            "pom": "inseam",
+            "value_cm": 99,  # stale value — no longer matches current 120
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+            "rationale": "Old exception for a previous revision value",
+        },
+    ]
+    spec2 = deepcopy(spec)
+    spec2["outfit"]["pieces"] = [piece2]
+    blocked = assess_manufacturing_readiness(spec2)
+    assert blocked["readiness_level"] == READINESS_DESIGN_CONCEPT
+    assert any(
+        i.get("code") == "pom_outside_category_band" and i.get("blocks_sample_ready")
+        for i in blocked["issues"]
+    )
 
 
 def test_sized_image_wrap_preserves_immutable_intended_dimensions(tmp_path: Path):

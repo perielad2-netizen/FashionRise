@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**PR #118 PM amendment — CHANGES REQUIRED addressed** · fail-closed readiness · private FR-3958 visual QA · **STOP for PM/owner acceptance** · FE `69b83c01` / BE+worker **`7af9c809`** · Alembic `011` · **0 paid AI** · **not deployed**.)
+**Last updated:** 2026-10-28 (**PR #118 readiness-gate closure** · empty-outfit + provenance≠approval + scoped exceptions · mypy clean · **STOP for PM acceptance** · FE `69b83c01` / BE+worker **`7af9c809`** · Alembic `011` · **0 paid AI** · **not deployed**.)
 
-**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged in production. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) / [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) live. Manufacturing-spec foundation PR [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) amended after Technical PM **CHANGES REQUIRED** — **do not deploy or run paid AI until owner acceptance**.
+**Phase:** Protected family beta. Create Real Design **Generate AI PDF → Wait → Download PDF** unchanged in production. PR [#116](https://github.com/perielad2-netizen/FashionRise/pull/116) / [#117](https://github.com/perielad2-netizen/FashionRise/pull/117) live. Manufacturing-spec foundation PR [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) is conditionally accepted with **deployment HOLD** until readiness-gate closure review — **do not deploy or run paid AI**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -53,7 +53,26 @@ Technical PM reviewed `bfaf4651` and required fail-closed readiness, conservativ
 | Private visual QA | Real Magic `3958812c…` (1024×1536) + six stored artifacts from run `6b3bf6c3…`. Private PDF 14 pages rendered. Evidence under agent artifacts `fr-3958-mfg-private-qa/` (**not** committed to GitHub) |
 | Private QA results | Hoodie/shorts flats PASS · hoodie detail readable + UNVERIFIED banner PASS · rejected shorts detail excluded PASS · BOM NOT CONFIRMED PASS · measurement warnings PASS · readiness DESIGN CONCEPT PASS |
 | Known limitations | No automatic image-pixel garment classifier (conservative unverified state instead). Proposed backs remain unverified. FR-3958 still blocked for SAMPLE-READY until designer confirms POMs/materials/closures/construction/sample size |
-| Exact next action | **STOP** for Technical PM + owner acceptance of amendment SHA. Do not deploy. |
+| Exact next action | Superseded by readiness-gate closure below. |
+
+## PR #118 readiness-gate closure (2026-10-28) — STOP for PM acceptance
+
+Technical PM CONDITIONAL PASS on `c411ed17` with **deployment HOLD** pending fail-closed closure items.
+
+| Item | Detail |
+|---|---|
+| Parent amendment | `c411ed17` |
+| Closure tip | *(recorded after commit)* |
+| Production | **Unchanged** — FE `69b83c01` · BE+worker `7af9c809` · Alembic `011` · ceiling `$50` · **no deploy** · **no migration** · **no historical PDF rewrite** |
+| Paid AI | **0** |
+| Outfit integrity | Empty / malformed / duplicate-id / unconfirmed-category outfits cannot reach SAMPLE-DEVELOPMENT READY |
+| Provenance ≠ approval | `source=designer` alone is insufficient. Required POMs/materials/fit/closure/construction/tolerances need meaningful values **and** explicit confirmation; `review_status=open` / `needs_review` remain unconfirmed |
+| Measurement exceptions | Narrow evidence-backed exceptions must match `code` + `piece_id` + `pom` + current `value_cm` (+ revision when set) with rationale; blanket `approve_all` rejected. Unmatched conflicts stay blocking |
+| Mypy | `techpack_manufacturing.py` — **0 errors** (`mypy --follow-imports=skip`; no broad type suppression) |
+| Tests | Prior suite preserved + new regressions (empty outfit, open-review designer provenance, scoped exception positive/negative) → **46 passed** with V2 PDF + P0 reliability |
+| Private visual QA | Prior real-image 14-page FR-3958 evidence retained under agent artifacts (not in GitHub) |
+| Known limitations | No automatic image-pixel garment classifier. Proposed backs unverified. Exception path covers measurement findings only (not materials/artwork). FR-3958 remains DESIGN CONCEPT until designer confirms fields |
+| Exact next action | **STOP** for Technical PM acceptance of closure SHA. **Do not deploy.** |
 
 ## OWNER ACCEPTANCE PASS — Measurements & Details (FE)
 
@@ -1006,7 +1025,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-28 | **PR #118 PM amendment (CHANGES REQUIRED):** fail-closed SAMPLE-READY gates; conservative unverified detail art (no pixel trust); `_SizedImage` immutable wrap + BOM color-list normalization + dedicated detail pages; negative trousers/hoodie + positive complete + unmarked wrong-garment tests; private FR-3958 Magic+6-artifact visual QA (14 pages); production FE `69b83c01` / BE+worker `7af9c809` / Alembic `011` unchanged; **0 paid AI**; **STOP for PM/owner acceptance — no deploy**. |
+| 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
+| 2026-10-28 | **PR #118 PM amendment (CHANGES REQUIRED):** fail-closed SAMPLE-READY gates; conservative unverified detail art (no pixel trust); `_SizedImage` immutable wrap + BOM color-list normalization + dedicated detail pages; negative trousers/hoodie + positive complete + unmarked wrong-garment tests; private FR-3958 Magic+6-artifact visual QA (14 pages); production FE `69b83c01` / BE+worker `7af9c809` / Alembic `011` unchanged; **0 paid AI**; Technical PM CONDITIONAL PASS + HOLD for readiness-gate closure. |
 | 2026-10-28 | **Manufacturing-ready Sample-Development Tech Pack foundation** draft PR #118 @ `bfaf4651`: readiness levels, POM contradiction flags, artifact exclusion, offline FR-3958 preview; production unchanged; **0 paid AI**; Technical PM returned **CHANGES REQUIRED** (see amendment row above). |
 | 2026-10-27 | **Professional AI Technical Pack quality audit (docs only):** inspected real PDFs FR-7182 / FR-D47D / FR-CF5A vs Magic Looks; FR-3958 NOT EVALUABLE; offline pytest **20 passed**; decision **NEEDS IMPROVEMENT** (P0 multi-piece collapse + `approved_template` overclaim); deliverable `docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`; FE/BE/worker/Alembic **unchanged**; **0 paid AI**; **STOP for PM** — no fix/deploy. |
 | 2026-10-27 | **OWNER ACCEPTANCE PASS — Measurements & Details** on FE `69b83c01` (PR #114): idle editor, Done save, reopen persistence, Generate-not-stale-Download after edit with existing Professional PDF. Production lineage preserved (`732bda9f` / worker / Alembic `011`). |

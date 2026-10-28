@@ -187,12 +187,20 @@ def _num(cell: Any) -> float | None:
     return cm
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
 def _text_blob(*parts: Any) -> str:
     return " ".join(str(p or "") for p in parts).lower()
 
 
 def _fit_tokens(piece: dict[str, Any], preferences: dict[str, Any] | None) -> str:
-    fit = piece.get("fit") if isinstance(piece.get("fit"), dict) else {}
+    fit = _as_dict(piece.get("fit"))
     prefs = preferences if isinstance(preferences, dict) else {}
     return _text_blob(
         fit.get("suggestion"),
@@ -205,9 +213,10 @@ def _fit_tokens(piece: dict[str, Any], preferences: dict[str, Any] | None) -> st
 
 
 def _stretch_evidence(piece: dict[str, Any]) -> bool:
-    mats = piece.get("materials") if isinstance(piece.get("materials"), dict) else {}
-    shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
-    closures = piece.get("closures") if isinstance(piece.get("closures"), dict) else {}
+    mats = _as_dict(piece.get("materials"))
+    shell = _as_dict(mats.get("shell"))
+    closures = _as_dict(piece.get("closures"))
+    fit = _as_dict(piece.get("fit"))
     blob = _text_blob(
         shell.get("name"),
         shell.get("composition"),
@@ -216,7 +225,7 @@ def _stretch_evidence(piece: dict[str, Any]) -> bool:
         shell.get("fabric_structure"),
         closures.get("type"),
         closures.get("notes"),
-        (piece.get("fit") or {}).get("ease_note") if isinstance(piece.get("fit"), dict) else "",
+        fit.get("ease_note"),
     )
     return any(tok in blob for tok in _STRETCH_TOKENS)
 
@@ -232,17 +241,18 @@ def _effective_category(piece: dict[str, Any]) -> str:
 def annotate_pom_definitions(piece: dict[str, Any]) -> dict[str, Any]:
     """Ensure finished POM cells carry measurement method definitions (non-destructive)."""
     out = deepcopy(piece)
-    finished = out.get("finished_measurements") if isinstance(out.get("finished_measurements"), dict) else {}
+    finished = _as_dict(out.get("finished_measurements"))
     for key, cell in list(finished.items()):
         if not isinstance(cell, dict):
             continue
         meta = POM_DEFINITIONS.get(key)
         if not meta:
             continue
-        if not cell.get("definition"):
-            cell["definition"] = f"{meta['label']} — {meta['method']}"
-        cell.setdefault("measure_type", meta["measure_type"])
-        finished[key] = cell
+        updated = dict(cell)
+        if not updated.get("definition"):
+            updated["definition"] = f"{meta['label']} — {meta['method']}"
+        updated.setdefault("measure_type", meta["measure_type"])
+        finished[key] = updated
     out["finished_measurements"] = finished
     return out
 
@@ -288,8 +298,8 @@ def normalize_closure_display(closures: dict[str, Any] | None) -> dict[str, Any]
 def normalize_shell_material(piece: dict[str, Any]) -> dict[str, Any]:
     """Separate garment color from shell material; strip outfit color-list fabric names."""
     out = deepcopy(piece)
-    mats = out.get("materials") if isinstance(out.get("materials"), dict) else {}
-    shell = dict(mats.get("shell") if isinstance(mats.get("shell"), dict) else {})
+    mats = _as_dict(out.get("materials"))
+    shell = _as_dict(mats.get("shell"))
     name = str(shell.get("name") or "")
     color_hint = str(out.get("color_hint") or "")
     # Detect list-like outfit color dump used as fabric name.
@@ -311,12 +321,10 @@ def normalize_shell_material(piece: dict[str, Any]) -> dict[str, Any]:
     mats["shell"] = shell
     # Ensure lining / rib / trim buckets exist for PDF separation.
     for key in ("lining", "interfacing", "rib", "trims"):
-        if key not in mats or not isinstance(mats.get(key), dict):
-            mats[key] = mats.get(key) if isinstance(mats.get(key), dict) else {"name": "", "source": "empty"}
+        if not isinstance(mats.get(key), dict):
+            mats[key] = {"name": "", "source": "empty"}
     out["materials"] = mats
-    out["closures"] = normalize_closure_display(
-        out.get("closures") if isinstance(out.get("closures"), dict) else {}
-    )
+    out["closures"] = normalize_closure_display(_as_dict(out.get("closures")))
     return out
 
 
@@ -342,6 +350,29 @@ def _issue(
     }
 
 
+def _measurement_issue(
+    *,
+    code: str,
+    message: str,
+    piece_id: str | None = None,
+    pom: str | None = None,
+    value_cm: float | None = None,
+    exception_allowed_if: str | None = None,
+    blocks_sample_ready: bool = True,
+) -> dict[str, Any]:
+    issue = _issue(
+        code=code,
+        message=message,
+        piece_id=piece_id,
+        pom=pom,
+        blocks_sample_ready=blocks_sample_ready,
+        exception_allowed_if=exception_allowed_if,
+    )
+    if value_cm is not None:
+        issue["value_cm"] = float(value_cm)
+    return issue
+
+
 def validate_piece_measurements(
     piece: dict[str, Any],
     *,
@@ -352,13 +383,14 @@ def validate_piece_measurements(
     issues: list[dict[str, Any]] = []
     pid = str(piece.get("id") or "")
     cat = _effective_category(piece)
-    finished = piece.get("finished_measurements") if isinstance(piece.get("finished_measurements"), dict) else {}
-    body = body if isinstance(body, dict) else {}
+    finished = _as_dict(piece.get("finished_measurements"))
+    body_m = body if isinstance(body, dict) else {}
     fit_blob = _fit_tokens(piece, preferences)
     stretch_ok = _stretch_evidence(piece)
     bands = CATEGORY_POM_PLAUSIBLE_CM.get(cat) or CATEGORY_POM_PLAUSIBLE_CM.get(
         str(piece.get("category") or ""), {}
     )
+    fit = _as_dict(piece.get("fit"))
 
     for pom, (lo, hi) in bands.items():
         cell = finished.get(pom)
@@ -368,36 +400,42 @@ def validate_piece_measurements(
         if cm < lo or cm > hi:
             label = POM_DEFINITIONS.get(pom, {}).get("label", pom)
             issues.append(
-                _issue(
+                _measurement_issue(
                     code="pom_outside_category_band",
                     piece_id=pid,
                     pom=pom,
+                    value_cm=cm,
                     message=(
                         f"{label} = {cm:g} cm is outside the usual {lo:g}–{hi:g} cm band for "
                         f"a {cat}. Designer value preserved — confirm measuring method "
                         f"({POM_DEFINITIONS.get(pom, {}).get('method', 'see POM definition')}) "
                         "or correct the value before sample development."
                     ),
-                    exception_allowed_if="Confirmed construction/material/fit exception documented",
+                    exception_allowed_if=(
+                        "Evidence-backed measurement exception naming this code/pom/value"
+                    ),
                 )
             )
-            if isinstance(cell, dict):
+            if isinstance(cell, dict) and not _is_explicitly_confirmed(cell):
+                # Do not strip an existing explicit confirmation — band findings are
+                # carried as readiness issues / exceptions instead.
                 cell["review_status"] = "needs_review"
 
-    # Explicit FR-style contradictions from visual length cues.
-    length_style = ""
-    fit = piece.get("fit") if isinstance(piece.get("fit"), dict) else {}
     length_style = str(fit.get("length_style") or "").lower()
     gl = _num(finished.get("garment_length"))
     if gl is not None and ("hip" in length_style or "upper hip" in length_style) and gl >= 100:
         issues.append(
-            _issue(
+            _measurement_issue(
                 code="length_vs_visual_silhouette",
                 piece_id=pid,
                 pom="garment_length",
+                value_cm=gl,
                 message=(
                     f"HPS-to-hem length = {gl:g} cm but the design notes describe a hip-length "
                     f"{cat}. Confirm whether this is a full-body / dress length or a data entry error."
+                ),
+                exception_allowed_if=(
+                    "Evidence-backed measurement exception naming this code/pom/value"
                 ),
             )
         )
@@ -406,22 +444,28 @@ def validate_piece_measurements(
         inseam is not None
         and cat == "shorts"
         and inseam >= 50
-        and any(tok in _text_blob(fit.get("length_style"), fit.get("silhouette")) for tok in ("mid-thigh", "thigh", "above-knee", "near-knee"))
+        and any(
+            tok in _text_blob(fit.get("length_style"), fit.get("silhouette"))
+            for tok in ("mid-thigh", "thigh", "above-knee", "near-knee")
+        )
     ):
         issues.append(
-            _issue(
+            _measurement_issue(
                 code="shorts_inseam_vs_silhouette",
                 piece_id=pid,
                 pom="inseam",
+                value_cm=inseam,
                 message=(
                     f"Shorts finished inseam = {inseam:g} cm while the silhouette describes "
                     "mid-thigh / above-knee shorts. Confirm measuring method or correct the POM."
                 ),
+                exception_allowed_if=(
+                    "Evidence-backed measurement exception naming this code/pom/value"
+                ),
             )
         )
 
-    # Body vs finished ease contradictions (regular/relaxed without stretch).
-    body_waist = _num(body.get("waist"))
+    body_waist = _num(body_m.get("waist"))
     fin_waist = _num(finished.get("waist"))
     if (
         body_waist is not None
@@ -430,20 +474,23 @@ def validate_piece_measurements(
         and not stretch_ok
     ):
         issues.append(
-            _issue(
+            _measurement_issue(
                 code="finished_waist_smaller_than_body",
                 piece_id=pid,
                 pom="waist",
+                value_cm=fin_waist,
                 message=(
                     f"Body waist = {body_waist:g} cm but finished waist = {fin_waist:g} cm "
                     "without confirmed stretch/elastic construction. "
                     "Confirm elastic/drawcord/knit stretch or correct measurements."
                 ),
-                exception_allowed_if="Stretch fabric or elastic waist confirmed by designer",
+                exception_allowed_if=(
+                    "Evidence-backed measurement exception naming this code/pom/value"
+                ),
             )
         )
 
-    body_hip = _num(body.get("hip"))
+    body_hip = _num(body_m.get("hip"))
     fin_hip = _num(finished.get("hip"))
     if (
         body_hip is not None
@@ -452,20 +499,23 @@ def validate_piece_measurements(
         and any(tok in fit_blob for tok in _RELAXED_FIT_TOKENS + _REGULAR_FIT_TOKENS)
     ):
         issues.append(
-            _issue(
+            _measurement_issue(
                 code="zero_ease_hip_with_relaxed_fit",
                 piece_id=pid,
                 pom="hip",
+                value_cm=fin_hip,
                 message=(
                     f"Body hip = {body_hip:g} cm and finished hip = {fin_hip:g} cm with "
                     "regular/relaxed fit claimed. Finished garment usually needs ease — "
                     "confirm skin-tight intent, stretch fabric, or correct POMs."
                 ),
-                exception_allowed_if="Zero-ease / stretch fit intentionally confirmed",
+                exception_allowed_if=(
+                    "Evidence-backed measurement exception naming this code/pom/value"
+                ),
             )
         )
 
-    body_bust = _num(body.get("bust"))
+    body_bust = _num(body_m.get("bust"))
     fin_chest = _num(finished.get("chest_bust"))
     if (
         body_bust is not None
@@ -474,15 +524,18 @@ def validate_piece_measurements(
         and any(tok in fit_blob for tok in _RELAXED_FIT_TOKENS)
     ):
         issues.append(
-            _issue(
+            _measurement_issue(
                 code="zero_ease_chest_with_relaxed_fit",
                 piece_id=pid,
                 pom="chest_bust",
+                value_cm=fin_chest,
                 message=(
                     f"Body bust = {body_bust:g} cm and finished chest = {fin_chest:g} cm with "
                     "relaxed fit. Confirm intentional zero ease / stretch, or correct values."
                 ),
-                exception_allowed_if="Zero-ease / stretch fit intentionally confirmed",
+                exception_allowed_if=(
+                    "Evidence-backed measurement exception naming this code/pom/value"
+                ),
             )
         )
 
@@ -513,6 +566,26 @@ _DESIGNER_SOURCES = frozenset(
         "confirmed",
     }
 )
+_UNRESOLVED_REVIEW = frozenset(
+    {
+        "open",
+        "needs_review",
+        "proposed",
+        "proposed_unverified",
+        "review",
+        "unverified",
+    }
+)
+_CONFIRMED_REVIEW = frozenset(
+    {
+        "confirmed",
+        "designer_confirmed",
+        "accepted",
+        "approved",
+        "visual_qa_confirmed",
+        "owner_accepted",
+    }
+)
 _VISUAL_CONFIRMED = frozenset(
     {
         "designer_confirmed",
@@ -528,8 +601,21 @@ _REJECTED_ART = frozenset(
         "rejected",
     }
 )
+_KNOWN_GARMENT_CATEGORIES = frozenset(
+    {
+        "trousers",
+        "shorts",
+        "top",
+        "hoodie",
+        "shirt",
+        "jacket",
+        "dress",
+        "skirt",
+        "jumpsuit",
+    }
+)
 
-# Category-required finished POMs that must be present, numeric, and designer-confirmed.
+# Category-required finished POMs that must be present, numeric, and explicitly confirmed.
 REQUIRED_POMS_BY_CATEGORY: dict[str, tuple[str, ...]] = {
     "trousers": ("waist", "hip", "inseam", "front_rise", "leg_opening"),
     "shorts": ("waist", "hip", "inseam", "front_rise", "leg_opening"),
@@ -543,18 +629,38 @@ REQUIRED_POMS_BY_CATEGORY: dict[str, tuple[str, ...]] = {
 }
 
 
+def _review_status(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    return str(value.get("review_status") or "").strip().lower()
+
+
+def _is_designer_provenance(value: Any) -> bool:
+    """True when a value was entered by a designer — provenance only, not approval."""
+    if not isinstance(value, dict):
+        return False
+    return str(value.get("source") or "").strip().lower() in _DESIGNER_SOURCES
+
+
 def _is_designer_source(value: Any) -> bool:
-    if isinstance(value, dict):
-        src = str(value.get("source") or "").strip().lower()
-        if value.get("designer_confirmed") is True:
-            return True
-        if str(value.get("review_status") or "").strip().lower() in {
-            "confirmed",
-            "designer_confirmed",
-        }:
-            return True
-        return src in _DESIGNER_SOURCES
-    return False
+    """Backward-compatible alias: provenance OR explicit confirmation."""
+    return _is_designer_provenance(value) or _is_explicitly_confirmed(value)
+
+
+def _is_explicitly_confirmed(value: Any) -> bool:
+    """Manufacturing approval — source=designer alone is never enough.
+
+    Requires designer_confirmed=True or a confirmed review_status, and rejects
+    unresolved statuses such as open / needs_review.
+    """
+    if not isinstance(value, dict):
+        return False
+    status = _review_status(value)
+    if status in _UNRESOLVED_REVIEW:
+        return False
+    if value.get("designer_confirmed") is True:
+        return True
+    return status in _CONFIRMED_REVIEW
 
 
 def _pom_designer_confirmed(cell: Any) -> bool:
@@ -562,7 +668,7 @@ def _pom_designer_confirmed(cell: Any) -> bool:
         return False
     if _num(cell) is None:
         return False
-    return _is_designer_source(cell)
+    return _is_explicitly_confirmed(cell)
 
 
 def required_fields_for_category(category: str) -> list[str]:
@@ -647,26 +753,30 @@ def evaluate_artifact_for_piece(
 def apply_artifact_reviews(spec: dict[str, Any]) -> dict[str, Any]:
     """Annotate illustration artifacts with include/evidence decisions (non-destructive)."""
     out = deepcopy(spec)
-    outfit = out.get("outfit") if isinstance(out.get("outfit"), dict) else {}
-    pieces = outfit.get("pieces") if isinstance(outfit.get("pieces"), list) else []
-    for piece in pieces:
+    outfit = _as_dict(out.get("outfit"))
+    pieces_raw = _as_list(outfit.get("pieces"))
+    pieces: list[Any] = []
+    for piece in pieces_raw:
         if not isinstance(piece, dict):
+            pieces.append(piece)
             continue
-        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
-        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        piece_out = dict(piece)
+        ill = _as_dict(piece_out.get("illustrations"))
+        arts = _as_dict(ill.get("artifacts"))
         for kind, meta in list(arts.items()):
             if not isinstance(meta, dict):
                 continue
-            decision = evaluate_artifact_for_piece(piece, kind=str(kind), artifact_meta=meta)
-            meta = dict(meta)
-            meta["preview_include"] = decision["include"]
-            meta["manufacturing_evidence"] = bool(decision.get("manufacturing_evidence"))
-            meta["review_state"] = decision["review_state"]
+            decision = evaluate_artifact_for_piece(piece_out, kind=str(kind), artifact_meta=meta)
+            meta_out = dict(meta)
+            meta_out["preview_include"] = decision["include"]
+            meta_out["manufacturing_evidence"] = bool(decision.get("manufacturing_evidence"))
+            meta_out["review_state"] = decision["review_state"]
             if decision.get("reason"):
-                meta["review_message"] = decision["reason"]
-            arts[str(kind)] = meta
+                meta_out["review_message"] = decision["reason"]
+            arts[str(kind)] = meta_out
         ill["artifacts"] = arts
-        piece["illustrations"] = ill
+        piece_out["illustrations"] = ill
+        pieces.append(piece_out)
     outfit["pieces"] = pieces
     out["outfit"] = outfit
     return out
@@ -676,7 +786,7 @@ def normalize_bom_rows(bom: list[Any] | None, *, piece: dict[str, Any] | None = 
     """Flag/normalize BOM rows that dump outfit color lists as fabric names. Never invent composition."""
     _ = piece
     rows: list[dict[str, Any]] = []
-    for row in bom or []:
+    for row in _as_list(bom):
         if not isinstance(row, dict):
             continue
         item = dict(row)
@@ -697,35 +807,38 @@ def normalize_bom_rows(bom: list[Any] | None, *, piece: dict[str, Any] | None = 
 
 
 def _fit_ease_confirmed(piece: dict[str, Any], preferences: dict[str, Any] | None) -> bool:
-    fit = piece.get("fit") if isinstance(piece.get("fit"), dict) else {}
-    if fit.get("designer_confirmed") is True:
-        return True
-    if str(fit.get("review_status") or "").lower() in {"confirmed", "designer_confirmed"}:
-        return True
-    if _is_designer_source(fit) and str(fit.get("suggestion") or fit.get("silhouette") or "").strip():
+    fit = _as_dict(piece.get("fit"))
+    has_value = bool(str(fit.get("suggestion") or fit.get("silhouette") or "").strip())
+    if has_value and _is_explicitly_confirmed(fit):
         return True
     prefs = preferences if isinstance(preferences, dict) else {}
-    return bool(prefs.get("fit_preference_confirmed") is True)
+    # Preference-level confirmation still requires a named fit on the piece.
+    return bool(has_value and prefs.get("fit_preference_confirmed") is True and _is_explicitly_confirmed(prefs))
 
 
 def _construction_confirmed(piece: dict[str, Any]) -> bool:
-    if piece.get("construction_confirmed") is True:
-        return True
-    steps = piece.get("construction_steps") if isinstance(piece.get("construction_steps"), list) else []
-    if not steps:
+    steps = _as_list(piece.get("construction_steps"))
+    meaningful = [
+        row
+        for row in steps
+        if isinstance(row, dict) and str(row.get("instruction") or "").strip()
+    ]
+    if not meaningful:
         return False
-    # At least one designer-sourced step; generic defaults alone are insufficient.
-    designer_steps = 0
-    for row in steps:
-        if isinstance(row, dict) and _is_designer_source(row):
-            designer_steps += 1
-    return designer_steps >= 1
+    if any(_is_explicitly_confirmed(row) for row in meaningful):
+        return True
+    # Piece-level construction_confirmed still requires at least one meaningful step
+    # and must not be left in an unresolved review state.
+    return bool(
+        piece.get("construction_confirmed") is True
+        and _review_status(piece) not in _UNRESOLVED_REVIEW
+    )
 
 
 def _material_confirmed(piece: dict[str, Any]) -> bool:
-    mats = piece.get("materials") if isinstance(piece.get("materials"), dict) else {}
-    shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
-    if str(shell.get("review_status") or "") == "needs_review":
+    mats = _as_dict(piece.get("materials"))
+    shell = _as_dict(mats.get("shell"))
+    if _review_status(shell) in _UNRESOLVED_REVIEW:
         return False
     name = str(shell.get("name") or "").strip()
     composition = str(shell.get("composition") or "").strip()
@@ -733,19 +846,222 @@ def _material_confirmed(piece: dict[str, Any]) -> bool:
         return False
     if re.search(r"\[.*\]", name):
         return False
-    return _is_designer_source(shell)
+    return _is_explicitly_confirmed(shell)
 
 
 def _closure_confirmed(piece: dict[str, Any]) -> bool:
-    closures = normalize_closure_display(
-        piece.get("closures") if isinstance(piece.get("closures"), dict) else {}
-    )
-    if str(closures.get("review_status") or "") == "needs_review":
+    closures = normalize_closure_display(_as_dict(piece.get("closures")))
+    if _review_status(closures) in _UNRESOLVED_REVIEW:
         return False
     display = str(closures.get("display_type") or closures.get("type") or "").strip()
     if not display or display == "—":
         return False
-    return _is_designer_source(closures)
+    return _is_explicitly_confirmed(closures)
+
+
+def _tolerances_confirmed(piece: dict[str, Any]) -> bool:
+    tol = _as_dict(piece.get("pom_tolerances"))
+    if not tol or tol.get("default_cm") is None:
+        return False
+    if _review_status(tol) in _UNRESOLVED_REVIEW:
+        return False
+    return _is_explicitly_confirmed(tol)
+
+
+def _piece_identity_ok(piece: dict[str, Any]) -> bool:
+    pid = str(piece.get("id") or "").strip()
+    if not pid:
+        return False
+    raw_cat = str(piece.get("category") or "").strip().lower()
+    effective = _effective_category(piece)
+    known = effective in _KNOWN_GARMENT_CATEGORIES or raw_cat in _KNOWN_GARMENT_CATEGORIES
+    category_confirmed = piece.get("category_confirmed") is True or _is_explicitly_confirmed(
+        piece.get("category_review")
+    )
+    if not raw_cat or raw_cat in {"other", "unknown", "unspecified", "n/a", "na"}:
+        return category_confirmed
+    return known or category_confirmed
+
+
+def validate_outfit_structure(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Reject empty / malformed / duplicate / unconfirmed garment identities."""
+    issues: list[dict[str, Any]] = []
+    outfit = _as_dict(spec.get("outfit"))
+    pieces_raw = outfit.get("pieces")
+    if not isinstance(pieces_raw, list) or not pieces_raw:
+        issues.append(
+            _issue(
+                code="outfit_empty",
+                message=(
+                    "Outfit has no garment components. SAMPLE-DEVELOPMENT READY requires at least "
+                    "one uniquely identified, category-confirmed piece."
+                ),
+            )
+        )
+        return issues
+
+    seen_ids: set[str] = set()
+    unique_valid = 0
+    for idx, piece in enumerate(pieces_raw):
+        if not isinstance(piece, dict):
+            issues.append(
+                _issue(
+                    code="piece_malformed",
+                    message=f"Outfit piece at index {idx} is malformed (expected object).",
+                )
+            )
+            continue
+
+        pid = str(piece.get("id") or "").strip()
+        duplicate = False
+        if not pid:
+            issues.append(
+                _issue(
+                    code="piece_id_missing",
+                    message=f"Outfit piece at index {idx} has no unique id.",
+                )
+            )
+        elif pid in seen_ids:
+            duplicate = True
+            issues.append(
+                _issue(
+                    code="piece_id_duplicate",
+                    piece_id=pid,
+                    message=f"Duplicate garment component id “{pid}”.",
+                )
+            )
+        else:
+            seen_ids.add(pid)
+
+        raw_cat = str(piece.get("category") or "").strip().lower()
+        effective = _effective_category(piece)
+        known = effective in _KNOWN_GARMENT_CATEGORIES or raw_cat in _KNOWN_GARMENT_CATEGORIES
+        category_confirmed = piece.get("category_confirmed") is True or _is_explicitly_confirmed(
+            piece.get("category_review")
+        )
+        if not raw_cat or raw_cat in {"other", "unknown", "unspecified", "n/a", "na"}:
+            if not category_confirmed:
+                issues.append(
+                    _issue(
+                        code="piece_category_unconfirmed",
+                        piece_id=pid or None,
+                        message=(
+                            f"Garment category for piece “{pid or idx}” is missing/unspecified. "
+                            "Confirm a manufacturing category before SAMPLE-DEVELOPMENT READY."
+                        ),
+                    )
+                )
+                continue
+        elif not known and not category_confirmed:
+            issues.append(
+                _issue(
+                    code="piece_category_unconfirmed",
+                    piece_id=pid or None,
+                    message=(
+                        f"Garment category “{raw_cat}” for piece “{pid or idx}” is not a known "
+                        "manufacturing category and has not been explicitly confirmed."
+                    ),
+                )
+            )
+            continue
+
+        if pid and not duplicate and _piece_identity_ok(piece):
+            unique_valid += 1
+
+    if unique_valid < 1:
+        issues.append(
+            _issue(
+                code="outfit_no_valid_pieces",
+                message=(
+                    "No uniquely identified garment component with a confirmed category is present."
+                ),
+            )
+        )
+    return issues
+
+
+def _collect_measurement_exceptions(spec: dict[str, Any], piece: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for src in (_as_list(spec.get("measurement_exceptions")), _as_list(piece.get("measurement_exceptions"))):
+        for row in src:
+            if isinstance(row, dict):
+                rows.append(row)
+    return rows
+
+
+def _exception_covers_issue(
+    issue: dict[str, Any],
+    *,
+    exceptions: list[dict[str, Any]],
+    pack_revision: Any = None,
+) -> bool:
+    """Narrow, evidence-backed exception — never a blanket approval.
+
+    Requires matching code + piece_id + pom + current value_cm, explicit
+    confirmation, and (when provided) matching revision.
+    """
+    code = str(issue.get("code") or "")
+    piece_id = str(issue.get("piece_id") or "")
+    pom = str(issue.get("pom") or "")
+    value = issue.get("value_cm")
+    if not code or not piece_id or not pom or not isinstance(value, (int, float)):
+        return False
+
+    for row in exceptions:
+        if not _is_explicitly_confirmed(row):
+            continue
+        # Reject blanket / global approvals.
+        if row.get("approve_all") is True or row.get("blanket") is True:
+            continue
+        if str(row.get("code") or "") != code:
+            continue
+        if str(row.get("piece_id") or "") != piece_id:
+            continue
+        if str(row.get("pom") or "") != pom:
+            continue
+        exc_val = row.get("value_cm")
+        if not isinstance(exc_val, (int, float)):
+            continue
+        if abs(float(exc_val) - float(value)) > 0.051:
+            continue
+        if (
+            row.get("revision") is not None
+            and pack_revision is not None
+            and str(row.get("revision")) != str(pack_revision)
+        ):
+            continue
+        if not str(row.get("rationale") or row.get("notes") or "").strip():
+            # Require a short rationale so this is evidence-backed, not a silent tick.
+            continue
+        return True
+    return False
+
+
+def apply_measurement_exceptions(
+    issues: list[dict[str, Any]],
+    *,
+    spec: dict[str, Any],
+    piece: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Clear blocks_sample_ready only for narrowly matched confirmed exceptions."""
+    exceptions = _collect_measurement_exceptions(spec, piece)
+    pack_revision = spec.get("revision")
+    out: list[dict[str, Any]] = []
+    for issue in issues:
+        item = dict(issue)
+        if item.get("blocks_sample_ready") and _exception_covers_issue(
+            item, exceptions=exceptions, pack_revision=pack_revision
+        ):
+            item["blocks_sample_ready"] = False
+            item["severity"] = "info"
+            item["exception_applied"] = True
+            item["review_status"] = "exception_confirmed"
+            item["message"] = (
+                str(item.get("message") or "")
+                + " Exception accepted for this specific finding/value/revision."
+            ).strip()
+        out.append(item)
+    return out
 
 
 def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
@@ -753,38 +1069,45 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
 
     A checked generic QC checklist alone is insufficient. Category-specific
     finished POMs, fit/ease, materials, closures, construction, tolerances and
-    conflict resolution must show explicit designer confirmation — not AI
-    estimates or generic defaults.
+    conflict resolution must show explicit review confirmation — not AI
+    estimates, generic defaults, or provenance-only ``source=designer``.
     """
-    v2 = deepcopy(spec) if isinstance(spec, dict) else {}
+    v2: dict[str, Any] = deepcopy(spec) if isinstance(spec, dict) else {}
     issues: list[dict[str, Any]] = []
     issues.extend(validate_sample_size(v2))
+    issues.extend(validate_outfit_structure(v2))
 
-    body = v2.get("body") if isinstance(v2.get("body"), dict) else {}
-    prefs = v2.get("preferences") if isinstance(v2.get("preferences"), dict) else {}
-    outfit = v2.get("outfit") if isinstance(v2.get("outfit"), dict) else {}
-    pieces = [p for p in (outfit.get("pieces") or []) if isinstance(p, dict)]
+    body = _as_dict(v2.get("body"))
+    prefs = _as_dict(v2.get("preferences"))
+    outfit = _as_dict(v2.get("outfit"))
+    pieces = [p for p in _as_list(outfit.get("pieces")) if isinstance(p, dict)]
 
     missing_required: list[str] = []
     category_requirements: dict[str, list[str]] = {}
 
     if not str(v2.get("sample_size") or "").strip():
         missing_required.append("named_sample_size")
+    if not pieces:
+        missing_required.append("outfit_pieces")
 
     for piece in pieces:
-        pid = str(piece.get("id") or "piece")
+        pid = str(piece.get("id") or "").strip() or "piece"
+        if not _piece_identity_ok(piece):
+            missing_required.append(f"{pid}:garment_identity")
+            continue
+
         cat = _effective_category(piece)
         reqs = required_fields_for_category(cat)
         category_requirements[pid] = reqs
         piece_n = normalize_shell_material(annotate_pom_definitions(piece))
-        meas_issues = validate_piece_measurements(piece_n, body=body, preferences=prefs)
+        meas_issues = apply_measurement_exceptions(
+            validate_piece_measurements(piece_n, body=body, preferences=prefs),
+            spec=v2,
+            piece=piece_n,
+        )
         issues.extend(meas_issues)
 
-        finished = (
-            piece_n.get("finished_measurements")
-            if isinstance(piece_n.get("finished_measurements"), dict)
-            else {}
-        )
+        finished = _as_dict(piece_n.get("finished_measurements"))
         required_poms = required_poms_for_piece(piece_n)
         missing_poms: list[str] = []
         unconfirmed_poms: list[str] = []
@@ -810,15 +1133,12 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     code="finished_poms_unconfirmed",
                     piece_id=pid,
                     message=(
-                        f"Category “{cat}” requires designer-confirmed finished POMs "
-                        f"{list(required_poms)}. "
+                        f"Category “{cat}” requires explicitly confirmed finished POMs "
+                        f"{list(required_poms)} (source=designer alone is insufficient). "
+                        + (f"Missing values: {missing_poms}. " if missing_poms else "")
                         + (
-                            f"Missing values: {missing_poms}. "
-                            if missing_poms
-                            else ""
-                        )
-                        + (
-                            f"Present but not designer-confirmed (AI/estimate/empty): {unconfirmed_poms}."
+                            f"Present but not review-confirmed (open/needs_review/AI/estimate): "
+                            f"{unconfirmed_poms}."
                             if unconfirmed_poms
                             else ""
                         )
@@ -833,8 +1153,8 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     code="fit_ease_unconfirmed",
                     piece_id=pid,
                     message=(
-                        f"Fit/ease for “{piece.get('label') or cat}” is not designer-confirmed. "
-                        "AI silhouette suggestions do not count."
+                        f"Fit/ease for “{piece.get('label') or cat}” lacks explicit review "
+                        "confirmation. Provenance-only designer source does not count."
                     ),
                 )
             )
@@ -847,7 +1167,7 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     piece_id=pid,
                     message=(
                         f"Shell material/composition for “{piece.get('label') or cat}” must be "
-                        "designer-specified (color lists and estimates are insufficient)."
+                        "explicitly confirmed (color lists, estimates, and open review are insufficient)."
                     ),
                 )
             )
@@ -860,7 +1180,7 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     piece_id=pid,
                     message=(
                         f"Closure/fastener for “{piece.get('label') or cat}” is unconfirmed. "
-                        "Boolean placeholders and AI guesses are not manufacturing specs."
+                        "Boolean placeholders, AI guesses, and open review are not manufacturing specs."
                     ),
                 )
             )
@@ -873,22 +1193,12 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     piece_id=pid,
                     message=(
                         f"Construction decisions for “{piece.get('label') or cat}” are missing or "
-                        "only generic defaults. Designer-confirmed steps are required."
+                        "only generic defaults. Explicitly confirmed steps are required."
                     ),
                 )
             )
 
-        tol = piece.get("pom_tolerances") if isinstance(piece.get("pom_tolerances"), dict) else {}
-        # Require explicit designer confirmation on tolerances (value alone is insufficient).
-        tolerances_ok = isinstance(tol, dict) and (
-            (
-                tol.get("designer_confirmed") is True
-                and tol.get("default_cm") is not None
-            )
-            or _is_designer_source(tol)
-            or any(isinstance(v, dict) and _is_designer_source(v) for v in tol.values())
-        )
-        if not tolerances_ok:
+        if not _tolerances_confirmed(piece_n):
             missing_required.append(f"{pid}:pom_tolerances")
             issues.append(
                 _issue(
@@ -896,14 +1206,13 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     piece_id=pid,
                     message=(
                         f"POM tolerances for “{piece.get('label') or cat}” are not "
-                        "designer-confirmed for the intended sample."
+                        "explicitly confirmed for the intended sample."
                     ),
                 )
             )
 
-        # Artwork: rejected excludes; unverified detail blocks manufacturing evidence.
-        ill = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
-        arts = ill.get("artifacts") if isinstance(ill.get("artifacts"), dict) else {}
+        ill = _as_dict(piece.get("illustrations"))
+        arts = _as_dict(ill.get("artifacts"))
         for kind, meta in arts.items():
             decision = evaluate_artifact_for_piece(
                 piece, kind=str(kind), artifact_meta=meta if isinstance(meta, dict) else {}
@@ -913,7 +1222,7 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     _issue(
                         code="artifact_category_mismatch",
                         piece_id=pid,
-                        message=decision["reason"],
+                        message=str(decision["reason"]),
                     )
                 )
             elif str(kind) == "detail_callouts" and not decision.get("manufacturing_evidence"):
@@ -921,7 +1230,7 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     _issue(
                         code="detail_art_unverified",
                         piece_id=pid,
-                        message=(
+                        message=str(
                             decision.get("reason")
                             or "Detail artwork is unverified and cannot count as manufacturing evidence."
                         ),
@@ -930,14 +1239,12 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
                     )
                 )
 
-        if meas_issues:
+        if any(i.get("blocks_sample_ready") for i in meas_issues):
             missing_required.append(f"{pid}:major_conflicts_resolved")
 
     blocking = [i for i in issues if i.get("blocks_sample_ready")]
-    qc = v2.get("qc_checklist") if isinstance(v2.get("qc_checklist"), list) else []
-    checklist_complete = (
-        all(isinstance(row, dict) and row.get("checked") for row in qc) if qc else False
-    )
+    qc = _as_list(v2.get("qc_checklist"))
+    checklist_complete = bool(qc) and all(isinstance(row, dict) and row.get("checked") for row in qc)
     if not checklist_complete:
         missing_required.append("designer_confirmation_checklist")
 
@@ -974,25 +1281,22 @@ def assess_manufacturing_readiness(spec: dict[str, Any]) -> dict[str, Any]:
 def enrich_spec_for_manufacturing_preview(spec: dict[str, Any]) -> dict[str, Any]:
     """Non-destructive enrichment used by corrected PDF preview and offline tests."""
     out = apply_artifact_reviews(deepcopy(spec) if isinstance(spec, dict) else {})
-    outfit = out.get("outfit") if isinstance(out.get("outfit"), dict) else {}
-    pieces = []
-    for piece in outfit.get("pieces") or []:
+    outfit = _as_dict(out.get("outfit"))
+    pieces: list[dict[str, Any]] = []
+    for piece in _as_list(outfit.get("pieces")):
         if not isinstance(piece, dict):
             continue
-        p = normalize_shell_material(annotate_pom_definitions(piece))
-        pieces.append(p)
-    outfit = dict(outfit)
+        pieces.append(normalize_shell_material(annotate_pom_definitions(piece)))
     outfit["pieces"] = pieces
     out["outfit"] = outfit
 
     assessment = assess_manufacturing_readiness(out)
-    # Merge issues into warnings without dropping prior warnings.
-    prior = [w for w in (out.get("warnings") if isinstance(out.get("warnings"), list) else [])]
-    merged = list(prior)
+    prior_raw = _as_list(out.get("warnings"))
+    prior = [w for w in prior_raw if isinstance(w, dict)]
+    merged: list[Any] = list(prior)
     seen = {
         f"{w.get('code')}|{w.get('piece_id')}|{w.get('pom')}|{w.get('message')}"
         for w in prior
-        if isinstance(w, dict)
     }
     for issue in assessment["issues"]:
         key = f"{issue.get('code')}|{issue.get('piece_id')}|{issue.get('pom')}|{issue.get('message')}"
@@ -1001,7 +1305,7 @@ def enrich_spec_for_manufacturing_preview(spec: dict[str, Any]) -> dict[str, Any
         seen.add(key)
         merged.append(issue)
     out["warnings"] = merged
-    ai = dict(out.get("ai") if isinstance(out.get("ai"), dict) else {})
+    ai = _as_dict(out.get("ai"))
     ai["manufacturing_readiness"] = {
         "level": assessment["readiness_level"],
         "label": assessment["readiness_label"],
