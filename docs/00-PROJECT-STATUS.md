@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-28 (**Issue #127 P0 sketch fill reliability** — tip  branch  · sealed-tip barrier + bounded endpoint joint seal + Close small gaps + gap hint · **HOLD / NOT DEPLOYED** · prod FE  / BE  · Alembic  · **0 paid AI** · **STOP for Technical PM**.)
+**Last updated:** 2026-10-28 (**Issue #127 P0 sketch fill reliability** — tip `61f0f0c2` / code `742cbddc` · branch `cursor/web-sketch-fill-reliability-77c6` · sealed-tip barrier + bounded endpoint joint seal + Close small gaps + gap hint · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
