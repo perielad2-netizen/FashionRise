@@ -659,14 +659,24 @@ def _set_run_progress(
     db.refresh(run)
 
 
-def _run_status_payload(db: Session, run: TechpackAIRun) -> dict[str, Any]:
+def _run_status_payload(
+    db: Session,
+    run: TechpackAIRun,
+    *,
+    current_for_draft: bool | None = None,
+) -> dict[str, Any]:
     arts = list(
         db.scalars(select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run.id)).all()
     )
     req = run.request if isinstance(run.request, dict) else {}
     result = run.result if isinstance(run.result, dict) else {}
     export_id = result.get("export_id")
-    pdf_ready = bool(result.get("pdf_ready")) and bool(export_id)
+    historical_pdf_ready = bool(result.get("pdf_ready")) and bool(export_id)
+    # Historical PDF existence ≠ current Download for this draft.
+    if current_for_draft is False:
+        pdf_ready = False
+    else:
+        pdf_ready = historical_pdf_ready
     # Budget-recorded cents (internal reservation / fallback accounting) — not verified wallet billing.
     budget_cents = result.get("budget_recorded_usd_cents")
     if budget_cents is None:
@@ -674,7 +684,7 @@ def _run_status_payload(db: Session, run: TechpackAIRun) -> dict[str, Any]:
     download_path = f"/api/v1/techpacks/exports/{export_id}/pdf" if export_id else None
     # Ready for the user only when Professional PDF is bound to this exact run.
     progress = req.get("progress") or result.get("progress")
-    if run.status == "completed" and not pdf_ready:
+    if run.status == "completed" and not historical_pdf_ready:
         # Never claim Ready without a verified Professional PDF for this run.
         if isinstance(progress, dict) and progress.get("phase") == "ready":
             progress = {
@@ -682,6 +692,12 @@ def _run_status_payload(db: Session, run: TechpackAIRun) -> dict[str, Any]:
                 "phase": "assembling",
                 "message": "Preparing your PDF…",
             }
+    if current_for_draft is False and isinstance(progress, dict) and progress.get("phase") == "ready":
+        progress = {
+            **progress,
+            "phase": "outdated",
+            "message": "Previous AI Technical Pack is outdated for this design.",
+        }
     return {
         "run_id": str(run.id),
         "id": str(run.id),
@@ -704,6 +720,8 @@ def _run_status_payload(db: Session, run: TechpackAIRun) -> dict[str, Any]:
         "export_id": str(export_id) if export_id else None,
         "download_path": download_path,
         "pdf_ready": pdf_ready,
+        "historical_pdf_ready": historical_pdf_ready,
+        "current_for_draft": True if current_for_draft is None else bool(current_for_draft),
         "pdf_filename": result.get("pdf_filename"),
         "safe_retry": run.status not in ("running", "queued", "reconciliation_required")
         and not (run.status == "failed" and int(run.cost_usd_cents or 0) > 0),
@@ -837,6 +855,54 @@ def enqueue_generate_one_tap_professional(
     if not idempotency_key or len(idempotency_key) < 8:
         raise ValidationAppError("idempotency_key required")
 
+    from app.services.techpack_structure import (
+        list_outfit_pieces,
+        plan_professional_image_kinds,
+        prepare_professional_outfit,
+        professional_pack_is_current_for_draft,
+        scoped_idempotency_key,
+    )
+    from app.services.techpack_service import reconcile_professional_export_validity
+
+    # Resolve/validate outfit BEFORE spend gates or queue insert (fail closed, $0).
+    # Also reconcile outdated historical Download so reuse cannot clear a stale pack.
+    reconcile_professional_export_validity(db, draft)
+    draft = _owned_draft(db, user, draft_id)
+    spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    spec, pieces, structure_meta = prepare_professional_outfit(
+        db, draft, spec, persist_repair=True
+    )
+    draft = _owned_draft(db, user, draft_id)
+    reconcile_professional_export_validity(db, draft)
+    draft = _owned_draft(db, user, draft_id)
+
+    def _export_meta_for_run(run: TechpackAIRun) -> dict | None:
+        result = run.result if isinstance(run.result, dict) else {}
+        eid = result.get("export_id")
+        if not eid:
+            return None
+        try:
+            from app.models.techpack_draft import TechpackExport
+
+            row = db.get(TechpackExport, uuid.UUID(str(eid)))
+        except (TypeError, ValueError):
+            return None
+        if row is not None and isinstance(row.metadata_, dict):
+            return row.metadata_
+        return None
+
+    def _run_is_current(run: TechpackAIRun, live_pieces: list, live_spec: dict) -> bool:
+        # Structure (+ export metadata) is the currency gate for completed reuse.
+        # Input fingerprints are enforced on queued runs before paid provider calls.
+        return professional_pack_is_current_for_draft(
+            pieces=live_pieces,
+            run_request=run.request if isinstance(run.request, dict) else {},
+            export_metadata=_export_meta_for_run(run),
+            spec=live_spec,
+            draft=draft,
+            require_input_match=False,
+        )
+
     existing = db.scalars(
         select(TechpackAIRun).where(
             TechpackAIRun.user_id == user.id,
@@ -844,24 +910,115 @@ def enqueue_generate_one_tap_professional(
         )
     ).first()
     if existing is not None:
-        payload = _run_status_payload(db, existing)
-        payload["idempotent_replay"] = True
+        live_spec = draft.spec if isinstance(draft.spec, dict) else {}
+        live_pieces = list_outfit_pieces(live_spec)
+        # In-flight / paid-failure / reconciliation: preserve safe replay semantics.
         if existing.status in ("queued", "running"):
+            payload = _run_status_payload(db, existing)
+            payload["idempotent_replay"] = True
             payload["message"] = (
                 "Generation already in progress for this request. Wait or reopen the draft."
             )
-        elif existing.status == "reconciliation_required":
+            return payload
+        if existing.status == "reconciliation_required":
+            payload = _run_status_payload(db, existing)
+            payload["idempotent_replay"] = True
             payload["safe_retry"] = False
             payload["message"] = (
                 "Previous attempt needs reconciliation — usable artifacts are preserved; "
                 "do not start a new paid run until recovery is confirmed."
             )
-        elif existing.status == "failed" and int(existing.cost_usd_cents or 0) > 0:
+            return payload
+        if existing.status == "failed" and int(existing.cost_usd_cents or 0) > 0:
+            payload = _run_status_payload(db, existing)
+            payload["idempotent_replay"] = True
             payload["safe_retry"] = False
             payload["message"] = (
                 "Previous attempt recorded usage. Start a new confirmed generation to continue."
             )
-        return payload
+            return payload
+        if existing.status == "completed" and _run_is_current(existing, live_pieces, live_spec):
+            existing = ensure_professional_pdf_for_run(db, user, existing)
+            payload = _run_status_payload(db, existing, current_for_draft=True)
+            payload["idempotent_replay"] = True
+            if payload.get("pdf_ready"):
+                payload["reused_completed"] = True
+                payload["message"] = "Using your existing AI Technical Pack for this design."
+            return payload
+        if existing.status == "completed":
+            # Historical key collision for a different garment structure / intent.
+            # Do not return the stale PDF as a successful replay. Scope a new key
+            # so a fresh authorized run can proceed without DB surgery (no auto-pay
+            # beyond this explicit Generate click).
+            scoped = scoped_idempotency_key(idempotency_key, live_pieces)
+            if scoped != idempotency_key:
+                scoped_existing = db.scalars(
+                    select(TechpackAIRun).where(
+                        TechpackAIRun.user_id == user.id,
+                        TechpackAIRun.idempotency_key == scoped,
+                    )
+                ).first()
+                if scoped_existing is not None:
+                    if scoped_existing.status in ("queued", "running"):
+                        payload = _run_status_payload(db, scoped_existing)
+                        payload["idempotent_replay"] = True
+                        payload["message"] = (
+                            "Generation already in progress for this request. "
+                            "Wait or reopen the draft."
+                        )
+                        return payload
+                    if (
+                        scoped_existing.status == "completed"
+                        and _run_is_current(scoped_existing, live_pieces, live_spec)
+                    ):
+                        scoped_existing = ensure_professional_pdf_for_run(
+                            db, user, scoped_existing
+                        )
+                        payload = _run_status_payload(
+                            db, scoped_existing, current_for_draft=True
+                        )
+                        payload["idempotent_replay"] = True
+                        if payload.get("pdf_ready"):
+                            payload["reused_completed"] = True
+                            payload["message"] = (
+                                "Using your existing AI Technical Pack for this design."
+                            )
+                        return payload
+                    if (
+                        scoped_existing.status == "failed"
+                        and int(scoped_existing.cost_usd_cents or 0) > 0
+                    ):
+                        payload = _run_status_payload(db, scoped_existing)
+                        payload["idempotent_replay"] = True
+                        payload["safe_retry"] = False
+                        payload["message"] = (
+                            "Previous attempt recorded usage. "
+                            "Start a new confirmed generation to continue."
+                        )
+                        return payload
+                idempotency_key = scoped
+            else:
+                # Cannot scope further — refuse silent stale replay.
+                payload = _run_status_payload(
+                    db, existing, current_for_draft=False
+                )
+                payload["idempotent_replay"] = False
+                payload["idempotency_collision"] = True
+                payload["historical_run_id"] = str(existing.id)
+                payload["pdf_ready"] = False
+                payload["safe_retry"] = True
+                payload["message"] = (
+                    "A previous Professional pack for this draft is outdated. "
+                    "Generate again to authorize a new run for the current design."
+                )
+                # Surface as non-completed so FE does not reopen Download overlay.
+                payload["status"] = "outdated"
+                return payload
+        else:
+            # Failed $0 / other terminal — allow retry under same key only when no row blocks.
+            payload = _run_status_payload(db, existing)
+            payload["idempotent_replay"] = True
+            return payload
 
     inflight = db.scalars(
         select(TechpackAIRun)
@@ -879,21 +1036,8 @@ def enqueue_generate_one_tap_professional(
         payload["message"] = "A Professional generation is already in progress for this draft."
         return payload
 
-    from app.services.techpack_structure import (
-        list_outfit_pieces,
-        plan_professional_image_kinds,
-        prepare_professional_outfit,
-        run_matches_draft_structure,
-    )
-
-    # Resolve/validate outfit BEFORE spend gates or queue insert (fail closed, $0).
-    spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
-    spec, pieces, structure_meta = prepare_professional_outfit(
-        db, draft, spec, persist_repair=True
-    )
-    draft = _owned_draft(db, user, draft_id)
-
-    # Reuse a completed Professional run + PDF for this draft revision (no second paid job).
+    # Reuse a completed Professional run + PDF for this draft (no second paid job)
+    # only with positive evidence the run is current for the live outfit.
     spec_now = draft.spec if isinstance(draft.spec, dict) else {}
     ai_now = spec_now.get("ai") if isinstance(spec_now.get("ai"), dict) else {}
     dirty = bool(ai_now.get("dirty_since_generation"))
@@ -910,12 +1054,9 @@ def enqueue_generate_one_tap_professional(
         ).first()
         if completed is not None:
             live_pieces = list_outfit_pieces(spec_now)
-            if run_matches_draft_structure(
-                completed.request if isinstance(completed.request, dict) else {},
-                live_pieces,
-            ):
+            if _run_is_current(completed, live_pieces, spec_now):
                 completed = ensure_professional_pdf_for_run(db, user, completed)
-                payload = _run_status_payload(db, completed)
+                payload = _run_status_payload(db, completed, current_for_draft=True)
                 if payload.get("pdf_ready"):
                     result = completed.result if isinstance(completed.result, dict) else {}
                     same_rev = int(result.get("draft_revision") or 0) == int(draft.revision or 1)
@@ -1385,6 +1526,14 @@ def latest_run_for_draft(
     draft_id: uuid.UUID,
 ) -> dict[str, Any] | None:
     """Resume helper — return newest run for this draft (running/completed/failed)."""
+    from app.services.techpack_service import reconcile_professional_export_validity
+    from app.services.techpack_structure import (
+        list_outfit_pieces,
+        professional_pack_is_current_for_draft,
+    )
+
+    draft = _owned_draft(db, user, draft_id)
+    reconcile_professional_export_validity(db, draft)
     draft = _owned_draft(db, user, draft_id)
     row = db.scalars(
         select(TechpackAIRun)
@@ -1393,7 +1542,48 @@ def latest_run_for_draft(
     ).first()
     if row is None:
         return None
-    return get_run(db, user, row.id)
+    payload = get_run(db, user, row.id)
+    # Distinguish historical PDF existence from current Download for this draft.
+    # Stale completed runs must not reopen the Download-ready overlay.
+    if row.stage == "professional" and row.status == "completed":
+        spec = draft.spec if isinstance(draft.spec, dict) else {}
+        pieces = list_outfit_pieces(spec)
+        export_meta = None
+        result = row.result if isinstance(row.result, dict) else {}
+        eid = result.get("export_id")
+        if eid:
+            try:
+                from app.models.techpack_draft import TechpackExport
+
+                export_row = db.get(TechpackExport, uuid.UUID(str(eid)))
+            except (TypeError, ValueError):
+                export_row = None
+            if export_row is not None and isinstance(export_row.metadata_, dict):
+                export_meta = export_row.metadata_
+        current = professional_pack_is_current_for_draft(
+            pieces=pieces,
+            run_request=row.request if isinstance(row.request, dict) else {},
+            export_metadata=export_meta,
+            spec=spec,
+            draft=draft,
+            require_input_match=False,
+        )
+        dirty = bool((spec.get("ai") or {}).get("dirty_since_generation")) if isinstance(
+            spec.get("ai"), dict
+        ) else False
+        if dirty or not current:
+            hist = bool(payload.get("historical_pdf_ready") or payload.get("export_id"))
+            payload["historical_pdf_ready"] = hist
+            payload["current_for_draft"] = False
+            payload["pdf_ready"] = False
+            progress = payload.get("progress")
+            if isinstance(progress, dict) and progress.get("phase") == "ready":
+                payload["progress"] = {
+                    **progress,
+                    "phase": "outdated",
+                    "message": "Previous AI Technical Pack is outdated for this design.",
+                }
+    return payload
 
 
 def run_generate(

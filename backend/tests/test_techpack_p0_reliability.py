@@ -1222,3 +1222,210 @@ def test_completed_historical_run_accessible_without_paid_retry(
     assert again["status"] == "completed"
     assert again.get("pdf_ready") is True
     assert again.get("export_id") == export_id
+
+
+def test_fr_d47d_legacy_one_piece_export_marks_two_piece_draft_outdated(
+    client, db_session, monkeypatch
+):
+    """FR-D47D: live 2-piece draft vs historical 1-piece export → dirty + no reuse."""
+    from app.models.techpack_draft import TechpackDraft, TechpackExport
+    from app.models.user import User
+    from app.services.techpack_structure import (
+        professional_pack_is_current_for_draft,
+        run_matches_draft_structure,
+    )
+
+    tokens = register_with_invite(client, db_session, "p0_d47d@example.com", "p0_d47d")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    CountingMock = _counting_mock()
+    set_professional_provider_override(CountingMock())
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="FR-D47D")
+    user = db_session.get(User, uuid.UUID(me["id"]))
+    row = db_session.get(TechpackDraft, uuid.UUID(draft["id"]))
+    assert user and row
+
+    # Historical completed 1-piece Professional run (no fingerprints) + export.
+    legacy_run = TechpackAIRun(
+        id=uuid.uuid4(),
+        draft_id=row.id,
+        user_id=user.id,
+        stage="professional",
+        status="completed",
+        confirm_token=f"tok-{uuid.uuid4().hex}",
+        idempotency_key=f"one-tap-{draft['id']}-r{draft['revision']}",
+        cost_usd_cents=165,
+        request={"mode": "professional", "piece_count": 1},  # legacy: no fingerprints
+        result={"pdf_ready": True, "export_id": None, "draft_revision": 1},
+    )
+    db_session.add(legacy_run)
+    db_session.flush()
+    export = TechpackExport(
+        id=uuid.uuid4(),
+        draft_id=row.id,
+        user_id=user.id,
+        storage_key=f"{user.id.hex}/{row.id.hex}/{uuid.uuid4().hex}.pdf",
+        filename="FR-D47D_r1_techpack.pdf",
+        byte_size=100,
+        page_count=4,
+        revision=1,
+        status="ready",
+        verification="unverified",
+        metadata_={
+            "is_professional": True,
+            "piece_count": 1,
+            "ai_run_id": str(legacy_run.id),
+        },
+    )
+    db_session.add(export)
+    # Write a tiny file so authenticated PDF resolve works.
+    storage = LocalStorageBackend()
+    storage.save_private_techpack_file(
+        key=export.storage_key, data=io.BytesIO(b"%PDF-1.4 legacy"), content_type="application/pdf"
+    )
+    res = dict(legacy_run.result or {})
+    res["export_id"] = str(export.id)
+    res["pdf_ready"] = True
+    legacy_run.result = res
+    spec = dict(row.spec or {})
+    # Already-repaired two-piece outfit (structure repair happened earlier).
+    pieces = list_outfit_pieces(spec)
+    assert len(pieces) >= 2
+    ai = {
+        "last_mode": "professional",
+        "last_run_id": str(legacy_run.id),
+        "export_id": str(export.id),
+        "dirty_since_generation": False,
+    }
+    spec["ai"] = ai
+    row.spec = spec
+    db_session.add(row)
+    db_session.add(legacy_run)
+    db_session.commit()
+
+    assert run_matches_draft_structure(legacy_run.request, pieces) is False
+    assert (
+        professional_pack_is_current_for_draft(
+            pieces=pieces,
+            run_request=legacy_run.request,
+            export_metadata=export.metadata_,
+            spec=spec,
+            draft=row,
+        )
+        is False
+    )
+
+    # 1–3: GET invalidates; repeat GET does not rewrite / bump revision.
+    first = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert first["spec"]["ai"].get("dirty_since_generation") is True
+    assert first["spec"]["ai"].get("outdated_export_id") == str(export.id)
+    assert first["spec"]["ai"].get("export_id") == str(export.id)
+    assert first["spec"]["ai"].get("last_run_id") == str(legacy_run.id)
+    rev = first["revision"]
+    updated_at = first["updated_at"]
+
+    second = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert second["spec"]["ai"].get("dirty_since_generation") is True
+    assert second["revision"] == rev
+    assert second["updated_at"] == updated_at
+    assert CountingMock.provider_calls == 0
+
+    # 4: Historic run stays completed; authenticated PDF remains accessible.
+    run_view = client.get(
+        f"/api/v1/techpacks/ai/runs/{legacy_run.id}", headers=_auth(tokens)
+    ).json()
+    assert run_view["status"] == "completed"
+    pdf = client.get(
+        f"/api/v1/techpacks/exports/{export.id}/pdf", headers=_auth(tokens)
+    )
+    assert pdf.status_code == 200, pdf.text
+
+    # 5 / 8: latest-run must not restore current Download overlay.
+    latest = client.get(
+        f"/api/v1/techpacks/{draft['id']}/ai/latest-run", headers=_auth(tokens)
+    ).json()
+    assert latest.get("id") == str(legacy_run.id)
+    assert latest.get("pdf_ready") is False
+    assert latest.get("current_for_draft") is False
+    assert latest.get("historical_pdf_ready") is True or latest.get("export_id")
+
+    # 5 / 7: ensure_professional_pdf must not clear dirty.
+    ensure_professional_pdf_for_run(db_session, user, legacy_run)
+    after = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    assert after["spec"]["ai"].get("dirty_since_generation") is True
+
+    # 5 / 9: idempotency collision must not return the wrong PDF as current.
+    collide = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={
+            "idempotency_key": f"one-tap-{draft['id']}-r{draft['revision']}",
+            "propose_back": False,
+        },
+    )
+    assert collide.status_code == 202, collide.text
+    body = collide.json()
+    assert body.get("reused_completed") is not True
+    assert body.get("pdf_ready") is not True or body.get("run_id") != str(legacy_run.id)
+    # 10: new authorized intent is possible (scoped key → new queued run).
+    assert body.get("status") in ("queued", "running")
+    assert body.get("run_id") != str(legacy_run.id)
+    assert CountingMock.provider_calls == 0  # enqueue only; worker not run
+
+
+def test_legacy_run_without_fingerprints_cannot_reuse_as_current():
+    from app.services.techpack_structure import (
+        professional_pack_is_current_for_draft,
+        run_matches_draft_structure,
+    )
+
+    pieces = [
+        {"id": "piece-a", "category": "top"},
+        {"id": "piece-b", "category": "trousers"},
+    ]
+    assert run_matches_draft_structure({}, pieces) is False
+    assert run_matches_draft_structure({"piece_count": 1}, pieces) is False
+    assert (
+        professional_pack_is_current_for_draft(
+            pieces=pieces,
+            run_request={},
+            export_metadata={"piece_count": 1, "is_professional": True},
+        )
+        is False
+    )
+
+
+def test_valid_v2_completed_run_still_reused_when_inputs_match(
+    client, db_session, monkeypatch
+):
+    tokens = register_with_invite(client, db_session, "p0_reuse@example.com", "p0_reuse")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_professional(monkeypatch, me["email"])
+    CountingMock = _counting_mock()
+    set_professional_provider_override(CountingMock())
+    draft = _seed_two_piece_draft(client, db_session, tokens, me, title="Reuse OK")
+    idem = f"idem-reuse-{uuid.uuid4().hex}"
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": idem, "propose_back": False},
+    )
+    assert gen.status_code == 202, gen.text
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    done = client.get(
+        f"/api/v1/techpacks/ai/runs/{gen.json()['run_id']}", headers=_auth(tokens)
+    ).json()
+    assert done["status"] == "completed"
+    calls_after_first = CountingMock.provider_calls
+
+    again = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"idem-reuse-b-{uuid.uuid4().hex}", "propose_back": False},
+    )
+    assert again.status_code == 202, again.text
+    body = again.json()
+    assert body.get("reused_completed") is True or body.get("idempotent_replay") is True
+    assert body.get("pdf_ready") is True
+    assert body.get("run_id") == done["run_id"]
+    assert CountingMock.provider_calls == calls_after_first

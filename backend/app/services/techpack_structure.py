@@ -643,7 +643,13 @@ def assert_pipeline_covers_required(
 
 
 def run_matches_draft_structure(run_request: dict[str, Any] | None, pieces: list[dict[str, Any]]) -> bool:
+    """Return True only with positive evidence the run matches the live outfit.
+
+    Legacy runs missing fingerprints / piece identity must not match. Known
+    contradictions (e.g. stored piece_count ≠ live count) always fail closed.
+    """
     req = run_request if isinstance(run_request, dict) else {}
+    live_n = len(pieces)
     fp = str(req.get("structure_fingerprint") or "")
     current = outfit_structure_fingerprint(pieces)
     if fp:
@@ -651,8 +657,50 @@ def run_matches_draft_structure(run_request: dict[str, Any] | None, pieces: list
     # Legacy runs: compare authorized piece_ids when present.
     authorized = req.get("piece_ids")
     if isinstance(authorized, list) and authorized:
-        return sorted(str(x) for x in authorized) == sorted(piece_id(p) for p in pieces)
-    return True
+        if sorted(str(x) for x in authorized) != sorted(piece_id(p) for p in pieces):
+            return False
+        raw_count = req.get("piece_count")
+        if raw_count is not None:
+            try:
+                if int(raw_count) != live_n:
+                    return False
+            except (TypeError, ValueError):
+                return False
+        return True
+    # Legacy piece_count alone is only usable as a contradiction detector.
+    raw_count = req.get("piece_count")
+    if raw_count is not None:
+        try:
+            # Equal count without piece identity is not positive proof.
+            if int(raw_count) != live_n:
+                return False
+        except (TypeError, ValueError):
+            return False
+    # Missing fingerprints / piece identity → fail closed (never a positive match).
+    return False
+
+
+def export_metadata_contradicts_draft(
+    export_metadata: dict[str, Any] | None,
+    pieces: list[dict[str, Any]],
+) -> bool:
+    """True when export metadata proves it cannot represent the live outfit."""
+    meta = export_metadata if isinstance(export_metadata, dict) else {}
+    raw = meta.get("piece_count")
+    if raw is None:
+        return False
+    try:
+        return int(raw) != len(pieces)
+    except (TypeError, ValueError):
+        return True
+
+
+def scoped_idempotency_key(base_key: str, pieces: list[dict[str, Any]]) -> str:
+    """Derive a collision-safe key for a new generation intent after a legacy clash."""
+    base = (base_key or "").strip()
+    fp = outfit_structure_fingerprint(pieces)[:20]
+    scoped = f"{base}#s:{fp}"
+    return scoped[:128]
 
 
 def authorized_input_version(run_request: dict[str, Any] | None) -> int:
@@ -688,6 +736,43 @@ def run_matches_authorized_inputs(
         spec, pieces, version=version, draft=draft
     )
     return authorized == current
+
+
+def professional_pack_is_current_for_draft(
+    *,
+    pieces: list[dict[str, Any]],
+    run_request: dict[str, Any] | None = None,
+    export_metadata: dict[str, Any] | None = None,
+    spec: dict[str, Any] | None = None,
+    draft: Any | None = None,
+    require_input_match: bool = False,
+) -> bool:
+    """Authoritative check: does this Professional run/export represent the live draft?
+
+    Fail closed when identity cannot be verified. Export metadata contradictions
+    (e.g. ``piece_count=1`` vs live ``2``) are never current. v2 runs require a
+    matching input fingerprint when ``require_input_match`` is set or when a
+    fingerprint was stamped on the run.
+    """
+    if export_metadata_contradicts_draft(export_metadata, pieces):
+        return False
+    req = run_request if isinstance(run_request, dict) else {}
+    if not run_matches_draft_structure(req, pieces):
+        return False
+    # Input fingerprint is for pre-provider drift on queued runs. After a successful
+    # Professional completion the draft typically gains illustrations/POMs, so the
+    # live input hash diverges even when the garment structure is unchanged.
+    # Only enforce input match when the caller explicitly requires it.
+    if require_input_match:
+        has_fp = bool(str(req.get("input_fingerprint") or "").strip())
+        version = authorized_input_version(req)
+        if not has_fp or version < INPUT_FINGERPRINT_VERSION:
+            return False
+        if not run_matches_authorized_inputs(
+            req, spec=spec, pieces=pieces, draft=draft
+        ):
+            return False
+    return True
 
 
 def authorized_input_drift_message() -> str:

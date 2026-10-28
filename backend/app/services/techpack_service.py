@@ -53,6 +53,88 @@ def _export_read(row: TechpackExport) -> TechpackExportRead:
     return TechpackExportRead.model_validate(row)
 
 
+def reconcile_professional_export_validity(db: Session, draft: TechpackDraft) -> bool:
+    """Idempotently mark Professional Download outdated when export/run ≠ live draft.
+
+    Preserves historical ``export_id`` / ``last_run_id``. Does not bump revision.
+    Returns True when a write was performed.
+    """
+    from app.models.techpack_ai_run import TechpackAIRun
+    from app.services.techpack_structure import (
+        list_outfit_pieces,
+        professional_pack_is_current_for_draft,
+    )
+
+    spec = draft.spec if isinstance(draft.spec, dict) else {}
+    ai = dict(spec.get("ai") if isinstance(spec.get("ai"), dict) else {})
+    had_professional = (
+        str(ai.get("last_mode") or "") == "professional"
+        and bool(ai.get("last_run_id") or ai.get("export_id"))
+    )
+    if not had_professional:
+        return False
+
+    pieces = list_outfit_pieces(spec)
+    export_meta: dict | None = None
+    run_req: dict | None = None
+    bound_export = str(ai.get("export_id") or "").strip()
+    if bound_export:
+        try:
+            export_row = db.get(TechpackExport, uuid.UUID(bound_export))
+        except (TypeError, ValueError):
+            export_row = None
+        if export_row is not None and isinstance(export_row.metadata_, dict):
+            export_meta = export_row.metadata_
+    run_id = str(ai.get("last_run_id") or "").strip()
+    if run_id:
+        try:
+            run_row = db.get(TechpackAIRun, uuid.UUID(run_id))
+        except (TypeError, ValueError):
+            run_row = None
+        if run_row is not None and isinstance(run_row.request, dict):
+            run_req = run_row.request
+
+    if professional_pack_is_current_for_draft(
+        pieces=pieces,
+        run_request=run_req,
+        export_metadata=export_meta,
+        spec=spec,
+        draft=draft,
+        require_input_match=False,
+    ):
+        return False
+
+    # Desired reconciled state (idempotent — skip write when already applied).
+    desired_outdated = bound_export or None
+    already = bool(ai.get("dirty_since_generation")) and (
+        not desired_outdated or str(ai.get("outdated_export_id") or "") == desired_outdated
+    )
+    if already:
+        return False
+
+    if desired_outdated and not ai.get("outdated_export_id"):
+        ai["outdated_export_id"] = desired_outdated
+    ai["dirty_since_generation"] = True
+    # Preserve historical provenance fields.
+    if run_id and not ai.get("last_run_id"):
+        ai["last_run_id"] = run_id
+    if bound_export and not ai.get("export_id"):
+        ai["export_id"] = bound_export
+    if not ai.get("last_mode"):
+        ai["last_mode"] = "professional"
+    spec = dict(spec)
+    spec["ai"] = ai
+    draft.spec = spec
+    draft.updated_at = datetime.now(UTC)
+    from sqlalchemy.orm.attributes import flag_modified
+
+    flag_modified(draft, "spec")
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    return True
+
+
 def _draft_read(db: Session, draft: TechpackDraft) -> TechpackDraftRead:
     """Attach the most relevant export — prefer Professional bound to last AI run."""
     rows = list(
@@ -321,6 +403,10 @@ def get_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraftRead
         db.add(draft)
         db.commit()
         db.refresh(draft)
+    # Even when structure was repaired earlier (dirty already false on disk),
+    # invalidate current Download if the bound Professional export contradicts
+    # the live outfit (FR-D47D: 1-piece PDF vs 2-piece draft).
+    reconcile_professional_export_validity(db, draft)
     return _draft_read(db, draft)
 
 
