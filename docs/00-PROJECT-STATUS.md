@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-28 (**Issue #124 FE** — measurement decimal buffer @ `7975f085` · branch `cursor/web-techpack-measure-decimal-77c6` from `13b26c3a` · **HOLD / NOT DEPLOYED** · prod FE `13b26c3a-apifix` / BE `005034d5` · Alembic `011` · **0 paid AI** · isolated from PR #123.)
+**Last updated:** 2026-10-28 (**PR #126 FE decimal DEPLOYED** as immutable release `bfbdd03f-decimal` @ tip `bfbdd03f` with `VITE_API_BASE_URL=/api/v1` · prod BE `311e259a` · Alembic `011` · rollback `13b26c3a-apifix` · **owner browser smoke PENDING — do not claim owner acceptance** · PR #125 fidelity amend `c430a7c7` HOLD / not deployed.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -21,8 +21,8 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`13b26c3a-apifix`** — Nginx `current` → `releases/13b26c3a-apifix`. Rollback `69b83c01`. |
-| Backend (FastAPI + PostgreSQL) | **`005034d5`** — **unchanged** by this FE PR. |
+| Frontend (`web-ui`) | **`bfbdd03f-decimal`** — PR #126 tip `bfbdd03f` + `/api/v1`. Rollback `13b26c3a-apifix` / `69b83c01`. |
+| Backend (FastAPI + PostgreSQL) | **`311e259a`** (PR #123). Alembic **`011`**. Rollback → `005034d5`. |
 | AI worker | `fashionrise-ai-worker` @ **`005034d5`** |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
