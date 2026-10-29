@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-29 (**Issue #127 / PR #129 fill integrity closure** — tip `b897a0ab38eec259e13040230f73f2cf26362c02` · code `399ac0bb0fb8b9364c94c6a5a791005e86e7800f` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · erase-aware dilate + cutout reject + gap-mouth fix · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM re-review**.)
+**Last updated:** 2026-10-29 (**Issue #127 / PR #129 fill integrity closure** — tip `9188f09ec9cb8442d4bbc0a87930a9b32158bbb7` · code `399ac0bb0fb8b9364c94c6a5a791005e86e7800f` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · erase-aware dilate + cutout reject + gap-mouth fix · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM re-review**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -36,7 +36,7 @@ Technical PM **CHANGES REQUIRED** on tip `327d2870` / code `1971ee7e`. This tip 
 
 | Item | Detail |
 |---|---|
-| Tip | `b897a0ab38eec259e13040230f73f2cf26362c02` (code `399ac0bb0fb8b9364c94c6a5a791005e86e7800f`) · PR **#129** |
+| Tip | `9188f09ec9cb8442d4bbc0a87930a9b32158bbb7` (code `399ac0bb0fb8b9364c94c6a5a791005e86e7800f`) · PR **#129** |
 | Branch | `cursor/web-sketch-fill-reliability-77c6` |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
 | P0 erased openings | Final `dilateMask` takes `eraseCoverage` and **never grows into erased pixels** unless later pencil ink already restored them (chronology). Narrow ~3px erase stays open under default Fill and Close small gaps; later redraw reconnects. |
