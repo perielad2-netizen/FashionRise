@@ -6,7 +6,7 @@ import { createFillId, type FillOp, type FillStyle } from '@/lib/fills'
 export type FloodFillOk = { ok: true; fill: FillOp }
 export type FloodFillErr = {
   ok: false
-  reason: 'open_outline' | 'empty_region' | 'outside' | 'too_large'
+  reason: 'open_outline' | 'empty_region' | 'outside' | 'too_large' | 'unsupported_cutout'
   message: string
   /** Approximate leak / gap location in design space when detectable. */
   gapHint?: { x: number; y: number }
@@ -196,6 +196,18 @@ export function floodFillAgainstBarrier(input: {
     }
   }
 
+  // Single-contour FillOp cannot represent holes. If the flooded ring encloses an
+  // unfilled cutout, painting the outer polygon would incorrectly fill the hole —
+  // fail closed with an actionable message (no multi-contour schema change here).
+  if (floodEnclosesUnsupportedCutout(visited, barrier, contour, count, minX, minY, maxX, maxY)) {
+    return {
+      ok: false,
+      reason: 'unsupported_cutout',
+      message:
+        'This area has an inner cutout. Fills can’t keep holes empty yet — tap a simpler closed area, or erase the inner outline first.',
+    }
+  }
+
   return {
     ok: true,
     fill: {
@@ -239,16 +251,17 @@ export function buildInkBarrierMask(
     raw[i] = img.data[p + 3]! > 12 ? 1 : 0
   }
 
+  const eraseCoverage = buildEraseCoverageMask(strokes)
   const sealPx = options?.endpointSealPx ?? DEFAULT_ENDPOINT_SEAL_PX
   if (sealPx > 0) {
-    const eraseCoverage = buildEraseCoverageMask(strokes)
     sealStrokeJoints(raw, strokes, sealPx, { eraseCoverage })
   }
 
   // Morphological dilate closes freehand hairline gaps at corners while staying
   // derived from rendered ink (not inventing invisible seams across panels).
+  // Never grow into erased openings unless later pencil ink already restored them.
   if (gapClose <= 0) return raw
-  return dilateMask(raw, gapClose)
+  return dilateMask(raw, gapClose, { eraseCoverage })
 }
 
 export type StrokeEndpoint = {
@@ -521,8 +534,21 @@ function stampDisk(
   }
 }
 
-export function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
+export type DilateMaskOptions = {
+  /**
+   * Pixels cleared by erase strokes. Dilation must not recreate a deliberate
+   * opening. Later pencil ink already present in `mask` is kept (chronology).
+   */
+  eraseCoverage?: Uint8Array
+}
+
+export function dilateMask(
+  mask: Uint8Array,
+  radius: number,
+  options?: DilateMaskOptions,
+): Uint8Array {
   if (radius <= 0) return mask
+  const eraseCoverage = options?.eraseCoverage
   const out = new Uint8Array(mask.length)
   for (let y = 0; y < DESIGN_HEIGHT; y += 1) {
     for (let x = 0; x < DESIGN_WIDTH; x += 1) {
@@ -533,7 +559,10 @@ export function dilateMask(mask: Uint8Array, radius: number): Uint8Array {
       const x1 = Math.min(DESIGN_WIDTH - 1, x + radius)
       for (let ny = y0; ny <= y1; ny += 1) {
         for (let nx = x0; nx <= x1; nx += 1) {
-          out[ny * DESIGN_WIDTH + nx] = 1
+          const i = ny * DESIGN_WIDTH + nx
+          // Do not grow into erased openings unless redrawn ink already lives there.
+          if (eraseCoverage && eraseCoverage[i] && !mask[i]) continue
+          out[i] = 1
         }
       }
     }
@@ -604,12 +633,14 @@ export function locateGapHint(
   }
   if (edgeX < 0) return null
 
-  // Walk parent chain from the edge escape back toward the seed. The first
-  // flooded cell that touches barrier ink (and is not on the paper edge) is a
-  // supported gap mouth — typically where the outline actually opens.
+  // Walk parent chain from the edge escape back toward the seed. The *first*
+  // flooded cell near barrier ink (and not on the paper edge) is the gap mouth
+  // nearest the escape — do not overwrite with later corridor cells. A small
+  // Chebyshev radius catches narrow mouths when the path runs through the gap
+  // centre; wide openings that never graze ink stay suppressed (null).
   let i = edgeY * DESIGN_WIDTH + edgeX
-  let best: { x: number; y: number } | null = null
   const edgeGuard = 2
+  const mouthRadius = 2
   while (i >= 0) {
     const x = i % DESIGN_WIDTH
     const y = Math.floor(i / DESIGN_WIDTH)
@@ -618,17 +649,87 @@ export function locateGapHint(
       y <= edgeGuard ||
       x >= DESIGN_WIDTH - 1 - edgeGuard ||
       y >= DESIGN_HEIGHT - 1 - edgeGuard
-    if (!onPaperEdge) {
-      const adj =
-        (x > 0 && barrier[y * DESIGN_WIDTH + (x - 1)]) ||
-        (x + 1 < DESIGN_WIDTH && barrier[y * DESIGN_WIDTH + (x + 1)]) ||
-        (y > 0 && barrier[(y - 1) * DESIGN_WIDTH + x]) ||
-        (y + 1 < DESIGN_HEIGHT && barrier[(y + 1) * DESIGN_WIDTH + x])
-      if (adj) best = { x, y }
+    if (!onPaperEdge && cellNearBarrier(barrier, x, y, mouthRadius)) {
+      return { x, y }
     }
     i = parent[i]!
   }
-  return best
+  // Ambiguous / insufficient evidence — suppress marker (neutral message).
+  return null
+}
+
+function cellNearBarrier(barrier: Uint8Array, x: number, y: number, radius: number): boolean {
+  for (let dy = -radius; dy <= radius; dy += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      const nx = x + dx
+      const ny = y + dy
+      if (nx < 0 || ny < 0 || nx >= DESIGN_WIDTH || ny >= DESIGN_HEIGHT) continue
+      if (barrier[ny * DESIGN_WIDTH + nx]) return true
+    }
+  }
+  return false
+}
+
+/**
+ * True when painting the outer flooded contour would cover an inner cutout that
+ * the flood did not visit. Single-contour persistence cannot represent holes.
+ */
+function floodEnclosesUnsupportedCutout(
+  visited: Uint8Array,
+  barrier: Uint8Array,
+  contour: number[],
+  floodedCount: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): boolean {
+  const outerArea = Math.abs(shoelaceArea(contour))
+  // Raster flood count is slightly below polygon area for simple shapes; a large
+  // surplus means the outer contour encloses unfilled interior (a cutout).
+  if (outerArea > floodedCount * 1.2 + 80) return true
+
+  // Pixel proof: any empty non-barrier cell inside the outer contour that the
+  // flood never visited would be painted incorrectly by a single solid fill.
+  let holeSamples = 0
+  const step = Math.max(1, Math.floor(Math.min(maxX - minX, maxY - minY) / 24))
+  for (let y = minY + 1; y < maxY; y += step) {
+    for (let x = minX + 1; x < maxX; x += step) {
+      const i = y * DESIGN_WIDTH + x
+      if (visited[i] || barrier[i]) continue
+      if (!pointInContour(x + 0.5, y + 0.5, contour)) continue
+      holeSamples += 1
+      if (holeSamples >= 3) return true
+    }
+  }
+  return false
+}
+
+function shoelaceArea(contour: number[]): number {
+  const n = Math.floor(contour.length / 2)
+  if (n < 3) return 0
+  let sum = 0
+  for (let i = 0; i < n; i += 1) {
+    const j = (i + 1) % n
+    sum += contour[i * 2]! * contour[j * 2 + 1]!
+    sum -= contour[j * 2]! * contour[i * 2 + 1]!
+  }
+  return sum / 2
+}
+
+function pointInContour(x: number, y: number, contour: number[]): boolean {
+  const n = Math.floor(contour.length / 2)
+  let inside = false
+  for (let i = 0, j = n - 1; i < n; j = i, i += 1) {
+    const xi = contour[i * 2]!
+    const yi = contour[i * 2 + 1]!
+    const xj = contour[j * 2]!
+    const yj = contour[j * 2 + 1]!
+    const intersect =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + Number.EPSILON) + xi
+    if (intersect) inside = !inside
+  }
+  return inside
 }
 
 /** Moore-neighbour boundary walk → flat [x,y,...] contour. */

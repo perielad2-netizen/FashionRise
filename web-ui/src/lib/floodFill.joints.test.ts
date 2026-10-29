@@ -263,6 +263,22 @@ describe('multi-stroke joint sealing (#127)', () => {
     }
   })
 
+  it('dilateMask does not grow into erased openings', async () => {
+    const { dilateMask } = await import('@/lib/floodFill')
+    const mask = emptyMask()
+    // Two ink blobs 4px apart with erase covering the corridor.
+    mask[100 * DESIGN_WIDTH + 100] = 1
+    mask[100 * DESIGN_WIDTH + 104] = 1
+    const eraseCoverage = emptyMask()
+    eraseCoverage[100 * DESIGN_WIDTH + 101] = 1
+    eraseCoverage[100 * DESIGN_WIDTH + 102] = 1
+    eraseCoverage[100 * DESIGN_WIDTH + 103] = 1
+    const dilated = dilateMask(mask, 2, { eraseCoverage })
+    expect(dilated[100 * DESIGN_WIDTH + 100]).toBe(1)
+    expect(dilated[100 * DESIGN_WIDTH + 104]).toBe(1)
+    expect(dilated[100 * DESIGN_WIDTH + 102]).toBe(0)
+  })
+
   it('exports automatic seal tighter than Gaps and below intentional 4px openings', () => {
     expect(STRONG_ENDPOINT_SEAL_PX).toBeGreaterThan(DEFAULT_ENDPOINT_SEAL_PX)
     expect(DEFAULT_ENDPOINT_SEAL_PX).toBeLessThan(4)
