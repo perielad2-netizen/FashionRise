@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-29 (**Issue #127 / PR #129 small-cutout safety closure** — tip `TIP_SHA_PENDING` · code `CODE_SHA_PENDING` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · deterministic contour∖flood cutout guard · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM acceptance**.)
+**Last updated:** 2026-10-29 (**Issue #127 / PR #129 small-cutout safety closure** — tip `c0c72ab35c23600b143fdaa8f490f956079ad0c1` · code `a3158b61fbeb8fb04549530be9176f504d9566b7` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · deterministic contour∖flood cutout guard · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM acceptance**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -36,7 +36,7 @@ Technical PM **PARTIAL PASS** on tip `1e83c897` / code `399ac0bb` — one remain
 
 | Item | Detail |
 |---|---|
-| Tip | `TIP_SHA_PENDING` (code `CODE_SHA_PENDING`) · PR **#129** |
+| Tip | `c0c72ab35c23600b143fdaa8f490f956079ad0c1` (code `a3158b61fbeb8fb04549530be9176f504d9566b7`) · PR **#129** |
 | Prior accepted code | `399ac0bb0fb8b9364c94c6a5a791005e86e7800f` (erase-aware dilate + nested cutout + gap mouth) |
 | Branch | `cursor/web-sketch-fill-reliability-77c6` (descendant of FE prod `bfbdd03f`) |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
