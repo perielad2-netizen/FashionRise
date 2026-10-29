@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #128 / PR #130 Magic source provenance closure** — tip `0561bb56cf49d69b9c2349a94dd54b79585a1f5f` / implementation `0561bb56cf49d69b9c2349a94dd54b79585a1f5f` / blob `e04fdbcf6f5fba8dc868094c86874e365cebc321` · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #129 remain independent** · **STOP for Technical PM final acceptance**.)
+**Last updated:** 2026-10-29 (**Issue #128 / PR #130 Magic source provenance closure** — tip `0734e9f1cfb4eef4012b6de4f3e289ffa9937877` / implementation `0561bb56cf49d69b9c2349a94dd54b79585a1f5f` / blob `e04fdbcf6f5fba8dc868094c86874e365cebc321` · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #129 remain independent** · **STOP for Technical PM final acceptance**.)
 
 **Phase:** Protected family beta. Issue #128: designer finished POMs preserved through enrich **and** mid-run measurement edits; garment-identity drift and PDF-assembly CAS fail closed without paid retry; paid artifacts retain authorized Magic source provenance. No restore of FR-3958 values without owner authorization.
 
@@ -24,7 +24,7 @@ Technical PM **PARTIAL PASS** on tip `983372f7` / implementation `4cb7d8f0` / bl
 
 | Item | Detail |
 |---|---|
-| Tip | `0561bb56cf49d69b9c2349a94dd54b79585a1f5f` (implementation; docs pin follows) |
+| Tip / GitHub HEAD | `0734e9f1cfb4eef4012b6de4f3e289ffa9937877` |
 | Implementation commit | `0561bb56cf49d69b9c2349a94dd54b79585a1f5f` |
 | Implementation blob | `e04fdbcf6f5fba8dc868094c86874e365cebc321` (`techpack_ai.py`) |
 | Prior accepted | `4cb7d8f0` / `2b684a28` structural+visual · `0e341c10` identity+PDF CAS · POM overlay |
