@@ -7,6 +7,15 @@ export type PointInput = {
   pressure?: number
 }
 
+export type StrokePathOptions = {
+  /**
+   * Barrier / fill-mask path: no tip taper and less thinning so stroke joins that
+   * look closed on-screen remain sealed in the raster mask. Visible Konva ink
+   * keeps the default tapered look.
+   */
+  sealTips?: boolean
+}
+
 /** Convert stroke points array into perfect-freehand input tuples. */
 export function toFreehandInput(points: number[]): number[][] {
   const out: number[][] = []
@@ -38,23 +47,31 @@ function pressureSpread(points: number[]): number {
   return max - min
 }
 
-export function strokeToSvgPath(stroke: Stroke): string {
+export function strokeToSvgPath(stroke: Stroke, options?: StrokePathOptions): string {
   const input = toFreehandInput(stroke.points)
   if (input.length === 0) return ''
 
   const erase = stroke.tool === 'erase'
+  const sealTips = options?.sealTips === true && !erase
   // Flat mouse pressure gets velocity simulation; a real pen already varies pressure.
-  const simulatePressure = !erase && pressureSpread(stroke.points) < 0.08
+  const simulatePressure = !erase && !sealTips && pressureSpread(stroke.points) < 0.08
 
   const outline = getStroke(input, {
     size: erase ? Math.max(stroke.size * 2.4, 10) : stroke.size,
-    thinning: erase ? 0.15 : 0.72,
-    smoothing: erase ? 0.4 : 0.68,
-    streamline: erase ? 0.35 : 0.58,
+    thinning: erase ? 0.15 : sealTips ? 0.18 : 0.72,
+    smoothing: erase ? 0.4 : sealTips ? 0.45 : 0.68,
+    streamline: erase ? 0.35 : sealTips ? 0.35 : 0.58,
     simulatePressure,
-    easing: (t) => (erase ? t : Math.sin((t * Math.PI) / 2)),
-    start: { taper: erase ? 0 : Math.max(6, stroke.size * 2.2), cap: true },
-    end: { taper: erase ? 0 : Math.max(10, stroke.size * 3.2), cap: true },
+    easing: (t) => (erase || sealTips ? t : Math.sin((t * Math.PI) / 2)),
+    // Visible ink keeps dramatic tapers; fill barriers must not open at joins.
+    start: {
+      taper: erase || sealTips ? 0 : Math.max(6, stroke.size * 2.2),
+      cap: true,
+    },
+    end: {
+      taper: erase || sealTips ? 0 : Math.max(10, stroke.size * 3.2),
+      cap: true,
+    },
   })
 
   return getSvgPathFromStroke(outline)

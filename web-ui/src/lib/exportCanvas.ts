@@ -30,17 +30,51 @@ export type Canvas2DLike = {
     dw: number,
     dh: number,
   ): void
+  createLinearGradient?(x0: number, y0: number, x1: number, y1: number): CanvasGradient
+  createPattern?(image: CanvasImageSource, repetition: string): CanvasPattern | null
   save(): void
   restore(): void
 }
 
+type FillPaintTarget = Canvas2DLike & {
+  createLinearGradient(x0: number, y0: number, x1: number, y1: number): CanvasGradient
+  createPattern(image: CanvasImageSource, repetition: string): CanvasPattern | null
+}
+
+export type PaintInkOptions = {
+  /**
+   * When true, draw strokes use seal-tip freehand paths so fill barriers do not
+   * leak at tapered joins. Erasers are unchanged. Visible Konva rendering omits
+   * this flag.
+   */
+  sealTips?: boolean
+}
+
+/** Paint a single erase stroke with destination-out (never onto reference/base). */
+export function paintEraseStroke(ctx: Canvas2DLike, stroke: Stroke): void {
+  if (stroke.tool !== 'erase') return
+  const path = strokeToSvgPath(stroke)
+  if (!path) return
+  const p = new Path2D(path)
+  ctx.save()
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.fillStyle = 'rgba(0,0,0,1)'
+  ctx.fill(p)
+  ctx.restore()
+}
+
 /**
  * Paint ink strokes onto an ink-only context.
- * Eraser uses destination-out against ink pixels only — never against reference/base.
+ * Eraser uses destination-out against ink pixels — never against reference/base.
  */
-export function paintInkStrokes(ctx: Canvas2DLike, strokes: Stroke[]): void {
+export function paintInkStrokes(
+  ctx: Canvas2DLike,
+  strokes: Stroke[],
+  options?: PaintInkOptions,
+): void {
+  const sealTips = options?.sealTips === true
   for (const stroke of strokes) {
-    const path = strokeToSvgPath(stroke)
+    const path = strokeToSvgPath(stroke, stroke.tool === 'draw' && sealTips ? { sealTips: true } : undefined)
     if (!path) continue
     const p = new Path2D(path)
     ctx.save()
@@ -57,6 +91,26 @@ export function paintInkStrokes(ctx: Canvas2DLike, strokes: Stroke[]): void {
   }
 }
 
+/**
+ * Paint garment fills, applying eraser strokes that occurred at or after each
+ * fill's `eraseAfterStrokeIndex` (missing → 0 for legacy saves). Croquis/reference
+ * is never present on this context.
+ */
+export function paintFillsWithErasers(
+  ctx: FillPaintTarget,
+  fills: FillOp[],
+  strokes: Stroke[],
+): void {
+  for (const fill of fills) {
+    paintFillOps(ctx, [fill])
+    const after = fill.eraseAfterStrokeIndex ?? 0
+    for (let i = after; i < strokes.length; i += 1) {
+      const stroke = strokes[i]!
+      if (stroke.tool === 'erase') paintEraseStroke(ctx, stroke)
+    }
+  }
+}
+
 export type ArtworkLayerOptions = {
   fills: FillOp[]
   strokes: Stroke[]
@@ -68,8 +122,9 @@ export type ArtworkLayerOptions = {
 }
 
 /**
- * Composite garment fills then ink onto `target`, matching Konva / PNG layering:
- * fills and ink use separate canvases so eraser destination-out removes ink only.
+ * Composite garment fills then ink onto `target`, matching Konva / PNG layering.
+ * Fills and ink stay on separate canvases so eraser never touches the reference;
+ * the same eraser strokes also punch fill pixels (per-fill chronology).
  */
 export function compositeFillAndInkLayers(target: Canvas2DLike, options: ArtworkLayerOptions): void {
   const { width, height, fills, strokes } = options
@@ -82,7 +137,7 @@ export function compositeFillAndInkLayers(target: Canvas2DLike, options: Artwork
   const fillCtx = fillLayer.getContext('2d')
   if (!fillCtx) throw new Error('Canvas 2D unavailable')
   if (sx !== 1 || sy !== 1) fillCtx.scale(sx, sy)
-  paintFillOps(fillCtx, fills)
+  paintFillsWithErasers(fillCtx, fills, strokes)
   target.drawImage(fillLayer, 0, 0, width, height)
 
   const inkLayer = document.createElement('canvas')
@@ -172,7 +227,7 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
   }
 
   // Fills sit above the reference and under ink (garment colour / fabric).
-  // Separate layers: eraser destination-out must not punch holes in fills.
+  // Eraser punches fill + ink on their own layers; reference/base stays intact.
   const strokes = options.minInkSize
     ? withMinimumSize(options.strokes, options.minInkSize / Math.min(sx, sy))
     : options.strokes
@@ -206,6 +261,55 @@ export async function exportCompositePng(options: ExportOptions): Promise<Blob> 
 export type SketchPngResult = { blob: Blob; referenceIncluded: boolean }
 
 /** Customer-facing export: a reference that fails to load is omitted, never fatal. */
+export type FrontBackSheetOptions = {
+  front: ExportOptions
+  back: ExportOptions
+  gapPx?: number
+  labelHeightPx?: number
+}
+
+/** Side-by-side front + back sheet with simple labels (export helper). */
+export async function exportFrontBackSheetPng(
+  options: FrontBackSheetOptions,
+): Promise<SketchPngResult> {
+  const gap = options.gapPx ?? 24
+  const labelH = options.labelHeightPx ?? 28
+  const frontW = options.front.width ?? DESIGN_WIDTH
+  const frontH = options.front.height ?? DESIGN_HEIGHT
+  const backW = options.back.width ?? DESIGN_WIDTH
+  const backH = options.back.height ?? DESIGN_HEIGHT
+  const panelW = Math.max(frontW, backW)
+  const panelH = frontH + labelH + backH + labelH
+  const sheetW = panelW * 2 + gap
+  const sheetH = panelH
+
+  const [{ canvas: frontCanvas, referenceIncluded: frontRef }, { canvas: backCanvas, referenceIncluded: backRef }] =
+    await Promise.all([
+      renderSketchCanvas({ ...options.front, width: frontW, height: frontH, onReferenceError: 'skip' }),
+      renderSketchCanvas({ ...options.back, width: backW, height: backH, onReferenceError: 'skip' }),
+    ])
+
+  const sheet = document.createElement('canvas')
+  sheet.width = sheetW
+  sheet.height = sheetH
+  const ctx = sheet.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D unavailable')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, sheetW, sheetH)
+
+  const drawPanel = (x: number, label: string, canvas: HTMLCanvasElement) => {
+    ctx.fillStyle = '#3a3a3c'
+    ctx.font = '600 14px system-ui, sans-serif'
+    ctx.fillText(label, x + 8, 20)
+    const y = labelH
+    ctx.drawImage(canvas, x + (panelW - canvas.width) / 2, y)
+  }
+  drawPanel(0, 'Front', frontCanvas)
+  drawPanel(panelW + gap, 'Back', backCanvas)
+  const blob = await canvasToPngBlob(sheet)
+  return { blob, referenceIncluded: frontRef || backRef }
+}
+
 export async function exportSketchPng(options: RenderOptions): Promise<SketchPngResult> {
   const { canvas, referenceIncluded } = await renderSketchCanvas({
     ...options,

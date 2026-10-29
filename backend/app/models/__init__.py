@@ -8,10 +8,14 @@ from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
 from app.models.garment_template import GarmentTemplate
+from app.models.magic_look_meta import MagicLookMeta
 from app.models.material_definition import MaterialDefinition
 from app.models.rating import Rating
 from app.models.refresh_token import RefreshToken
 from app.models.registration_invitation import RegistrationInvitation
+from app.models.techpack_ai_artifact import TechpackAIArtifact
+from app.models.techpack_ai_run import TechpackAIRun
+from app.models.techpack_draft import TechpackDraft, TechpackExport
 from app.models.user import User
 from app.models.user_follow import UserFollow
 from app.models.user_profile import UserProfile
@@ -27,10 +31,15 @@ __all__ = [
     "GalleryLike",
     "GarmentDesign",
     "GarmentTemplate",
+    "MagicLookMeta",
     "MaterialDefinition",
     "Rating",
     "RefreshToken",
     "RegistrationInvitation",
+    "TechpackAIArtifact",
+    "TechpackAIRun",
+    "TechpackDraft",
+    "TechpackExport",
     "User",
     "UserFollow",
     "UserProfile",

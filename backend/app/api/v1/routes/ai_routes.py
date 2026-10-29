@@ -7,7 +7,14 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import CurrentUser
 from app.core.rate_limit import limiter
 from app.db.session import get_db
-from app.schemas.ai import AIJobCreate, AIJobRead, SketchPipelineBody
+from app.schemas.ai import (
+    AIJobCreate,
+    AIJobRead,
+    MagicOperationJobsRead,
+    SketchPipelineBody,
+    SketchPolishDualBody,
+    SketchPolishDualRead,
+)
 from app.services import ai_service
 
 router = APIRouter()
@@ -47,6 +54,47 @@ def sketch_polish(
 ) -> AIJobRead:
     _ = request.url
     return _sketch_enqueue(db, user, "sketch_polish", body)
+
+
+@router.post(
+    "/sketch/polish-dual",
+    response_model=SketchPolishDualRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("20/minute")
+def sketch_polish_dual(
+    request: Request,
+    user: CurrentUser,
+    body: SketchPolishDualBody,
+    db: Session = Depends(get_db),
+) -> SketchPolishDualRead:
+    _ = request.url
+    front_job, back_job, operation_id = ai_service.enqueue_dual_sketch_polish(db, user, body)
+    return SketchPolishDualRead(
+        magic_operation_id=operation_id,
+        front_job=AIJobRead.from_job(front_job),
+        back_job=AIJobRead.from_job(back_job),
+    )
+
+
+@router.get(
+    "/magic-operations/{operation_id}/jobs",
+    response_model=MagicOperationJobsRead,
+)
+@limiter.limit("120/minute")
+def list_magic_operation_jobs(
+    request: Request,
+    operation_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> MagicOperationJobsRead:
+    """Recover front/back sketch_polish jobs for one coordinated Magic operation."""
+    _ = request.url
+    jobs = ai_service.list_jobs_for_magic_operation(db, user, operation_id)
+    return MagicOperationJobsRead(
+        magic_operation_id=operation_id,
+        jobs=[AIJobRead.from_job(j) for j in jobs],
+    )
 
 
 @router.post("/style/suggest", response_model=AIJobRead, status_code=status.HTTP_201_CREATED)

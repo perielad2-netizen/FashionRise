@@ -22,7 +22,7 @@ def _settings(**env) -> Settings:
         "openai_model": "gpt-6-luna",
         "openai_reasoning_effort": "none",
         "openai_max_completion_tokens": 1400,
-        "openai_image_model": "gpt-image-1",
+        "openai_image_model": "gpt-image-2.5-sunburst",
         "openai_timeout_seconds": 180.0,
         "openai_http_timeout_seconds": 60.0,
         "openai_base_url": None,
@@ -78,7 +78,10 @@ def test_default_chat_model_is_gpt_6_luna(monkeypatch):
     monkeypatch.delenv("OPENAI_REASONING_EFFORT", raising=False)
     monkeypatch.delenv("OPENAI_MAX_COMPLETION_TOKENS", raising=False)
     monkeypatch.delenv("OPENAI_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_IMAGE_QUALITY", raising=False)
+    # Ignore backend/.env so this asserts code defaults, not a local developer pin.
     s = Settings(
+        _env_file=None,
         testing=True,
         environment="development",
         openai_api_key=None,
@@ -86,7 +89,8 @@ def test_default_chat_model_is_gpt_6_luna(monkeypatch):
     assert s.openai_model == "gpt-6-luna"
     assert s.openai_reasoning_effort == "none"
     assert s.openai_max_completion_tokens == 1400
-    assert s.openai_image_model == "gpt-image-1"
+    assert s.openai_image_model == "gpt-image-2.5-sunburst"
+    assert s.openai_image_quality == "high"
 
 
 def test_environment_override_still_selects_the_model(monkeypatch):
@@ -488,6 +492,65 @@ def test_worker_marks_failed_when_openai_raises(monkeypatch):
     assert job.status == "failed"
     assert "model timeout" in (job.error_message or "")
     assert job.result_data is None
+
+
+def test_worker_persists_allowlisted_failure_meta_only(monkeypatch):
+    job = SimpleNamespace(
+        id=uuid4(),
+        job_type="sketch_polish",
+        input_data={},
+        result_data=None,
+        error_message=None,
+        status="queued",
+    )
+
+    def _boom(*_a, **_k):
+        raise sketch_openai.SketchCompletionError(
+            "sketch image edit failed",
+            safe_meta={
+                "error_category": "provider_bad_request",
+                "error_type": "BadRequestError",
+                "http_status": 400,
+                "provider_code": "invalid_image",
+                "request_id": "req_worker_meta_001",
+                "stage": "images.edit",
+                "image_edit_attempted": True,
+                "image_bytes_returned": False,
+                "raw_body": "SECRET_MUST_NOT_PERSIST",
+                "prompt": "SECRET_PROMPT",
+            },
+        )
+
+    monkeypatch.setattr(sketch_openai, "is_configured", lambda: True)
+    monkeypatch.setattr(sketch_openai, "complete_sketch_job", _boom)
+
+    class _Db:
+        def scalar(self, _stmt):
+            return job if job.status == "queued" else None
+
+        def commit(self):
+            pass
+
+    processed = ai_worker.run_worker_tick(_Db(), limit=1)
+    assert processed == 1
+    assert job.status == "failed"
+    assert job.error_message == "sketch image edit failed"
+    assert job.result_data == {
+        "error": {
+            "error_category": "provider_bad_request",
+            "error_type": "BadRequestError",
+            "http_status": 400,
+            "provider_code": "invalid_image",
+            "request_id": "req_worker_meta_001",
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+        }
+    }
+    dumped = json.dumps(job.result_data)
+    assert "SECRET" not in dumped
+    assert "prompt" not in dumped
+
 
 
 def test_api_key_is_not_logged(monkeypatch, settings, caplog):

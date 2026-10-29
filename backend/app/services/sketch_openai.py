@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import uuid
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
@@ -14,6 +16,11 @@ from openai import OpenAI
 
 from app.core.config import get_settings
 from app.models.ai_job import AIJob
+from app.services.reference_croquis import (
+    edit_reference_instructions,
+    reference_from_job_input,
+    vision_reference_instructions,
+)
 from app.storage.local import LocalStorageBackend
 
 logger = logging.getLogger(__name__)
@@ -24,6 +31,68 @@ SKETCH_JOB_TYPES = frozenset({"sketch_clean", "sketch_polish", "style_suggest"})
 # so Unity continues to read summary / cleanup_bullets / polish_bullets / suggestions
 # (and polish's extra image_prompt) without a schema change.
 JSON_OBJECT_RESPONSE_FORMAT = {"type": "json_object"}
+
+# Hard budget for the images.edit brief (production maint slice). Protected
+# instructions (enhancement + coverage + non-photoreal illustration style + optional
+# textile reference) always fit inside this budget; only lower-priority vision
+# prose is bounded to fill the remainder. Raised from 3800 to fit Front/Back
+# DESIGN ENHANCEMENT without crowding coverage/pattern contracts or design facts.
+IMAGE_PROMPT_MAX_CHARS = 4500
+
+# Fixed garment-coverage contract for adult, non-explicit fashion (Issue #64).
+# Distinguishes drawn fabric from exposed skin / croquis body / paper — does not
+# alter provider moderation settings or request explicit content.
+_COVERAGE_PRESERVATION_CONTRACT = (
+    "COVERAGE FIDELITY (adult fashion croquis): Distinguish actual drawn garment "
+    "material from exposed skin and from blank/light croquis-body or paper background. "
+    "Preserve two-piece and one-piece swimsuits, lingerie/underwear construction, "
+    "exposed midriff, cut-outs, straps, necklines, and leg openings exactly as drawn. "
+    "Never invent an extra bodysuit, white lining, modesty insert, or coverage panel. "
+    "Preserve intentionally drawn white or pale fabric only when garment material is "
+    "actually present in the sketch. Do not reinterpret bare skin or croquis body tone "
+    "as opaque fabric. When coverage fields are missing, null, unknown, or contradictory, "
+    "rely on the uploaded sketch only — do not invent bare-skin regions or extra fabric "
+    "panels, or make the design more revealing or more covered."
+)
+
+# Applied-fill color authority — outlines must not become fabric; never invent accents.
+_COLOR_FIDELITY_CONTRACT = (
+    "COLOR FIDELITY: Use ONLY colors/gradients/fabrics actually applied on the garment and "
+    "shared garment-spec main_colors/materials. Black or dark outline strokes are linework, "
+    "not fabric fill. Do NOT invent extra accent colors, contrast panels, trims, overlays, "
+    "or materials (e.g. pink/blue accents on a gray-only dress). Keep Front/Back color story "
+    "consistent with the applied fills."
+)
+
+# Used only when a second textile swatch image is attached to images.edit.
+_FABRIC_SWATCH_EDIT_CONTRACT = (
+    "TEXTILE REFERENCE: Image 1 is the garment sketch (silhouette, pose, coverage, painted "
+    "regions). Image 2 is the EXACT textile swatch from the Studio canvas — reproduce this "
+    "repeating motif, spacing, scale, and colors on painted garment regions only. Do NOT "
+    "replace the motif with plain glossy satin, a solid fill, or an invented pattern. "
+    "Natural draping and folds are allowed; motif geometry must remain recognizable. "
+    "Do not alter silhouette, pose, or skin/coverage boundaries."
+)
+
+# Front + Back: elevate the design; do not pixel-trace sketch mistakes.
+# Protected — must survive IMAGE_PROMPT_MAX_CHARS evidence bounding.
+_DESIGN_ENHANCEMENT_CONTRACT = (
+    "DESIGN ENHANCEMENT (Front and Back): Sketch guides concept, silhouette, cut, strap/"
+    "sleeve placement, openings, and applied colors/fabrics — NOT a pixel-perfect trace. "
+    "Polish into a beautiful professional fashion rendering (clean lines, smooth seams, "
+    "refined proportions). Normalize sketch glitches (accidental asymmetry, uneven strap/"
+    "sleeve widths, crooked edges, wobble); keep intentional design asymmetry. Do NOT "
+    "redesign or invent decorative panels. Same design elevated — not traced/cartoonish; "
+    "keep applied fabric/pattern/color theme."
+)
+
+# Illustration-style restriction — equal priority with coverage; must not be truncated
+# away by verbose vision evidence (Issue #64 PM amendment).
+_ILLUSTRATION_STYLE_CONTRACT = (
+    "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark, "
+    "cartoon outlines, and heavy black border framing. "
+    "Deliver a polished non-photorealistic fashion illustration."
+)
 
 # Longest-prefix table from official GPT-6 docs. Unknown families fail closed.
 # gpt-4o / gpt-4.1 omit reasoning_effort (rollback). Luna/Sol accept "none".
@@ -46,7 +115,85 @@ class SketchConfigError(ValueError):
 
 
 class SketchCompletionError(RuntimeError):
-    """Sanitized completion failure. Worker marks the job failed. No payloads."""
+    """Sanitized completion failure. Worker marks the job failed. No payloads.
+
+    Optional ``safe_meta`` carries allowlisted diagnostic fields only
+    (exception class, HTTP status, short provider code, request id, stage).
+    Never attach prompts, images, raw provider bodies, or credentials.
+    """
+
+    def __init__(self, message: str, *, safe_meta: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.safe_meta = dict(safe_meta or {})
+
+
+# Strict allowlists for persisted/logged diagnostics (never free-form provider text).
+_SAFE_PROVIDER_CODES = frozenset(
+    {
+        "content_policy_violation",
+        "moderation_blocked",
+        "invalid_image",
+        "invalid_image_format",
+        "invalid_image_size",
+        "image_too_large",
+        "image_parse_error",
+        "billing_hard_limit_reached",
+        "insufficient_quota",
+        "rate_limit_exceeded",
+        "model_not_found",
+        "unsupported_value",
+        "invalid_value",
+        "missing_required_parameter",
+    }
+)
+
+_SAFE_ERROR_CATEGORIES = frozenset(
+    {
+        "provider_content_policy",
+        "provider_quota",
+        "provider_rate_limit",
+        "provider_auth",
+        "provider_unavailable",
+        "provider_model_unavailable",
+        "provider_bad_request",
+        "empty_edit_response",
+        "image_edit_failed",
+        "sketch_completion_failed",
+        "no_sketch_image",
+        "retired_image_model",
+        "unsupported_image_model",
+    }
+)
+
+_SAFE_STAGES = frozenset({"images.edit", "chat.completions", "config"})
+
+_SAFE_ERROR_TYPES = frozenset(
+    {
+        "BadRequestError",
+        "AuthenticationError",
+        "PermissionDeniedError",
+        "NotFoundError",
+        "RateLimitError",
+        "InternalServerError",
+        "APIConnectionError",
+        "APITimeoutError",
+        "APIStatusError",
+        "APIError",
+        "EmptyEditResponse",
+        "ImageModelNotEligible",
+        "NoSketchImage",
+        "RetiredImageModel",
+        "UnsupportedImageModel",
+        "RuntimeError",
+        "ValueError",
+        "TimeoutError",
+        "ProviderError",
+    }
+)
+
+_CONTENT_POLICY_CODES = frozenset({"content_policy_violation", "moderation_blocked"})
+_QUOTA_CODES = frozenset({"billing_hard_limit_reached", "insufficient_quota"})
+_MODEL_UNAVAILABLE_CODES = frozenset({"model_not_found"})
 
 
 def is_configured() -> bool:
@@ -164,6 +311,19 @@ def _raw_sketch_bytes(job: AIJob) -> tuple[bytes, str] | None:
     return None
 
 
+def _raw_fabric_swatch_bytes(job: AIJob) -> tuple[bytes, str] | None:
+    """Optional exact Studio textile tile (never invent; fail closed if corrupt)."""
+    d = job.input_data or {}
+    b64raw = d.get("fabric_swatch_base64")
+    if not isinstance(b64raw, str) or not b64raw.strip():
+        return None
+    try:
+        return _decode_inline_base64(b64raw)
+    except Exception as e:
+        logger.warning("OpenAI job %s: bad fabric_swatch_base64: %s", job.id, e)
+        return None
+
+
 def _image_part(job: AIJob) -> dict[str, Any] | None:
     raw = _raw_sketch_bytes(job)
     if raw is None:
@@ -182,29 +342,37 @@ def _system_prompt(job_type: str) -> str:
         )
     if job_type == "sketch_polish":
         return (
-            "You are a senior fashion design director. A young designer uploaded a rough fashion sketch. "
-            "Your job is to extract the DESIGN CONCEPT for a professional fashion-illustration edit. "
-            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence — including "
-            "the model's exact croquis pose/stance and garment silhouette — versus (B) drawing imperfections "
-            "that may be professionally refined (wobbly lines, uneven fill, crude shading). "
-            "Never invent anatomy, swap left/right, or normalize a dynamic stance into a generic runway pose. "
+            "You are a senior fashion design director. A young designer uploaded a rough fashion sketch "
+            "(Front or Back). Your job is to extract the DESIGN CONCEPT for a polished professional "
+            "fashion-illustration enhancement — elevate the idea; do not ask the image model to trace "
+            "the rough sketch literally. "
+            "Distinguish clearly: (A) design decisions that MUST be preserved from visible evidence "
+            "(garment concept, silhouette, cut, strap/sleeve placement, openings, applied "
+            "colors/fabrics/patterns only — invent no new accent colors or decorative panels, "
+            "Front/Back coherence), versus (B) drawing imperfections that MUST be professionally "
+            "normalized away (wobbly/crooked lines, accidental left/right asymmetry, uneven strap "
+            "or sleeve widths, rough fill edges, crude shading, awkward hand-drawn proportions, "
+            "traced-sketch look). "
+            "When the user message includes SELECTED STUDIO REFERENCE metadata, that selection is authoritative "
+            "over any conflicting impression of the figure's fashion-croquis family (male vs female presentation). "
             "Respond ONLY with valid JSON using keys: "
-            "summary (one short exciting sentence about the design concept, not the rough drawing), "
+            "summary (one short exciting sentence about the elevated design concept, not the rough drawing), "
             "polish_bullets (array of 3–5 concise tips for the young designer), "
             "design_identity (object with evidence-backed fields; use null only when not visible: "
-            "garment_category, silhouette, pose (short free-text stance summary), neckline, sleeve_type, "
-            "sleeve_length, hemline, main_colors, fabric_patterns, accessories, asymmetry_notes, "
-            "distinctive_details, pose_lock (object of visible anatomical relationships only; null field "
-            "when occluded/uncertain — never invent measurements: torso_orientation, shoulder_alignment, "
-            "hip_alignment, supporting_leg, bent_or_lifted_leg, knee_positions, foot_placement, "
-            "arm_and_hand_positions, body_asymmetry_and_perspective)), "
-            "refine_ok (array of short drawing imperfections that MAY be upgraded — never design decisions "
-            "and never pose/stance changes), "
-            "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes "
-            "to preserve: concrete pose relationships from pose_lock, hat/hair, neckline, sleeves, hem, "
-            "main colors, fabric patterns, asymmetry, accessories, distinctive details — invent nothing; "
-            "do not describe amateur line quality or ask to keep a child sketch look; do not summarize pose "
-            "as a generic 'standing front view' when limbs are bent, lifted, crossed, or asymmetric)."
+            "garment_category, silhouette, pose, neckline, sleeve_type, sleeve_length, hemline, "
+            "main_colors, fabric_patterns, accessories, asymmetry_notes, distinctive_details, "
+            "skin_visible_regions, garment_panels, cutouts_and_openings, intended_pale_or_white_fabric), "
+            "refine_ok (array of short drawing imperfections that SHOULD be upgraded — never design decisions), "
+            "image_prompt (one English paragraph for an image EDIT listing ONLY visible design attributes to preserve: "
+            "pose, hat/hair, neckline, sleeves, hem, applied main colors only, fabric patterns, intentional "
+            "design asymmetry when present, accessories, distinctive details, garment coverage boundaries, "
+            "exposed skin/midriff/cut-outs, and any intentionally drawn white/pale fabric — invent nothing; "
+            "Never invent accent colors, contrast panels, trims, bodysuits, linings, or modesty panels; "
+            "do not treat blank/light croquis body or paper as garment fabric; explicitly call for polished "
+            "professional fashion rendering that normalizes accidental sketch imperfections (uneven straps/"
+            "sleeves, crooked edges, wobble) into a clean balanced design; do not describe amateur line "
+            "quality or ask to keep a traced/cartoon sketch look; do not request a different croquis family "
+            "than the SELECTED STUDIO REFERENCE)."
         )
     return (
         "You are a fashion stylist AI. Respond ONLY with valid JSON using keys: "
@@ -212,9 +380,209 @@ def _system_prompt(job_type: str) -> str:
     )
 
 
+def _normalized_studio_side(input_data: dict[str, Any]) -> str | None:
+    raw = input_data.get("studio_side")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    return raw.strip().lower()
+
+
+# Bound for SHARED GARMENT SPEC payload text inside the image prompt.
+# Kept tight so COLOR/DESIGN/COVERAGE/STYLE protected contracts always fit.
+_SHARED_GARMENT_SPEC_PROMPT_CHARS = 320
+
+# Ordered whitelist: color/material identity first; diagnostics/notes last.
+# Alphabetical JSON + blind truncation previously dropped main_colors when a
+# long `details` string sorted ahead of it (Issue #42 PM 2026-10-26).
+_SHARED_GARMENT_SPEC_PRIORITY_KEYS: tuple[str, ...] = (
+    "main_colors",
+    "materials",
+    "colors",
+    "garment_category",
+    "silhouette",
+    "hem",
+    "neckline",
+    "notes",
+    "details",
+)
+
+
+def _compact_json_value(value: Any) -> Any:
+    """Shrink nested values for the prompt clause without inventing content."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        out: list[Any] = []
+        for item in value:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    out.append(text)
+            elif isinstance(item, (int, float, bool)) or item is None:
+                out.append(item)
+            else:
+                try:
+                    out.append(json.dumps(item, ensure_ascii=True, separators=(",", ":")))
+                except (TypeError, ValueError):
+                    continue
+        return out
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _clip_prose(text: str, max_chars: int) -> str:
+    """Bound optional notes/details on a word boundary; never emit a partial token mid-word when avoidable."""
+    text = text.strip()
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    clipped = text[:max_chars].rstrip()
+    if " " in clipped:
+        # Prefer a clean word cut when the next char is mid-token.
+        if max_chars < len(text) and not text[max_chars].isspace():
+            clipped = clipped.rsplit(" ", 1)[0].rstrip()
+    return clipped or text[:max_chars].rstrip()
+
+
+def _serialize_shared_garment_spec(spec: dict[str, Any], *, max_chars: int) -> str:
+    """Pack high-priority fields first; never slice mid-field / mid-JSON token."""
+    packed: dict[str, Any] = {}
+    encoded = "{}"
+    for key in _SHARED_GARMENT_SPEC_PRIORITY_KEYS:
+        if key not in spec:
+            continue
+        raw = spec.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, str) and not raw.strip():
+            continue
+        if isinstance(raw, list) and not raw:
+            continue
+        candidate_val = _compact_json_value(raw)
+        if isinstance(candidate_val, str) and not candidate_val:
+            continue
+        if isinstance(candidate_val, list) and not candidate_val:
+            continue
+
+        # Bound low-priority prose so color/material authority keeps headroom.
+        if key in ("notes", "details") and isinstance(candidate_val, str):
+            # Leave room for at least main_colors + materials when present.
+            prose_cap = max(48, max_chars // (4 if key == "details" else 3))
+            candidate_val = _clip_prose(candidate_val, prose_cap)
+
+        trial = dict(packed)
+        trial[key] = candidate_val
+        try:
+            trial_encoded = json.dumps(trial, ensure_ascii=True, separators=(",", ":"))
+        except (TypeError, ValueError):
+            continue
+        if len(trial_encoded) <= max_chars:
+            packed = trial
+            encoded = trial_encoded
+            continue
+
+        # Last chance for optional prose: shrink until it fits, else skip.
+        if key in ("notes", "details") and isinstance(candidate_val, str) and packed:
+            lo, hi = 16, len(candidate_val)
+            best: str | None = None
+            best_packed: dict[str, Any] | None = None
+            while lo <= hi:
+                mid = (lo + hi) // 2
+                trial[key] = _clip_prose(candidate_val, mid)
+                try:
+                    trial_encoded = json.dumps(trial, ensure_ascii=True, separators=(",", ":"))
+                except (TypeError, ValueError):
+                    break
+                if len(trial_encoded) <= max_chars:
+                    best = trial_encoded
+                    best_packed = dict(trial)
+                    lo = mid + 1
+                else:
+                    hi = mid - 1
+            if best is not None and best_packed is not None:
+                encoded = best
+                packed = best_packed
+        # High-priority fields that cannot fit even alone are skipped whole
+        # (never emit truncated/malformed JSON).
+    return encoded if packed else ""
+
+
+def _shared_garment_spec_clause(input_data: dict[str, Any]) -> str:
+    spec = input_data.get("shared_garment_spec")
+    if spec is None:
+        return ""
+    if isinstance(spec, str) and spec.strip():
+        # Legacy string notes — keep as notes-only compact object.
+        text = _serialize_shared_garment_spec(
+            {"notes": spec.strip()},
+            max_chars=_SHARED_GARMENT_SPEC_PROMPT_CHARS,
+        )
+    elif isinstance(spec, dict) and spec:
+        text = _serialize_shared_garment_spec(
+            spec,
+            max_chars=_SHARED_GARMENT_SPEC_PROMPT_CHARS,
+        )
+    else:
+        return ""
+    if not text:
+        return ""
+    return (
+        "SHARED GARMENT SPEC (front/back consistency — do not contradict): "
+        f"{text}"
+    )
+
+
+def _studio_side_vision_clause(side: str | None) -> str:
+    if side == "front":
+        return (
+            "STUDIO VIEW: FRONT of the garment (viewer-facing). This upload is the front sketch only. "
+            "Extract front design intent for a polished professional enhancement (not a literal trace). "
+            "Describe and preserve front-facing design elements. Do NOT describe rear/back-only details "
+            "or claim this is a rear view."
+        )
+    if side == "back":
+        return (
+            "STUDIO VIEW: REAR / BACK of the garment. This upload is the back sketch only — use neutral "
+            "professional fashion-illustration language for adult swimwear and rear garment construction "
+            "(dorsal silhouette, back neckline, back straps or ties, rear closures, center-back seams, "
+            "rear hem, coverage panels as designed). Target the same polished professional enhancement "
+            "quality as Front — not a traced or cartoon back sketch. Do NOT claim this is the front view, "
+            "invent front-only details, or add coverage that is not drawn."
+        )
+    return ""
+
+
+def _studio_side_edit_clause(side: str | None) -> str:
+    if side == "front":
+        return (
+            "VIEW: front-facing fashion illustration — preserve front concept and applied "
+            "materials; polish imperfections; not a rear/back view. "
+        )
+    if side == "back":
+        return (
+            "VIEW: rear/back fashion illustration — accurate back necklines, straps/ties, "
+            "dorsal seams, rear hem as designed; same polished quality as front (not traced/"
+            "cartoon); never describe this upload as a front-facing sketch. "
+        )
+    return ""
+
+
 def _user_text(job: AIJob) -> str:
     d = job.input_data or {}
     parts: list[str] = []
+    if job.job_type == "sketch_polish":
+        ref = reference_from_job_input(d if isinstance(d, dict) else {})
+        parts.append(vision_reference_instructions(ref))
+        side = _normalized_studio_side(d if isinstance(d, dict) else {})
+        side_clause = _studio_side_vision_clause(side)
+        if side_clause:
+            parts.append(side_clause)
+        spec_clause = _shared_garment_spec_clause(d if isinstance(d, dict) else {})
+        if spec_clause:
+            parts.append(spec_clause)
     notes = d.get("notes")
     if isinstance(notes, str) and notes.strip():
         parts.append(f"Designer notes:\n{notes.strip()}")
@@ -230,311 +598,307 @@ def _user_text(job: AIJob) -> str:
     return "\n\n".join(parts) if parts else "Infer from the attached sketch image only."
 
 
-# Critical pose relationships first (Issue #39). Order is packing priority.
-_POSE_LOCK_FIELD_ORDER = (
-    "supporting_leg",
-    "bent_or_lifted_leg",
-    "foot_placement",
-    "knee_positions",
-    "arm_and_hand_positions",
-    "shoulder_alignment",
-    "hip_alignment",
-    "torso_orientation",
-    "body_asymmetry_and_perspective",
-)
-
-_GARMENT_IDENTITY_FIELD_ORDER = (
-    "garment_category",
-    "silhouette",
-    "pose",
-    "neckline",
-    "sleeve_type",
-    "sleeve_length",
-    "hemline",
-    "main_colors",
-    "fabric_patterns",
-    "accessories",
-    "asymmetry_notes",
-    "distinctive_details",
-)
-
-_GENERIC_POSE_PHRASES = frozenset(
-    {
-        "standing",
-        "standing front view",
-        "front view",
-        "front-facing",
-        "upright",
-        "neutral stance",
-        "fashion pose",
-        "elegant fashion pose",
-        "runway pose",
-        "model pose",
-    }
-)
-
-# images.edit prompt budget. Evidence is packed as whole facts — never sliced mid-fact.
-IMAGE_PROMPT_MAX_CHARS = 3800
-_POSE_LOCK_FACT_MAX_CHARS = 220
-_GARMENT_FACT_MAX_CHARS = 160
-_EVIDENCE_CHUNK_MAX_CHARS = 280
+def _neutralize_opposite_subject_language(text: str, family: str) -> str:
+    """Neutralize opposite-family *subject/figure* claims without stripping garment/hair details."""
+    if not text or family not in {"male", "female"}:
+        return text
+    selected = f"selected {family} fashion croquis"
+    if family == "male":
+        patterns = (
+            (
+                r"\bfemale-presenting(?:\s+(?:fashion\s+)?(?:model|figure|croquis))?\b",
+                selected,
+            ),
+            (r"\bfemale(?:\s+fashion)?\s+(?:model|figure|croquis)\b", selected),
+            (r"\bwoman(?:\s+model|\s+figure)?\b", selected),
+            (r"\bgirl(?:\s+model|\s+figure)?\b", selected),
+            (
+                r"\bfeminine(?:\s+facial|\s+body|\s+figure|\s+model|\s+presentation)\b",
+                f"selected {family} croquis presentation",
+            ),
+            (r"\ba\s+female\b", f"a {selected}"),
+            (r"\bthe\s+female\b", f"the {selected}"),
+        )
+    else:
+        patterns = (
+            (
+                r"\bmale-presenting(?:\s+(?:fashion\s+)?(?:model|figure|croquis))?\b",
+                selected,
+            ),
+            (r"\bmale(?:\s+fashion)?\s+(?:model|figure|croquis)\b", selected),
+            (r"\bman(?:\s+model|\s+figure)?\b", selected),
+            (r"\bboy(?:\s+model|\s+figure)?\b", selected),
+            (
+                r"\bmasculine(?:\s+facial|\s+body|\s+figure|\s+model|\s+presentation)\b",
+                f"selected {family} croquis presentation",
+            ),
+            (r"\ba\s+male\b", f"a {selected}"),
+            (r"\bthe\s+male\b", f"the {selected}"),
+        )
+    out = text
+    for pat, replacement in patterns:
+        out = re.sub(pat, replacement, out, flags=re.IGNORECASE)
+    return out
 
 
-def _is_usable_identity_text(val: Any) -> bool:
+def _scrub_structured_subject_fields(structured: dict[str, Any], family: str) -> dict[str, Any]:
+    out = dict(structured)
+    for key in ("image_prompt", "summary"):
+        val = out.get(key)
+        if isinstance(val, str) and val.strip():
+            out[key] = _neutralize_opposite_subject_language(val, family)
+    for key in ("polish_bullets", "cleanup_bullets"):
+        bullets = out.get(key)
+        if isinstance(bullets, list):
+            out[key] = [
+                _neutralize_opposite_subject_language(item, family) if isinstance(item, str) else item
+                for item in bullets
+            ]
+    identity = out.get("design_identity")
+    if isinstance(identity, dict):
+        identity = dict(identity)
+        for key, val in list(identity.items()):
+            if key in {
+                "selected_croquis_family",
+                "selected_reference_model_id",
+                "croquis_presentation",
+            }:
+                continue
+            if isinstance(val, str):
+                identity[key] = _neutralize_opposite_subject_language(val, family)
+        out["design_identity"] = identity
+    return out
+
+
+def _apply_reference_precedence(structured: Any, job: AIJob | None) -> Any:
+    if job is None or not isinstance(structured, dict):
+        return structured
+    ref = reference_from_job_input(job.input_data if isinstance(job.input_data, dict) else {})
+    if ref is None or ref.family is None:
+        return structured
+    out = _scrub_structured_subject_fields(structured, ref.family)
+    identity = out.get("design_identity")
+    if not isinstance(identity, dict):
+        identity = {}
+    else:
+        identity = dict(identity)
+    identity["selected_croquis_family"] = ref.family
+    identity["selected_reference_model_id"] = ref.model_id
+    identity["croquis_presentation"] = (
+        f"{ref.family} fashion croquis (selected Studio reference `{ref.model_id}`)"
+    )
+    out["design_identity"] = identity
+    return out
+
+
+def _is_usable_identity_value(val: Any) -> bool:
     if val is None:
         return False
     text = str(val).strip()
     return bool(text) and text.lower() not in {"null", "none", "n/a", "unknown"}
 
 
-def _bound_fact(text: str, max_chars: int) -> str:
-    """Bound one fact to max_chars without cutting mid-word / mid-sentence fragment."""
-    cleaned = " ".join(str(text).split())
-    if len(cleaned) <= max_chars:
-        return cleaned
-    window = cleaned[:max_chars]
-    for sep in (". ", "; ", ", ", " "):
-        idx = window.rfind(sep)
-        if idx >= max(24, max_chars // 3):
-            return window[: idx + (0 if sep == " " else 1)].rstrip()
-    # Last resort: last whitespace in the window (still not mid-word).
-    idx = window.rfind(" ")
-    if idx > 0:
-        return window[:idx].rstrip()
-    return window.rstrip()
-
-
-def _pack_segments(segments: list[str], budget: int) -> str:
-    """Join complete segments in order until budget is exhausted.
-
-    Never truncate a segment mid-text. Oversized single segments are skipped so a
-    later shorter critical fact can still pack; once a in-budget segment does not
-    fit, packing stops so lower-priority trailing prose cannot displace earlier facts.
-    """
-    if budget <= 0:
-        return ""
-    out: list[str] = []
-    used = 0
-    for seg in segments:
-        text = (seg or "").strip()
-        if not text:
-            continue
-        # Drop a single oversized fact rather than slicing mid-sentence.
-        if len(text) > budget:
-            continue
-        need = len(text) + (1 if out else 0)
-        if used + need > budget:
-            break
-        out.append(text)
-        used += need
-    return " ".join(out)
-
-
-def _pack_labeled_facts(label: str, facts: list[str], budget: int) -> str:
-    """Pack a label only when at least one fact fits (avoids orphan headers)."""
-    if not facts or budget <= 0:
-        return ""
-    label_text = label.strip()
-    # Reserve label + space; if label alone cannot fit with one fact, omit group.
-    if len(label_text) + 1 >= budget:
-        return _pack_segments(facts, budget)
-    remaining_after_label = budget - len(label_text) - 1
-    packed_facts = _pack_segments(facts, remaining_after_label)
-    if not packed_facts:
-        return ""
-    return f"{label_text} {packed_facts}"
-
-
-def _pose_lock_facts(identity: dict[str, Any]) -> list[str]:
-    """Visible pose_lock facts only — never invent anatomy when fields are null/missing."""
-    pose_lock = identity.get("pose_lock")
-    if not isinstance(pose_lock, dict) or not pose_lock:
+def _design_identity_bits(structured: dict[str, Any]) -> list[str]:
+    """Return ordered evidence-backed design_identity labels (skip null/unknown)."""
+    identity = structured.get("design_identity")
+    if not isinstance(identity, dict) or not identity:
         return []
-    facts: list[str] = []
-    for key in _POSE_LOCK_FIELD_ORDER:
-        val = pose_lock.get(key)
-        if not _is_usable_identity_text(val):
-            continue
-        label = key.replace("_", " ")
-        body = _bound_fact(str(val).strip(), _POSE_LOCK_FACT_MAX_CHARS)
-        if body:
-            facts.append(f"{label}: {body}")
-    return facts
-
-
-def _pose_lock_clause(identity: dict[str, Any]) -> str:
-    """Format structured pose_lock relationships for the edit brief."""
-    facts = _pose_lock_facts(identity)
-    if not facts:
-        return ""
-    return (
-        "POSE LOCK (preserve these visible anatomical relationships exactly; do not normalize): "
-        + "; ".join(facts)
-        + "."
+    order = (
+        "croquis_presentation",
+        "garment_category",
+        "silhouette",
+        # Coverage facts early among evidence so they win budget over free-text prose.
+        "skin_visible_regions",
+        "garment_panels",
+        "cutouts_and_openings",
+        "intended_pale_or_white_fabric",
+        "pose",
+        "neckline",
+        "sleeve_type",
+        "sleeve_length",
+        "hemline",
+        "main_colors",
+        "fabric_patterns",
+        "accessories",
+        "asymmetry_notes",
+        "distinctive_details",
     )
-
-
-def _garment_identity_facts(identity: dict[str, Any]) -> list[str]:
-    """Garment/design identity facts (pose_lock handled separately for priority packing)."""
-    facts: list[str] = []
-    has_pose_lock = isinstance(identity.get("pose_lock"), dict) and bool(identity.get("pose_lock"))
-    for key in _GARMENT_IDENTITY_FIELD_ORDER:
+    bits: list[str] = []
+    for key in order:
         val = identity.get(key)
-        if not _is_usable_identity_text(val):
+        if not _is_usable_identity_value(val):
             continue
-        text = str(val).strip()
-        # Prefer structured pose_lock over a generic free-text pose summary.
-        if key == "pose" and has_pose_lock and text.lower() in _GENERIC_POSE_PHRASES:
-            continue
-        body = _bound_fact(text, _GARMENT_FACT_MAX_CHARS)
-        if body:
-            facts.append(f"{key.replace('_', ' ')}: {body}")
-    return facts
+        bits.append(f"{key.replace('_', ' ')}: {str(val).strip()}")
+    return bits
 
 
 def _design_identity_clause(structured: dict[str, Any]) -> str:
     """Fold vision design_identity fields into the edit brief when present."""
-    identity = structured.get("design_identity")
-    if not isinstance(identity, dict) or not identity:
-        return ""
-    bits = _garment_identity_facts(identity)
-    pose_clause = _pose_lock_clause(identity)
-    if pose_clause:
-        bits.append(pose_clause)
+    bits = _design_identity_bits(structured)
     if not bits:
         return ""
     return "Preserve these design attributes: " + "; ".join(bits) + "."
 
 
-def _evidence_chunks(structured: Any, summary: str) -> list[str]:
-    """Lower-priority free-text evidence chunks (whole sentences when possible)."""
+def _bound_at_boundary(text: str, max_chars: int) -> str:
+    """Bound lower-priority prose without raising IMAGE_PROMPT_MAX_CHARS.
+
+    Prefers cutting at `;` / sentence / word boundaries. Does not invent content.
+    Empty when the budget is exhausted.
+    """
+    if max_chars <= 0:
+        return ""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    # Leave room for an ellipsis marker when we must cut.
+    hard = max_chars - 1 if max_chars > 1 else max_chars
+    window = text[:hard]
+    for sep in ("; ", ". ", ", ", " "):
+        idx = window.rfind(sep)
+        if idx >= max(24, hard // 4):
+            return window[: idx + len(sep.rstrip())].rstrip() + "…"
+    return window.rstrip() + ("…" if max_chars > 1 else "")
+
+
+def _assemble_design_evidence(
+    *,
+    identity_bits: list[str],
+    free_text: str,
+    budget: int,
+) -> str:
+    """Pack structured identity facts first, then free-text vision notes, within budget."""
+    if budget <= 0:
+        return ""
+    prefix = "Design evidence: "
+    remaining = budget - len(prefix)
+    if remaining <= 0:
+        return ""
+    parts: list[str] = []
+    if identity_bits:
+        identity_block = "Preserve these design attributes: " + "; ".join(identity_bits) + "."
+        if len(identity_block) <= remaining:
+            parts.append(identity_block)
+            remaining -= len(identity_block) + (1 if free_text.strip() else 0)
+        else:
+            # Keep as many leading fields as fit (field boundary), never inventing coverage.
+            kept: list[str] = []
+            head = "Preserve these design attributes: "
+            used = len(head) + 1  # trailing period
+            for bit in identity_bits:
+                add = len(bit) + (2 if kept else 0)  # "; " between bits
+                if used + add > remaining:
+                    break
+                kept.append(bit)
+                used += add
+            if kept:
+                parts.append(head + "; ".join(kept) + ".")
+                remaining = budget - len(prefix) - len(parts[0]) - (1 if free_text.strip() else 0)
+            else:
+                remaining = 0
+    prose = (free_text or "").strip()
+    if prose and remaining > 0:
+        bounded = _bound_at_boundary(prose, remaining)
+        if bounded:
+            parts.append(bounded)
+    if not parts:
+        return ""
+    return prefix + " ".join(parts)
+
+
+def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None) -> str:
+    """Build a professional fashion-illustration edit brief (production maint prompt + identity).
+
+    Protected instructions (source-of-truth, selected croquis, coverage fidelity, and
+    non-photoreal illustration style) always remain intact. Only lower-priority vision
+    prose is bounded to fit ``IMAGE_PROMPT_MAX_CHARS``. Does not import undeployed
+    PR #41 pose_lock packing and does not raise the global character cap.
+    """
+    structured = _apply_reference_precedence(structured, job)
+    summary_text = summary or ""
+    ref = None
+    if job is not None:
+        ref = reference_from_job_input(job.input_data if isinstance(job.input_data, dict) else {})
+        if ref is not None and ref.family is not None:
+            summary_text = _neutralize_opposite_subject_language(summary_text, ref.family)
+            if isinstance(structured, dict) and isinstance(structured.get("summary"), str):
+                summary_text = str(structured.get("summary") or summary_text)
+
     evidence = ""
+    identity_bits: list[str] = []
     if isinstance(structured, dict):
         evidence = str(structured.get("image_prompt") or "").strip()
+        if ref is not None and ref.family is not None and evidence:
+            evidence = _neutralize_opposite_subject_language(evidence, ref.family)
+        identity_bits = _design_identity_bits(structured)
         if not evidence:
             bullets = structured.get("polish_bullets") or structured.get("cleanup_bullets") or []
             if isinstance(bullets, list) and bullets:
-                joined = "; ".join(str(b).strip() for b in bullets if str(b).strip())
-                evidence = f"{summary}. Design details: {joined}".strip()
-    if not evidence:
-        evidence = (summary or "Professional fashion illustration of this sketch").strip()
-    evidence = " ".join(evidence.split())
-    if not evidence:
-        return []
-    # Split on sentence boundaries when long; each chunk is packed whole or skipped.
-    if len(evidence) <= _EVIDENCE_CHUNK_MAX_CHARS:
-        return [evidence]
-    chunks: list[str] = []
-    rest = evidence
-    while rest:
-        if len(rest) <= _EVIDENCE_CHUNK_MAX_CHARS:
-            chunks.append(rest)
-            break
-        window = rest[:_EVIDENCE_CHUNK_MAX_CHARS]
-        cut = -1
-        for sep in (". ", "; ", ", "):
-            idx = window.rfind(sep)
-            if idx >= _EVIDENCE_CHUNK_MAX_CHARS // 3:
-                cut = idx + len(sep)
-                break
-        if cut < 0:
-            cut = window.rfind(" ")
-        if cut < 0:
-            # Pathological no-whitespace blob: skip rather than mid-token slice into the prompt.
-            break
-        piece = rest[:cut].strip()
-        if piece:
-            chunks.append(piece)
-        rest = rest[cut:].strip()
-    return chunks
+                joined = "; ".join(str(b).strip() for b in bullets if str(b).strip())[:600]
+                evidence = f"{summary_text}. Design details: {joined}"
+    if not evidence and not identity_bits:
+        evidence = summary_text or "Professional fashion illustration of this sketch"
 
-
-def _build_image_prompt(structured: Any, summary: str) -> str:
-    """Build a professional fashion-illustration edit brief (not a pale wash / child-sketch retain).
-
-    Assembles a fixed instruction frame plus prioritized evidence. Critical pose_lock facts are
-    packed before lower-priority garment prose and free-text image_prompt chunks. The budget is
-    enforced by omitting whole trailing segments — never by slicing mid-fact.
-    """
-    identity: dict[str, Any] = {}
-    if isinstance(structured, dict):
-        raw_identity = structured.get("design_identity")
-        if isinstance(raw_identity, dict):
-            identity = raw_identity
-
-    pose_facts = _pose_lock_facts(identity)
-    garment_facts = _garment_identity_facts(identity)
-    evidence_parts = _evidence_chunks(structured, summary)
-
-    lead = (
+    reference_clause = edit_reference_instructions(ref) + " "
+    side_clause = ""
+    fabric_clause = ""
+    if job is not None:
+        side_clause = _studio_side_edit_clause(
+            _normalized_studio_side(job.input_data if isinstance(job.input_data, dict) else {})
+        )
+        shared_edit = _shared_garment_spec_clause(
+            job.input_data if isinstance(job.input_data, dict) else {}
+        )
+        if shared_edit:
+            side_clause = f"{side_clause}{shared_edit} "
+        swatch_raw = (
+            job.input_data.get("fabric_swatch_base64")
+            if isinstance(job.input_data, dict)
+            else None
+        )
+        if isinstance(swatch_raw, str) and swatch_raw.strip():
+            fabric_clause = f"{_FABRIC_SWATCH_EDIT_CONTRACT} "
+    protected = (
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
-        "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent "
-        "AND for the model's croquis pose, stance, limb positions, and body proportions. "
+        "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
+        f"{reference_clause}"
+        f"{side_clause}"
+        f"{fabric_clause}"
+        f"{_DESIGN_ENHANCEMENT_CONTRACT} "
+        f"{_COVERAGE_PRESERVATION_CONTRACT} "
+        f"{_COLOR_FIDELITY_CONTRACT} "
+        "PRESERVE exactly from visible evidence: garment category, silhouette/cut, pose, neckline, "
+        "sleeve type/length, hemline, applied main colors only, fabric/textile patterns, intentional "
+        "design asymmetry when clearly designed, accessories, distinctive details, and coverage map "
+        "(panels vs exposed skin, cut-outs, straps, openings). "
+        "UPGRADE construction and presentation: clean contours; sophisticated garment construction "
+        "and tailoring; balance accidental uneven straps/sleeves; fabric folds/drape/texture; "
+        "richer but faithful colors in the applied palette; crisp repeating textile patterns; defined "
+        "seams/hems; attractive fashion presentation on a clean light background. Do NOT keep "
+        "rough sketch glitches or a traced look. Do NOT apply only a faint watercolor or light "
+        "color wash. Do NOT invent a different garment, invent accent colors/contrast panels, "
+        "change applied colors, alter the silhouette, add unnecessary accessories, invent white "
+        "linings/bodysuits/modesty panels, or make every design look like the same generic "
+        "fashion outfit. "
+        f"{_ILLUSTRATION_STYLE_CONTRACT}"
     )
-    pose_rules = (
-        "CRITICAL POSE RULES — professional refinement is NOT a pose rewrite: do NOT straighten bent "
-        "limbs; do NOT lower a lifted foot or plant both boots when one foot was raised/angled; do NOT "
-        "uncross or newly cross the legs; do NOT change weight distribution or supporting leg; do NOT "
-        "reorient the torso, shoulders, or hips; do NOT swap left/right hands or move a hand-on-hip; "
-        "do NOT replace the original stance with a generic upright runway pose. "
+    # Reserve space for a separating space + design evidence block when budget allows.
+    evidence_budget = IMAGE_PROMPT_MAX_CHARS - len(protected) - 1
+    evidence_block = _assemble_design_evidence(
+        identity_bits=identity_bits,
+        free_text=evidence,
+        budget=evidence_budget,
     )
-    preserve = (
-        "PRESERVE exactly from visible evidence: garment category, original silhouette, the original "
-        "model pose/stance, neckline, sleeve type and length, hemline, main colors, fabric/textile "
-        "patterns, asymmetry, accessories (such as hats), and distinctive design details. "
-    )
-    upgrade = (
-        "UPGRADE construction and presentation only: strong clean garment contours; sophisticated "
-        "tailoring and garment construction; visible fabric folds, draping, and texture; richer but "
-        "faithful colors; crisp repeating textile patterns; clearly defined necklines, sleeves, seams, "
-        "and hems; attractive fashion-presentation quality; clean full-body composition on a clean light "
-        "presentation background — while keeping the same full-body framing and croquis proportions. "
-    )
-    bans = (
-        "Do NOT retain rough/amateur drawing imperfections. Do NOT apply only a faint watercolor or light "
-        "color wash. Do NOT invent a different garment, change the designer's colors, alter the silhouette, "
-        "add unnecessary accessories, or make every design look like the same generic fashion outfit. "
-    )
-    suffix = "Avoid photorealism, photography, CGI, magazine lookbook collage, text, watermark."
-
-    # Fixed instruction frame (without trailing avoid-line) is reserved first so polish/safety
-    # language cannot be crowded out by verbose vision text. Pose rules sit immediately after
-    # the lead so anti-repose bans are never budget-optional. Evidence packs next by priority;
-    # the photorealism avoid-line is always last when budget allows.
-    fixed_core = f"{lead}{pose_rules}{preserve}{upgrade}{bans}"
-    suffix_budget = len(suffix) + 1  # leading space before suffix
-    evidence_budget = max(0, IMAGE_PROMPT_MAX_CHARS - len(fixed_core) - suffix_budget)
-
-    # Priority: pose_lock → garment identity → free-text vision evidence.
-    groups = [
-        (
-            "POSE LOCK (preserve these visible anatomical relationships exactly; do not normalize):",
-            pose_facts,
-        ),
-        ("Garment attributes to preserve:", garment_facts),
-        ("Design evidence:", evidence_parts),
-    ]
-    packed_groups: list[str] = []
-    used = 0
-    for label, facts in groups:
-        room = evidence_budget - used - (1 if packed_groups else 0)
-        group_text = _pack_labeled_facts(label, facts, room)
-        if not group_text:
-            # Try next lower-priority group only if this group had no usable facts.
-            if facts:
-                # Facts existed but none fit — stop so we do not skip ahead past priority.
-                break
-            continue
-        packed_groups.append(group_text)
-        used += len(group_text) + (1 if len(packed_groups) > 1 else 0)
-
-    packed_evidence = " ".join(packed_groups)
-    parts = [fixed_core.rstrip()]
-    if packed_evidence:
-        parts.append(packed_evidence)
-    # Always keep the avoid-line when the reserved suffix budget remains (it was reserved above).
-    parts.append(suffix)
-    return " ".join(parts)
+    if evidence_block:
+        prompt = f"{protected} {evidence_block}"
+    else:
+        prompt = protected
+    if len(prompt) > IMAGE_PROMPT_MAX_CHARS:
+        # Defensive: protected alone must fit; never slice mid-instruction.
+        prompt = protected[:IMAGE_PROMPT_MAX_CHARS]
+    return prompt
 
 
 def _extract_image_bytes(item: Any) -> bytes | None:
@@ -549,13 +913,415 @@ def _extract_image_bytes(item: Any) -> bytes | None:
 
 
 def _sanitize_provider_error(exc: BaseException) -> str:
-    """Bounded log token: exception class only. Never the provider body (may hold image/secrets)."""
-    return type(exc).__name__[:80]
+    """Bounded log token: allowlisted exception class only. Never the provider body."""
+    name = type(exc).__name__[:80]
+    if name in _SAFE_ERROR_TYPES:
+        return name
+    return "ProviderError"
 
 
-def _supports_input_fidelity(model: str) -> bool:
+def _safe_provider_code(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    code = raw.strip()[:64]
+    if not code or code not in _SAFE_PROVIDER_CODES:
+        return None
+    return code
+
+
+def _safe_request_id(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    rid = raw.strip()[:128]
+    if not rid or len(rid) < 8 or len(rid) > 128:
+        return None
+    # Correlation ids are typically alnum / hyphen / underscore (OpenAI req_* style).
+    if not all(ch.isalnum() or ch in "-_" for ch in rid):
+        return None
+    return rid
+
+
+def _safe_error_type_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    name = raw.strip()[:80]
+    if name in _SAFE_ERROR_TYPES:
+        return name
+    return None
+
+
+def _safe_stage_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    stage = raw.strip()[:64]
+    if stage in _SAFE_STAGES:
+        return stage
+    return None
+
+
+def _safe_error_category_token(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    category = raw.strip()[:64]
+    if category in _SAFE_ERROR_CATEGORIES:
+        return category
+    return None
+
+
+def _safe_provider_error_fields(exc: BaseException) -> dict[str, Any]:
+    """Allowlisted provider diagnostics. Never includes message/body/prompt/image bytes."""
+    fields: dict[str, Any] = {"error_type": _sanitize_provider_error(exc)}
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int) and 100 <= status <= 599:
+        fields["http_status"] = status
+    code = _safe_provider_code(getattr(exc, "code", None))
+    if code:
+        fields["provider_code"] = code
+    request_id = _safe_request_id(getattr(exc, "request_id", None))
+    if request_id:
+        fields["request_id"] = request_id
+    return fields
+
+
+def normalize_failure_meta(meta: Any) -> dict[str, Any]:
+    """Return only allowlisted diagnostic fields suitable for DB/API/logs."""
+    if not isinstance(meta, dict) or not meta:
+        return {}
+    out: dict[str, Any] = {}
+    category = _safe_error_category_token(meta.get("error_category"))
+    if category:
+        out["error_category"] = category
+    error_type = _safe_error_type_token(meta.get("error_type"))
+    if error_type:
+        out["error_type"] = error_type
+    status = meta.get("http_status")
+    if isinstance(status, int) and 100 <= status <= 599:
+        out["http_status"] = status
+    code = _safe_provider_code(meta.get("provider_code"))
+    if code:
+        out["provider_code"] = code
+    request_id = _safe_request_id(meta.get("request_id"))
+    if request_id:
+        out["request_id"] = request_id
+    stage = _safe_stage_token(meta.get("stage"))
+    if stage:
+        out["stage"] = stage
+    for bool_key in ("image_edit_attempted", "image_bytes_returned"):
+        if bool_key in meta and isinstance(meta[bool_key], bool):
+            out[bool_key] = meta[bool_key]
+    return out
+
+
+def failure_result_for_storage(meta: Any) -> dict[str, Any] | None:
+    """Worker persistence shape: ``{\"error\": {allowlisted…}}`` or None."""
+    cleaned = normalize_failure_meta(meta)
+    return {"error": cleaned} if cleaned else None
+
+
+def _classify_edit_failure(meta: dict[str, Any]) -> str:
+    """Map allowlisted fields to a stable error category for UI/ops (not a provider body).
+
+    Ordinary HTTP 400 without a confirmed safety code is never treated as content policy.
+    """
+    cleaned = normalize_failure_meta(meta)
+    if cleaned.get("error_category") in _SAFE_ERROR_CATEGORIES:
+        return cleaned["error_category"]  # type: ignore[return-value]
+    code = cleaned.get("provider_code")
+    status = cleaned.get("http_status")
+    error_type = cleaned.get("error_type")
+    if code in _CONTENT_POLICY_CODES:
+        return "provider_content_policy"
+    if code in _QUOTA_CODES:
+        return "provider_quota"
+    if code in _MODEL_UNAVAILABLE_CODES:
+        return "provider_model_unavailable"
+    if code == "rate_limit_exceeded" or status == 429 or error_type == "RateLimitError":
+        return "provider_rate_limit"
+    if status in {401, 403} or error_type in {"AuthenticationError", "PermissionDeniedError"}:
+        return "provider_auth"
+    if status in {500, 502, 503, 504} or error_type == "InternalServerError":
+        return "provider_unavailable"
+    if error_type == "EmptyEditResponse":
+        return "empty_edit_response"
+    if error_type in {"RetiredImageModel", "UnsupportedImageModel", "ImageModelNotEligible"}:
+        if error_type == "RetiredImageModel":
+            return "retired_image_model"
+        return "unsupported_image_model"
+    if isinstance(status, int) and 400 <= status < 500:
+        return "provider_bad_request"
+    if cleaned.get("image_edit_attempted"):
+        return "image_edit_failed"
+    return "sketch_completion_failed"
+
+
+def _user_message_for_edit_failure(category: str) -> str:
+    """Short, safe user-facing copy. Original sketch is never modified by these failures."""
+    if category == "provider_content_policy":
+        return (
+            "Magic could not edit this sketch under the image provider's safety rules. "
+            "Your original design is unchanged. Edit the sketch, then start a new Magic "
+            "operation — identical retries are not sent automatically."
+        )
+    if category == "provider_rate_limit":
+        return "Magic is temporarily busy. Your original design is unchanged — try again shortly."
+    if category == "provider_quota":
+        return "Magic is temporarily unavailable (provider quota). Your original design is unchanged."
+    if category == "provider_auth":
+        return "Magic is temporarily unavailable. Your original design is unchanged."
+    if category in {"provider_unavailable", "provider_model_unavailable"}:
+        return "Magic is temporarily unavailable. Your original design is unchanged — try again shortly."
+    if category == "retired_image_model":
+        return (
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
+    if category == "unsupported_image_model":
+        return (
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged."
+        )
+    # Keep the historical generic string for unclassified edit failures (compat + ops grep).
+    return "sketch image edit failed"
+
+
+
+# Explicit per-model edit capabilities (do not infer from string prefixes alone).
+# Sources: OpenAI Images edit API + GPT Image 2.5 / deprecation docs (2026-10).
+@dataclass(frozen=True)
+class ImageEditCapabilities:
+    model_id: str
+    status: str  # supported | retired | unsupported
+    sizes: frozenset[str]
+    qualities: frozenset[str]
+    default_quality: str
+    output_formats: frozenset[str]
+    supports_input_fidelity: bool
+    input_fidelity_values: frozenset[str]
+    max_n: int
+
+
+_DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"
+_DEFAULT_IMAGE_SIZE = "1024x1536"
+
+# Exact documented snapshot aliases only (OpenAI model pages). No prefix wildcards.
+# Unknown suffix / future IDs fail closed before any billable images.edit.
+_IMAGE_EDIT_SNAPSHOT_ALIASES: dict[str, str] = {
+    "gpt-image-2.5-sunburst-2026-09-08": "gpt-image-2.5-sunburst",
+}
+
+# Qualities FashionRise may send on a paid edit. xhigh/max are API-legal for Sunburst
+# but rejected here as a cost/config guard (fail closed, 0 HTTP).
+_FASHIONRISE_EDIT_QUALITIES: frozenset[str] = frozenset({"low", "medium", "high", "auto"})
+
+_IMAGE_EDIT_CAPABILITIES: dict[str, ImageEditCapabilities] = {
+    "gpt-image-2.5-sunburst": ImageEditCapabilities(
+        model_id="gpt-image-2.5-sunburst",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "xhigh", "max", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-2.5-flare": ImageEditCapabilities(
+        model_id="gpt-image-2.5-flare",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "xhigh", "max", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-2": ImageEditCapabilities(
+        model_id="gpt-image-2",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        # Official docs: omit input_fidelity for gpt-image-2 (always high fidelity).
+        supports_input_fidelity=False,
+        input_fidelity_values=frozenset(),
+        max_n=10,
+    ),
+    "gpt-image-1.5": ImageEditCapabilities(
+        model_id="gpt-image-1.5",
+        status="supported",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"high", "low"}),
+        max_n=10,
+    ),
+    # Retired 2026-10-23 — never issue a paid edit against these ids.
+    "gpt-image-1": ImageEditCapabilities(
+        model_id="gpt-image-1",
+        status="retired",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"high", "low"}),
+        max_n=10,
+    ),
+    "gpt-image-1-mini": ImageEditCapabilities(
+        model_id="gpt-image-1-mini",
+        status="retired",
+        sizes=frozenset({"1024x1024", "1024x1536", "1536x1024", "auto"}),
+        qualities=frozenset({"low", "medium", "high", "auto", "standard"}),
+        default_quality="high",
+        output_formats=frozenset({"png", "jpeg", "webp"}),
+        supports_input_fidelity=True,
+        input_fidelity_values=frozenset({"low"}),
+        max_n=10,
+    ),
+}
+
+
+def image_edit_capabilities(model: str) -> ImageEditCapabilities | None:
+    """Return the capability row for an exact model id or documented snapshot alias only."""
     m = (model or "").strip()
-    return m == "gpt-image-1" or m.startswith("gpt-image-1.") or m in {"gpt-image-1.5", "gpt-image-2"}
+    if not m:
+        return None
+    if m in _IMAGE_EDIT_CAPABILITIES:
+        return _IMAGE_EDIT_CAPABILITIES[m]
+    canonical = _IMAGE_EDIT_SNAPSHOT_ALIASES.get(m)
+    if canonical is not None:
+        return _IMAGE_EDIT_CAPABILITIES.get(canonical)
+    return None
+
+
+def resolve_image_edit_quality(caps: ImageEditCapabilities, configured: str | None) -> str:
+    """Resolve FashionRise-allowed edit quality.
+
+    Legacy ``standard`` maps to ``high``. Explicit ``xhigh`` / ``max`` and other
+    unexpected values raise before any paid HTTP (no silent premium upgrade, no
+    silent fallback to default for unknown strings).
+    """
+    raw = (configured or "").strip().lower() or caps.default_quality
+    if raw == "standard":
+        # Documented legacy compatibility (older GPT Image envs used "standard").
+        raw = "high"
+    if raw in {"xhigh", "max"}:
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image quality configuration). "
+            "Your original design is unchanged."
+        )
+    if raw not in _FASHIONRISE_EDIT_QUALITIES or raw not in caps.qualities:
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image quality configuration). "
+            "Your original design is unchanged."
+        )
+    return raw
+
+
+def assert_image_model_editable(model: str) -> ImageEditCapabilities:
+    """Fail closed before any paid images.edit when the model is retired/unknown."""
+    caps = image_edit_capabilities(model)
+    if caps is None:
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged.",
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "config",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "unsupported_image_model",
+                    "error_type": "UnsupportedImageModel",
+                }
+            ),
+        )
+    if caps.status == "retired":
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged.",
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "config",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "retired_image_model",
+                    "error_type": "RetiredImageModel",
+                }
+            ),
+        )
+    if caps.status != "supported":
+        raise SketchCompletionError(
+            "Magic image editing is temporarily unavailable (image model configuration). "
+            "Your original design is unchanged.",
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "config",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "unsupported_image_model",
+                    "error_type": "UnsupportedImageModel",
+                }
+            ),
+        )
+    return caps
+
+
+def build_image_edit_kwargs(
+    *,
+    model: str,
+    prompt: str,
+    sketch: tuple[bytes, str],
+    size: str,
+    quality: str | None,
+    fabric_swatch: tuple[bytes, str] | None = None,
+) -> dict[str, Any]:
+    """Construct images.edit kwargs. With a fabric swatch, send [sketch, textile] as image list."""
+    configured = (model or "").strip()
+    caps = assert_image_model_editable(configured)
+    sketch_bytes, mime = sketch
+    ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
+    size_value = size if size in caps.sizes else _DEFAULT_IMAGE_SIZE
+    if size_value not in caps.sizes:
+        size_value = "1024x1536" if "1024x1536" in caps.sizes else next(iter(sorted(caps.sizes)))
+    sketch_img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
+    if fabric_swatch is not None:
+        sw_bytes, sw_mime = fabric_swatch
+        sw_ext = (
+            "jpg"
+            if ("jpeg" in sw_mime or "jpg" in sw_mime)
+            else "webp"
+            if "webp" in sw_mime
+            else "png"
+        )
+        textile_img = (
+            f"textile.{sw_ext}",
+            BytesIO(sw_bytes),
+            sw_mime or f"image/{sw_ext}",
+        )
+        # OpenAI images.edit accepts a sequence: image 1 = sketch, image 2 = textile.
+        image_arg: Any = [sketch_img, textile_img]
+    else:
+        image_arg = sketch_img
+    # Forward the exact allowlisted model id (canonical or documented snapshot).
+    kwargs: dict[str, Any] = {
+        "model": configured,
+        "image": image_arg,
+        "prompt": prompt,
+        "size": size_value,
+        "n": 1,
+    }
+    q = resolve_image_edit_quality(caps, quality)
+    kwargs["quality"] = q
+    if "png" in caps.output_formats:
+        kwargs["output_format"] = "png"
+    # Only set input_fidelity when the capability table explicitly allows it.
+    if caps.supports_input_fidelity and "high" in caps.input_fidelity_values:
+        kwargs["input_fidelity"] = "high"
+    return kwargs
 
 
 def _try_edit_look_from_sketch(
@@ -566,50 +1332,77 @@ def _try_edit_look_from_sketch(
     size: str,
     *,
     sketch: tuple[bytes, str],
-) -> tuple[bytes | None, str]:
+    quality: str | None = None,
+) -> tuple[bytes | None, str, dict[str, Any]]:
     """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0)."""
-    sketch_bytes, mime = sketch
     model = (model or "").strip()
-    if not model.startswith("gpt-image"):
-        logger.warning("OpenAI job %s: image model not eligible for edit", job.id)
-        return None, ""
-
-    ext = "jpg" if ("jpeg" in mime or "jpg" in mime) else "webp" if "webp" in mime else "png"
-    size_value = size if size in {"1024x1024", "1024x1536", "1536x1024", "auto"} else "1024x1536"
+    fabric_swatch = _raw_fabric_swatch_bytes(job)
     try:
-        img = (f"sketch.{ext}", BytesIO(sketch_bytes), mime or f"image/{ext}")
-        logger.info(
-            "OpenAI job %s: editing sketch with %s size=%s (input_fidelity=%s)",
-            job.id,
-            model,
-            size_value,
-            "high" if _supports_input_fidelity(model) else "omit",
+        kwargs = build_image_edit_kwargs(
+            model=model,
+            prompt=prompt,
+            sketch=sketch,
+            size=size,
+            quality=quality,
+            fabric_swatch=fabric_swatch,
         )
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "image": img,
-            "prompt": prompt,
-            "size": size_value,
-            "n": 1,
+    except SketchCompletionError:
+        raise
+    except Exception:
+        logger.warning("OpenAI job %s: image model not eligible for edit", job.id)
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": False,
+            "image_bytes_returned": False,
+            "error_type": "ImageModelNotEligible",
         }
-        if _supports_input_fidelity(model):
-            kwargs["input_fidelity"] = "high"
+
+    fidelity = kwargs.get("input_fidelity", "omit")
+    image_count = 2 if isinstance(kwargs.get("image"), list) else 1
+    try:
+        logger.info(
+            "OpenAI job %s: editing sketch with %s size=%s quality=%s output_format=%s "
+            "input_fidelity=%s image_inputs=%s",
+            job.id,
+            kwargs.get("model"),
+            kwargs.get("size"),
+            kwargs.get("quality"),
+            kwargs.get("output_format"),
+            fidelity,
+            image_count,
+        )
         # Disable OpenAI SDK automatic retries for this paid image call only.
         # Chat Completions (vision) keeps the client default retry policy.
         result = client.with_options(max_retries=0).images.edit(**kwargs)
         data = getattr(result, "data", None) or []
         raw = _extract_image_bytes(data[0]) if data else None
         if raw:
-            return raw, model
+            return raw, str(kwargs.get("model") or model), {}
         logger.warning("OpenAI job %s: edit returned no image bytes", job.id)
-        return None, ""
-    except Exception as e:
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            "error_type": "EmptyEditResponse",
+        }
+    except SketchCompletionError:
+        raise
+    except Exception as exc:
+        fields = _safe_provider_error_fields(exc)
         logger.warning(
-            "OpenAI job %s: image edit failed type=%s",
+            "OpenAI job %s: image edit failed type=%s status=%s code=%s request_id=%s",
             job.id,
-            _sanitize_provider_error(e),
+            fields.get("error_type"),
+            fields.get("http_status"),
+            fields.get("provider_code"),
+            fields.get("request_id"),
         )
-        return None, ""
+        return None, "", {
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            **fields,
+        }
 
 
 def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, summary: str) -> str | None:
@@ -618,25 +1411,44 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
     Uses SDK max_retries=0 for the edit call only. When the image model is disabled, returns None.
     When editing is enabled but the sketch is missing or the single edit fails, raises
     SketchCompletionError so the worker reports a genuine failure. Never calls images.generate
-    or a secondary edit model.
+    or a secondary edit model. Retired models fail closed before any paid edit HTTP call.
     """
     settings = get_settings()
-    model = (getattr(settings, "openai_image_model", None) or "gpt-image-1").strip()
+    model = (getattr(settings, "openai_image_model", None) or _DEFAULT_IMAGE_MODEL).strip()
     if model.lower() in {"", "none", "off", "false", "0"}:
         return None
 
+    # Fail closed before sketch decode work when the configured model cannot be edited.
+    assert_image_model_editable(model)
+
     sketch = _raw_sketch_bytes(job)
     if sketch is None:
-        raise SketchCompletionError("no sketch image for edit")
+        raise SketchCompletionError(
+            "no sketch image for edit",
+            safe_meta=normalize_failure_meta(
+                {
+                    "stage": "images.edit",
+                    "image_edit_attempted": False,
+                    "image_bytes_returned": False,
+                    "error_category": "no_sketch_image",
+                    "error_type": "NoSketchImage",
+                }
+            ),
+        )
 
-    prompt = _build_image_prompt(structured, summary)
-    size = (getattr(settings, "openai_image_size", None) or "1024x1536").strip()
+    prompt = _build_image_prompt(structured, summary, job=job)
+    size = (getattr(settings, "openai_image_size", None) or _DEFAULT_IMAGE_SIZE).strip()
+    quality = getattr(settings, "openai_image_quality", None)
 
-    raw, used_model = _try_edit_look_from_sketch(
-        client, job, prompt, model, size, sketch=sketch
+    raw, used_model, fail_meta = _try_edit_look_from_sketch(
+        client, job, prompt, model, size, sketch=sketch, quality=quality
     )
     if not raw:
-        raise SketchCompletionError("sketch image edit failed")
+        category = _classify_edit_failure(fail_meta)
+        raise SketchCompletionError(
+            _user_message_for_edit_failure(category),
+            safe_meta=normalize_failure_meta({**fail_meta, "error_category": category}),
+        )
 
     key = f"ai/{job.id.hex if hasattr(job.id, 'hex') else str(job.id).replace('-', '')}_{uuid.uuid4().hex[:10]}.png"
     storage = LocalStorageBackend()

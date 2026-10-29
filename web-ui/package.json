@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/assert-sw-access-safe.mjs",
+    "build": "tsc -b && vite build && node scripts/assert-sw-access-safe.mjs && node scripts/assert-prod-api-base.mjs",
     "lint": "oxlint src",
     "preview": "vite preview",
     "test": "vitest run",
@@ -22,6 +22,7 @@
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.13",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",

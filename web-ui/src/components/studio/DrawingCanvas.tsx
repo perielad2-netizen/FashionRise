@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Stage, Layer, Image as KonvaImage, Path, Rect } from 'react-konva'
+import { Stage, Layer, Image as KonvaImage, Path, Rect, Circle } from 'react-konva'
 import type Konva from 'konva'
 import { appendPoint, strokeToSvgPath } from '@/lib/freehand'
 import { decidePointer, pressureForPointer } from '@/lib/pointerSession'
 import { floodFillRegion } from '@/lib/floodFill'
 import type { FillOp, FillStyle } from '@/lib/fills'
 import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
-import { paintFillOps } from '@/lib/paintFills'
+import { paintFillsWithErasers } from '@/lib/exportCanvas'
 import { sampleArtworkPixel } from '@/lib/sampleArtworkPixel'
 import {
   BRUSH_SIZE_STEP_PX,
@@ -46,7 +46,19 @@ type Props = {
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
   onFillComplete?: (fill: FillOp) => void
-  onFillError?: (message: string) => void
+  onFillError?: (
+    message: string,
+    detail?: {
+      reason: string
+      gapHint?: { x: number; y: number }
+      suggestCloseGaps?: boolean
+    },
+  ) => void
+  /** One-shot stronger joint seal for the next fill tap (Close small gaps). */
+  fillCloseSmallGaps?: boolean
+  onFillCloseSmallGapsConsumed?: () => void
+  /** Optional gap marker in design space after an open-outline failure. */
+  fillGapHint?: { x: number; y: number } | null
   onEyedropperSample?: (color: string) => void
   /** Optional: Alt + mouse wheel adjusts brush size without drawing. */
   onBrushSize?: (px: number) => void
@@ -63,14 +75,15 @@ type Props = {
   onViewportChange?: (next: ViewportState) => void
 }
 
-function renderFillsImage(fills: FillOp[]): HTMLImageElement | null {
+/** Rasterize fills with chronological eraser punches (never includes croquis). */
+function renderFillsImage(fills: FillOp[], strokes: Stroke[]): HTMLImageElement | null {
   if (fills.length === 0) return null
   const canvas = document.createElement('canvas')
   canvas.width = DESIGN_WIDTH
   canvas.height = DESIGN_HEIGHT
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
-  paintFillOps(ctx, fills)
+  paintFillsWithErasers(ctx, fills, strokes)
   const img = new window.Image()
   img.src = canvas.toDataURL('image/png')
   return img
@@ -97,6 +110,9 @@ export function DrawingCanvas({
   onStrokeComplete,
   onFillComplete,
   onFillError,
+  fillCloseSmallGaps = false,
+  onFillCloseSmallGapsConsumed,
+  fillGapHint = null,
   onEyedropperSample,
   onBrushSize,
   framed = true,
@@ -241,7 +257,8 @@ export function DrawingCanvas({
     void (async () => {
       await ensureFabricAssetsForFills(fills, { required: false }).catch(() => undefined)
       if (cancelled) return
-      const img = renderFillsImage(fills)
+      // Committed strokes only — live erase draft punches via Konva Path below.
+      const img = renderFillsImage(fills, strokes)
       if (!img) {
         setFillsImage(null)
         return
@@ -253,7 +270,7 @@ export function DrawingCanvas({
     return () => {
       cancelled = true
     }
-  }, [fills])
+  }, [fills, strokes])
 
   const fitScale = size.w / DESIGN_WIDTH
   const contentScale = immersive && viewport ? viewport.scale : fitScale
@@ -588,14 +605,28 @@ export function DrawingCanvas({
   const applyFillAt = useCallback(
     (x: number, y: number) => {
       const style = fillStyle ?? { kind: 'solid' as const, color: brushColor }
-      const result = floodFillRegion({ strokes, x, y, style })
+      const closeSmallGaps = fillCloseSmallGaps
+      if (closeSmallGaps) onFillCloseSmallGapsConsumed?.()
+      const result = floodFillRegion({ strokes, x, y, style, closeSmallGaps })
       if (!result.ok) {
-        onFillError?.(result.message)
+        onFillError?.(result.message, {
+          reason: result.reason,
+          gapHint: result.gapHint,
+          suggestCloseGaps: result.suggestCloseGaps,
+        })
         return
       }
       onFillComplete?.(result.fill)
     },
-    [brushColor, fillStyle, onFillComplete, onFillError, strokes],
+    [
+      brushColor,
+      fillCloseSmallGaps,
+      fillStyle,
+      onFillCloseSmallGapsConsumed,
+      onFillComplete,
+      onFillError,
+      strokes,
+    ],
   )
 
   const sampleAt = useCallback(
@@ -930,6 +961,22 @@ export function DrawingCanvas({
         {fillsImage ? (
           <KonvaImage image={fillsImage} x={0} y={0} width={DESIGN_WIDTH} height={DESIGN_HEIGHT} />
         ) : null}
+        {draft && draft.tool === 'erase'
+          ? (() => {
+              const data = strokeToSvgPath(draft)
+              if (!data) return null
+              return (
+                <Path
+                  key={`fill-erase-${draft.id}`}
+                  data={data}
+                  fill="#F8F4F0"
+                  opacity={1}
+                  globalCompositeOperation="destination-out"
+                  listening={false}
+                />
+              )
+            })()
+          : null}
       </Layer>
       <Layer x={immersive ? panX : 0} y={immersive ? panY : 0} scaleX={immersive ? contentScale : 1} scaleY={immersive ? contentScale : 1}>
         {all.map((stroke) => {
@@ -948,6 +995,18 @@ export function DrawingCanvas({
             />
           )
         })}
+        {fillGapHint ? (
+          <Circle
+            x={fillGapHint.x}
+            y={fillGapHint.y}
+            radius={10}
+            stroke="#C2410C"
+            strokeWidth={2.5}
+            dash={[4, 3]}
+            listening={false}
+            perfectDrawEnabled={false}
+          />
+        ) : null}
       </Layer>
     </>
   )
