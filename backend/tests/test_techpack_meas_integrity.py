@@ -35,7 +35,7 @@ from app.services.techpack_ai import (
 )
 from app.services.techpack_ai_professional import MockProfessionalProvider
 from app.services.techpack_ai_worker import run_techpack_worker_tick
-from app.services.techpack_garments import FINISHED_POM
+from app.services.techpack_garments import FINISHED_POM, default_piece
 from app.storage.local import LocalStorageBackend
 from tests.auth_test_helpers import register_with_invite
 from tests.test_techpack_meas_concurrent import (
@@ -629,6 +629,417 @@ def test_owner_waist_edit_independent_sqlalchemy_session(engine, monkeypatch):
                 assert run_row is not None
                 result = run_row.result if isinstance(run_row.result, dict) else {}
                 assert result.get("reconciled_concurrent_designer_edits") is True
+            finally:
+                verify.close()
+    finally:
+        set_professional_provider_override(None)
+        app.dependency_overrides.pop(get_db, None)
+        worker.close()
+        _cleanup_user_rows(SessionLocal, user_id)
+
+
+def _add_job_for_user(db_session, *, user_id: uuid.UUID) -> AIJob:
+    job = AIJob(
+        user_id=user_id,
+        design_id=None,
+        job_type="sketch_polish",
+        status="completed",
+        input_data={"studio_side": "front"},
+        result_data={
+            "summary": "red shirt with navy shorts",
+            "pipeline": "sketch_polish",
+            "image_url": _store_image(),
+        },
+        error_message=None,
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    return job
+
+
+def _seed_two_piece_draft(client, db_session, tokens, me) -> dict[str, Any]:
+    """Shirt + shorts outfit for structural drift regressions."""
+    job = _add_job_for_user(db_session, user_id=uuid.UUID(me["id"]))
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "FR-130 two garment"},
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()
+    shirt_id = f"shirt-{uuid.uuid4().hex[:8]}"
+    shorts_id = f"shorts-{uuid.uuid4().hex[:8]}"
+    shirt = default_piece(piece_id=shirt_id, category="shirt", label="Shirt", color_hint="red")
+    shorts = default_piece(piece_id=shorts_id, category="shorts", label="Shorts", color_hint="navy")
+    finished = {}
+    values = {
+        "waist": 75.0,
+        "hip": 110.0,
+        "inseam": 18.0,
+        "outseam": 42.0,
+        "front_rise": 30.0,
+        "back_rise": 40.0,
+        "thigh": 58.0,
+        "leg_opening": 40.0,
+        "waistband": 4.0,
+    }
+    for key in FINISHED_POM["shorts"]:
+        finished[key] = _designer_cell(values[key], definition=key)
+    shorts["finished_measurements"] = finished
+    patched = client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={"spec": {"outfit": {"piece_count": 2, "pieces": [shirt, shorts]}}},
+    )
+    assert patched.status_code == 200, patched.text
+    return patched.json()
+
+
+def test_piece_removed_mid_run_retains_authorized_artifacts(client, db_session, monkeypatch):
+    """Structural drift: remove one garment mid-provider — keep paid bytes, no bind."""
+    tokens = register_with_invite(client, db_session, "struct130a@example.com", "struct130a")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_ai(monkeypatch, me["email"])
+    draft = _seed_two_piece_draft(client, db_session, tokens, me)
+    draft_id = uuid.UUID(draft["id"])
+    pieces0 = draft["spec"]["outfit"]["pieces"]
+    assert len(pieces0) == 2
+    removed_id = str(pieces0[0]["id"])
+    kept_id = str(pieces0[1]["id"])
+
+    def _remove_first_piece() -> None:
+        live = db_session.get(TechpackDraft, draft_id)
+        assert live is not None
+        spec = copy.deepcopy(live.spec if isinstance(live.spec, dict) else {})
+        remaining = [
+            p
+            for p in (spec.get("outfit") or {}).get("pieces") or []
+            if isinstance(p, dict) and str(p.get("id")) != removed_id
+        ]
+        assert len(remaining) == 1
+        spec["outfit"] = {"piece_count": 1, "pieces": remaining}
+        live.spec = spec
+        flag_modified(live, "spec")
+        live.revision = int(live.revision or 1) + 1
+        live.updated_at = datetime.now(UTC)
+        db_session.add(live)
+        db_session.commit()
+
+    set_professional_provider_override(ConcurrentEditProvider(_remove_first_piece))
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"struct-rm-{uuid.uuid4().hex}"},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    assert run_techpack_worker_tick(db_session, limit=2) >= 1
+
+    status = client.get(f"/api/v1/techpacks/ai/runs/{run_id}", headers=_auth(tokens)).json()
+    assert status["status"] == "completed"
+    assert status.get("pdf_ready") is not True
+    run_row = db_session.get(TechpackAIRun, uuid.UUID(run_id))
+    assert run_row is not None
+    result = run_row.result if isinstance(run_row.result, dict) else {}
+    assert result.get("skipped_identity_drift") is True
+    assert result.get("skipped_stale_spec_write") is True
+    assert int(run_row.cost_usd_cents or 0) > 0
+
+    arts = list(
+        db_session.scalars(
+            select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run_row.id)
+        ).all()
+    )
+    assert arts, "paid artwork must be retained against authorized piece snapshot"
+    art_piece_ids = {str(a.piece_id) for a in arts}
+    assert removed_id in art_piece_ids
+    storage = LocalStorageBackend()
+    for art in arts:
+        assert art.user_id == uuid.UUID(me["id"])
+        assert art.draft_id == draft_id
+        assert art.run_id == run_row.id
+        assert art.byte_size and art.byte_size > 0
+        path = storage._private_techpack_path(art.storage_key)
+        assert path.is_file()
+        assert path.stat().st_size == art.byte_size
+
+    # Authoritative DB state — current outfit must keep the designer remove.
+    db_session.expire_all()
+    live_row = db_session.get(TechpackDraft, draft_id)
+    assert live_row is not None
+    live_spec = live_row.spec if isinstance(live_row.spec, dict) else {}
+    live_pieces = (live_spec.get("outfit") or {}).get("pieces") or []
+    assert len(live_pieces) == 1, f"expected designer remove to stick, got {len(live_pieces)}"
+    assert str(live_pieces[0].get("id")) == kept_id
+    for piece in live_pieces:
+        illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        assert illust.get("mode") != "professional"
+    ai = live_spec.get("ai") if isinstance(live_spec.get("ai"), dict) else {}
+    assert str(ai.get("last_run_id") or "") != run_id
+    assert not ai.get("export_id")
+
+    reopened = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    # GET must not rebind stale professional artwork onto the current outfit.
+    for piece in reopened["spec"]["outfit"]["pieces"]:
+        illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+        assert illust.get("mode") != "professional"
+    ai2 = reopened["spec"].get("ai") if isinstance(reopened["spec"].get("ai"), dict) else {}
+    assert str(ai2.get("export_id") or "") == ""
+
+
+def test_color_treatment_change_same_hint_skips_artwork_bind(client, db_session, monkeypatch):
+    """Visual drift: same piece_id + color_hint, gradient→solid mid-run."""
+    tokens = register_with_invite(client, db_session, "visual130a@example.com", "visual130a")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_ai(monkeypatch, me["email"])
+    draft = _seed_shorts_draft(client, db_session, tokens, me)
+    draft_id = uuid.UUID(draft["id"])
+    piece_id = str(_find_shorts_piece(draft["spec"])["id"])
+
+    row = db_session.get(TechpackDraft, draft_id)
+    assert row is not None
+    spec0 = copy.deepcopy(row.spec if isinstance(row.spec, dict) else {})
+    p0 = _piece_by_id(spec0, piece_id)
+    p0["color_hint"] = "red"
+    p0["color_treatment"] = {
+        "mode": "gradient",
+        "stops": ["#FF0000", "#FFFFFF"],
+        "direction": "top-to-bottom",
+        "placement": "body",
+        "designer_confirmed": True,
+        "angle": 90,
+    }
+    p0["visible_details"] = {"pocket_style": "patch", "hem_finish": "clean"}
+    for i, p in enumerate(spec0["outfit"]["pieces"]):
+        if str(p.get("id")) == piece_id:
+            spec0["outfit"]["pieces"][i] = p0
+    row.spec = spec0
+    flag_modified(row, "spec")
+    db_session.add(row)
+    db_session.commit()
+
+    def _flatten_to_solid() -> None:
+        live = db_session.get(TechpackDraft, draft_id)
+        assert live is not None
+        spec = copy.deepcopy(live.spec if isinstance(live.spec, dict) else {})
+        p = _piece_by_id(spec, piece_id)
+        assert p["color_hint"] == "red"
+        p["color_treatment"] = {
+            "mode": "solid",
+            "stops": ["#FF0000"],
+            "direction": "",
+            "placement": "body",
+            "designer_confirmed": True,
+        }
+        p["visible_details"] = {"pocket_style": "none", "hem_finish": "clean"}
+        for i, x in enumerate(spec["outfit"]["pieces"]):
+            if str(x.get("id")) == piece_id:
+                spec["outfit"]["pieces"][i] = p
+        live.spec = spec
+        flag_modified(live, "spec")
+        live.revision = int(live.revision or 1) + 1
+        live.updated_at = datetime.now(UTC)
+        db_session.add(live)
+        db_session.commit()
+
+    set_professional_provider_override(ConcurrentEditProvider(_flatten_to_solid))
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"visual-ct-{uuid.uuid4().hex}"},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    assert run_techpack_worker_tick(db_session, limit=2) >= 1
+
+    run_row = db_session.get(TechpackAIRun, uuid.UUID(run_id))
+    assert run_row is not None
+    result = run_row.result if isinstance(run_row.result, dict) else {}
+    assert result.get("skipped_identity_drift") is True
+    assert result.get("pdf_ready") is not True
+    arts = list(
+        db_session.scalars(
+            select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run_row.id)
+        ).all()
+    )
+    assert arts
+
+    reopened = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    live_piece = _piece_by_id(reopened["spec"], piece_id)
+    assert live_piece["color_hint"] == "red"
+    assert live_piece["color_treatment"]["mode"] == "solid"
+    assert live_piece["visible_details"]["pocket_style"] == "none"
+    illust = live_piece.get("illustrations") if isinstance(live_piece.get("illustrations"), dict) else {}
+    assert illust.get("mode") != "professional"
+
+
+def test_color_treatment_drift_independent_sqlalchemy_session(engine, monkeypatch):
+    """Independent PG session: gradient→solid mid-run; keep latest design, no bind."""
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    email = f"visualindep_{uuid.uuid4().hex[:8]}@example.com"
+    username = f"visualindep_{uuid.uuid4().hex[:8]}"
+    user_id: uuid.UUID | None = None
+
+    bootstrap = SessionLocal()
+    try:
+        inv = invitation_service.create_invitation(bootstrap, email=email, expires_in_hours=24)
+        token = inv.plaintext_token
+        bootstrap.commit()
+    finally:
+        bootstrap.close()
+
+    worker = SessionLocal()
+    try:
+        user = auth_service.register_user(
+            worker,
+            UserRegister(
+                email=email,
+                username=username,
+                password="StrongPass123!",
+                invitation_code=token,
+                display_name=username,
+            ),
+        )
+        worker.commit()
+        user_id = user.id
+        job = AIJob(
+            user_id=user_id,
+            design_id=None,
+            job_type="sketch_polish",
+            status="completed",
+            input_data={"studio_side": "front"},
+            result_data={
+                "summary": "red gradient shorts",
+                "pipeline": "sketch_polish",
+                "image_url": _store_image(),
+            },
+            error_message=None,
+        )
+        worker.add(job)
+        worker.commit()
+        worker.refresh(job)
+
+        def _override_get_db():
+            yield worker
+
+        app.dependency_overrides[get_db] = _override_get_db
+        _enable_ai(monkeypatch, email)
+        with TestClient(app) as client:
+            headers = {"Authorization": f"Bearer {create_access_token(str(user_id))}"}
+            login = client.post(
+                "/api/v1/auth/login",
+                json={"email": email, "password": "StrongPass123!"},
+            )
+            if login.status_code == 200:
+                headers = _auth(login.json())
+
+            created = client.post(
+                "/api/v1/techpacks",
+                headers=headers,
+                json={"look_id": str(job.id), "title": "Visual indep"},
+            )
+            assert created.status_code == 201, created.text
+            draft = created.json()
+            draft_id = uuid.UUID(draft["id"])
+            live = client.get(f"/api/v1/techpacks/{draft['id']}", headers=headers).json()
+            pieces = live["spec"]["outfit"]["pieces"]
+            target = pieces[0]
+            target["category"] = "shorts"
+            target["label"] = "Shorts"
+            target["color_hint"] = "red"
+            target["color_treatment"] = {
+                "mode": "gradient",
+                "stops": ["#AA0000", "#FFCCCC"],
+                "direction": "left-to-right",
+                "placement": "body",
+                "designer_confirmed": True,
+                "angle": 0,
+            }
+            finished = {}
+            values = {
+                "waist": 75.0,
+                "hip": 110.0,
+                "inseam": 18.0,
+                "outseam": 42.0,
+                "front_rise": 30.0,
+                "back_rise": 40.0,
+                "thigh": 58.0,
+                "leg_opening": 40.0,
+                "waistband": 4.0,
+            }
+            for key in FINISHED_POM["shorts"]:
+                finished[key] = _designer_cell(values[key], definition=key)
+            target["finished_measurements"] = finished
+            patched = client.patch(
+                f"/api/v1/techpacks/{draft['id']}",
+                headers=headers,
+                json={"spec": {"outfit": {"piece_count": len(pieces), "pieces": pieces}}},
+            )
+            assert patched.status_code == 200, patched.text
+            worker.commit()
+            piece_id = str(target["id"])
+
+            def _owner_visual_edit() -> None:
+                s = SessionLocal()
+                try:
+                    row = s.get(TechpackDraft, draft_id)
+                    assert row is not None
+                    spec = copy.deepcopy(row.spec if isinstance(row.spec, dict) else {})
+                    p = _piece_by_id(spec, piece_id)
+                    p["color_treatment"] = {
+                        "mode": "solid",
+                        "stops": ["#AA0000"],
+                        "direction": "",
+                        "placement": "body",
+                        "designer_confirmed": True,
+                    }
+                    for i, x in enumerate(spec["outfit"]["pieces"]):
+                        if str(x.get("id")) == piece_id:
+                            spec["outfit"]["pieces"][i] = p
+                    row.spec = spec
+                    flag_modified(row, "spec")
+                    row.revision = int(row.revision or 1) + 1
+                    row.updated_at = datetime.now(UTC)
+                    s.add(row)
+                    s.commit()
+                finally:
+                    s.close()
+
+            set_professional_provider_override(ConcurrentEditProvider(_owner_visual_edit))
+            gen = client.post(
+                f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+                headers=headers,
+                json={"idempotency_key": f"vis-indep-{uuid.uuid4().hex}"},
+            )
+            assert gen.status_code == 202, gen.text
+            run_id = gen.json()["run_id"]
+            worker.commit()
+            assert run_techpack_worker_tick(worker, limit=2) >= 1
+            worker.commit()
+
+            verify = SessionLocal()
+            try:
+                run_row = verify.get(TechpackAIRun, uuid.UUID(run_id))
+                assert run_row is not None
+                result = run_row.result if isinstance(run_row.result, dict) else {}
+                assert result.get("skipped_identity_drift") is True
+                arts = list(
+                    verify.scalars(
+                        select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run_row.id)
+                    ).all()
+                )
+                assert arts
+                row = verify.get(TechpackDraft, draft_id)
+                assert row is not None
+                live_piece = _piece_by_id(row.spec, piece_id)
+                assert live_piece["color_treatment"]["mode"] == "solid"
+                illust = (
+                    live_piece.get("illustrations")
+                    if isinstance(live_piece.get("illustrations"), dict)
+                    else {}
+                )
+                assert illust.get("mode") != "professional"
             finally:
                 verify.close()
     finally:

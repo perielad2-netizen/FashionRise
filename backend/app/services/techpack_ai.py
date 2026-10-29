@@ -287,8 +287,50 @@ def _designer_owned_meas_fingerprint(spec: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _color_treatment_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
+    """Stable generation-relevant color_treatment (aligned with #125 field shapes).
+
+    Includes mode / stops / direction / placement / angle — not volatile AI/export
+    bookkeeping. Safe when ``color_treatment`` is absent (pre-#125 specs).
+    """
+    raw = piece.get("color_treatment")
+    if not isinstance(raw, dict):
+        return {}
+    mode = str(raw.get("mode") or raw.get("type") or "").strip().lower()
+    stops_raw = raw.get("stops") if raw.get("stops") is not None else raw.get("colors")
+    stops: list[Any] = list(stops_raw) if isinstance(stops_raw, list) else []
+    named = raw.get("named_colors")
+    return {
+        "mode": mode,
+        "stops": stops,
+        "named_colors": list(named) if isinstance(named, list) else [],
+        "direction": str(raw.get("direction") or "").strip(),
+        "placement": str(raw.get("placement") or "").strip(),
+        "gradient_id": str(raw.get("gradient_id") or "").strip(),
+        "angle": raw.get("angle") if isinstance(raw.get("angle"), (int, float)) else None,
+        "designer_confirmed": bool(raw.get("designer_confirmed")),
+        "notes": str(raw.get("notes") or "").strip(),
+    }
+
+
+def _visible_details_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
+    """Appearance-affecting visible_details — excludes provenance bookkeeping keys."""
+    raw = piece.get("visible_details")
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key in sorted(raw.keys(), key=lambda x: str(x)):
+        if str(key).endswith("_provenance"):
+            continue
+        val = raw.get(key)
+        if val in (None, ""):
+            continue
+        out[str(key)] = val
+    return out
+
+
 def _piece_identity_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
-    """Garment identity fields only — excludes finished/body measurements."""
+    """Garment identity / visual generation inputs — excludes finished/body measurements."""
     mats_raw = piece.get("materials")
     mats: dict[str, Any] = mats_raw if isinstance(mats_raw, dict) else {}
     shell_raw = mats.get("shell")
@@ -307,12 +349,18 @@ def _piece_identity_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
                 step_digest.append(str(step.get("instruction") or step.get("step") or "")[:200])
             elif step not in (None, ""):
                 step_digest.append(str(step)[:200])
+    pattern_raw = piece.get("fabric_pattern")
+    if pattern_raw is None:
+        pattern_raw = shell.get("pattern") or mats.get("pattern")
     return {
         "id": str(piece.get("id") or ""),
         "category": str(piece.get("category") or ""),
         "role": str(piece.get("role") or ""),
         "label": str(piece.get("label") or ""),
         "color_hint": str(piece.get("color_hint") or ""),
+        "color_treatment": _color_treatment_snapshot(piece),
+        "visible_details": _visible_details_snapshot(piece),
+        "fabric_pattern": str(pattern_raw or ""),
         "closures_type": str(closures.get("type") or ""),
         "closures_notes": str(closures.get("notes") or ""),
         "fit_silhouette": str(fit.get("silhouette") or ""),
@@ -369,11 +417,23 @@ def capture_generation_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> d
     updated = draft.updated_at
     ai_raw = spec.get("ai")
     ai: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
+    outfit_raw = spec.get("outfit")
+    outfit: dict[str, Any] = outfit_raw if isinstance(outfit_raw, dict) else {}
+    pieces_raw = outfit.get("pieces")
+    pieces_list: list[Any] = pieces_raw if isinstance(pieces_raw, list) else []
+    authorized_piece_ids = [
+        str(p.get("id") or "")
+        for p in pieces_list
+        if isinstance(p, dict) and str(p.get("id") or "").strip()
+    ]
     return {
         "draft_revision": int(draft.revision or 1),
         "draft_updated_at": updated.isoformat() if isinstance(updated, datetime) else None,
         "meas_fingerprint": _designer_owned_meas_fingerprint(spec),
         "identity_fingerprint": garment_identity_fingerprint(spec, draft),
+        # Authorized outfit IDs at provider start — artifact retention uses this
+        # snapshot when the live piece list drifts mid-run.
+        "authorized_piece_ids": authorized_piece_ids,
         # Prior pack pointers — used to detect PDF-only / other-run ownership that
         # landed during generation. Must not treat a mere prior pack as "newer".
         "last_run_id": str(ai.get("last_run_id") or "").strip() or None,
@@ -1713,13 +1773,20 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         enriched: dict[str, Any] | None = None
         if skip_draft_spec_write:
             # Newer pack ownership and/or garment-identity drift — keep designer state.
-            # Record artifacts + cost on the run without mutating draft.spec / binding artwork.
+            # Persist paid artifacts against the *authorized generation snapshot*
+            # (not the live outfit): piece remove/replace/ID change must not block
+            # retention or rebind artwork onto a substituted garment.
             identity_drift = _identity_changed_since_boundary(
                 draft, base_spec, generation_boundary
             )
             pack_moved = _pack_ownership_moved_since_boundary(base_spec, generation_boundary)
             enriched, artifacts = _persist_professional_result(
-                db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=base_spec
+                db,
+                user=user,
+                draft=draft,
+                run=run,
+                pipeline=pipeline,
+                base_spec=ensure_v2(spec),
             )
             del enriched  # never write stale/misbound enrich onto the live draft
             assembling = {
@@ -2348,8 +2415,10 @@ def run_generate(
                 draft, base_spec, generation_boundary
             )
             pack_moved = _pack_ownership_moved_since_boundary(base_spec, generation_boundary)
+            # Skip path: retain artifacts vs authorized snapshot. Bind path: enrich live.
+            persist_spec = ensure_v2(spec) if skip_draft_spec_write else base_spec
             enriched, artifacts = _persist_professional_result(
-                db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=base_spec
+                db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=persist_spec
             )
             if skip_draft_spec_write:
                 del enriched
