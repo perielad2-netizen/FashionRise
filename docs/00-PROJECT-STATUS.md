@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #128 concurrent-write closure** — tip TBD-after-commit · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #127 remain separate** · **STOP for Technical PM re-review**.)
+**Last updated:** 2026-10-29 (**Issue #128 concurrent-write closure** — tip  · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #127 remain separate** · **STOP for Technical PM re-review**.)
 
 **Phase:** Protected family beta. Issue #128: designer finished POMs preserved through enrich **and** mid-run saves protected by fail-closed post-provider CAS. No restore of FR-3958 values without owner authorization.
 
@@ -24,7 +24,7 @@ Technical PM **PARTIAL PASS** on enrich tip `6ac13dc3` / docs tip `e6d1ed85`. Th
 
 | Item | Detail |
 |---|---|
-| Tip | TBD-after-commit (pinned in follow-up docs commit) |
+| Tip |  |
 | Branch | `cursor/web-techpack-meas-preserve-77c6` (direct descendant of prod BE **`311e259a`**) |
 | PR base | `cursor/web-techpack-be-prod-311e259a-77c6` @ `311e259a` (verified production lineage; avoids diverged pdf-qa-clean docs) |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
