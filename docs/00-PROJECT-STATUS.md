@@ -1,93 +1,445 @@
 # FashionRise — project status & session handoff
 
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
-**Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
+**Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #127 / PR #129 final 6px cutout check** — tip `c9ebcca0f51518bb8c77a6706bb50279442971ea` · code `02f904dc25e450cc55ea83013b0e1bf0ef31c2b1` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · pre-dilation visible-ink cutout guard · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM final acceptance**.)
+**Last updated:** 2026-10-29 (**OWNER-AUTHORIZED PRODUCTION RELEASE** — Issue [#131](https://github.com/perielad2-netizen/FashionRise/issues/131) · BE+worker **`6cc317ec`** (PR #130) · FE **`ebcb1cc7`** (PR #129) · Alembic **`011`** · backup `techpack-130-129-deploy-20261029T131341Z` · **0 paid AI** · issues #127/#128 remain open pending owner mobile acceptance · **86-PR cleanup NOT started**.)
 
-**Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
-
-### Issue #124 — measurement decimal input (FE-only) — STOP for Technical PM
-
-| Item | Detail |
-|---|---|
-| Branch / tip | `cursor/web-techpack-measure-decimal-77c6` @ **`7975f085`** (from FE tip `13b26c3a`) |
-| Fix | `measuredDecimalInput` + `MeasuredField` local edit buffer preserves `25.` / `0.` / `.5` / `25,5`; commit on complete parse / blur; user edits → `source: 'designer'` (no manufacturing auto-approval); empty → `null` + `empty`; no silent 0 / integer truncation |
-| Tests | Vitest **25 passed** (`measuredDecimalInput` + `MeasuredField` + `MeasurementsSheet` body/finished + compact Android `inputMode=decimal`) |
-| Scope | FE only — do **not** conflate with PR #123 PDF QA / BE hold or FR-B9F9 fidelity |
-| Deploy | **No** — after accept: FE-only rebuild from tip with `VITE_API_BASE_URL=/api/v1` (apifix pattern). BE unchanged |
+**Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity) and PR #129 (6px cutout fill safety + decimal lineage).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`bfbdd03f-decimal`** — PR #126 tip `bfbdd03f` + `/api/v1`. Rollback `13b26c3a-apifix` / `69b83c01`. |
-| Backend (FastAPI + PostgreSQL) | **`311e259a`** (PR #123). Alembic **`011`**. Rollback → `005034d5`. |
-| AI worker | `fashionrise-ai-worker` @ **`005034d5`** |
-| Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
+| Frontend (`web-ui`) | **`ebcb1cc7`** — release `/var/www/fashionrise/releases/ebcb1cc7` · source `ebcb1cc7b6102e343ee06e08435faab64f4b4995` · `VITE_API_BASE_URL=/api/v1` · App pill **`ebcb1cc7`** (not stale `b2fbd043`). Rollback → `bfbdd03f-decimal`. |
+| Backend (FastAPI + PostgreSQL) | **`6cc317ecd55423403b6479e8bb185c3e4cde2bf1`** (PR #130). Alembic **`011`**. Rollback → `311e259a`. |
+| AI worker | `fashionrise-ai-worker` @ **`6cc317ec`** (matched with API). |
+| Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
+## Owner-authorized production release — Issue #131 (2026-10-29) — DEPLOYED
 
+Authorized by owner to deploy engineering-accepted PR #130 then PR #129. Coordination ledger: [#131](https://github.com/perielad2-netizen/FashionRise/issues/131).
 
-## Issue #127 / PR #129 — final 6px cutout check — STOP for Technical PM acceptance (2026-10-29)
-
-Technical PM **Substantial pass / HOLD** on tip `f1930dcf` / code `a3158b61` — residual P0: a visibly hollow **6px** continuous cutout could be sealed by barrier dilate (`gapClose=2`) and escape the contour∖flood check because sealed cells were skipped as `barrier[i]`. This tip keeps the accepted scanline guard and threads **pre-dilation visible ink** so dilate-sealed hollows still fail closed. Dilate fringe along the flood frontier is excluded so hole-free fills stay green. All prior PR #129 safety fixes retained.
-
-| Item | Detail |
-|---|---|
-| Tip | `c9ebcca0f51518bb8c77a6706bb50279442971ea` (code `02f904dc25e450cc55ea83013b0e1bf0ef31c2b1`) · PR **#129** |
-| Prior accepted code | `a3158b61fbeb8fb04549530be9176f504d9566b7` (scanline contour∖flood) on tip `f1930dcf` / `c0c72ab3` |
-| Branch | `cursor/web-sketch-fill-reliability-77c6` (descendant of FE prod `bfbdd03f`) |
-| Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
-| P0 6px cutout | `buildInkBarrierLayers` exposes `visibleInk` (pre-dilate) + `barrier` (post-dilate). Cutout check counts empty **visible** cells inside the persisted contour; dilate-only frontier fringe (adjacent to visited) ignored; dilate-sealed interior hollows → `unsupported_cutout` / **no FillOp**. |
-| Regressions (real Path2D) | **6×6 continuous cutout**: sketch centre alpha=0, dilate seals barrier centre, fill → `unsupported_cutout`, export hollow stays empty; 8px offset cutout retained; thin multi-stroke closed outline still fills; complex hole-free irregular outline still fills; erase reopen + pencil reconnect retained |
-| Preserved | Erase-aware final dilate · large nested cutout reject · gap-mouth first candidate · thin multi-stroke joins · bounded Gaps · undo / gradient / fabric · scanline (no sparse lattice) |
-| Tests (fill) | focused floodFill raster+core **18 passed**; fill-related (joints/barrier/paint/fills) **42 passed** |
-| Lint / TS / build | `oxlint src --quiet` **PASS**; `tsc` **PASS**; `VITE_API_BASE_URL=/api/v1` production build **PASS** (`assert-prod-api-base` ok) |
-| Safety | **No deploy · no paid AI · no private artwork · no schema migration · no broad rewrite · #125 / #130 independent** |
-| Exact next action | **STOP** for Technical PM final acceptance of PR #129. **Do not deploy.** Controlled FE-only rollout only after accept. |
-
-
-### Prior safety amendment (still in tip — PM accepted foundation)
-
-| Item | Detail |
-|---|---|
-| Code | `1971ee7e` on `742cbddc` |
-| Content | Eraser veto · facing seals (auto 2.5 / Gaps 12) · real Path2D raster tests · spatial-hash seals · dress-free copy |
-
-### Full-suite baseline failures (unchanged vs tip `327d2870` / deployed FE)
-
-| # | Test |
-|---|---|
-| 1 | `StudioPage.test.tsx` › Studio beta notices stay outside Settings › shows and dismisses Magic, Settings, and Back at **390×844** |
-| 2 | same › **768×1024** |
-| 3 | same › **1024×550** |
-| 4 | same › **1180×600** |
-| 5 | same › **1440×900** |
-| 6 | `draftPersistence.test.ts` › restoreStudioDraft damaged cloud V2 safety › forwards clearBackIntent metadata through Front clear → Back clear save (no false conflict) |
-
-
-## PR #126 owner acceptance + measurement/version investigation — STOP (2026-10-28)
+### Release A — Backend + AI worker (PR #130)
 
 | Item | Result |
 |---|---|
-| Owner acceptance | **ACCEPTED** — decimal dot/comma, finished garment, empty, save/reopen, hard refresh, cross-design persistence |
-| Live release | `/var/www/fashionrise/releases/bfbdd03f-decimal` · packaging `version.json`/`REVISION` = `bfbdd03f` |
-| Version label discrepancy | UI/`index.html` show **`App b2fbd043`** because build env `VITE_BUILD_SHA=b2fbd043…` overrode git SHA in `vite.config.ts`; served JS `index-CxaD09Yn.js` ≠ old release `index-PLPsFUN5.js` and contains decimal-buffer code |
-| Verdict on version | **Label wrong, assets correct** — do not redeploy solely for the label |
-| Measurement backup | Pre-FE dump `techpack-pdf-qa-123-deploy-20261028T175326Z/fashionrise_beta.sql.gz` (17:53Z) vs live |
-| Filled-value losses | **0** across all 13 drafts |
-| Post-FE edits | Only draft `f24ef424…` (19:28Z) — additive designer fills on previously empty POMs; matches owner re-entry |
-| Pre-existing blanks | 5 drafts already body+finished empty in backup; many others have empty POM keys (`source=empty`) or partial `calculated` sets only |
-| Export snapshots | No `finished_measurements` in export metadata (0/20) |
-| Cause | Not deploy deletion. Blanks align with pre-existing empty/partial slots + garment-specific templates |
-| Recovery | No cutover restore indicated. Any future restore needs draft-level auth; avoid overwriting post-deploy designer edits |
-| Artifact | `/opt/cursor/artifacts/controlled-rollout-123-126/MEASUREMENT_AND_VERSION_INVESTIGATION.md` |
-| PR #125 | **HOLD / not deployed** |
+| Source | Exact `6cc317ecd55423403b6479e8bb185c3e4cde2bf1` (implementation `0561bb56` / blob `e04fdbcf`) |
+| Prior | `311e259aa6fa4a64b4688b818d7f6b319f45e492` |
+| Preflight | Active Professional/AI runs **0**; Alembic **011**; services active; ancestry `311e259a`⊂`6cc317ec`; **no** alembic file diff |
+| Offline tests | Focused integrity/concurrent/preserve **18 passed** on disposable TEST DB; broader p0/async/v3 **33 passed / 1** known baseline `test_partial_cost_preserved_on_failure` (`KeyError: status`); Ruff 9 / mypy 51 |
+| Backup | `/var/backups/fashionrise/techpack-130-129-deploy-20261029T131341Z/` — env, unit files, `fashionrise_beta.sql.gz` + `.dump` (~18 MB, gzip/pg_restore verified), `ROLLBACK.sh` → `311e259a` |
+| Deploy method | Force-checkout `/opt/fashionrise/src` to tip · write `APP_REVISION`/`REVISION` · clear `__pycache__` · restart `fashionrise-api` then `fashionrise-ai-worker`. **Did not** run `deploy/update_app.sh` (would auto-run Alembic). |
+| Post-verify | `/health` ok · `/ready` database ok · API+worker+nginx **active** · Alembic **011** · provenance helpers present · drafts **13** / artifacts **35** retained · active runs **0** · **0 paid AI** |
+| Discrepancies | None material. Localhost HTTP to public vhost returns **403** without AOP client cert (expected; unchanged). |
+
+### Release B — Frontend only (PR #129)
+
+| Item | Result |
+|---|---|
+| Source | Exact `ebcb1cc7b6102e343ee06e08435faab64f4b4995` (implementation `c9ebcca0` / code `02f904dc`) |
+| Prior | `bfbdd03f-decimal` |
+| Build | `VITE_API_BASE_URL=/api/v1` · `VITE_BUILD_SHA=ebcb1cc7b6102e343ee06e08435faab64f4b4995` (explicit; no stale `b2fbd043`) · `assert-prod-api-base` + `assert-sw-access-safe` PASS |
+| Release | `/var/www/fashionrise/releases/ebcb1cc7` · `version.json` sha full tip · title **App ebcb1cc7** · SW no NavigationRoute / no index.html precache · bundle contains `unsupported_cutout` + `/api/v1` |
+| Activate | Atomic `ln -sfn …/ebcb1cc7 …/current` · `nginx -t` · reload. Prior release retained. |
+| Rollback | `/var/www/fashionrise/releases/ebcb1cc7/ROLLBACK.sh` → `bfbdd03f-decimal` |
+| Verify | Disk verify PASS (SHA, API base, fill markers, SW safety). API still healthy. **No** paid Magic/Professional generation. |
+| Transient incident | Empty release dir briefly activated before tar upload; **immediately** rolled back to `bfbdd03f-decimal`, then completed deploy. Final current = `ebcb1cc7`. |
+
+### Explicit confirmations
+
+- **Paid AI / provider calls during release + smoke: 0**
+- **Migrations / seed / historical restore: none**
+- **PR #125 / Nginx Access / Cloudflare / secrets / DB records: untouched**
+- **Issues #127 and #128: NOT closed** — remain open for owner mobile acceptance
+- **86-PR cleanup: NOT started** (blocked until this release verification is recorded)
+
+### Remaining owner mobile acceptance (not claimed done)
+
+1. ~1.75px connected complex multistroke shirt outline @ ~62% zoom → Fill → save/reopen  
+2. Eraser, Gaps, separate panels, 6px hollow fail-closed, undo, gradients/fabrics  
+3. Magic **export without paid generation**  
+4. Measurement/POM edit persistence after #130  
+
+### Exact next action
+
+Owner mobile acceptance on FE `ebcb1cc7` + BE `6cc317ec`. Then proceed with Issue #131 Stage C (issue/PR reconciliation) only after acceptance notes are recorded. Do **not** close #127/#128 on deploy alone.
 
 
-## Quiet autosave + PDF validity + Done race (2026-10-27) LIVE — stop for owner verification
+## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
+
+Technical PM **PARTIAL PASS** on tip `983372f7` / implementation `4cb7d8f0` / blob `2b684a28` — structural + visual identity accepted; one narrow P0 remained: skip-path artifacts still attributed live `draft.front_job_id`/`look_id` when Magic source changed mid-run. This tip captures immutable generation-boundary Magic source IDs and uses them for paid-artifact provenance on **both** Professional completion paths (bind + identity-drift skip).
+
+| Item | Detail |
+|---|---|
+| Tip / GitHub HEAD | `c16acf41013a39eb83b68ef40105fe3498f6cd06` |
+| Implementation commit | `0561bb56cf49d69b9c2349a94dd54b79585a1f5f` |
+| Implementation blob | `e04fdbcf6f5fba8dc868094c86874e365cebc321` (`techpack_ai.py`) |
+| Prior accepted | `4cb7d8f0` / `2b684a28` structural+visual · `0e341c10` identity+PDF CAS · POM overlay |
+| Branch | `cursor/web-techpack-meas-preserve-77c6` (descendant of prod BE **`311e259a`**) |
+| PR | [#130](https://github.com/perielad2-netizen/FashionRise/pull/130) vs `cursor/web-techpack-be-prod-311e259a-77c6` @ `311e259a` |
+| Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
+| P0 Magic provenance | `capture_generation_boundary` stores `look_id`/`front_job_id`/`back_job_id`. `_persist_professional_result(..., generation_boundary=)` sets artifact `source_job_id`/`look_id` from that snapshot (front\|\|back semantics unchanged). Live draft source IDs never rewrite historical paid rows. |
+| Regressions (mocked) | Magic look/front swapped mid-run (independent session): private bytes retained; artifacts keep **original** source IDs; draft keeps **newer** source; artwork unbound; no PDF bind; cost retained; **exactly one** provider call. Happy path: provenance matches unchanged draft sources. |
+| Preserved | Finished POM · concurrent measurement CAS · PDF CAS · structural artifact retention · gradient/visible-detail identity · cost without paid retry |
+| Tests | Focused integrity+concurrent **18/18**. Broader Professional/PDF/p0/v3/async: **81 passed**, **1** baseline `test_partial_cost_preserved_on_failure` (`KeyError: 'status'`) on `311e259a`. |
+| Lint | Ruff `techpack_ai.py` **9** (baseline parity). mypy **51** (parity). |
+| Safety | **No deploy · no migration · no paid AI · no data restore · #125 / #129 independent** |
+| Exact next action | **STOP** for Technical PM final acceptance of PR #130. **Do not deploy.** |
+
+
+### Prior enrich fix (still in tip — PM accepted)
+
+| Item | Detail |
+|---|---|
+| Code | `6ac13dc34903e03aa992769fb48721647abd4620` |
+| Root cause | `_propose_finished_measurements` rebuilt from `empty_finished_measurements()` and only copied prior cells inside `set_calc` keys → shorts outseam/thigh/waistband dropped |
+| Fix | Overlay entire existing `finished_measurements`; propose only when `value` empty; autofill category-swap keeps nonempty cells |
+| FR-3958 forensics | All available snapshots post-08:11Z show blanks — **not recoverable; do not invent** |
+
+## PR #123 review-guard closure — STOP for Technical PM (2026-10-28)
+
+Technical PM reviewed clean PR #123 @ `43c8d376` → **HOLD — one focused P0 guard correction**. Prior invalidation/fingerprint/reviewer work stood; this tip closes the fail-closed source-pack guards.
+
+### Guard correction (this tip)
+
+| Control | Behavior |
+|---|---|
+| Run stage | `TechpackAIRun.stage` is authoritative (`professional` required). Disallowed stages (`basic`, `generate`, …) **fail closed** even for same-user/same-draft runs — no nested silent continue |
+| Legacy blank | Empty stage allowed **only** when draft `ai.last_mode=professional` + `ai.last_run_id` matches the artifact run + run `completed` |
+| Current source pack | Artifact `run_id` must equal draft `ai.last_run_id` (historical non-current Professional runs cannot dirty the pack) |
+| Outfit reference | Artifact must appear in current garment illustration refs (unreferenced rows cannot invalidate) |
+| Negatives | Non-Professional run · historical non-current run · unreferenced illustration — all 422, no revision bump |
+| Positives | Valid Professional pathway + legacy blank-with-evidence preserved; PDF A→review→B / idempotent / history / zero-provider unchanged |
+
+### Prior clean-replacement context (still in tip)
+
+Technical PM reviewed prior PR #122 @ `8794583f` → **HOLD / CHANGES REQUIRED**. This clean replacement branch answers those P0/P1 items without private artifacts in git history.
+
+### Owner smoke evidence still true (production, unchanged)
+
+| Item | Result |
+|---|---|
+| Login after FE API-base fix | **PASS** |
+| Reopen FR-3958 + Update PDF (No AI) → Rev **2** | **PASS** — 15p, `$0` assembly, source 250¢, same 7 images as Rev 1 |
+| Paid provider calls | **0** |
+| Source AI run / Rev 1 PDF | **Unchanged** (run `6b3bf6c3…`, export `b2a1922a…`) |
+| Current export | Rev 2 `d19a5d0c…` still embeds wrong shorts detail (`7298860c…`, `proposed`) |
+
+### PDF QA failures (Rev 2) — still open in production
+
+| Sev | Defect |
+|---|---|
+| **P0** | Shorts detail page shows purple hoodie construction (artifact `7298860c…`) |
+| **P1** | Outfit-level color list printed as garment color; layout/legend/provenance honesty |
+
+### Clean replacement — what changed (NOT deployed)
+
+| Item | Detail |
+|---|---|
+| Branch / PR | `cursor/web-techpack-pdf-qa-clean-77c6` · [#123](https://github.com/perielad2-netizen/FashionRise/pull/123) — descendant of prod BE `005034d5` (+ deploy docs); no private PDF/PNG/QA JSON in commits |
+| Supersedes | Prior PR #122 / `cursor/web-techpack-pdf-qa-77c6` @ `8794583f` (private blobs in history — do not merge) |
+| P0 review→PDF | `record_owned_artifact_review`: auth ownership checks → audit decision with **server-derived** `reviewer_user_id`/`username` → atomic `dirty_since_generation` + `outdated_export_id` + revision bump + `artifact_review_version` |
+| P0 fingerprint | `_pdf_only_content_fingerprint` includes authoritative `TechpackAIArtifact` review tokens so PDF-only cannot reuse a pre-review export |
+| P0 bytes | Illustration storage + historical PDF A preserved; **never** auto AI |
+| P0 FE CTA | After review, GET draft shows `dirty_since_generation=true` → existing FE shows **Update PDF (No AI)** |
+| P0 generic review API | `POST /techpacks/artifacts/{id}/review` — no hardcoded FR-3958 IDs in product modules; FR-3958 mark stays a bounded operator workflow after BE deploy |
+| P0 git hygiene | Sanitized synthetic fixture UUIDs only; private offline evidence under `/opt/cursor/artifacts/fr3958-pdf-qa-clean/` (not in git) |
+| P1 reviewer | No client `operator` field; identity from auth principal; auditable `operator_decisions` / `artifact_review_decisions` |
+| P1 reapprove | Rejection and reapproval both reconcile `preview_include` / inclusion status |
+| P1 colors | Live Garment color rows assert Lavender/purple + golden yellow; historical raw-color notes are not treated as live garment color |
+| Private offline PDF | 14 pages · DESIGN CONCEPT · hoodie detail included · shorts detail EXCLUDED · purple+yellow colors · pdf_only `$0` / source 250¢ · **0** paid AI |
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| `test_techpack_pdf_only_update` + `test_techpack_manufacturing_ready` + `test_techpack_p0_reliability` | **69 passed** (includes 3 negative + 1 legacy-blank guard tests) |
+| Review→rebuild regression (wrong shorts art → reject → Update CTA → new PDF B excludes art; idempotent repeat; concurrent assembly; historical A; zero provider) | **PASS** |
+| Guard negatives (non-Professional / historical / unreferenced) + legacy blank Professional evidence | **PASS** |
+| Ruff F401/F821 on amended BE modules | **clean** |
+| mypy `techpack_manufacturing` / schemas / routes | **clean** |
+| mypy `techpack_service.py` | ~65 pre-existing union noise (no new blocker class) |
+| Private offline FR-3958 PDF + page rasters + report | **PASS** @ `/opt/cursor/artifacts/fr3958-pdf-qa-clean/` |
+| Production FE/BE/Alembic | **Preserved** — no deploy this turn |
+
+### Sibling Issue #124 PRs (isolated — not this deploy)
+
+| PR | Scope | Tip |
+|---|---|---|
+| [#126](https://github.com/perielad2-netizen/FashionRise/pull/126) FE measure decimal | `cursor/web-techpack-measure-decimal-77c6` | `bfbdd03f` |
+| [#125](https://github.com/perielad2-netizen/FashionRise/pull/125) BE fidelity (closure/gradient) | `cursor/web-techpack-fidelity-b9f9-77c6` | `05118592` |
+
+### Blocked / exact proposed deployment sequence (after Technical PM accept)
+
+1. **Do not deploy** until acceptance. Do not rewrite historical exports. Do not run paid AI.
+2. Controlled **BE + worker** deploy of this clean tip (force-checkout on VPS from `005034d5` lineage — **not** a blind GitHub merge into a stale PR base). FE stays **`13b26c3a-apifix`**. Alembic stays **`011`**.
+3. Authenticated owner (or approved operator workflow) `POST /techpacks/artifacts/{7298860c…}/review` with `rejected_category_mismatch` — server dirties draft; FE shows **Update PDF (No AI)**.
+4. Owner runs **Update PDF (No AI)** → new current PDF B excludes wrong shorts art; Rev 2 / Rev 1 remain downloadable; readiness DESIGN CONCEPT; assembly `$0`.
+5. Rollback BE+worker → **`005034d5`** if needed. FE rollback → `69b83c01` only if FE regresses (unchanged by this PR).
+
+## Completed-look UX + Update PDF (No AI) — deployed baseline (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| FE PR #120 | Deployed as **`13b26c3a-apifix`** (API-base fix-forward after missing `VITE_API_BASE_URL`) |
+| BE PR #119 tip | Production **`005034d5`** (artwork provenance gate + docs) |
+| Paid AI | **0** on PDF-only path |
+
+### PR #119 artwork provenance / ownership gate (live)
+
+| Control | Behavior |
+|---|---|
+| Source run | Owned completed Professional `TechpackAIRun` only |
+| Illustrations | Server-owned `TechpackAIArtifact` rewrite before PDF assembly |
+| Cost honesty | `assembly_cost_usd_cents=0` vs `source_run_cost_usd_cents` (QA branch also stamps PDF body) |
+
+## PR #118 controlled deployment (2026-10-28) — STOP
+
+Technical PM **ACCEPTED** manufacturing foundation. Deployed tip `2c8cb88e1571b01bd7ae6079e0543ddd754bfc7f` (reviewed closure `9ae1ead2` + docs/ruff tip commits) from production baseline `7af9c809` — **not** a blind GitHub merge into the stale PR base.
+
+| Item | Detail |
+|---|---|
+| Lineage | `7af9c809` → … → `9ae1ead2` → tip `2c8cb88e` (ancestor-descendant; BE/docs only; no FE / no Alembic) |
+| Deploy path | VPS `/opt/fashionrise/src` force-checkout tip · write `APP_REVISION`/`REVISION` · clear `__pycache__` · restart `fashionrise-api` + `fashionrise-ai-worker` |
+| Deploy time | 2026-10-28 **12:08 Asia/Jerusalem** (10:08 UTC) |
+| Health | `/health` ok · `/ready` database ok · both units **active** |
+| Backup | `/var/backups/fashionrise/techpack-mfg-ready-deploy-20261028T100449Z/` (env, db dump/SQL, PDF meta, prior services) |
+| Rollback | `…/ROLLBACK.sh` → **`7af9c809`** + restart API/worker |
+| Pre-deploy gates | **46 passed** (`test_techpack_manufacturing_ready` + V2 PDF fixtures + P0 reliability) · ruff clean on `techpack_manufacturing.py` · mypy clean on `techpack_manufacturing.py` |
+| Alembic | **`011`** confirmed post-deploy |
+| Limits | `$50` ceiling · `$8`/run · `$20`/user/day · **6** images/run — confirmed unchanged |
+| FR-3958 | Live draft assess → **`DESIGN_CONCEPT`** · **22** blocking/unresolved manufacturing issues (sample size, POM bands, ease, materials, closures, construction, unverified detail art, etc.) |
+| Historical preserve | FR-3958 export `b2a1922a…` (10p / 13 366 568 B) + FR-D47D exports `07c5e48a…`/`cffdfb8a…`/`d1478343…` byte+page match backup; Download associations unchanged; offline PdfReader validation only (**no** live provider / regen) |
+| Paid AI | **0** — no enqueue, no Professional generation, no historical PDF rewrite |
+| FE | **Unchanged** at `69b83c01` |
+| Blockers | FR-3958 remains DESIGN CONCEPT until designer confirms POMs/materials/closures/construction/sample size. No paid Professional regen authorized. |
+| Exact next action | Owner/PM: hard-refresh FE; confirm Download still serves preserved FR-3958 / FR-D47D PDFs. Do **not** authorize paid regen unless explicitly scoped. Rollback if needed via backup `ROLLBACK.sh`. |
+
+## Manufacturing-ready Tech Pack foundation (2026-10-28) — accepted & deployed
+
+| Item | Detail |
+|---|---|
+| Trigger | FR-3958 (purple zip hoodie + yellow shorts) failed sample-development acceptance: implausible POMs, color-list “fabrics”, boolean closure, cross-garment detail sheet, readiness overstated by AI completion |
+| Branch / PR | `cursor/web-techpack-mfg-ready-77c6` · [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) · deployed from lineage `7af9c809` |
+| Production | **Deployed** — FE `69b83c01` · BE+worker **`2c8cb88e`** · Alembic `011` · ceiling `$50` |
+| Paid AI | **0** — offline fixtures + Mock paths only; existing FR-3958 / FR-D47D exports preserved |
+| P0 Measurement integrity | Category-aware POM bands + body-vs-finished ease checks; contradictions flagged **NEEDS REVIEW** (values not silently corrected); sample size required |
+| P0 Readiness levels | `DESIGN CONCEPT / DRAFT` · `SAMPLE-DEVELOPMENT READY` · `PRODUCTION APPROVED` (never auto). AI completion ≠ sample-ready |
+| P0 Artifact quality | Cross-garment detail rejection; originals preserved; corrected preview excludes mismatches (no substitution, no regen) |
+| P1 Materials / PDF | Color vs shell vs composition vs stretch/GSM; boolean closures normalized; larger detail sheets; no Piece A/B/C cutter rectangles; honest “no sewing pattern supplied” |
+| Offline evidence | Fixture `backend/tests/fixtures/fr_3958_manufacturing_spec.json` · preview `backend/artifacts/manufacturing_previews/FR-3958_manufacturing_preview.pdf` |
+| Tests | `test_techpack_manufacturing_ready.py` + V2 PDF fixtures + P0 reliability |
+| Blockers for SAMPLE-READY on FR-3958 | Missing sample size; hoodie length 110 cm vs hip-length; shorts inseam 80 cm; waist 75 vs body 90 without stretch; zero-ease hip/chest with relaxed fit; shell/closure unconfirmed; shorts detail mismatch |
+| Exact next action | Superseded by controlled deployment section above. |
+
+## PR #118 PM amendment — CHANGES REQUIRED (2026-10-28) — STOP for acceptance
+
+Technical PM reviewed `bfaf4651` and required fail-closed readiness, conservative artwork review, PDF/BOM fixes, and **real** private FR-3958 visual verification (not 1×1 / artifact-ID-only).
+
+| Item | Detail |
+|---|---|
+| Parent review commit | `bfaf4651` |
+| Amendment SHA | `c411ed17e3bf46e43b866738d85a60ad1f239aec` |
+| Amendment branch / PR | `cursor/web-techpack-mfg-ready-77c6` · [#118](https://github.com/perielad2-netizen/FashionRise/pull/118) |
+| Production | **Unchanged** — FE `69b83c01` · BE+worker `7af9c809` · Alembic `011` · ceiling `$50` · **no deploy** · **no migration** · **no historical export replacement** |
+| Paid AI | **0** |
+| Fail-closed readiness | `assess_manufacturing_readiness()` enforces category POMs + designer confirmation for finished measurements, fit/ease, materials, closures, construction, tolerances, conflict resolution. Checked QC checklist alone is **insufficient**. Never auto `PRODUCTION_APPROVED` |
+| Artwork policy | Unverified detail art remains reviewable (`include=True`) but `manufacturing_evidence=False`. Artifact↔piece IDs / analysis text are **not** pixel proof. Rejected shorts detail stays excluded; originals preserved |
+| PDF / BOM | `_SizedImage.wrap()` recomputes from immutable intended size; detail sheets on dedicated pages; BOM color-list rows → `Shell fabric — NOT CONFIRMED` (composition not invented); pattern review labels humanized |
+| Offline tests | Negative incomplete trousers + hoodie → `DESIGN_CONCEPT`; positive complete confirmed trousers → `SAMPLE_DEVELOPMENT_READY` + `production_approved=False`; unmarked wrong-garment detail stays unverified and blocks sample-ready |
+| Private visual QA | Real Magic `3958812c…` (1024×1536) + six stored artifacts from run `6b3bf6c3…`. Private PDF 14 pages rendered. Evidence under agent artifacts `fr-3958-mfg-private-qa/` (**not** committed to GitHub) |
+| Private QA results | Hoodie/shorts flats PASS · hoodie detail readable + UNVERIFIED banner PASS · rejected shorts detail excluded PASS · BOM NOT CONFIRMED PASS · measurement warnings PASS · readiness DESIGN CONCEPT PASS |
+| Known limitations | No automatic image-pixel garment classifier (conservative unverified state instead). Proposed backs remain unverified. FR-3958 still blocked for SAMPLE-READY until designer confirms POMs/materials/closures/construction/sample size |
+| Exact next action | Superseded by readiness-gate closure below. |
+
+## PR #118 readiness-gate closure (2026-10-28) — STOP for PM acceptance
+
+Technical PM CONDITIONAL PASS on `c411ed17` with **deployment HOLD** pending fail-closed closure items.
+
+| Item | Detail |
+|---|---|
+| Parent amendment | `c411ed17` |
+| Closure tip | `9ae1ead23fe1d58ed612c1f48c57165fb40ae4a3` |
+| Production | **Unchanged** — FE `69b83c01` · BE+worker `7af9c809` · Alembic `011` · ceiling `$50` · **no deploy** · **no migration** · **no historical PDF rewrite** |
+| Paid AI | **0** |
+| Outfit integrity | Empty / malformed / duplicate-id / unconfirmed-category outfits cannot reach SAMPLE-DEVELOPMENT READY |
+| Provenance ≠ approval | `source=designer` alone is insufficient. Required POMs/materials/fit/closure/construction/tolerances need meaningful values **and** explicit confirmation; `review_status=open` / `needs_review` remain unconfirmed |
+| Measurement exceptions | Narrow evidence-backed exceptions must match `code` + `piece_id` + `pom` + current `value_cm` (+ revision when set) with rationale; blanket `approve_all` rejected. Unmatched conflicts stay blocking |
+| Mypy | `techpack_manufacturing.py` — **0 errors** (`mypy --follow-imports=skip`; no broad type suppression) |
+| Tests | Prior suite preserved + new regressions (empty outfit, open-review designer provenance, scoped exception positive/negative) → **46 passed** with V2 PDF + P0 reliability |
+| Private visual QA | Prior real-image 14-page FR-3958 evidence retained under agent artifacts (not in GitHub) |
+| Known limitations | No automatic image-pixel garment classifier. Proposed backs unverified. Exception path covers measurement findings only (not materials/artwork). FR-3958 remains DESIGN CONCEPT until designer confirms fields |
+| Exact next action | **STOP** for Technical PM acceptance of closure SHA. **Do not deploy.** |
+
+## OWNER ACCEPTANCE PASS — Measurements & Details (FE)
+
+Owner PASS on FE `69b83c01` for idle editor, Done save, reopen persistence, Generate-not-stale-Download after edit with existing Professional PDF.
+
+## PR #116 Owner Acceptance PASS — Professional reliability
+
+PM/owner acceptance **PASS** for PR #116 reliability work (structure gates, artifact binding, fair image budget, dirty invalidation, pattern honesty, fingerprint v2). Production baseline: FE `69b83c01` · BE/worker `0815433b` · Alembic `011`.
+
+## PR #115 Professional quality audit — PM accepted
+
+Evidence-only audit (`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`). Decision **NEEDS IMPROVEMENT**. Kept intact as historical evidence.
+
+## FR-D47D controlled Professional validation — preflight (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Mode | **Read-only preflight only** — no Generate, enqueue, paid OpenAI, PDF regen, or deploy |
+| Target | Style **FR-D47D** · draft `6bc071d3…` · title “Look · Oct 26, 2026” |
+| Structure | **2 pieces** — `top` (`piece-2df509ce`, label Top) + `trousers` (`piece-e51dce19`) · `piece_count=2` · not inconclusive |
+| Magic | Front/look job present, completed, source image resolvable (~1.2 MB) · **no back** Magic |
+| Historical PDF | Professional export `cffdfb8a…` · **`piece_count=1`** · still referenced as current `ai.export_id` · private file **present** |
+| Dirty / Download | **`dirty_since_generation=false`** → UI would still treat one-piece pack as current Download |
+| Active jobs | **None** (no queued / running / reconciliation_required) |
+| Image plan (FE `propose_back:true`, max 6, no back) | Per garment: `flat_front` + `flat_back_proposed` + `detail_callouts` · pattern sheets skipped · **6 images** |
+| Estimator | Deployed `estimate_professional_cents` → **413–796¢ (~$4.13–$7.96)** · within `$8`/run · operator remaining ~`$10.45` · user day remaining `$20` · **not a final charge guarantee** |
+| Fingerprint | **v2 active** on code |
+| Decision | **NO-GO** |
+| Blockers | (1) Historical one-piece PDF still current Download / not marked dirty. (2) Legacy completed run has no structure/input fingerprints → `run_matches_draft_structure` would **reuse** that one-piece completed run instead of authorizing a new two-piece paid generate. |
+| Paid AI | **0** |
+
+### Exact next action (owner / PM) — superseded after hotfix
+
+Preflight blockers (1)–(2) addressed by the historical-PDF validity maintenance below. Paid Generate remains **blocked** until an explicit single paid-run authorization is issued.
+
+## FR-D47D historical PDF validity & reuse hotfix (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Branch / PR | [`#117`](https://github.com/perielad2-netizen/FashionRise/pull/117) · `cursor/web-techpack-hist-pdf-validity-77c6` · base PR #116 tip `0815433b` |
+| Commit / deploy | **`7af9c809`** · API + AI worker restarted · health OK |
+| Root causes (preflight NO-GO) | (A) Live 2-piece FR-D47D still had `dirty_since_generation=false` with 1-piece export as current Download. (B) Legacy completed run without fingerprints: `run_matches_draft_structure` returned **True** → unsafe `reused_completed`. (C) FE idempotency `one-tap-{draft}-r{rev}` could replay the stale completed run. |
+| Fix A | Authoritative `professional_pack_is_current_for_draft` + export `piece_count` contradiction; idempotent `reconcile_professional_export_validity` on GET draft / latest-run / enqueue |
+| Fix B | `run_matches_draft_structure` **fail-closed** without positive fingerprint/piece_ids; reuse requires current pack evidence; never clear dirty for legacy mismatch |
+| Fix C | Idempotency collision scopes a structure-bound key (`#s:{fp}`) for a new authorized intent; latest-run sets `pdf_ready=false` / `current_for_draft=false` while `historical_pdf_ready` remains |
+| Offline tests | MockProfessionalProvider · `test_techpack_p0_reliability` + `pdf_ready_binding` **27 passed** · **$0** provider |
+| Production verify (FR-D47D `6bc071d3…`) | GET reconcile → `dirty_since_generation=true`, `outdated_export_id=cffdfb8a…`, revision still **1**; export file **7,585,753** bytes intact; legacy run `72d563cc…` completed / cost **165¢** unchanged; `run_matches_draft_structure=false`; latest-run `pdf_ready=false` / `current_for_draft=false` / `historical_pdf_ready=true`; **0** queued/running; second reconcile write **false** |
+| Migration | **None** — Alembic **`011`** |
+| Paid AI | **0** |
+| Backup / rollback | `/var/backups/fashionrise/techpack-hist-pdf-validity-deploy-20261028T071542Z/` · `ROLLBACK.sh` → **`0815433b`** |
+| Post-fix preflight | **GO** for Download/reuse gates on FR-D47D. **Not** authorization to spend. |
+| Exact next owner action | **Superseded** — owner issued single-run authorization; see live validation section below. |
+
+## FR-D47D first authorized live Professional validation (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Authorization | **EXACTLY ONE** paid Professional run · draft `6bc071d3-e150-44bb-af3f-f0fed632d5fc` · style **FR-D47D** · owner-approved · no retries · no Magic · no budget/config/code changes |
+| Runtime lineage | FE `69b83c01` · BE+worker **`7af9c809`** · Alembic **`011`** · PR #116 PASS · PR #117 hotfix live |
+| Pre-submit | Dirty=true · pieces `piece-2df509ce` top + `piece-e51dce19` trousers · Magic front resolves · no back · fingerprint **v2** · plan **6** images · estimate **413–796¢** · user-day remaining `$20` · allowlisted · **0** active runs · **GO** |
+| Submit | Authenticated one-tap `generate-professional` · HTTP **202** · status **queued** (not reused) · auth TS **2026-10-28T07:40:53Z** · idempotency prefix `owner-auth-fr-d47d-live-20261028T074053Z-…` |
+| New run | **`cb4a8efc-ff36-45ca-9751-97d8ce10ba0e`** · input fingerprint version **2** · planned images **6** · estimate **796¢** |
+| Outcome | **completed** · `pdf_ready=true` · `current_for_draft=true` · progress ready · ~3.5 min wall time |
+| New export | **`d1478343-205e-4f03-b964-3bd477281099`** · piece_count **2** · **9** pages · **10,659,152** bytes · Professional |
+| Artifacts | 6/6 bound to correct piece IDs: front + proposed back + detail for top and trousers |
+| Historical PDF | `cffdfb8a…` **intact** (**7,585,753** bytes, piece_count=1) · retained as `outdated_export_id` / prior run `72d563cc…` |
+| Internal cost | Estimated **796¢** · recorded actual **250¢ ($2.50)** · billable status **recorded on run** |
+| Provider calls (worker logs) | **2**× `chat/completions` (vision) · **6**× `images/edits` · all HTTP 200 · no failed paid sections (pattern sheets budget-skipped only) |
+| OpenAI billing | Production key is `sk-proj-…` (project key). Dashboard credit balance **not readable** via API key (session/browser required). Owner starting screenshot **$14.17** (~09:36 Asia/Jerusalem). Ending balance **not captured here** — owner to supply post-run screenshot. Auto-reload settings **not modified**. Org/project title match to screenshot: **unconfirmed** (no org headers on Models API; balance comparison may not measure this run until owner confirms). |
+| Private preserve | `/var/lib/fashionrise/storage/private_qa/fr-d47d-live-validation-20261028T0741Z/` (+ backup mirror under `/var/backups/fashionrise/…`) — Magic front, 6 flats, new+historical PDFs, meta. **Not** committed to GitHub. |
+| Visual QA | **Ready for human review** · **NOT passed** merely because the run completed |
+| Quality blockers | Human visual review of tunic/trousers flats, proposed backs, detail sheets, and 9-page PDF still required |
+| Second run | **None** · STOP after this run |
+| Exact next owner action | (1) Open the new PDF/export `d1478343…` and perform visual QA. (2) Capture OpenAI billing balance screenshot and compare to `$14.17`. (3) Do **not** authorize another paid generate unless a separate explicit authorization is issued. |
+
+## Operator spend ceiling raise — $15 → $50 (2026-10-28)
+
+| Item | Detail |
+|---|---|
+| Reason | UI showed “Operator techpack AI spend ceiling reached” because recorded spend **$7.05** + two-garment estimate upper **$7.96** ⇒ **$15.01** vs old ceiling **$15** |
+| Change | **Only** `TECHPACK_AI_SPEND_CEILING_USD=50.00` (was `15`) |
+| Unchanged | `TECHPACK_AI_MAX_USD_PER_RUN=8` · `TECHPACK_AI_MAX_USD_PER_USER_DAY=20` · `TECHPACK_AI_MAX_IMAGES_PER_RUN=6` · models · enablement/allowlist · all other env |
+| Code / migrate / FE | **None** — env-only · no merge · no paid enqueue |
+| Runtime after restart | API+worker healthy · settings report ceiling **50.0** · max run **8** · user day **20** · images **6** |
+| Read-only gate check | Recorded spend **705¢** + estimate hi **796¢** = **1501¢** ≤ ceiling **5000¢** · challenge `ai_enabled=true` · message no longer ceiling-blocked |
+| Paid AI this change | **0** |
+| Backup / rollback | `/var/backups/fashionrise/techpack-spend-ceiling-50-deploy-20261028T080703Z/` · `ROLLBACK.sh` restores prior `.env` (ceiling `$15`) and restarts API+worker |
+| Safety | Ceiling must not be set to `0` (disables Professional under current implementation) |
+| Exact next owner action | Manual Generate AI PDF from the web UI for additional designs as desired; agent does not enqueue paid runs. |
+
+## Professional Tech Pack P0/P1 reliability — PR #116 (landed)
+
+| Item | Detail |
+|---|---|
+| Branch / PR | [`#116`](https://github.com/perielad2-netizen/FashionRise/pull/116) · `cursor/web-techpack-p0-reliability-be-77c6` |
+| Initial deploy | **`bae05c56`** · backup `techpack-p0-reliability-deploy-20261027T201322Z` · rollback → `732bda9f` |
+| Amendment deploy | **`270e87e2`** · backup `techpack-p0-amend-deploy-20261027T205258Z` · rollback → `bae05c56` |
+| Fingerprint v2 deploy | **`0815433b`** · backup `techpack-p0-fpv2-deploy-20261028T052414Z` · rollback → `270e87e2` |
+| Scope | Structure validation; remove `pieces[0]` fallback; fair image budget; repair invalidates Download; pattern `proposed_unverified`; PDF REVIEW; inconclusive reject; input fingerprint v2 |
+| Workflow | Unchanged: **Generate AI PDF → Wait → Download PDF** |
+| Migration | **None** (Alembic `011`) |
+| Owner acceptance | **PASS** |
+| Offline tests | **51 passed** (MockProfessionalProvider, $0) |
+
+---
+
+## Historical handoff archive (preserved)
+
+> The following sections are preserved from prior status revisions so project decisions and milestones are not lost. Prefer the **Last updated** / production table above for current truth.
+
+### Archived snapshot — techpack-quality-audit / owner PASS era
+
+# FashionRise — project status & session handoff
+
+**Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
+**Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
+
+**Last updated:** 2026-10-27 (**OWNER ACCEPTANCE PASS** — Measurements & Details FE `69b83c01` / PR #114. Professional AI Technical Pack **quality audit complete** → **NEEDS IMPROVEMENT**. Backend **`732bda9f`** / worker unchanged / Alembic **`011`**. **0 paid AI calls**. Docs-only analysis branch — **no deploy**.)
+
+**Phase:** Protected family beta. Create Real Design main workflow unchanged. Editor acceptance closed; Professional PDF quality gated on PM review of audit evidence.
+
+**Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
+
+| Layer | Revision |
+|---|---|
+| Frontend (`web-ui`) | **`69b83c01`** — Nginx `root` → `/var/www/fashionrise/current` → `releases/69b83c01`. Done closes only after latest editable snapshot is clean. Prior: `af1ddbb5` (PDF validity) ← `31c1de01` (quiet autosave) ← `ce752b43` (#113). |
+| Backend (FastAPI + PostgreSQL) | **`732bda9f`** — **unchanged** (hash-matched `techpack_pdf.py` / `techpack_ai_professional.py` during audit). |
+| AI worker | Standalone `fashionrise-ai-worker` — **unchanged** · `OPENAI_MODEL=gpt-6-luna` |
+| Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
+| Nginx | `root /var/www/fashionrise/current;` · `index.html` / `version.json` / `sw.js` no-store |
+| Deploy backup | `/var/backups/fashionrise/done-race-fe-deploy-20261027T164012Z` (rollback → prior FE `af1ddbb5`) |
+| AI spend | Ceiling **`$15`**, max **`$8`/run**, **`$20`/user/day**, allowlist **3**, `OPENAI_REASONING_EFFORT=none`. **Audit paid calls: 0.** |
+
+## OWNER ACCEPTANCE PASS — 2026-10-27 (Measurements & Details)
+
+Owner confirmed PASS on production FE **`69b83c01`** for all four scenarios:
+
+1. Open editor without flicker / write loops.  
+2. Edit a measurement and close with Done.  
+3. Reopen and confirm the saved value.  
+4. Edit a design that already has a Professional PDF → UI shows **Generate AI PDF** (not stale Download).
+
+Quiet autosave + PDF validity + Done/save race (PR #114) remain LIVE. **No further editor work** unless a new regression appears.
+
+## Professional AI Technical Pack quality audit — 2026-10-27 (docs only)
+
+| Item | Detail |
+|---|---|
+| Deliverable | [`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`](./TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md) |
+| Tip |  |
+| Branch | `cursor/techpack-quality-audit-77c6` (from docs tip `ac76632a` / production FE lineage) |
+| Decision | **NEEDS IMPROVEMENT** |
+| Real PDFs inspected | **FR-7182** (pink striped dress, V3.1), **FR-D47D** (Magic = tunic+trousers but PDF = 1× dress), **FR-CF5A** (burgundy slip, V2 footer) |
+| Not evaluable | **FR-3958** lavender hoodie + yellow shorts — draft only, **no** Professional export |
+| Offline tests | `test_techpack_v3_professional` + `v31_one_tap` + `v2_pdf_fixtures` + `provenance` → **20 passed** (mock provider, $0) |
+| Top P0 | Multi-piece identity collapse (FR-D47D); AI pattern rows labeled `approved_template` |
+| Top P1 | silk≠cotton without REVIEW on stored FR-CF5A; sleeveless + sleeve length 60; long-sleeve assumption on ¾ tunic |
+| Safety | No production code/deploy/migration; private PDFs not committed; **0 paid AI** |
+| Blocked / unapproved | Fixes, regenerations, deploys, merges of stale `main` / unrelated PRs |
+
+### Exact next action (PM)
+
+1. Read the audit scorecards (especially FR-D47D P0 and FR-7182 `approved_template`).  
+2. Choose: **targeted fix** (multi-piece generate gate + review_state default + PDF REVIEW/sleeve guards) **or** owner visual review of FR-7182 pages 1/3/5 first.  
+3. Do **not** authorize paid Professional regenerations until that choice is explicit.
+
+## Quiet autosave + PDF validity + Done race (2026-10-27) LIVE — owner accepted
 
 | Item | Detail |
 |---|---|
@@ -99,14 +451,8 @@ Technical PM **Substantial pass / HOLD** on tip `f1930dcf` / code `a3158b61` —
 | Tests (StrictMode, 390/768/1366) | Clean Done **0** PATCH; dirty Done **1**; A→Done→edit B mid-flight → B persisted before close (`maxInFlight=1`); B fail → stay open; Done during background PATCH → no overlap; repeated Done/Escape → no duplicate writes; prior quiet/PDF suites green (**73** related tests) |
 | Production verify | `current`→`69b83c01`; version.json full SHA; health/ready OK; BE still `732bda9f` |
 | Safety | FE-only; BE/worker untouched; **0 paid AI** |
+| Owner acceptance | **PASS — 2026-10-27** |
 | Rollback | `ln -sfn /var/www/fashionrise/releases/af1ddbb5 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` · or `done-race-fe-deploy-…/ROLLBACK.sh` |
-
-### Next recommended action (owner)
-
-1. Hard-refresh → confirm build **`69b83c01`**.
-2. Open Measurements & details → leave idle (no flicker / write loop).
-3. Edit → Done while typing again mid-save → editor must not close until the latest value is saved; no duplicate network writes.
-4. With an existing Professional PDF: edit measurement → Generate (not stale Download).
 
 ## V3.1 — what shipped (2026-10-27)
 
@@ -880,8 +1226,19 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-29 | **PR #129 final 6px cutout check (HOLD follow-up):** pre-dilation `visibleInk` cutout guard so dilate-sealed 6px hollow → `unsupported_cutout` / no FillOp / export empty; frontier dilate fringe excluded; Path2D 6px regression + thin multi-stroke still fills; fill tests **42**; prod build `/api/v1` PASS; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
-| 2026-10-29 | **PR #129 fill integrity closure (CHANGES REQUIRED follow-up):** erase-aware final dilate (narrow openings survive Fill+Gaps; later pencil reconnects); reject unsupported single-contour cutouts with pixel+persist proof; gap hint = first mouth from escape / suppress ambiguous; fill tests **26**; full suite **633/6** baseline; prod build `/api/v1` PASS; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
+| 2026-10-29 | **OWNER-AUTHORIZED PROD RELEASE (#131):** BE+worker `6cc317ec` (PR #130) · FE `ebcb1cc7` (PR #129) · Alembic `011` · backup `techpack-130-129-deploy-20261029T131341Z` · health/ready PASS · **0 paid AI** · #127/#128 remain open · 86-PR cleanup not started. |
+| 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; HEAD `c16acf41` / impl `0561bb56` / blob `e04fdbcf`; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
+| 2026-10-29 | **Issue #128 / PR #130 structural & visual identity:** authorized-snapshot artifact retention on piece-list drift; `color_treatment`/`visible_details` identity fingerprint; tip `991244fa727bf01a6aed15bf7471dae776239d62` / commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9`; 12 focused / 114 broader pass / 1 baseline async_worker fail; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
+| 2026-10-29 | **Issue #128 / PR #130 data-integrity closure:** garment-identity fingerprint fail-closed skip; PDF-assembly revision/meas/identity/dirty CAS; independent SQLAlchemy session concurrency tests; tip `44afea60f87cec2da59a8710c583c2e84314a5ae` / code `0e341c10e28998c84235c307414f7e0bb4a1c641`; verification 111 pass / 1 pre-existing async_worker fail on baseline `311e259a`; Ruff 9 / mypy 51 parity; production FE `bfbdd03f-decimal` / BE `311e259a` / Alembic `011` **unchanged**; **0 paid AI**; **#125 / #129 independent**; **STOP for Technical PM re-review — do not deploy**. |
+| 2026-10-29 | **Issue #128 concurrent-write closure (PARTIAL PASS follow-up):** generation-boundary capture + post-provider `FOR UPDATE` re-read; live-spec enrich on mid-run measurement edits; skip draft.spec when pack ownership moved (PDF-only); retain artifacts/cost; never re-call paid AI; mocked DB persist/GET tests; enrich tip `6ac13dc3` retained; production FE `bfbdd03f-decimal` / BE `311e259a` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
+| 2026-10-28 | **PR #123 review-guard closure:** fail-closed non-Professional stage + current `last_run_id` + outfit-referenced artifact checks; legacy blank stage only with Professional draft evidence; **69** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. Issue #124 (FE decimals + FR-B9F9 fidelity) tracked separately. |
+| 2026-10-28 | **PR #123 clean replacement for #122 (CHANGES REQUIRED closure)** @ `80e86f90`/`43c8d376`: review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git; production unchanged; superseded tip by review-guard closure above. |
+| 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
+| 2026-10-28 | **PR #118 PM amendment (CHANGES REQUIRED):** fail-closed SAMPLE-READY gates; conservative unverified detail art (no pixel trust); `_SizedImage` immutable wrap + BOM color-list normalization + dedicated detail pages; negative trousers/hoodie + positive complete + unmarked wrong-garment tests; private FR-3958 Magic+6-artifact visual QA (14 pages); production FE `69b83c01` / BE+worker `7af9c809` / Alembic `011` unchanged; **0 paid AI**; Technical PM CONDITIONAL PASS + HOLD for readiness-gate closure. |
+| 2026-10-28 | **Manufacturing-ready Sample-Development Tech Pack foundation** draft PR #118 @ `bfaf4651`: readiness levels, POM contradiction flags, artifact exclusion, offline FR-3958 preview; production unchanged; **0 paid AI**; Technical PM returned **CHANGES REQUIRED** (see amendment row above). |
+| 2026-10-27 | **Professional AI Technical Pack quality audit (docs only):** inspected real PDFs FR-7182 / FR-D47D / FR-CF5A vs Magic Looks; FR-3958 NOT EVALUABLE; offline pytest **20 passed**; decision **NEEDS IMPROVEMENT** (P0 multi-piece collapse + `approved_template` overclaim); deliverable `docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`; FE/BE/worker/Alembic **unchanged**; **0 paid AI**; **STOP for PM** — no fix/deploy. |
+| 2026-10-27 | **OWNER ACCEPTANCE PASS — Measurements & Details** on FE `69b83c01` (PR #114): idle editor, Done save, reopen persistence, Generate-not-stale-Download after edit with existing Professional PDF. Production lineage preserved (`732bda9f` / worker / Alembic `011`). |
+| 2026-10-27 | **PR #114 Done/save race FE LIVE** @ `69b83c01` (quiet autosave + PDF validity retained); BE `732bda9f` unchanged; **0 paid AI**. |
 | 2026-10-26 | **Create Real Design mobile UX + provenance DEPLOYED** FE `5f519734` (PR [#98](https://github.com/perielad2-netizen/FashionRise/pull/98)) + BE `08b66ca2` (PR [#97](https://github.com/perielad2-netizen/FashionRise/pull/97)); Alembic `010` unchanged; Android Edit Measurements sheet; Stage 4 Basic vs Professional clarity; PDF Basic/No-AI labeling; smoke PASS (heuristic provenance, **0 paid**); backup `techpack-mobile-ux-deploy-20261026T201157Z`. Owner first paid AI test still pending. |
 | 2026-10-26 | **Create Real Design V3 DEPLOYED** FE `75a8e8ca` (PR [#96](https://github.com/perielad2-netizen/FashionRise/pull/96)) + BE `5fd4b843` (PR [#95](https://github.com/perielad2-netizen/FashionRise/pull/95)); Alembic `010` `techpack_ai_artifacts`; Nginx artifacts image route; owner-allowlist AI gates ON (ceiling `$15`, max `$8`/run, `$20`/day); non-AI smoke PASS (heuristic `$0`, professional confirm only); mocked CI + FR-7182 fixture PDF; Dual Magic ON; **0 paid generate by Cursor**; backup `techpack-v3-deploy-20261026T190439Z`. Owner to run first live AI Professional test. No monetization. |
 | 2026-10-26 | **Create Real Design V2 DEPLOYED** FE `e2416ed0` (PR [#94](https://github.com/perielad2-netizen/FashionRise/pull/94)) + BE `f2433513` (PR [#93](https://github.com/perielad2-netizen/FashionRise/pull/93)); Alembic `009` `techpack_ai_runs`; Nginx AI allowlist; multi-piece PDF + flats/schematics; smoke PASS (heuristic `$0`, paid AI 403); Dual Magic ON; **0 paid AI**; backup `techpack-v2-deploy-20261026T181418Z`. No monetization. |

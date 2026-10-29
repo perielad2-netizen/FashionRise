@@ -38,6 +38,32 @@ class Settings(BaseSettings):
     upload_subdir: str = "uploads"
     # Private fabric bytes live here — sibling of upload_subdir, never mounted publicly.
     private_fabric_subdir: str = "private_fabrics"
+    # Private tech-pack PDFs — never mounted under /static/uploads.
+    private_techpack_subdir: str = "private_techpacks"
+    # Create Real Design V1 flag (legacy). Prefer techpack_ai_enabled.
+    techpack_ai_draft_enabled: bool = False
+    # Create Real Design AI — fail closed without spend ceiling + (for professional) allowlist.
+    techpack_ai_enabled: bool = False
+    # Operator must set a positive ceiling (USD) before any paid techpack AI call.
+    techpack_ai_spend_ceiling_usd: float = 0.0
+    # Professional image-aware runs need a higher ceiling than text tips ($0.50 is inadequate).
+    techpack_ai_max_usd_per_run: float = 8.0
+    techpack_ai_max_usd_per_user_day: float = 20.0
+    # Legacy V2 text-only estimate (cents). Professional uses image-aware estimator.
+    techpack_ai_estimate_chat_cents: int = 8
+    # Conservative professional estimate floor/ceiling used for UI + preflight (cents).
+    techpack_ai_estimate_professional_cents_base: int = 250
+    techpack_ai_estimate_professional_cents_per_piece: int = 180
+    techpack_ai_estimate_professional_cents_propose_back: int = 80
+    # Comma-separated owner emails and/or user UUIDs allowed for paid professional AI.
+    # Empty = nobody (fail closed even if techpack_ai_enabled). Never commit real IDs.
+    techpack_ai_owner_allowlist: str = ""
+    # Max concurrent paid professional runs system-wide (reservation lock).
+    techpack_ai_max_concurrent_runs: int = 2
+    # Max image generations per professional run (front/back/detail/pattern).
+    techpack_ai_max_images_per_run: int = 6
+    # Entitlement boundary placeholder for future premium billing (not charged here).
+    techpack_ai_requires_entitlement: bool = False
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
@@ -60,9 +86,12 @@ class Settings(BaseSettings):
     # reasoning tokens. 1400 covers summary + bullets + optional image_prompt.
     openai_max_completion_tokens: int = 1400
     # sketch_polish look image (images.edit). Set OPENAI_IMAGE_MODEL=off to disable.
-    openai_image_model: str = "gpt-image-1"
+    # Default: gpt-image-2.5-sunburst (gpt-image-1 shut down 2026-10-23).
+    openai_image_model: str = "gpt-image-2.5-sunburst"
     openai_image_size: str = "1024x1536"
-    openai_image_quality: str = "standard"
+    # FashionRise default quality is high. Legacy "standard" maps to high in code.
+    # Explicit xhigh/max (and unknown values) fail closed before any paid images.edit.
+    openai_image_quality: str = "high"
 
     max_upload_size_mb: int = 25
     allowed_upload_image_types: str = "image/jpeg,image/png,image/webp"
@@ -84,6 +113,9 @@ class Settings(BaseSettings):
     cf_access_jwt_validation: bool = False
     cf_access_team_domain: str = ""
     cf_access_aud: str = ""
+    # Optional seamless app login: verify Access JWT → map email to existing User → issue tokens.
+    # Requires team domain + AUD. Never auto-provisions users. Default off until AUD is configured.
+    cf_access_sso_login: bool = False
 
     @field_validator("cors_origins", mode="before")
     @classmethod
