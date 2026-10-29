@@ -287,8 +287,85 @@ def _designer_owned_meas_fingerprint(spec: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _piece_identity_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
+    """Garment identity fields only — excludes finished/body measurements."""
+    mats_raw = piece.get("materials")
+    mats: dict[str, Any] = mats_raw if isinstance(mats_raw, dict) else {}
+    shell_raw = mats.get("shell")
+    shell: dict[str, Any] = shell_raw if isinstance(shell_raw, dict) else {}
+    lining_raw = mats.get("lining")
+    lining: dict[str, Any] = lining_raw if isinstance(lining_raw, dict) else {}
+    closures_raw = piece.get("closures")
+    closures: dict[str, Any] = closures_raw if isinstance(closures_raw, dict) else {}
+    fit_raw = piece.get("fit")
+    fit: dict[str, Any] = fit_raw if isinstance(fit_raw, dict) else {}
+    steps = piece.get("construction_steps")
+    step_digest: list[str] = []
+    if isinstance(steps, list):
+        for step in steps:
+            if isinstance(step, dict):
+                step_digest.append(str(step.get("instruction") or step.get("step") or "")[:200])
+            elif step not in (None, ""):
+                step_digest.append(str(step)[:200])
+    return {
+        "id": str(piece.get("id") or ""),
+        "category": str(piece.get("category") or ""),
+        "role": str(piece.get("role") or ""),
+        "label": str(piece.get("label") or ""),
+        "color_hint": str(piece.get("color_hint") or ""),
+        "closures_type": str(closures.get("type") or ""),
+        "closures_notes": str(closures.get("notes") or ""),
+        "fit_silhouette": str(fit.get("silhouette") or ""),
+        "shell_name": str(shell.get("name") or ""),
+        "shell_composition": str(shell.get("composition") or ""),
+        "lining_name": str(lining.get("name") or ""),
+        "construction_steps": step_digest,
+    }
+
+
+def garment_identity_fingerprint(
+    spec: dict[str, Any],
+    draft: TechpackDraft | None = None,
+) -> str:
+    """Hash of garment identity / authorized generation inputs excluding measurements.
+
+    Category, closures, color, construction, piece structure, and Magic source
+    identity — not finished POM / body values.
+    """
+    from app.services.techpack_structure import outfit_structure_fingerprint
+
+    outfit_raw = spec.get("outfit")
+    outfit: dict[str, Any] = outfit_raw if isinstance(outfit_raw, dict) else {}
+    pieces_raw = outfit.get("pieces")
+    pieces_list: list[Any] = pieces_raw if isinstance(pieces_raw, list) else []
+    pieces = [p for p in pieces_list if isinstance(p, dict)]
+    look_id = ""
+    front_job_id = ""
+    back_job_id = ""
+    if draft is not None:
+        look_id = str(draft.look_id or "")
+        front_job_id = str(draft.front_job_id or "")
+        back_job_id = str(draft.back_job_id or "")
+    payload: dict[str, Any] = {
+        "structure": outfit_structure_fingerprint(pieces),
+        "look_id": look_id,
+        "front_job_id": front_job_id,
+        "back_job_id": back_job_id,
+        "look_notes": str(spec.get("look_notes") or "").strip(),
+        "look_design_identity": spec.get("look_design_identity")
+        if isinstance(spec.get("look_design_identity"), dict)
+        else {},
+        "pieces": [
+            _piece_identity_snapshot(p)
+            for p in sorted(pieces, key=lambda x: str(x.get("id") or ""))
+        ],
+    }
+    raw = json.dumps(payload, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 def capture_generation_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> dict[str, Any]:
-    """Snapshot revision / updated_at / measurement fingerprint / pack ownership at provider start."""
+    """Snapshot revision / fingerprints / pack ownership at provider start."""
     updated = draft.updated_at
     ai_raw = spec.get("ai")
     ai: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
@@ -296,11 +373,50 @@ def capture_generation_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> d
         "draft_revision": int(draft.revision or 1),
         "draft_updated_at": updated.isoformat() if isinstance(updated, datetime) else None,
         "meas_fingerprint": _designer_owned_meas_fingerprint(spec),
+        "identity_fingerprint": garment_identity_fingerprint(spec, draft),
         # Prior pack pointers — used to detect PDF-only / other-run ownership that
         # landed during generation. Must not treat a mere prior pack as "newer".
         "last_run_id": str(ai.get("last_run_id") or "").strip() or None,
         "export_id": str(ai.get("export_id") or "").strip() or None,
     }
+
+
+def capture_pdf_assembly_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> dict[str, Any]:
+    """Authoritative draft state used as the PDF render input (pre-bind CAS)."""
+    updated = draft.updated_at
+    ai_raw = spec.get("ai")
+    ai: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
+    return {
+        "draft_revision": int(draft.revision or 1),
+        "draft_updated_at": updated.isoformat() if isinstance(updated, datetime) else None,
+        "meas_fingerprint": _designer_owned_meas_fingerprint(spec),
+        "identity_fingerprint": garment_identity_fingerprint(spec, draft),
+        "dirty_since_generation": bool(ai.get("dirty_since_generation")),
+        "last_run_id": str(ai.get("last_run_id") or "").strip() or None,
+        "export_id": str(ai.get("export_id") or "").strip() or None,
+    }
+
+
+def _lock_draft_for_cas(db: Session, draft_id: uuid.UUID) -> TechpackDraft:
+    """Row-lock draft and refresh identity-map state after concurrent commits."""
+    db.expire_all()
+    return db.execute(
+        select(TechpackDraft)
+        .where(TechpackDraft.id == draft_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
+
+
+def _identity_changed_since_boundary(
+    draft: TechpackDraft,
+    live_spec: dict[str, Any],
+    boundary: dict[str, Any],
+) -> bool:
+    expected = str(boundary.get("identity_fingerprint") or "")
+    if not expected:
+        return False
+    return garment_identity_fingerprint(live_spec, draft) != expected
 
 
 def _generation_boundary_stale(
@@ -316,6 +432,30 @@ def _generation_boundary_stale(
         return True
     expected_fp = str(boundary.get("meas_fingerprint") or "")
     return bool(expected_fp and _designer_owned_meas_fingerprint(live_spec) != expected_fp)
+
+
+def _pdf_assembly_bind_stale(
+    draft: TechpackDraft,
+    live_spec: dict[str, Any],
+    pdf_boundary: dict[str, Any],
+) -> bool:
+    """True when designer/spec changed after the PDF render snapshot.
+
+    Ignores ``updated_at`` alone — ``export_pdf`` itself bumps it. Uses revision,
+    measurement + identity fingerprints, and dirty flag.
+    """
+    if int(draft.revision or 1) != int(pdf_boundary.get("draft_revision") or 1):
+        return True
+    if _identity_changed_since_boundary(draft, live_spec, pdf_boundary):
+        return True
+    expected_meas = str(pdf_boundary.get("meas_fingerprint") or "")
+    if expected_meas and _designer_owned_meas_fingerprint(live_spec) != expected_meas:
+        return True
+    ai_raw = live_spec.get("ai")
+    ai: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
+    return bool(ai.get("dirty_since_generation")) and not bool(
+        pdf_boundary.get("dirty_since_generation")
+    )
 
 
 def _pack_ownership_moved_since_boundary(
@@ -364,18 +504,24 @@ def resolve_persist_base_after_provider(
     """Row-lock draft and choose persist base after paid provider work.
 
     Returns ``(draft, base_spec, concurrent_edits, skip_draft_spec_write)``.
-    When the owner saved measurements (or a newer PDF pack) during generation,
-    never re-apply the pre-provider snapshot. Never re-issues paid calls.
+
+    - Measurement-only mid-run edits → enrich from **live** spec (never stale snapshot).
+    - Garment identity / Magic source / structure change → **skip** draft.spec write
+      (do not bind obsolete artwork to the modified design).
+    - Newer PDF pack ownership → skip draft.spec write.
+    Never re-issues paid calls.
     """
     _ = run
-    draft = db.execute(
-        select(TechpackDraft).where(TechpackDraft.id == draft_id).with_for_update()
-    ).scalar_one()
+    draft = _lock_draft_for_cas(db, draft_id)
     live_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
-    concurrent = _generation_boundary_stale(draft, live_spec, boundary)
     if _pack_ownership_moved_since_boundary(live_spec, boundary):
         # Newer PDF-only / Professional ownership claimed during generation — keep it.
         return draft, live_spec, True, True
+    if _identity_changed_since_boundary(draft, live_spec, boundary):
+        # Category / closure / color / structure / Magic source drifted — keep designer
+        # data; retain artifacts/cost on the run without misbinding old artwork.
+        return draft, live_spec, True, True
+    concurrent = _generation_boundary_stale(draft, live_spec, boundary)
     if concurrent:
         return draft, live_spec, True, False
     return draft, ensure_v2(authorized_spec), False, False
@@ -902,6 +1048,11 @@ def ensure_professional_pdf_for_run(
     req = dict(run.request) if isinstance(run.request, dict) else {}
     structure_ok = run_matches_draft_structure(req, pieces)
     result = dict(run.result) if isinstance(run.result, dict) else {}
+    # Fail-closed concurrent reconciliation: never auto-rebind orphaned artwork/PDF.
+    if result.get("skipped_stale_spec_write") or result.get("skipped_stale_pdf_bind"):
+        return run
+    if result.get("skipped_identity_drift"):
+        return run
     export_id_raw = result.get("export_id")
     if export_id_raw and result.get("pdf_ready"):
         # Verify file still readable; otherwise reassemble.
@@ -1561,16 +1712,23 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         artifacts: list[dict[str, Any]] = []
         enriched: dict[str, Any] | None = None
         if skip_draft_spec_write:
-            # Newer pack ownership already on the draft — keep designer/PDF state.
-            # Still record provider usage + any artifacts already created would be none;
-            # attach pipeline bytes as run artifacts without mutating draft.spec.
+            # Newer pack ownership and/or garment-identity drift — keep designer state.
+            # Record artifacts + cost on the run without mutating draft.spec / binding artwork.
+            identity_drift = _identity_changed_since_boundary(
+                draft, base_spec, generation_boundary
+            )
+            pack_moved = _pack_ownership_moved_since_boundary(base_spec, generation_boundary)
             enriched, artifacts = _persist_professional_result(
                 db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=base_spec
             )
-            # Discard enriched draft write; retain only artifact rows + cost on the run.
+            del enriched  # never write stale/misbound enrich onto the live draft
             assembling = {
                 "phase": "assembling",
-                "message": "AI finished — keeping your newer saved pack",
+                "message": (
+                    "AI finished — keeping your newer saved pack"
+                    if pack_moved
+                    else "AI finished — kept your design changes; artwork was not applied"
+                ),
                 "pieces_done": max(1, len(pieces)),
                 "pieces_total": max(1, len(pieces)),
             }
@@ -1579,6 +1737,8 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             req2.pop("provider_in_flight", None)
             req2["reconciled_concurrent_designer_edits"] = True
             req2["skipped_stale_spec_write"] = True
+            if identity_drift:
+                req2["skipped_identity_drift"] = True
             run.request = req2
             run.result = {
                 "piece_count": (draft.spec or {}).get("outfit", {}).get("piece_count")
@@ -1597,12 +1757,19 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
                 "pdf_ready": False,
                 "draft_revision": int(draft.revision or 1),
                 "skipped_stale_spec_write": True,
+                "skipped_identity_drift": identity_drift,
                 "reconciled_concurrent_designer_edits": True,
             }
             run.status = "completed"
             run.error_message = (
                 "Professional generation finished after newer designer/PDF changes. "
                 "Paid usage was recorded; the newer saved pack was not overwritten."
+                if pack_moved
+                else (
+                    "Professional generation finished after garment identity/structure "
+                    "changed during the run. Paid usage was recorded; obsolete artwork "
+                    "was not applied to your updated design."
+                )
             )[:1000]
             db.add(run)
             db.commit()
@@ -1669,6 +1836,17 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         db.refresh(run)
         db.refresh(draft)
 
+        # Snapshot the exact draft state that PDF assembly will render from.
+        # Binding must CAS against this — not merely pack ownership.
+        pdf_render_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+        pdf_boundary = capture_pdf_assembly_boundary(draft, pdf_render_spec)
+        req_pdf = dict(run.request) if isinstance(run.request, dict) else {}
+        req_pdf["pdf_assembly_boundary"] = pdf_boundary
+        run.request = req_pdf
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+
         from app.services import techpack_service
 
         try:
@@ -1703,29 +1881,36 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             ) from pdf_exc
 
         run = db.get(TechpackAIRun, run_id)
-        draft = db.execute(
-            select(TechpackDraft).where(TechpackDraft.id == draft.id).with_for_update()
-        ).scalar_one()
+        draft = _lock_draft_for_cas(db, draft.id)
         assert run is not None
-        # If a newer pack appeared during PDF assembly, keep it and finish the run
-        # without clobbering designer/PDF ownership.
+        # If a newer pack OR designer edit appeared during PDF assembly, keep
+        # designer data / dirty flag; leave the assembled PDF historical only.
         live_now = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
-        if _live_owned_by_other_completed_pack(live_now, run):
+        pack_taken = _live_owned_by_other_completed_pack(live_now, run)
+        bind_stale = _pdf_assembly_bind_stale(draft, live_now, pdf_boundary)
+        if pack_taken or bind_stale:
             ready_progress = {
                 "phase": "ready",
-                "message": "AI finished — kept your newer saved pack",
+                "message": (
+                    "AI finished — kept your newer saved pack"
+                    if pack_taken
+                    else "AI finished — kept your latest edits; PDF left historical"
+                ),
                 "pieces_done": max(1, len(pieces)),
                 "pieces_total": max(1, len(pieces)),
             }
             req3 = dict(run.request) if isinstance(run.request, dict) else {}
             req3["progress"] = ready_progress
             req3["skipped_stale_spec_write"] = True
+            if bind_stale and not pack_taken:
+                req3["skipped_stale_pdf_bind"] = True
             run.request = req3
             result_ok = dict(run.result) if isinstance(run.result, dict) else {}
             result_ok.update(
                 {
                     "pdf_ready": False,
                     "skipped_stale_spec_write": True,
+                    "skipped_stale_pdf_bind": bool(bind_stale and not pack_taken),
                     "draft_revision": int(draft.revision or 1),
                     "progress": ready_progress,
                     "orphaned_export_id": str(exported.id),
@@ -1736,7 +1921,13 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             run.error_message = (
                 "Professional PDF was assembled but a newer saved pack is current; "
                 "designer data was not overwritten."
+                if pack_taken
+                else (
+                    "Professional PDF was assembled from an earlier draft snapshot; "
+                    "your newer edits were kept and dirty state was preserved."
+                )
             )[:1000]
+            # Do NOT mutate draft.spec — preserve measurements, dirty flag, export ownership.
             db.add(run)
             db.commit()
             db.refresh(run)
@@ -2153,26 +2344,43 @@ def run_generate(
             ).get("vision_model")
             analysis_summary = pipeline.get("analysis_summary")
             failed_sections = list(pipeline.get("failed_sections") or [])
+            identity_drift = _identity_changed_since_boundary(
+                draft, base_spec, generation_boundary
+            )
+            pack_moved = _pack_ownership_moved_since_boundary(base_spec, generation_boundary)
             enriched, artifacts = _persist_professional_result(
                 db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=base_spec
             )
             if skip_draft_spec_write:
+                del enriched
                 run.status = "completed"
                 run.model = model
                 run.cost_usd_cents = cost
                 run.error_message = (
                     "Professional generation finished after newer designer/PDF changes. "
                     "Paid usage was recorded; the newer saved pack was not overwritten."
+                    if pack_moved
+                    else (
+                        "Professional generation finished after garment identity/structure "
+                        "changed during the run. Paid usage was recorded; obsolete artwork "
+                        "was not applied to your updated design."
+                    )
                 )[:1000]
                 ready_progress = {
                     "phase": "ready",
-                    "message": "AI finished — keeping your newer saved pack",
+                    "message": (
+                        "AI finished — keeping your newer saved pack"
+                        if pack_moved
+                        else "AI finished — kept your design changes; artwork was not applied"
+                    ),
                     "pieces_done": max(1, len(pieces)),
                     "pieces_total": max(1, len(pieces)),
                 }
                 req = dict(run.request) if isinstance(run.request, dict) else {}
                 req["progress"] = ready_progress
                 req["skipped_stale_spec_write"] = True
+                if identity_drift:
+                    req["skipped_identity_drift"] = True
                 run.request = req
                 run.result = {
                     "piece_count": (draft.spec or {}).get("outfit", {}).get("piece_count")
@@ -2187,6 +2395,7 @@ def run_generate(
                     "artifact_ids": [a["id"] for a in artifacts],
                     "progress": ready_progress,
                     "skipped_stale_spec_write": True,
+                    "skipped_identity_drift": identity_drift,
                     "reconciled_concurrent_designer_edits": True,
                 }
                 db.add(run)
@@ -2206,6 +2415,7 @@ def run_generate(
                     "failed_sections": failed_sections,
                     "idempotent_replay": False,
                     "skipped_stale_spec_write": True,
+                    "skipped_identity_drift": identity_drift,
                 }
             if concurrent_edits:
                 ai_sync_raw = enriched.get("ai")
