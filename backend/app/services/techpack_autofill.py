@@ -92,9 +92,16 @@ def apply_visible_analysis_to_piece(
         out["category"] = detected
         out["role"] = ROLE_BY_CATEGORY.get(detected, "other")
         out["detection_source"] = "ai_vision"
-        out["finished_measurements"] = empty_finished_measurements(
+        # Category swap must not wipe nonempty POM cells (designer or otherwise).
+        prior_raw = out.get("finished_measurements")
+        prior_finished: dict[str, Any] = prior_raw if isinstance(prior_raw, dict) else {}
+        next_finished = empty_finished_measurements(
             detected, str(out.get("units") or "cm")
         )
+        for key, cell in prior_finished.items():
+            if isinstance(cell, dict) and cell.get("value") not in (None, ""):
+                next_finished[key] = dict(cell)
+        out["finished_measurements"] = next_finished
         out["category_provenance"] = "ai_inferred"
     elif detected and detected != current and user_confirmed_cat:
         conflicts = list(out.get("ai_conflicts") or []) if isinstance(out.get("ai_conflicts"), list) else []
