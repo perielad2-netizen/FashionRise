@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-29 (**Issue #127 fill safety closure** — amendment on `742cbddc` · branch `cursor/web-sketch-fill-reliability-77c6` · eraser veto + facing seals + real Path2D raster tests + gap-hint fix · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM acceptance**.)
+**Last updated:** 2026-10-29 (**Issue #127 fill safety closure** — tip `1971ee7e` / on `742cbddc` · branch `cursor/web-sketch-fill-reliability-77c6` · eraser veto + facing seals + real Path2D raster tests + gap-hint fix · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM acceptance**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -34,7 +34,7 @@
 
 | Item | Detail |
 |---|---|
-| Tip | _(pending commit)_ — code base `742cbddc3d88aa551e634df3e90b09a1f2c2c019` + safety amendment |
+| Tip | `1971ee7e144f48800d264703032bf895b58083c6` (safety amendment on `742cbddc3d88aa551e634df3e90b09a1f2c2c019`) |
 | PM | **CHANGES REQUIRED** on `742cbddc` / tip `5301341b` → this amendment |
 | Trigger | Owner mobile fill of complex freehand shirt outline (1.75 px, ~62% zoom) repeatedly failed with open-outline / “dress” copy |
 | Root cause | Fill barrier used tapered perfect-freehand tips; multi-stroke joins leaked at alpha>12. First fix: `sealTips` + endpoint seal. |
