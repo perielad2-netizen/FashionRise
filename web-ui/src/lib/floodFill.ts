@@ -196,10 +196,13 @@ export function floodFillAgainstBarrier(input: {
     }
   }
 
-  // Single-contour FillOp cannot represent holes. If the flooded ring encloses an
-  // unfilled cutout, painting the outer polygon would incorrectly fill the hole —
-  // fail closed with an actionable message (no multi-contour schema change here).
-  if (floodEnclosesUnsupportedCutout(visited, barrier, contour, count, minX, minY, maxX, maxY)) {
+  // Persist the same contour the canvas will paint — cutout safety must judge this
+  // polygon, not a pre-simplify trace the user never sees.
+  const simplified = simplifyContour(contour, 1.4)
+
+  // Single-contour FillOp cannot represent holes. If painting the persisted contour
+  // would cover unfilled interior the flood never claimed, fail closed (no schema change).
+  if (floodEnclosesUnsupportedCutout(visited, barrier, simplified)) {
     return {
       ok: false,
       reason: 'unsupported_cutout',
@@ -212,7 +215,7 @@ export function floodFillAgainstBarrier(input: {
     ok: true,
     fill: {
       id: createFillId(),
-      contour: simplifyContour(contour, 1.4),
+      contour: simplified,
       style: input.style,
       seedX: input.x,
       seedY: input.y,
@@ -671,65 +674,91 @@ function cellNearBarrier(barrier: Uint8Array, x: number, y: number, radius: numb
 }
 
 /**
- * True when painting the outer flooded contour would cover an inner cutout that
- * the flood did not visit. Single-contour persistence cannot represent holes.
+ * Minimum painted∖flooded non-barrier pixels that prove a real cutout.
+ * Allows a few discrete fringe mismatches from contour simplification without
+ * missing a closed 4–8px design-pixel opening (~12–50 cells).
+ */
+const MIN_UNSUPPORTED_CUTOUT_PIXELS = 4
+
+/**
+ * True when painting the persisted fill contour would cover an inner cutout the
+ * flood never visited. Deterministic non-AA scanline raster of the contour vs the
+ * flood mask — not sparse lattice sampling or area heuristics.
  */
 function floodEnclosesUnsupportedCutout(
   visited: Uint8Array,
   barrier: Uint8Array,
   contour: number[],
-  floodedCount: number,
-  minX: number,
-  minY: number,
-  maxX: number,
-  maxY: number,
 ): boolean {
-  const outerArea = Math.abs(shoelaceArea(contour))
-  // Raster flood count is slightly below polygon area for simple shapes; a large
-  // surplus means the outer contour encloses unfilled interior (a cutout).
-  if (outerArea > floodedCount * 1.2 + 80) return true
-
-  // Pixel proof: any empty non-barrier cell inside the outer contour that the
-  // flood never visited would be painted incorrectly by a single solid fill.
-  let holeSamples = 0
-  const step = Math.max(1, Math.floor(Math.min(maxX - minX, maxY - minY) / 24))
-  for (let y = minY + 1; y < maxY; y += step) {
-    for (let x = minX + 1; x < maxX; x += step) {
-      const i = y * DESIGN_WIDTH + x
-      if (visited[i] || barrier[i]) continue
-      if (!pointInContour(x + 0.5, y + 0.5, contour)) continue
-      holeSamples += 1
-      if (holeSamples >= 3) return true
+  const coverage = rasterizeContourCoverage(contour)
+  if (!coverage) return false
+  const { mask, minX, minY, maxX, maxY } = coverage
+  let holePixels = 0
+  for (let y = minY; y <= maxY; y += 1) {
+    const row = y * DESIGN_WIDTH
+    for (let x = minX; x <= maxX; x += 1) {
+      const i = row + x
+      if (!mask[i]) continue
+      if (visited[i]) continue
+      if (barrier[i]) continue
+      holePixels += 1
+      if (holePixels >= MIN_UNSUPPORTED_CUTOUT_PIXELS) return true
     }
   }
   return false
 }
 
-function shoelaceArea(contour: number[]): number {
+/**
+ * Integer scanline fill of a closed contour (pixel centres). Matches even-odd
+ * geometry without canvas antialiasing so small cutouts cannot hide between samples.
+ */
+function rasterizeContourCoverage(
+  contour: number[],
+): { mask: Uint8Array; minX: number; minY: number; maxX: number; maxY: number } | null {
   const n = Math.floor(contour.length / 2)
-  if (n < 3) return 0
-  let sum = 0
+  if (n < 3) return null
+  let minX = DESIGN_WIDTH - 1
+  let minY = DESIGN_HEIGHT - 1
+  let maxX = 0
+  let maxY = 0
   for (let i = 0; i < n; i += 1) {
-    const j = (i + 1) % n
-    sum += contour[i * 2]! * contour[j * 2 + 1]!
-    sum -= contour[j * 2]! * contour[i * 2 + 1]!
+    const x = contour[i * 2]!
+    const y = contour[i * 2 + 1]!
+    if (x < minX) minX = Math.floor(x)
+    if (y < minY) minY = Math.floor(y)
+    if (x > maxX) maxX = Math.ceil(x)
+    if (y > maxY) maxY = Math.ceil(y)
   }
-  return sum / 2
-}
+  minX = Math.max(0, minX - 1)
+  minY = Math.max(0, minY - 1)
+  maxX = Math.min(DESIGN_WIDTH - 1, maxX + 1)
+  maxY = Math.min(DESIGN_HEIGHT - 1, maxY + 1)
 
-function pointInContour(x: number, y: number, contour: number[]): boolean {
-  const n = Math.floor(contour.length / 2)
-  let inside = false
-  for (let i = 0, j = n - 1; i < n; j = i, i += 1) {
-    const xi = contour[i * 2]!
-    const yi = contour[i * 2 + 1]!
-    const xj = contour[j * 2]!
-    const yj = contour[j * 2 + 1]!
-    const intersect =
-      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + Number.EPSILON) + xi
-    if (intersect) inside = !inside
+  const mask = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  for (let y = minY; y <= maxY; y += 1) {
+    const ys = y + 0.5
+    const crossings: number[] = []
+    for (let i = 0, j = n - 1; i < n; j = i, i += 1) {
+      const yi = contour[i * 2 + 1]!
+      const yj = contour[j * 2 + 1]!
+      if (yi > ys === yj > ys) continue
+      const xi = contour[i * 2]!
+      const xj = contour[j * 2]!
+      const t = (ys - yi) / (yj - yi)
+      crossings.push(xi + t * (xj - xi))
+    }
+    if (crossings.length < 2) continue
+    crossings.sort((a, b) => a - b)
+    for (let k = 0; k + 1 < crossings.length; k += 2) {
+      const xStart = Math.max(minX, Math.ceil(crossings[k]! - 1e-9))
+      const xEnd = Math.min(maxX, Math.floor(crossings[k + 1]! - 1e-9))
+      const row = y * DESIGN_WIDTH
+      for (let x = xStart; x <= xEnd; x += 1) {
+        mask[row + x] = 1
+      }
+    }
   }
-  return inside
+  return { mask, minX, minY, maxX, maxY }
 }
 
 /** Moore-neighbour boundary walk → flat [x,y,...] contour. */

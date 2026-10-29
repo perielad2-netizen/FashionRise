@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-29 (**Issue #127 / PR #129 fill integrity closure** — tip `9188f09ec9cb8442d4bbc0a87930a9b32158bbb7` · code `399ac0bb0fb8b9364c94c6a5a791005e86e7800f` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · erase-aware dilate + cutout reject + gap-mouth fix · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM re-review**.)
+**Last updated:** 2026-10-29 (**Issue #127 / PR #129 small-cutout safety closure** — tip `TIP_SHA_PENDING` · code `CODE_SHA_PENDING` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · deterministic contour∖flood cutout guard · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM acceptance**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -30,23 +30,25 @@
 
 
 
-## Issue #127 / PR #129 — fill integrity closure — STOP for Technical PM re-review (2026-10-29)
+## Issue #127 / PR #129 — small-cutout safety closure — STOP for Technical PM acceptance (2026-10-29)
 
-Technical PM **CHANGES REQUIRED** on tip `327d2870` / code `1971ee7e`. This tip closes the remaining P0/P1 integrity blockers without a multi-contour schema redesign.
+Technical PM **PARTIAL PASS** on tip `1e83c897` / code `399ac0bb` — one remaining P0: sparse lattice hole detection could miss 4–8px cutouts. This tip replaces sampling with a deterministic non-AA contour∖flood comparison. All prior PR #129 safety fixes retained (erase-aware dilate, large nested cutout reject, gap-mouth first-candidate).
 
 | Item | Detail |
 |---|---|
-| Tip | `9188f09ec9cb8442d4bbc0a87930a9b32158bbb7` (code `399ac0bb0fb8b9364c94c6a5a791005e86e7800f`) · PR **#129** |
-| Branch | `cursor/web-sketch-fill-reliability-77c6` |
+| Tip | `TIP_SHA_PENDING` (code `CODE_SHA_PENDING`) · PR **#129** |
+| Prior accepted code | `399ac0bb0fb8b9364c94c6a5a791005e86e7800f` (erase-aware dilate + nested cutout + gap mouth) |
+| Branch | `cursor/web-sketch-fill-reliability-77c6` (descendant of FE prod `bfbdd03f`) |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
-| P0 erased openings | Final `dilateMask` takes `eraseCoverage` and **never grows into erased pixels** unless later pencil ink already restored them (chronology). Narrow ~3px erase stays open under default Fill and Close small gaps; later redraw reconnects. |
-| P0 nested cutouts | Single-contour `FillOp` cannot represent holes. Flood that would enclose an unfilled cutout returns `unsupported_cutout` with an actionable message. Rendered-pixel proof: outer-only polygon paints the hole; rejected path never persists; hole-only fill still works and round-trips parse/export without spilling into the ring. |
-| P1 gap diagnostic | `locateGapHint` returns the **first** mouth from the edge escape (Chebyshev r=2); wide/ambiguous openings that never graze ink → **suppress** marker (neutral copy). |
-| Preserved | Thin multi-stroke joining, bounded Gaps, eraser handling, gradient/fabric fills, undo, mobile touch, prior Path2D/facing/sealTips work |
-| Tests (fill) | `floodFill.joints` + `floodFill.raster` + barrier + core **26 passed**; broader fill/undo/gradient/persistence **119 passed** |
-| Full suite | **633 passed / 6 failed** — same 6 unrelated failures as prior tip / deployed FE baseline (below) |
+| P0 small cutouts | `floodEnclosesUnsupportedCutout` now scanline-rasterizes the **persisted simplified** contour (no canvas AA) and rejects when ≥4 painted∖flooded non-barrier pixels would cover an unfilled interior. No sparse lattice / area heuristic for correctness. |
+| Regressions (real Path2D) | 8px cutout offset between old sample points → `unsupported_cutout` / no FillOp; narrow hollow not painted over; complex hole-free irregular outline still fills; hole persist/export retained; erase reopen + pencil reconnect retained |
+| Preserved | Erase-aware final dilate · large nested cutout reject · gap-mouth first candidate · thin multi-stroke joins · bounded Gaps · undo / gradient / fabric |
+| Tests (fill) | `floodFill.joints` + `floodFill.raster` + barrier + core **29 passed**; broader fill-related **46 passed** |
+| Full suite | **636 passed / 6 failed** — same 6 unrelated baseline failures as prior tip / deployed FE |
 | Lint / TS / build | oxlint clean on touched files; `tsc -b` **PASS**; `VITE_API_BASE_URL=/api/v1` production build **PASS** (`assert-prod-api-base` ok) |
-| Exact next action | **STOP** for Technical PM re-review of PR #129. **Do not deploy.** No paid AI, no migration, no customer recordings in git |
+| Safety | **No deploy · no paid AI · no private artwork · no schema migration · #125 / #130 independent** |
+| Exact next action | **STOP** for Technical PM final acceptance of PR #129. **Do not deploy.** |
+
 
 ### Prior safety amendment (still in tip — PM accepted foundation)
 

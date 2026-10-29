@@ -346,6 +346,141 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
     }
   })
 
+  it('detects a small 8px cutout offset between former sparse sample points', () => {
+    // Outer panel ~220×280 → old lattice step was floor(min/24)=10. Place an 8×8
+    // continuous cutout so its interior sits between those sample positions and
+    // still survives default dilate (6px seals shut; 8px keeps a few empty cells).
+    const outer = multiStrokeRect(0.75, 2.25)
+    const hx0 = 307
+    const hy0 = 333
+    const hx1 = 315
+    const hy1 = 341
+    const loop = [
+      ...strideLine(hx0, hy0, hx1, hy0, 10),
+      ...strideLine(hx1, hy0, hx1, hy1, 10),
+      ...strideLine(hx1, hy1, hx0, hy1, 10),
+      ...strideLine(hx0, hy1, hx0, hy0, 10),
+    ]
+    const strokes = [...outer, drawStroke(loop, 1.25)]
+    const ring = floodFillRegion({
+      strokes,
+      x: 340,
+      y: 380,
+      style: solidStyle('#B91C1C'),
+    })
+    expect(ring.ok).toBe(false)
+    if (!ring.ok) {
+      expect(ring.reason).toBe('unsupported_cutout')
+      expect(ring.message.toLowerCase()).toMatch(/cutout|hole|inner/)
+    }
+    // Rejected path must not yield a persistable FillOp.
+    expect(Object.prototype.hasOwnProperty.call(ring, 'fill')).toBe(false)
+
+    // A slightly larger sibling cutout remains fillable on its own (accepted path).
+    const bigHx0 = 360
+    const bigHy0 = 360
+    const bigHx1 = 372
+    const bigHy1 = 372
+    const bigLoop = [
+      ...strideLine(bigHx0, bigHy0, bigHx1, bigHy0, 10),
+      ...strideLine(bigHx1, bigHy0, bigHx1, bigHy1, 10),
+      ...strideLine(bigHx1, bigHy1, bigHx0, bigHy1, 10),
+      ...strideLine(bigHx0, bigHy1, bigHx0, bigHy0, 10),
+    ]
+    const withBig = [...outer, drawStroke(bigLoop, 1.25)]
+    const hole = floodFillRegion({
+      strokes: withBig,
+      x: 366,
+      y: 366,
+      style: solidStyle('#1D4ED8'),
+    })
+    expect(hole.ok).toBe(true)
+    if (hole.ok) {
+      expect(checkPersistableFill(hole.fill).ok).toBe(true)
+      const roundTrip = parseFillOp(JSON.parse(JSON.stringify(hole.fill)))
+      expect(roundTrip).not.toBeNull()
+      const exportCanvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
+      const exportCtx = exportCanvas.getContext('2d')!
+      paintFillOps(exportCtx, [roundTrip!])
+      const exported = exportCtx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+      const holePx = exported.data[(366 * DESIGN_WIDTH + 366) * 4 + 3]!
+      const panelPx = exported.data[(380 * DESIGN_WIDTH + 280) * 4 + 3]!
+      expect(holePx).toBeGreaterThan(10)
+      expect(panelPx).toBe(0)
+    }
+  })
+
+  it('does not paint over a narrow enclosed hollow detail', () => {
+    // Large outer + thin continuous hollow (~8×28) that survives default dilate.
+    const outer = multiStrokeRect(0.75, 2.25)
+    const hx0 = 346
+    const hy0 = 358
+    const hx1 = 354
+    const hy1 = 386
+    const hollowLoop = [
+      ...strideLine(hx0, hy0, hx1, hy0, 8),
+      ...strideLine(hx1, hy0, hx1, hy1, 12),
+      ...strideLine(hx1, hy1, hx0, hy1, 8),
+      ...strideLine(hx0, hy1, hx0, hy0, 12),
+    ]
+    const strokes = [...outer, drawStroke(hollowLoop, 1.25)]
+    const panel = floodFillRegion({
+      strokes,
+      x: 280,
+      y: 400,
+      style: solidStyle('#B91C1C'),
+    })
+    expect(panel.ok).toBe(false)
+    if (!panel.ok) expect(panel.reason).toBe('unsupported_cutout')
+    expect(Object.prototype.hasOwnProperty.call(panel, 'fill')).toBe(false)
+
+    // Prove a hypothetical outer-only fill would obliterate the hollow.
+    const bogus: FillOp = {
+      id: 'bogus-hollow',
+      contour: [230, 250, 450, 250, 450, 510, 230, 510],
+      style: solidStyle('#B91C1C'),
+      seedX: 280,
+      seedY: 400,
+    }
+    const canvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
+    const ctx = canvas.getContext('2d')!
+    paintFillOps(ctx, [bogus])
+    const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+    const hollowIdx = (Math.round((hy0 + hy1) / 2) * DESIGN_WIDTH + Math.round((hx0 + hx1) / 2)) * 4
+    expect(img.data[hollowIdx + 3]!).toBeGreaterThan(10)
+  })
+
+  it('still fills a complex hole-free irregular outline', () => {
+    // Concave / irregular closed silhouette with no inner cutout — must succeed.
+    const pts = [
+      260, 300, 320, 270, 380, 295, 430, 260, 450, 340, 420, 420, 380, 480, 320, 500, 270, 460,
+      240, 400, 250, 340,
+    ]
+    const outline: number[] = []
+    for (let i = 0; i < pts.length; i += 2) {
+      const j = (i + 2) % pts.length
+      outline.push(...strideLine(pts[i]!, pts[i + 1]!, pts[j]!, pts[j + 1]!, 10))
+    }
+    // One continuous stroke so joins cannot invent a hole.
+    const strokes = [drawStroke(outline, 2.2)]
+    const result = floodFillRegion({
+      strokes,
+      x: 340,
+      y: 380,
+      style: solidStyle('#0F766E'),
+      gapClose: DEFAULT_GAP_CLOSE_PX,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(checkPersistableFill(result.fill).ok).toBe(true)
+      const exportCanvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
+      const exportCtx = exportCanvas.getContext('2d')!
+      paintFillOps(exportCtx, [result.fill])
+      const exported = exportCtx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+      expect(exported.data[(380 * DESIGN_WIDTH + 340) * 4 + 3]!).toBeGreaterThan(10)
+    }
+  })
+
   it('marks the gap mouth nearest the escape, not a later corridor cell', () => {
     // Synthetic barrier: three-sided box with a *narrow* top gap. Escape from a
     // deep seed runs past many wall-adjacent corridor cells; the marker must be
