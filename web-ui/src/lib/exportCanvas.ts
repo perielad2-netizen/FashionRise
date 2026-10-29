@@ -132,6 +132,26 @@ export type ArtworkLayerOptions = {
    */
   originX?: number
   originY?: number
+  /** Letterbox offset in output pixels (fit-contain padding). */
+  offsetX?: number
+  offsetY?: number
+}
+
+function applyDesignTransform(
+  ctx: CanvasRenderingContext2D,
+  options: {
+    scaleX: number
+    scaleY: number
+    originX: number
+    originY: number
+    offsetX: number
+    offsetY: number
+  },
+): void {
+  const { scaleX: sx, scaleY: sy, originX: ox, originY: oy, offsetX, offsetY } = options
+  if (offsetX !== 0 || offsetY !== 0) ctx.translate(offsetX, offsetY)
+  if (sx !== 1 || sy !== 1) ctx.scale(sx, sy)
+  if (ox !== 0 || oy !== 0) ctx.translate(-ox, -oy)
 }
 
 /**
@@ -145,15 +165,17 @@ export function compositeFillAndInkLayers(target: Canvas2DLike, options: Artwork
   const sy = options.scaleY ?? 1
   const ox = options.originX ?? 0
   const oy = options.originY ?? 0
+  const offsetX = options.offsetX ?? 0
+  const offsetY = options.offsetY ?? 0
+  const needsTransform = sx !== 1 || sy !== 1 || ox !== 0 || oy !== 0 || offsetX !== 0 || offsetY !== 0
 
   const fillLayer = document.createElement('canvas')
   fillLayer.width = width
   fillLayer.height = height
   const fillCtx = fillLayer.getContext('2d')
   if (!fillCtx) throw new Error('Canvas 2D unavailable')
-  if (sx !== 1 || sy !== 1 || ox !== 0 || oy !== 0) {
-    fillCtx.scale(sx, sy)
-    fillCtx.translate(-ox, -oy)
+  if (needsTransform) {
+    applyDesignTransform(fillCtx, { scaleX: sx, scaleY: sy, originX: ox, originY: oy, offsetX, offsetY })
   }
   paintFillsWithErasers(fillCtx, fills, strokes)
   target.drawImage(fillLayer, 0, 0, width, height)
@@ -163,12 +185,34 @@ export function compositeFillAndInkLayers(target: Canvas2DLike, options: Artwork
   inkLayer.height = height
   const inkCtx = inkLayer.getContext('2d')
   if (!inkCtx) throw new Error('Canvas 2D unavailable')
-  if (sx !== 1 || sy !== 1 || ox !== 0 || oy !== 0) {
-    inkCtx.scale(sx, sy)
-    inkCtx.translate(-ox, -oy)
+  if (needsTransform) {
+    applyDesignTransform(inkCtx, { scaleX: sx, scaleY: sy, originX: ox, originY: oy, offsetX, offsetY })
   }
   paintInkStrokes(inkCtx, strokes)
   target.drawImage(inkLayer, 0, 0, width, height)
+}
+
+/**
+ * Uniform fit-contain of a design frame into an output size (letterbox / pillarbox).
+ * When aspects match (legacy 768×1024 → 240×320), scale is identical to stretch and
+ * offsets are zero — legacy thumbnails stay pixel-compatible.
+ */
+export function fitContainLayout(
+  designW: number,
+  designH: number,
+  outW: number,
+  outH: number,
+): { scale: number; offsetX: number; offsetY: number; contentW: number; contentH: number } {
+  const scale = Math.min(outW / Math.max(1, designW), outH / Math.max(1, designH))
+  const contentW = designW * scale
+  const contentH = designH * scale
+  return {
+    scale,
+    offsetX: (outW - contentW) / 2,
+    offsetY: (outH - contentH) / 2,
+    contentW,
+    contentH,
+  }
 }
 
 export type RenderedSketch = {
@@ -223,9 +267,10 @@ export function withMinimumSize(strokes: Stroke[], minDesignSize: number): Strok
  *   FINAL        = base, then ink composited on top
  *
  * Strokes stay in design space. Frame choice (`auto` / `legacy` / `paper`) is
- * independent of output `width`/`height` — thumbnails may scale a paper frame
- * into 240×320 without cropping margin ink. Croquis always fit-contains into the
- * legacy 768×1024 plane (never recentered onto the full paper).
+ * independent of output `width`/`height`. When an explicit output size is set,
+ * the design frame is mapped with **uniform fit-contain** (letterbox) so croquis
+ * and garment proportions are preserved — critical when paper 1280×1536 is shown
+ * in a 240×320 thumbnail. Legacy 768×1024 → 240×320 keeps identical scale/offsets.
  *
  * No network calls other than loading the reference image URL already shown in Studio.
  */
@@ -239,8 +284,11 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
   const designH = frame.height
   const width = options.width ?? designW
   const height = options.height ?? designH
-  const sx = width / designW
-  const sy = height / designH
+  const layout = fitContainLayout(designW, designH, width, height)
+  const sx = layout.scale
+  const sy = layout.scale
+  const offsetX = layout.offsetX
+  const offsetY = layout.offsetY
 
   const base = document.createElement('canvas')
   base.width = width
@@ -257,8 +305,14 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
       const img = await (options.loadReference ?? loadImage)(options.referenceUrl)
       const fit = fitContain(img.width, img.height, DESIGN_WIDTH, DESIGN_HEIGHT)
       baseCtx.save()
-      baseCtx.scale(sx, sy)
-      baseCtx.translate(-originX, -originY)
+      applyDesignTransform(baseCtx, {
+        scaleX: sx,
+        scaleY: sy,
+        originX,
+        originY,
+        offsetX,
+        offsetY,
+      })
       baseCtx.globalAlpha = options.referenceOpacity ?? 1
       baseCtx.drawImage(img, fit.x, fit.y, fit.w, fit.h)
       baseCtx.restore()
@@ -290,6 +344,8 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
     scaleY: sy,
     originX,
     originY,
+    offsetX,
+    offsetY,
   })
   return { canvas: base, referenceIncluded }
 }

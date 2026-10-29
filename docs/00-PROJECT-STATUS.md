@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #127 / PR #134 export closure** — Front+Back sheet + preview frame fix atop extended paper · prod unchanged FE `ebcb1cc7` / BE `6cc317ec` · **0 paid AI** · **STOP for final Technical PM re-review**.)
+**Last updated:** 2026-10-29 (**Issue #127 / PR #134 export proof + preview proportions** — decoded Front+Back PNG RGB proof + fit-contain thumbnails · prod unchanged FE `ebcb1cc7` / BE `6cc317ec` · **0 paid AI** · **STOP for final Technical PM re-review**.)
 
 **Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity) and PR #129 (6px cutout fill safety + decimal lineage).
 
@@ -38,21 +38,26 @@ Fill succeeds inside the legacy `768×1024` plane and fails when a closed oversi
 | Fit Page framing | Still frames croquis (does not shrink model to paper); pan/zoom reaches margins |
 | PNG export (single) | Legacy-only → 768×1024 pixel-identical; oversized → full paper frame |
 | Front+Back sheet | Shared `resolveSheetExportFrame`: either side paper → both panels paper (aligned croquis); both legacy → historical 768×1024 layout. **No forced legacy width/height crop.** |
-| Preview thumbnails | `width`/`height` are output-only; `frame: 'auto'` scales full paper into 240×320 for oversized designs |
+| Preview thumbnails | `width`/`height` are output-only; `frame: 'auto'` maps design via **uniform fit-contain** (`fitContainLayout`) into 240×320 — letterbox for paper 1280×1536; legacy 768×1024 stays zero-offset / pixel-compatible |
 | Magic capture | **Fail closed** if artwork exceeds legacy frame (no silent crop; 0 paid AI) |
 
-### P0 closure (PM PARTIAL PASS follow-up)
+### P0/P1 closure (PM PARTIAL PASS → export proof + preview proportions)
 
-`renderSketchCanvas` now separates **frame choice** from **output size**. `exportFrontBackSheetPng` uses the shared sheet frame instead of forcing `DESIGN_WIDTH/HEIGHT`. Pixel Path2D regressions cover Front↔Back oversized/legacy mixes, both-oversized, both-legacy dimensions, croquis placement on legacy vs paper, and preview margin survival.
+Accepted crop path preserved (`resolveSheetExportFrame` + frame vs output size). Follow-up proof:
+
+| Item | Detail |
+|---|---|
+| **P0 sheet PNG proof** | Tests decode the **actual** `exportFrontBackSheetPng()` blob via `@napi-rs/canvas`, sample **RGB** (not opaque-cream alpha) on real outline edge coords across all four margins; cover Front oversized/Back legacy, reverse, both oversized, both legacy; assert sheet dims, panel positions, croquis alignment; negative control (missing Front stroke → cream / no ink) |
+| **P1 preview proportions** | `fitContainLayout` + letterbox offsets in `renderSketchCanvas`; extended thumbs keep croquis aspect; legacy 240×320 stretch-equivalent when aspects match |
 
 ### Verification
 
 | Check | Result |
 |---|---|
-| Focused export/paper/fill | `exportFrontBack.extendedPaper` + `paperBounds.extendedFill` + flood/export suites green |
-| FE Vitest | **658 passed / 6 failed** (same baseline: 5× StudioPage beta-notices + `draftPersistence` clearBackIntent) |
+| Focused export/paper/preview | `exportFrontBack.extendedPaper` (12) + `paperBounds.extendedFill` + related — **green** |
+| FE Vitest | **660 passed / 6 failed** (same baseline: 5× StudioPage beta-notices + `draftPersistence` clearBackIntent) |
 | `tsc -b` | **PASS** |
-| lint (oxlint) | warnings only |
+| lint (oxlint) | warnings only (pre-existing + cleaned unused test local) |
 | Prod build | `VITE_API_BASE_URL=/api/v1` · SW Access-safe · assert-prod-api-base **PASS** |
 
 ### Risks / open for PM
@@ -61,6 +66,7 @@ Fill succeeds inside the legacy `768×1024` plane and fails when a closed oversi
 - Magic remains legacy-frame-only until a separately gated capture path exists.
 - Soft fill pixel cap is 58% of paper; whole-page leaks still hit the outer edge first.
 - #127 stays open until owner mobile QA of oversized fill + save/reopen on a deployed build.
+- **STOP for final Technical PM review** — no merge / deploy / BE / paid AI.
 
 
 ## Stage C — canonical baseline + GitHub cleanup (2026-10-29) — STOP for Technical PM
