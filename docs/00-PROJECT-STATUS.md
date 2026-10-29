@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-29 (**Issue #127 / PR #129 fill integrity closure** — tip  · code  · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · erase-aware dilate + cutout reject + gap-mouth fix · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM re-review**.)
+**Last updated:** 2026-10-29 (**Issue #127 / PR #129 fill integrity closure** — tip `b897a0ab38eec259e13040230f73f2cf26362c02` · code `399ac0bb0fb8b9364c94c6a5a791005e86e7800f` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · erase-aware dilate + cutout reject + gap-mouth fix · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM re-review**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -36,7 +36,7 @@ Technical PM **CHANGES REQUIRED** on tip `327d2870` / code `1971ee7e`. This tip 
 
 | Item | Detail |
 |---|---|
-| Tip |  (code ) · PR **#129** |
+| Tip | `b897a0ab38eec259e13040230f73f2cf26362c02` (code `399ac0bb0fb8b9364c94c6a5a791005e86e7800f`) · PR **#129** |
 | Branch | `cursor/web-sketch-fill-reliability-77c6` |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
 | P0 erased openings | Final `dilateMask` takes `eraseCoverage` and **never grows into erased pixels** unless later pencil ink already restored them (chronology). Narrow ~3px erase stays open under default Fill and Close small gaps; later redraw reconnects. |
@@ -879,6 +879,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-29 | **PR #129 fill integrity closure (CHANGES REQUIRED follow-up):** erase-aware final dilate (narrow openings survive Fill+Gaps; later pencil reconnects); reject unsupported single-contour cutouts with pixel+persist proof; gap hint = first mouth from escape / suppress ambiguous; fill tests **26**; full suite **633/6** baseline; prod build `/api/v1` PASS; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
 | 2026-10-26 | **Create Real Design mobile UX + provenance DEPLOYED** FE `5f519734` (PR [#98](https://github.com/perielad2-netizen/FashionRise/pull/98)) + BE `08b66ca2` (PR [#97](https://github.com/perielad2-netizen/FashionRise/pull/97)); Alembic `010` unchanged; Android Edit Measurements sheet; Stage 4 Basic vs Professional clarity; PDF Basic/No-AI labeling; smoke PASS (heuristic provenance, **0 paid**); backup `techpack-mobile-ux-deploy-20261026T201157Z`. Owner first paid AI test still pending. |
 | 2026-10-26 | **Create Real Design V3 DEPLOYED** FE `75a8e8ca` (PR [#96](https://github.com/perielad2-netizen/FashionRise/pull/96)) + BE `5fd4b843` (PR [#95](https://github.com/perielad2-netizen/FashionRise/pull/95)); Alembic `010` `techpack_ai_artifacts`; Nginx artifacts image route; owner-allowlist AI gates ON (ceiling `$15`, max `$8`/run, `$20`/day); non-AI smoke PASS (heuristic `$0`, professional confirm only); mocked CI + FR-7182 fixture PDF; Dual Magic ON; **0 paid generate by Cursor**; backup `techpack-v3-deploy-20261026T190439Z`. Owner to run first live AI Professional test. No monetization. |
 | 2026-10-26 | **Create Real Design V2 DEPLOYED** FE `e2416ed0` (PR [#94](https://github.com/perielad2-netizen/FashionRise/pull/94)) + BE `f2433513` (PR [#93](https://github.com/perielad2-netizen/FashionRise/pull/93)); Alembic `009` `techpack_ai_runs`; Nginx AI allowlist; multi-piece PDF + flats/schematics; smoke PASS (heuristic `$0`, paid AI 403); Dual Magic ON; **0 paid AI**; backup `techpack-v2-deploy-20261026T181418Z`. No monetization. |
