@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**OWNER-AUTHORIZED PRODUCTION RELEASE** — Issue [#131](https://github.com/perielad2-netizen/FashionRise/issues/131) · BE+worker **`6cc317ec`** (PR #130) · FE **`ebcb1cc7`** (PR #129) · Alembic **`011`** · backup `techpack-130-129-deploy-20261029T131341Z` · **0 paid AI** · issues #127/#128 remain open pending owner mobile acceptance · **86-PR cleanup NOT started**.)
+**Last updated:** 2026-10-29 (**Stage C canonical baseline** — branch `cursor/web-canonical-baseline-77c6` · prod FE `ebcb1cc7` · BE `6cc317ec` · Alembic `011` · closed 12 superseded BE PRs · **65 open PRs remain** · **0 paid AI** · **STOP for Technical PM**.)
 
 **Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity) and PR #129 (6px cutout fill safety + decimal lineage).
 
@@ -17,6 +17,80 @@
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+
+## Stage C — canonical baseline + GitHub cleanup (2026-10-29) — STOP for Technical PM
+
+Non-deploying reconciliation of **actually deployed** FE + BE into one reviewable tip. **No production mutation. No `main` force-update. No paid AI.**
+
+### Production baseline (immutable)
+
+| Layer | Exact SHA / pin |
+|---|---|
+| Frontend | `ebcb1cc7b6102e343ee06e08435faab64f4b4995` · release `ebcb1cc7` |
+| Backend + AI worker | `6cc317ecd55423403b6479e8bb185c3e4cde2bf1` |
+| Alembic | `011` |
+
+### Canonical integration candidate
+
+| Item | Detail |
+|---|---|
+| Branch | `cursor/web-canonical-baseline-77c6` |
+| Tip | *(see PR after push)* |
+| Method | Start at FE tip → replace `backend/` with BE tip tree (delete+checkout for exactness) → retain FE-only docs + #132 deploy ledger |
+| Tree equivalence | `web-ui/` **byte-match** FE tip (376 files) · `backend/` **byte-match** BE tip (189 files) |
+| Targets | Reviewable PR → `main` (**do not merge** until Technical PM approval) |
+
+### Verification (this tip)
+
+| Suite | Result |
+|---|---|
+| FE focused (fill + decimal) | **38 passed** |
+| FE full Vitest | **637 passed / 6 failed** — same baseline: 5× StudioPage beta-notices viewports + `draftPersistence` clearBackIntent |
+| FE lint | oxlint warnings only (pre-existing setState-in-effect / export patterns) |
+| FE `tsc -b` | **PASS** |
+| FE prod build | `VITE_API_BASE_URL=/api/v1` + SHA `ebcb1cc7…` · SW Access-safe · assert-prod-api-base **PASS** |
+| BE techpack PG integration | **82 passed / 2 failed** — known `async_worker` `KeyError: status`; `test_heuristic_generate_two_piece_and_ai_status` failed in suite, **passed in isolation** (order/env flake, not new reconciliation defect) |
+| Ruff / mypy (`techpack_ai.py`) | **9** / **51** (deployed BE parity) |
+
+### PR inventory (Stage C batch 2)
+
+| Metric | Count |
+|---|---|
+| Open at Stage C start (after PM batch 1) | **77** |
+| Closed this batch (strict BE ancestors, no web-ui touch) | **12** — #57 #65 #70 #91 #93 #95 #97 #100 #103 #118 #119 #121 |
+| Open remaining | **65** |
+| Protected / keep | #125 HOLD · #129 · #130 · #132 · canonical PR |
+| Audit artifact | `docs/deploy/STAGE-C-PR-AUDIT-2026-10-29.md` (+ `.json`) |
+
+Closed only with pre-close provenance comments. Branches **not** deleted. Divergent drafts/experiments and anything with unique commits vs deployed tips **kept**.
+
+### Issue reconciliation (no blind closes)
+
+| Issue | Disposition | Evidence |
+|---|---|---|
+| #127 Fill | **partially-delivered** — keep open | FE `ebcb1cc7` deployed; **owner mobile acceptance pending** |
+| #128 POM integrity | **partially-delivered** — keep open | BE `6cc317ec` deployed; **owner measurement acceptance pending** |
+| #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
+| #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
+| #18 invite registration | **implemented / activation tracked** — keep open | Invite register UI + API; CF Access + public register **still gated** |
+| #42 Front/Back croquis | **partially-delivered** — keep open | Dual Magic / rear croquis in prod lineage; unmet polish may remain |
+| #54 Magic image-edit | **partially-delivered / roadmap** — keep open | Sunburst path deployed; model-identity/quality follow-ups remain |
+| #83 Create Real Design epic | **partially-delivered** — keep open | Core techpack shipped in prod BE; manufacturing-grade editable roadmap remains |
+| #131 release ledger | **in progress** — keep open | Stages A–B deployed; Stage C candidate ready for PM |
+
+### Remaining real defects / product priorities
+
+1. Owner mobile Fill acceptance (#127) + measurement persistence acceptance (#128)
+2. Closure/gradient visual fidelity redesign (**PR #125 HOLD**)
+3. Canonical `main` adoption after PM approval of integration PR (no blind merge)
+4. Continue evidence-based PR closures from remaining 65 (no branch deletes)
+5. Magic model-identity / coverage quality follow-ups (#54)
+
+### Recommended next engineering milestone
+
+**Owner mobile acceptance of Fill (#127) + POM persistence (#128) on production `ebcb1cc7` / `6cc317ec`, then Technical PM review/merge of the canonical baseline PR into `main` as the sole future integration base — without deploying from that merge until explicitly authorized.**
+
 
 ## Owner-authorized production release — Issue #131 (2026-10-29) — DEPLOYED
 
