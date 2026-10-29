@@ -1047,3 +1047,269 @@ def test_color_treatment_drift_independent_sqlalchemy_session(engine, monkeypatc
         app.dependency_overrides.pop(get_db, None)
         worker.close()
         _cleanup_user_rows(SessionLocal, user_id)
+
+
+def test_happy_path_artifacts_use_draft_magic_source_ids(client, db_session, monkeypatch):
+    """Negative: unchanged Magic source — artifact provenance matches draft look/front."""
+    tokens = register_with_invite(client, db_session, "src130happy@example.com", "src130happy")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_ai(monkeypatch, me["email"])
+    draft = _seed_shorts_draft(client, db_session, tokens, me)
+    original_look = uuid.UUID(draft["look_id"])
+    original_front = uuid.UUID(draft["front_job_id"])
+    assert original_look == original_front
+
+    ConcurrentEditProvider.provider_calls = 0
+    set_professional_provider_override(MockProfessionalProvider())
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": f"src-happy-{uuid.uuid4().hex}"},
+    )
+    assert gen.status_code == 202, gen.text
+    run_id = gen.json()["run_id"]
+    assert run_techpack_worker_tick(db_session, limit=2) >= 1
+
+    run_row = db_session.get(TechpackAIRun, uuid.UUID(run_id))
+    assert run_row is not None
+    assert run_row.status == "completed"
+    assert int(run_row.cost_usd_cents or 0) > 0
+    arts = list(
+        db_session.scalars(
+            select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run_row.id)
+        ).all()
+    )
+    assert arts
+    for art in arts:
+        assert art.source_job_id == original_front
+        assert art.look_id == original_look
+
+    live = db_session.get(TechpackDraft, uuid.UUID(draft["id"]))
+    assert live is not None
+    assert live.look_id == original_look
+    assert live.front_job_id == original_front
+
+
+def test_magic_source_change_mid_run_keeps_original_artifact_provenance(
+    engine, monkeypatch
+):
+    """Magic look/front replaced mid-provider — artifacts keep authorized source IDs."""
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    email = f"srcprov_{uuid.uuid4().hex[:8]}@example.com"
+    username = f"srcprov_{uuid.uuid4().hex[:8]}"
+    user_id: uuid.UUID | None = None
+
+    bootstrap = SessionLocal()
+    try:
+        inv = invitation_service.create_invitation(bootstrap, email=email, expires_in_hours=24)
+        token = inv.plaintext_token
+        bootstrap.commit()
+    finally:
+        bootstrap.close()
+
+    worker = SessionLocal()
+    try:
+        user = auth_service.register_user(
+            worker,
+            UserRegister(
+                email=email,
+                username=username,
+                password="StrongPass123!",
+                invitation_code=token,
+                display_name=username,
+            ),
+        )
+        worker.commit()
+        user_id = user.id
+
+        original_job = AIJob(
+            user_id=user_id,
+            design_id=None,
+            job_type="sketch_polish",
+            status="completed",
+            input_data={"studio_side": "front"},
+            result_data={
+                "summary": "authorized navy shorts",
+                "pipeline": "sketch_polish",
+                "image_url": _store_image(),
+            },
+            error_message=None,
+        )
+        worker.add(original_job)
+        worker.commit()
+        worker.refresh(original_job)
+        original_job_id = original_job.id
+
+        replacement_job = AIJob(
+            user_id=user_id,
+            design_id=None,
+            job_type="sketch_polish",
+            status="completed",
+            input_data={"studio_side": "front"},
+            result_data={
+                "summary": "replacement crimson shorts",
+                "pipeline": "sketch_polish",
+                "image_url": _store_image(),
+            },
+            error_message=None,
+        )
+        worker.add(replacement_job)
+        worker.commit()
+        worker.refresh(replacement_job)
+        replacement_job_id = replacement_job.id
+        assert replacement_job_id != original_job_id
+
+        def _override_get_db():
+            yield worker
+
+        app.dependency_overrides[get_db] = _override_get_db
+        _enable_ai(monkeypatch, email)
+        with TestClient(app) as client:
+            headers = {"Authorization": f"Bearer {create_access_token(str(user_id))}"}
+            login = client.post(
+                "/api/v1/auth/login",
+                json={"email": email, "password": "StrongPass123!"},
+            )
+            if login.status_code == 200:
+                headers = _auth(login.json())
+
+            created = client.post(
+                "/api/v1/techpacks",
+                headers=headers,
+                json={"look_id": str(original_job_id), "title": "Source provenance"},
+            )
+            assert created.status_code == 201, created.text
+            draft = created.json()
+            draft_id = uuid.UUID(draft["id"])
+            assert draft["look_id"] == str(original_job_id)
+            assert draft["front_job_id"] == str(original_job_id)
+
+            live = client.get(f"/api/v1/techpacks/{draft['id']}", headers=headers).json()
+            pieces = live["spec"]["outfit"]["pieces"]
+            target = pieces[0]
+            target["category"] = "shorts"
+            target["label"] = "Shorts"
+            finished = {}
+            values = {
+                "waist": 75.0,
+                "hip": 110.0,
+                "inseam": 18.0,
+                "outseam": 42.0,
+                "front_rise": 30.0,
+                "back_rise": 40.0,
+                "thigh": 58.0,
+                "leg_opening": 40.0,
+                "waistband": 4.0,
+            }
+            for key in FINISHED_POM["shorts"]:
+                finished[key] = _designer_cell(values[key], definition=key)
+            target["finished_measurements"] = finished
+            patched = client.patch(
+                f"/api/v1/techpacks/{draft['id']}",
+                headers=headers,
+                json={"spec": {"outfit": {"piece_count": len(pieces), "pieces": pieces}}},
+            )
+            assert patched.status_code == 200, patched.text
+            worker.commit()
+
+            def _swap_magic_source_other_session() -> None:
+                s = SessionLocal()
+                try:
+                    row = s.get(TechpackDraft, draft_id)
+                    assert row is not None
+                    row.look_id = replacement_job_id
+                    row.front_job_id = replacement_job_id
+                    row.revision = int(row.revision or 1) + 1
+                    row.updated_at = datetime.now(UTC)
+                    s.add(row)
+                    s.commit()
+                finally:
+                    s.close()
+
+            ConcurrentEditProvider.provider_calls = 0
+            set_professional_provider_override(
+                ConcurrentEditProvider(_swap_magic_source_other_session)
+            )
+            gen = client.post(
+                f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+                headers=headers,
+                json={"idempotency_key": f"src-prov-{uuid.uuid4().hex}"},
+            )
+            assert gen.status_code == 202, gen.text
+            run_id = gen.json()["run_id"]
+            worker.commit()
+            assert run_techpack_worker_tick(worker, limit=2) >= 1
+            worker.commit()
+            assert ConcurrentEditProvider.provider_calls == 1
+
+            verify = SessionLocal()
+            try:
+                run_row = verify.get(TechpackAIRun, uuid.UUID(run_id))
+                assert run_row is not None
+                assert run_row.status == "completed"
+                result = run_row.result if isinstance(run_row.result, dict) else {}
+                assert result.get("skipped_identity_drift") is True
+                assert result.get("skipped_stale_spec_write") is True
+                assert result.get("pdf_ready") is not True
+                assert int(run_row.cost_usd_cents or 0) > 0
+
+                arts = list(
+                    verify.scalars(
+                        select(TechpackAIArtifact).where(TechpackAIArtifact.run_id == run_row.id)
+                    ).all()
+                )
+                assert arts, "paid artwork must be retained with original source provenance"
+                storage = LocalStorageBackend()
+                for art in arts:
+                    assert art.source_job_id == original_job_id
+                    assert art.look_id == original_job_id
+                    assert art.source_job_id != replacement_job_id
+                    assert art.look_id != replacement_job_id
+                    assert art.byte_size and art.byte_size > 0
+                    path = storage._private_techpack_path(art.storage_key)
+                    assert path.is_file()
+                    assert path.stat().st_size == art.byte_size
+
+                row = verify.get(TechpackDraft, draft_id)
+                assert row is not None
+                assert row.look_id == replacement_job_id
+                assert row.front_job_id == replacement_job_id
+                live_spec = row.spec if isinstance(row.spec, dict) else {}
+                for piece in (live_spec.get("outfit") or {}).get("pieces") or []:
+                    if not isinstance(piece, dict):
+                        continue
+                    illust = (
+                        piece.get("illustrations")
+                        if isinstance(piece.get("illustrations"), dict)
+                        else {}
+                    )
+                    assert illust.get("mode") != "professional"
+                ai = live_spec.get("ai") if isinstance(live_spec.get("ai"), dict) else {}
+                assert str(ai.get("last_run_id") or "") != run_id
+                assert not ai.get("export_id")
+
+                # No current PDF incorrectly bound to this run.
+                exports = list(
+                    verify.scalars(
+                        select(TechpackExport).where(TechpackExport.draft_id == draft_id)
+                    ).all()
+                )
+                for exp in exports:
+                    assert str(getattr(exp, "run_id", None) or "") != run_id
+            finally:
+                verify.close()
+
+            # GET must keep the newer Magic source and leave artwork unbound.
+            reopened = client.get(f"/api/v1/techpacks/{draft['id']}", headers=headers).json()
+            assert reopened["look_id"] == str(replacement_job_id)
+            assert reopened["front_job_id"] == str(replacement_job_id)
+            for piece in reopened["spec"]["outfit"]["pieces"]:
+                illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+                assert illust.get("mode") != "professional"
+            ai2 = reopened["spec"].get("ai") if isinstance(reopened["spec"].get("ai"), dict) else {}
+            assert str(ai2.get("export_id") or "") == ""
+    finally:
+        set_professional_provider_override(None)
+        app.dependency_overrides.pop(get_db, None)
+        worker.close()
+        _cleanup_user_rows(SessionLocal, user_id)

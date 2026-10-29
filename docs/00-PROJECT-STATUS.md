@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #128 / PR #130 structural & visual identity closure** — tip `991244fa727bf01a6aed15bf7471dae776239d62` / implementation commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9` · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #129 remain independent** · **STOP for Technical PM re-review**.)
+**Last updated:** 2026-10-29 (**Issue #128 / PR #130 Magic source provenance closure** — tip pending pin / implementation pending · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #129 remain independent** · **STOP for Technical PM final acceptance**.)
 
-**Phase:** Protected family beta. Issue #128: designer finished POMs preserved through enrich **and** mid-run measurement edits; garment-identity drift and PDF-assembly CAS fail closed without paid retry. No restore of FR-3958 values without owner authorization.
+**Phase:** Protected family beta. Issue #128: designer finished POMs preserved through enrich **and** mid-run measurement edits; garment-identity drift and PDF-assembly CAS fail closed without paid retry; paid artifacts retain authorized Magic source provenance. No restore of FR-3958 values without owner authorization.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -18,25 +18,26 @@
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
-## Issue #128 / PR #130 — structural & visual identity closure — STOP for Technical PM re-review (2026-10-29)
+## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
-Technical PM **CHANGES REQUIRED** on tip `8950bd61` (prior integrity tip). This tip closes the two remaining P0s: artifact retention under piece-list/ID structural drift, and generation-relevant visual identity beyond `color_hint`. Accepted measurement CAS / PDF CAS / independent-session POM tests are preserved.
+Technical PM **PARTIAL PASS** on tip `983372f7` / implementation `4cb7d8f0` / blob `2b684a28` — structural + visual identity accepted; one narrow P0 remained: skip-path artifacts still attributed live `draft.front_job_id`/`look_id` when Magic source changed mid-run. This tip captures immutable generation-boundary Magic source IDs and uses them for paid-artifact provenance on **both** Professional completion paths (bind + identity-drift skip).
 
 | Item | Detail |
 |---|---|
-| Tip | `991244fa727bf01a6aed15bf7471dae776239d62` |
-| Implementation commit | `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` (git commit containing `techpack_ai.py` closure) |
-| Implementation blob | `2b684a28f257c3824a05405e3f75f54c0877edb9` (`git rev-parse HEAD:backend/app/services/techpack_ai.py`) |
-| Prior accepted | `d96acbad` overlay · `0e341c10` / `880fe820` identity+PDF CAS |
+| Tip | *(pin after push — GitHub HEAD)* |
+| Implementation commit | *(pin after push)* |
+| Implementation blob | *(pin after push — `techpack_ai.py`)* |
+| Prior accepted | `4cb7d8f0` / `2b684a28` structural+visual · `0e341c10` identity+PDF CAS · POM overlay |
 | Branch | `cursor/web-techpack-meas-preserve-77c6` (descendant of prod BE **`311e259a`**) |
 | PR | [#130](https://github.com/perielad2-netizen/FashionRise/pull/130) vs `cursor/web-techpack-be-prod-311e259a-77c6` @ `311e259a` |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
-| P0 structural artifacts | Skip-path `_persist_professional_result` now uses the **authorized generation snapshot** (not live outfit). Piece remove/replace/ID change mid-run retains private bytes + cost with original `piece_id` provenance; draft.spec untouched; no PDF bind / no paid retry. |
-| P0 visual identity | `_piece_identity_snapshot` includes `color_treatment` (mode/stops/direction/placement/angle), `visible_details` (non-provenance), fabric pattern, plus prior category/closure/construction/Magic source fields. Same `color_hint` + gradient→solid / detail change → skip bind. |
-| Tests | Focused integrity+concurrent **12/12**. Broader Professional/PDF/provenance/mfg/p0/v3/autofill/async: **114 passed**, **1** pre-existing `test_partial_cost_preserved_on_failure` (`KeyError: 'status'`) on baseline `311e259a`. |
-| Lint | Ruff `techpack_ai.py` **9** (tip baseline parity). mypy message set **51** (parity). |
-| Safety | **No deploy · no migration · no paid AI · #125 / #129 independent** |
-| Exact next action | **STOP** for Technical PM re-review of PR #130. **Do not deploy.** |
+| P0 Magic provenance | `capture_generation_boundary` stores `look_id`/`front_job_id`/`back_job_id`. `_persist_professional_result(..., generation_boundary=)` sets artifact `source_job_id`/`look_id` from that snapshot (front\|\|back semantics unchanged). Live draft source IDs never rewrite historical paid rows. |
+| Regressions (mocked) | Magic look/front swapped mid-run (independent session): private bytes retained; artifacts keep **original** source IDs; draft keeps **newer** source; artwork unbound; no PDF bind; cost retained; **exactly one** provider call. Happy path: provenance matches unchanged draft sources. |
+| Preserved | Finished POM · concurrent measurement CAS · PDF CAS · structural artifact retention · gradient/visible-detail identity · cost without paid retry |
+| Tests | Focused integrity+concurrent **18/18**. Broader Professional/PDF/p0/v3/async: **81 passed**, **1** baseline `test_partial_cost_preserved_on_failure` (`KeyError: 'status'`) on `311e259a`. |
+| Lint | Ruff `techpack_ai.py` **9** (baseline parity). mypy **51** (parity). |
+| Safety | **No deploy · no migration · no paid AI · no data restore · #125 / #129 independent** |
+| Exact next action | **STOP** for Technical PM final acceptance of PR #130. **Do not deploy.** |
 
 
 ### Prior enrich fix (still in tip — PM accepted)
@@ -1175,6 +1176,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; tip pending pin; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 structural & visual identity:** authorized-snapshot artifact retention on piece-list drift; `color_treatment`/`visible_details` identity fingerprint; tip `991244fa727bf01a6aed15bf7471dae776239d62` / commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9`; 12 focused / 114 broader pass / 1 baseline async_worker fail; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 data-integrity closure:** garment-identity fingerprint fail-closed skip; PDF-assembly revision/meas/identity/dirty CAS; independent SQLAlchemy session concurrency tests; tip `44afea60f87cec2da59a8710c583c2e84314a5ae` / code `0e341c10e28998c84235c307414f7e0bb4a1c641`; verification 111 pass / 1 pre-existing async_worker fail on baseline `311e259a`; Ruff 9 / mypy 51 parity; production FE `bfbdd03f-decimal` / BE `311e259a` / Alembic `011` **unchanged**; **0 paid AI**; **#125 / #129 independent**; **STOP for Technical PM re-review — do not deploy**. |
 | 2026-10-29 | **Issue #128 concurrent-write closure (PARTIAL PASS follow-up):** generation-boundary capture + post-provider `FOR UPDATE` re-read; live-spec enrich on mid-run measurement edits; skip draft.spec when pack ownership moved (PDF-only); retain artifacts/cost; never re-call paid AI; mocked DB persist/GET tests; enrich tip `6ac13dc3` retained; production FE `bfbdd03f-decimal` / BE `311e259a` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |

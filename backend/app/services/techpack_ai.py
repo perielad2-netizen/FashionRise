@@ -412,8 +412,22 @@ def garment_identity_fingerprint(
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _uuid_or_none(value: Any) -> uuid.UUID | None:
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return uuid.UUID(text)
+    except ValueError:
+        return None
+
+
 def capture_generation_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> dict[str, Any]:
-    """Snapshot revision / fingerprints / pack ownership at provider start."""
+    """Snapshot revision / fingerprints / Magic sources / pack ownership at provider start."""
     updated = draft.updated_at
     ai_raw = spec.get("ai")
     ai: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
@@ -426,6 +440,11 @@ def capture_generation_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> d
         for p in pieces_list
         if isinstance(p, dict) and str(p.get("id") or "").strip()
     ]
+    # Immutable Magic source IDs for paid-artifact provenance — never re-read live draft
+    # after provider work (look/front/back may change mid-run).
+    look_id = _uuid_or_none(draft.look_id)
+    front_job_id = _uuid_or_none(draft.front_job_id)
+    back_job_id = _uuid_or_none(draft.back_job_id)
     return {
         "draft_revision": int(draft.revision or 1),
         "draft_updated_at": updated.isoformat() if isinstance(updated, datetime) else None,
@@ -434,11 +453,32 @@ def capture_generation_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> d
         # Authorized outfit IDs at provider start — artifact retention uses this
         # snapshot when the live piece list drifts mid-run.
         "authorized_piece_ids": authorized_piece_ids,
+        "look_id": str(look_id) if look_id else None,
+        "front_job_id": str(front_job_id) if front_job_id else None,
+        "back_job_id": str(back_job_id) if back_job_id else None,
         # Prior pack pointers — used to detect PDF-only / other-run ownership that
         # landed during generation. Must not treat a mere prior pack as "newer".
         "last_run_id": str(ai.get("last_run_id") or "").strip() or None,
         "export_id": str(ai.get("export_id") or "").strip() or None,
     }
+
+
+def _authorized_source_ids(
+    draft: TechpackDraft,
+    generation_boundary: dict[str, Any] | None,
+) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+    """Return (source_job_id, look_id) for paid artifact rows.
+
+    Prefers the immutable generation-boundary snapshot so mid-run Magic source
+    changes do not rewrite historical provenance. Falls back to the draft only
+    for direct callers that omit a boundary (unit tests).
+    """
+    if generation_boundary is not None:
+        look_id = _uuid_or_none(generation_boundary.get("look_id"))
+        front_job_id = _uuid_or_none(generation_boundary.get("front_job_id"))
+        back_job_id = _uuid_or_none(generation_boundary.get("back_job_id"))
+        return front_job_id or back_job_id, look_id
+    return draft.front_job_id or draft.back_job_id, draft.look_id
 
 
 def capture_pdf_assembly_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> dict[str, Any]:
@@ -789,6 +829,7 @@ def _persist_professional_result(
     run: TechpackAIRun,
     pipeline: dict[str, Any],
     base_spec: dict[str, Any],
+    generation_boundary: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     storage = LocalStorageBackend()
     spec = enrich_spec_heuristic(base_spec)
@@ -797,6 +838,8 @@ def _persist_professional_result(
     by_id = {str(p.get("id")): p for p in pieces}
     artifact_rows: list[TechpackAIArtifact] = []
     artifact_reads: list[dict[str, Any]] = []
+    # Historical provenance = authorized Magic source at provider start, not live draft.
+    source_job_id, source_look_id = _authorized_source_ids(draft, generation_boundary)
 
     from app.services.techpack_structure import assert_pipeline_covers_required
 
@@ -864,8 +907,8 @@ def _persist_professional_result(
                 mime_type=str(art.get("mime") or "image/png"),
                 byte_size=len(raw),
                 model=art.get("model"),
-                source_job_id=draft.front_job_id or draft.back_job_id,
-                look_id=draft.look_id,
+                source_job_id=source_job_id,
+                look_id=source_look_id,
                 review_state="proposed" if kind != "flat_back_proposed" else "proposed_unverified",
                 metadata_={
                     "analysis_schema": analysis.get("schema_version"),
@@ -1787,6 +1830,7 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
                 run=run,
                 pipeline=pipeline,
                 base_spec=ensure_v2(spec),
+                generation_boundary=generation_boundary,
             )
             del enriched  # never write stale/misbound enrich onto the live draft
             assembling = {
@@ -1844,7 +1888,13 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             return _run_status_payload(db, run)
 
         enriched, artifacts = _persist_professional_result(
-            db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=base_spec
+            db,
+            user=user,
+            draft=draft,
+            run=run,
+            pipeline=pipeline,
+            base_spec=base_spec,
+            generation_boundary=generation_boundary,
         )
 
         # Persist illustrations first so PDF assembly (and recovery) can use them.
@@ -2416,9 +2466,16 @@ def run_generate(
             )
             pack_moved = _pack_ownership_moved_since_boundary(base_spec, generation_boundary)
             # Skip path: retain artifacts vs authorized snapshot. Bind path: enrich live.
+            # Provenance always uses generation-boundary Magic source IDs.
             persist_spec = ensure_v2(spec) if skip_draft_spec_write else base_spec
             enriched, artifacts = _persist_professional_result(
-                db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=persist_spec
+                db,
+                user=user,
+                draft=draft,
+                run=run,
+                pipeline=pipeline,
+                base_spec=persist_spec,
+                generation_boundary=generation_boundary,
             )
             if skip_draft_spec_write:
                 del enriched
