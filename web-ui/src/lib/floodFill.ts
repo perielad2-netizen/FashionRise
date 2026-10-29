@@ -1,6 +1,18 @@
 import { paintInkStrokes } from '@/lib/exportCanvas'
 import { strokeToSvgPath } from '@/lib/freehand'
-import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
+import { type Stroke } from '@/lib/strokes'
+import {
+  MAX_PAPER_FILL_PIXELS,
+  PAPER_HEIGHT,
+  PAPER_WIDTH,
+  designToPaperIndex,
+  designToPaperX,
+  designToPaperY,
+  isPaperEdgeIndex,
+  paperToDesignX,
+  paperToDesignY,
+  withPaperOrigin,
+} from '@/lib/paperBounds'
 import { createFillId, type FillOp, type FillStyle } from '@/lib/fills'
 
 export type FloodFillOk = { ok: true; fill: FillOp }
@@ -16,7 +28,7 @@ export type FloodFillErr = {
 export type FloodFillResult = FloodFillOk | FloodFillErr
 
 /** Soft cap so a leak cannot paint the whole paper. */
-export const MAX_FILL_PIXELS = Math.floor(DESIGN_WIDTH * DESIGN_HEIGHT * 0.42)
+export const MAX_FILL_PIXELS = MAX_PAPER_FILL_PIXELS
 
 /** Default morphological dilate (design px) after sealed-tip rasterization. */
 export const DEFAULT_GAP_CLOSE_PX = 2
@@ -91,13 +103,19 @@ export function floodFillRegion(input: {
   }
 
   const hint = locateGapHint(barrier, input.x, input.y)
+  const edgeOverflow =
+    !result.ok &&
+    typeof result.message === 'string' &&
+    result.message.includes('outer drawing boundary')
   return {
     ...result,
     ...(hint ? { gapHint: hint } : { gapHint: undefined }),
     suggestCloseGaps: false,
-    message: hint
-      ? 'Outline looks open near the highlighted spot — close it so the fill stays inside the shape.'
-      : 'Outline looks open — close the shape so the fill stays inside.',
+    message: edgeOverflow
+      ? result.message
+      : hint
+        ? 'Outline looks open near the highlighted spot — close it so the fill stays inside the shape.'
+        : 'Outline looks open — close the shape so the fill stays inside.',
   }
 }
 
@@ -113,14 +131,15 @@ export function floodFillAgainstBarrier(input: {
   y: number
   style: FillStyle
 }): FloodFillResult {
-  const sx = Math.round(input.x)
-  const sy = Math.round(input.y)
-  if (sx < 0 || sy < 0 || sx >= DESIGN_WIDTH || sy >= DESIGN_HEIGHT) {
+  // Seed is design-space; barrier mask is paper-indexed with origin offset.
+  const sx = designToPaperX(input.x)
+  const sy = designToPaperY(input.y)
+  if (sx < 0 || sy < 0 || sx >= PAPER_WIDTH || sy >= PAPER_HEIGHT) {
     return { ok: false, reason: 'outside', message: 'Tap inside a closed garment outline to fill.' }
   }
 
   const barrier = input.barrier
-  const idx = sy * DESIGN_WIDTH + sx
+  const idx = sy * PAPER_WIDTH + sx
   if (barrier[idx]) {
     return {
       ok: false,
@@ -129,9 +148,9 @@ export function floodFillAgainstBarrier(input: {
     }
   }
 
-  const visited = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
-  const stackX = new Int32Array(DESIGN_WIDTH * DESIGN_HEIGHT)
-  const stackY = new Int32Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const visited = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
+  const stackX = new Int32Array(PAPER_WIDTH * PAPER_HEIGHT)
+  const stackY = new Int32Array(PAPER_WIDTH * PAPER_HEIGHT)
   let sp = 0
   stackX[sp] = sx
   stackY[sp] = sy
@@ -149,14 +168,13 @@ export function floodFillAgainstBarrier(input: {
     const cx = stackX[sp]!
     const cy = stackY[sp]!
     count += 1
-    if (cx === 0 || cy === 0 || cx === DESIGN_WIDTH - 1 || cy === DESIGN_HEIGHT - 1) {
-      // Fail closed as soon as the flood escapes to the paper edge — do not keep
-      // expanding until MAX_FILL_PIXELS (which would mis-report open outlines).
-      // Do not advertise the paper edge as a gap location — locateGapHint decides.
+    if (isPaperEdgeIndex(cx, cy)) {
+      // Fail closed at the *extended* outer paper edge (not the legacy 768×1024 box).
       return {
         ok: false,
         reason: 'open_outline',
-        message: 'Outline looks open — close the shape so the fill stays inside.',
+        message:
+          'Outline reaches the outer drawing boundary — close the shape inside the paper so the fill stays contained.',
       }
     }
     if (count > MAX_FILL_PIXELS) {
@@ -178,8 +196,8 @@ export function floodFillAgainstBarrier(input: {
   }
 
   function push(nx: number, ny: number) {
-    if (nx < 0 || ny < 0 || nx >= DESIGN_WIDTH || ny >= DESIGN_HEIGHT) return
-    const i = ny * DESIGN_WIDTH + nx
+    if (nx < 0 || ny < 0 || nx >= PAPER_WIDTH || ny >= PAPER_HEIGHT) return
+    const i = ny * PAPER_WIDTH + nx
     if (visited[i] || barrier[i]) return
     visited[i] = 1
     stackX[sp] = nx
@@ -206,19 +224,26 @@ export function floodFillAgainstBarrier(input: {
 
   // Persist the same contour the canvas will paint — cutout safety must judge this
   // polygon, not a pre-simplify trace the user never sees.
-  const simplified = simplifyContour(contour, 1.4)
+  const simplifiedPaper = simplifyContour(contour, 1.4)
 
   // Single-contour FillOp cannot represent holes. Use pre-dilation visible ink so
   // a hollow sealed only by morphological expand still fails closed — without
   // treating the dilate fringe along the flood frontier as a cutout.
+  // Contour is still in paper-index space here so it aligns with visited/barrier.
   const visibleInk = input.visibleInk ?? barrier
-  if (floodEnclosesUnsupportedCutout(visited, barrier, visibleInk, simplified)) {
+  if (floodEnclosesUnsupportedCutout(visited, barrier, visibleInk, simplifiedPaper)) {
     return {
       ok: false,
       reason: 'unsupported_cutout',
       message:
         'This area has an inner cutout. Fills can’t keep holes empty yet — tap a simpler closed area, or erase the inner outline first.',
     }
+  }
+
+  // Persist design-space contour (may include negative / >legacy coordinates).
+  const simplified: number[] = []
+  for (let i = 0; i + 1 < simplifiedPaper.length; i += 2) {
+    simplified.push(paperToDesignX(simplifiedPaper[i]!), paperToDesignY(simplifiedPaper[i + 1]!))
   }
 
   return {
@@ -254,19 +279,22 @@ export function buildInkBarrierLayers(
   gapClose = DEFAULT_GAP_CLOSE_PX,
   options?: BarrierMaskOptions,
 ): InkBarrierLayers {
-  const empty = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const empty = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
   const canvas = document.createElement('canvas')
-  canvas.width = DESIGN_WIDTH
-  canvas.height = DESIGN_HEIGHT
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return { visibleInk: empty, barrier: empty }
 
-  ctx.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+  ctx.clearRect(0, 0, PAPER_WIDTH, PAPER_HEIGHT)
   // Seal-tip paths for draw ink so tapered pencil tips do not open joins in the mask.
-  paintInkStrokes(ctx, strokes, { sealTips: true })
+  // Translate so design-space Path2D (incl. negative coords) lands on the paper raster.
+  withPaperOrigin(ctx, (c) => {
+    paintInkStrokes(c, strokes, { sealTips: true })
+  })
 
-  const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-  const raw = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const img = ctx.getImageData(0, 0, PAPER_WIDTH, PAPER_HEIGHT)
+  const raw = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
   for (let i = 0, p = 0; i < raw.length; i += 1, p += 4) {
     raw[i] = img.data[p + 3]! > 12 ? 1 : 0
   }
@@ -366,25 +394,27 @@ function tipTangent(
 /** Rasterize erase strokes alone — sealed pixels under this mask must not return. */
 export function buildEraseCoverageMask(strokes: Stroke[]): Uint8Array {
   const eraseOnly = strokes.filter((s) => s.tool === 'erase')
-  const empty = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const empty = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
   if (eraseOnly.length === 0) return empty
   const canvas = document.createElement('canvas')
-  canvas.width = DESIGN_WIDTH
-  canvas.height = DESIGN_HEIGHT
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return empty
   const Path2DCtor = typeof Path2D === 'undefined' ? null : Path2D
   if (!Path2DCtor) return empty
-  ctx.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+  ctx.clearRect(0, 0, PAPER_WIDTH, PAPER_HEIGHT)
   // Paint erase silhouettes as solid source-over (same Path2D as destination-out erase).
-  for (const stroke of eraseOnly) {
-    const svg = strokeToSvgPath(stroke)
-    if (!svg) continue
-    ctx.fillStyle = '#000000'
-    ctx.fill(new Path2DCtor(svg))
-  }
-  const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-  const mask = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  withPaperOrigin(ctx, (c) => {
+    for (const stroke of eraseOnly) {
+      const svg = strokeToSvgPath(stroke)
+      if (!svg) continue
+      c.fillStyle = '#000000'
+      c.fill(new Path2DCtor(svg))
+    }
+  })
+  const img = ctx.getImageData(0, 0, PAPER_WIDTH, PAPER_HEIGHT)
+  const mask = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
   for (let i = 0, p = 0; i < mask.length; i += 1, p += 4) {
     mask[i] = img.data[p + 3]! > 12 ? 1 : 0
   }
@@ -402,13 +432,15 @@ export type SealJointsOptions = {
 
 function tipHasAliveInk(mask: Uint8Array, x: number, y: number, radius: number): boolean {
   const r = Math.max(1, Math.ceil(radius))
-  const x0 = Math.max(0, Math.round(x) - r)
-  const x1 = Math.min(DESIGN_WIDTH - 1, Math.round(x) + r)
-  const y0 = Math.max(0, Math.round(y) - r)
-  const y1 = Math.min(DESIGN_HEIGHT - 1, Math.round(y) + r)
+  const cx = designToPaperX(x)
+  const cy = designToPaperY(y)
+  const x0 = Math.max(0, cx - r)
+  const x1 = Math.min(PAPER_WIDTH - 1, cx + r)
+  const y0 = Math.max(0, cy - r)
+  const y1 = Math.min(PAPER_HEIGHT - 1, cy + r)
   for (let py = y0; py <= y1; py += 1) {
     for (let px = x0; px <= x1; px += 1) {
-      if (mask[py * DESIGN_WIDTH + px]) return true
+      if (mask[py * PAPER_WIDTH + px]) return true
     }
   }
   return false
@@ -514,11 +546,12 @@ function capsuleHitsErase(
   let samples = 0
   for (let s = 0; s <= steps; s += 1) {
     const t = s / steps
-    const x = Math.round(x0 + (x1 - x0) * t)
-    const y = Math.round(y0 + (y1 - y0) * t)
-    if (x < 0 || y < 0 || x >= DESIGN_WIDTH || y >= DESIGN_HEIGHT) continue
+    const x = x0 + (x1 - x0) * t
+    const y = y0 + (y1 - y0) * t
+    const i = designToPaperIndex(x, y)
+    if (i < 0) continue
     samples += 1
-    if (eraseCoverage[y * DESIGN_WIDTH + x]) hits += 1
+    if (eraseCoverage[i]) hits += 1
   }
   // Any substantial erase along the prospective bridge vetoes the seal.
   return samples > 0 && hits / samples >= 0.25
@@ -548,17 +581,17 @@ function stampDisk(
   eraseCoverage?: Uint8Array,
 ): void {
   const r = Math.max(1, Math.round(radius))
-  const xMid = Math.round(cx)
-  const yMid = Math.round(cy)
+  const xMid = designToPaperX(cx)
+  const yMid = designToPaperY(cy)
   const r2 = r * r
   for (let y = yMid - r; y <= yMid + r; y += 1) {
-    if (y < 0 || y >= DESIGN_HEIGHT) continue
+    if (y < 0 || y >= PAPER_HEIGHT) continue
     for (let x = xMid - r; x <= xMid + r; x += 1) {
-      if (x < 0 || x >= DESIGN_WIDTH) continue
+      if (x < 0 || x >= PAPER_WIDTH) continue
       const dx = x - xMid
       const dy = y - yMid
       if (dx * dx + dy * dy > r2) continue
-      const i = y * DESIGN_WIDTH + x
+      const i = y * PAPER_WIDTH + x
       // Never restore ink a designer deliberately erased.
       if (eraseCoverage && eraseCoverage[i]) continue
       mask[i] = 1
@@ -582,16 +615,16 @@ export function dilateMask(
   if (radius <= 0) return mask
   const eraseCoverage = options?.eraseCoverage
   const out = new Uint8Array(mask.length)
-  for (let y = 0; y < DESIGN_HEIGHT; y += 1) {
-    for (let x = 0; x < DESIGN_WIDTH; x += 1) {
-      if (!mask[y * DESIGN_WIDTH + x]) continue
+  for (let y = 0; y < PAPER_HEIGHT; y += 1) {
+    for (let x = 0; x < PAPER_WIDTH; x += 1) {
+      if (!mask[y * PAPER_WIDTH + x]) continue
       const y0 = Math.max(0, y - radius)
-      const y1 = Math.min(DESIGN_HEIGHT - 1, y + radius)
+      const y1 = Math.min(PAPER_HEIGHT - 1, y + radius)
       const x0 = Math.max(0, x - radius)
-      const x1 = Math.min(DESIGN_WIDTH - 1, x + radius)
+      const x1 = Math.min(PAPER_WIDTH - 1, x + radius)
       for (let ny = y0; ny <= y1; ny += 1) {
         for (let nx = x0; nx <= x1; nx += 1) {
-          const i = ny * DESIGN_WIDTH + nx
+          const i = ny * PAPER_WIDTH + nx
           // Do not grow into erased openings unless redrawn ink already lives there.
           if (eraseCoverage && eraseCoverage[i] && !mask[i]) continue
           out[i] = 1
@@ -615,33 +648,33 @@ export function locateGapHint(
   seedX: number,
   seedY: number,
 ): { x: number; y: number } | null {
-  const sx = Math.round(seedX)
-  const sy = Math.round(seedY)
-  if (sx < 0 || sy < 0 || sx >= DESIGN_WIDTH || sy >= DESIGN_HEIGHT) return null
-  if (barrier[sy * DESIGN_WIDTH + sx]) return null
+  const sx = designToPaperX(seedX)
+  const sy = designToPaperY(seedY)
+  if (sx < 0 || sy < 0 || sx >= PAPER_WIDTH || sy >= PAPER_HEIGHT) return null
+  if (barrier[sy * PAPER_WIDTH + sx]) return null
 
-  const visited = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
-  const parent = new Int32Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const visited = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
+  const parent = new Int32Array(PAPER_WIDTH * PAPER_HEIGHT)
   parent.fill(-1)
-  const qx = new Int32Array(DESIGN_WIDTH * DESIGN_HEIGHT)
-  const qy = new Int32Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const qx = new Int32Array(PAPER_WIDTH * PAPER_HEIGHT)
+  const qy = new Int32Array(PAPER_WIDTH * PAPER_HEIGHT)
   let head = 0
   let tail = 0
   qx[tail] = sx
   qy[tail] = sy
   tail += 1
-  visited[sy * DESIGN_WIDTH + sx] = 1
+  visited[sy * PAPER_WIDTH + sx] = 1
   let edgeX = -1
   let edgeY = -1
   let steps = 0
-  const limit = Math.min(MAX_FILL_PIXELS, DESIGN_WIDTH * DESIGN_HEIGHT)
+  const limit = Math.min(MAX_FILL_PIXELS, PAPER_WIDTH * PAPER_HEIGHT)
 
   while (head < tail && steps < limit) {
     const cx = qx[head]!
     const cy = qy[head]!
     head += 1
     steps += 1
-    if (cx === 0 || cy === 0 || cx === DESIGN_WIDTH - 1 || cy === DESIGN_HEIGHT - 1) {
+    if (isPaperEdgeIndex(cx, cy)) {
       edgeX = cx
       edgeY = cy
       break
@@ -653,11 +686,11 @@ export function locateGapHint(
       [cx, cy - 1],
     ] as const
     for (const [nx, ny] of neighbors) {
-      if (nx < 0 || ny < 0 || nx >= DESIGN_WIDTH || ny >= DESIGN_HEIGHT) continue
-      const i = ny * DESIGN_WIDTH + nx
+      if (nx < 0 || ny < 0 || nx >= PAPER_WIDTH || ny >= PAPER_HEIGHT) continue
+      const i = ny * PAPER_WIDTH + nx
       if (visited[i] || barrier[i]) continue
       visited[i] = 1
-      parent[i] = cy * DESIGN_WIDTH + cx
+      parent[i] = cy * PAPER_WIDTH + cx
       qx[tail] = nx
       qy[tail] = ny
       tail += 1
@@ -670,19 +703,19 @@ export function locateGapHint(
   // nearest the escape — do not overwrite with later corridor cells. A small
   // Chebyshev radius catches narrow mouths when the path runs through the gap
   // centre; wide openings that never graze ink stay suppressed (null).
-  let i = edgeY * DESIGN_WIDTH + edgeX
+  let i = edgeY * PAPER_WIDTH + edgeX
   const edgeGuard = 2
   const mouthRadius = 2
   while (i >= 0) {
-    const x = i % DESIGN_WIDTH
-    const y = Math.floor(i / DESIGN_WIDTH)
+    const x = i % PAPER_WIDTH
+    const y = Math.floor(i / PAPER_WIDTH)
     const onPaperEdge =
       x <= edgeGuard ||
       y <= edgeGuard ||
-      x >= DESIGN_WIDTH - 1 - edgeGuard ||
-      y >= DESIGN_HEIGHT - 1 - edgeGuard
+      x >= PAPER_WIDTH - 1 - edgeGuard ||
+      y >= PAPER_HEIGHT - 1 - edgeGuard
     if (!onPaperEdge && cellNearBarrier(barrier, x, y, mouthRadius)) {
-      return { x, y }
+      return { x: paperToDesignX(x), y: paperToDesignY(y) }
     }
     i = parent[i]!
   }
@@ -695,8 +728,8 @@ function cellNearBarrier(barrier: Uint8Array, x: number, y: number, radius: numb
     for (let dx = -radius; dx <= radius; dx += 1) {
       const nx = x + dx
       const ny = y + dy
-      if (nx < 0 || ny < 0 || nx >= DESIGN_WIDTH || ny >= DESIGN_HEIGHT) continue
-      if (barrier[ny * DESIGN_WIDTH + nx]) return true
+      if (nx < 0 || ny < 0 || nx >= PAPER_WIDTH || ny >= PAPER_HEIGHT) continue
+      if (barrier[ny * PAPER_WIDTH + nx]) return true
     }
   }
   return false
@@ -729,7 +762,7 @@ function floodEnclosesUnsupportedCutout(
   const { mask, minX, minY, maxX, maxY } = coverage
   let holePixels = 0
   for (let y = minY; y <= maxY; y += 1) {
-    const row = y * DESIGN_WIDTH
+    const row = y * PAPER_WIDTH
     for (let x = minX; x <= maxX; x += 1) {
       const i = row + x
       if (!mask[i]) continue
@@ -755,11 +788,11 @@ function floodEnclosesUnsupportedCutout(
 
 function cellNearVisited(visited: Uint8Array, x: number, y: number, radius: number): boolean {
   const y0 = Math.max(0, y - radius)
-  const y1 = Math.min(DESIGN_HEIGHT - 1, y + radius)
+  const y1 = Math.min(PAPER_HEIGHT - 1, y + radius)
   const x0 = Math.max(0, x - radius)
-  const x1 = Math.min(DESIGN_WIDTH - 1, x + radius)
+  const x1 = Math.min(PAPER_WIDTH - 1, x + radius)
   for (let ny = y0; ny <= y1; ny += 1) {
-    const row = ny * DESIGN_WIDTH
+    const row = ny * PAPER_WIDTH
     for (let nx = x0; nx <= x1; nx += 1) {
       if (visited[row + nx]) return true
     }
@@ -776,8 +809,8 @@ function rasterizeContourCoverage(
 ): { mask: Uint8Array; minX: number; minY: number; maxX: number; maxY: number } | null {
   const n = Math.floor(contour.length / 2)
   if (n < 3) return null
-  let minX = DESIGN_WIDTH - 1
-  let minY = DESIGN_HEIGHT - 1
+  let minX = PAPER_WIDTH - 1
+  let minY = PAPER_HEIGHT - 1
   let maxX = 0
   let maxY = 0
   for (let i = 0; i < n; i += 1) {
@@ -790,10 +823,10 @@ function rasterizeContourCoverage(
   }
   minX = Math.max(0, minX - 1)
   minY = Math.max(0, minY - 1)
-  maxX = Math.min(DESIGN_WIDTH - 1, maxX + 1)
-  maxY = Math.min(DESIGN_HEIGHT - 1, maxY + 1)
+  maxX = Math.min(PAPER_WIDTH - 1, maxX + 1)
+  maxY = Math.min(PAPER_HEIGHT - 1, maxY + 1)
 
-  const mask = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const mask = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
   for (let y = minY; y <= maxY; y += 1) {
     const ys = y + 0.5
     const crossings: number[] = []
@@ -811,7 +844,7 @@ function rasterizeContourCoverage(
     for (let k = 0; k + 1 < crossings.length; k += 2) {
       const xStart = Math.max(minX, Math.ceil(crossings[k]! - 1e-9))
       const xEnd = Math.min(maxX, Math.floor(crossings[k + 1]! - 1e-9))
-      const row = y * DESIGN_WIDTH
+      const row = y * PAPER_WIDTH
       for (let x = xStart; x <= xEnd; x += 1) {
         mask[row + x] = 1
       }
@@ -832,9 +865,9 @@ function traceContour(
   let startY = -1
   outer: for (let y = minY; y <= maxY; y += 1) {
     for (let x = minX; x <= maxX; x += 1) {
-      if (!mask[y * DESIGN_WIDTH + x]) continue
+      if (!mask[y * PAPER_WIDTH + x]) continue
       // left neighbour empty → boundary start
-      if (x === 0 || !mask[y * DESIGN_WIDTH + (x - 1)]) {
+      if (x === 0 || !mask[y * PAPER_WIDTH + (x - 1)]) {
         startX = x
         startY = y
         break outer
@@ -849,7 +882,7 @@ function traceContour(
   let x = startX
   let y = startY
   let dir = 0
-  const maxSteps = DESIGN_WIDTH * DESIGN_HEIGHT
+  const maxSteps = PAPER_WIDTH * PAPER_HEIGHT
 
   for (let step = 0; step < maxSteps; step += 1) {
     points.push(x, y)
@@ -858,8 +891,8 @@ function traceContour(
       const nd = (dir + 6 + k) % 8 // prefer turning left
       const nx = x + dx[nd]!
       const ny = y + dy[nd]!
-      if (nx < 0 || ny < 0 || nx >= DESIGN_WIDTH || ny >= DESIGN_HEIGHT) continue
-      if (!mask[ny * DESIGN_WIDTH + nx]) continue
+      if (nx < 0 || ny < 0 || nx >= PAPER_WIDTH || ny >= PAPER_HEIGHT) continue
+      if (!mask[ny * PAPER_WIDTH + nx]) continue
       x = nx
       y = ny
       dir = nd

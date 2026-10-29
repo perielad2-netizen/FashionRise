@@ -2,6 +2,7 @@ import { strokeToSvgPath } from '@/lib/freehand'
 import type { FillOp } from '@/lib/fills'
 import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { paintFillOps } from '@/lib/paintFills'
+import { resolveExportFrame } from '@/lib/paperBounds'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 
 export const PAPER_BACKGROUND = '#F8F4F0'
@@ -119,6 +120,12 @@ export type ArtworkLayerOptions = {
   /** Design→output scale applied on each layer before paint (default 1). */
   scaleX?: number
   scaleY?: number
+  /**
+   * Design-space origin of the output raster (paper offset). Design (0,0) lands at
+   * pixel (−originX, −originY) after scale — required for extended-paper exports.
+   */
+  originX?: number
+  originY?: number
 }
 
 /**
@@ -130,13 +137,18 @@ export function compositeFillAndInkLayers(target: Canvas2DLike, options: Artwork
   const { width, height, fills, strokes } = options
   const sx = options.scaleX ?? 1
   const sy = options.scaleY ?? 1
+  const ox = options.originX ?? 0
+  const oy = options.originY ?? 0
 
   const fillLayer = document.createElement('canvas')
   fillLayer.width = width
   fillLayer.height = height
   const fillCtx = fillLayer.getContext('2d')
   if (!fillCtx) throw new Error('Canvas 2D unavailable')
-  if (sx !== 1 || sy !== 1) fillCtx.scale(sx, sy)
+  if (sx !== 1 || sy !== 1 || ox !== 0 || oy !== 0) {
+    fillCtx.scale(sx, sy)
+    fillCtx.translate(-ox, -oy)
+  }
   paintFillsWithErasers(fillCtx, fills, strokes)
   target.drawImage(fillLayer, 0, 0, width, height)
 
@@ -145,7 +157,10 @@ export function compositeFillAndInkLayers(target: Canvas2DLike, options: Artwork
   inkLayer.height = height
   const inkCtx = inkLayer.getContext('2d')
   if (!inkCtx) throw new Error('Canvas 2D unavailable')
-  if (sx !== 1 || sy !== 1) inkCtx.scale(sx, sy)
+  if (sx !== 1 || sy !== 1 || ox !== 0 || oy !== 0) {
+    inkCtx.scale(sx, sy)
+    inkCtx.translate(-ox, -oy)
+  }
   paintInkStrokes(inkCtx, strokes)
   target.drawImage(inkLayer, 0, 0, width, height)
 }
@@ -184,14 +199,29 @@ export function withMinimumSize(strokes: Stroke[], minDesignSize: number): Strok
  *   INK canvas   = strokes (eraser destination-out on ink only)
  *   FINAL        = base, then ink composited on top
  *
- * Strokes stay in design space and are scaled to the output size. No network calls
- * other than loading the reference image URL that is already shown in Studio.
+ * Strokes stay in design space. Default output size is legacy 768×1024 when
+ * artwork stays inside that plane (pixel-identical reopen/export). Oversized
+ * garments that use the extended paper margins export at the full paper size
+ * with the croquis still at its legacy design coordinates (origin offset).
+ *
+ * Explicit `width`/`height` overrides keep the legacy croquis frame (thumbnails).
+ * No network calls other than loading the reference image URL already shown in Studio.
  */
 export async function renderSketchCanvas(options: RenderOptions): Promise<RenderedSketch> {
-  const width = options.width ?? DESIGN_WIDTH
-  const height = options.height ?? DESIGN_HEIGHT
-  const sx = width / DESIGN_WIDTH
-  const sy = height / DESIGN_HEIGHT
+  const fills = options.fills ?? []
+  const explicitSize = options.width != null || options.height != null
+  const frame = explicitSize
+    ? { mode: 'legacy' as const, originX: 0, originY: 0, width: DESIGN_WIDTH, height: DESIGN_HEIGHT }
+    : resolveExportFrame(options.strokes, fills)
+
+  const originX = frame.originX
+  const originY = frame.originY
+  const designW = frame.width
+  const designH = frame.height
+  const width = options.width ?? designW
+  const height = options.height ?? designH
+  const sx = width / designW
+  const sy = height / designH
 
   const base = document.createElement('canvas')
   base.width = width
@@ -208,8 +238,10 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
       const img = await (options.loadReference ?? loadImage)(options.referenceUrl)
       const fit = fitContain(img.width, img.height, DESIGN_WIDTH, DESIGN_HEIGHT)
       baseCtx.save()
+      baseCtx.scale(sx, sy)
+      baseCtx.translate(-originX, -originY)
       baseCtx.globalAlpha = options.referenceOpacity ?? 1
-      baseCtx.drawImage(img, fit.x * sx, fit.y * sy, fit.w * sx, fit.h * sy)
+      baseCtx.drawImage(img, fit.x, fit.y, fit.w, fit.h)
       baseCtx.restore()
       referenceIncluded = true
     } catch (err) {
@@ -218,7 +250,6 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
   }
 
   // Prefetch private fabric assets before paint so tiling matches live Studio.
-  const fills = options.fills ?? []
   const fabricMode = options.onFabricError ?? 'throw'
   try {
     await ensureFabricAssetsForFills(fills, { required: fabricMode === 'throw' })
@@ -238,6 +269,8 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
     height,
     scaleX: sx,
     scaleY: sy,
+    originX,
+    originY,
   })
   return { canvas: base, referenceIncluded }
 }

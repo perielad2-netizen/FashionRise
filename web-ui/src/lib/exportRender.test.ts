@@ -52,6 +52,7 @@ function installFakeCanvas(options: { noContext?: boolean; blob?: Blob | null } 
         ctx.globalCompositeOperation = 'source-over'
       },
       scale: (x: number, y: number) => ops.push({ canvas: index, op: 'scale', detail: [x, y] }),
+      translate: (x: number, y: number) => ops.push({ canvas: index, op: 'translate', detail: [x, y] }),
       createLinearGradient: () => ({
         addColorStop: () => undefined,
       }),
@@ -104,21 +105,28 @@ describe('renderSketchCanvas composition', () => {
     const fillLayer = ops.filter((o) => o.canvas === 1)
     const ink = ops.filter((o) => o.canvas === 2)
     expect(base[0]).toMatchObject({ op: 'fillRect', detail: { a: [0, 0, 768, 1024], fill: '#F8F4F0' } })
-    expect(base[1]).toMatchObject({ op: 'drawImage', detail: { img: reference, alpha: 0.4, a: [192, 0, 384, 1024] } })
+    // Reference is drawn in design space after scale/translate on the base context.
+    expect(base.find((o) => o.op === 'drawImage' && (o.detail as { img: unknown }).img === reference)).toMatchObject({
+      detail: { img: reference, alpha: 0.4, a: [192, 0, 384, 1024] },
+    })
     // Fills paint on their own layer (under ink); eraser also punches the fill layer.
     expect(fillLayer.some((o) => o.op === 'fill')).toBe(true)
-    expect(fillLayer[0]).toMatchObject({ detail: { fill: '#B91C1C' } })
+    expect(fillLayer.find((o) => o.op === 'fill')).toMatchObject({ detail: { fill: '#B91C1C' } })
     expect(fillLayer.map((o) => (o.detail as { mode?: string }).mode).filter(Boolean)).toContain(
       'destination-out',
     )
     // Ink layer still gets draw + erase; the base/reference never receives destination-out.
-    expect(ink.map((o) => (o.detail as { mode: string }).mode)).toEqual(['source-over', 'destination-out'])
-    expect(ink[0]).toMatchObject({ detail: { alpha: 0.5, fill: '#D63384' } })
+    expect(ink.filter((o) => o.op === 'fill').map((o) => (o.detail as { mode: string }).mode)).toEqual([
+      'source-over',
+      'destination-out',
+    ])
+    expect(ink.find((o) => o.op === 'fill')).toMatchObject({ detail: { alpha: 0.5, fill: '#D63384' } })
     expect(base.some((o) => o.op === 'fill')).toBe(false)
-    expect(base[2]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
-    expect(((base[2]!.detail as { img: { id: string } }).img).id).toBe('canvas-1')
-    expect(base[3]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
-    expect(((base[3]!.detail as { img: { id: string } }).img).id).toBe('canvas-2')
+    const baseLayerDraws = base.filter((o) => o.op === 'drawImage' && (o.detail as { img: { id?: string } }).img?.id)
+    expect(baseLayerDraws[0]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
+    expect(((baseLayerDraws[0]!.detail as { img: { id: string } }).img).id).toBe('canvas-1')
+    expect(baseLayerDraws[1]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
+    expect(((baseLayerDraws[1]!.detail as { img: { id: string } }).img).id).toBe('canvas-2')
   })
 
   it('scales design-space strokes and reference to a smaller output', async () => {
@@ -130,10 +138,13 @@ describe('renderSketchCanvas composition', () => {
       height: 320,
       loadReference: async () => reference,
     })
-    // Fill layer (canvas 1) and ink layer (canvas 2) both scale; first scale is the fill layer.
-    expect(ops.find((o) => o.op === 'scale')).toMatchObject({ canvas: 1, detail: [0.3125, 0.3125] })
-    expect(ops.filter((o) => o.op === 'scale').map((o) => o.canvas)).toEqual([1, 2])
-    expect(ops.find((o) => o.canvas === 0 && o.op === 'drawImage')).toMatchObject({ detail: { a: [60, 0, 120, 320] } })
+    // Base scales for the reference; fill + ink layers also scale.
+    expect(ops.filter((o) => o.op === 'scale').map((o) => o.canvas)).toEqual([0, 1, 2])
+    expect(ops.filter((o) => o.op === 'scale').every((o) => o.detail?.[0] === 0.3125)).toBe(true)
+    // Reference drawImage args stay in design space (context already scaled).
+    expect(ops.find((o) => o.canvas === 0 && o.op === 'drawImage')).toMatchObject({
+      detail: { a: [192, 0, 384, 1024] },
+    })
   })
 
   it('keeps exact stroke sizes unless a minimum output ink size is requested', async () => {

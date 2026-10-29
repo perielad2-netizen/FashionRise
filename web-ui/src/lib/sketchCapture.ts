@@ -1,5 +1,6 @@
 import { exportSketchPng, type ExportOptions } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
+import { artworkExceedsLegacyBounds } from '@/lib/paperBounds'
 
 /** Soft client bound; backend also enforces max_upload_size_mb. */
 export const MAGIC_MAX_SKETCH_BYTES = 8 * 1024 * 1024
@@ -39,6 +40,13 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
     options.strokes.length > 0 || (options.fills?.length ?? 0) > 0 || Boolean(options.referenceUrl)
   if (!hasArtwork) {
     throw new Error('Draw a sketch before using Magic.')
+  }
+  // Fail closed when artwork uses the extended paper margins — do not silently
+  // crop oversized garments into the legacy Magic input frame (0 paid AI).
+  if (artworkExceedsLegacyBounds(options.strokes, options.fills ?? [])) {
+    throw new Error(
+      'This sketch extends beyond the standard Magic frame. Pull oversized strokes inside the croquis area, or export a PNG instead — Magic was not started.',
+    )
   }
   const expectsReference = Boolean(options.referenceUrl)
   try {

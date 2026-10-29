@@ -3,7 +3,11 @@ export type ToolKind = 'draw' | 'erase' | 'fill' | 'eyedropper'
 export type Stroke = {
   id: string
   tool: ToolKind
-  /** Flattened [x,y,pressure?, ...] points in design space (768×1024). */
+  /**
+   * Flattened [x,y,pressure?, ...] points in design space.
+   * Legacy croquis reference remains 768×1024; extended paper allows coordinates
+   * outside that plane (see `paperBounds.ts`).
+   */
   points: number[]
   color: string
   size: number

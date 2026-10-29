@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Stroke } from '@/lib/strokes'
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
+import { PAPER_HEIGHT, PAPER_WIDTH, designToPaperIndex } from '@/lib/paperBounds'
 import { solidStyle } from '@/lib/fills'
 
 /**
@@ -9,17 +9,17 @@ import { solidStyle } from '@/lib/fills'
  * of truth — same as Konva/PNG.
  */
 describe('buildInkBarrierMask + erased seams', () => {
-  const pixels = new Uint8ClampedArray(DESIGN_WIDTH * DESIGN_HEIGHT * 4)
+  const pixels = new Uint8ClampedArray(PAPER_WIDTH * PAPER_HEIGHT * 4)
 
   function inkOn(x: number, y: number) {
-    const i = (y * DESIGN_WIDTH + x) * 4
+    const i = (designToPaperIndex(x, y)) * 4
     pixels[i] = 0
     pixels[i + 1] = 0
     pixels[i + 2] = 0
     pixels[i + 3] = 255
   }
   function inkOff(x: number, y: number) {
-    const i = (y * DESIGN_WIDTH + x) * 4
+    const i = (designToPaperIndex(x, y)) * 4
     pixels[i + 3] = 0
   }
   function hLine(y: number, x0: number, x1: number) {
@@ -56,10 +56,13 @@ describe('buildInkBarrierMask + erased seams', () => {
     vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
       if (tag !== 'canvas') return realCreate(tag)
       return {
-        width: DESIGN_WIDTH,
-        height: DESIGN_HEIGHT,
+        width: PAPER_WIDTH,
+        height: PAPER_HEIGHT,
         getContext: () => ({
           clearRect: () => pixels.fill(0),
+          save: () => undefined,
+          restore: () => undefined,
+          translate: () => undefined,
           filter: '',
           drawImage: () => undefined,
           getImageData: () => ({ data: pixels }),
@@ -94,7 +97,7 @@ describe('buildInkBarrierMask + erased seams', () => {
     vLine(250, 200, 700)
     hLine(400, 250, 450)
     const withSeam = buildInkBarrierMask(outer, 0)
-    expect(withSeam[400 * DESIGN_WIDTH + 350]).toBe(1)
+    expect(withSeam[designToPaperIndex(350, 400)]).toBe(1)
     const bodice = floodFillAgainstBarrier({
       barrier: withSeam,
       x: 350,
@@ -120,9 +123,9 @@ describe('buildInkBarrierMask + erased seams', () => {
       opacity: 1,
     }
     const afterErase = buildInkBarrierMask([...outer, erasedWaist], 0)
-    expect(afterErase[400 * DESIGN_WIDTH + 350]).toBe(0)
-    expect(afterErase[400 * DESIGN_WIDTH + 250]).toBe(1)
-    expect(afterErase[400 * DESIGN_WIDTH + 450]).toBe(1)
+    expect(afterErase[designToPaperIndex(350, 400)]).toBe(0)
+    expect(afterErase[designToPaperIndex(250, 400)]).toBe(1)
+    expect(afterErase[designToPaperIndex(450, 400)]).toBe(1)
 
     const merged = floodFillAgainstBarrier({
       barrier: afterErase,
@@ -146,7 +149,7 @@ describe('buildInkBarrierMask + erased seams', () => {
       gapClose: 0,
     })
     expect(viaRegion.ok).toBe(true)
-    expect(DESIGN_HEIGHT).toBeGreaterThan(0)
+    expect(PAPER_HEIGHT).toBeGreaterThan(0)
   })
 
   it('open outline after erasing a side fails closed instead of trapping a ghost region', async () => {
@@ -187,6 +190,6 @@ describe('buildInkBarrierMask + erased seams', () => {
     )
     // Without a top barrier, flood from interior reaches the outer paper edge
     // of our tiny box only if the box isn't sealed — clear top:
-    expect(open[300 * DESIGN_WIDTH + 350]).toBe(0)
+    expect(open[designToPaperIndex(350, 300)]).toBe(0)
   })
 })

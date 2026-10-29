@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Stage C canonical baseline** — branch `cursor/web-canonical-baseline-77c6` · prod FE `ebcb1cc7` · BE `6cc317ec` · Alembic `011` · closed 12 superseded BE PRs · **65 open PRs remain** · **0 paid AI** · **STOP for Technical PM**.)
+**Last updated:** 2026-10-29 (**Issue #127 extended paper** — branch `cursor/web-extended-paper-127-77c6` based on canonical #133 @ `5bd6d585` · prod unchanged FE `ebcb1cc7` / BE `6cc317ec` · **0 paid AI** · **STOP for Technical PM review**.)
 
 **Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity) and PR #129 (6px cutout fill safety + decimal lineage).
 
@@ -17,6 +17,44 @@
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+
+## Issue #127 — extended logical drawing paper (2026-10-29) — STOP for Technical PM
+
+Frontend-only candidate based on accepted canonical baseline PR #133 (`5bd6d585`). **Does not modify or merge #133. No production deploy. No BE/provider/paid AI.**
+
+### Problem (owner-confirmed on prod FE `ebcb1cc7`)
+
+Fill succeeds inside the legacy `768×1024` plane and fails when a closed oversized silhouette crosses that boundary. CSS/zoom enlargement cannot fix logical flood-fill / export bounds. Croquis must keep exact legacy position/scale.
+
+### Architecture
+
+| Concept | Value |
+|---|---|
+| Croquis / legacy reference | `DESIGN_WIDTH×DESIGN_HEIGHT` = **768×1024** (unchanged coords) |
+| Extended paper | `PAPER_ORIGIN=(-256,-256)` · **1280×1536** (`web-ui/src/lib/paperBounds.ts`) |
+| Stroke/fill persistence | Existing numeric design coords unchanged; new artwork may use negative / >legacy |
+| Flood / barrier / contour | Paper-indexed masks with origin translate; reject at **new** outer edge |
+| Fit Page framing | Still frames croquis (does not shrink model to paper); pan/zoom reaches margins |
+| PNG export | Legacy-only → 768×1024 pixel-identical; oversized → full paper frame |
+| Magic capture | **Fail closed** if artwork exceeds legacy frame (no silent crop; 0 paid AI) |
+
+### Verification
+
+| Check | Result |
+|---|---|
+| FE Vitest | **648 passed / 6 failed** (same baseline: 5× StudioPage beta-notices + `draftPersistence` clearBackIntent) |
+| Focused #127 Path2D | `paperBounds.extendedFill.test.ts` **11/11** + prior floodFill raster/joints/barrier green |
+| `tsc -b` | **PASS** |
+| lint (oxlint) | warnings only (pre-existing setState-in-effect / export patterns) |
+| Prod build | `VITE_API_BASE_URL=/api/v1` · SW Access-safe · assert-prod-api-base **PASS** |
+
+### Risks / open for PM
+
+- Non-immersive framed canvas still CSS-sizes to the croquis plane; oversized margin drawing is primarily via immersive pan/zoom (Fit Page keeps croquis framing).
+- Magic remains legacy-frame-only until a separately gated capture path exists.
+- Soft fill pixel cap raised to 58% of paper so closed oversized garments can fill; whole-page leaks still hit the outer edge first.
+- #127 stays open until owner mobile QA of oversized fill + save/reopen on a deployed build (not this PR).
 
 
 ## Stage C — canonical baseline + GitHub cleanup (2026-10-29) — STOP for Technical PM
@@ -69,7 +107,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 | Issue | Disposition | Evidence |
 |---|---|---|
-| #127 Fill | **partially-delivered** — keep open | FE `ebcb1cc7` deployed; **owner mobile acceptance pending** |
+| #127 Fill | **partially-delivered** — keep open | FE `ebcb1cc7` deployed; owner confirmed boundary limit; **extended-paper FE PR** (this branch) awaiting PM review + owner oversized QA |
 | #128 POM integrity | **partially-delivered** — keep open | BE `6cc317ec` deployed; **owner measurement acceptance pending** |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |

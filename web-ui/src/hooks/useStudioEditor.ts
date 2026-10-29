@@ -1923,7 +1923,7 @@ export function useStudioEditor() {
         publishStudioNotice(
           wantedReference && !referenceIncluded
             ? EXPORT_NO_REFERENCE
-            : 'PNG exported (768 × 1024). Check your downloads.',
+            : 'PNG exported. Check your downloads.',
         )
       } catch (err) {
         if (err instanceof FabricAssetLoadError) {
