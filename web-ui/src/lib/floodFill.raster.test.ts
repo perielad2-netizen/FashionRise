@@ -4,10 +4,12 @@
  */
 import { createCanvas, Path2D as NapiPath2D } from '@napi-rs/canvas'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { paintInkStrokes } from '@/lib/exportCanvas'
 import {
   DEFAULT_ENDPOINT_SEAL_PX,
   DEFAULT_GAP_CLOSE_PX,
   STRONG_ENDPOINT_SEAL_PX,
+  buildInkBarrierLayers,
   buildInkBarrierMask,
   floodFillRegion,
   locateGapHint,
@@ -346,10 +348,68 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
     }
   })
 
+  it('protects a visibly hollow 6px continuous cutout even when dilate seals the barrier', () => {
+    // Explicit 6×6 continuous loop — prior tip noted dilate seals barrier empties to 0.
+    // Pre-dilation visible-ink geometry must still protect the hollow.
+    const outer = multiStrokeRect(0.75, 2.25)
+    const hx0 = 307
+    const hy0 = 333
+    const hx1 = 313
+    const hy1 = 339
+    const cx = Math.round((hx0 + hx1) / 2)
+    const cy = Math.round((hy0 + hy1) / 2)
+    const loop = [
+      ...strideLine(hx0, hy0, hx1, hy0, 10),
+      ...strideLine(hx1, hy0, hx1, hy1, 10),
+      ...strideLine(hx1, hy1, hx0, hy1, 10),
+      ...strideLine(hx0, hy1, hx0, hy0, 10),
+    ]
+    const strokes = [...outer, drawStroke(loop, 1.25)]
+
+    // 1) Original rendered sketch has a visibly empty interior at the cutout centre.
+    const sketch = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
+    const sketchCtx = sketch.getContext('2d')!
+    sketchCtx.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+    paintInkStrokes(sketchCtx, strokes, { sealTips: true })
+    const sketchImg = sketchCtx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+    expect(sketchImg.data[(cy * DESIGN_WIDTH + cx) * 4 + 3]!).toBe(0)
+
+    const layers = buildInkBarrierLayers(strokes, DEFAULT_GAP_CLOSE_PX, {
+      endpointSealPx: DEFAULT_ENDPOINT_SEAL_PX,
+    })
+    // Visible (pre-dilate) ink keeps the hollow empty; dilated barrier may seal it.
+    expect(layers.visibleInk[cy * DESIGN_WIDTH + cx]).toBe(0)
+    // Document the dilate-seal behaviour that previously hid this case.
+    expect(layers.barrier[cy * DESIGN_WIDTH + cx]).toBe(1)
+
+    // 2–3) Filling the surrounding panel must fail closed — no FillOp.
+    const ring = floodFillRegion({
+      strokes,
+      x: 340,
+      y: 380,
+      style: solidStyle('#B91C1C'),
+      gapClose: DEFAULT_GAP_CLOSE_PX,
+    })
+    expect(ring.ok).toBe(false)
+    if (!ring.ok) {
+      expect(ring.reason).toBe('unsupported_cutout')
+      expect(ring.message.toLowerCase()).toMatch(/cutout|hole|inner/)
+    }
+    expect(Object.prototype.hasOwnProperty.call(ring, 'fill')).toBe(false)
+
+    // 4) Saved/exported path: no fill paint may cover the hollow (no FillOp to paint).
+    const exportCanvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
+    const exportCtx = exportCanvas.getContext('2d')!
+    paintFillOps(exportCtx, [])
+    paintInkStrokes(exportCtx, strokes, { sealTips: true })
+    const exported = exportCtx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+    // Hollow stays empty (ink only on the loop; no fill underpaint).
+    expect(exported.data[(cy * DESIGN_WIDTH + cx) * 4 + 3]!).toBe(0)
+  })
+
   it('detects a small 8px cutout offset between former sparse sample points', () => {
     // Outer panel ~220×280 → old lattice step was floor(min/24)=10. Place an 8×8
-    // continuous cutout so its interior sits between those sample positions and
-    // still survives default dilate (6px seals shut; 8px keeps a few empty cells).
+    // continuous cutout so its interior sits between those sample positions.
     const outer = multiStrokeRect(0.75, 2.25)
     const hx0 = 307
     const hy0 = 333

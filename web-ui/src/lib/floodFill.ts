@@ -54,9 +54,11 @@ export function floodFillRegion(input: {
 }): FloodFillResult {
   const endpointSeal = input.closeSmallGaps ? STRONG_ENDPOINT_SEAL_PX : DEFAULT_ENDPOINT_SEAL_PX
   const gapClose = input.gapClose ?? DEFAULT_GAP_CLOSE_PX
-  const barrier = buildInkBarrierMask(input.strokes, gapClose, { endpointSealPx: endpointSeal })
+  const layers = buildInkBarrierLayers(input.strokes, gapClose, { endpointSealPx: endpointSeal })
+  const barrier = layers.barrier
   const result = floodFillAgainstBarrier({
     barrier,
+    visibleInk: layers.visibleInk,
     x: input.x,
     y: input.y,
     style: input.style,
@@ -66,11 +68,12 @@ export function floodFillRegion(input: {
   }
 
   // Diagnose whether a bounded stronger seal would help — do not apply it silently.
-  const strong = buildInkBarrierMask(input.strokes, Math.max(gapClose, 3), {
+  const strongLayers = buildInkBarrierLayers(input.strokes, Math.max(gapClose, 3), {
     endpointSealPx: STRONG_ENDPOINT_SEAL_PX,
   })
   const probe = floodFillAgainstBarrier({
-    barrier: strong,
+    barrier: strongLayers.barrier,
+    visibleInk: strongLayers.visibleInk,
     x: input.x,
     y: input.y,
     style: input.style,
@@ -101,6 +104,11 @@ export function floodFillRegion(input: {
 /** Core flood-fill against a prebuilt barrier mask (testable without Canvas 2D). */
 export function floodFillAgainstBarrier(input: {
   barrier: Uint8Array
+  /**
+   * Pre-dilation visible ink (post seal). Used so cutout safety still sees hollows
+   * that morphological dilate sealed into the barrier. Defaults to `barrier`.
+   */
+  visibleInk?: Uint8Array
   x: number
   y: number
   style: FillStyle
@@ -200,9 +208,11 @@ export function floodFillAgainstBarrier(input: {
   // polygon, not a pre-simplify trace the user never sees.
   const simplified = simplifyContour(contour, 1.4)
 
-  // Single-contour FillOp cannot represent holes. If painting the persisted contour
-  // would cover unfilled interior the flood never claimed, fail closed (no schema change).
-  if (floodEnclosesUnsupportedCutout(visited, barrier, simplified)) {
+  // Single-contour FillOp cannot represent holes. Use pre-dilation visible ink so
+  // a hollow sealed only by morphological expand still fails closed — without
+  // treating the dilate fringe along the flood frontier as a cutout.
+  const visibleInk = input.visibleInk ?? barrier
+  if (floodEnclosesUnsupportedCutout(visited, barrier, visibleInk, simplified)) {
     return {
       ok: false,
       reason: 'unsupported_cutout',
@@ -228,21 +238,28 @@ export type BarrierMaskOptions = {
   endpointSealPx?: number
 }
 
+export type InkBarrierLayers = {
+  /** Post seal-tip + endpoint seal, before morphological dilate (visible drawing). */
+  visibleInk: Uint8Array
+  /** Final flood barrier (visibleInk after optional dilate). */
+  barrier: Uint8Array
+}
+
 /**
- * Rasterize draw+erase strokes into a barrier mask matching what the user sees,
- * with seal-tip freehand paths plus a bounded, eraser-aware endpoint joint seal.
+ * Rasterize draw+erase strokes into visible-ink + dilated barrier layers.
  * Exported for regression tests (erased seams must not remain invisible barriers).
  */
-export function buildInkBarrierMask(
+export function buildInkBarrierLayers(
   strokes: Stroke[],
   gapClose = DEFAULT_GAP_CLOSE_PX,
   options?: BarrierMaskOptions,
-): Uint8Array {
+): InkBarrierLayers {
+  const empty = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
   const canvas = document.createElement('canvas')
   canvas.width = DESIGN_WIDTH
   canvas.height = DESIGN_HEIGHT
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  if (!ctx) return new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  if (!ctx) return { visibleInk: empty, barrier: empty }
 
   ctx.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
   // Seal-tip paths for draw ink so tapered pencil tips do not open joins in the mask.
@@ -263,8 +280,20 @@ export function buildInkBarrierMask(
   // Morphological dilate closes freehand hairline gaps at corners while staying
   // derived from rendered ink (not inventing invisible seams across panels).
   // Never grow into erased openings unless later pencil ink already restored them.
-  if (gapClose <= 0) return raw
-  return dilateMask(raw, gapClose, { eraseCoverage })
+  if (gapClose <= 0) return { visibleInk: raw, barrier: raw }
+  return { visibleInk: raw, barrier: dilateMask(raw, gapClose, { eraseCoverage }) }
+}
+
+/**
+ * Rasterize draw+erase strokes into a barrier mask matching what the user sees,
+ * with seal-tip freehand paths plus a bounded, eraser-aware endpoint joint seal.
+ */
+export function buildInkBarrierMask(
+  strokes: Stroke[],
+  gapClose = DEFAULT_GAP_CLOSE_PX,
+  options?: BarrierMaskOptions,
+): Uint8Array {
+  return buildInkBarrierLayers(strokes, gapClose, options).barrier
 }
 
 export type StrokeEndpoint = {
@@ -674,7 +703,7 @@ function cellNearBarrier(barrier: Uint8Array, x: number, y: number, radius: numb
 }
 
 /**
- * Minimum painted∖flooded non-barrier pixels that prove a real cutout.
+ * Minimum painted∖flooded empty visible-ink pixels that prove a real cutout.
  * Allows a few discrete fringe mismatches from contour simplification without
  * missing a closed 4–8px design-pixel opening (~12–50 cells).
  */
@@ -682,12 +711,17 @@ const MIN_UNSUPPORTED_CUTOUT_PIXELS = 4
 
 /**
  * True when painting the persisted fill contour would cover an inner cutout the
- * flood never visited. Deterministic non-AA scanline raster of the contour vs the
- * flood mask — not sparse lattice sampling or area heuristics.
+ * flood never visited.
+ *
+ * Compares against **pre-dilation visible ink** so morphological expand cannot
+ * hide a hollow that is empty in the rendered sketch. Dilate-only fringe along
+ * the flood frontier (barrier ∧ ¬visibleInk ∧ adjacent to visited) is ignored —
+ * that is contour/simplify mismatch, not a cutout.
  */
 function floodEnclosesUnsupportedCutout(
   visited: Uint8Array,
   barrier: Uint8Array,
+  visibleInk: Uint8Array,
   contour: number[],
 ): boolean {
   const coverage = rasterizeContourCoverage(contour)
@@ -700,9 +734,34 @@ function floodEnclosesUnsupportedCutout(
       const i = row + x
       if (!mask[i]) continue
       if (visited[i]) continue
-      if (barrier[i]) continue
-      holePixels += 1
-      if (holePixels >= MIN_UNSUPPORTED_CUTOUT_PIXELS) return true
+      // Skip actual drawn ink; empty sketch cells may still be cutouts.
+      if (visibleInk[i]) continue
+      // Surviving hollow (empty even after dilate) — classic cutout.
+      if (!barrier[i]) {
+        holePixels += 1
+        if (holePixels >= MIN_UNSUPPORTED_CUTOUT_PIXELS) return true
+        continue
+      }
+      // Dilate sealed this cell. Count only interior sealed hollows, not the
+      // 1px dilate fringe hugging the flood frontier from contour simplify.
+      if (!cellNearVisited(visited, x, y, 1)) {
+        holePixels += 1
+        if (holePixels >= MIN_UNSUPPORTED_CUTOUT_PIXELS) return true
+      }
+    }
+  }
+  return false
+}
+
+function cellNearVisited(visited: Uint8Array, x: number, y: number, radius: number): boolean {
+  const y0 = Math.max(0, y - radius)
+  const y1 = Math.min(DESIGN_HEIGHT - 1, y + radius)
+  const x0 = Math.max(0, x - radius)
+  const x1 = Math.min(DESIGN_WIDTH - 1, x + radius)
+  for (let ny = y0; ny <= y1; ny += 1) {
+    const row = ny * DESIGN_WIDTH
+    for (let nx = x0; nx <= x1; nx += 1) {
+      if (visited[row + nx]) return true
     }
   }
   return false
