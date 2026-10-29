@@ -26,6 +26,7 @@ Technical PM **PARTIAL PASS** on enrich tip `6ac13dc3` / docs tip `e6d1ed85`. Th
 |---|---|
 | Tip | `8278b45ca729fb4157c9fdd7c2bed562fe10a013` (code `d96acbad1fc7672d5f8c38634265ef132e204716`) |
 | Branch | `cursor/web-techpack-meas-preserve-77c6` (direct descendant of prod BE **`311e259a`**) |
+| PR | [#130](https://github.com/perielad2-netizen/FashionRise/pull/130) vs `cursor/web-techpack-be-prod-311e259a-77c6` @ `311e259a` |
 | PR base | `cursor/web-techpack-be-prod-311e259a-77c6` @ `311e259a` (verified production lineage; avoids diverged pdf-qa-clean docs) |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
 | Accepted (unchanged) | Entire finished-measurement overlay; empty-only proposals; designer metadata; category-change preserve; FR-3958 forensics (no invent/restore) |
