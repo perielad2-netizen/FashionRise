@@ -31,6 +31,12 @@ function cachedReference(src: string): Promise<HTMLImageElement> {
   return pending
 }
 
+/**
+ * Saved-design thumbnail. Output is always PREVIEW_WIDTH×PREVIEW_HEIGHT; the
+ * design frame is chosen automatically (legacy vs extended paper) so oversized
+ * garments fit into the thumbnail without cropping margins. Legacy artwork
+ * still uses the 768×1024 frame scaled into the same preview size.
+ */
 export async function renderPreviewBlob(snapshot: SavedDesignSnapshot): Promise<Blob> {
   const { canvas } = await renderSketchCanvas({
     strokes: snapshot.strokes,
@@ -39,6 +45,7 @@ export async function renderPreviewBlob(snapshot: SavedDesignSnapshot): Promise<
     referenceOpacity: snapshot.dimmed ? 0.4 : 1,
     width: PREVIEW_WIDTH,
     height: PREVIEW_HEIGHT,
+    frame: 'auto',
     onReferenceError: 'skip',
     onFabricError: 'skip',
     loadReference: cachedReference,

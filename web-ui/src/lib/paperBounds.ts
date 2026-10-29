@@ -155,29 +155,25 @@ export function artworkExceedsLegacyBounds(
   return false
 }
 
-/**
- * Export / capture frame: legacy 768×1024 when artwork stays inside the croquis
- * plane (pixel-identical reopen/export); full extended paper otherwise.
- */
-export function resolveExportFrame(
-  strokes: Stroke[],
-  fills: FillBoundsSource[] = [],
-): {
+export type ExportFrame = {
   mode: 'legacy' | 'paper'
   originX: number
   originY: number
   width: number
   height: number
-} {
-  if (!artworkExceedsLegacyBounds(strokes, fills)) {
-    return {
-      mode: 'legacy',
-      originX: 0,
-      originY: 0,
-      width: DESIGN_WIDTH,
-      height: DESIGN_HEIGHT,
-    }
+}
+
+export function legacyExportFrame(): ExportFrame {
+  return {
+    mode: 'legacy',
+    originX: 0,
+    originY: 0,
+    width: DESIGN_WIDTH,
+    height: DESIGN_HEIGHT,
   }
+}
+
+export function paperExportFrame(): ExportFrame {
   return {
     mode: 'paper',
     originX: PAPER_ORIGIN_X,
@@ -185,4 +181,30 @@ export function resolveExportFrame(
     width: PAPER_WIDTH,
     height: PAPER_HEIGHT,
   }
+}
+
+/**
+ * Export / capture frame: legacy 768×1024 when artwork stays inside the croquis
+ * plane (pixel-identical reopen/export); full extended paper otherwise.
+ */
+export function resolveExportFrame(
+  strokes: Stroke[],
+  fills: FillBoundsSource[] = [],
+): ExportFrame {
+  if (!artworkExceedsLegacyBounds(strokes, fills)) return legacyExportFrame()
+  return paperExportFrame()
+}
+
+/**
+ * Shared Front+Back sheet frame: if either side uses the extended paper, both
+ * panels use paper so croquis placement aligns. Both-legacy keeps 768×1024.
+ */
+export function resolveSheetExportFrame(
+  front: { strokes: Stroke[]; fills?: FillBoundsSource[] },
+  back: { strokes: Stroke[]; fills?: FillBoundsSource[] },
+): ExportFrame {
+  const frontFrame = resolveExportFrame(front.strokes, front.fills ?? [])
+  const backFrame = resolveExportFrame(back.strokes, back.fills ?? [])
+  if (frontFrame.mode === 'paper' || backFrame.mode === 'paper') return paperExportFrame()
+  return legacyExportFrame()
 }

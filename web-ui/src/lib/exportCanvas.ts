@@ -2,7 +2,13 @@ import { strokeToSvgPath } from '@/lib/freehand'
 import type { FillOp } from '@/lib/fills'
 import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { paintFillOps } from '@/lib/paintFills'
-import { resolveExportFrame } from '@/lib/paperBounds'
+import {
+  legacyExportFrame,
+  paperExportFrame,
+  resolveExportFrame,
+  resolveSheetExportFrame,
+  type ExportFrame,
+} from '@/lib/paperBounds'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 
 export const PAPER_BACKGROUND = '#F8F4F0'
@@ -184,6 +190,23 @@ export type RenderOptions = ExportOptions & {
    * fall below one pixel when 768×1024 is scaled down. Leave unset for exports.
    */
   minInkSize?: number
+  /**
+   * Design-space frame selection. Independent of `width`/`height` (output resize).
+   * - `auto` (default): legacy vs paper from artwork bounds
+   * - `legacy` / `paper`: force that frame (Front+Back sheet alignment)
+   */
+  frame?: 'auto' | 'legacy' | 'paper' | ExportFrame
+}
+
+function resolveRenderFrame(
+  options: Pick<RenderOptions, 'strokes' | 'fills' | 'frame'>,
+): ExportFrame {
+  const fills = options.fills ?? []
+  const requested = options.frame ?? 'auto'
+  if (requested === 'legacy') return legacyExportFrame()
+  if (requested === 'paper') return paperExportFrame()
+  if (typeof requested === 'object') return requested
+  return resolveExportFrame(options.strokes, fills)
 }
 
 export function withMinimumSize(strokes: Stroke[], minDesignSize: number): Stroke[] {
@@ -199,20 +222,16 @@ export function withMinimumSize(strokes: Stroke[], minDesignSize: number): Strok
  *   INK canvas   = strokes (eraser destination-out on ink only)
  *   FINAL        = base, then ink composited on top
  *
- * Strokes stay in design space. Default output size is legacy 768×1024 when
- * artwork stays inside that plane (pixel-identical reopen/export). Oversized
- * garments that use the extended paper margins export at the full paper size
- * with the croquis still at its legacy design coordinates (origin offset).
+ * Strokes stay in design space. Frame choice (`auto` / `legacy` / `paper`) is
+ * independent of output `width`/`height` — thumbnails may scale a paper frame
+ * into 240×320 without cropping margin ink. Croquis always fit-contains into the
+ * legacy 768×1024 plane (never recentered onto the full paper).
  *
- * Explicit `width`/`height` overrides keep the legacy croquis frame (thumbnails).
  * No network calls other than loading the reference image URL already shown in Studio.
  */
 export async function renderSketchCanvas(options: RenderOptions): Promise<RenderedSketch> {
   const fills = options.fills ?? []
-  const explicitSize = options.width != null || options.height != null
-  const frame = explicitSize
-    ? { mode: 'legacy' as const, originX: 0, originY: 0, width: DESIGN_WIDTH, height: DESIGN_HEIGHT }
-    : resolveExportFrame(options.strokes, fills)
+  const frame = resolveRenderFrame(options)
 
   const originX = frame.originX
   const originY = frame.originY
@@ -307,20 +326,41 @@ export async function exportFrontBackSheetPng(
 ): Promise<SketchPngResult> {
   const gap = options.gapPx ?? 24
   const labelH = options.labelHeightPx ?? 28
-  const frontW = options.front.width ?? DESIGN_WIDTH
-  const frontH = options.front.height ?? DESIGN_HEIGHT
-  const backW = options.back.width ?? DESIGN_WIDTH
-  const backH = options.back.height ?? DESIGN_HEIGHT
-  const panelW = Math.max(frontW, backW)
-  const panelH = frontH + labelH + backH + labelH
-  const sheetW = panelW * 2 + gap
-  const sheetH = panelH
+  // Shared frame so croquis alignment matches across sides; never force legacy
+  // dimensions that would crop extended-margin artwork.
+  const sheetFrame = resolveSheetExportFrame(
+    { strokes: options.front.strokes, fills: options.front.fills },
+    { strokes: options.back.strokes, fills: options.back.fills },
+  )
 
   const [{ canvas: frontCanvas, referenceIncluded: frontRef }, { canvas: backCanvas, referenceIncluded: backRef }] =
     await Promise.all([
-      renderSketchCanvas({ ...options.front, width: frontW, height: frontH, onReferenceError: 'skip' }),
-      renderSketchCanvas({ ...options.back, width: backW, height: backH, onReferenceError: 'skip' }),
+      renderSketchCanvas({
+        ...options.front,
+        // Explicit output size only when the caller asked for it; otherwise native frame.
+        width: options.front.width,
+        height: options.front.height,
+        frame: sheetFrame,
+        onReferenceError: 'skip',
+      }),
+      renderSketchCanvas({
+        ...options.back,
+        width: options.back.width,
+        height: options.back.height,
+        frame: sheetFrame,
+        onReferenceError: 'skip',
+      }),
     ])
+
+  const frontW = frontCanvas.width
+  const frontH = frontCanvas.height
+  const backW = backCanvas.width
+  const backH = backCanvas.height
+  const panelW = Math.max(frontW, backW)
+  // Preserve the historical sheet height formula (legacy layout unchanged).
+  const panelH = frontH + labelH + backH + labelH
+  const sheetW = panelW * 2 + gap
+  const sheetH = panelH
 
   const sheet = document.createElement('canvas')
   sheet.width = sheetW

@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #127 extended paper** — branch `cursor/web-extended-paper-127-77c6` based on canonical #133 @ `5bd6d585` · prod unchanged FE `ebcb1cc7` / BE `6cc317ec` · **0 paid AI** · **STOP for Technical PM review**.)
+**Last updated:** 2026-10-29 (**Issue #127 / PR #134 export closure** — Front+Back sheet + preview frame fix atop extended paper · prod unchanged FE `ebcb1cc7` / BE `6cc317ec` · **0 paid AI** · **STOP for final Technical PM re-review**.)
 
 **Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity) and PR #129 (6px cutout fill safety + decimal lineage).
 
@@ -19,9 +19,9 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## Issue #127 — extended logical drawing paper (2026-10-29) — STOP for Technical PM
+## Issue #127 / PR #134 — extended paper + Front/Back export closure (2026-10-29) — STOP for final PM
 
-Frontend-only candidate based on accepted canonical baseline PR #133 (`5bd6d585`). **Does not modify or merge #133. No production deploy. No BE/provider/paid AI.**
+Frontend-only candidate based on accepted canonical baseline PR #133 (`5bd6d585`). **Does not modify or merge #133. #125 remains HOLD. No production deploy. No BE/provider/paid AI.**
 
 ### Problem (owner-confirmed on prod FE `ebcb1cc7`)
 
@@ -36,25 +36,31 @@ Fill succeeds inside the legacy `768×1024` plane and fails when a closed oversi
 | Stroke/fill persistence | Existing numeric design coords unchanged; new artwork may use negative / >legacy |
 | Flood / barrier / contour | Paper-indexed masks with origin translate; reject at **new** outer edge |
 | Fit Page framing | Still frames croquis (does not shrink model to paper); pan/zoom reaches margins |
-| PNG export | Legacy-only → 768×1024 pixel-identical; oversized → full paper frame |
+| PNG export (single) | Legacy-only → 768×1024 pixel-identical; oversized → full paper frame |
+| Front+Back sheet | Shared `resolveSheetExportFrame`: either side paper → both panels paper (aligned croquis); both legacy → historical 768×1024 layout. **No forced legacy width/height crop.** |
+| Preview thumbnails | `width`/`height` are output-only; `frame: 'auto'` scales full paper into 240×320 for oversized designs |
 | Magic capture | **Fail closed** if artwork exceeds legacy frame (no silent crop; 0 paid AI) |
+
+### P0 closure (PM PARTIAL PASS follow-up)
+
+`renderSketchCanvas` now separates **frame choice** from **output size**. `exportFrontBackSheetPng` uses the shared sheet frame instead of forcing `DESIGN_WIDTH/HEIGHT`. Pixel Path2D regressions cover Front↔Back oversized/legacy mixes, both-oversized, both-legacy dimensions, croquis placement on legacy vs paper, and preview margin survival.
 
 ### Verification
 
 | Check | Result |
 |---|---|
-| FE Vitest | **648 passed / 6 failed** (same baseline: 5× StudioPage beta-notices + `draftPersistence` clearBackIntent) |
-| Focused #127 Path2D | `paperBounds.extendedFill.test.ts` **11/11** + prior floodFill raster/joints/barrier green |
+| Focused export/paper/fill | `exportFrontBack.extendedPaper` + `paperBounds.extendedFill` + flood/export suites green |
+| FE Vitest | **658 passed / 6 failed** (same baseline: 5× StudioPage beta-notices + `draftPersistence` clearBackIntent) |
 | `tsc -b` | **PASS** |
-| lint (oxlint) | warnings only (pre-existing setState-in-effect / export patterns) |
+| lint (oxlint) | warnings only |
 | Prod build | `VITE_API_BASE_URL=/api/v1` · SW Access-safe · assert-prod-api-base **PASS** |
 
 ### Risks / open for PM
 
-- Non-immersive framed canvas still CSS-sizes to the croquis plane; oversized margin drawing is primarily via immersive pan/zoom (Fit Page keeps croquis framing).
+- Non-immersive framed canvas still CSS-sizes to the croquis plane; oversized margin drawing is primarily via immersive pan/zoom.
 - Magic remains legacy-frame-only until a separately gated capture path exists.
-- Soft fill pixel cap raised to 58% of paper so closed oversized garments can fill; whole-page leaks still hit the outer edge first.
-- #127 stays open until owner mobile QA of oversized fill + save/reopen on a deployed build (not this PR).
+- Soft fill pixel cap is 58% of paper; whole-page leaks still hit the outer edge first.
+- #127 stays open until owner mobile QA of oversized fill + save/reopen on a deployed build.
 
 
 ## Stage C — canonical baseline + GitHub cleanup (2026-10-29) — STOP for Technical PM
