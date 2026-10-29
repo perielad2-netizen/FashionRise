@@ -477,6 +477,9 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               onUndo={editor.undo}
               onRedo={editor.redo}
               orientation={narrow ? 'horizontal' : 'vertical'}
+              showCloseSmallGaps={editor.showCloseSmallGaps}
+              closeSmallGapsArmed={editor.fillCloseSmallGaps}
+              onCloseSmallGaps={editor.armCloseSmallGaps}
             />
           ) : null}
           <div className={styles.canvasStage}>
@@ -493,6 +496,9 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               onStrokeComplete={editor.onStrokeComplete}
               onFillComplete={editor.onFillComplete}
               onFillError={editor.onFillError}
+              fillCloseSmallGaps={editor.fillCloseSmallGaps}
+              onFillCloseSmallGapsConsumed={editor.onFillCloseSmallGapsConsumed}
+              fillGapHint={editor.fillGapHint}
               onEyedropperSample={editor.onEyedropperSample}
               onBrushSize={editor.setBrushSizePx}
               immersive={immersive}

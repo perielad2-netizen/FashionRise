@@ -41,6 +41,15 @@ type FillPaintTarget = Canvas2DLike & {
   createPattern(image: CanvasImageSource, repetition: string): CanvasPattern | null
 }
 
+export type PaintInkOptions = {
+  /**
+   * When true, draw strokes use seal-tip freehand paths so fill barriers do not
+   * leak at tapered joins. Erasers are unchanged. Visible Konva rendering omits
+   * this flag.
+   */
+  sealTips?: boolean
+}
+
 /** Paint a single erase stroke with destination-out (never onto reference/base). */
 export function paintEraseStroke(ctx: Canvas2DLike, stroke: Stroke): void {
   if (stroke.tool !== 'erase') return
@@ -58,9 +67,14 @@ export function paintEraseStroke(ctx: Canvas2DLike, stroke: Stroke): void {
  * Paint ink strokes onto an ink-only context.
  * Eraser uses destination-out against ink pixels — never against reference/base.
  */
-export function paintInkStrokes(ctx: Canvas2DLike, strokes: Stroke[]): void {
+export function paintInkStrokes(
+  ctx: Canvas2DLike,
+  strokes: Stroke[],
+  options?: PaintInkOptions,
+): void {
+  const sealTips = options?.sealTips === true
   for (const stroke of strokes) {
-    const path = strokeToSvgPath(stroke)
+    const path = strokeToSvgPath(stroke, stroke.tool === 'draw' && sealTips ? { sealTips: true } : undefined)
     if (!path) continue
     const p = new Path2D(path)
     ctx.save()

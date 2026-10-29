@@ -641,6 +641,16 @@ export function useStudioEditor() {
 
   const artwork = useCallback(() => activeArtwork(editorSideState()), [editorSideState])
 
+  const [fillCloseSmallGaps, setFillCloseSmallGaps] = useState(false)
+  const [fillGapHint, setFillGapHint] = useState<{ x: number; y: number } | null>(null)
+  const [showCloseSmallGaps, setShowCloseSmallGaps] = useState(false)
+
+  const clearFillGapUi = useCallback(() => {
+    setFillGapHint(null)
+    setShowCloseSmallGaps(false)
+    setFillCloseSmallGaps(false)
+  }, [])
+
   const onStrokeComplete = useCallback(
     (stroke: Stroke) => {
       activeHistory().push(artwork())
@@ -663,8 +673,10 @@ export function useStudioEditor() {
         backFills: patch.backFills,
         activeSide: patch.activeSide,
       })
+      // Stale gap markers / armed Gaps must not survive new draw or erase ink.
+      clearFillGapUi()
     },
-    [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags],
+    [activeHistory, artwork, clearFillGapUi, commitFromEditor, editorSideState, syncHistoryFlags],
   )
 
   const onFillComplete = useCallback(
@@ -709,17 +721,43 @@ export function useStudioEditor() {
         backStrokes: patch.backStrokes,
         backFills: patch.backFills,
       })
+      setFillGapHint(null)
+      setShowCloseSmallGaps(false)
+      setFillCloseSmallGaps(false)
       publishStudioNotice('Region filled. Undo if you need to try again.')
     },
     [activeHistory, artwork, commitFromEditor, editorSideState, publishStudioNotice, syncHistoryFlags],
   )
 
   const onFillError = useCallback(
-    (message: string) => {
+    (
+      message: string,
+      detail?: {
+        reason: string
+        gapHint?: { x: number; y: number }
+        suggestCloseGaps?: boolean
+      },
+    ) => {
       publishStudioNotice(message)
+      if (detail?.gapHint) setFillGapHint(detail.gapHint)
+      else setFillGapHint(null)
+      if (detail?.reason === 'open_outline') {
+        setShowCloseSmallGaps(true)
+        if (detail.suggestCloseGaps) setFillCloseSmallGaps(false)
+      }
     },
     [publishStudioNotice],
   )
+
+  const armCloseSmallGaps = useCallback(() => {
+    setFillCloseSmallGaps(true)
+    setTool('fill')
+    publishStudioNotice('Close small gaps armed — tap Fill inside the outline.')
+  }, [publishStudioNotice])
+
+  const onFillCloseSmallGapsConsumed = useCallback(() => {
+    setFillCloseSmallGaps(false)
+  }, [])
 
   const onEyedropperSample = useCallback(
     (sampled: string) => {
@@ -772,10 +810,12 @@ export function useStudioEditor() {
       backFills: patch.backFills,
       clearBackIntent,
     })
+    clearFillGapUi()
   }, [
     activeHistory,
     artwork,
     backClearIntentForPatch,
+    clearFillGapUi,
     commitFromEditor,
     editorSideState,
     syncHistoryFlags,
@@ -808,10 +848,12 @@ export function useStudioEditor() {
       backFills: patch.backFills,
       clearBackIntent,
     })
+    clearFillGapUi()
   }, [
     activeHistory,
     artwork,
     backClearIntentForPatch,
+    clearFillGapUi,
     commitFromEditor,
     editorSideState,
     syncHistoryFlags,
@@ -910,8 +952,19 @@ export function useStudioEditor() {
       setActiveSide(side)
       syncHistoryFlags()
       commitFromEditor({ activeSide: side })
+      clearFillGapUi()
     },
-    [activeSide, commitFromEditor, frontBackEnabled, model, syncHistoryFlags],
+    [activeSide, clearFillGapUi, commitFromEditor, frontBackEnabled, model, syncHistoryFlags],
+  )
+
+  const selectTool = useCallback(
+    (next: ToolKind) => {
+      setTool(next)
+      // Armed Gaps / gap markers are fill-session state — clear when leaving fill
+      // or switching drawing tools so they cannot mislead after a tool change.
+      if (next !== 'fill') clearFillGapUi()
+    },
+    [clearFillGapUi],
   )
 
   const onCustomFile = useCallback(
@@ -2222,7 +2275,7 @@ export function useStudioEditor() {
     strokes,
     fills,
     tool,
-    setTool,
+    setTool: selectTool,
     sizeId,
     setSizeId,
     brushSize,
@@ -2246,6 +2299,11 @@ export function useStudioEditor() {
     onStrokeComplete,
     onFillComplete,
     onFillError,
+    fillCloseSmallGaps,
+    fillGapHint,
+    showCloseSmallGaps,
+    armCloseSmallGaps,
+    onFillCloseSmallGapsConsumed,
     onEyedropperSample,
     undo,
     redo,

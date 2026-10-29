@@ -102,6 +102,7 @@ describe('floodFillAgainstBarrier', () => {
     if (result.ok) return
     expect(result.reason).toBe('open_outline')
     expect(result.message).toMatch(/close the shape/i)
+    expect(result.message.toLowerCase()).not.toContain('dress')
   })
 
   it('rejects taps on the barrier and outside the design space', () => {

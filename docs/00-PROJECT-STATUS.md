@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-28 (**PR #126 OWNER ACCEPTED** · live release `bfbdd03f-decimal` · UI label incorrectly baked as `App b2fbd043` via stale `VITE_BUILD_SHA` env — **assets are #126** · measurement investigation: **0 filled-value losses** vs pre-FE SQL backup · BE `311e259a` · Alembic `011` · PR #125 HOLD · **STOP for Technical PM** · 0 paid AI.)
+**Last updated:** 2026-10-29 (**Issue #127 / PR #129 final 6px cutout check** — tip `c9ebcca0f51518bb8c77a6706bb50279442971ea` · code `02f904dc25e450cc55ea83013b0e1bf0ef31c2b1` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · pre-dilation visible-ink cutout guard · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM final acceptance**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -27,6 +27,45 @@
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+
+
+## Issue #127 / PR #129 — final 6px cutout check — STOP for Technical PM acceptance (2026-10-29)
+
+Technical PM **Substantial pass / HOLD** on tip `f1930dcf` / code `a3158b61` — residual P0: a visibly hollow **6px** continuous cutout could be sealed by barrier dilate (`gapClose=2`) and escape the contour∖flood check because sealed cells were skipped as `barrier[i]`. This tip keeps the accepted scanline guard and threads **pre-dilation visible ink** so dilate-sealed hollows still fail closed. Dilate fringe along the flood frontier is excluded so hole-free fills stay green. All prior PR #129 safety fixes retained.
+
+| Item | Detail |
+|---|---|
+| Tip | `c9ebcca0f51518bb8c77a6706bb50279442971ea` (code `02f904dc25e450cc55ea83013b0e1bf0ef31c2b1`) · PR **#129** |
+| Prior accepted code | `a3158b61fbeb8fb04549530be9176f504d9566b7` (scanline contour∖flood) on tip `f1930dcf` / `c0c72ab3` |
+| Branch | `cursor/web-sketch-fill-reliability-77c6` (descendant of FE prod `bfbdd03f`) |
+| Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
+| P0 6px cutout | `buildInkBarrierLayers` exposes `visibleInk` (pre-dilate) + `barrier` (post-dilate). Cutout check counts empty **visible** cells inside the persisted contour; dilate-only frontier fringe (adjacent to visited) ignored; dilate-sealed interior hollows → `unsupported_cutout` / **no FillOp**. |
+| Regressions (real Path2D) | **6×6 continuous cutout**: sketch centre alpha=0, dilate seals barrier centre, fill → `unsupported_cutout`, export hollow stays empty; 8px offset cutout retained; thin multi-stroke closed outline still fills; complex hole-free irregular outline still fills; erase reopen + pencil reconnect retained |
+| Preserved | Erase-aware final dilate · large nested cutout reject · gap-mouth first candidate · thin multi-stroke joins · bounded Gaps · undo / gradient / fabric · scanline (no sparse lattice) |
+| Tests (fill) | focused floodFill raster+core **18 passed**; fill-related (joints/barrier/paint/fills) **42 passed** |
+| Lint / TS / build | `oxlint src --quiet` **PASS**; `tsc` **PASS**; `VITE_API_BASE_URL=/api/v1` production build **PASS** (`assert-prod-api-base` ok) |
+| Safety | **No deploy · no paid AI · no private artwork · no schema migration · no broad rewrite · #125 / #130 independent** |
+| Exact next action | **STOP** for Technical PM final acceptance of PR #129. **Do not deploy.** Controlled FE-only rollout only after accept. |
+
+
+### Prior safety amendment (still in tip — PM accepted foundation)
+
+| Item | Detail |
+|---|---|
+| Code | `1971ee7e` on `742cbddc` |
+| Content | Eraser veto · facing seals (auto 2.5 / Gaps 12) · real Path2D raster tests · spatial-hash seals · dress-free copy |
+
+### Full-suite baseline failures (unchanged vs tip `327d2870` / deployed FE)
+
+| # | Test |
+|---|---|
+| 1 | `StudioPage.test.tsx` › Studio beta notices stay outside Settings › shows and dismisses Magic, Settings, and Back at **390×844** |
+| 2 | same › **768×1024** |
+| 3 | same › **1024×550** |
+| 4 | same › **1180×600** |
+| 5 | same › **1440×900** |
+| 6 | `draftPersistence.test.ts` › restoreStudioDraft damaged cloud V2 safety › forwards clearBackIntent metadata through Front clear → Back clear save (no false conflict) |
 
 
 ## PR #126 owner acceptance + measurement/version investigation — STOP (2026-10-28)
@@ -841,6 +880,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-29 | **PR #129 final 6px cutout check (HOLD follow-up):** pre-dilation `visibleInk` cutout guard so dilate-sealed 6px hollow → `unsupported_cutout` / no FillOp / export empty; frontier dilate fringe excluded; Path2D 6px regression + thin multi-stroke still fills; fill tests **42**; prod build `/api/v1` PASS; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
+| 2026-10-29 | **PR #129 fill integrity closure (CHANGES REQUIRED follow-up):** erase-aware final dilate (narrow openings survive Fill+Gaps; later pencil reconnects); reject unsupported single-contour cutouts with pixel+persist proof; gap hint = first mouth from escape / suppress ambiguous; fill tests **26**; full suite **633/6** baseline; prod build `/api/v1` PASS; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
 | 2026-10-26 | **Create Real Design mobile UX + provenance DEPLOYED** FE `5f519734` (PR [#98](https://github.com/perielad2-netizen/FashionRise/pull/98)) + BE `08b66ca2` (PR [#97](https://github.com/perielad2-netizen/FashionRise/pull/97)); Alembic `010` unchanged; Android Edit Measurements sheet; Stage 4 Basic vs Professional clarity; PDF Basic/No-AI labeling; smoke PASS (heuristic provenance, **0 paid**); backup `techpack-mobile-ux-deploy-20261026T201157Z`. Owner first paid AI test still pending. |
 | 2026-10-26 | **Create Real Design V3 DEPLOYED** FE `75a8e8ca` (PR [#96](https://github.com/perielad2-netizen/FashionRise/pull/96)) + BE `5fd4b843` (PR [#95](https://github.com/perielad2-netizen/FashionRise/pull/95)); Alembic `010` `techpack_ai_artifacts`; Nginx artifacts image route; owner-allowlist AI gates ON (ceiling `$15`, max `$8`/run, `$20`/day); non-AI smoke PASS (heuristic `$0`, professional confirm only); mocked CI + FR-7182 fixture PDF; Dual Magic ON; **0 paid generate by Cursor**; backup `techpack-v3-deploy-20261026T190439Z`. Owner to run first live AI Professional test. No monetization. |
 | 2026-10-26 | **Create Real Design V2 DEPLOYED** FE `e2416ed0` (PR [#94](https://github.com/perielad2-netizen/FashionRise/pull/94)) + BE `f2433513` (PR [#93](https://github.com/perielad2-netizen/FashionRise/pull/93)); Alembic `009` `techpack_ai_runs`; Nginx AI allowlist; multi-piece PDF + flats/schematics; smoke PASS (heuristic `$0`, paid AI 403); Dual Magic ON; **0 paid AI**; backup `techpack-v2-deploy-20261026T181418Z`. No monetization. |
