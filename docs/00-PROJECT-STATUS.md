@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #128 concurrent-write closure** — tip  · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #127 remain separate** · **STOP for Technical PM re-review**.)
+**Last updated:** 2026-10-29 (**Issue #128 concurrent-write closure** — tip `5fc9927b2b3cc1477b0f5589e6844f9aab65f2cb` / code `d96acbad1fc7672d5f8c38634265ef132e204716` · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #127 remain separate** · **STOP for Technical PM re-review**.)
 
 **Phase:** Protected family beta. Issue #128: designer finished POMs preserved through enrich **and** mid-run saves protected by fail-closed post-provider CAS. No restore of FR-3958 values without owner authorization.
 
@@ -24,7 +24,7 @@ Technical PM **PARTIAL PASS** on enrich tip `6ac13dc3` / docs tip `e6d1ed85`. Th
 
 | Item | Detail |
 |---|---|
-| Tip |  |
+| Tip | `5fc9927b2b3cc1477b0f5589e6844f9aab65f2cb` (code `d96acbad1fc7672d5f8c38634265ef132e204716`) |
 | Branch | `cursor/web-techpack-meas-preserve-77c6` (direct descendant of prod BE **`311e259a`**) |
 | PR base | `cursor/web-techpack-be-prod-311e259a-77c6` @ `311e259a` (verified production lineage; avoids diverged pdf-qa-clean docs) |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
@@ -1171,6 +1171,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-29 | **Issue #128 concurrent-write closure (PARTIAL PASS follow-up):** generation-boundary capture + post-provider `FOR UPDATE` re-read; live-spec enrich on mid-run measurement edits; skip draft.spec when pack ownership moved (PDF-only); retain artifacts/cost; never re-call paid AI; mocked DB persist/GET tests; enrich tip `6ac13dc3` retained; production FE `bfbdd03f-decimal` / BE `311e259a` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
 | 2026-10-28 | **PR #123 review-guard closure:** fail-closed non-Professional stage + current `last_run_id` + outfit-referenced artifact checks; legacy blank stage only with Professional draft evidence; **69** backend regressions PASS; production FE `13b26c3a-apifix` / BE `005034d5` / Alembic `011` **unchanged**; **0 paid AI**; **STOP for Technical PM — do not deploy**. Issue #124 (FE decimals + FR-B9F9 fidelity) tracked separately. |
 | 2026-10-28 | **PR #123 clean replacement for #122 (CHANGES REQUIRED closure)** @ `80e86f90`/`43c8d376`: review→PDF invalidation + fingerprint review tokens; auth-derived reviewer; sanitized fixtures; private FR-3958 evidence kept off git; production unchanged; superseded tip by review-guard closure above. |
 | 2026-10-28 | **PR #118 readiness-gate closure:** reject empty/malformed/duplicate/unconfirmed outfit identities; separate `source=designer` provenance from explicit review confirmation; narrow measurement exceptions (code/pom/value/revision + rationale; no blanket); mypy clean on manufacturing module; regressions added; prior 14-page private visual QA retained; production unchanged; **0 paid AI**; **STOP for PM acceptance — no deploy**. |
