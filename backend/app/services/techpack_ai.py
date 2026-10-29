@@ -18,6 +18,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import get_settings
 from app.core.errors import ForbiddenError, NotFoundError, ValidationAppError
@@ -238,6 +239,146 @@ def _measurement_cell_empty(cell: Any) -> bool:
     if not isinstance(cell, dict):
         return True
     return cell.get("value") in (None, "")
+
+
+def _designer_owned_meas_fingerprint(spec: dict[str, Any]) -> str:
+    """Stable hash of designer-owned body + finished POM cells (not AI illustrations)."""
+    payload: dict[str, Any] = {"body": {}, "pieces": {}}
+    body_raw = spec.get("body")
+    body: dict[str, Any] = body_raw if isinstance(body_raw, dict) else {}
+    for key in sorted(body.keys()):
+        cell = body.get(key)
+        if not isinstance(cell, dict):
+            continue
+        payload["body"][key] = {
+            "value": cell.get("value"),
+            "unit": cell.get("unit"),
+            "source": cell.get("source"),
+            "review_status": cell.get("review_status"),
+            "note": cell.get("note"),
+            "definition": cell.get("definition"),
+        }
+    outfit_raw = spec.get("outfit")
+    outfit: dict[str, Any] = outfit_raw if isinstance(outfit_raw, dict) else {}
+    pieces_raw = outfit.get("pieces")
+    pieces_list: list[Any] = pieces_raw if isinstance(pieces_raw, list) else []
+    for piece in pieces_list:
+        if not isinstance(piece, dict):
+            continue
+        pid = str(piece.get("id") or "")
+        finished_raw = piece.get("finished_measurements")
+        finished: dict[str, Any] = finished_raw if isinstance(finished_raw, dict) else {}
+        cells: dict[str, Any] = {}
+        for key in sorted(finished.keys()):
+            cell = finished.get(key)
+            if not isinstance(cell, dict):
+                continue
+            cells[key] = {
+                "value": cell.get("value"),
+                "unit": cell.get("unit"),
+                "source": cell.get("source"),
+                "review_status": cell.get("review_status"),
+                "note": cell.get("note"),
+                "definition": cell.get("definition"),
+                "confidence": cell.get("confidence"),
+            }
+        payload["pieces"][pid] = cells
+    raw = json.dumps(payload, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def capture_generation_boundary(draft: TechpackDraft, spec: dict[str, Any]) -> dict[str, Any]:
+    """Snapshot revision / updated_at / measurement fingerprint / pack ownership at provider start."""
+    updated = draft.updated_at
+    ai_raw = spec.get("ai")
+    ai: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
+    return {
+        "draft_revision": int(draft.revision or 1),
+        "draft_updated_at": updated.isoformat() if isinstance(updated, datetime) else None,
+        "meas_fingerprint": _designer_owned_meas_fingerprint(spec),
+        # Prior pack pointers — used to detect PDF-only / other-run ownership that
+        # landed during generation. Must not treat a mere prior pack as "newer".
+        "last_run_id": str(ai.get("last_run_id") or "").strip() or None,
+        "export_id": str(ai.get("export_id") or "").strip() or None,
+    }
+
+
+def _generation_boundary_stale(
+    draft: TechpackDraft,
+    live_spec: dict[str, Any],
+    boundary: dict[str, Any],
+) -> bool:
+    if int(draft.revision or 1) != int(boundary.get("draft_revision") or 1):
+        return True
+    live_updated = draft.updated_at.isoformat() if isinstance(draft.updated_at, datetime) else None
+    bound_updated = boundary.get("draft_updated_at")
+    if live_updated and bound_updated and live_updated != bound_updated:
+        return True
+    expected_fp = str(boundary.get("meas_fingerprint") or "")
+    return bool(expected_fp and _designer_owned_meas_fingerprint(live_spec) != expected_fp)
+
+
+def _pack_ownership_moved_since_boundary(
+    live_spec: dict[str, Any], boundary: dict[str, Any]
+) -> bool:
+    """True when draft pack pointers changed after the generation boundary.
+
+    Sequential Professional regenerations keep the prior pack until this run
+    finishes — that is NOT a concurrent overwrite. Skip draft writes only when
+    a different completed pack (e.g. PDF-only) claimed ownership mid-flight.
+    """
+    ai_raw = live_spec.get("ai")
+    ai: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
+    live_last = str(ai.get("last_run_id") or "").strip()
+    live_export = str(ai.get("export_id") or "").strip()
+    if not live_last or not live_export:
+        return False
+    bound_last = str(boundary.get("last_run_id") or "").strip()
+    bound_export = str(boundary.get("export_id") or "").strip()
+    return (live_last, live_export) != (bound_last, bound_export)
+
+
+def _live_owned_by_other_completed_pack(
+    live_spec: dict[str, Any], run: TechpackAIRun
+) -> bool:
+    """True when draft already binds a completed pack for a different run.
+
+    Used after this run has (or would have) claimed ownership — e.g. during PDF
+    assembly — to detect a mid-flight PDF-only / other Professional takeover.
+    """
+    ai_raw = live_spec.get("ai")
+    ai: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
+    last = str(ai.get("last_run_id") or "").strip()
+    export = str(ai.get("export_id") or "").strip()
+    return bool(last and export and last != str(run.id))
+
+
+def resolve_persist_base_after_provider(
+    db: Session,
+    *,
+    draft_id: uuid.UUID,
+    run: TechpackAIRun,
+    boundary: dict[str, Any],
+    authorized_spec: dict[str, Any],
+) -> tuple[TechpackDraft, dict[str, Any], bool, bool]:
+    """Row-lock draft and choose persist base after paid provider work.
+
+    Returns ``(draft, base_spec, concurrent_edits, skip_draft_spec_write)``.
+    When the owner saved measurements (or a newer PDF pack) during generation,
+    never re-apply the pre-provider snapshot. Never re-issues paid calls.
+    """
+    _ = run
+    draft = db.execute(
+        select(TechpackDraft).where(TechpackDraft.id == draft_id).with_for_update()
+    ).scalar_one()
+    live_spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    concurrent = _generation_boundary_stale(draft, live_spec, boundary)
+    if _pack_ownership_moved_since_boundary(live_spec, boundary):
+        # Newer PDF-only / Professional ownership claimed during generation — keep it.
+        return draft, live_spec, True, True
+    if concurrent:
+        return draft, live_spec, True, False
+    return draft, ensure_v2(authorized_spec), False, False
 
 
 def _propose_finished_measurements(piece: dict[str, Any], body: dict[str, Any], fit: str) -> dict[str, Any]:
@@ -1318,6 +1459,16 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         )
         raise ValidationAppError(msg)
 
+    # Capture authorized revision + designer measurement state before any paid call.
+    generation_boundary = capture_generation_boundary(draft, spec)
+    req_boundary = dict(run.request) if isinstance(run.request, dict) else {}
+    req_boundary["generation_boundary"] = generation_boundary
+    req_boundary["draft_revision"] = generation_boundary["draft_revision"]
+    run.request = req_boundary
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
     max_images = int(req.get("max_images") or get_settings().techpack_ai_max_images_per_run or 6)
     image_plan = req.get("image_plan") if isinstance(req.get("image_plan"), dict) else None
     if image_plan is None:
@@ -1384,30 +1535,100 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             clear_in_flight=True,
         )
         pipeline["usage"]["estimated_cost_usd_cents"] = estimate
-        enriched, artifacts = _persist_professional_result(
-            db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=spec
+
+        # Post-provider CAS: re-read authoritative draft under row lock. If the owner
+        # saved measurements (or a newer PDF pack) during generation, enrich from the
+        # live spec — never re-apply the stale pre-provider snapshot, never re-call paid AI.
+        run = db.get(TechpackAIRun, run_id)
+        assert run is not None
+        draft, base_spec, concurrent_edits, skip_draft_spec_write = resolve_persist_base_after_provider(
+            db,
+            draft_id=draft.id,
+            run=run,
+            boundary=generation_boundary,
+            authorized_spec=spec,
         )
+
         cost = int((pipeline.get("usage") or {}).get("cost_usd_cents") or usage_cost or 0)
         model = (pipeline.get("usage") or {}).get("image_model") or (
             pipeline.get("usage") or {}
         ).get("vision_model")
         analysis_summary = pipeline.get("analysis_summary")
         failed_sections = list(pipeline.get("failed_sections") or [])
+        run.model = model
+        run.cost_usd_cents = max(int(run.cost_usd_cents or 0), cost)
+
+        artifacts: list[dict[str, Any]] = []
+        enriched: dict[str, Any] | None = None
+        if skip_draft_spec_write:
+            # Newer pack ownership already on the draft — keep designer/PDF state.
+            # Still record provider usage + any artifacts already created would be none;
+            # attach pipeline bytes as run artifacts without mutating draft.spec.
+            enriched, artifacts = _persist_professional_result(
+                db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=base_spec
+            )
+            # Discard enriched draft write; retain only artifact rows + cost on the run.
+            assembling = {
+                "phase": "assembling",
+                "message": "AI finished — keeping your newer saved pack",
+                "pieces_done": max(1, len(pieces)),
+                "pieces_total": max(1, len(pieces)),
+            }
+            req2 = dict(run.request) if isinstance(run.request, dict) else {}
+            req2["progress"] = assembling
+            req2.pop("provider_in_flight", None)
+            req2["reconciled_concurrent_designer_edits"] = True
+            req2["skipped_stale_spec_write"] = True
+            run.request = req2
+            run.result = {
+                "piece_count": (draft.spec or {}).get("outfit", {}).get("piece_count")
+                if isinstance(draft.spec, dict)
+                else None,
+                "warnings": [],
+                "mode": mode,
+                "analysis_summary": analysis_summary,
+                "failed_sections": failed_sections,
+                "estimated_cost_usd_cents": estimate,
+                "actual_cost_usd_cents": run.cost_usd_cents,
+                "budget_recorded_usd_cents": run.cost_usd_cents,
+                "artifact_ids": [a["id"] for a in artifacts],
+                "progress": assembling,
+                "sections": sections,
+                "pdf_ready": False,
+                "draft_revision": int(draft.revision or 1),
+                "skipped_stale_spec_write": True,
+                "reconciled_concurrent_designer_edits": True,
+            }
+            run.status = "completed"
+            run.error_message = (
+                "Professional generation finished after newer designer/PDF changes. "
+                "Paid usage was recorded; the newer saved pack was not overwritten."
+            )[:1000]
+            db.add(run)
+            db.commit()
+            db.refresh(run)
+            return _run_status_payload(db, run)
+
+        enriched, artifacts = _persist_professional_result(
+            db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=base_spec
+        )
 
         # Persist illustrations first so PDF assembly (and recovery) can use them.
-        ai_block = enriched.get("ai") if isinstance(enriched.get("ai"), dict) else {}
-        ai_block = {
-            **ai_block,
+        ai_raw = enriched.get("ai")
+        ai_prev: dict[str, Any] = ai_raw if isinstance(ai_raw, dict) else {}
+        ai_block: dict[str, Any] = {
+            **ai_prev,
             "dirty_since_generation": False,
             "budget_recorded_usd_cents": max(int(run.cost_usd_cents or 0), cost),
         }
+        if concurrent_edits:
+            ai_block["reconciled_concurrent_designer_edits"] = True
         enriched["ai"] = ai_block
         draft.spec = enriched
+        flag_modified(draft, "spec")
         draft.status = "DRAFT"
         draft.verification = "UNVERIFIED"
         draft.updated_at = datetime.now(UTC)
-        run.model = model
-        run.cost_usd_cents = max(int(run.cost_usd_cents or 0), cost)
         assembling = {
             "phase": "assembling",
             "message": "Preparing your PDF…",
@@ -1417,6 +1638,8 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         req2 = dict(run.request) if isinstance(run.request, dict) else {}
         req2["progress"] = assembling
         req2.pop("provider_in_flight", None)
+        if concurrent_edits:
+            req2["reconciled_concurrent_designer_edits"] = True
         run.request = req2
         run.result = {
             "piece_count": enriched.get("outfit", {}).get("piece_count"),
@@ -1432,6 +1655,7 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             "sections": sections,
             "pdf_ready": False,
             "draft_revision": int(draft.revision or 1),
+            "reconciled_concurrent_designer_edits": concurrent_edits,
         }
         run.input_hash = hashlib.sha256(
             json.dumps({"mode": mode, "propose_back": propose_back}, sort_keys=True).encode()
@@ -1479,8 +1703,45 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             ) from pdf_exc
 
         run = db.get(TechpackAIRun, run_id)
-        draft = _owned_draft(db, user, draft.id)
+        draft = db.execute(
+            select(TechpackDraft).where(TechpackDraft.id == draft.id).with_for_update()
+        ).scalar_one()
         assert run is not None
+        # If a newer pack appeared during PDF assembly, keep it and finish the run
+        # without clobbering designer/PDF ownership.
+        live_now = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+        if _live_owned_by_other_completed_pack(live_now, run):
+            ready_progress = {
+                "phase": "ready",
+                "message": "AI finished — kept your newer saved pack",
+                "pieces_done": max(1, len(pieces)),
+                "pieces_total": max(1, len(pieces)),
+            }
+            req3 = dict(run.request) if isinstance(run.request, dict) else {}
+            req3["progress"] = ready_progress
+            req3["skipped_stale_spec_write"] = True
+            run.request = req3
+            result_ok = dict(run.result) if isinstance(run.result, dict) else {}
+            result_ok.update(
+                {
+                    "pdf_ready": False,
+                    "skipped_stale_spec_write": True,
+                    "draft_revision": int(draft.revision or 1),
+                    "progress": ready_progress,
+                    "orphaned_export_id": str(exported.id),
+                }
+            )
+            run.result = result_ok
+            run.status = "completed"
+            run.error_message = (
+                "Professional PDF was assembled but a newer saved pack is current; "
+                "designer data was not overwritten."
+            )[:1000]
+            db.add(run)
+            db.commit()
+            db.refresh(run)
+            return _run_status_payload(db, run)
+
         ready_progress = {
             "phase": "ready",
             "message": "Your AI Technical Pack is ready",
@@ -1511,8 +1772,6 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
         ai_final["last_mode"] = "professional"
         spec_final["ai"] = ai_final
         draft.spec = spec_final
-        from sqlalchemy.orm.attributes import flag_modified
-
         flag_modified(draft, "spec")
         db.add(draft)
         db.add(run)
@@ -1841,6 +2100,7 @@ def run_generate(
         cost = 0
         model = None
 
+        generation_boundary = capture_generation_boundary(draft, spec)
         if mode == "professional":
             storage = LocalStorageBackend()
             front = _resolve_job_bytes(storage, draft.front_job_id, db)
@@ -1880,16 +2140,80 @@ def run_generate(
                 },
             )
             pipeline["usage"]["estimated_cost_usd_cents"] = estimate
-            enriched, artifacts = _persist_professional_result(
-                db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=spec
+            draft, base_spec, concurrent_edits, skip_draft_spec_write = resolve_persist_base_after_provider(
+                db,
+                draft_id=draft.id,
+                run=run,
+                boundary=generation_boundary,
+                authorized_spec=spec,
             )
-            # Record provider-reported actual usage; do not clamp incurred cost downward.
             cost = int((pipeline.get("usage") or {}).get("cost_usd_cents") or 0)
             model = (pipeline.get("usage") or {}).get("image_model") or (
                 pipeline.get("usage") or {}
             ).get("vision_model")
             analysis_summary = pipeline.get("analysis_summary")
             failed_sections = list(pipeline.get("failed_sections") or [])
+            enriched, artifacts = _persist_professional_result(
+                db, user=user, draft=draft, run=run, pipeline=pipeline, base_spec=base_spec
+            )
+            if skip_draft_spec_write:
+                run.status = "completed"
+                run.model = model
+                run.cost_usd_cents = cost
+                run.error_message = (
+                    "Professional generation finished after newer designer/PDF changes. "
+                    "Paid usage was recorded; the newer saved pack was not overwritten."
+                )[:1000]
+                ready_progress = {
+                    "phase": "ready",
+                    "message": "AI finished — keeping your newer saved pack",
+                    "pieces_done": max(1, len(pieces)),
+                    "pieces_total": max(1, len(pieces)),
+                }
+                req = dict(run.request) if isinstance(run.request, dict) else {}
+                req["progress"] = ready_progress
+                req["skipped_stale_spec_write"] = True
+                run.request = req
+                run.result = {
+                    "piece_count": (draft.spec or {}).get("outfit", {}).get("piece_count")
+                    if isinstance(draft.spec, dict)
+                    else None,
+                    "warnings": [],
+                    "mode": mode,
+                    "analysis_summary": analysis_summary,
+                    "failed_sections": failed_sections,
+                    "estimated_cost_usd_cents": estimate,
+                    "actual_cost_usd_cents": cost,
+                    "artifact_ids": [a["id"] for a in artifacts],
+                    "progress": ready_progress,
+                    "skipped_stale_spec_write": True,
+                    "reconciled_concurrent_designer_edits": True,
+                }
+                db.add(run)
+                db.commit()
+                db.refresh(run)
+                return {
+                    "run_id": str(run.id),
+                    "status": run.status,
+                    "cost_usd_cents": run.cost_usd_cents,
+                    "actual_cost_usd_cents": run.cost_usd_cents,
+                    "estimated_cost_usd_cents": estimate,
+                    "mode": mode,
+                    "draft_id": str(draft.id),
+                    "warnings": [],
+                    "artifacts": artifacts,
+                    "analysis_summary": analysis_summary,
+                    "failed_sections": failed_sections,
+                    "idempotent_replay": False,
+                    "skipped_stale_spec_write": True,
+                }
+            if concurrent_edits:
+                ai_sync_raw = enriched.get("ai")
+                ai_sync: dict[str, Any] = (
+                    dict(ai_sync_raw) if isinstance(ai_sync_raw, dict) else {}
+                )
+                ai_sync["reconciled_concurrent_designer_edits"] = True
+                enriched["ai"] = ai_sync
         else:
             enriched = enrich_spec_heuristic(spec)
             if mode == "ai":
@@ -1907,6 +2231,7 @@ def run_generate(
                 model = get_settings().openai_model
 
         draft.spec = enriched
+        flag_modified(draft, "spec")
         draft.status = "DRAFT"
         draft.verification = "UNVERIFIED"
         draft.updated_at = datetime.now(UTC)

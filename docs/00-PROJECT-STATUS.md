@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-28 (**Issue #128 P0 measurement data-loss correction** — tip `98abc804` / code `6ac13dc3` · base `311e259a` · branch `cursor/web-techpack-meas-preserve-77c6` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 remains HOLD** · **STOP for Technical PM acceptance**.)
+**Last updated:** 2026-10-29 (**Issue #128 concurrent-write closure** — tip TBD-after-commit · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #127 remain separate** · **STOP for Technical PM re-review**.)
 
-**Phase:** Protected family beta. Issue #128 fixes Professional/heuristic enrichment dropping designer finished POMs (outseam/thigh/waistband). No restore of FR-3958 values without owner authorization.
+**Phase:** Protected family beta. Issue #128: designer finished POMs preserved through enrich **and** mid-run saves protected by fail-closed post-provider CAS. No restore of FR-3958 values without owner authorization.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -18,19 +18,31 @@
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
-## Issue #128 — measurement data-loss correction — STOP (2026-10-28)
+## Issue #128 — concurrent-write closure — STOP for Technical PM re-review (2026-10-29)
+
+Technical PM **PARTIAL PASS** on enrich tip `6ac13dc3` / docs tip `e6d1ed85`. This tip closes the outstanding P0: Professional completion must not overwrite designer edits saved while the paid provider was in flight.
 
 | Item | Detail |
 |---|---|
-| Tip | `98abc804e184082e26a6e6bda6b06318939ea057` (code `6ac13dc34903e03aa992769fb48721647abd4620`, base `311e259a`) |
-| Branch / base | `cursor/web-techpack-meas-preserve-77c6` from deployed BE **`311e259a`** |
-| Trigger | FR-3958 shorts: designer outseam / thigh / waistband missing after Professional generation |
-| Root cause | `_persist_professional_result` → `enrich_spec_heuristic` → `_propose_finished_measurements` rebuilds from `empty_finished_measurements()` and only copies prior cells inside `set_calc` keys. Shorts POMs **outseam / thigh / waistband** are never passed to `set_calc`, so nonempty designer cells were replaced with empty shells. |
-| Fix | Overlay **entire** existing `finished_measurements` dict before proposals; propose only when `value` is genuinely empty; preserve unit/source/review/note/definition. Autofill category-swap also keeps nonempty POM cells. |
-| Other paths | Manufacturing annotate / PDF assembly read-only on cells (no wipe). AI run request stores fingerprints only (no pre-spec snapshot). Concurrent draft updates still replace `draft.spec` wholesale after enrich — fixed enrich removes the wipe. |
-| FR-3958 forensics (read-only) | Live + post-gen backups (mfg 10:04Z, noai 12:49Z, pdf-qa 17:53Z) and PDFs r1–r3 all show outseam/thigh/waistband **Empty**. No pre-Professional (08:11Z) full draft dump found. Export metadata has no FM values. **Not recoverable from available artifacts — do not invent; restore only with explicit owner authorization.** |
-| Tests | `test_techpack_meas_preserve` (shorts all POMs + reopen + empty-only propose + autofill category swap) + related autofill/v2/provenance **19 passed**. Pre-existing ruff findings on `techpack_ai.py` unchanged. |
-| Safety | **No deploy · no migration · no paid AI · no customer-data write · no historical PDF rewrite · #125 HOLD** |
+| Tip | TBD-after-commit (pinned in follow-up docs commit) |
+| Branch | `cursor/web-techpack-meas-preserve-77c6` (direct descendant of prod BE **`311e259a`**) |
+| PR base | `cursor/web-techpack-be-prod-311e259a-77c6` @ `311e259a` (verified production lineage; avoids diverged pdf-qa-clean docs) |
+| Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
+| Accepted (unchanged) | Entire finished-measurement overlay; empty-only proposals; designer metadata; category-change preserve; FR-3958 forensics (no invent/restore) |
+| P0 fix | Before paid call: `capture_generation_boundary` (revision / `updated_at` / meas fingerprint / pack `last_run_id`+`export_id`). After provider: `resolve_persist_base_after_provider` row-locks draft (`FOR UPDATE`). If measurements changed → enrich from **live** spec (never stale snapshot). If pack ownership **moved since boundary** (e.g. PDF-only mid-flight) → record artifacts+cost, **skip** `draft.spec` write. Never re-issues paid calls. Post-PDF assembly re-checks other-run pack ownership. |
+| Tests (mocked provider only) | `test_techpack_meas_concurrent` — 9 shorts POMs survive persist+GET; waist 75→76.5 mid-run survives; empty outseam added mid-run survives; designer metadata survives; newer PDF-only pack not overwritten; no duplicate paid reuse. `test_techpack_meas_preserve` retained. Broader Professional/pdf-only/p0/autofill: **79 passed**; 1 pre-existing async_worker failure unrelated. |
+| Lint | Ruff on changed files = tip baseline (9 pre-existing). Targeted mypy message set parity with tip. |
+| Safety | **No deploy · no migration · no paid AI · no customer-data write · no historical restore · #125 / #127 separate** |
+| Exact next action | **STOP** for Technical PM re-review of concurrent-write tip. **Do not deploy.** |
+
+### Prior enrich fix (still in tip — PM accepted)
+
+| Item | Detail |
+|---|---|
+| Code | `6ac13dc34903e03aa992769fb48721647abd4620` |
+| Root cause | `_propose_finished_measurements` rebuilt from `empty_finished_measurements()` and only copied prior cells inside `set_calc` keys → shorts outseam/thigh/waistband dropped |
+| Fix | Overlay entire existing `finished_measurements`; propose only when `value` empty; autofill category-swap keeps nonempty cells |
+| FR-3958 forensics | All available snapshots post-08:11Z show blanks — **not recoverable; do not invent** |
 
 ## PR #123 review-guard closure — STOP for Technical PM (2026-10-28)
 
@@ -355,6 +367,7 @@ Quiet autosave + PDF validity + Done/save race (PR #114) remain LIVE. **No furth
 | Item | Detail |
 |---|---|
 | Deliverable | [`docs/TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md`](./TECHPACK-PROFESSIONAL-QUALITY-AUDIT.md) |
+| Tip |  |
 | Branch | `cursor/techpack-quality-audit-77c6` (from docs tip `ac76632a` / production FE lineage) |
 | Decision | **NEEDS IMPROVEMENT** |
 | Real PDFs inspected | **FR-7182** (pink striped dress, V3.1), **FR-D47D** (Magic = tunic+trousers but PDF = 1× dress), **FR-CF5A** (burgundy slip, V2 footer) |
