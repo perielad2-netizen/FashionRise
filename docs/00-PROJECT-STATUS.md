@@ -3,20 +3,70 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #128 / PR #130 Magic source provenance closure** — tip `c16acf41013a39eb83b68ef40105fe3498f6cd06` / implementation `0561bb56cf49d69b9c2349a94dd54b79585a1f5f` / blob `e04fdbcf6f5fba8dc868094c86874e365cebc321` · branch `cursor/web-techpack-meas-preserve-77c6` · base prod BE `311e259a` · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **#125 / #129 remain independent** · **STOP for Technical PM final acceptance**.)
+**Last updated:** 2026-10-29 (**OWNER-AUTHORIZED PRODUCTION RELEASE** — Issue [#131](https://github.com/perielad2-netizen/FashionRise/issues/131) · BE+worker **`6cc317ec`** (PR #130) · FE **`ebcb1cc7`** (PR #129) · Alembic **`011`** · backup `techpack-130-129-deploy-20261029T131341Z` · **0 paid AI** · issues #127/#128 remain open pending owner mobile acceptance · **86-PR cleanup NOT started**.)
 
-**Phase:** Protected family beta. Issue #128: designer finished POMs preserved through enrich **and** mid-run measurement edits; garment-identity drift and PDF-assembly CAS fail closed without paid retry; paid artifacts retain authorized Magic source provenance. No restore of FR-3958 values without owner authorization.
+**Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity) and PR #129 (6px cutout fill safety + decimal lineage).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`bfbdd03f-decimal`** — PR #126 tip + `/api/v1`. UI App pill may still show `b2fbd043` (bake-time `VITE_BUILD_SHA`); assets are decimal build. |
-| Backend (FastAPI + PostgreSQL) | **`311e259a`** (PR #123). Alembic **`011`**. |
-| AI worker | `fashionrise-ai-worker` @ **`311e259a`** lineage / prior pin as deployed |
-| Database | `fashionrise_beta` — Alembic **`011`** (no migration) |
+| Frontend (`web-ui`) | **`ebcb1cc7`** — release `/var/www/fashionrise/releases/ebcb1cc7` · source `ebcb1cc7b6102e343ee06e08435faab64f4b4995` · `VITE_API_BASE_URL=/api/v1` · App pill **`ebcb1cc7`** (not stale `b2fbd043`). Rollback → `bfbdd03f-decimal`. |
+| Backend (FastAPI + PostgreSQL) | **`6cc317ecd55423403b6479e8bb185c3e4cde2bf1`** (PR #130). Alembic **`011`**. Rollback → `311e259a`. |
+| AI worker | `fashionrise-ai-worker` @ **`6cc317ec`** (matched with API). |
+| Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
 | Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+## Owner-authorized production release — Issue #131 (2026-10-29) — DEPLOYED
+
+Authorized by owner to deploy engineering-accepted PR #130 then PR #129. Coordination ledger: [#131](https://github.com/perielad2-netizen/FashionRise/issues/131).
+
+### Release A — Backend + AI worker (PR #130)
+
+| Item | Result |
+|---|---|
+| Source | Exact `6cc317ecd55423403b6479e8bb185c3e4cde2bf1` (implementation `0561bb56` / blob `e04fdbcf`) |
+| Prior | `311e259aa6fa4a64b4688b818d7f6b319f45e492` |
+| Preflight | Active Professional/AI runs **0**; Alembic **011**; services active; ancestry `311e259a`⊂`6cc317ec`; **no** alembic file diff |
+| Offline tests | Focused integrity/concurrent/preserve **18 passed** on disposable TEST DB; broader p0/async/v3 **33 passed / 1** known baseline `test_partial_cost_preserved_on_failure` (`KeyError: status`); Ruff 9 / mypy 51 |
+| Backup | `/var/backups/fashionrise/techpack-130-129-deploy-20261029T131341Z/` — env, unit files, `fashionrise_beta.sql.gz` + `.dump` (~18 MB, gzip/pg_restore verified), `ROLLBACK.sh` → `311e259a` |
+| Deploy method | Force-checkout `/opt/fashionrise/src` to tip · write `APP_REVISION`/`REVISION` · clear `__pycache__` · restart `fashionrise-api` then `fashionrise-ai-worker`. **Did not** run `deploy/update_app.sh` (would auto-run Alembic). |
+| Post-verify | `/health` ok · `/ready` database ok · API+worker+nginx **active** · Alembic **011** · provenance helpers present · drafts **13** / artifacts **35** retained · active runs **0** · **0 paid AI** |
+| Discrepancies | None material. Localhost HTTP to public vhost returns **403** without AOP client cert (expected; unchanged). |
+
+### Release B — Frontend only (PR #129)
+
+| Item | Result |
+|---|---|
+| Source | Exact `ebcb1cc7b6102e343ee06e08435faab64f4b4995` (implementation `c9ebcca0` / code `02f904dc`) |
+| Prior | `bfbdd03f-decimal` |
+| Build | `VITE_API_BASE_URL=/api/v1` · `VITE_BUILD_SHA=ebcb1cc7b6102e343ee06e08435faab64f4b4995` (explicit; no stale `b2fbd043`) · `assert-prod-api-base` + `assert-sw-access-safe` PASS |
+| Release | `/var/www/fashionrise/releases/ebcb1cc7` · `version.json` sha full tip · title **App ebcb1cc7** · SW no NavigationRoute / no index.html precache · bundle contains `unsupported_cutout` + `/api/v1` |
+| Activate | Atomic `ln -sfn …/ebcb1cc7 …/current` · `nginx -t` · reload. Prior release retained. |
+| Rollback | `/var/www/fashionrise/releases/ebcb1cc7/ROLLBACK.sh` → `bfbdd03f-decimal` |
+| Verify | Disk verify PASS (SHA, API base, fill markers, SW safety). API still healthy. **No** paid Magic/Professional generation. |
+| Transient incident | Empty release dir briefly activated before tar upload; **immediately** rolled back to `bfbdd03f-decimal`, then completed deploy. Final current = `ebcb1cc7`. |
+
+### Explicit confirmations
+
+- **Paid AI / provider calls during release + smoke: 0**
+- **Migrations / seed / historical restore: none**
+- **PR #125 / Nginx Access / Cloudflare / secrets / DB records: untouched**
+- **Issues #127 and #128: NOT closed** — remain open for owner mobile acceptance
+- **86-PR cleanup: NOT started** (blocked until this release verification is recorded)
+
+### Remaining owner mobile acceptance (not claimed done)
+
+1. ~1.75px connected complex multistroke shirt outline @ ~62% zoom → Fill → save/reopen  
+2. Eraser, Gaps, separate panels, 6px hollow fail-closed, undo, gradients/fabrics  
+3. Magic **export without paid generation**  
+4. Measurement/POM edit persistence after #130  
+
+### Exact next action
+
+Owner mobile acceptance on FE `ebcb1cc7` + BE `6cc317ec`. Then proceed with Issue #131 Stage C (issue/PR reconciliation) only after acceptance notes are recorded. Do **not** close #127/#128 on deploy alone.
+
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
@@ -1176,6 +1226,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-29 | **OWNER-AUTHORIZED PROD RELEASE (#131):** BE+worker `6cc317ec` (PR #130) · FE `ebcb1cc7` (PR #129) · Alembic `011` · backup `techpack-130-129-deploy-20261029T131341Z` · health/ready PASS · **0 paid AI** · #127/#128 remain open · 86-PR cleanup not started. |
 | 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; HEAD `c16acf41` / impl `0561bb56` / blob `e04fdbcf`; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 structural & visual identity:** authorized-snapshot artifact retention on piece-list drift; `color_treatment`/`visible_details` identity fingerprint; tip `991244fa727bf01a6aed15bf7471dae776239d62` / commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9`; 12 focused / 114 broader pass / 1 baseline async_worker fail; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 data-integrity closure:** garment-identity fingerprint fail-closed skip; PDF-assembly revision/meas/identity/dirty CAS; independent SQLAlchemy session concurrency tests; tip `44afea60f87cec2da59a8710c583c2e84314a5ae` / code `0e341c10e28998c84235c307414f7e0bb4a1c641`; verification 111 pass / 1 pre-existing async_worker fail on baseline `311e259a`; Ruff 9 / mypy 51 parity; production FE `bfbdd03f-decimal` / BE `311e259a` / Alembic `011` **unchanged**; **0 paid AI**; **#125 / #129 independent**; **STOP for Technical PM re-review — do not deploy**. |
