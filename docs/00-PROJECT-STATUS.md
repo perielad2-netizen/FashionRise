@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-28 (**Issue #127 P0 sketch fill reliability** — tip `30556c18` / code `742cbddc` · branch `cursor/web-sketch-fill-reliability-77c6` · sealed-tip barrier + bounded endpoint joint seal + Close small gaps + gap hint · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM**.)
+**Last updated:** 2026-10-29 (**Issue #127 fill safety closure** — amendment on `742cbddc` · branch `cursor/web-sketch-fill-reliability-77c6` · eraser veto + facing seals + real Path2D raster tests + gap-hint fix · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM acceptance**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -30,17 +30,31 @@
 
 
 
-## Issue #127 — sketch fill reliability (thin multi-stroke outlines) — STOP (2026-10-28)
+## Issue #127 — sketch fill reliability + fill safety closure — STOP (2026-10-29)
 
 | Item | Detail |
 |---|---|
-| Tip | `30556c185cbbbf2ec5cd4a04429fd6def9bca620` (code `742cbddc3d88aa551e634df3e90b09a1f2c2c019`) |
+| Tip | _(pending commit)_ — code base `742cbddc3d88aa551e634df3e90b09a1f2c2c019` + safety amendment |
+| PM | **CHANGES REQUIRED** on `742cbddc` / tip `5301341b` → this amendment |
 | Trigger | Owner mobile fill of complex freehand shirt outline (1.75 px, ~62% zoom) repeatedly failed with open-outline / “dress” copy |
-| Root cause | Fill barrier used the same tapered perfect-freehand paths as visible ink (`start/end taper` up to 6–10 px on thin brushes). Multi-stroke joins that look closed still leak in the alpha>12 raster; fixed `gapClose=2` dilation cannot bridge tip gaps. Flood then escapes to paper edge → `open_outline`. |
-| Fix | Barrier-only `sealTips` freehand paths; bounded endpoint joint seal (5 px auto / 12 px Close small gaps); gap hint marker; messages without “dress”; explicit **Gaps** tool-rail action (one-shot stronger seal — does not silently merge intentional openings) |
-| Preserved | Eraser destination-out barriers, gradient/fabric fills, undo, autosave, Magic export, croquis not a barrier |
-| Tests | `floodFill.joints` + sealTips + existing floodFill/barrier suites **PASS**; full Vitest 619 pass / 6 pre-existing unrelated fail on tip; oxlint warnings-only; `tsc -b` + production build with `/api/v1` **PASS** |
-| Deploy | **STOP — not deployed**. No migration, no paid AI |
+| Root cause | Fill barrier used tapered perfect-freehand tips; multi-stroke joins leaked at alpha>12. First fix: `sealTips` + endpoint seal. |
+| Safety amendment | (1) **Eraser veto** — `buildEraseCoverageMask` + tip-alive check; seals never restore erased junctions. (2) **Facing seals** — cross-stroke bridges require mutual tip tangents; auto max **2.5 px** (not 5); Gaps still **12 px** with facing. Rejects parallel adjacent panels. (3) **Real Path2D raster** tests via `@napi-rs/canvas`. (4) **Gap hint** — parent-chain mouth only; never paper edge; no “highlighted spot” without evidence. (5) Clear gap/Gaps UI on draw/erase/undo/redo/side/tool. (6) Spatial-hash seals for hundreds of strokes. |
+| Preserved | Eraser, gradient/fabric fills, undo, autosave, front/back, Magic export |
+| Tests (fill) | `floodFill.joints` + `floodFill.raster` + barrier + sealTips **23 passed** |
+| Full suite | **629 passed / 6 failed** — same 6 as tip `5301341b` baseline (unrelated): see table below |
+| Lint / TS / build | oxlint warnings-only on touched files; `tsc -b` **PASS**; `VITE_API_BASE_URL=/api/v1` production build **PASS** |
+| Deploy | **STOP — not deployed**. No migration, no paid AI, no private recordings in git |
+
+### Full-suite baseline failures (unchanged vs tip `5301341b`)
+
+| # | Test |
+|---|---|
+| 1 | `StudioPage.test.tsx` › Studio beta notices stay outside Settings › shows and dismisses Magic, Settings, and Back at **390×844** |
+| 2 | same › **768×1024** |
+| 3 | same › **1024×550** |
+| 4 | same › **1180×600** |
+| 5 | same › **1440×900** |
+| 6 | `draftPersistence.test.ts` › restoreStudioDraft damaged cloud V2 safety › forwards clearBackIntent metadata through Front clear → Back clear save (no false conflict) |
 
 
 ## PR #126 owner acceptance + measurement/version investigation — STOP (2026-10-28)

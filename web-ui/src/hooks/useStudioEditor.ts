@@ -641,6 +641,16 @@ export function useStudioEditor() {
 
   const artwork = useCallback(() => activeArtwork(editorSideState()), [editorSideState])
 
+  const [fillCloseSmallGaps, setFillCloseSmallGaps] = useState(false)
+  const [fillGapHint, setFillGapHint] = useState<{ x: number; y: number } | null>(null)
+  const [showCloseSmallGaps, setShowCloseSmallGaps] = useState(false)
+
+  const clearFillGapUi = useCallback(() => {
+    setFillGapHint(null)
+    setShowCloseSmallGaps(false)
+    setFillCloseSmallGaps(false)
+  }, [])
+
   const onStrokeComplete = useCallback(
     (stroke: Stroke) => {
       activeHistory().push(artwork())
@@ -663,13 +673,11 @@ export function useStudioEditor() {
         backFills: patch.backFills,
         activeSide: patch.activeSide,
       })
+      // Stale gap markers / armed Gaps must not survive new draw or erase ink.
+      clearFillGapUi()
     },
-    [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags],
+    [activeHistory, artwork, clearFillGapUi, commitFromEditor, editorSideState, syncHistoryFlags],
   )
-
-  const [fillCloseSmallGaps, setFillCloseSmallGaps] = useState(false)
-  const [fillGapHint, setFillGapHint] = useState<{ x: number; y: number } | null>(null)
-  const [showCloseSmallGaps, setShowCloseSmallGaps] = useState(false)
 
   const onFillComplete = useCallback(
     (fill: FillOp) => {
@@ -802,10 +810,12 @@ export function useStudioEditor() {
       backFills: patch.backFills,
       clearBackIntent,
     })
+    clearFillGapUi()
   }, [
     activeHistory,
     artwork,
     backClearIntentForPatch,
+    clearFillGapUi,
     commitFromEditor,
     editorSideState,
     syncHistoryFlags,
@@ -838,10 +848,12 @@ export function useStudioEditor() {
       backFills: patch.backFills,
       clearBackIntent,
     })
+    clearFillGapUi()
   }, [
     activeHistory,
     artwork,
     backClearIntentForPatch,
+    clearFillGapUi,
     commitFromEditor,
     editorSideState,
     syncHistoryFlags,
@@ -940,8 +952,19 @@ export function useStudioEditor() {
       setActiveSide(side)
       syncHistoryFlags()
       commitFromEditor({ activeSide: side })
+      clearFillGapUi()
     },
-    [activeSide, commitFromEditor, frontBackEnabled, model, syncHistoryFlags],
+    [activeSide, clearFillGapUi, commitFromEditor, frontBackEnabled, model, syncHistoryFlags],
+  )
+
+  const selectTool = useCallback(
+    (next: ToolKind) => {
+      setTool(next)
+      // Armed Gaps / gap markers are fill-session state — clear when leaving fill
+      // or switching drawing tools so they cannot mislead after a tool change.
+      if (next !== 'fill') clearFillGapUi()
+    },
+    [clearFillGapUi],
   )
 
   const onCustomFile = useCallback(
@@ -2252,7 +2275,7 @@ export function useStudioEditor() {
     strokes,
     fills,
     tool,
-    setTool,
+    setTool: selectTool,
     sizeId,
     setSizeId,
     brushSize,
