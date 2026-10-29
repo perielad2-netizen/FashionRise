@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-29 (**Issue #127 / PR #129 final 6px cutout check** — tip pending commit · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · pre-dilation visible-ink cutout guard · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM final acceptance**.)
+**Last updated:** 2026-10-29 (**Issue #127 / PR #129 final 6px cutout check** — tip `c9ebcca0f51518bb8c77a6706bb50279442971ea` · code `02f904dc25e450cc55ea83013b0e1bf0ef31c2b1` · PR #129 · branch `cursor/web-sketch-fill-reliability-77c6` · pre-dilation visible-ink cutout guard · **HOLD / NOT DEPLOYED** · prod FE `bfbdd03f-decimal` / BE `311e259a` · Alembic `011` · **0 paid AI** · **STOP for Technical PM final acceptance**.)
 
 **Phase:** Protected family beta. FE decimal typing fix is ready for PM review separately from BE PDF QA (#123) and FR-B9F9 fidelity work.
 
@@ -36,7 +36,7 @@ Technical PM **Substantial pass / HOLD** on tip `f1930dcf` / code `a3158b61` —
 
 | Item | Detail |
 |---|---|
-| Tip | *(this commit — pin SHAs after push)* · PR **#129** |
+| Tip | `c9ebcca0f51518bb8c77a6706bb50279442971ea` (code `02f904dc25e450cc55ea83013b0e1bf0ef31c2b1`) · PR **#129** |
 | Prior accepted code | `a3158b61fbeb8fb04549530be9176f504d9566b7` (scanline contour∖flood) on tip `f1930dcf` / `c0c72ab3` |
 | Branch | `cursor/web-sketch-fill-reliability-77c6` (descendant of FE prod `bfbdd03f`) |
 | Production (unchanged) | FE **`bfbdd03f-decimal`** · BE+worker **`311e259a`** · Alembic **`011`** |
