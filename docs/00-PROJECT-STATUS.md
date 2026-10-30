@@ -3,48 +3,50 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**P0 #136 / PR #137 tip `2dfcaba0`** — compiled gates+`/api/v1` assert · release runbook forbids `6ec73ba2` reuse · V2 restore notice + no-overwrite tests · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · **STOP for final Technical PM** · **0 paid AI** · no deploy.)
+**Last updated:** 2026-10-30 (**P0 #136 / PR #137 FE recovery DEPLOYED** — live FE **`2dfcaba0`** · source `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` · compiled FRONT_BACK/MAGIC/DUAL **ON** · REGISTRATION OFF · BE `6cc317ec` unchanged · Alembic `011` · **0 paid AI** · #136 OPEN pending owner UI acceptance · #135 PAUSED · **#127/#128 CLOSED** · no merge.)
 
-**Phase:** Protected family beta. **Incident #136 HOLD** on further FE forward-deploys until VITE gate parity restored. #135 Create My Croquis **PAUSED**.
+**Phase:** Protected family beta. #135 Create My Croquis **PAUSED** until owner accepts #136 recovery on live FE.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`6ec73ba2`** — release `/var/www/fashionrise/releases/6ec73ba2` · source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · **compiled `VITE_STUDIO_FRONT_BACK_ENABLED`/`VITE_MAGIC_UI_ENABLED` effectively false (incident #136)** · App pill **`6ec73ba2`**. Rollback artifact `ebcb1cc7` retained but **same gate defect**. |
+| Frontend (`web-ui`) | **`2dfcaba0`** — release `/var/www/fashionrise/releases/2dfcaba0` · source `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` · App pill **`2dfcaba0`** · compiled gates FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, API `/api/v1`. Prior defective `6ec73ba2` + `ebcb1cc7` retained (gates OFF — rollback does not restore Studio UI). |
 | Backend (FastAPI + PostgreSQL) | **`6cc317ecd55423403b6479e8bb185c3e4cde2bf1`** (PR #130). Alembic **`011`**. Rollback → `311e259a`. |
 | AI worker | `fashionrise-ai-worker` @ **`6cc317ec`** (matched with API). |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
-| Nginx | `root /var/www/fashionrise/current;` → `releases/6ec73ba2` · CF Access + AOP unchanged |
+| Nginx | `root /var/www/fashionrise/current;` → `releases/2dfcaba0` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## P0 #136 — missing VITE Studio gates after FE `6ec73ba2` (2026-10-30) — STOP for final Technical PM
+## P0 #136 / PR #137 — FE recovery DEPLOYED (2026-10-30) — owner UI acceptance next
 
-Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137).
+Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. Runbook: `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md`. PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137).
 
-**Issue hygiene:** [#127](https://github.com/perielad2-netizen/FashionRise/issues/127) and [#128](https://github.com/perielad2-netizen/FashionRise/issues/128) are **CLOSED** (owner acceptance). Do **not** reopen/revoke for #136. #135 PAUSED. #136 OPEN.
+**Issue hygiene:** [#127](https://github.com/perielad2-netizen/FashionRise/issues/127) and [#128](https://github.com/perielad2-netizen/FashionRise/issues/128) remain **CLOSED**. #135 PAUSED. #136 OPEN pending owner Access-session confirmation (Front/Back icon, Magic not Soon, Restoring exits, V2 Back preserved, oversized Fill).
 
-### Compiled gates (live defect)
+### Live compiled gates (post-recovery)
 
-| Gate | live `6ec73ba2` | `ebcb1cc7` | known-good `69b83c01` |
+| Gate | live `2dfcaba0` | prior `6ec73ba2` | `ebcb1cc7` |
 |---|---|---|---|
-| FRONT_BACK / MAGIC / DUAL | **OFF** | **OFF** | ON |
+| FRONT_BACK / MAGIC / DUAL | **ON** | OFF | OFF |
 | REGISTRATION | OFF | OFF | OFF |
 
-### PR #137 safeguards (Corrections A/B/C)
+### Deploy record
 
-| Item | Status |
+| Item | Result |
 |---|---|
-| **A** Compiled FRONT_BACK/MAGIC/DUAL/REGISTRATION + `/api/v1`; per-flag negative unit tests; explicit `export VITE_*` | done |
-| **B** Release runbook `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md` — new dir from #137 tip; assert refuses `VITE_BUILD_SHA=6ec73ba2*` | done; **not activated** |
-| **C** V2 back ink + actionable `studioNotice` · no `persistStudioDraft` · generic restore → error label | done |
-| Issue hygiene | **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN |
-| Verify | focused green · full Vitest **675 passed / 6 baseline** · tsc · lint · prod build · SW Access-safe · `COMPILED_GATES.json` |
-| Prod activate | **NOT done** |
+| Auth | Technical PM ENGINEERING ACCEPTED · **owner authorized** FE-only |
+| Source | Exact `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` |
+| Build | Explicit VITE allowlist · assert-prod-vite-flags PASS · `COMPILED_GATES.json` all four + `/api/v1` |
+| Release | **new** `/var/www/fashionrise/releases/2dfcaba0` · nonempty before symlink · App **`2dfcaba0`** |
+| Activate | Atomic `ln -sfn …/2dfcaba0 …/current` · `nginx -t` · reload |
+| Backup | `/var/backups/fashionrise/pr137-fe-recovery-deploy-20261030T122721Z/` · `ROLLBACK.sh` → `6ec73ba2` (**gates still OFF**) |
+| BE/worker / Alembic | **unchanged** `6cc317ec` / `011` |
+| Paid AI | **0** |
+| Preserved | `6ec73ba2`, `ebcb1cc7` dirs · no browser storage clear · no draft mutation · no merge |
 
-**Next after final PM PASS + owner auth:** follow recovery runbook — build **`2dfcaba0`** (`2dfcaba0a97059adddceaa3ae8e0bee000fb32df`) → new `/var/www/fashionrise/releases/2dfcaba0/` → verify `BUILD_ENV`+`COMPILED_GATES` → atomic symlink. Keep BE `6cc317ec`. Never reuse `6ec73ba2`.
-
+**Next:** Owner hard-refresh (Access session) → confirm Studio Front/Back + Magic UI + Restoring exit + V2 Back. Do **not** click paid Magic generation unless separately authorized. #135 stays PAUSED until #136 accepted.
 ## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — then P0 #136
 
 Owner authorized controlled frontend-only production deploy of engineering-accepted source **`6ec73ba26ee5b8c25b29a77d31050942af4c6c6d`**. Deploy executed. **#127 was subsequently CLOSED with owner Fill/save/reopen acceptance** — do not revoke. Separate post-deploy **#136** (missing VITE Studio gates) is tracked on PR #137.

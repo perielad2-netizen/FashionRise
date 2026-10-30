@@ -1,26 +1,33 @@
-# P0 #136 / PR #137 — FE recovery release runbook (NOT EXECUTED)
+# P0 #136 / PR #137 — FE recovery release runbook — EXECUTED
 
-**Status:** Prepared for Technical PM + owner authorization only. **Do not run until authorized.**  
+**Status:** **EXECUTED** 2026-10-30 after Technical PM ENGINEERING ACCEPTED + **owner authorization**.  
 **Scope:** Frontend-only. No BE/worker restart, migration, paid AI, or draft mutation.
 
-## Why not `6ec73ba2`
-
-Live `/var/www/fashionrise/releases/6ec73ba2` was built from `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` **without** Studio VITE gates and **without** PR #137 restore-boot / assert scripts. Rebuilding under that identity would claim false provenance.
-
-Rollback target `ebcb1cc7` also has compiled Front/Back+Magic **OFF** — not a Studio UI fix.
-
-## Source identity (update after final tip)
+## Live result
 
 | Field | Value |
 |---|---|
 | Branch | `cursor/web-incident-136-vite-flags-77c6` |
 | PR | [#137](https://github.com/perielad2-netizen/FashionRise/pull/137) |
-| **Release source SHA** | `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` (PR #137 Corrections A/B/C tip; not `6ec73ba2…`) |
-| App / release dir | `/var/www/fashionrise/releases/2dfcaba0/` matching that tip |
-| `VITE_BUILD_SHA` | `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` (assert refuses empty or `6ec73ba2*`) |
-| Must include | restore-boot harden + `assert-prod-vite-flags` all-four compiled gates + `/api/v1` |
+| **Release source SHA** | `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` |
+| App / release dir | `/var/www/fashionrise/releases/2dfcaba0/` |
+| `current` | → `releases/2dfcaba0` |
+| `VITE_BUILD_SHA` | `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` |
+| Compiled gates | FRONT_BACK=true · MAGIC_UI=true · DUAL_MAGIC=true · REGISTRATION=false · API=/api/v1 |
+| BE / worker | **unchanged** `6cc317ecd55423403b6479e8bb185c3e4cde2bf1` |
+| Alembic | **011** |
+| Backup | `/var/backups/fashionrise/pr137-fe-recovery-deploy-20261030T122721Z/` |
+| Rollback | `releases/2dfcaba0/ROLLBACK.sh` → `6ec73ba2` (**gates still OFF**) |
+| Paid AI | **0** |
+| Old releases | `6ec73ba2`, `ebcb1cc7` **unchanged** on disk |
 
-## Required build exports
+## Why not `6ec73ba2`
+
+Live `/var/www/fashionrise/releases/6ec73ba2` was built from `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` **without** Studio VITE gates and **without** PR #137 restore-boot / assert scripts. Rebuilding under that identity would claim false provenance. Recovery used a **new** immutable release id `2dfcaba0`.
+
+Rollback target `ebcb1cc7` also has compiled Front/Back+Magic **OFF** — not a Studio UI fix.
+
+## Build exports used
 
 ```bash
 export VITE_API_BASE_URL=/api/v1
@@ -28,24 +35,22 @@ export VITE_REGISTRATION_UI_ENABLED=false
 export VITE_MAGIC_UI_ENABLED=true
 export VITE_STUDIO_FRONT_BACK_ENABLED=true
 export VITE_STUDIO_DUAL_MAGIC_ENABLED=true
-export VITE_BUILD_SHA=<FULL_PR137_TIP_SHA>
-# Do not rely on gitignored .env.production alone — Node assert requires these exports.
+export VITE_BUILD_SHA=2dfcaba0a97059adddceaa3ae8e0bee000fb32df
 cd web-ui && npm run build
-# npm run build runs: tsc, vite, assert-sw-access-safe, assert-prod-api-base, assert-prod-vite-flags
 ```
 
-`assert-prod-vite-flags` fail-closed checks **compiled** FRONT_BACK/MAGIC/DUAL/REGISTRATION + `/api/v1`, writes `dist/BUILD_ENV.txt` + `dist/COMPILED_GATES.json`.
+`assert-prod-vite-flags` PASS · `BUILD_ENV.txt` + `COMPILED_GATES.json` written · Access-safe SW · `/api/v1`.
 
-## Immutable release procedure (after owner auth)
+## Procedure completed
 
-1. Checkout exact authorized tip; confirm `git rev-parse HEAD` equals authorized SHA.
+1. Checkout exact `2dfcaba0a97059adddceaa3ae8e0bee000fb32df`.
 2. Build with exports above.
-3. Stage into **new** dir `/var/www/fashionrise/releases/<shortsha>/` — **never** overwrite `6ec73ba2` or `ebcb1cc7`.
-4. Copy `BUILD_ENV.txt`, `COMPILED_GATES.json`, `version.json`, `REVISION`, `ROLLBACK.sh` → prior `6ec73ba2`.
-5. **Before** symlink: nonempty `index.html`, `sw.js`, `assets/index-*.js`, `BUILD_ENV.txt`, `COMPILED_GATES.json` with all four gates correct + `apiBase=/api/v1`.
-6. Atomic `ln -sfn …/<shortsha> …/current` · `nginx -t` · reload.
-7. Smoke: App pill = shortsha · Front/Back visible · Magic not Soon · Restoring completes · **0 paid AI**.
-8. Leave BE/worker `6cc317ec`, Alembic `011` untouched.
+3. Staged **new** dir `/var/www/fashionrise/releases/2dfcaba0/` — did **not** overwrite `6ec73ba2` or `ebcb1cc7`.
+4. Wrote `BUILD_ENV.txt`, `COMPILED_GATES.json`, `version.json`, `REVISION`, `RELEASE_NOTE.json`, `ROLLBACK.sh`.
+5. **Before** symlink: verified nonempty `index.html`, `sw.js`, `assets/index-*.js`, gates, API base.
+6. Atomic `ln -sfn …/2dfcaba0 …/current` · `nginx -t` · reload.
+7. Operator smoke: App title `FashionRise · App 2dfcaba0` · live compiled helpers match allowlist · health/ready OK · BE unchanged · **0 paid AI**.
+8. Owner Access-session UI acceptance still required for #136 close.
 
 ## Preserve
 
