@@ -23,7 +23,7 @@
 5. **Front-only V1** — no synthesized back from a single front photo. Back side uses blank / “Front-only croquis” notice; Dual Magic / rear croquis remain for built-ins only.
 6. **Phased delivery** — A private storage → B Studio + mock → C gated AI → D controlled release.
 
-**Rejected shortcuts:** public `/static/uploads` for photos; browser-only blob URLs as the durable reference; silent model remapping when assets disappear; fabricating a back view; piggybacking Magic spend ceilings without a separate croquis budget.
+**Rejected shortcuts:** public `/static/uploads` for photos; browser-only blob URLs as the durable reference; silent model remapping when assets disappear; fabricating a back view; following Magic’s look-storage path (still writes PNGs under the public uploads tree) or Magic’s **lack** of a spend ceiling.
 
 ---
 
@@ -50,7 +50,7 @@
 | Tablet landscape | Same wizard as full-height sheet; large preview; sticky Generate/Accept. |
 | Mobile | Full-screen wizard steps; camera capture preferred; one primary CTA per step; avoid nested cards. |
 
-Reuse existing Models / My Fabrics interaction language (list + authenticated image URL fetch via API, not static paths). Do not invent a second Studio shell.
+Reuse existing Models / My Fabrics interaction language (list + authenticated blob fetch via API, not static paths). Natural footholds: Models panel CTA, and the existing **My Gallery** tab currently labeled “coming later.” Do not invent a second Studio shell. Do not revive `uploadReferenceImage` / public uploads for personal photos.
 
 ### 2.3 Front/Back
 
@@ -89,7 +89,9 @@ Reuse existing Models / My Fabrics interaction language (list + authenticated im
 | Private fabrics | `FabricAsset` owner-scoped; bytes under `private_fabrics/`; soft-delete; owner-only image route; tests assert **not** under `/static/uploads`. | `backend/app/models/fabric_asset.py`, `services/fabric_asset_service.py`, `api/v1/routes/fabrics.py`, `tests/test_fabric_assets.py` |
 | Storage | `LocalStorageBackend.save_private_file` / `resolve_private_file`; public mount is `upload_subdir` → `/static/uploads`. | `backend/app/storage/local.py`, `main.py` |
 | Upload validation | MIME sniff, size limits, dimension probe before full decode, PNG re-encode (strips EXIF via re-encode). | `core/upload_validation.py`, fabric service |
-| Magic / looks | Paid `images.edit` via worker; authenticated job image routes preferred over public static; spend ceilings for techpack Professional separate. | `services/sketch_openai.py`, `api/v1/routes/ai_routes.py`, config |
+| Magic / looks | Paid `images.edit` via worker; owner `GET /ai/jobs/{id}/image` exists, but look bytes are still **written under public uploads**. Magic has **no** spend ceiling (unlike techpack Professional). | `sketch_openai.py`, `ai_routes.py`, `ai_service.py` |
+| Magic croquis allowlist | Prompt identity allowlists builtin/`custom`/`blank` model ids — **no** user-uploaded croquis asset id today. Personal croquis used as Magic input later must extend `reference_croquis` deliberately. | `services/reference_croquis.py` |
+| Unused upload API | FE `uploadsApi.uploadReferenceImage` → `POST /uploads/image` exists but Studio correctly does **not** call it. | `web-ui/src/services/uploadsApi.ts` |
 | Image model | Config default `openai_image_model=gpt-image-2.5-sunburst`, size `1024x1536`, quality `high`, `max_retries=0` pattern for edits. | `core/config.py`, P1-54 docs |
 | Alembic | Head **`011`**. Next migration would be `012_*` — **not in this design PR**. | `alembic/versions/` |
 | Auth | JWT `CurrentUser`; ownership filters on every private resource. | `app/auth/dependencies.py` |
@@ -322,11 +324,13 @@ Notes:
 ### 9.3 Cost / abuse controls (proposed)
 
 - `MY_CROQUIS_AI_ENABLED=false` until owner auth.
+- **Do not inherit Magic’s cost model:** Magic sketch jobs today have **no** `TECHPACK_*`-style spend ceiling (only rate limits + idempotency). Croquis must use **dedicated** per-user daily caps + operator ceiling (pattern after techpack Professional, not Magic).
 - Per-user: e.g. N generations / day (PM pick; suggest **3**/day beta).
 - Per-run soft estimate shown pre-confirm; hard reject if operator croquis ceiling exceeded.
 - Idempotent generate; explicit user retry only.
 - `max_retries=0` at provider client (match Magic edit discipline).
 - Record `cost_cents` from usage when available; else mark unknown.
+- Generated croquis bytes stay in `private_croquis/` even if Stage C reuses the `images.edit` client — never copy Magic’s public-upload write path.
 
 ---
 
