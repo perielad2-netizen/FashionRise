@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Issue #127 / PR #134 export proof + preview proportions** — decoded Front+Back PNG RGB proof + fit-contain thumbnails · prod unchanged FE `ebcb1cc7` / BE `6cc317ec` · **0 paid AI** · **STOP for final Technical PM re-review**.)
+**Last updated:** 2026-10-30 (**Issue #127 / PR #134 ENGINEERING ACCEPTED** — tip `6ec73ba2` · FE-only controlled release gate pending separate owner authorization · prod unchanged FE `ebcb1cc7` / BE `6cc317ec` · **0 paid AI** · **NOT MERGED / NOT DEPLOYED**.)
 
 **Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity) and PR #129 (6px cutout fill safety + decimal lineage).
 
@@ -19,54 +19,42 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## Issue #127 / PR #134 — extended paper + Front/Back export closure (2026-10-29) — STOP for final PM
+## Issue #127 / PR #134 — ENGINEERING ACCEPTED (2026-10-30) — FE-only release gate; NOT MERGED / NOT DEPLOYED
 
-Frontend-only candidate based on accepted canonical baseline PR #133 (`5bd6d585`). **Does not modify or merge #133. #125 remains HOLD. No production deploy. No BE/provider/paid AI.**
+Technical PM **FINAL ENGINEERING ACCEPTANCE** on HEAD **`6ec73ba26ee5b8c25b29a77d31050942af4c6c6d`** (`cursor/web-extended-paper-127-77c6`, +3 ahead of canonical #133 `5bd6d585`). Frontend-only; **no backend / migration / provider / paid AI**. #133 and #125 unchanged. **Deployment requires separate owner authorization.**
 
-### Problem (owner-confirmed on prod FE `ebcb1cc7`)
-
-Fill succeeds inside the legacy `768×1024` plane and fails when a closed oversized silhouette crosses that boundary. CSS/zoom enlargement cannot fix logical flood-fill / export bounds. Croquis must keep exact legacy position/scale.
-
-### Architecture
+### Accepted scope
 
 | Concept | Value |
 |---|---|
 | Croquis / legacy reference | `DESIGN_WIDTH×DESIGN_HEIGHT` = **768×1024** (unchanged coords) |
-| Extended paper | `PAPER_ORIGIN=(-256,-256)` · **1280×1536** (`web-ui/src/lib/paperBounds.ts`) |
-| Stroke/fill persistence | Existing numeric design coords unchanged; new artwork may use negative / >legacy |
-| Flood / barrier / contour | Paper-indexed masks with origin translate; reject at **new** outer edge |
-| Fit Page framing | Still frames croquis (does not shrink model to paper); pan/zoom reaches margins |
-| PNG export (single) | Legacy-only → 768×1024 pixel-identical; oversized → full paper frame |
-| Front+Back sheet | Shared `resolveSheetExportFrame`: either side paper → both panels paper (aligned croquis); both legacy → historical 768×1024 layout. **No forced legacy width/height crop.** |
-| Preview thumbnails | `width`/`height` are output-only; `frame: 'auto'` maps design via **uniform fit-contain** (`fitContainLayout`) into 240×320 — letterbox for paper 1280×1536; legacy 768×1024 stays zero-offset / pixel-compatible |
-| Magic capture | **Fail closed** if artwork exceeds legacy frame (no silent crop; 0 paid AI) |
+| Extended paper | `PAPER_ORIGIN=(-256,-256)` · **1280×1536** |
+| Flood / barrier / contour | Paper-indexed; new-edge fail-closed; eraser / gap / 6px hollow preserved |
+| Front+Back sheet | Shared paper frame when either side extended; no forced legacy crop; decoded-PNG RGB proof |
+| Preview thumbnails | Uniform `fitContainLayout` (no croquis stretch); legacy 240×320 pixel-compatible |
+| Magic capture | **Fail closed** on extended artwork (0 paid AI) |
 
-### P0/P1 closure (PM PARTIAL PASS → export proof + preview proportions)
-
-Accepted crop path preserved (`resolveSheetExportFrame` + frame vs output size). Follow-up proof:
-
-| Item | Detail |
-|---|---|
-| **P0 sheet PNG proof** | Tests decode the **actual** `exportFrontBackSheetPng()` blob via `@napi-rs/canvas`, sample **RGB** (not opaque-cream alpha) on real outline edge coords across all four margins; cover Front oversized/Back legacy, reverse, both oversized, both legacy; assert sheet dims, panel positions, croquis alignment; negative control (missing Front stroke → cream / no ink) |
-| **P1 preview proportions** | `fitContainLayout` + letterbox offsets in `renderSketchCanvas`; extended thumbs keep croquis aspect; legacy 240×320 stretch-equivalent when aspects match |
-
-### Verification
+### Verification (Cursor-reported; PM reviewed code, did not re-run)
 
 | Check | Result |
 |---|---|
-| Focused export/paper/preview | `exportFrontBack.extendedPaper` (12) + `paperBounds.extendedFill` + related — **green** |
-| FE Vitest | **660 passed / 6 failed** (same baseline: 5× StudioPage beta-notices + `draftPersistence` clearBackIntent) |
-| `tsc -b` | **PASS** |
-| lint (oxlint) | warnings only (pre-existing + cleaned unused test local) |
-| Prod build | `VITE_API_BASE_URL=/api/v1` · SW Access-safe · assert-prod-api-base **PASS** |
+| Focused `exportFrontBack.extendedPaper` | **12 passed** |
+| FE Vitest | **660 passed / 6 failed** (known baseline: 5× StudioPage beta-notices + `draftPersistence` clearBackIntent — keep transparent) |
+| `tsc` / lint / prod build `/api/v1` + Access-safe SW | **PASS** |
 
-### Risks / open for PM
+### Release gate (separate owner auth — do not auto-deploy)
 
-- Non-immersive framed canvas still CSS-sizes to the croquis plane; oversized margin drawing is primarily via immersive pan/zoom.
-- Magic remains legacy-frame-only until a separately gated capture path exists.
-- Soft fill pixel cap is 58% of paper; whole-page leaks still hit the outer edge first.
-- #127 stays open until owner mobile QA of oversized fill + save/reopen on a deployed build.
-- **STOP for final Technical PM review** — no merge / deploy / BE / paid AI.
+1. Immutable **FRONTEND-ONLY** artifact from exact HEAD `6ec73ba2` with correct build SHA / `VITE_API_BASE_URL=/api/v1`
+2. Verify **populated** release directory **before** activating symlink (past empty-release-dir incident)
+3. Preserve FE rollback `ebcb1cc7`; do **not** alter BE/worker `6cc317ec`, Alembic `011`, `main`, #133, or #125
+4. Post-activate checks: CF Access/AOP, PWA/SW, auth, desktop/mobile; no paid/provider calls
+5. Owner mobile QA before closing #127: 1.75px complex outline + oversized puffy garment beyond old bounds (fill, save/reopen, Front+Back sheet, croquis unchanged, eraser/gaps/6px, zoom/pan). Mobile perf + 58% soft fill cap = bounded risks, not waived acceptance.
+
+### Next (only after #127 owner-accepted)
+
+Owner-requested `Create My Croquis` planning — photo privacy/consent + visual-only (not manufacturing measurement) guardrails. **Do not start or call paid AI now.**
+
+**STOP — ENGINEERING ACCEPTED; no merge / deploy without separate owner authorization. #127 stays OPEN.**
 
 
 ## Stage C — canonical baseline + GitHub cleanup (2026-10-29) — STOP for Technical PM
