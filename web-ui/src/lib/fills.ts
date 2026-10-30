@@ -1,5 +1,12 @@
 /** Garment region fills (solid, gradient, fabric) stored alongside ink strokes. */
 
+import {
+  PAPER_HEIGHT,
+  PAPER_ORIGIN_X,
+  PAPER_ORIGIN_Y,
+  PAPER_WIDTH,
+} from '@/lib/paperBounds'
+
 export type SolidFillStyle = { kind: 'solid'; color: string }
 
 export type GradientFillStyle = {
@@ -285,10 +292,14 @@ export const GRADIENT_PRESETS: GradientPreset[] = [
 
 /** Max flat contour values ([x,y,...]) accepted when parsing persisted fills. */
 export const MAX_FILL_CONTOUR_VALUES = 4_000
-/** Soft design-space pad: reject wildly out-of-range coordinates (malformed payloads). */
+/**
+ * Soft design-space pad beyond the extended paper — reject wildly out-of-range
+ * coordinates (malformed payloads) without blocking legitimate margin artwork.
+ */
 const DESIGN_PAD = 64
-const CONTOUR_COORD_MIN = -DESIGN_PAD
-const CONTOUR_COORD_MAX = 1024 + DESIGN_PAD
+const CONTOUR_COORD_MIN = Math.min(PAPER_ORIGIN_X, PAPER_ORIGIN_Y) - DESIGN_PAD
+const CONTOUR_COORD_MAX =
+  Math.max(PAPER_ORIGIN_X + PAPER_WIDTH, PAPER_ORIGIN_Y + PAPER_HEIGHT) + DESIGN_PAD
 
 export function createFillId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()

@@ -19,6 +19,13 @@ import {
   type ToolKind,
 } from '@/lib/strokes'
 import {
+  PAPER_HEIGHT,
+  PAPER_ORIGIN_X,
+  PAPER_ORIGIN_Y,
+  PAPER_WIDTH,
+  clampPointToPaper,
+} from '@/lib/paperBounds'
+import {
   clampPan,
   distance,
   fitPage,
@@ -79,10 +86,12 @@ type Props = {
 function renderFillsImage(fills: FillOp[], strokes: Stroke[]): HTMLImageElement | null {
   if (fills.length === 0) return null
   const canvas = document.createElement('canvas')
-  canvas.width = DESIGN_WIDTH
-  canvas.height = DESIGN_HEIGHT
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
+  // Design-space Path2D (incl. negative margin coords) → paper raster.
+  ctx.translate(-PAPER_ORIGIN_X, -PAPER_ORIGIN_Y)
   paintFillsWithErasers(ctx, fills, strokes)
   const img = new window.Image()
   img.src = canvas.toDataURL('image/png')
@@ -382,7 +391,11 @@ export function DrawingCanvas({
   const extendDraft = useCallback((point: { x: number; y: number; pressure: number }) => {
     const prev = draftRef.current
     if (!prev) return
-    const next = { ...prev, points: appendPoint(prev.points, point) }
+    const clamped = clampPointToPaper(point.x, point.y)
+    const next = {
+      ...prev,
+      points: appendPoint(prev.points, { ...point, x: clamped.x, y: clamped.y }),
+    }
     draftRef.current = next
     setDraft(next)
   }, [])
@@ -729,10 +742,11 @@ export function DrawingCanvas({
       } catch {
         /* capture optional */
       }
+      const clamped = clampPointToPaper(point.x, point.y)
       const stroke: Stroke = {
         id: createStrokeId(),
         tool: activeTool,
-        points: appendPoint([], point),
+        points: appendPoint([], { ...point, x: clamped.x, y: clamped.y }),
         color: brushColor,
         size: brushSize,
         opacity: activeTool === 'erase' ? 1 : brushOpacity,
@@ -947,7 +961,14 @@ export function DrawingCanvas({
   const content = (
     <>
       <Layer listening={false} x={immersive ? panX : 0} y={immersive ? panY : 0} scaleX={immersive ? contentScale : 1} scaleY={immersive ? contentScale : 1}>
-        <Rect x={0} y={0} width={DESIGN_WIDTH} height={DESIGN_HEIGHT} fill="#F8F4F0" />
+        {/* Extended paper — croquis reference stays on the legacy 768×1024 plane. */}
+        <Rect
+          x={PAPER_ORIGIN_X}
+          y={PAPER_ORIGIN_Y}
+          width={PAPER_WIDTH}
+          height={PAPER_HEIGHT}
+          fill="#F8F4F0"
+        />
         {refImage && refFit ? (
           <KonvaImage
             image={refImage}
@@ -959,7 +980,13 @@ export function DrawingCanvas({
           />
         ) : null}
         {fillsImage ? (
-          <KonvaImage image={fillsImage} x={0} y={0} width={DESIGN_WIDTH} height={DESIGN_HEIGHT} />
+          <KonvaImage
+            image={fillsImage}
+            x={PAPER_ORIGIN_X}
+            y={PAPER_ORIGIN_Y}
+            width={PAPER_WIDTH}
+            height={PAPER_HEIGHT}
+          />
         ) : null}
         {draft && draft.tool === 'erase'
           ? (() => {

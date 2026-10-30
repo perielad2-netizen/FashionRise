@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
+import { PAPER_HEIGHT, PAPER_WIDTH, designToPaperX, designToPaperY } from '@/lib/paperBounds'
 
 type Buf = Uint8ClampedArray
 type Ctx = {
@@ -13,8 +13,11 @@ type Ctx = {
 }
 
 function setPixel(buf: Buf, x: number, y: number, r: number, g: number, b: number, a = 255) {
-  if (x < 0 || y < 0 || x >= DESIGN_WIDTH || y >= DESIGN_HEIGHT) return
-  const i = (y * DESIGN_WIDTH + x) * 4
+  // x,y are design-space; buffer is paper-indexed.
+  const ix = designToPaperX(x)
+  const iy = designToPaperY(y)
+  if (ix < 0 || iy < 0 || ix >= PAPER_WIDTH || iy >= PAPER_HEIGHT) return
+  const i = (iy * PAPER_WIDTH + ix) * 4
   buf[i] = r
   buf[i + 1] = g
   buf[i + 2] = b
@@ -22,7 +25,8 @@ function setPixel(buf: Buf, x: number, y: number, r: number, g: number, b: numbe
 }
 
 function getPixel(buf: Buf, x: number, y: number) {
-  const i = (y * DESIGN_WIDTH + x) * 4
+  // x,y are paper indices (from getImageData).
+  const i = (y * PAPER_WIDTH + x) * 4
   return [buf[i]!, buf[i + 1]!, buf[i + 2]!, buf[i + 3]!] as const
 }
 
@@ -109,10 +113,20 @@ function paintInkOnto(buf: Buf, strokes: Stroke[]) {
 vi.mock('@/lib/exportCanvas', () => ({
   compositeFillAndInkLayers: (
     target: Ctx,
-    options: { fills: FillOp[]; strokes: Stroke[]; width: number; height: number },
+    options: {
+      fills: FillOp[]
+      strokes: Stroke[]
+      width: number
+      height: number
+      originX?: number
+      originY?: number
+    },
   ) => {
     const fillBuf = new Uint8ClampedArray(options.width * options.height * 4)
     const inkBuf = new Uint8ClampedArray(options.width * options.height * 4)
+    // Mock paints in design space into paper-sized buffers (origin handled by setPixel).
+    void options.originX
+    void options.originY
     paintFillsWithErasersOnto(fillBuf, options.fills, options.strokes)
     paintInkOnto(inkBuf, options.strokes)
     blendOver(target.__buf, fillBuf)
@@ -125,19 +139,20 @@ describe('sampleArtworkPixel', () => {
     const realCreate = document.createElement.bind(document)
     vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
       if (tag !== 'canvas') return realCreate(tag)
-      const buf = new Uint8ClampedArray(DESIGN_WIDTH * DESIGN_HEIGHT * 4)
+      const buf = new Uint8ClampedArray(PAPER_WIDTH * PAPER_HEIGHT * 4)
       const ctx: Ctx = {
         __buf: buf,
         clearRect: () => clearBuf(buf),
         scale: () => undefined,
+        translate: () => undefined,
         drawImage: () => undefined,
         getImageData: (x: number, y: number) => ({
           data: Uint8ClampedArray.from(getPixel(buf, x, y)),
         }),
       }
       return {
-        width: DESIGN_WIDTH,
-        height: DESIGN_HEIGHT,
+        width: PAPER_WIDTH,
+        height: PAPER_HEIGHT,
         getContext: () => ctx,
       } as unknown as HTMLCanvasElement
     }) as typeof document.createElement)
@@ -335,6 +350,6 @@ describe('sampleArtworkPixel', () => {
     const { sampleArtworkPixel } = await import('@/lib/sampleArtworkPixel')
     const miss = sampleArtworkPixel({ fills: [], strokes: [], x: 5, y: 5 })
     expect(miss.hit).toBe(false)
-    expect(DESIGN_HEIGHT).toBeGreaterThan(0)
+    expect(PAPER_HEIGHT).toBeGreaterThan(0)
   })
 })

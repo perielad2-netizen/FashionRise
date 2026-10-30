@@ -1,22 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import { floodFillAgainstBarrier } from '@/lib/floodFill'
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
+import { PAPER_HEIGHT, PAPER_WIDTH, designToPaperIndex } from '@/lib/paperBounds'
 import { solidStyle } from '@/lib/fills'
 
 function emptyBarrier(): Uint8Array {
-  return new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  return new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
+}
+
+function mark(barrier: Uint8Array, x: number, y: number): void {
+  const i = designToPaperIndex(x, y)
+  if (i >= 0) barrier[i] = 1
 }
 
 /** Closed rectangle ring so the interior is fillable and does not touch the paper edge. */
 function closedRectBarrier(x0: number, y0: number, x1: number, y1: number): Uint8Array {
   const barrier = emptyBarrier()
   for (let x = x0; x <= x1; x += 1) {
-    barrier[y0 * DESIGN_WIDTH + x] = 1
-    barrier[y1 * DESIGN_WIDTH + x] = 1
+    mark(barrier, x, y0)
+    mark(barrier, x, y1)
   }
   for (let y = y0; y <= y1; y += 1) {
-    barrier[y * DESIGN_WIDTH + x0] = 1
-    barrier[y * DESIGN_WIDTH + x1] = 1
+    mark(barrier, x0, y)
+    mark(barrier, x1, y)
   }
   return barrier
 }
@@ -47,16 +52,16 @@ describe('floodFillAgainstBarrier', () => {
     const barrier = emptyBarrier()
     // Outer dress silhouette
     for (let x = 250; x <= 450; x += 1) {
-      barrier[180 * DESIGN_WIDTH + x] = 1
-      barrier[700 * DESIGN_WIDTH + x] = 1
+      mark(barrier, x, 180)
+      mark(barrier, x, 700)
     }
     for (let y = 180; y <= 700; y += 1) {
-      barrier[y * DESIGN_WIDTH + 250] = 1
-      barrier[y * DESIGN_WIDTH + 450] = 1
+      mark(barrier, 250, y)
+      mark(barrier, 450, y)
     }
     // Waist seam separating bodice / skirt
     for (let x = 250; x <= 450; x += 1) {
-      barrier[380 * DESIGN_WIDTH + x] = 1
+      mark(barrier, x, 380)
     }
 
     const bodice = floodFillAgainstBarrier({
@@ -86,11 +91,11 @@ describe('floodFillAgainstBarrier', () => {
     const barrier = emptyBarrier()
     // Three sides only — open at the top.
     for (let y = 200; y <= 500; y += 1) {
-      barrier[y * DESIGN_WIDTH + 200] = 1
-      barrier[y * DESIGN_WIDTH + 400] = 1
+      mark(barrier, 200, y)
+      mark(barrier, 400, y)
     }
     for (let x = 200; x <= 400; x += 1) {
-      barrier[500 * DESIGN_WIDTH + x] = 1
+      mark(barrier, x, 500)
     }
     const result = floodFillAgainstBarrier({
       barrier,
@@ -105,7 +110,7 @@ describe('floodFillAgainstBarrier', () => {
     expect(result.message.toLowerCase()).not.toContain('dress')
   })
 
-  it('rejects taps on the barrier and outside the design space', () => {
+  it('rejects taps on the barrier and outside the extended paper', () => {
     const barrier = closedRectBarrier(100, 100, 200, 200)
     expect(
       floodFillAgainstBarrier({
@@ -115,10 +120,11 @@ describe('floodFillAgainstBarrier', () => {
         style: solidStyle('#111111'),
       }).ok,
     ).toBe(false)
+    // Negative design coords inside the paper margins are valid; go past the origin.
     expect(
       floodFillAgainstBarrier({
         barrier,
-        x: -1,
+        x: -PAPER_WIDTH,
         y: 10,
         style: solidStyle('#111111'),
       }).ok,

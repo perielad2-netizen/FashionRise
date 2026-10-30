@@ -16,7 +16,8 @@ import { paintFillOps } from '@/lib/paintFills'
 import { createEmptyDraftDocument, parseStudioDraftDocument } from '@/lib/draftDocument'
 import { captureSketchForMagic } from '@/lib/sketchCapture'
 import { exportSketchPng } from '@/lib/exportCanvas'
-import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
+import { type Stroke } from '@/lib/strokes'
+import { PAPER_HEIGHT, PAPER_WIDTH, designToPaperIndex } from '@/lib/paperBounds'
 
 vi.mock('@/lib/exportCanvas', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/exportCanvas')>()
@@ -43,14 +44,18 @@ beforeEach(() => {
 
 /** Closed rectangle ring so the interior is fillable and does not touch the paper edge. */
 function closedRectBarrier(x0: number, y0: number, x1: number, y1: number): Uint8Array {
-  const barrier = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  const barrier = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
+  const mark = (x: number, y: number) => {
+    const i = designToPaperIndex(x, y)
+    if (i >= 0) barrier[i] = 1
+  }
   for (let x = x0; x <= x1; x += 1) {
-    barrier[y0 * DESIGN_WIDTH + x] = 1
-    barrier[y1 * DESIGN_WIDTH + x] = 1
+    mark(x, y0)
+    mark(x, y1)
   }
   for (let y = y0; y <= y1; y += 1) {
-    barrier[y * DESIGN_WIDTH + x0] = 1
-    barrier[y * DESIGN_WIDTH + x1] = 1
+    mark(x0, y)
+    mark(x1, y)
   }
   return barrier
 }

@@ -17,6 +17,7 @@ import {
 import { checkPersistableFill, parseFillOp, solidStyle, type FillOp } from '@/lib/fills'
 import { paintFillOps } from '@/lib/paintFills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke, createStrokeId } from '@/lib/strokes'
+import { PAPER_HEIGHT, PAPER_WIDTH, designToPaperIndex } from '@/lib/paperBounds'
 
 const g = globalThis as typeof globalThis & {
   Path2D: typeof Path2D
@@ -32,7 +33,9 @@ beforeAll(() => {
   g.Path2D = NapiPath2D as unknown as typeof Path2D
   document.createElement = ((tag: string) => {
     if (tag === 'canvas') {
-      const canvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT) as unknown as HTMLCanvasElement
+      // Barrier / erase masks allocate PAPER_WIDTH×PAPER_HEIGHT; paint tests that
+      // need the legacy frame create their own napi canvases explicitly.
+      const canvas = createCanvas(PAPER_WIDTH, PAPER_HEIGHT) as unknown as HTMLCanvasElement
       return canvas
     }
     return previousCreateElement!(tag)
@@ -197,7 +200,7 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
 
     // Barrier must not show sealed ink through the erased junction.
     const barrier = buildInkBarrierMask(strokes, 0, { endpointSealPx: STRONG_ENDPOINT_SEAL_PX })
-    expect(barrier[y0 * DESIGN_WIDTH + x1]).toBe(0)
+    expect(barrier[designToPaperIndex(x1, y0)]).toBe(0)
   })
 
   it('keeps a narrow 3px erased opening open after final dilate (Fill + Gaps)', () => {
@@ -244,12 +247,12 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
     const barrier = buildInkBarrierMask(erased, DEFAULT_GAP_CLOSE_PX, {
       endpointSealPx: DEFAULT_ENDPOINT_SEAL_PX,
     })
-    expect(barrier[y0 * DESIGN_WIDTH + gapMidX]).toBe(0)
+    expect(barrier[designToPaperIndex(gapMidX, y0)]).toBe(0)
 
     const strongBarrier = buildInkBarrierMask(erased, DEFAULT_GAP_CLOSE_PX, {
       endpointSealPx: STRONG_ENDPOINT_SEAL_PX,
     })
-    expect(strongBarrier[y0 * DESIGN_WIDTH + gapMidX]).toBe(0)
+    expect(strongBarrier[designToPaperIndex(gapMidX, y0)]).toBe(0)
   })
 
   it('lets a later pencil stroke reconnect an erased gap (chronology)', () => {
@@ -378,9 +381,9 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
       endpointSealPx: DEFAULT_ENDPOINT_SEAL_PX,
     })
     // Visible (pre-dilate) ink keeps the hollow empty; dilated barrier may seal it.
-    expect(layers.visibleInk[cy * DESIGN_WIDTH + cx]).toBe(0)
+    expect(layers.visibleInk[designToPaperIndex(cx, cy)]).toBe(0)
     // Document the dilate-seal behaviour that previously hid this case.
-    expect(layers.barrier[cy * DESIGN_WIDTH + cx]).toBe(1)
+    expect(layers.barrier[designToPaperIndex(cx, cy)]).toBe(1)
 
     // 2–3) Filling the surrounding panel must fail closed — no FillOp.
     const ring = floodFillRegion({
@@ -545,16 +548,16 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
     // Synthetic barrier: three-sided box with a *narrow* top gap. Escape from a
     // deep seed runs past many wall-adjacent corridor cells; the marker must be
     // the first mouth from the edge (near y=200), not a side-wall cell near the seed.
-    const barrier = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+    const barrier = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
     for (let y = 200; y <= 600; y += 1) {
-      barrier[y * DESIGN_WIDTH + 200] = 1
-      barrier[y * DESIGN_WIDTH + 500] = 1
+      barrier[designToPaperIndex(200, y)] = 1
+      barrier[designToPaperIndex(500, y)] = 1
     }
     for (let x = 200; x <= 500; x += 1) {
-      barrier[600 * DESIGN_WIDTH + x] = 1
+      barrier[designToPaperIndex(x, 600)] = 1
     }
-    for (let x = 200; x <= 348; x += 1) barrier[200 * DESIGN_WIDTH + x] = 1
-    for (let x = 352; x <= 500; x += 1) barrier[200 * DESIGN_WIDTH + x] = 1
+    for (let x = 200; x <= 348; x += 1) barrier[designToPaperIndex(x, 200)] = 1
+    for (let x = 352; x <= 500; x += 1) barrier[designToPaperIndex(x, 200)] = 1
 
     const hint = locateGapHint(barrier, 350, 450)
     expect(hint).not.toBeNull()
@@ -566,14 +569,14 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
 
     // Wide ambiguous opening: path through the centre never grazes barrier tips —
     // suppress the marker rather than highlighting a misleading side-wall cell.
-    const wide = new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+    const wide = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
     for (let y = 200; y <= 600; y += 1) {
-      wide[y * DESIGN_WIDTH + 200] = 1
-      wide[y * DESIGN_WIDTH + 500] = 1
+      wide[designToPaperIndex(200, y)] = 1
+      wide[designToPaperIndex(500, y)] = 1
     }
-    for (let x = 200; x <= 500; x += 1) wide[600 * DESIGN_WIDTH + x] = 1
-    for (let x = 200; x <= 300; x += 1) wide[200 * DESIGN_WIDTH + x] = 1
-    for (let x = 400; x <= 500; x += 1) wide[200 * DESIGN_WIDTH + x] = 1
+    for (let x = 200; x <= 500; x += 1) wide[designToPaperIndex(x, 600)] = 1
+    for (let x = 200; x <= 300; x += 1) wide[designToPaperIndex(x, 200)] = 1
+    for (let x = 400; x <= 500; x += 1) wide[designToPaperIndex(x, 200)] = 1
     expect(locateGapHint(wide, 350, 450)).toBeNull()
   })
 

@@ -38,7 +38,7 @@ export function SettingsInspector({
         <h3>Canvas</h3>
         <div className={styles.row}>
           <span>Size</span>
-          <strong>768 × 1024</strong>
+          <strong>768 × 1024</strong> croquis · extended paper 1280 × 1536
         </div>
         <div className={styles.row}>
           <span>Background</span>

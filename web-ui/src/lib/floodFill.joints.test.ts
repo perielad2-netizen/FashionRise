@@ -6,11 +6,12 @@ import {
   floodFillAgainstBarrier,
   sealStrokeJoints,
 } from '@/lib/floodFill'
-import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke, createStrokeId } from '@/lib/strokes'
+import { type Stroke, createStrokeId } from '@/lib/strokes'
+import { PAPER_HEIGHT, PAPER_WIDTH, designToPaperIndex } from '@/lib/paperBounds'
 import { solidStyle } from '@/lib/fills'
 
 function emptyMask(): Uint8Array {
-  return new Uint8Array(DESIGN_WIDTH * DESIGN_HEIGHT)
+  return new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
 }
 
 /** Axis-aligned thin rectangle as four separate strokes with intentional tip gaps. */
@@ -50,12 +51,12 @@ function paintRectOntoMask(mask: Uint8Array, x0: number, y0: number, x1: number,
   const ay0 = Math.round(Math.min(y0, y1))
   const ay1 = Math.round(Math.max(y0, y1))
   for (let x = ax0; x <= ax1; x += 1) {
-    mask[ay0 * DESIGN_WIDTH + x] = 1
-    mask[ay1 * DESIGN_WIDTH + x] = 1
+    mask[designToPaperIndex(x, ay0)] = 1
+    mask[designToPaperIndex(x, ay1)] = 1
   }
   for (let y = ay0; y <= ay1; y += 1) {
-    mask[y * DESIGN_WIDTH + ax0] = 1
-    mask[y * DESIGN_WIDTH + ax1] = 1
+    mask[designToPaperIndex(ax0, y)] = 1
+    mask[designToPaperIndex(ax1, y)] = 1
   }
 }
 
@@ -64,8 +65,8 @@ function paintAliveTips(mask: Uint8Array, strokes: Stroke[]) {
   for (const e of collectDrawStrokeEndpoints(strokes)) {
     const x = Math.round(e.x)
     const y = Math.round(e.y)
-    if (x >= 0 && y >= 0 && x < DESIGN_WIDTH && y < DESIGN_HEIGHT) {
-      mask[y * DESIGN_WIDTH + x] = 1
+    if (designToPaperIndex(x, y) >= 0) {
+      mask[designToPaperIndex(x, y)] = 1
     }
   }
 }
@@ -175,12 +176,12 @@ describe('multi-stroke joint sealing (#127)', () => {
     }
     const mask = emptyMask()
     for (let y = 300; y <= 500; y += 1) {
-      mask[y * DESIGN_WIDTH + 300] = 1
-      mask[y * DESIGN_WIDTH + 304] = 1
+      mask[designToPaperIndex(300, y)] = 1
+      mask[designToPaperIndex(304, y)] = 1
     }
     sealStrokeJoints(mask, [left, right], STRONG_ENDPOINT_SEAL_PX)
     // Mid-gap between panels must stay empty.
-    expect(mask[400 * DESIGN_WIDTH + 302]).toBe(0)
+    expect(mask[designToPaperIndex(302, 400)]).toBe(0)
   })
 
   it('strong Close-small-gaps seal bridges a medium accidental gap that default seal skips', () => {
@@ -230,23 +231,23 @@ describe('multi-stroke joint sealing (#127)', () => {
     const eraseCoverage = emptyMask()
     for (let y = 238; y <= 248; y += 1) {
       for (let x = 454; x <= 464; x += 1) {
-        eraseCoverage[y * DESIGN_WIDTH + x] = 1
-        mask[y * DESIGN_WIDTH + x] = 0
+        eraseCoverage[designToPaperIndex(x, y)] = 1
+        mask[designToPaperIndex(x, y)] = 0
       }
     }
     sealStrokeJoints(mask, strokes, STRONG_ENDPOINT_SEAL_PX, { eraseCoverage })
     // Ghost barrier must not reappear in the erased corridor.
-    expect(mask[243 * DESIGN_WIDTH + 458]).toBe(0)
+    expect(mask[designToPaperIndex(458, 243)]).toBe(0)
   })
 
   it('open_outline messages never call the garment a dress', () => {
     const barrier = emptyMask()
     for (let y = 200; y <= 500; y += 1) {
-      barrier[y * DESIGN_WIDTH + 200] = 1
-      barrier[y * DESIGN_WIDTH + 400] = 1
+      barrier[designToPaperIndex(200, y)] = 1
+      barrier[designToPaperIndex(400, y)] = 1
     }
     for (let x = 200; x <= 400; x += 1) {
-      barrier[500 * DESIGN_WIDTH + x] = 1
+      barrier[designToPaperIndex(x, 500)] = 1
     }
     const result = floodFillAgainstBarrier({
       barrier,
@@ -267,22 +268,22 @@ describe('multi-stroke joint sealing (#127)', () => {
     const { dilateMask } = await import('@/lib/floodFill')
     const mask = emptyMask()
     // Two ink blobs 4px apart with erase covering the corridor.
-    mask[100 * DESIGN_WIDTH + 100] = 1
-    mask[100 * DESIGN_WIDTH + 104] = 1
+    mask[designToPaperIndex(100, 100)] = 1
+    mask[designToPaperIndex(104, 100)] = 1
     const eraseCoverage = emptyMask()
-    eraseCoverage[100 * DESIGN_WIDTH + 101] = 1
-    eraseCoverage[100 * DESIGN_WIDTH + 102] = 1
-    eraseCoverage[100 * DESIGN_WIDTH + 103] = 1
+    eraseCoverage[designToPaperIndex(101, 100)] = 1
+    eraseCoverage[designToPaperIndex(102, 100)] = 1
+    eraseCoverage[designToPaperIndex(103, 100)] = 1
     const dilated = dilateMask(mask, 2, { eraseCoverage })
-    expect(dilated[100 * DESIGN_WIDTH + 100]).toBe(1)
-    expect(dilated[100 * DESIGN_WIDTH + 104]).toBe(1)
-    expect(dilated[100 * DESIGN_WIDTH + 102]).toBe(0)
+    expect(dilated[designToPaperIndex(100, 100)]).toBe(1)
+    expect(dilated[designToPaperIndex(104, 100)]).toBe(1)
+    expect(dilated[designToPaperIndex(102, 100)]).toBe(0)
   })
 
   it('exports automatic seal tighter than Gaps and below intentional 4px openings', () => {
     expect(STRONG_ENDPOINT_SEAL_PX).toBeGreaterThan(DEFAULT_ENDPOINT_SEAL_PX)
     expect(DEFAULT_ENDPOINT_SEAL_PX).toBeLessThan(4)
     expect(STRONG_ENDPOINT_SEAL_PX).toBeLessThanOrEqual(12)
-    expect(DESIGN_HEIGHT).toBeGreaterThan(0)
+    expect(PAPER_HEIGHT).toBeGreaterThan(0)
   })
 })

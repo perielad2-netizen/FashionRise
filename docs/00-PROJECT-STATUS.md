@@ -3,20 +3,62 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-29 (**Stage C canonical baseline** — branch `cursor/web-canonical-baseline-77c6` · prod FE `ebcb1cc7` · BE `6cc317ec` · Alembic `011` · closed 12 superseded BE PRs · **65 open PRs remain** · **0 paid AI** · **STOP for Technical PM**.)
+**Last updated:** 2026-10-30 (**Issue #127 / PR #134 FE-ONLY PRODUCTION DEPLOYED** — live release `6ec73ba2` · source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · BE/worker unchanged `6cc317ec` · Alembic `011` · **0 paid AI** · **#127 OPEN for owner mobile QA** · PR not merged to `main`.)
 
-**Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity) and PR #129 (6px cutout fill safety + decimal lineage).
+**Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity), PR #129 (6px cutout fill safety), and PR #134 (extended paper — FE-only).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`ebcb1cc7`** — release `/var/www/fashionrise/releases/ebcb1cc7` · source `ebcb1cc7b6102e343ee06e08435faab64f4b4995` · `VITE_API_BASE_URL=/api/v1` · App pill **`ebcb1cc7`** (not stale `b2fbd043`). Rollback → `bfbdd03f-decimal`. |
+| Frontend (`web-ui`) | **`6ec73ba2`** — release `/var/www/fashionrise/releases/6ec73ba2` · source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · `VITE_API_BASE_URL=/api/v1` · App pill **`6ec73ba2`**. Rollback → **`ebcb1cc7`**. |
 | Backend (FastAPI + PostgreSQL) | **`6cc317ecd55423403b6479e8bb185c3e4cde2bf1`** (PR #130). Alembic **`011`**. Rollback → `311e259a`. |
 | AI worker | `fashionrise-ai-worker` @ **`6cc317ec`** (matched with API). |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
-| Nginx | `root /var/www/fashionrise/current;` · CF Access + AOP unchanged |
+| Nginx | `root /var/www/fashionrise/current;` → `releases/6ec73ba2` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
+
+
+## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — owner-authorized; #127 stays OPEN
+
+Owner authorized controlled frontend-only production deploy of engineering-accepted source **`6ec73ba26ee5b8c25b29a77d31050942af4c6c6d`**. PR #134 / #133 / #125 **not merged** to `main`. **No API/worker restart, migration, DB mutation, Nginx/CF gate change, or paid AI.**
+
+### Deploy execution
+
+| Item | Result |
+|---|---|
+| Timestamp (UTC) | **2026-10-30T07:35:06Z** (Asia/Jerusalem **09:35 IST**) |
+| Approved source | Exact `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` (web-ui tree `0709aa71…`; docs-only tip `7c0a4e41` identical tree) |
+| Preflight | Live FE `ebcb1cc7` · BE+worker `6cc317ec` · Alembic `011` · nginx root → `current` · Access/AOP present · rollback target `ebcb1cc7`/`bfbdd03f-decimal` intact |
+| Offline verify | Vitest **660 passed / 6 known baseline fails** · `tsc` · lint warnings only · build `VITE_API_BASE_URL=/api/v1` + Access-safe SW **PASS** |
+| Build | `VITE_API_BASE_URL=/api/v1` · `VITE_BUILD_SHA=6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` |
+| Release dir | `/var/www/fashionrise/releases/6ec73ba2` — **validated nonempty** (83 files, `index.html`/`sw.js`/`version.json`/assets) **before** symlink switch (empty-dir incident procedure fixed) |
+| Activate | Atomic `ln -sfn …/6ec73ba2 …/current` · `nginx -t` · reload |
+| Backup / rollback | `/var/backups/fashionrise/pr134-fe-only-deploy-20261030T073506Z/` + release `ROLLBACK.sh` → **`ebcb1cc7`** |
+| Disk smoke | Bundle markers `/api/v1`, `6ec73ba2`, `unsupported_cutout`, paper `1280`/`1536`/`-256` · SW no NavigationRoute · API `/health`+`/ready` ok · BE still `6cc317ec` · Alembic `011` |
+| Paid AI | **0** |
+| Public HTTPS without Access cookie | 302/403 expected (unchanged CF Access / AOP) |
+
+### Accepted product scope (now live on FE)
+
+| Concept | Value |
+|---|---|
+| Croquis / legacy reference | `768×1024` unchanged coords |
+| Extended paper | `PAPER_ORIGIN=(-256,-256)` · **1280×1536** |
+| Front+Back sheet | Shared paper frame when either side extended; decoded-PNG RGB proof in tests |
+| Preview thumbnails | Uniform `fitContainLayout`; legacy 240×320 compatible |
+| Magic capture | **Fail closed** on extended artwork |
+
+### Owner mobile QA still required (#127 remains OPEN)
+
+1. ~1.75px complex outline + oversized puffy garment beyond old bounds → Fill → save/refresh/reopen  
+2. Front+Back PNG non-cropped; croquis unchanged; eraser / gaps / 6px hollow / undo  
+3. Mobile pan/zoom performance acceptable  
+4. Do **not** submit Magic on extended design (client fail-closed)
+
+### Next (only after #127 owner-accepted)
+
+`Create My Croquis` planning — photo privacy/consent + visual-only guardrails. **Do not start or call paid AI now.**
 
 
 ## Stage C — canonical baseline + GitHub cleanup (2026-10-29) — STOP for Technical PM
@@ -69,7 +111,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 | Issue | Disposition | Evidence |
 |---|---|---|
-| #127 Fill | **partially-delivered** — keep open | FE `ebcb1cc7` deployed; **owner mobile acceptance pending** |
+| #127 Fill | **partially-delivered** — keep open | FE **`6ec73ba2`** live (PR #134 FE-only deploy 2026-10-30); owner mobile oversized QA still required before close |
 | #128 POM integrity | **partially-delivered** — keep open | BE `6cc317ec` deployed; **owner measurement acceptance pending** |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
@@ -1300,6 +1342,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-30 | **OWNER-AUTHORIZED FE-ONLY PROD DEPLOY (#127 / PR #134):** FE release **`6ec73ba2`** from approved source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · BE/worker **unchanged** `6cc317ec` · Alembic **`011`** · nonempty release validated before symlink · backup `pr134-fe-only-deploy-20261030T073506Z` · rollback → `ebcb1cc7` · disk smoke PASS · **0 paid AI** · **#127 stays OPEN** for owner mobile QA · PRs #134/#133/#125 **not merged**. |
 | 2026-10-29 | **OWNER-AUTHORIZED PROD RELEASE (#131):** BE+worker `6cc317ec` (PR #130) · FE `ebcb1cc7` (PR #129) · Alembic `011` · backup `techpack-130-129-deploy-20261029T131341Z` · health/ready PASS · **0 paid AI** · #127/#128 remain open · 86-PR cleanup not started. |
 | 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; HEAD `c16acf41` / impl `0561bb56` / blob `e04fdbcf`; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 structural & visual identity:** authorized-snapshot artifact retention on piece-list drift; `color_treatment`/`visible_details` identity fingerprint; tip `991244fa727bf01a6aed15bf7471dae776239d62` / commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9`; 12 focused / 114 broader pass / 1 baseline async_worker fail; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
