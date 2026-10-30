@@ -3,15 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**Issue #127 / PR #134 FE-ONLY PRODUCTION DEPLOYED** — live release `6ec73ba2` · source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · BE/worker unchanged `6cc317ec` · Alembic `011` · **0 paid AI** · **#127 OPEN for owner mobile QA** · PR not merged to `main`.)
+**Last updated:** 2026-10-30 (**P0 #136 post-deploy regression** — live FE `6ec73ba2` missing compile-time Studio gates · Front/Back + Magic OFF in bundle · **`ebcb1cc7` also OFF** · rebuild candidate ready · **no prod mutation pending owner auth** · #135 PAUSED · **0 paid AI**.)
 
-**Phase:** Protected family beta. Controlled production rollout of engineering-accepted PR #130 (Magic source provenance / measurement integrity), PR #129 (6px cutout fill safety), and PR #134 (extended paper — FE-only).
+**Phase:** Protected family beta. **Incident #136 HOLD** on further FE forward-deploys until VITE gate parity restored. #135 Create My Croquis **PAUSED**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`6ec73ba2`** — release `/var/www/fashionrise/releases/6ec73ba2` · source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · `VITE_API_BASE_URL=/api/v1` · App pill **`6ec73ba2`**. Rollback → **`ebcb1cc7`**. |
+| Frontend (`web-ui`) | **`6ec73ba2`** — release `/var/www/fashionrise/releases/6ec73ba2` · source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · **compiled `VITE_STUDIO_FRONT_BACK_ENABLED`/`VITE_MAGIC_UI_ENABLED` effectively false (incident #136)** · App pill **`6ec73ba2`**. Rollback artifact `ebcb1cc7` retained but **same gate defect**. |
 | Backend (FastAPI + PostgreSQL) | **`6cc317ecd55423403b6479e8bb185c3e4cde2bf1`** (PR #130). Alembic **`011`**. Rollback → `311e259a`. |
 | AI worker | `fashionrise-ai-worker` @ **`6cc317ec`** (matched with API). |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
@@ -19,46 +19,42 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — owner-authorized; #127 stays OPEN
+## P0 #136 — missing VITE Studio gates after FE `6ec73ba2` (2026-10-30) — STOP for owner auth
 
-Owner authorized controlled frontend-only production deploy of engineering-accepted source **`6ec73ba26ee5b8c25b29a77d31050942af4c6c6d`**. PR #134 / #133 / #125 **not merged** to `main`. **No API/worker restart, migration, DB mutation, Nginx/CF gate change, or paid AI.**
+Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. Branch: `cursor/web-incident-136-vite-flags-77c6`.
+
+| Finding | Evidence |
+|---|---|
+| Live FE | `current` → `releases/6ec73ba2` · BE `6cc317ec` · Alembic `011` unchanged |
+| Compiled live gates | `frontBackEnabled??helper` → **`return!1`** (OFF); dual-imm also **OFF** |
+| Rollback `ebcb1cc7` | **Same OFF** in compiled JS (no `BUILD_ENV.txt`) — symlink rollback alone will **not** restore Front/Back or Magic |
+| Known-good | `69b83c01` / `af1ddbb5`: helpers **`return!0`** + `BUILD_ENV` MAGIC/FRONT_BACK/DUAL=true |
+| Root cause | #134 prod build set only `VITE_API_BASE_URL` + `VITE_BUILD_SHA`; gates default false at compile time |
+| Restoring draft | Likely uncaught V2 serialize reject while Front/Back OFF; **do not** clear site data / force V2→V1 |
+| Offline fix proof | Rebuild same `web-ui` tree `0709aa71…` with allowlist → helper **`return!0`**; `assert-prod-vite-flags.mjs` wired into `npm run build` |
+| Prod mutation this turn | **None** |
+| #135 | **PAUSED** |
+
+**Owner decision needed before any symlink change:** authorize forward deploy of rebuilt `6ec73ba2` tree **with** production VITE allowlist (keeps #127 paper). Do **not** expect `ebcb1cc7` rollback to restore Studio gates.
+
+## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — then P0 #136
+
+Owner authorized controlled frontend-only production deploy of engineering-accepted source **`6ec73ba26ee5b8c25b29a77d31050942af4c6c6d`**. Deploy executed; **post-deploy P0 #136** (missing VITE gates) now blocks owner mobile QA closure.
 
 ### Deploy execution
 
 | Item | Result |
 |---|---|
 | Timestamp (UTC) | **2026-10-30T07:35:06Z** (Asia/Jerusalem **09:35 IST**) |
-| Approved source | Exact `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` (web-ui tree `0709aa71…`; docs-only tip `7c0a4e41` identical tree) |
-| Preflight | Live FE `ebcb1cc7` · BE+worker `6cc317ec` · Alembic `011` · nginx root → `current` · Access/AOP present · rollback target `ebcb1cc7`/`bfbdd03f-decimal` intact |
-| Offline verify | Vitest **660 passed / 6 known baseline fails** · `tsc` · lint warnings only · build `VITE_API_BASE_URL=/api/v1` + Access-safe SW **PASS** |
-| Build | `VITE_API_BASE_URL=/api/v1` · `VITE_BUILD_SHA=6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` |
-| Release dir | `/var/www/fashionrise/releases/6ec73ba2` — **validated nonempty** (83 files, `index.html`/`sw.js`/`version.json`/assets) **before** symlink switch (empty-dir incident procedure fixed) |
-| Activate | Atomic `ln -sfn …/6ec73ba2 …/current` · `nginx -t` · reload |
-| Backup / rollback | `/var/backups/fashionrise/pr134-fe-only-deploy-20261030T073506Z/` + release `ROLLBACK.sh` → **`ebcb1cc7`** |
-| Disk smoke | Bundle markers `/api/v1`, `6ec73ba2`, `unsupported_cutout`, paper `1280`/`1536`/`-256` · SW no NavigationRoute · API `/health`+`/ready` ok · BE still `6cc317ec` · Alembic `011` |
+| Approved source | Exact `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` (web-ui tree `0709aa71…`) |
+| Build (defect) | `VITE_API_BASE_URL=/api/v1` · `VITE_BUILD_SHA=6ec73ba2…` · **Studio VITE gates omitted → compiled OFF** |
+| Release / activate | `/var/www/fashionrise/releases/6ec73ba2` nonempty-before-switch · atomic `current` |
+| Backup / rollback artifact | `pr134-fe-only-deploy-20261030T073506Z` · `ROLLBACK.sh` → `ebcb1cc7` (**insufficient for #136**) |
 | Paid AI | **0** |
-| Public HTTPS without Access cookie | 302/403 expected (unchanged CF Access / AOP) |
 
-### Accepted product scope (now live on FE)
+### Owner mobile QA (#127) blocked until #136 gate restore
 
-| Concept | Value |
-|---|---|
-| Croquis / legacy reference | `768×1024` unchanged coords |
-| Extended paper | `PAPER_ORIGIN=(-256,-256)` · **1280×1536** |
-| Front+Back sheet | Shared paper frame when either side extended; decoded-PNG RGB proof in tests |
-| Preview thumbnails | Uniform `fitContainLayout`; legacy 240×320 compatible |
-| Magic capture | **Fail closed** on extended artwork |
-
-### Owner mobile QA still required (#127 remains OPEN)
-
-1. ~1.75px complex outline + oversized puffy garment beyond old bounds → Fill → save/refresh/reopen  
-2. Front+Back PNG non-cropped; croquis unchanged; eraser / gaps / 6px hollow / undo  
-3. Mobile pan/zoom performance acceptable  
-4. Do **not** submit Magic on extended design (client fail-closed)
-
-### Next (only after #127 owner-accepted)
-
-`Create My Croquis` planning — photo privacy/consent + visual-only guardrails. **Do not start or call paid AI now.**
+Extended paper is in the live bundle, but Front/Back + Magic UI are compiled off. Complete #136 rebuild deploy before oversized Fill mobile acceptance.
 
 
 ## Stage C — canonical baseline + GitHub cleanup (2026-10-29) — STOP for Technical PM
