@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,6 +8,7 @@ import {
   StudioDraftSerializeError,
 } from '@/lib/draftDocument'
 import { useStudioEditor } from '@/hooks/useStudioEditor'
+import type { Stroke } from '@/lib/strokes'
 
 vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'false')
 vi.stubEnv('VITE_MAGIC_UI_ENABLED', 'false')
@@ -26,33 +27,46 @@ vi.mock('@/services/auth/AuthProvider', () => ({
   }),
 }))
 
+const backInk: Stroke = {
+  id: 'back-ink-1',
+  tool: 'draw',
+  points: [10, 20, 0.5, 30, 40, 0.5],
+  color: '#112233',
+  size: 2,
+  opacity: 1,
+}
+
 const v2Doc = {
   ...createEmptyDraftDocument(),
   schema: STUDIO_DRAFT_SCHEMA_V2,
   activeSide: 'front' as const,
-  back: { strokes: [], fills: [] },
+  back: { strokes: [backInk], fills: [] },
 }
+
+const persistStudioDraft = vi.fn(async () => ({
+  ok: true as const,
+  designId: 'design-v2',
+  document: v2Doc,
+  fingerprint: 'fp',
+  syncedRevision: 3,
+  localPersisted: true,
+}))
+
+const restoreStudioDraft = vi.fn(async () => ({
+  designId: 'design-v2',
+  document: v2Doc,
+  syncedRevision: 3,
+  conflict: null,
+  notice: null,
+}))
 
 vi.mock('@/lib/draftPersistence', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/draftPersistence')>()
   return {
     ...actual,
-    restoreStudioDraft: async () => ({
-      designId: 'design-v2',
-      document: v2Doc,
-      syncedRevision: 3,
-      conflict: null,
-      notice: null,
-    }),
+    restoreStudioDraft: (...args: unknown[]) => restoreStudioDraft(...args),
     persistLocalRecovery: async () => ({ ok: true, wrote: true }),
-    persistStudioDraft: async () => ({
-      ok: true as const,
-      designId: 'design-v2',
-      document: v2Doc,
-      fingerprint: 'fp',
-      syncedRevision: 3,
-      localPersisted: true,
-    }),
+    persistStudioDraft: (...args: unknown[]) => persistStudioDraft(...args),
   }
 })
 
@@ -74,15 +88,46 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe('useStudioEditor restore boot (#136)', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    persistStudioDraft.mockClear()
+    restoreStudioDraft.mockClear()
+    restoreStudioDraft.mockImplementation(async () => ({
+      designId: 'design-v2',
+      document: v2Doc,
+      syncedRevision: 3,
+      conflict: null,
+      notice: null,
+    }))
   })
 
-  it('exits Restoring when V2 fingerprint serialize fails; does not stay stuck', async () => {
+  it('keeps V2 back ink, exits Restoring, and never cloud-writes after serialize block', async () => {
     const { result } = renderHook(() => useStudioEditor(), { wrapper })
     await waitFor(() => {
       expect(result.current.saveStatus).not.toBe('restoring')
     })
     expect(result.current.ready).toBe(true)
     expect(result.current.saveStatus).toBe('local-only')
+    expect(result.current.hasBackInk).toBe(true)
+    expect(persistStudioDraft).not.toHaveBeenCalled()
+
+    // Ordinary UI action must still refuse automatic cloud overwrite.
+    await act(async () => {
+      result.current.retrySave()
+    })
+    await waitFor(() => {
+      expect(persistStudioDraft).not.toHaveBeenCalled()
+    })
+  })
+
+  it('exits Restoring with safe error on generic restore rejection; no cloud write', async () => {
+    restoreStudioDraft.mockImplementationOnce(async () => {
+      throw new Error('indexeddb unavailable')
+    })
+    const { result } = renderHook(() => useStudioEditor(), { wrapper })
+    await waitFor(() => {
+      expect(result.current.saveStatus).not.toBe('restoring')
+    })
+    expect(result.current.ready).toBe(true)
+    expect(result.current.saveStatus).toBe('error')
+    expect(persistStudioDraft).not.toHaveBeenCalled()
   })
 })

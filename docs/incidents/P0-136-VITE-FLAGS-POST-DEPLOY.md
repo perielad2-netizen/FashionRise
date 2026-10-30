@@ -1,39 +1,45 @@
 # P0 #136 — Studio gates missing after FE `6ec73ba2` deploy
 
-**Status:** Phase A/B/C complete offline · **no production mutation** · STOP for Technical PM  
+**Status:** PM PARTIAL PASS follow-up · P0-1/P0-2/P1 addressed on PR #137 · **no production mutation** · STOP for final Technical PM  
 **Paid AI:** 0 · **BE/worker:** untouched `6cc317ec` · Alembic `011`  
-**Branch:** `cursor/web-incident-136-vite-flags-77c6` · PR #137
+**Branch:** `cursor/web-incident-136-vite-flags-77c6` · PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137)
 
-## Phase A — Compiled gate diagnosis (immutable releases)
+## Issue status (do not revoke)
 
-Inspected production `index-*.js` for constant-folded helpers:
-
-| Gate | Detection | **live `6ec73ba2`** | **rollback `ebcb1cc7`** | known-good `69b83c01` |
-|---|---|---|---|---|
-| `VITE_STUDIO_FRONT_BACK_ENABLED` | `frontBackEnabled??H()` → `H(){return!0/!1}` | **OFF (`!1`)** | **OFF (`!1`)** | **ON (`!0`)** |
-| `VITE_STUDIO_DUAL_MAGIC_ENABLED` | hook `a=H(),o=D()` next helper | **OFF** | **OFF** | **ON** |
-| `VITE_MAGIC_UI_ENABLED` | `Ze=M()` beside magic phase busy flag | **OFF** | **OFF** | **ON** |
-| `VITE_REGISTRATION_UI_ENABLED` | `/register` element gate helper | **OFF** | **OFF** | **OFF** |
-
-`BUILD_ENV.txt`: missing on `6ec73ba2` / `ebcb1cc7` / `bfbdd03f-decimal`; present on `69b83c01`/`af1ddbb5` with MAGIC/FRONT_BACK/DUAL=`true`, REGISTRATION=`false`.
-
-**Build procedure defect:** #134 clean-worktree build set only `VITE_API_BASE_URL` + `VITE_BUILD_SHA`. No `web-ui/.env.production` on the build host (`/opt/fashionrise/web-ui/.env.production` absent; local `.env.production` gitignored). Gates defaulted false at compile time. #134 source did **not** remove the gate modules.
-
-**Restoring draft…:** `useStudioEditor` boot calls `documentForCloud` → `serializeStudioDraftDocument`, which **throws** on V2 drafts when Front/Back is off. The boot async IIFE had **no try/catch**, so `saveStatus` stayed `'restoring'`. **Do not** clear site data / force V2→V1 / overwrite cloud.
-
-## Phase B — Rollback preparedness (NOT executed)
-
-| Item | Value |
+| Issue | State |
 |---|---|
-| Command (ready) | `bash /var/www/fashionrise/releases/6ec73ba2/ROLLBACK.sh` → `ebcb1cc7` |
-| Prep record | `/var/backups/fashionrise/incident-136-rollback-prep-20261030T103659Z/` |
-| BE/worker | unchanged |
-| **Warning** | `ebcb1cc7` compiled gates are **also OFF** — rollback restores prior Fill tip but **will not** restore Front/Back or Magic UI |
-| Owner auth | **required before execute** |
+| **#127** Fill / extended paper | **CLOSED** — owner Fill/save/refresh/reopen acceptance recorded; #136 is a **separate** post-deploy gate regression |
+| **#128** POM persistence | **CLOSED** |
+| **#135** Create My Croquis | **PAUSED** until #136 resolved |
+| **#136** Studio gates / Restoring | **OPEN** |
 
-## Phase C — Forward release candidate (not activated)
+## Phase A — compiled gates (unchanged findings)
 
-Allowlist from known-good `BUILD_ENV.txt` (not invented from `.env.production.example`):
+| Gate | live `6ec73ba2` | rollback `ebcb1cc7` | known-good `69b83c01` |
+|---|---|---|---|
+| FRONT_BACK | OFF | OFF | ON |
+| MAGIC_UI | OFF | OFF | ON |
+| DUAL_MAGIC | OFF | OFF | ON |
+| REGISTRATION | OFF | OFF | OFF |
+
+Root cause: #134 clean build omitted Studio VITE env (no host `.env.production`; only API base + SHA). Restoring draft stuck = uncaught V2 serialize while Front/Back OFF.
+
+## Phase B — rollback prepared, not preferred
+
+`bash /var/www/fashionrise/releases/6ec73ba2/ROLLBACK.sh` → `ebcb1cc7` prepared. **Ineffective for gate restore** (ebcb also OFF). Prefer controlled forward recovery.
+
+## Phase C — forward candidate requirements (PM P0/P1)
+
+### P0-1 Compiled flag assertions (all four)
+
+`scripts/assert-prod-vite-flags.mjs` now:
+
+1. Requires **explicit Node `export VITE_*=…`** for the allowlist (documents that Vite may read gitignored `.env.production` into `import.meta.env` **without** populating `process.env` — env-only checks are insufficient alone).
+2. Parses compiled `index-*.js` and fail-closed verifies **Front/Back, Dual Magic, Magic UI, Registration** helpers (`return!0` / `return!1`).
+3. Writes `BUILD_ENV.txt` + `COMPILED_GATES.json` (booleans only).
+4. Unit tests (`src/lib/assertProdViteFlags.test.ts`) flip **each** gate independently and expect failure.
+
+Allowlist (from known-good `BUILD_ENV`, not example invention):
 
 ```
 VITE_API_BASE_URL=/api/v1
@@ -41,27 +47,40 @@ VITE_REGISTRATION_UI_ENABLED=false
 VITE_MAGIC_UI_ENABLED=true
 VITE_STUDIO_FRONT_BACK_ENABLED=true
 VITE_STUDIO_DUAL_MAGIC_ENABLED=true
-VITE_BUILD_SHA=6ec73ba26ee5b8c25b29a77d31050942af4c6c6d
 ```
 
-| Deliverable | Result |
+### P0-2 New immutable release identity
+
+**Do not** rebuild/overwrite `/var/www/fashionrise/releases/6ec73ba2` or reuse App pill `6ec73ba2` for different bytes.
+
+When owner/PM authorizes deploy:
+
+1. Checkout **final reviewed PR #137 tip** (contains restore-boot harden + assert).
+2. `VITE_BUILD_SHA=<that tip full SHA>` matching the checkout.
+3. Create **new unique** release dir e.g. `/var/www/fashionrise/releases/<shortsha>/`.
+4. Verify nonempty assets + `BUILD_ENV.txt` + `COMPILED_GATES.json` (all four gates correct) **before** `ln -sfn`.
+5. Preserve `6ec73ba2` and `ebcb1cc7` artifacts (both have gates OFF — document as non-restorative for Studio UI).
+6. Leave API/worker `6cc317ec`, Alembic `011` untouched.
+
+### P1-3 V2 no-overwrite regressions
+
+`useStudioEditor.restoreBoot.test.tsx`:
+
+- V2 back ink retained (`hasBackInk`)
+- Exits Restoring → `local-only`
+- `persistStudioDraft` never called after serialize block or after `retrySave`
+- Generic restore rejection → `error`, no cloud write
+- V2 downgrade refusal preserved in `draftDocument.v2.test.ts`
+
+## Verification (this tip)
+
+| Check | Result |
 |---|---|
-| Offline rebuild of `web-ui` tree `0709aa71…` | Compiled FRONT_BACK/DUAL/MAGIC **`!0`**; REG **`!1`** |
-| `assert-prod-vite-flags.mjs` | Wired into `npm run build`; writes `dist/BUILD_ENV.txt`; fails if gates default off |
-| Restore boot harden | try/catch around fingerprint serialize; V2 kept on canvas as `local-only`; no cloud overwrite |
-| Regression test | `useStudioEditor.restoreBoot.test.tsx` |
-| Vitest | **661 passed / 6 known baseline fails** (5× StudioPage beta-notices + `draftPersistence` clearBackIntent) |
-| `tsc` / lint / prod build + SW Access-safe + `/api/v1` | **PASS** |
+| Focused assert + restore boot | green |
+| Full Vitest | **661+ passed / 6 known baseline fails** (disclose) |
+| `tsc` / lint / prod build `/api/v1` + Access-safe SW + assert-prod-vite-flags | **PASS** (with explicit VITE exports) |
 | Production activate | **NOT done** |
 
-## Recommendation for Technical PM / owner
+## Recommendation
 
-1. **Preferred:** Authorize FE-only deploy of rebuilt `6ec73ba2` tree **with** the allowlist above (keeps #127 extended paper + restores Studio gates). Validate nonempty release + `BUILD_ENV.txt` + compiled `return!0` **before** symlink.
-2. **Not sufficient as gate fix:** symlink rollback to `ebcb1cc7`.
-3. Keep #135 PAUSED; #127 OPEN until owner mobile QA after gates restored.
-4. No paid AI / BE restart / migration.
-
-## Live snapshot (unchanged this turn)
-
-- `current` → `/var/www/fashionrise/releases/6ec73ba2`
-- BE/worker `6cc317ec` · Alembic `011`
+Authorize FE-only deploy of **PR #137 tip** as a **new** release id with explicit VITE allowlist + compiled-gate verification before symlink. #135 remains PAUSED.

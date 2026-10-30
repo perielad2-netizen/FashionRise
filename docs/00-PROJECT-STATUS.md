@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**P0 #136 Phase A/B/C** — compiled gates confirmed OFF on live `6ec73ba2` **and** `ebcb1cc7` · restore-boot harden + assert gate on PR #137 · rollback prepared not executed · **STOP for Technical PM** · #135 PAUSED · **0 paid AI**.)
+**Last updated:** 2026-10-30 (**P0 #136 PR #137 PM follow-up** — all-four compiled gate assert + V2 no-overwrite tests · new release id required (do not reuse `6ec73ba2`) · **#127/#128 CLOSED** (do not revoke) · #135 PAUSED · **STOP for final Technical PM** · **0 paid AI** · no prod activate.)
 
 **Phase:** Protected family beta. **Incident #136 HOLD** on further FE forward-deploys until VITE gate parity restored. #135 Create My Croquis **PAUSED**.
 
@@ -19,38 +19,35 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## P0 #136 — missing VITE Studio gates after FE `6ec73ba2` (2026-10-30) — STOP for Technical PM
+## P0 #136 — missing VITE Studio gates after FE `6ec73ba2` (2026-10-30) — STOP for final Technical PM
 
-Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. Branch/PR: `cursor/web-incident-136-vite-flags-77c6` / [#137](https://github.com/perielad2-netizen/FashionRise/pull/137).
+Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137).
 
-### Phase A — confirmed compiled values
+**Issue hygiene:** [#127](https://github.com/perielad2-netizen/FashionRise/issues/127) and [#128](https://github.com/perielad2-netizen/FashionRise/issues/128) are **CLOSED** (owner acceptance). Do **not** reopen/revoke for #136. #135 PAUSED. #136 OPEN.
 
-| Gate | live `6ec73ba2` | rollback `ebcb1cc7` | known-good `69b83c01` |
+### Compiled gates (live defect)
+
+| Gate | live `6ec73ba2` | `ebcb1cc7` | known-good `69b83c01` |
 |---|---|---|---|
-| FRONT_BACK | **OFF** | **OFF** | ON |
-| MAGIC_UI | **OFF** | **OFF** | ON |
-| DUAL_MAGIC | **OFF** | **OFF** | ON |
-| REGISTRATION_UI | OFF | OFF | OFF |
+| FRONT_BACK / MAGIC / DUAL | **OFF** | **OFF** | ON |
+| REGISTRATION | OFF | OFF | OFF |
 
-Root cause: #134 clean build lacked `.env.production` / Studio VITE env; only API base + build SHA set. Restoring draft stuck = uncaught V2 `documentForCloud` serialize while Front/Back OFF.
+### PR #137 safeguards (PM P0/P1)
 
-### Phase B — rollback prepared, not executed
+| Item | Status |
+|---|---|
+| P0-1 all-four **compiled** gate assert + independent mismatch unit tests | done (`assert-prod-vite-flags` + `COMPILED_GATES.json`) |
+| Explicit `export VITE_*` required (`.env.production` alone insufficient for Node assert) | documented |
+| P0-2 **new release id** from final #137 tip — never overwrite `releases/6ec73ba2` / reuse pill | documented; not activated |
+| P1-3 V2 back-ink retained · no `persistStudioDraft` · generic restore error | done |
+| Verify | focused green · full Vitest **661+/6 baseline** · tsc/lint/`/api/v1`/SW PASS |
+| Prod activate | **NOT done** |
 
-`bash /var/www/fashionrise/releases/6ec73ba2/ROLLBACK.sh` ready; prep under `/var/backups/fashionrise/incident-136-rollback-prep-*`. **Insufficient alone** (ebcb gates also OFF). Needs explicit owner auth to run.
-
-### Phase C — forward candidate (not activated)
-
-- Allowlist from known-good `BUILD_ENV` (MAGIC/FRONT_BACK/DUAL=true, REGISTRATION=false)
-- Offline rebuild proof: helpers ON; `assert-prod-vite-flags` in `npm run build`
-- Restore-boot try/catch + `useStudioEditor.restoreBoot.test.tsx`
-- Verify: Vitest **661/6 baseline**, `tsc`, lint, `/api/v1` + Access-safe SW **PASS**
-- **No production activate · 0 paid AI · #135 PAUSED · #127 OPEN**
-
-**PM/owner next:** authorize FE-only deploy of rebuilt `6ec73ba2` tree with allowlist + nonempty/`BUILD_ENV`/compiled-`!0` checks before symlink.
+**Next after PM PASS + owner auth:** build **#137 tip** → new `/var/www/fashionrise/releases/<shortsha>/` → verify `BUILD_ENV`+`COMPILED_GATES` → atomic symlink. Keep BE `6cc317ec`.
 
 ## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — then P0 #136
 
-Owner authorized controlled frontend-only production deploy of engineering-accepted source **`6ec73ba26ee5b8c25b29a77d31050942af4c6c6d`**. Deploy executed; **post-deploy P0 #136** (missing VITE gates) now blocks owner mobile QA closure.
+Owner authorized controlled frontend-only production deploy of engineering-accepted source **`6ec73ba26ee5b8c25b29a77d31050942af4c6c6d`**. Deploy executed. **#127 was subsequently CLOSED with owner Fill/save/reopen acceptance** — do not revoke. Separate post-deploy **#136** (missing VITE Studio gates) is tracked on PR #137.
 
 ### Deploy execution
 
@@ -58,14 +55,11 @@ Owner authorized controlled frontend-only production deploy of engineering-accep
 |---|---|
 | Timestamp (UTC) | **2026-10-30T07:35:06Z** (Asia/Jerusalem **09:35 IST**) |
 | Approved source | Exact `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` (web-ui tree `0709aa71…`) |
-| Build (defect) | `VITE_API_BASE_URL=/api/v1` · `VITE_BUILD_SHA=6ec73ba2…` · **Studio VITE gates omitted → compiled OFF** |
+| Build (defect) | `VITE_API_BASE_URL=/api/v1` · `VITE_BUILD_SHA=6ec73ba2…` · **Studio VITE gates omitted → compiled OFF** (#136) |
 | Release / activate | `/var/www/fashionrise/releases/6ec73ba2` nonempty-before-switch · atomic `current` |
-| Backup / rollback artifact | `pr134-fe-only-deploy-20261030T073506Z` · `ROLLBACK.sh` → `ebcb1cc7` (**insufficient for #136**) |
+| Backup / rollback artifact | `pr134-fe-only-deploy-20261030T073506Z` · `ROLLBACK.sh` → `ebcb1cc7` (**insufficient for #136 gates**) |
 | Paid AI | **0** |
-
-### Owner mobile QA (#127) blocked until #136 gate restore
-
-Extended paper is in the live bundle, but Front/Back + Magic UI are compiled off. Complete #136 rebuild deploy before oversized Fill mobile acceptance.
+| #127 | **CLOSED** (owner acceptance) — #136 does not reopen it |
 
 
 ## Stage C — canonical baseline + GitHub cleanup (2026-10-29) — STOP for Technical PM
@@ -118,7 +112,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 | Issue | Disposition | Evidence |
 |---|---|---|
-| #127 Fill | **partially-delivered** — keep open | FE **`6ec73ba2`** live (PR #134 FE-only deploy 2026-10-30); owner mobile oversized QA still required before close |
+| #127 Fill | **CLOSED** (owner acceptance) | FE `6ec73ba2` deployed; owner Fill/save/reopen accepted; do not reopen for #136 gate regression |
 | #128 POM integrity | **partially-delivered** — keep open | BE `6cc317ec` deployed; **owner measurement acceptance pending** |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
@@ -1349,7 +1343,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-30 | **OWNER-AUTHORIZED FE-ONLY PROD DEPLOY (#127 / PR #134):** FE release **`6ec73ba2`** from approved source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · BE/worker **unchanged** `6cc317ec` · Alembic **`011`** · nonempty release validated before symlink · backup `pr134-fe-only-deploy-20261030T073506Z` · rollback → `ebcb1cc7` · disk smoke PASS · **0 paid AI** · **#127 stays OPEN** for owner mobile QA · PRs #134/#133/#125 **not merged**. |
+| 2026-10-30 | **P0 #136 / PR #137 PM follow-up:** all-four compiled VITE gate assert + V2 no-overwrite tests · new release id required (never reuse `6ec73ba2`) · **#127/#128 CLOSED** (do not revoke) · #135 PAUSED · live FE still `6ec73ba2` (gates OFF) · **0 paid AI** · **STOP for final PM** — no activate. |
+| 2026-10-30 | **OWNER-AUTHORIZED FE-ONLY PROD DEPLOY (#127 / PR #134):** FE release **`6ec73ba2`** from approved source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · BE/worker **unchanged** `6cc317ec` · Alembic **`011`** · nonempty before symlink · backup `pr134-fe-only-deploy-20261030T073506Z` · **0 paid AI** · later **#127 CLOSED** by owner; post-deploy **#136** gate regression tracked separately. |
 | 2026-10-29 | **OWNER-AUTHORIZED PROD RELEASE (#131):** BE+worker `6cc317ec` (PR #130) · FE `ebcb1cc7` (PR #129) · Alembic `011` · backup `techpack-130-129-deploy-20261029T131341Z` · health/ready PASS · **0 paid AI** · #127/#128 remain open · 86-PR cleanup not started. |
 | 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; HEAD `c16acf41` / impl `0561bb56` / blob `e04fdbcf`; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 structural & visual identity:** authorized-snapshot artifact retention on piece-list drift; `color_treatment`/`visible_details` identity fingerprint; tip `991244fa727bf01a6aed15bf7471dae776239d62` / commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9`; 12 focused / 114 broader pass / 1 baseline async_worker fail; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
