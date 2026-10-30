@@ -107,7 +107,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 | Issue | Disposition | Evidence |
 |---|---|---|
-| #127 Fill | **partially-delivered** — keep open | FE `ebcb1cc7` deployed; owner confirmed boundary limit; **extended-paper FE PR** (this branch) awaiting PM review + owner oversized QA |
+| #127 Fill | **partially-delivered** — keep open | FE `ebcb1cc7` deployed; PR #134 tip `6ec73ba2` **ENGINEERING ACCEPTED** (not merged/deployed); owner mobile oversized QA still required before close |
 | #128 POM integrity | **partially-delivered** — keep open | BE `6cc317ec` deployed; **owner measurement acceptance pending** |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
