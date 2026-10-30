@@ -14,7 +14,7 @@
 | **#127** Fill / extended paper | **CLOSED** — owner acceptance; do not reopen for #136 |
 | **#128** POM persistence | **CLOSED** |
 | **#136** Studio gates / Restoring | **CLOSED** — owner six-point acceptance on `2dfcaba0` |
-| **#135** Create My Croquis | **DESIGN ACTIVE** — see `docs/CREATE-MY-CROQUIS-V1-DESIGN.md` |
+| **#135** Create My Croquis | **DESIGN · Stage A HOLD** — PR #138 PM PARTIAL PASS corrections; see `docs/CREATE-MY-CROQUIS-V1-DESIGN.md` |
 
 ## Distinguish deployment report vs owner acceptance
 

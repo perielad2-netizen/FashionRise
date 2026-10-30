@@ -1,12 +1,13 @@
 # Create My Croquis V1 — Implementation-Ready Design
 
-**Status:** DESIGN ONLY — Technical PM review checkpoint  
+**Status:** DESIGN ONLY — Technical PM **PARTIAL PASS** · Stage A **HOLD** pending corrections below (2026-10-30 follow-up)  
 **Issue:** [#135](https://github.com/perielad2-netizen/FashionRise/issues/135)  
+**PR:** [#138](https://github.com/perielad2-netizen/FashionRise/pull/138) (docs-only draft, stacked on #137)  
 **Date:** 2026-10-30  
 **Base lineage:** PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137) tip (accepted production FE recovery `2dfcaba0`)  
 **Production baseline (do not assume = `main`):** FE `2dfcaba0` / source `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` · BE+worker `6cc317ec` · Alembic `011`  
 **Gates:** FRONT_BACK/MAGIC/DUAL ON · REGISTRATION OFF · API `/api/v1` · CF Access + AOP unchanged  
-**This document authorizes nothing:** no implementation, migration, deploy, paid AI, real-photo handling, or production flag changes until separately accepted.
+**This document authorizes nothing:** no Stage A implementation, migration, deploy, paid AI, real-photo collection, or production flag changes until separately accepted after final PM PASS.
 
 ---
 
@@ -16,53 +17,62 @@
 
 **Recommended V1 architecture (simplest secure path on current VPS):**
 
-1. **Private media store** — extend the proven fabric pattern (`private_fabrics` + owner-auth `GET …/image` + `Cache-Control: private, no-store`). Add a sibling root `private_croquis/` via `LocalStorageBackend`. **Never** write source photos or generated croquis under `/static/uploads`.
-2. **Domain tables** — `personal_croquis` (versioned generation record) + `private_media_assets` (or two typed asset FKs) for source photo and generated PNG, soft-delete aware.
-3. **Studio reference** — new durable model choice `personal` (keep legacy `custom` as session-only blob for temporary overlays if desired, or deprecate upload-to-custom in favor of Create My Croquis). Persist `personalCroquisId` + `personalCroquisVersion` in draft/saved snapshots so reopen binds the **exact** accepted generation.
-4. **AI** — separate gate `MY_CROQUIS_AI_ENABLED=false` (independent of Magic / Dual Magic / Professional). Provider adapter reuses existing `images.edit` + `gpt-image-2.5-sunburst` path patterns with **mock-first** Stage B; Stage C wires live provider only after PM/owner auth.
-5. **Front-only V1** — no synthesized back from a single front photo. Back side uses blank / “Front-only croquis” notice; Dual Magic / rear croquis remain for built-ins only.
-6. **Phased delivery** — A private storage → B Studio + mock → C gated AI → D controlled release.
+1. **Consent-gated private media** — photos stay **local in the browser** until the user records **storage/privacy consent**; only then may bytes hit the server. **AI/provider consent** is a separate later step before generation. Adults-only beta attestation required (does **not** prove age).
+2. **Dedicated private croquis storage** — new `LocalStorageBackend` methods rooted at `private_croquis/` (sibling of `private_fabrics/`). Current `save_private_file` is **hardwired to fabrics** and must **not** be reused under a croquis key. Never `/static/uploads`.
+3. **Append-only immutable versions** — `personal_croquis` (library identity) + `personal_croquis_version` rows. Each accepted generation is a new immutable `(croquis_id, version) → generated_asset_id` mapping. Drafts/Saved Designs pin exact version; regeneration never mutates older pins.
+4. **Studio reference** — durable `model=personal` + `personalCroquisId` + `personalCroquisVersion`. Legacy builtins/`custom`/`blank` unchanged. Front-only V1.
+5. **Fail-closed gates (independent):**
+   - `MY_CROQUIS_UPLOAD_ENABLED=false` — blocks production photo upload/storage API
+   - `MY_CROQUIS_AI_ENABLED=false` — blocks provider generation
+   - `VITE_MY_CROQUIS_UI_ENABLED=false` — hides wizard entry
+   - Stage B mocks are **test/offline only**, never a public bypass
+6. **Geometry** — EXIF orientation → then strip/re-encode → **deterministic full-body fit-contain** into 768×1024 with transparent padding (**no center-crop** of the subject). Paper 1280×1536 / origin (-256,-256) unchanged.
+7. **Phased delivery** — A gated private storage → B Studio + offline mock → C spend-reserved AI → D controlled release.
 
-**Rejected shortcuts:** public `/static/uploads` for photos; browser-only blob URLs as the durable reference; silent model remapping when assets disappear; fabricating a back view; following Magic’s look-storage path (still writes PNGs under the public uploads tree) or Magic’s **lack** of a spend ceiling.
+**Rejected shortcuts:** upload-before-consent; mutable single-row version repoint; fabric `save_private_file` for croquis; public uploads; Magic look-write path; Magic’s lack of spend ceiling; Stage B mock as production path; silent model remapping after erasure.
 
 ---
 
 ## 2. Product UX
 
-### 2.1 Happy path
+### 2.1 Happy path (consent-first)
 
-1. Creator Studio → Models → **Create My Croquis** (beta entry, visually distinct from the 10 built-ins).
-2. Requirements + privacy sheet (before file picker): fully clothed, full-body, front-facing, standing, good light; photo is private; processing may use an AI provider; not for measurements; minors policy (see §13).
-3. Upload or capture → client MIME/size precheck → server authoritative validation.
-4. Review crop/preview of the **uploaded** photo + explicit consent checkbox (versioned consent text).
-5. **Generate My Croquis** (explicit CTA; no AI call on file select alone).
-6. Progress: queued / running / failed with safe messages; cost/quota surfaced before confirm when AI gate is on.
-7. Preview generated line-art on the 768×1024 reference plane (paper chrome unchanged).
-8. Accept → save personal croquis to library; Reject → keep photo for retry or discard generation.
-9. Selecting the croquis sets Studio model to `personal` with pinned version; drawing tools work as today.
-10. Save / refresh / reopen / Saved Design restore the **same** croquis version.
+1. Creator Studio → Models → **Create My Croquis** (requires UI gate on).
+2. Requirements + privacy overview (no file transmission yet): fully clothed, full-body, front-facing, standing, good light; private storage; optional later AI provider processing; not for measurements; adults-only beta.
+3. **Adults-only acknowledgment** (checkbox): “I confirm I am 18+ and have the rights to use this photo.” *Self-attestation does not independently verify age* — see §13.
+4. User **selects/captures** a photo. Image stays as a **local blob** for on-device preview only (client MIME/size precheck). **No network upload.**
+5. Explicit **storage/privacy consent** (versioned text): permission to store the photo privately on FashionRise servers for croquis creation; retention summary; how to delete. CTA **“Upload securely”** enabled only after consent.
+6. Authenticated upload (server validates consent proof + upload gate + image rules) → server returns croquis draft id + source asset id.
+7. User reviews server-normalized preview (orientation-corrected, EXIF stripped).
+8. Explicit **AI/provider-processing consent** (separate versioned text) + cost/quota summary when AI gate is on. CTA **“Generate My Croquis”** — no provider call before this.
+9. Progress: queued / running / failed with safe messages.
+10. Preview generated line-art fit-contained on the 768×1024 plane.
+11. **Accept** → creates a **new immutable version** in the library; **Reject** → discard that generation attempt (source retention per §6).
+12. Selecting a library croquis sets `model=personal` with pinned id+version; drawing tools unchanged.
+13. Save / refresh / reopen / Saved Design restore the **exact** pinned version.
 
 ### 2.2 Desktop / tablet / mobile
 
 | Surface | Pattern |
 |---|---|
-| Desktop | Models sheet/panel: built-ins grid + footer CTA “Create My Croquis”. Modal wizard (requirements → upload → consent → generate → preview). |
-| Tablet landscape | Same wizard as full-height sheet; large preview; sticky Generate/Accept. |
-| Mobile | Full-screen wizard steps; camera capture preferred; one primary CTA per step; avoid nested cards. |
+| Desktop | Models panel + wizard modal: eligibility → local select → storage consent → upload → AI consent → generate → preview. |
+| Tablet landscape | Full-height sheet; sticky primary CTA per step. |
+| Mobile | Full-screen steps; camera capture preferred; one primary CTA. |
 
-Reuse existing Models / My Fabrics interaction language (list + authenticated blob fetch via API, not static paths). Natural footholds: Models panel CTA, and the existing **My Gallery** tab currently labeled “coming later.” Do not invent a second Studio shell. Do not revive `uploadReferenceImage` / public uploads for personal photos.
+Footholds: Models CTA; optional later **My Gallery** tab. Do not invent a second Studio shell. Do not call `uploadReferenceImage` / public uploads.
 
 ### 2.3 Front/Back
 
 - V1 personal croquis is **front-only**.
-- When `activeSide === 'back'`: show blank paper or existing strokes/fills only; optional non-blocking notice “This personal croquis is front-only.”
-- Do **not** mirror/flip the front croquis as a fake back.
-- Built-in rear croquis (`backCanvasSrc`) unchanged for library models.
+- Back side: blank / existing ink only + optional “Front-only croquis” notice.
+- Never mirror/flip front as a fake back.
+- Built-in rear croquis unchanged.
 
 ### 2.4 Library management
 
-- “My Croquis” list under Models (or sibling of My Fabrics): thumbnail via owner-auth image route, rename, soft-delete.
-- Soft-delete removes from picker; historical drafts still resolve bytes when `include_deleted` on asset GET (same as fabrics).
+- List accepted versions (latest per croquis or flat version cards — PM prefer **latest accepted per croquis** in picker, with version pin retained in designs).
+- **Archive (soft-hide):** remove from picker; historical pins still resolve if bytes retained.
+- **Permanent delete:** user-initiated erasure (§6) — historical designs show unavailable reference without remapping or wiping ink.
 
 ---
 
@@ -72,77 +82,58 @@ Reuse existing Models / My Fabrics interaction language (list + authenticated bl
 
 | Area | Finding | Path |
 |---|---|---|
-| Model library | 10 selectable builtins + legacy `female`/`male` + `custom`/`blank`. `custom` has **no** rear croquis. | `web-ui/src/assets/modelLibrary.ts` |
-| Custom upload | `onCustomFile` validates then uses **blob URL only**; explicitly refuses persistence because `/static/uploads` is not owner-private. | `web-ui/src/hooks/useStudioEditor.ts` |
-| Saved designs | `snapshotFromDocument` **drops** `customReferenceUrl` / `customReferenceKey`. Custom imagery does **not** survive Saved Design reopen. | `web-ui/src/lib/savedDesign.ts` |
-| Draft doc | Fields `customReferenceUrl`, `customReferenceKey` exist but are session-oriented. V2 holds front/back ink. | `web-ui/src/lib/draftDocument.ts` |
-| Geometry | Legacy design plane **768×1024**; extended paper **1280×1536** with origin **(-256,-256)**. Croquis must remain fit/aligned in the legacy plane. | `web-ui/src/lib/paperBounds.ts` |
-| Export | Front/Back PNG export fit-contains reference into design plane; paper frame when ink exceeds legacy box. | `web-ui/src/lib/exportCanvas.ts`, extended-paper tests |
-| Client validation | `validateReferenceImageFile` MIME allowlist helper (server must still sniff bytes). | `web-ui/src/lib/referenceFile.ts` |
-| Feature flags | `VITE_STUDIO_FRONT_BACK_ENABLED`, `VITE_MAGIC_UI_ENABLED`, `VITE_STUDIO_DUAL_MAGIC_ENABLED`, `VITE_REGISTRATION_UI_ENABLED` — defaults OFF; prod recovery asserts compiled values. New croquis AI gate must **not** couple to these. | `assert-prod-vite-flags.mjs` |
-| Private images (precedent) | Uploaded fabrics fetched via authenticated API + `Cache-Control: private, no-store`. | FE fabric services + BE fabrics routes |
+| Model library | 10 selectable builtins + legacy `female`/`male` + `custom`/`blank`. `custom` has **no** rear. | `modelLibrary.ts` |
+| Custom upload | Blob URL only; refuses persistence — `/static/uploads` not owner-private. | `useStudioEditor.ts` |
+| Saved designs | `snapshotFromDocument` drops custom URL/key. | `savedDesign.ts` |
+| Geometry | Design 768×1024; paper 1280×1536 origin (-256,-256). | `paperBounds.ts` |
+| Flags | Studio VITE gates independent; croquis flags must not weaken #136 asserts. | `assert-prod-vite-flags.mjs` |
+| Private image precedent | Fabrics / Magic job image via Bearer blob fetch. | fabric/ai FE services |
+| Unused upload API | `uploadsApi.uploadReferenceImage` must stay unused for croquis. | `uploadsApi.ts` |
 
 ### 3.2 Backend
 
 | Area | Finding | Path |
 |---|---|---|
-| Private fabrics | `FabricAsset` owner-scoped; bytes under `private_fabrics/`; soft-delete; owner-only image route; tests assert **not** under `/static/uploads`. | `backend/app/models/fabric_asset.py`, `services/fabric_asset_service.py`, `api/v1/routes/fabrics.py`, `tests/test_fabric_assets.py` |
-| Storage | `LocalStorageBackend.save_private_file` / `resolve_private_file`; public mount is `upload_subdir` → `/static/uploads`. | `backend/app/storage/local.py`, `main.py` |
-| Upload validation | MIME sniff, size limits, dimension probe before full decode, PNG re-encode (strips EXIF via re-encode). | `core/upload_validation.py`, fabric service |
-| Magic / looks | Paid `images.edit` via worker; owner `GET /ai/jobs/{id}/image` exists, but look bytes are still **written under public uploads**. Magic has **no** spend ceiling (unlike techpack Professional). | `sketch_openai.py`, `ai_routes.py`, `ai_service.py` |
-| Magic croquis allowlist | Prompt identity allowlists builtin/`custom`/`blank` model ids — **no** user-uploaded croquis asset id today. Personal croquis used as Magic input later must extend `reference_croquis` deliberately. | `services/reference_croquis.py` |
-| Unused upload API | FE `uploadsApi.uploadReferenceImage` → `POST /uploads/image` exists but Studio correctly does **not** call it. | `web-ui/src/services/uploadsApi.ts` |
-| Image model | Config default `openai_image_model=gpt-image-2.5-sunburst`, size `1024x1536`, quality `high`, `max_retries=0` pattern for edits. | `core/config.py`, P1-54 docs |
-| Alembic | Head **`011`**. Next migration would be `012_*` — **not in this design PR**. | `alembic/versions/` |
-| Auth | JWT `CurrentUser`; ownership filters on every private resource. | `app/auth/dependencies.py` |
-| Rate limits | SlowAPI `@limiter.limit` on fabric/AI routes. | fabrics / ai routes |
+| Private fabrics | Owner-scoped; `private_fabrics/`; soft-delete; auth image; not under static. | fabric model/service/routes |
+| **Storage API semantics** | `LocalStorageBackend.save_private_file` / `resolve_private_file` are **hardwired to `private_fabric_root()`**, not a generic private namespace. Croquis needs **dedicated** `save_private_croquis_file` / `resolve_private_croquis_file` (or equivalent) rooted at `private_croquis_subdir`. | `storage/local.py` |
+| Public mount | `upload_subdir` → `/static/uploads` — forbidden for croquis. | `main.py` |
+| Upload validation | MIME sniff, size, dimension probe, PNG re-encode. | `upload_validation.py` |
+| Magic | `images.edit`; look bytes still under public uploads; **no** Magic spend ceiling. | `sketch_openai.py` |
+| Magic allowlist | `reference_croquis` builtins/`custom`/`blank` only. | `reference_croquis.py` |
+| Techpack spend | Operator/user/run ceilings — pattern to **copy for croquis**, not Magic. | `techpack_ai.py`, config |
+| Alembic | Head **011**; next would be `012_*` — not in this docs PR. | `alembic/versions/` |
 
 ### 3.3 Production hygiene
 
-- `#136` CLOSED after owner six-point acceptance on FE `2dfcaba0`.
-- `#127` / `#128` CLOSED — do not reopen.
-- `#137` deployed, **not merged**; `main` ≠ live FE/BE.
-- Design branch must stack on `#137` lineage, not assume `main`.
+- #136 **CLOSED** (owner acceptance on `2dfcaba0`). #127/#128 **CLOSED**. #137 deployed, **unmerged**.
+- Design stacks on #137 lineage; `main` ≠ live FE/BE.
 
 ---
 
 ## 4. Component / data-flow architecture
 
 ```
-┌──────────── FE Studio ────────────┐
-│ Models → Create My Croquis wizard │
-│  upload ──POST /personal-croquis/photos
-│  consent+generate ──POST …/generate
-│  poll ──GET …/{id}
-│  accept ──POST …/{id}/accept
-│  select ── set model=personal + ids
-│  draw / fill / save (draft V2 + Saved Design)
-│  reference paint ← GET …/assets/{id}/image (auth)
-└───────────────┬───────────────────┘
-                │ /api/v1 (CF Access + JWT)
-┌───────────────▼───────────────────┐
-│ FastAPI                             │
-│  ownership + rate limit + quotas    │
-│  validate image → private store     │
-│  personal_croquis row + job enqueue │
-│  (Stage C) worker adapter           │
-└───────────────┬───────────────────┘
-                │
-┌───────────────▼───────────────────┐
-│ Disk: local_storage_root/           │
-│  private_croquis/{user}/{asset}.png │  ← NOT static-mounted
-│  uploads/ …                         │  ← public mount; forbidden for croquis
-│ Postgres: personal_croquis + assets │
-└─────────────────────────────────────┘
+┌──────────── FE Studio wizard ────────────┐
+│ local File/blob preview (no upload)      │
+│ storage consent ──POST /consent/storage  │
+│ upload ───────────POST /photos           │  (requires storage consent + UPLOAD gate)
+│ AI consent ───────POST /consent/ai       │
+│ generate ─────────POST /versions:generate│  (requires AI consent + AI gate + reservation)
+│ accept ───────────POST /versions/{v}/accept
+│ select pin ─────── model=personal + id+ver
+│ paint ← GET /assets/{id}/image (auth)    │
+└──────────────────┬───────────────────────┘
+                   │ JWT + CF Access
+┌──────────────────▼───────────────────────┐
+│ FastAPI: ownership, rate limits, gates   │
+│ consent proofs, spend reservation (C)    │
+│ LocalStorageBackend croquis root         │
+│ private_croquis/{user}/{asset}.png       │
+│ Postgres: croquis + versions + assets    │
+└──────────────────────────────────────────┘
 ```
 
-**FE modules to reuse:** Models UI, `useStudioEditor` reference pipeline, `draftDocument` / `draftPersistence`, `savedDesign`, `referenceFile`, fabric authenticated image fetch pattern, paperBounds / exportCanvas.
-
-**BE modules to reuse:** `FabricAsset` service patterns, `LocalStorageBackend` private roots, `upload_validation`, auth deps, rate limiter, AI worker job skeleton (Stage C), spend/idempotency patterns from techpack/Magic **without sharing the same enable flag**.
-
-**New (proposed):**  
-FE: `CreateMyCroquisWizard`, `personalCroquisApi`, modelLibrary `personal` choice, draft fields.  
-BE: `personal_croquis` models/routes/services, `private_croquis` storage root, Stage C `MyCroquisProvider` + worker hook, settings `MY_CROQUIS_AI_ENABLED`.
+**Filenames:** client filenames are **never** used as storage keys, prompt identities, or log fields. Display names are sanitized separately.
 
 ---
 
@@ -150,128 +141,197 @@ BE: `personal_croquis` models/routes/services, `private_croquis` storage root, S
 
 ### 5.1 Invariants
 
-- Source photos and generated croquis are **owner-private**.
-- Serve only via authenticated routes with ownership check.
-- Responses: `Cache-Control: private, no-store` (match fabrics).
-- No public URL, no CDN cache of private bytes, no logging of image/base64/private paths/tokens.
-- Consent version recorded before any provider call.
-- Quota + rate limits; fail closed when AI gate off.
+- No photo bytes leave the browser before **storage consent** + upload gate.
+- No provider call before **AI consent** + AI gate + spend reservation (Stage C).
+- Owner-only auth media; `Cache-Control: private, no-store`.
+- No public URL, CDN cache, or logging of images/base64/paths/tokens.
+- Adults-only attestation recorded; not age verification.
+- #136 Studio compiled-gate asserts remain mandatory for FE releases.
 
-### 5.2 Threats and mitigations
+### 5.2 Threats (selected)
 
 | Threat | Mitigation |
 |---|---|
-| IDOR on asset/croquis UUID | Every GET/DELETE filters `owner_id == current_user`; cross-user → 404 (not 403) to avoid existence leaks where fabrics already do |
-| Guessable sequential IDs | UUIDv4 primary keys |
-| Access-token leakage in image URLs | No query-string tokens; cookie/Authorization header only; short-lived browser memory of blob from authenticated fetch if needed |
-| Stale signed URLs | **Do not use** long-lived signed public URLs in V1; auth each request |
-| Cross-user retrieval via static mount | Bytes outside `upload_subdir`; Nginx keep denying public static for private trees; tests probe `/static/uploads/...` → 404 |
-| Cache exposure (shared browser/CDN) | `private, no-store`; no `public`/`max-age` on private images |
-| Deletion race while design open | Soft-delete; image GET allows `include_deleted` for owner; UI shows “Croquis unavailable” without remapping model or wiping strokes |
-| Replay of generate | Idempotency key per (user, source_asset, consent_version, prompt_version); duplicate returns same job |
-| Malicious upload (polyglot, bomb) | Sniff magic bytes; size cap; dimension probe pre-decode; re-encode PNG; pixel caps |
-| EXIF/GPS leak | Re-encode strips metadata (same as fabrics) |
-| Provider prompt injection via filename | Ignore client filenames for storage keys; sanitize display names |
-| Log leakage | Structured logs: ids, status, bytes counts — never payloads |
-| Abuse / cost runaway | Separate croquis quotas + `MY_CROQUIS_AI_ENABLED`; per-user daily gens; operator ceiling |
-| Minors | See §13 — block or disable until policy approved |
-| Moderation refusal | Map provider policy errors to safe UI; retain photo; no silent retry spend |
-
-### 5.3 Storage options compared
-
-| Option | Pros | Cons | V1 verdict |
-|---|---|---|---|
-| **A. Local private dir + auth FileResponse** (fabrics) | Already in prod; simple VPS; tested IDOR suite | Single-host; backup ops manual | **Recommend** |
-| B. S3/MinIO private bucket + short signed GET | Better multi-host | New infra, IAM, URL expiry bugs | Later if multi-node |
-| C. `/static/uploads` + obscure names | Easy | **Public**; CF/Nginx may expose | **Forbidden** |
-| D. DB BYTEA | Simple backup story | Bloats Postgres; bad for large photos | Reject |
+| Upload without consent | Server rejects photo POST lacking valid, current `storage_consent_id` for this user/session |
+| Generate without AI consent | Server rejects generate lacking `ai_consent_id` bound to same croquis/source |
+| IDOR | Owner filter; cross-user → 404 |
+| Path traversal / symlink | Resolve under croquis root only; reject escapes & public-root aliases |
+| Mutable version repoint | Append-only version rows; drafts pin exact version |
+| Orphan bytes | Atomic write + DB commit; cleanup on failure; scheduled sweeper |
+| Backup exposure | Private dirs in backups; restore ACLs; expiry policy (§6) |
+| Stage B bypass | Mocks only in tests / `TESTING`; not routable in prod |
+| Magic-like unlimited spend | Dedicated croquis ceilings + reservation |
+| Cache / static leak | Probe `/static/uploads/...` → 404 in tests; Nginx deny public static for private trees |
 
 ---
 
-## 6. Storage and deletion lifecycle
+## 6. Storage implementation and deletion / retention
 
-| Event | Source photo | Generated croquis | Drafts / Saved Designs |
-|---|---|---|---|
-| Upload | Create asset `kind=source` | — | — |
-| Generate accept | Retained (default) or user opt-out later | Create asset `kind=generated`, pin version | References `personalCroquisId`+`version` |
-| Soft-delete croquis from library | Unchanged | `deleted_at` set; hidden from picker | Still renders for owner via include_deleted image GET |
-| Soft-delete source only | `deleted_at`; cannot regenerate from it | Generated remains | Designs unaffected |
-| Hard-delete (future / GDPR) | Secure unlink + tombstone | Same; designs show unavailable placeholder **without** switching to another model or clearing ink | Explicit PM-approved flow |
-| User account delete | Cascade per existing user FK policy | Cascade | Existing design ownership rules |
+### 6.1 Dedicated croquis storage (correcting fabric hardwire)
 
-**Critical:** Deletion must **never** silently change `model` to a builtin or wipe strokes/fills.
+**Fact:** `save_private_file` writes under `private_fabric_root()` only.
+
+**Required implementation (Stage A):**
+
+```text
+settings.private_croquis_subdir = "private_croquis"   # sibling of private_fabrics
+LocalStorageBackend.private_croquis_root()
+LocalStorageBackend.save_private_croquis_file(key=..., data=...)
+LocalStorageBackend.resolve_private_croquis_file(key=...)
+LocalStorageBackend.delete_private_croquis_file(key=...)  # secure unlink
+```
+
+Rules:
+
+- Key = `croquis/{owner_id}/{asset_id}.png` (UUIDs only).
+- Resolve path; require `path.relative_to(private_croquis_root)`; reject if also under `public_upload_root`.
+- Reject `..`, absolute paths, symlink escapes.
+- **Atomic write:** write temp file in same directory → `fsync` → `rename`.
+- On DB commit failure after write: best-effort unlink; enqueue sweeper retry.
+- Size bounds at read and after normalize; never mount croquis root as StaticFiles.
+- Image GET: owner auth + `Cache-Control: private, no-store`.
+
+Optional later: generalize a `PrivateStore(kind=fabrics|croquis|techpacks)` — **not required** for V1 if dedicated methods are clear and tested.
+
+### 6.2 Recommended retention defaults (owner/legal must still approve before live photos)
+
+| Asset / event | Recommended default | Notes |
+|---|---|---|
+| Local blob pre-consent | Never uploaded | Browser-only |
+| Source photo after successful upload | Retain **7 days** or until accept+user deletes, whichever first | Auto-expire job |
+| Source after **accept** | Delete source within **24h** (keep generated only) | Reduces sensitive retention |
+| Abandoned upload (no generate within 24h) | Delete source + draft croquis row | Sweeper |
+| Failed generation | Keep source until expire window; no auto paid retry | |
+| **Archive** (library hide) | Soft `archived_at`; bytes kept so pinned designs render | Distinct from erase |
+| **Permanent delete** (user) | Tombstone row; unlink generated (+ source if any); pins → unavailable | Not silent remap |
+| Account deletion | Cascade DB + **scheduled filesystem unlink** of owner croquis keys | FK cascade ≠ disk cleanup |
+| Backups | Include private dirs; retain backups **≤ 30 days** then expire; restores keep ACLs | Operator runbook |
+| Erasure vs backup lag | User erasure marks `erase_requested_at`; sweeper + next backup expiry removes residual copies | Disclose in privacy copy |
+
+**Historical designs after permanent erasure:** keep strokes/fills/`model=personal`+pinned ids; reference paint fails closed with “Croquis unavailable”; **never** switch to another croquis or builtin automatically.
+
+**Failure retry:** deletion/unlink failures logged with asset id only; exponential backoff sweeper; alert on persistent orphans.
 
 ---
 
-## 7. Data model and API contracts (proposed — no migration in this PR)
+## 7. Data model and API contracts (immutable versions)
 
-### 7.1 Tables (illustrative)
+### 7.1 Tables (illustrative — migration 012 only after Stage A auth)
 
 **`private_media_assets`**
 
-- `id` UUID PK  
-- `owner_id` UUID FK users  
-- `kind` enum: `croquis_source` \| `croquis_generated`  
-- `content_type`, `width`, `height`, `byte_size`  
-- `storage_key` (under `private_croquis/…`)  
-- `sha256` (optional integrity)  
-- `created_at`, `deleted_at`
+| Column | Notes |
+|---|---|
+| `id` UUID PK | |
+| `owner_id` UUID FK | |
+| `kind` | `croquis_source` \| `croquis_generated` |
+| `content_type`, `width`, `height`, `byte_size`, `sha256` | |
+| `storage_key` | under `private_croquis/` |
+| `created_at`, `deleted_at`, `erase_requested_at` | |
 
-**`personal_croquis`**
+**`personal_croquis`** (library identity / conversation about one subject photo lineage)
 
-- `id` UUID PK  
-- `owner_id` UUID FK  
-- `source_asset_id` UUID FK  
-- `generated_asset_id` UUID FK nullable until success  
-- `status` enum: `uploaded` \| `consent_recorded` \| `queued` \| `running` \| `succeeded` \| `failed` \| `rejected` \| `accepted`  
-- `version` int (increment on re-generate accept)  
-- `consent_version` str  
-- `provider_job_id` / `provider_generation_id` nullable  
-- `cost_cents` nullable  
-- `idempotency_key` unique per owner  
-- `error_code` safe nullable  
-- `created_at`, `updated_at`, `deleted_at`
+| Column | Notes |
+|---|---|
+| `id` UUID PK | Stable library id |
+| `owner_id` UUID FK | |
+| `display_name` | sanitized |
+| `source_asset_id` UUID FK nullable | may be null after source expiry |
+| `status` | `draft_local` semantics server-side start at `awaiting_upload` → `uploaded` → … |
+| `storage_consent_id`, `adults_attestation_at` | |
+| `archived_at`, `deleted_at`, `erase_requested_at` | archive ≠ erase |
+| `created_at`, `updated_at` | |
 
-### 7.2 Draft / Saved Design reference
+**`personal_croquis_version`** (**append-only**, immutable)
 
-Extend `StudioDraftDocument` / Saved snapshot:
+| Column | Notes |
+|---|---|
+| `id` UUID PK | Optional surrogate |
+| `croquis_id` UUID FK | |
+| `owner_id` UUID FK | denormalized for ownership checks |
+| `version` INT | monotonic per croquis_id starting at 1 |
+| `generated_asset_id` UUID FK | **immutable** after insert |
+| `status` | `generating` \| `failed` \| `rejected` \| `accepted` |
+| `ai_consent_id` | required before generate |
+| `provider_job_id`, `cost_cents`, `idempotency_key` | |
+| `prompt_version`, `geometry_profile` | e.g. `fit_contain_768x1024_v1` |
+| `created_at`, `accepted_at` | |
+| **UNIQUE** `(croquis_id, version)` | |
+| **UNIQUE** `(owner_id, idempotency_key)` where not null | |
+
+**Rules:**
+
+- Accepting a generation **INSERTs** a new version row (or transitions `generating`→`accepted` **without** changing `generated_asset_id`).
+- Re-generate always allocates `version = max+1` with a **new** asset id.
+- **Never UPDATE** `generated_asset_id` on an accepted row.
+- Drafts/Saved Designs store `{ personalCroquisId, personalCroquisVersion }` and resolve:
+
+```text
+SELECT * FROM personal_croquis_version
+ WHERE croquis_id = :id AND version = :ver AND owner_id = :user
+```
+
+Missing/erased → unavailable reference UI; ink untouched.
+
+### 7.2 Draft / Saved Design fields
 
 ```ts
 model: ... | 'personal'
 personalCroquisId: string | null
-personalCroquisVersion: number | null
+personalCroquisVersion: number | null  // exact pin; required when model=personal
 ```
 
-- Legacy `female`/`male`/builtins/`blank`/`custom` unchanged.
-- `custom` remains session-only blob path (or UI redirects users to Create My Croquis for durability).
-- Fingerprint/serialization must include personal ids so OCC/cloud sync does not drop them.
-- Preview/export resolve reference via authenticated fetch → object URL; if 404, paint without reference + non-destructive notice.
+Fingerprint/OCC must include both ids. Legacy models unchanged.
 
-### 7.3 API sketch (`/api/v1/personal-croquis`)
+### 7.3 Consent records
 
-| Method | Path | Purpose |
+**`user_consent_events`** (or croquis-scoped consent table):
+
+| Field | Notes |
+|---|---|
+| `id` UUID | returned to client as consent proof |
+| `owner_id` | |
+| `purpose` | `croquis_storage` \| `croquis_ai_provider` |
+| `consent_version` | string, e.g. `storage-2026-10-30` |
+| `adults_attested` | bool (required true for beta) |
+| `text_hash` | hash of shown consent copy |
+| `created_at` | |
+
+**Server enforcement:**
+
+- `POST /photos` requires `storage_consent_id` owned by user, purpose=`croquis_storage`, consent_version in allowlist, adults_attested, age < e.g. 1 hour (or bound to croquis draft id).
+- `POST …/generate` requires `ai_consent_id` purpose=`croquis_ai_provider`, bound to same croquis/source, allowlisted version; UI disabled state is insufficient alone.
+
+### 7.4 API sketch (`/api/v1/personal-croquis`)
+
+All routes: auth, rate limits, ownership. Upload/generate additionally require gates.
+
+| Method | Path | Gate / consent |
 |---|---|---|
-| POST | `/photos` | Upload source (no AI) |
-| GET | `` | List accepted croquis (library) |
-| GET | `/{id}` | Status / metadata |
-| POST | `/{id}/consent` | Record consent version |
-| POST | `/{id}/generate` | Enqueue generation (requires consent + gate) |
-| POST | `/{id}/accept` | Pin as library croquis |
-| POST | `/{id}/reject` | Discard generation; keep source optional |
-| DELETE | `/{id}` | Soft-delete library entry |
-| GET | `/assets/{asset_id}/image` | Owner-auth bytes |
+| POST | `/attestations/adults` | record adults attestation |
+| POST | `/consent/storage` | returns `storage_consent_id` |
+| POST | `/consent/ai` | returns `ai_consent_id` |
+| POST | `/photos` | **UPLOAD gate** + storage consent + multipart |
+| GET | `` | list non-archived croquis + latest accepted version summary |
+| GET | `/{id}` | metadata |
+| GET | `/{id}/versions/{version}` | exact version resolver |
+| POST | `/{id}/versions/generate` | **AI gate** + AI consent + spend reservation |
+| POST | `/{id}/versions/{version}/accept` | pin into library |
+| POST | `/{id}/versions/{version}/reject` | |
+| POST | `/{id}/archive` | hide from picker |
+| DELETE | `/{id}` | permanent erase request |
+| GET | `/assets/{asset_id}/image` | owner auth bytes |
 
-All routes: auth required, rate-limited, ownership enforced.
+### 7.5 Feature / activation gates
 
-### 7.4 Feature flags
-
-| Flag | Default | Notes |
+| Flag | Default | Controls |
 |---|---|---|
-| `MY_CROQUIS_AI_ENABLED` (BE) | `false` | Fail closed; Stage B uses mock provider regardless |
-| `VITE_MY_CROQUIS_UI_ENABLED` (FE) | `false` | UI entry visibility; independent of Magic/FrontBack/Registration |
-| Existing Magic / Dual / Professional flags | unchanged | No coupling |
+| `MY_CROQUIS_UPLOAD_ENABLED` | **false** | Production photo upload/storage API |
+| `MY_CROQUIS_AI_ENABLED` | **false** | Provider generation / spend |
+| `VITE_MY_CROQUIS_UI_ENABLED` | **false** | Wizard visibility |
+| Stage B mock provider | test/offline only | `TESTING` or non-mounted test double — **not** a public route |
 
-Prod assert scripts must be extended in implementation stages so croquis UI flag defaults stay fail-closed and **#136 Studio gates remain enforced**.
+AI gate **must not** alone enable photo collection. Upload gate **must not** alone enable paid generation. Keep #136 FRONT_BACK/MAGIC/DUAL/REGISTRATION assert suite intact and independent.
 
 ---
 
@@ -279,129 +339,101 @@ Prod assert scripts must be extended in implementation stages so croquis UI flag
 
 | Rule | Spec |
 |---|---|
-| Design plane | 768×1024 (unchanged) |
-| Paper | 1280×1536, origin (-256,-256) |
-| Placement | Fit-contain generated PNG into 768×1024; letterbox transparent; do not stretch to paper |
-| Layer order | Croquis under fills under ink (existing) |
-| Pan/zoom/Fill/eraser | Unchanged coordinate math |
-| Thumbnails / PNG export | Use same reference resolver as live canvas |
-| Front/Back | Personal croquis on front only; back has no fabricated reference |
-| Reopen fidelity | Bind `personalCroquisId`+`version`; never remap to another croquis |
-
-Generated asset target raster: prefer **768×1024** PNG with transparency, or 1024×1536 provider output center-cropped/fit into 768×1024 at accept time (deterministic preprocess). Exact preprocess pipeline is an implementation detail; acceptance tests lock visual plane alignment.
+| Design plane | 768×1024 unchanged |
+| Paper | 1280×1536, origin (-256,-256) unchanged |
+| EXIF | Apply orientation transform **before** metadata strip / PNG re-encode |
+| Placement | **Deterministic full-body fit-contain** into 768×1024; transparent letterbox/pillarbox; **no subject center-crop** |
+| Provider output | If provider returns opaque/non-alpha or different size, post-process with same fit-contain profile `fit_contain_768x1024_v1`; do not assume lossless alpha from provider |
+| Live / preview / export | Same geometry profile id stored on version row |
+| Layer order | Croquis under fills under ink |
+| Pan/zoom/Fill/eraser | Unchanged |
+| Front/Back | Front reference only |
 
 ---
 
-## 9. AI provider alternatives and cost
+## 9. AI provider, cost, Stage C spend controls
 
-### 9.1 Options
+### 9.1 Provider
 
-| Approach | Fit | Privacy | Cost | V1 |
-|---|---|---|---|---|
-| **OpenAI `images.edit` + `gpt-image-2.5-sunburst`** (existing Magic path) | Strong style control from photo+prompt | Photo leaves VPS to provider — disclose in consent | Token-priced | **Recommend Stage C** |
-| `gpt-image-2.5-flare` | Faster everyday | Same | Same rates | Optional A/B later |
-| Local CV only (pose/edge) | Weak fashion croquis quality | Stays on-box | ~$0 | Insufficient alone for product promise |
-| Third-party specialty | Unknown | Extra vendor review | Unknown | Out of scope V1 |
+- Prefer existing `images.edit` + `gpt-image-2.5-sunburst` (official rates 2026-10-30: text in $5/M, image in $8/M, image out $30/M).
+- Per-request croquis cost **unknown** until fixture measurement; historical Magic edit ≈$0.05 order is **not** a guarantee.
+- **0** live calls in design work.
 
-### 9.2 Official pricing (retrieved 2026-10-30)
+### 9.2 Stage C concurrency-safe spend (required design)
 
-Source: [OpenAI Pricing](https://developers.openai.com/api/docs/pricing) · [GPT Image 2.5 Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst)
+Do **not** inherit Magic’s unlimited budget. Follow techpack-style ceilings with croquis-specific settings, e.g.:
 
-| Token class | Standard price |
+- `MY_CROQUIS_AI_SPEND_CEILING_USD` (operator, default 0 → fail closed)
+- `MY_CROQUIS_AI_MAX_USD_PER_USER_DAY`
+- `MY_CROQUIS_AI_MAX_GENERATIONS_PER_USER_DAY` (suggest **3**)
+- `MY_CROQUIS_AI_MAX_USD_PER_RUN` soft estimate gate
+
+**Reservation protocol:**
+
+1. Begin DB transaction; lock user spend row / advisory lock.
+2. Sum settled + **open reservations**; reject if estimate would exceed ceilings.
+3. Insert `spend_reservation` (`open`, estimate_cents, idempotency_key).
+4. Enqueue job; commit.
+5. On success: settle actual `cost_cents` (from usage if present); close reservation.
+6. On failure with **no** provider call: release reservation ($0).
+7. On **unknown** provider outcome (timeout after send): mark `reconciliation_required`; count estimate against ceiling until reconciled; **no automatic paid retry**.
+8. User-visible retry only after explicit new authorization; new idempotency key or documented replay rules that cannot double-charge.
+
+Idempotent generate: same key returns same version/job; never a second paid call.
+
+---
+
+## 10. Test / acceptance matrix (future)
+
+Includes prior T1–T21 plus:
+
+| # | Case |
 |---|---|
-| Text input | $5 / 1M |
-| Image input | $8 / 1M |
-| Image output | $30 / 1M |
-
-Notes:
-
-- GPT Image 2 calculator **does not** estimate GPT Image 2.5 token use.
-- Direct `/v1/images/edits` does **not** use cached image-input pricing.
-- FashionRise historical isolated Sunburst edit (synthetic, short brief) ≈ **$0.048** (`docs/incidents/P1-54-LIVE-SUNBURST-VALIDATION.md`) — **not** a guarantee for personal croquis; real cost **unknown** until offline measurement with representative fixtures.
-- Optional vision/chat preprocessing (if used) adds `gpt-6-luna` tokens — separate line item.
-- **No live provider calls in this design assignment.**
-
-### 9.3 Cost / abuse controls (proposed)
-
-- `MY_CROQUIS_AI_ENABLED=false` until owner auth.
-- **Do not inherit Magic’s cost model:** Magic sketch jobs today have **no** `TECHPACK_*`-style spend ceiling (only rate limits + idempotency). Croquis must use **dedicated** per-user daily caps + operator ceiling (pattern after techpack Professional, not Magic).
-- Per-user: e.g. N generations / day (PM pick; suggest **3**/day beta).
-- Per-run soft estimate shown pre-confirm; hard reject if operator croquis ceiling exceeded.
-- Idempotent generate; explicit user retry only.
-- `max_retries=0` at provider client (match Magic edit discipline).
-- Record `cost_cents` from usage when available; else mark unknown.
-- Generated croquis bytes stay in `private_croquis/` even if Stage C reuses the `images.edit` client — never copy Magic’s public-upload write path.
-
----
-
-## 10. Test / acceptance matrix (future implementation)
-
-| # | Case | Stage |
-|---|---|---|
-| T1 | User A cannot GET User B croquis/asset (404) | A |
-| T2 | Anon GET asset → 401 | A |
-| T3 | Asset id under `/static/uploads` → 404 | A |
-| T4 | Soft-deleted still owner-retrievable for historical design | A |
-| T5 | Oversized / wrong MIME / dimension bomb rejected | A |
-| T6 | EXIF GPS absent after normalize | A |
-| T7 | Generate without consent → 400 | B/C |
-| T8 | AI gate off → no provider call (mock asserts) | B/C |
-| T9 | Idempotent generate returns same job | C |
-| T10 | Failed generation: safe error; photo retained; $ recorded only if spent | C |
-| T11 | Quota / ceiling exceeded → no call | C |
-| T12 | Source deleted: cannot regenerate; accepted croquis still paints | A/B |
-| T13 | Croquis library soft-delete: drafts reopen with same ink + reference if bytes kept | B |
-| T14 | Save/refresh/reopen retains exact croquis version | B |
-| T15 | Front/Back isolation — no fake back reference | B |
-| T16 | Legacy builtin/legacy female/male drafts untouched | B |
-| T17 | Draw / Fill / eraser / pan / zoom regressions | B |
-| T18 | Desktop / tablet / mobile wizard smoke | B/D |
-| T19 | Error paths non-destructive to draft ink | B |
-| T20 | Prod Vite assert still enforces #136 Studio gates | B/D |
-| T21 | Minors policy enforcement (once decided) | C/D |
-
-Offline fixtures/mocks only until Stage D authorized paid tests.
+| T22 | Photo POST without storage consent → 400; no bytes stored |
+| T23 | Generate without AI consent → 400; no provider mock call |
+| T24 | Upload gate off → 403/404 even if AI gate on |
+| T25 | AI gate off → generate refused even if upload gate on |
+| T26 | Accept v1; regenerate v2; draft pinned to v1 still resolves v1 asset |
+| T27 | UPDATE of accepted `generated_asset_id` impossible / constrained |
+| T28 | Permanent erase → design shows unavailable; ink preserved |
+| T29 | `save_private_file` (fabric) cannot write croquis keys into fabric root under croquis API |
+| T30 | Croquis path traversal / public-root alias rejected |
+| T31 | Atomic write + failed commit leaves no orphan (or sweeper removes) |
+| T32 | Abandoned source expired by sweeper |
+| T33 | Stage B mock not reachable when `TESTING` false / prod config |
+| T34 | Spend reservation blocks concurrent double-spend |
+| T35 | Unknown provider outcome → reconciliation, no auto retry |
+| T36 | EXIF orientation applied; GPS absent after normalize |
+| T37 | Fit-contain padding stable across canvas/preview/export (no crop) |
+| T38 | Adults attestation required; missing → blocked |
 
 ---
 
 ## 11. Phased delivery plan
 
-### Stage A — Private asset / storage foundation
+### Stage A — Private storage foundation (**HOLD** until final PM PASS + auth)
 
-- **Scope:** BE models + migration `012`, private_croquis storage, upload/list/get/delete image routes, ownership tests. No Studio UI AI.
-- **Reuse:** fabric_asset_service, LocalStorageBackend, upload_validation.
-- **New:** personal_croquis models/routes/services; alembic 012.
-- **Tests:** T1–T6, T12 (storage half).
-- **Security:** static-path probe, cache headers, log redaction.
-- **Accept:** IDOR suite green; bytes never public.
-- **Rollback:** drop routes/flag; migration reverse if unused.
-- **Blockers:** none beyond PM design accept.
+- Consent APIs (storage) + adults attestation; upload API behind **`MY_CROQUIS_UPLOAD_ENABLED=false`**.
+- Dedicated croquis storage methods; assets + croquis + version tables (version table ready even if generate is stubbed).
+- IDOR / static / atomic-write / cleanup tests.
+- **No** public photo collection in prod until upload gate explicitly authorized later.
 
-### Stage B — Studio integration + mock generation
+### Stage B — Studio + **offline/test-only** mock
 
-- **Scope:** FE wizard, `VITE_MY_CROQUIS_UI_ENABLED`, mock generator (deterministic PNG fixture), draft/saved persistence fields, geometry tests, Front-only behavior.
-- **Reuse:** useStudioEditor, modelLibrary, savedDesign, paperBounds.
-- **DB/API:** consume Stage A; mock sets `generated_asset_id` without provider.
-- **Tests:** T7–T8 (mock), T13–T20.
-- **Accept:** end-to-end with mock; reopen fidelity; no paid calls.
-- **Rollback:** FE flag off.
-- **Depends:** A.
+- FE wizard consent-first UX; draft pins; geometry profile tests.
+- Mock generator **only** in unit/integration tests or local `TESTING` harness — **not** exposed as a production generate path that bypasses AI consent/cost.
 
-### Stage C — AI generation integration
+### Stage C — AI integration
 
-- **Scope:** `MY_CROQUIS_AI_ENABLED`, worker/provider adapter, consent enforcement, idempotency, quotas, failure mapping.
-- **Reuse:** sketch_openai images.edit patterns, worker queue patterns — **new job type**, not Magic look jobs.
-- **Tests:** T8–T11 with provider mocks; contract tests for usage/cost fields.
-- **Accept:** mock provider suite; live calls **forbidden** until Stage D auth.
-- **Rollback:** BE flag false.
-- **Depends:** A+B; PM prompt/policy decisions (§13).
+- AI consent + `MY_CROQUIS_AI_ENABLED`; reservation/quotas/idempotency/unknown-outcome handling.
+- Provider adapter; still default OFF; **no** live paid calls without separate owner auth.
 
-### Stage D — Controlled release + owner acceptance
+### Stage D — Controlled release
 
-- **Scope:** Prod readiness checklist; Nginx/Access unchanged; staged FE/BE deploy plan; owner mobile QA; **separately authorized** single paid generation tests.
-- **Accept:** owner checklist (§10 product) + privacy smoke.
-- **Rollback:** prior immutable FE/BE releases; flags off.
-- **Depends:** C + owner auth for paid + deploy.
+- Separate authorizations for: upload gate ON (photo collection), AI gate ON, paid test gens, FE UI gate.
+- Owner mobile QA; privacy copy approved.
+
+Rollback: flags off; prior immutable FE/BE releases; sweeper continues erase requests.
 
 ---
 
@@ -409,62 +441,87 @@ Offline fixtures/mocks only until Stage D authorized paid tests.
 
 | Risk | Mitigation |
 |---|---|
-| Provider sends photo off-box | Explicit consent; retention disclosure; minimize source retention |
-| Quality ≠ fashion croquis | Prompt fixtures; accept/reject UX; mock-first |
-| Cost surprise | Separate ceilings; estimate UI; low daily quota |
-| Geometry drift vs #134 paper | Lock tests to 768×1024 fit-contain on 1280×1536 paper |
-| Breaking #136 gates | Keep assert-prod-vite-flags; croquis flags independent |
-| Deletion breaks designs | Soft-delete + include_deleted; never silent model swap |
-| Scope creep (measurements, back view) | Explicit V1 non-goals |
-| Branching from `main` loses FE recovery | Stack on #137 lineage until canonical merge strategy decided |
+| Consent UI-only | Server consent ids |
+| Mutable version bug | Append-only table + tests T26/T27 |
+| Fabric storage misuse | Dedicated croquis methods + tests |
+| Backup retains erased photos | Short backup TTL + erase disclosure |
+| Stage B prod bypass | Mock not mounted in prod |
+| Cost runaway | Reservations; not Magic model |
+| Geometry crop regression | Locked fit-contain fixtures |
+| Weakening #136 gates | Independent assert suite |
 
 ---
 
-## 13. Explicit decisions requiring PM / owner approval
+## 13. Explicit decisions — recommended defaults vs owner/legal approval
 
-1. **Minors:** Block uploads under 18 (self-attestation + policy) vs disable feature until legal review — **recommend: disable Create My Croquis for anyone who does not attest “I am 18+ and have rights to this photo”; no child-photo pipeline in V1**.
-2. **Source retention default:** Keep source until user deletes vs auto-delete source N days after accept.
-3. **Daily generation quota** and operator croquis spend ceiling amounts.
-4. **Whether session `custom` upload remains** alongside Create My Croquis or is removed from Models UI.
-5. **Provider model:** lock `gpt-image-2.5-sunburst` vs allow flare.
-6. **Back-side UX copy** when personal croquis selected.
-7. **Hard-delete / GDPR export** timeline beyond soft-delete.
-8. **Canonical git strategy:** when/how #137 recovery merges vs continuing stacked FE PRs.
-9. **Stage D paid test authorization** — never implied by design accept.
-10. **Consent copy / privacy policy URL** final legal text.
+### 13.1 Recommended engineering defaults (pending owner/legal sign-off before live photos)
+
+| Topic | Recommended default |
+|---|---|
+| Minors / eligibility | **Adults-only beta**; require 18+ attestation; feature blocked without it. **Attestation ≠ age verification.** |
+| Storage before AI | Local preview → storage consent → upload |
+| AI consent | Separate step; versioned |
+| Source retention | 7 days max; delete within 24h after accept |
+| Abandoned uploads | Delete after 24h |
+| Archive vs erase | Archive keeps bytes for pins; erase unlinks + unavailable UI |
+| Account delete | DB cascade + filesystem sweeper |
+| Backup retention | ≤ 30 days |
+| Daily gens | 3 / user / day (when AI on) |
+| Operator croquis ceiling | Explicit >0 required (fail closed at 0) |
+| Geometry | fit_contain_768x1024_v1; no subject crop |
+| Magic interoperability | **Studio-underlay only in V1**; no `reference_croquis` extension yet |
+| Session `custom` upload | Keep for now; durable path is Create My Croquis |
+| Provider | `gpt-image-2.5-sunburst` |
+
+### 13.2 Must have explicit owner / legal approval before production photo collection
+
+1. Final consent copy (storage + AI) and privacy policy URL.  
+2. Adults-only policy and attestation wording (and whether stronger age checks are required).  
+3. Retention/erasure/backup timelines (confirm or override §6.2).  
+4. Whether source may be retained longer for dispute/safety.  
+5. Quota and spend ceiling dollar amounts.  
+6. Authorization to turn **`MY_CROQUIS_UPLOAD_ENABLED`** on in any environment with real users.  
+7. Authorization for any paid Stage D generation tests.  
+8. Canonical merge strategy for #137 vs continued stacks.
 
 ---
 
-## 14. Recommended first implementation PR scope
+## 14. Recommended first implementation PR (after final PM PASS)
 
-**After design acceptance, first code PR = Stage A only:**
+**Stage A only**, still fail-closed:
 
-- Alembic `012_personal_croquis` (+ private media assets as designed)
-- `LocalStorageBackend` private_croquis root
-- Owner-auth CRUD + image routes
-- Focused IDOR / static-path / validation tests
-- `MY_CROQUIS_AI_ENABLED` setting present and **false**
-- No FE wizard, no worker provider calls, no production deploy
-
-Base that PR on the then-current accepted lineage (prefer #137 recovery line until PM says otherwise). Keep docs-only vs code PRs separate.
+- Alembic `012` with assets + croquis + **version** + consent tables  
+- Dedicated `private_croquis` storage API  
+- Consent + gated upload routes (upload gate default false)  
+- Exact-version read APIs  
+- Tests T1–T6, T22, T24, T26–T32, T36 (orientation/strip unit)  
+- No FE wizard required in A (or UI gate false)  
+- No provider calls  
 
 ---
 
 ## Appendix A — Non-goals (V1)
 
-- Body measurements / POM / size prediction  
-- Synthetic back croquis from one front photo  
-- Public sharing of personal croquis  
-- Replacing builtin library  
-- Coupling to Magic Dual generation  
-- Using `/static/uploads`  
-- Live paid calls during design or Stage A/B  
+- Measurements / POM / fit  
+- Synthetic back croquis  
+- Public sharing  
+- Magic allowlist extension  
+- Using `/static/uploads` or fabric `save_private_file` for croquis  
+- Production Stage B mock generate  
+- Live paid calls during design / Stage A  
 
-## Appendix B — Verification of this design checkpoint
+## Appendix B — PM correction traceability (2026-10-30)
 
-- Code inspection of FE/BE paths listed above  
-- Official OpenAI pricing pages retrieved 2026-10-30  
-- **0** provider/paid calls  
-- **0** production changes  
-- **0** migrations / runtime code in this PR  
-- Docs-only draft PR stacked on #137 lineage  
+| PM item | Section |
+|---|---|
+| P0-A consent before upload; separate AI consent; adults-only | §2.1, §7.3, §13 |
+| P0-B append-only immutable versions | §7.1, §7.2, T26–T27 |
+| P0-C fabric hardwire; dedicated croquis store; retention/erasure | §3.2, §6 |
+| P0-D upload gate ≠ AI gate; mock test-only; spend reservation | §7.5, §9.2, §11 |
+| P1 fit-contain not crop; EXIF before strip | §8 |
+
+## Appendix C — Verification of this docs checkpoint
+
+- Documentation-only amendments on PR #138  
+- **0** provider/paid calls · **0** production modifications · **0** migrations/runtime code  
+- Stage A **not** started  

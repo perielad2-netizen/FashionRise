@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**#136 CLOSED** owner acceptance on FE `2dfcaba0` · **#135 DESIGN ACTIVE** — docs `CREATE-MY-CROQUIS-V1-DESIGN.md` · **#127/#128 CLOSED** · live FE **`2dfcaba0`** · BE `6cc317ec` · Alembic `011` · **0 paid AI** · no merge · no croquis implementation yet.)
+**Last updated:** 2026-10-30 (**#135 design PR #138** — Technical PM **PARTIAL PASS / Stage A HOLD** · consent-first + immutable versions + dedicated `private_croquis` storage + upload≠AI gates + fit-contain geometry corrections · **#136 CLOSED** · **#127/#128 CLOSED** · live FE **`2dfcaba0`** · BE `6cc317ec` · **0 paid AI** · no Stage A code · no merge.)
 
-**Phase:** Protected family beta. #135 Create My Croquis is **DESIGN ACTIVE** (architecture/feasibility only). Do **not** implement, migrate, deploy, handle real photos, or call paid AI until the design PR is accepted.
+**Phase:** Protected family beta. #135 Create My Croquis design under **Stage A HOLD** until final PM acceptance of corrected `CREATE-MY-CROQUIS-V1-DESIGN.md`. Do **not** implement, migrate, deploy, collect real photos, or call paid AI.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -19,17 +19,18 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## Issue #135 — Create My Croquis V1 — DESIGN ACTIVE (2026-10-30)
+## Issue #135 — Create My Croquis V1 — DESIGN PARTIAL PASS / Stage A HOLD (2026-10-30)
 
-Design doc: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md). Issue [#135](https://github.com/perielad2-netizen/FashionRise/issues/135).
+Design doc: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md). Issue [#135](https://github.com/perielad2-netizen/FashionRise/issues/135). Draft PR [#138](https://github.com/perielad2-netizen/FashionRise/pull/138) (stacked on #137).
 
 | Item | Status |
 |---|---|
 | Dependency #136 | **CLOSED** — owner six-point acceptance on live FE `2dfcaba0` |
-| Phase | **DESIGN / FEASIBILITY ONLY** — architecture, privacy/threat model, staged plan |
-| Implementation | **NOT started** · no migration · no API · no FE feature code · `MY_CROQUIS_AI_ENABLED` proposed default **false** |
-| Paid AI / real photos | **Forbidden** until later authorized stages |
-| Next | Technical PM review of design draft PR · then Stage A (private storage) only if accepted |
+| PM review | **PARTIAL PASS** — direction accepted; P0/P1 design corrections applied; **Stage A HOLD** |
+| Corrections | Consent-before-upload · append-only immutable versions · dedicated `private_croquis` (fabric `save_private_file` hardwired) · upload gate ≠ AI gate · mock test-only · spend reservations · fit-contain (no crop) + EXIF-before-strip |
+| Implementation | **NOT started** · no migration · no API · proposed defaults: `MY_CROQUIS_UPLOAD_ENABLED=false`, `MY_CROQUIS_AI_ENABLED=false`, `VITE_MY_CROQUIS_UI_ENABLED=false` |
+| Paid AI / real photos | **Forbidden** until separately authorized |
+| Next | Final Technical PM acceptance of corrected design · then separate Stage A authorization |
 
 ## P0 #136 / PR #137 — FE recovery DEPLOYED + OWNER ACCEPTED (2026-10-30) — CLOSED
 
@@ -132,7 +133,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 | #127 Fill | **CLOSED** (owner acceptance) | FE `6ec73ba2` deployed; owner Fill/save/reopen accepted; do not reopen for #136 |
 | #128 POM integrity | **CLOSED** (owner acceptance) | BE `6cc317ec` deployed; owner measurement acceptance recorded; do not reopen for #136 |
 | #136 Studio gates | **CLOSED** (owner acceptance) | FE recovery `2dfcaba0` owner six-point PASS; do not reopen |
-| #135 Create My Croquis | **DESIGN ACTIVE** | `docs/CREATE-MY-CROQUIS-V1-DESIGN.md`; no implementation yet |
+| #135 Create My Croquis | **DESIGN · Stage A HOLD** | PR #138 docs; PM PARTIAL PASS corrections applied; no implementation |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
 | #18 invite registration | **implemented / activation tracked** — keep open | Invite register UI + API; CF Access + public register **still gated** |
@@ -143,7 +144,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Remaining real defects / product priorities
 
-1. **#135 Create My Croquis** — DESIGN ACTIVE; await Technical PM accept of `CREATE-MY-CROQUIS-V1-DESIGN.md`, then Stage A only
+1. **#135 Create My Croquis** — Stage A **HOLD** until final PM acceptance of corrected design (#138)
 2. Closure/gradient visual fidelity redesign (**PR #125 HOLD**)
 3. Canonical `main` adoption after PM approval of integration PR (no blind merge of undeployed stacks)
 4. Continue evidence-based PR closures from remaining open issues (no branch deletes)
@@ -152,7 +153,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Recommended next engineering milestone
 
-**Technical PM review of Create My Croquis V1 design draft PR.** No implementation, migration, real-photo handling, paid AI, or production changes until design accepted. Keep live FE `2dfcaba0` / BE `6cc317ec`.
+**Final Technical PM acceptance of PR #138 design corrections.** Do **not** start Stage A, migrate, collect photos, or call paid AI until separately authorized. Keep live FE `2dfcaba0` / BE `6cc317ec`.
 
 
 ## Owner-authorized production release — Issue #131 (2026-10-29) — DEPLOYED
@@ -1360,6 +1361,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-30 | **#135 PR #138 PM PARTIAL PASS follow-up:** consent-before-upload · immutable version table · dedicated `private_croquis` storage · `MY_CROQUIS_UPLOAD_ENABLED` ≠ AI gate · mock test-only · spend reservations · fit-contain/EXIF geometry · Stage A **HOLD** · docs-only · **0** paid AI · **STOP for final PM**. |
 | 2026-10-30 | **#135 DESIGN ACTIVE:** `docs/CREATE-MY-CROQUIS-V1-DESIGN.md` · private-storage-first architecture · `MY_CROQUIS_AI_ENABLED=false` proposed · Stages A–D · **0** code/migration/paid AI · stacked draft PR off #137 lineage · **STOP for Technical PM**. |
 | 2026-10-30 | **#136 CLOSED (owner acceptance):** six live checks PASS on FE **`2dfcaba0`** · PM recovery accepted · #135 resumed design-only · #127/#128 remain CLOSED · PR #137 still **unmerged**. |
 | 2026-10-30 | **OWNER-AUTHORIZED FE-ONLY RECOVERY (#136 / PR #137):** live FE **`2dfcaba0`** · BE/worker **unchanged** `6cc317ec` · Alembic **`011`** · backup `pr137-fe-recovery-deploy-20261030T122721Z` · **0 paid AI** · later owner-accepted · **no merge**. |
