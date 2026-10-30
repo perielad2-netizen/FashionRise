@@ -3,15 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**P0 #136 / PR #137 FE recovery DEPLOYED** — live FE **`2dfcaba0`** · source `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` · compiled FRONT_BACK/MAGIC/DUAL **ON** · REGISTRATION OFF · BE `6cc317ec` unchanged · Alembic `011` · **0 paid AI** · #136 OPEN pending owner UI acceptance · #135 PAUSED · **#127/#128 CLOSED** · no merge.)
+**Last updated:** 2026-10-30 (**#136 CLOSED** owner acceptance on FE `2dfcaba0` · **#135 DESIGN ACTIVE** — docs `CREATE-MY-CROQUIS-V1-DESIGN.md` · **#127/#128 CLOSED** · live FE **`2dfcaba0`** · BE `6cc317ec` · Alembic `011` · **0 paid AI** · no merge · no croquis implementation yet.)
 
-**Phase:** Protected family beta. #135 Create My Croquis **PAUSED** until owner accepts #136 recovery on live FE.
+**Phase:** Protected family beta. #135 Create My Croquis is **DESIGN ACTIVE** (architecture/feasibility only). Do **not** implement, migrate, deploy, handle real photos, or call paid AI until the design PR is accepted.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`2dfcaba0`** — release `/var/www/fashionrise/releases/2dfcaba0` · source `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` · App pill **`2dfcaba0`** · compiled gates FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, API `/api/v1`. Prior defective `6ec73ba2` + `ebcb1cc7` retained (gates OFF — rollback does not restore Studio UI). |
+| Frontend (`web-ui`) | **`2dfcaba0`** — release `/var/www/fashionrise/releases/2dfcaba0` · source `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` · App pill **`2dfcaba0`** · compiled gates FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, API `/api/v1`. Prior `6ec73ba2` + `ebcb1cc7` retained (gates OFF). |
 | Backend (FastAPI + PostgreSQL) | **`6cc317ecd55423403b6479e8bb185c3e4cde2bf1`** (PR #130). Alembic **`011`**. Rollback → `311e259a`. |
 | AI worker | `fashionrise-ai-worker` @ **`6cc317ec`** (matched with API). |
 | Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
@@ -19,18 +19,37 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## P0 #136 / PR #137 — FE recovery DEPLOYED (2026-10-30) — owner UI acceptance next
+## Issue #135 — Create My Croquis V1 — DESIGN ACTIVE (2026-10-30)
 
-Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. Runbook: `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md`. PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137).
+Design doc: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md). Issue [#135](https://github.com/perielad2-netizen/FashionRise/issues/135).
 
-**Issue hygiene:** [#127](https://github.com/perielad2-netizen/FashionRise/issues/127) and [#128](https://github.com/perielad2-netizen/FashionRise/issues/128) remain **CLOSED**. #135 PAUSED. #136 OPEN pending owner Access-session confirmation (Front/Back icon, Magic not Soon, Restoring exits, V2 Back preserved, oversized Fill).
+| Item | Status |
+|---|---|
+| Dependency #136 | **CLOSED** — owner six-point acceptance on live FE `2dfcaba0` |
+| Phase | **DESIGN / FEASIBILITY ONLY** — architecture, privacy/threat model, staged plan |
+| Implementation | **NOT started** · no migration · no API · no FE feature code · `MY_CROQUIS_AI_ENABLED` proposed default **false** |
+| Paid AI / real photos | **Forbidden** until later authorized stages |
+| Next | Technical PM review of design draft PR · then Stage A (private storage) only if accepted |
 
-### Live compiled gates (post-recovery)
+## P0 #136 / PR #137 — FE recovery DEPLOYED + OWNER ACCEPTED (2026-10-30) — CLOSED
+
+Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. Runbook: `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md`. PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137) (deployed, **not merged**).
+
+**Issue hygiene:** [#127](https://github.com/perielad2-netizen/FashionRise/issues/127) and [#128](https://github.com/perielad2-netizen/FashionRise/issues/128) remain **CLOSED**. [#136](https://github.com/perielad2-netizen/FashionRise/issues/136) **CLOSED** after owner acceptance. #135 **DESIGN ACTIVE**.
+
+### Live compiled gates
 
 | Gate | live `2dfcaba0` | prior `6ec73ba2` | `ebcb1cc7` |
 |---|---|---|---|
 | FRONT_BACK / MAGIC / DUAL | **ON** | OFF | OFF |
 | REGISTRATION | OFF | OFF | OFF |
+
+### Deploy vs acceptance (do not conflate)
+
+| Record | Evidence |
+|---|---|
+| **Deployment (operator)** | Immutable FE `/var/www/fashionrise/releases/2dfcaba0` · source `2dfcaba0…` · `COMPILED_GATES` ON · BE `6cc317ec` · backup `pr137-fe-recovery-deploy-20261030T122721Z` · **0 paid AI** · [PR comment](https://github.com/perielad2-netizen/FashionRise/pull/137#issuecomment-6522888175) |
+| **Acceptance (owner)** | Six live checks PASS (Front/Back, Magic not Soon without invoke, Restoring exits, V2 Back preserved, oversized Fill, save/reopen) · PM closed #136 · [PR acceptance](https://github.com/perielad2-netizen/FashionRise/pull/137#issuecomment-6523155424) |
 
 ### Deploy record
 
@@ -38,15 +57,11 @@ Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. Runbook: `docs/d
 |---|---|
 | Auth | Technical PM ENGINEERING ACCEPTED · **owner authorized** FE-only |
 | Source | Exact `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` |
-| Build | Explicit VITE allowlist · assert-prod-vite-flags PASS · `COMPILED_GATES.json` all four + `/api/v1` |
-| Release | **new** `/var/www/fashionrise/releases/2dfcaba0` · nonempty before symlink · App **`2dfcaba0`** |
-| Activate | Atomic `ln -sfn …/2dfcaba0 …/current` · `nginx -t` · reload |
-| Backup | `/var/backups/fashionrise/pr137-fe-recovery-deploy-20261030T122721Z/` · `ROLLBACK.sh` → `6ec73ba2` (**gates still OFF**) |
+| Release | **new** `/var/www/fashionrise/releases/2dfcaba0` · App **`2dfcaba0`** |
 | BE/worker / Alembic | **unchanged** `6cc317ec` / `011` |
 | Paid AI | **0** |
-| Preserved | `6ec73ba2`, `ebcb1cc7` dirs · no browser storage clear · no draft mutation · no merge |
+| Merge | **NOT done** — preserve recovery code; canonical `main` reconciliation separate |
 
-**Next:** Owner hard-refresh (Access session) → confirm Studio Front/Back + Magic UI + Restoring exit + V2 Back. Do **not** click paid Magic generation unless separately authorized. #135 stays PAUSED until #136 accepted.
 ## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — then P0 #136
 
 Owner authorized controlled frontend-only production deploy of engineering-accepted source **`6ec73ba26ee5b8c25b29a77d31050942af4c6c6d`**. Deploy executed. **#127 was subsequently CLOSED with owner Fill/save/reopen acceptance** — do not revoke. Separate post-deploy **#136** (missing VITE Studio gates) is tracked on PR #137.
@@ -114,8 +129,10 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 | Issue | Disposition | Evidence |
 |---|---|---|
-| #127 Fill | **CLOSED** (owner acceptance) | FE `6ec73ba2` deployed; owner Fill/save/reopen accepted; do not reopen for #136 gate regression |
+| #127 Fill | **CLOSED** (owner acceptance) | FE `6ec73ba2` deployed; owner Fill/save/reopen accepted; do not reopen for #136 |
 | #128 POM integrity | **CLOSED** (owner acceptance) | BE `6cc317ec` deployed; owner measurement acceptance recorded; do not reopen for #136 |
+| #136 Studio gates | **CLOSED** (owner acceptance) | FE recovery `2dfcaba0` owner six-point PASS; do not reopen |
+| #135 Create My Croquis | **DESIGN ACTIVE** | `docs/CREATE-MY-CROQUIS-V1-DESIGN.md`; no implementation yet |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
 | #18 invite registration | **implemented / activation tracked** — keep open | Invite register UI + API; CF Access + public register **still gated** |
@@ -126,16 +143,16 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Remaining real defects / product priorities
 
-1. **P0 #136** — restore compiled Studio VITE gates via final reviewed PR #137 (HOLD until PM PASS + owner auth)
+1. **#135 Create My Croquis** — DESIGN ACTIVE; await Technical PM accept of `CREATE-MY-CROQUIS-V1-DESIGN.md`, then Stage A only
 2. Closure/gradient visual fidelity redesign (**PR #125 HOLD**)
-3. Canonical `main` adoption after PM approval of integration PR (no blind merge)
+3. Canonical `main` adoption after PM approval of integration PR (no blind merge of undeployed stacks)
 4. Continue evidence-based PR closures from remaining open issues (no branch deletes)
 5. Magic model-identity / coverage quality follow-ups (#54)
-6. #135 Create My Croquis remains **PAUSED**
+6. #136 **CLOSED** — do not reopen; preserve FE `2dfcaba0` recovery identity
 
 ### Recommended next engineering milestone
 
-**Technical PM final PASS of PR #137 Corrections A/B/C, then owner-authorized FE-only recovery release from the final #137 tip into a new immutable release directory (never reuse `6ec73ba2`). Keep BE `6cc317ec`. Do not merge/deploy until authorized.**
+**Technical PM review of Create My Croquis V1 design draft PR.** No implementation, migration, real-photo handling, paid AI, or production changes until design accepted. Keep live FE `2dfcaba0` / BE `6cc317ec`.
 
 
 ## Owner-authorized production release — Issue #131 (2026-10-29) — DEPLOYED
@@ -1343,6 +1360,9 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-30 | **#135 DESIGN ACTIVE:** `docs/CREATE-MY-CROQUIS-V1-DESIGN.md` · private-storage-first architecture · `MY_CROQUIS_AI_ENABLED=false` proposed · Stages A–D · **0** code/migration/paid AI · stacked draft PR off #137 lineage · **STOP for Technical PM**. |
+| 2026-10-30 | **#136 CLOSED (owner acceptance):** six live checks PASS on FE **`2dfcaba0`** · PM recovery accepted · #135 resumed design-only · #127/#128 remain CLOSED · PR #137 still **unmerged**. |
+| 2026-10-30 | **OWNER-AUTHORIZED FE-ONLY RECOVERY (#136 / PR #137):** live FE **`2dfcaba0`** · BE/worker **unchanged** `6cc317ec` · Alembic **`011`** · backup `pr137-fe-recovery-deploy-20261030T122721Z` · **0 paid AI** · later owner-accepted · **no merge**. |
 | 2026-10-30 | **P0 #136 / PR #137 Corrections A/B/C tip `2dfcaba0`:** compiled all-four gates + `/api/v1` assert · refuses `VITE_BUILD_SHA=6ec73ba2*` · release runbook `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md` · V2 back-ink + actionable notice + no `persistStudioDraft` · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · verify focused green · Vitest **675/6 baseline** · tsc/lint/build/SW/`COMPILED_GATES` PASS · live FE still `6ec73ba2` · **0 paid AI** · **STOP for final Technical PM** — no activate. |
 | 2026-10-30 | **P0 #136 / PR #137 PM follow-up:** all-four compiled VITE gate assert + V2 no-overwrite tests · new release id required (never reuse `6ec73ba2`) · **#127/#128 CLOSED** (do not revoke) · #135 PAUSED · live FE still `6ec73ba2` (gates OFF) · **0 paid AI** · **STOP for final PM** — no activate. |
 | 2026-10-30 | **OWNER-AUTHORIZED FE-ONLY PROD DEPLOY (#127 / PR #134):** FE release **`6ec73ba2`** from approved source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · BE/worker **unchanged** `6cc317ec` · Alembic **`011`** · nonempty before symlink · backup `pr134-fe-only-deploy-20261030T073506Z` · **0 paid AI** · later **#127 CLOSED** by owner; post-deploy **#136** gate regression tracked separately. |
