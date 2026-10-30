@@ -107,6 +107,8 @@ describe('useStudioEditor restore boot (#136)', () => {
     expect(result.current.ready).toBe(true)
     expect(result.current.saveStatus).toBe('local-only')
     expect(result.current.hasBackInk).toBe(true)
+    expect(result.current.studioNotice ?? '').toMatch(/Front\/Back/i)
+    expect(result.current.studioNotice ?? '').toMatch(/not overwritten/i)
     expect(persistStudioDraft).not.toHaveBeenCalled()
 
     // Ordinary UI action must still refuse automatic cloud overwrite.
@@ -118,7 +120,7 @@ describe('useStudioEditor restore boot (#136)', () => {
     })
   })
 
-  it('exits Restoring with safe error on generic restore rejection; no cloud write', async () => {
+  it('exits Restoring with actionable error on generic restore rejection; no cloud write', async () => {
     restoreStudioDraft.mockImplementationOnce(async () => {
       throw new Error('indexeddb unavailable')
     })
@@ -128,6 +130,8 @@ describe('useStudioEditor restore boot (#136)', () => {
     })
     expect(result.current.ready).toBe(true)
     expect(result.current.saveStatus).toBe('error')
+    expect(result.current.saveStatusLabel).toMatch(/Save failed/i)
+    expect(result.current.studioNotice ?? '').toMatch(/not overwritten/i)
     expect(persistStudioDraft).not.toHaveBeenCalled()
   })
 })

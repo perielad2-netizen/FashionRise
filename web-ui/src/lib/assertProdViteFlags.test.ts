@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  assertCompiledApiBase,
   assertCompiledGatesMatchAllowlist,
   assertNodeEnvAllowlist,
   extractCompiledGates,
@@ -113,5 +114,20 @@ describe('assert-prod-vite-flags Node env allowlist', () => {
     expect(EXPECTED_PROD_VITE_FLAGS.VITE_STUDIO_FRONT_BACK_ENABLED).toBe(true)
     expect(EXPECTED_PROD_VITE_FLAGS.VITE_STUDIO_DUAL_MAGIC_ENABLED).toBe(true)
     expect(EXPECTED_PROD_VITE_FLAGS.VITE_REGISTRATION_UI_ENABLED).toBe(false)
+  })
+})
+
+describe('assert-prod-vite-flags compiled API base', () => {
+  it('accepts relative /api/v1', () => {
+    expect(assertCompiledApiBase('const x=`/api/v1`;')).toEqual([])
+  })
+
+  it('fails when /api/v1 is missing', () => {
+    expect(assertCompiledApiBase('const x="/api/v2"').some((f) => f.includes('missing'))).toBe(true)
+  })
+
+  it('fails when localhost API base is embedded', () => {
+    const failures = assertCompiledApiBase('fetch("http://localhost:8001/api/v1") `/api/v1`')
+    expect(failures.some((f) => f.includes('localhost'))).toBe(true)
   })
 })

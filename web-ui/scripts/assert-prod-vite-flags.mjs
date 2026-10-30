@@ -124,6 +124,25 @@ export function assertCompiledGatesMatchAllowlist(gates, expected = EXPECTED_PRO
   return failures
 }
 
+/** Fail-closed: compiled bundle must embed relative /api/v1 and must not embed localhost API bases. */
+export function assertCompiledApiBase(bundleText) {
+  const failures = []
+  const hasRelative =
+    bundleText.includes('`/api/v1`') ||
+    bundleText.includes('"/api/v1"') ||
+    bundleText.includes("'/api/v1'")
+  if (!hasRelative) {
+    failures.push('compiled bundle missing relative /api/v1')
+  }
+  if (/https?:\/\/127\.0\.0\.1(?::\d+)?\/api\/v1/.test(bundleText)) {
+    failures.push('compiled bundle embeds http://127.0.0.1…/api/v1')
+  }
+  if (/https?:\/\/localhost(?::\d+)?\/api\/v1/.test(bundleText)) {
+    failures.push('compiled bundle embeds http://localhost…/api/v1')
+  }
+  return failures
+}
+
 export function assertNodeEnvAllowlist(env = process.env, expected = EXPECTED_PROD_VITE_FLAGS) {
   const failures = []
   const apiBase = (env.VITE_API_BASE_URL ?? '').trim()
@@ -173,14 +192,27 @@ function main() {
   const compiledFailures = assertCompiledGatesMatchAllowlist(gates)
   if (compiledFailures.length) fail(compiledFailures.join('; '))
 
+  const apiFailures = assertCompiledApiBase(text)
+  if (apiFailures.length) fail(apiFailures.join('; '))
+
   const apiBase = (process.env.VITE_API_BASE_URL ?? '').trim()
+  const buildSha = (process.env.VITE_BUILD_SHA ?? '').trim()
+  if (!buildSha) {
+    fail('VITE_BUILD_SHA must be set to the final PR #137 tip SHA (new release identity; never reuse 6ec73ba2)')
+  }
+  if (/^6ec73ba2/i.test(buildSha)) {
+    fail(
+      'VITE_BUILD_SHA must not be the defective 6ec73ba2 release identity — use the final reviewed PR #137 tip SHA',
+    )
+  }
+
   const buildEnvLines = [
     `VITE_API_BASE_URL=${apiBase}`,
     `VITE_REGISTRATION_UI_ENABLED=${effectiveEnvBool('VITE_REGISTRATION_UI_ENABLED')}`,
     `VITE_MAGIC_UI_ENABLED=${effectiveEnvBool('VITE_MAGIC_UI_ENABLED')}`,
     `VITE_STUDIO_FRONT_BACK_ENABLED=${effectiveEnvBool('VITE_STUDIO_FRONT_BACK_ENABLED')}`,
     `VITE_STUDIO_DUAL_MAGIC_ENABLED=${effectiveEnvBool('VITE_STUDIO_DUAL_MAGIC_ENABLED')}`,
-    `VITE_BUILD_SHA=${(process.env.VITE_BUILD_SHA ?? '').trim()}`,
+    `VITE_BUILD_SHA=${buildSha}`,
     `BUILT_AT_UTC=${new Date().toISOString()}`,
     `ASSERT_PROD_VITE_FLAGS=pass`,
   ]
@@ -191,6 +223,8 @@ function main() {
     dualMagic: gates.dualMagic.value,
     magicUi: gates.magicUi.value,
     registration: gates.registration.value,
+    apiBase: '/api/v1',
+    buildSha,
     helpers: {
       frontBack: gates.frontBack.id,
       dualMagic: gates.dualMagic.id,
@@ -204,7 +238,7 @@ function main() {
   console.log(
     'assert-prod-vite-flags: ok ' +
       `(compiled frontBack=${gates.frontBack.value} magic=${gates.magicUi.value} ` +
-      `dual=${gates.dualMagic.value} registration=${gates.registration.value}; api=/api/v1)`,
+      `dual=${gates.dualMagic.value} registration=${gates.registration.value}; api=/api/v1; sha=${buildSha.slice(0, 8)})`,
   )
 }
 

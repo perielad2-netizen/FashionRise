@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**P0 #136 PR #137 PM follow-up** — all-four compiled gate assert + V2 no-overwrite tests · new release id required (do not reuse `6ec73ba2`) · **#127/#128 CLOSED** (do not revoke) · #135 PAUSED · **STOP for final Technical PM** · **0 paid AI** · no prod activate.)
+**Last updated:** 2026-10-30 (**P0 #136 / PR #137 Corrections A/B/C** — compiled gates+`/api/v1` assert · release runbook forbids `6ec73ba2` reuse · V2 restore notice + no-overwrite tests · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · **STOP for final Technical PM** · **0 paid AI** · no deploy.)
 
 **Phase:** Protected family beta. **Incident #136 HOLD** on further FE forward-deploys until VITE gate parity restored. #135 Create My Croquis **PAUSED**.
 
@@ -32,18 +32,18 @@ Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. PR [#137](https:
 | FRONT_BACK / MAGIC / DUAL | **OFF** | **OFF** | ON |
 | REGISTRATION | OFF | OFF | OFF |
 
-### PR #137 safeguards (PM P0/P1)
+### PR #137 safeguards (Corrections A/B/C)
 
 | Item | Status |
 |---|---|
-| P0-1 all-four **compiled** gate assert + independent mismatch unit tests | done (`assert-prod-vite-flags` + `COMPILED_GATES.json`) |
-| Explicit `export VITE_*` required (`.env.production` alone insufficient for Node assert) | documented |
-| P0-2 **new release id** from final #137 tip — never overwrite `releases/6ec73ba2` / reuse pill | documented; not activated |
-| P1-3 V2 back-ink retained · no `persistStudioDraft` · generic restore error | done |
-| Verify | focused green · full Vitest **661+/6 baseline** · tsc/lint/`/api/v1`/SW PASS |
+| **A** Compiled FRONT_BACK/MAGIC/DUAL/REGISTRATION + `/api/v1`; per-flag negative unit tests; explicit `export VITE_*` | done |
+| **B** Release runbook `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md` — new dir from #137 tip; assert refuses `VITE_BUILD_SHA=6ec73ba2*` | done; **not activated** |
+| **C** V2 back ink + actionable `studioNotice` · no `persistStudioDraft` · generic restore → error label | done |
+| Issue hygiene | **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN |
+| Verify | focused green · full Vitest **675 passed / 6 baseline** · tsc · lint · prod build · SW Access-safe · `COMPILED_GATES.json` |
 | Prod activate | **NOT done** |
 
-**Next after PM PASS + owner auth:** build **#137 tip** → new `/var/www/fashionrise/releases/<shortsha>/` → verify `BUILD_ENV`+`COMPILED_GATES` → atomic symlink. Keep BE `6cc317ec`.
+**Next after final PM PASS + owner auth:** follow recovery runbook — checkout **final PR #137 tip** (branch HEAD after Corrections A/B/C) → set matching `VITE_BUILD_SHA` → new `/var/www/fashionrise/releases/<shortsha>/` → verify `BUILD_ENV`+`COMPILED_GATES` → atomic symlink. Keep BE `6cc317ec`. Never reuse `6ec73ba2`.
 
 ## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — then P0 #136
 
@@ -113,7 +113,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 | Issue | Disposition | Evidence |
 |---|---|---|
 | #127 Fill | **CLOSED** (owner acceptance) | FE `6ec73ba2` deployed; owner Fill/save/reopen accepted; do not reopen for #136 gate regression |
-| #128 POM integrity | **partially-delivered** — keep open | BE `6cc317ec` deployed; **owner measurement acceptance pending** |
+| #128 POM integrity | **CLOSED** (owner acceptance) | BE `6cc317ec` deployed; owner measurement acceptance recorded; do not reopen for #136 |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
 | #18 invite registration | **implemented / activation tracked** — keep open | Invite register UI + API; CF Access + public register **still gated** |
@@ -124,15 +124,16 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Remaining real defects / product priorities
 
-1. Owner mobile Fill acceptance (#127) + measurement persistence acceptance (#128)
+1. **P0 #136** — restore compiled Studio VITE gates via final reviewed PR #137 (HOLD until PM PASS + owner auth)
 2. Closure/gradient visual fidelity redesign (**PR #125 HOLD**)
 3. Canonical `main` adoption after PM approval of integration PR (no blind merge)
-4. Continue evidence-based PR closures from remaining 65 (no branch deletes)
+4. Continue evidence-based PR closures from remaining open issues (no branch deletes)
 5. Magic model-identity / coverage quality follow-ups (#54)
+6. #135 Create My Croquis remains **PAUSED**
 
 ### Recommended next engineering milestone
 
-**Owner mobile acceptance of Fill (#127) + POM persistence (#128) on production `ebcb1cc7` / `6cc317ec`, then Technical PM review/merge of the canonical baseline PR into `main` as the sole future integration base — without deploying from that merge until explicitly authorized.**
+**Technical PM final PASS of PR #137 Corrections A/B/C, then owner-authorized FE-only recovery release from the final #137 tip into a new immutable release directory (never reuse `6ec73ba2`). Keep BE `6cc317ec`. Do not merge/deploy until authorized.**
 
 
 ## Owner-authorized production release — Issue #131 (2026-10-29) — DEPLOYED
@@ -170,19 +171,16 @@ Authorized by owner to deploy engineering-accepted PR #130 then PR #129. Coordin
 - **Paid AI / provider calls during release + smoke: 0**
 - **Migrations / seed / historical restore: none**
 - **PR #125 / Nginx Access / Cloudflare / secrets / DB records: untouched**
-- **Issues #127 and #128: NOT closed** — remain open for owner mobile acceptance
-- **86-PR cleanup: NOT started** (blocked until this release verification is recorded)
+- **Issues #127 and #128:** later **CLOSED** after owner acceptance (2026-10-30); do not reopen for #136
+- **86-PR cleanup: NOT started** at this release; Stage C later closed 12 BE-ancestor PRs
 
-### Remaining owner mobile acceptance (not claimed done)
+### Owner mobile acceptance (later closed)
 
-1. ~1.75px connected complex multistroke shirt outline @ ~62% zoom → Fill → save/reopen  
-2. Eraser, Gaps, separate panels, 6px hollow fail-closed, undo, gradients/fabrics  
-3. Magic **export without paid generation**  
-4. Measurement/POM edit persistence after #130  
+Owner Fill/save/reopen (#127) and measurement/POM persistence (#128) were accepted after this release; both issues are **CLOSED**. Post-deploy Studio gate regression is tracked separately as **#136**.
 
-### Exact next action
+### Exact next action (superseded)
 
-Owner mobile acceptance on FE `ebcb1cc7` + BE `6cc317ec`. Then proceed with Issue #131 Stage C (issue/PR reconciliation) only after acceptance notes are recorded. Do **not** close #127/#128 on deploy alone.
+Historical next action was owner mobile acceptance on FE `ebcb1cc7` + BE `6cc317ec`. **Current hold:** final Technical PM review of PR #137, then owner-authorized FE recovery for #136.
 
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
@@ -507,7 +505,7 @@ Preflight blockers (1)–(2) addressed by the historical-PDF validity maintenanc
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-27 (**OWNER ACCEPTANCE PASS** — Measurements & Details FE `69b83c01` / PR #114. Professional AI Technical Pack **quality audit complete** → **NEEDS IMPROVEMENT**. Backend **`732bda9f`** / worker unchanged / Alembic **`011`**. **0 paid AI calls**. Docs-only analysis branch — **no deploy**.)
+**Last updated:** 2026-10-30 (**P0 #136 / PR #137 Corrections A/B/C** — compiled gates+`/api/v1` assert · release runbook forbids `6ec73ba2` reuse · V2 restore notice + no-overwrite tests · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · **STOP for final Technical PM** · **0 paid AI** · no deploy.)
 
 **Phase:** Protected family beta. Create Real Design main workflow unchanged. Editor acceptance closed; Professional PDF quality gated on PM review of audit evidence.
 
@@ -1343,6 +1341,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-30 | **P0 #136 / PR #137 Corrections A/B/C tip :** compiled all-four gates + `/api/v1` assert · refuses `VITE_BUILD_SHA=6ec73ba2*` · release runbook `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md` · V2 back-ink + actionable notice + no `persistStudioDraft` · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · verify focused green · Vitest **675/6 baseline** · tsc/lint/build/SW/`COMPILED_GATES` PASS · live FE still `6ec73ba2` · **0 paid AI** · **STOP for final Technical PM** — no activate. |
 | 2026-10-30 | **P0 #136 / PR #137 PM follow-up:** all-four compiled VITE gate assert + V2 no-overwrite tests · new release id required (never reuse `6ec73ba2`) · **#127/#128 CLOSED** (do not revoke) · #135 PAUSED · live FE still `6ec73ba2` (gates OFF) · **0 paid AI** · **STOP for final PM** — no activate. |
 | 2026-10-30 | **OWNER-AUTHORIZED FE-ONLY PROD DEPLOY (#127 / PR #134):** FE release **`6ec73ba2`** from approved source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · BE/worker **unchanged** `6cc317ec` · Alembic **`011`** · nonempty before symlink · backup `pr134-fe-only-deploy-20261030T073506Z` · **0 paid AI** · later **#127 CLOSED** by owner; post-deploy **#136** gate regression tracked separately. |
 | 2026-10-29 | **OWNER-AUTHORIZED PROD RELEASE (#131):** BE+worker `6cc317ec` (PR #130) · FE `ebcb1cc7` (PR #129) · Alembic `011` · backup `techpack-130-129-deploy-20261029T131341Z` · health/ready PASS · **0 paid AI** · #127/#128 remain open · 86-PR cleanup not started. |

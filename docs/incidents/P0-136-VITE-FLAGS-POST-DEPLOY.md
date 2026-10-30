@@ -1,8 +1,9 @@
 # P0 #136 — Studio gates missing after FE `6ec73ba2` deploy
 
-**Status:** PM PARTIAL PASS follow-up · P0-1/P0-2/P1 addressed on PR #137 · **no production mutation** · STOP for final Technical PM  
+**Status:** Corrections A/B/C on PR #137 · **no production mutation** · STOP for final Technical PM  
 **Paid AI:** 0 · **BE/worker:** untouched `6cc317ec` · Alembic `011`  
-**Branch:** `cursor/web-incident-136-vite-flags-77c6` · PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137)
+**Branch:** `cursor/web-incident-136-vite-flags-77c6` · PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137)  
+**Release runbook:** `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md` (not executed)
 
 ## Issue status (do not revoke)
 
@@ -66,10 +67,10 @@ When owner/PM authorizes deploy:
 
 `useStudioEditor.restoreBoot.test.tsx`:
 
-- V2 back ink retained (`hasBackInk`)
-- Exits Restoring → `local-only`
+- V2 draft with Back artwork retained (`hasBackInk`)
+- Exits Restoring → `local-only` with actionable `studioNotice` (Front/Back · not overwritten)
 - `persistStudioDraft` never called after serialize block or after `retrySave`
-- Generic restore rejection → `error`, no cloud write
+- Generic restore rejection → `error` / `Save failed` + not-overwritten notice; no cloud write
 - V2 downgrade refusal preserved in `draftDocument.v2.test.ts`
 
 ## Verification (this tip)
@@ -77,8 +78,8 @@ When owner/PM authorizes deploy:
 | Check | Result |
 |---|---|
 | Focused assert + restore boot | green |
-| Full Vitest | **661+ passed / 6 known baseline fails** (disclose) |
-| `tsc` / lint / prod build `/api/v1` + Access-safe SW + assert-prod-vite-flags | **PASS** (with explicit VITE exports) |
+| Full Vitest | **675 passed / 6 known baseline fails** (disclose; unchanged historical set) |
+| `tsc` / lint / prod build `/api/v1` + Access-safe SW + assert-prod-vite-flags | **PASS** (with explicit VITE exports; refuses `6ec73ba2*` BUILD_SHA) |
 | Production activate | **NOT done** |
 
 ## Recommendation
