@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/assert-sw-access-safe.mjs && node scripts/assert-prod-api-base.mjs",
+    "build": "tsc -b && vite build && node scripts/assert-sw-access-safe.mjs && node scripts/assert-prod-api-base.mjs && node scripts/assert-prod-vite-flags.mjs",
     "lint": "oxlint src",
     "preview": "vite preview",
     "test": "vitest run",
