@@ -15,9 +15,9 @@ Rollback target `ebcb1cc7` also has compiled Front/Back+Magic **OFF** — not a 
 |---|---|
 | Branch | `cursor/web-incident-136-vite-flags-77c6` |
 | PR | [#137](https://github.com/perielad2-netizen/FashionRise/pull/137) |
-| **Release source SHA** | **final reviewed tip of PR #137** after Corrections A/B/C (`git rev-parse HEAD` on this branch; not `6ec73ba2…`, not intermediate `5543dc6e` alone) |
-| App / release dir | `/var/www/fashionrise/releases/<shortsha8>/` matching that tip |
-| `VITE_BUILD_SHA` | **full tip SHA** (assert refuses empty or `6ec73ba2*`) |
+| **Release source SHA** | `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` (PR #137 Corrections A/B/C tip; not `6ec73ba2…`) |
+| App / release dir | `/var/www/fashionrise/releases/2dfcaba0/` matching that tip |
+| `VITE_BUILD_SHA` | `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` (assert refuses empty or `6ec73ba2*`) |
 | Must include | restore-boot harden + `assert-prod-vite-flags` all-four compiled gates + `/api/v1` |
 
 ## Required build exports

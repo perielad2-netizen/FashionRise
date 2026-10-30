@@ -2,7 +2,7 @@
 
 **Status:** Corrections A/B/C on PR #137 · **no production mutation** · STOP for final Technical PM  
 **Paid AI:** 0 · **BE/worker:** untouched `6cc317ec` · Alembic `011`  
-**Branch:** `cursor/web-incident-136-vite-flags-77c6` · PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137)  
+**Branch:** `cursor/web-incident-136-vite-flags-77c6` · PR [#137](https://github.com/perielad2-netizen/FashionRise/pull/137) · tip `2dfcaba0a97059adddceaa3ae8e0bee000fb32df`  
 **Release runbook:** `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md` (not executed)
 
 ## Issue status (do not revoke)

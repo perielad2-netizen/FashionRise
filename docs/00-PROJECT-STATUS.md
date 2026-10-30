@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**P0 #136 / PR #137 Corrections A/B/C** — compiled gates+`/api/v1` assert · release runbook forbids `6ec73ba2` reuse · V2 restore notice + no-overwrite tests · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · **STOP for final Technical PM** · **0 paid AI** · no deploy.)
+**Last updated:** 2026-10-30 (**P0 #136 / PR #137 tip `2dfcaba0`** — compiled gates+`/api/v1` assert · release runbook forbids `6ec73ba2` reuse · V2 restore notice + no-overwrite tests · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · **STOP for final Technical PM** · **0 paid AI** · no deploy.)
 
 **Phase:** Protected family beta. **Incident #136 HOLD** on further FE forward-deploys until VITE gate parity restored. #135 Create My Croquis **PAUSED**.
 
@@ -43,7 +43,7 @@ Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. PR [#137](https:
 | Verify | focused green · full Vitest **675 passed / 6 baseline** · tsc · lint · prod build · SW Access-safe · `COMPILED_GATES.json` |
 | Prod activate | **NOT done** |
 
-**Next after final PM PASS + owner auth:** follow recovery runbook — checkout **final PR #137 tip** (branch HEAD after Corrections A/B/C) → set matching `VITE_BUILD_SHA` → new `/var/www/fashionrise/releases/<shortsha>/` → verify `BUILD_ENV`+`COMPILED_GATES` → atomic symlink. Keep BE `6cc317ec`. Never reuse `6ec73ba2`.
+**Next after final PM PASS + owner auth:** follow recovery runbook — build **`2dfcaba0`** (`2dfcaba0a97059adddceaa3ae8e0bee000fb32df`) → new `/var/www/fashionrise/releases/2dfcaba0/` → verify `BUILD_ENV`+`COMPILED_GATES` → atomic symlink. Keep BE `6cc317ec`. Never reuse `6ec73ba2`.
 
 ## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — then P0 #136
 
@@ -505,7 +505,7 @@ Preflight blockers (1)–(2) addressed by the historical-PDF validity maintenanc
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**.
 
-**Last updated:** 2026-10-30 (**P0 #136 / PR #137 Corrections A/B/C** — compiled gates+`/api/v1` assert · release runbook forbids `6ec73ba2` reuse · V2 restore notice + no-overwrite tests · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · **STOP for final Technical PM** · **0 paid AI** · no deploy.)
+**Last updated:** 2026-10-30 (**P0 #136 / PR #137 tip `2dfcaba0`** — compiled gates+`/api/v1` assert · release runbook forbids `6ec73ba2` reuse · V2 restore notice + no-overwrite tests · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · **STOP for final Technical PM** · **0 paid AI** · no deploy.)
 
 **Phase:** Protected family beta. Create Real Design main workflow unchanged. Editor acceptance closed; Professional PDF quality gated on PM review of audit evidence.
 
@@ -1341,7 +1341,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-10-30 | **P0 #136 / PR #137 Corrections A/B/C tip :** compiled all-four gates + `/api/v1` assert · refuses `VITE_BUILD_SHA=6ec73ba2*` · release runbook `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md` · V2 back-ink + actionable notice + no `persistStudioDraft` · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · verify focused green · Vitest **675/6 baseline** · tsc/lint/build/SW/`COMPILED_GATES` PASS · live FE still `6ec73ba2` · **0 paid AI** · **STOP for final Technical PM** — no activate. |
+| 2026-10-30 | **P0 #136 / PR #137 Corrections A/B/C tip `2dfcaba0`:** compiled all-four gates + `/api/v1` assert · refuses `VITE_BUILD_SHA=6ec73ba2*` · release runbook `docs/deploy/P0-136-PR137-FE-RECOVERY-RELEASE.md` · V2 back-ink + actionable notice + no `persistStudioDraft` · **#127/#128 CLOSED** · #135 PAUSED · #136 OPEN · verify focused green · Vitest **675/6 baseline** · tsc/lint/build/SW/`COMPILED_GATES` PASS · live FE still `6ec73ba2` · **0 paid AI** · **STOP for final Technical PM** — no activate. |
 | 2026-10-30 | **P0 #136 / PR #137 PM follow-up:** all-four compiled VITE gate assert + V2 no-overwrite tests · new release id required (never reuse `6ec73ba2`) · **#127/#128 CLOSED** (do not revoke) · #135 PAUSED · live FE still `6ec73ba2` (gates OFF) · **0 paid AI** · **STOP for final PM** — no activate. |
 | 2026-10-30 | **OWNER-AUTHORIZED FE-ONLY PROD DEPLOY (#127 / PR #134):** FE release **`6ec73ba2`** from approved source `6ec73ba26ee5b8c25b29a77d31050942af4c6c6d` · BE/worker **unchanged** `6cc317ec` · Alembic **`011`** · nonempty before symlink · backup `pr134-fe-only-deploy-20261030T073506Z` · **0 paid AI** · later **#127 CLOSED** by owner; post-deploy **#136** gate regression tracked separately. |
 | 2026-10-29 | **OWNER-AUTHORIZED PROD RELEASE (#131):** BE+worker `6cc317ec` (PR #130) · FE `ebcb1cc7` (PR #129) · Alembic `011` · backup `techpack-130-129-deploy-20261029T131341Z` · health/ready PASS · **0 paid AI** · #127/#128 remain open · 86-PR cleanup not started. |
