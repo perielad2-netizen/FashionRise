@@ -8,6 +8,7 @@ import {
   draftContentFingerprint,
   normalizeActiveSide,
   rebaseChosenLocalDraft,
+  StudioDraftSerializeError,
   type SaveStatus,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
@@ -527,53 +528,88 @@ export function useStudioEditor() {
     let cancelled = false
     ;(async () => {
       setSaveStatus('restoring')
-      const restored = await restoreStudioDraft(user.id)
-      if (cancelled) return
+      try {
+        const restored = await restoreStudioDraft(user.id)
+        if (cancelled) return
 
-      // Authoritative ref BEFORE React state — any immediate flush uses this snapshot.
-      authoritativeDocRef.current = restored.conflict
-        ? restored.conflict.local
-        : restored.document
-      designIdRef.current = restored.designId
-      syncedRevisionRef.current = restored.syncedRevision
-      if (restored.syncedRevision != null && !restored.conflict) {
-        syncedFingerprintRef.current = draftContentFingerprint(
-          documentForCloud(restored.document),
-        )
-      }
+        // Authoritative ref BEFORE React state — any immediate flush uses this snapshot.
+        authoritativeDocRef.current = restored.conflict
+          ? restored.conflict.local
+          : restored.document
+        designIdRef.current = restored.designId
+        syncedRevisionRef.current = restored.syncedRevision
+        let frontBackSerializeBlocked = false
+        if (restored.syncedRevision != null && !restored.conflict) {
+          // Fingerprint is best-effort: V2 drafts must not throw the boot UI into a
+          // permanent "Restoring draft…" state when Front/Back is compiled off (#136).
+          try {
+            syncedFingerprintRef.current = draftContentFingerprint(
+              documentForCloud(restored.document),
+            )
+          } catch (err) {
+            syncedFingerprintRef.current = null
+            if (err instanceof StudioDraftSerializeError) {
+              frontBackSerializeBlocked = true
+              publishStudioNotice(
+                'This design uses Front/Back. Studio Front/Back is currently unavailable — your draft was kept and was not overwritten.',
+              )
+            } else {
+              throw err
+            }
+          }
+        }
 
-      if (restored.damagedCloud || restored.blockAutomaticCloudWrites) {
+        if (restored.damagedCloud || restored.blockAutomaticCloudWrites) {
+          damagedCloudBlockRef.current = true
+          setDamagedCloud(restored.damagedCloud)
+          setDamagedCloudDialogOpen(Boolean(restored.damagedCloud))
+          applyDocument(restored.document, restored.designId)
+          setSaveStatus(restored.damagedCloud?.hasLocalRecovery ? 'local-only' : 'idle')
+        } else if (restored.conflict) {
+          conflictOpenRef.current = true
+          setDraftConflict(restored.conflict)
+          applyDocument(restored.conflict.local, restored.conflict.designId)
+          setSaveStatus('local-only')
+        } else if (frontBackSerializeBlocked) {
+          // Keep V2 document on canvas; block automatic cloud writes until Front/Back is on.
+          damagedCloudBlockRef.current = true
+          applyDocument(restored.document, restored.designId)
+          setSaveStatus('local-only')
+        } else {
+          damagedCloudBlockRef.current = false
+          setDamagedCloud(null)
+          setDamagedCloudDialogOpen(false)
+          applyDocument(restored.document, restored.designId)
+          setSaveStatus(restored.designId ? 'saved' : 'idle')
+        }
+        if (restored.notice) publishStudioNotice(restored.notice)
+
+        bootedRef.current = true
+        setReady(true)
+
+        const needsSync =
+          restored.conflict === null &&
+          !restored.blockAutomaticCloudWrites &&
+          !restored.damagedCloud &&
+          !frontBackSerializeBlocked &&
+          (restored.designId === null
+            ? documentHasAnyInk(restored.document)
+            : restored.notice?.includes('Syncing') === true)
+        if (needsSync) {
+          void flushCloudSave()
+        }
+      } catch (err) {
+        if (cancelled) return
+        // Non-destructive: leave IndexedDB/cloud drafts untouched; exit restoring.
+        bootedRef.current = true
+        setReady(true)
+        setSaveStatus('error')
         damagedCloudBlockRef.current = true
-        setDamagedCloud(restored.damagedCloud)
-        setDamagedCloudDialogOpen(Boolean(restored.damagedCloud))
-        applyDocument(restored.document, restored.designId)
-        setSaveStatus(restored.damagedCloud?.hasLocalRecovery ? 'local-only' : 'idle')
-      } else if (restored.conflict) {
-        conflictOpenRef.current = true
-        setDraftConflict(restored.conflict)
-        applyDocument(restored.conflict.local, restored.conflict.designId)
-        setSaveStatus('local-only')
-      } else {
-        damagedCloudBlockRef.current = false
-        setDamagedCloud(null)
-        setDamagedCloudDialogOpen(false)
-        applyDocument(restored.document, restored.designId)
-        setSaveStatus(restored.designId ? 'saved' : 'idle')
-      }
-      if (restored.notice) publishStudioNotice(restored.notice)
-
-      bootedRef.current = true
-      setReady(true)
-
-      const needsSync =
-        restored.conflict === null &&
-        !restored.blockAutomaticCloudWrites &&
-        !restored.damagedCloud &&
-        (restored.designId === null
-          ? documentHasAnyInk(restored.document)
-          : restored.notice?.includes('Syncing') === true)
-      if (needsSync) {
-        void flushCloudSave()
+        const detail =
+          err instanceof StudioDraftSerializeError
+            ? 'Front/Back draft could not be prepared for sync while Front/Back is disabled. Your saved work was not overwritten.'
+            : 'Could not finish restoring your draft. Your saved work was not overwritten — try refreshing after Studio features are restored.'
+        publishStudioNotice(detail)
       }
     })()
     return () => {

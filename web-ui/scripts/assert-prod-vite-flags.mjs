@@ -17,9 +17,16 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dist = path.join(root, 'dist')
 const assets = path.join(dist, 'assets')
 
-/** Expected production FE gate allowlist (names + effective booleans only). */
+/**
+ * Expected production FE gate allowlist (names + effective booleans only).
+ *
+ * Sourced from known-good immutable release BUILD_ENV.txt records
+ * (`69b83c01`, `af1ddbb5`, `31c1de01`) — not invented from
+ * `.env.production.example`. Registration stays false (same as those releases).
+ */
 export const EXPECTED_PROD_VITE_FLAGS = Object.freeze({
   VITE_API_BASE_URL: '/api/v1',
+  VITE_REGISTRATION_UI_ENABLED: false,
   VITE_MAGIC_UI_ENABLED: true,
   VITE_STUDIO_FRONT_BACK_ENABLED: true,
   VITE_STUDIO_DUAL_MAGIC_ENABLED: true,
@@ -48,15 +55,21 @@ if (apiBase !== EXPECTED_PROD_VITE_FLAGS.VITE_API_BASE_URL) {
 }
 
 for (const name of [
+  'VITE_REGISTRATION_UI_ENABLED',
   'VITE_MAGIC_UI_ENABLED',
   'VITE_STUDIO_FRONT_BACK_ENABLED',
   'VITE_STUDIO_DUAL_MAGIC_ENABLED',
 ]) {
   const expected = EXPECTED_PROD_VITE_FLAGS[name]
   const actual = envBool(name)
-  if (actual !== expected) {
+  // Registration: unset/empty must count as false (matches historical prod builds).
+  const effective =
+    name === 'VITE_REGISTRATION_UI_ENABLED' && (process.env[name] == null || process.env[name] === '')
+      ? false
+      : actual
+  if (effective !== expected) {
     fail(
-      `${name} expected ${expected}, got ${actual} ` +
+      `${name} expected ${expected}, got ${effective} ` +
         `(raw=${JSON.stringify(process.env[name] ?? '')}). ` +
         'Refusing to ship a build that would hide Front/Back or Magic (incident #136).',
     )

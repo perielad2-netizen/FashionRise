@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**P0 #136 post-deploy regression** — live FE `6ec73ba2` missing compile-time Studio gates · Front/Back + Magic OFF in bundle · **`ebcb1cc7` also OFF** · rebuild candidate ready · **no prod mutation pending owner auth** · #135 PAUSED · **0 paid AI**.)
+**Last updated:** 2026-10-30 (**P0 #136 Phase A/B/C** — compiled gates confirmed OFF on live `6ec73ba2` **and** `ebcb1cc7` · restore-boot harden + assert gate on PR #137 · rollback prepared not executed · **STOP for Technical PM** · #135 PAUSED · **0 paid AI**.)
 
 **Phase:** Protected family beta. **Incident #136 HOLD** on further FE forward-deploys until VITE gate parity restored. #135 Create My Croquis **PAUSED**.
 
@@ -19,23 +19,34 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## P0 #136 — missing VITE Studio gates after FE `6ec73ba2` (2026-10-30) — STOP for owner auth
+## P0 #136 — missing VITE Studio gates after FE `6ec73ba2` (2026-10-30) — STOP for Technical PM
 
-Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. Branch: `cursor/web-incident-136-vite-flags-77c6`.
+Full ledger: `docs/incidents/P0-136-VITE-FLAGS-POST-DEPLOY.md`. Branch/PR: `cursor/web-incident-136-vite-flags-77c6` / [#137](https://github.com/perielad2-netizen/FashionRise/pull/137).
 
-| Finding | Evidence |
-|---|---|
-| Live FE | `current` → `releases/6ec73ba2` · BE `6cc317ec` · Alembic `011` unchanged |
-| Compiled live gates | `frontBackEnabled??helper` → **`return!1`** (OFF); dual-imm also **OFF** |
-| Rollback `ebcb1cc7` | **Same OFF** in compiled JS (no `BUILD_ENV.txt`) — symlink rollback alone will **not** restore Front/Back or Magic |
-| Known-good | `69b83c01` / `af1ddbb5`: helpers **`return!0`** + `BUILD_ENV` MAGIC/FRONT_BACK/DUAL=true |
-| Root cause | #134 prod build set only `VITE_API_BASE_URL` + `VITE_BUILD_SHA`; gates default false at compile time |
-| Restoring draft | Likely uncaught V2 serialize reject while Front/Back OFF; **do not** clear site data / force V2→V1 |
-| Offline fix proof | Rebuild same `web-ui` tree `0709aa71…` with allowlist → helper **`return!0`**; `assert-prod-vite-flags.mjs` wired into `npm run build` |
-| Prod mutation this turn | **None** |
-| #135 | **PAUSED** |
+### Phase A — confirmed compiled values
 
-**Owner decision needed before any symlink change:** authorize forward deploy of rebuilt `6ec73ba2` tree **with** production VITE allowlist (keeps #127 paper). Do **not** expect `ebcb1cc7` rollback to restore Studio gates.
+| Gate | live `6ec73ba2` | rollback `ebcb1cc7` | known-good `69b83c01` |
+|---|---|---|---|
+| FRONT_BACK | **OFF** | **OFF** | ON |
+| MAGIC_UI | **OFF** | **OFF** | ON |
+| DUAL_MAGIC | **OFF** | **OFF** | ON |
+| REGISTRATION_UI | OFF | OFF | OFF |
+
+Root cause: #134 clean build lacked `.env.production` / Studio VITE env; only API base + build SHA set. Restoring draft stuck = uncaught V2 `documentForCloud` serialize while Front/Back OFF.
+
+### Phase B — rollback prepared, not executed
+
+`bash /var/www/fashionrise/releases/6ec73ba2/ROLLBACK.sh` ready; prep under `/var/backups/fashionrise/incident-136-rollback-prep-*`. **Insufficient alone** (ebcb gates also OFF). Needs explicit owner auth to run.
+
+### Phase C — forward candidate (not activated)
+
+- Allowlist from known-good `BUILD_ENV` (MAGIC/FRONT_BACK/DUAL=true, REGISTRATION=false)
+- Offline rebuild proof: helpers ON; `assert-prod-vite-flags` in `npm run build`
+- Restore-boot try/catch + `useStudioEditor.restoreBoot.test.tsx`
+- Verify: Vitest **661/6 baseline**, `tsc`, lint, `/api/v1` + Access-safe SW **PASS**
+- **No production activate · 0 paid AI · #135 PAUSED · #127 OPEN**
+
+**PM/owner next:** authorize FE-only deploy of rebuilt `6ec73ba2` tree with allowlist + nonempty/`BUILD_ENV`/compiled-`!0` checks before symlink.
 
 ## Issue #127 / PR #134 — FE-ONLY PRODUCTION DEPLOY (2026-10-30) — then P0 #136
 
