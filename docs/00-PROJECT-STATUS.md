@@ -27,7 +27,7 @@ Design: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md
 |---|---|
 | Branch | `cursor/web-create-my-croquis-stage-b-77c6` (stacked on accepted Stage A; same draft PR #140) |
 | Amendment (code) | **`c5390d2c40458a21ea312995616c89f6e44757da`** — contract/underlay/Back-ink/harness |
-| Docs tip | exact HEAD `484bba8740d67c16c172be9e27ed8291ad12e845` |
+| Docs tip | see branch HEAD (`git rev-parse origin/cursor/web-create-my-croquis-stage-b-77c6`) |
 | Base / Stage A accepted | Exact PR #139 HEAD **`655f6d3486f5bd5b89f2191a1016054d0ade4894`** (PM PASS 2026-10-31) |
 | Design parent | `e6c34ca5f7475690bd8da610f22f8ac9d56de40d` (PR #138) |
 | PM prior tip | `243f4915172af921d329a97fa7aa88829dedcaf2` (PARTIAL PASS / CHANGES REQUIRED) |
