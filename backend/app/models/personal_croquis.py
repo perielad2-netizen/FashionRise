@@ -35,6 +35,7 @@ VERSION_STATUS_GENERATING = "generating"
 VERSION_STATUS_FAILED = "failed"
 VERSION_STATUS_REJECTED = "rejected"
 VERSION_STATUS_ACCEPTED = "accepted"
+VERSION_STATUS_RECONCILIATION = "reconciliation_required"
 
 
 class PersonalCroquis(Base):

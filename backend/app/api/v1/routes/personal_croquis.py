@@ -1,6 +1,7 @@
-"""Create My Croquis Stage A authenticated routes.
+"""Create My Croquis authenticated routes (Stage A storage + Stage C generate).
 
-Gates default OFF. No generate / provider endpoint. Ownership enforced on all reads.
+Gates default OFF. Generate requires MY_CROQUIS_AI_ENABLED + spend ceiling > 0.
+Ownership enforced on all reads. No paid provider calls under default config.
 """
 
 import uuid
@@ -18,12 +19,14 @@ from app.schemas.personal_croquis import (
     AdultsAttestationRequest,
     ConsentAcknowledgeRequest,
     ConsentEventRead,
+    GenerateVersionRequest,
     PersonalCroquisRead,
     PersonalCroquisVersionRead,
     consent_to_read,
     croquis_to_read,
     version_to_read,
 )
+from app.services import personal_croquis_generate as pcg
 from app.services import personal_croquis_service as pcs
 
 router = APIRouter()
@@ -172,6 +175,35 @@ def get_croquis(
     row = pcs.get_owned_croquis(db, user, croquis_id, include_archived=True)
     latest = pcs.latest_accepted_version(db, user, row.id)
     return croquis_to_read(row, latest=latest)
+
+
+@router.post(
+    "/{croquis_id}/versions/generate",
+    response_model=PersonalCroquisVersionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("10/minute")
+def generate_croquis_version(
+    request: Request,
+    croquis_id: uuid.UUID,
+    body: GenerateVersionRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PersonalCroquisVersionRead:
+    """Stage C generate — AI consent + AI gate + spend reservation + idempotency.
+
+    Defaults fail closed. Live paid providers are not activated in this build;
+    tests inject a mock adapter. Same idempotency_key never double-charges.
+    """
+    _ = request.url
+    row = pcg.generate_personal_croquis_version(
+        db,
+        user,
+        croquis_id,
+        ai_consent_id=body.ai_consent_id,
+        idempotency_key=body.idempotency_key,
+    )
+    return version_to_read(row)
 
 
 @router.get("/{croquis_id}/versions/{version}", response_model=PersonalCroquisVersionRead)

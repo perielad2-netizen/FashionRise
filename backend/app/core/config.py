@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     # Create My Croquis gates (independent of Studio FRONT_BACK/MAGIC/DUAL). Fail closed.
     my_croquis_upload_enabled: bool = False
     my_croquis_ai_enabled: bool = False
+    # Stage C spend controls — operator ceiling default 0 → fail closed (no paid calls).
+    my_croquis_ai_spend_ceiling_usd: float = 0.0
+    my_croquis_ai_max_usd_per_run: float = 0.0
+    my_croquis_ai_max_usd_per_user_day: float = 0.0
+    my_croquis_ai_max_generations_per_user_day: int = 3
+    # Soft estimate used for reservation preflight (cents). Not a live pricing guarantee.
+    my_croquis_ai_estimate_cents: int = 8
+    my_croquis_ai_consent_max_age_seconds: int = 3600
     # Consent notice versions. Collection remains fail-closed until approved notice text is set.
     my_croquis_storage_consent_version: str = "storage-2026-10-30-draft"
     my_croquis_ai_consent_version: str = "ai-provider-2026-10-30-draft"
