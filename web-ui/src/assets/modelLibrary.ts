@@ -36,7 +36,10 @@ export type BuiltinModelId = LegacyModelId | SelectableBuiltinModelId
 
 export type UtilityModelId = 'custom' | 'blank'
 
-export type ModelChoice = BuiltinModelId | UtilityModelId
+/** Durable Create My Croquis underlay — resolved via exact (croquis_id, version) pins. */
+export type PersonalModelId = 'personal'
+
+export type ModelChoice = BuiltinModelId | UtilityModelId | PersonalModelId
 
 export type BuiltinModelDef = {
   id: SelectableBuiltinModelId
@@ -174,6 +177,7 @@ export const MODEL_CHOICES: readonly ModelChoice[] = [
   ...BUILTIN_MODELS.map((m) => m.id),
   'custom',
   'blank',
+  'personal',
 ]
 
 export function isLegacyModelId(value: unknown): value is LegacyModelId {
@@ -200,7 +204,7 @@ export function getBuiltinModel(id: ModelChoice): BuiltinModelDef | null {
 
 /** Resolve the exact canvas URL for a stored model choice and paper side. */
 export function canvasSrcForModel(id: ModelChoice, side: ModelCanvasSide = 'front'): string | null {
-  if (id === 'custom' || id === 'blank') return null
+  if (id === 'custom' || id === 'blank' || id === 'personal') return null
   if (isLegacyModelId(id)) return side === 'back' ? null : LEGACY_MODEL_CANVAS[id]
   const def = SELECTABLE_BY_ID.get(id)
   if (!def) return null
@@ -209,7 +213,8 @@ export function canvasSrcForModel(id: ModelChoice, side: ModelCanvasSide = 'fron
 }
 
 export function modelHasRearAsset(id: ModelChoice): boolean {
-  if (id === 'custom' || id === 'blank' || isLegacyModelId(id)) return false
+  // V1 personal croquis is front-only (design §2 / Stage B).
+  if (id === 'custom' || id === 'blank' || id === 'personal' || isLegacyModelId(id)) return false
   const def = SELECTABLE_BY_ID.get(id)
   if (!def) return false
   return isRearCroquisPublished(def.id)
@@ -222,6 +227,7 @@ export function defaultModelForGender(gender: ModelGender): SelectableBuiltinMod
 export function modelLabel(model: ModelChoice): string {
   if (model === 'custom') return 'Custom reference'
   if (model === 'blank') return 'Blank paper'
+  if (model === 'personal') return 'My Croquis'
   if (model === 'female') return 'Female · Classic'
   if (model === 'male') return 'Male · Classic'
   const def = SELECTABLE_BY_ID.get(model)

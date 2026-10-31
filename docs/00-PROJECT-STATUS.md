@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-31 (**#135 Create My Croquis Stage A hardening** — P0/P1 corrections on DRAFT PR #139 · **STOP for final Technical PM acceptance** · **no merge / no deploy / no production migration** · croquis gates remain **OFF** · **0 provider / 0 paid AI** · live production unchanged.)
+**Last updated:** 2026-10-31 (**#135 Create My Croquis Stage B** — Studio + offline/mock wizard on stacked draft PR · Stage A **ACCEPTED** @ `655f6d3486f5bd5b89f2191a1016054d0ade4894` · **STOP for Technical PM Stage B code review** · **no merge / no deploy / no production migration** · croquis gates remain **OFF** · **0 provider / 0 paid AI** · live production unchanged.)
 
-**Phase:** Protected family beta. #135 Create My Croquis **Stage A hardening complete (draft PR #139)** — awaiting final Technical PM acceptance. Do **not** merge, deploy, run production Alembic `012`, install retention timers, collect real photos, enable upload/AI/UI gates, or begin Stage B.
+**Phase:** Protected family beta. #135 Create My Croquis **Stage A ACCEPTED** · **Stage B implementation complete (draft PR)** — awaiting Technical PM Stage B code review. Do **not** merge, deploy, run production Alembic `012`, install retention timers, collect real photos, enable upload/AI/UI gates, or begin Stage C.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -19,28 +19,36 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## Issue #135 — Create My Croquis V1 — STAGE A HARDENING (2026-10-31) — STOP for final PM acceptance
+## Issue #135 — Create My Croquis V1 — STAGE B STUDIO + OFFLINE (2026-10-31) — STOP for PM code review
 
-Design (accepted): [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md) @ PR [#138](https://github.com/perielad2-netizen/FashionRise/pull/138) tip `e6c34ca5f7475690bd8da610f22f8ac9d56de40d`. Issue [#135](https://github.com/perielad2-netizen/FashionRise/issues/135). DRAFT PR [#139](https://github.com/perielad2-netizen/FashionRise/pull/139).
-
-Prior reviewed Stage A tip: `fc97072f408529e97940addc886b2181aacbaf8a` (PM PARTIAL PASS — comment 6547358867). Hardening corrections below; architecture/lineage unchanged.
+Design: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md). Issue [#135](https://github.com/perielad2-netizen/FashionRise/issues/135).
 
 | Item | Status |
 |---|---|
-| Branch | `cursor/web-create-my-croquis-stage-a-77c6` tip **`154f4ce72bd244fb3a8da4f5e68f44e83b71b080`** · hardening impl `ae400baabe144faef5b76069bf25ba48ea184195` (stacked on accepted design `e6c34ca5`) |
+| Branch | `cursor/web-create-my-croquis-stage-b-77c6` @ **`db3b3c5c82a4cf064fb13cec119835dbfdbdde09`** (stacked on accepted Stage A) |
+| Base / Stage A accepted | Exact PR #139 HEAD **`655f6d3486f5bd5b89f2191a1016054d0ade4894`** (PM PASS 2026-10-31) · hardening impl `ae400baabe144faef5b76069bf25ba48ea184195` |
+| Design parent | `e6c34ca5f7475690bd8da610f22f8ac9d56de40d` (PR #138) |
+| Scope | Consent-first wizard (UI gate) · local photo preview · Stage A API client · `model=personal` + exact `(croquis_id,version)` pins · owner-scoped asset resolver · front-only Back · 768×1024 fit-contain geometry helpers · offline/test fixture only |
+| Gates (defaults) | `MY_CROQUIS_UPLOAD_ENABLED=false` · `MY_CROQUIS_AI_ENABLED=false` · `VITE_MY_CROQUIS_UI_ENABLED=false` (independent of #136 FRONT_BACK/MAGIC/DUAL) |
+| Notices | Empty/draft notice text fail-closed on FE+BE; synthetic fixtures test-only; no production draft placeholders |
+| Generate / provider | **No production generate route** · Stage B offline fixture only · **0** provider calls |
+| Verification | Focused Stage B Vitest (gates/pins/notices/geometry/front-only) · Studio draft/save/#136 assert regressions · build gate assert unchanged · backend Stage A suite not regressing this PR |
+| Remaining blockers (Stage D / real photos) | Owner/legal-approved notices · retention/backup · account-delete integration · sweeper runbook · explicit upload/AI gate authorization · separate paid AI auth |
+| Production | **Unchanged** — FE `2dfcaba0` · BE/worker `6cc317ec` · Alembic `011` · no merge/deploy/migration/timers/provider |
+| Next PM action | **Technical PM Stage B code review** · then decide Stage C authorization separately |
+
+## Issue #135 — Create My Croquis V1 — STAGE A ACCEPTED (archive) (2026-10-31)
+
+DRAFT PR [#139](https://github.com/perielad2-netizen/FashionRise/pull/139) · **Technical PM PASS** at exact HEAD **`655f6d3486f5bd5b89f2191a1016054d0ade4894`**.
+
+| Item | Status |
+|---|---|
+| Branch | `cursor/web-create-my-croquis-stage-a-77c6` @ **`655f6d3486f5bd5b89f2191a1016054d0ade4894`** · hardening impl `ae400baabe144faef5b76069bf25ba48ea184195` |
 | Base | `cursor/web-create-my-croquis-v1-design-77c6` @ `e6c34ca5f7475690bd8da610f22f8ac9d56de40d` (PR #138) |
-| Migration | Alembic **`012`** + PG triggers (`trg_personal_croquis_version_immutability`, `trg_personal_croquis_version_owner_consistency`) — disposable upgrade → downgrade `011` → re-upgrade; triggers present after both upgrades |
-| Storage | Dedicated `private_croquis_*` — no-clobber publish (`link`/`O_EXCL`+`os.replace`); symlink-component reject incl. in-root aliases; typed unlink outcomes |
-| API | `/api/v1/personal-croquis` — explicit JSON consent bodies; empty/draft notice text fail-closed |
-| Gates (defaults) | `MY_CROQUIS_UPLOAD_ENABLED=false` · `MY_CROQUIS_AI_ENABLED=false` · `VITE_MY_CROQUIS_UI_ENABLED=false` (independent of Studio FRONT_BACK/MAGIC/DUAL) |
-| Retention | Offline sweeper only — fail-closed cleanup (UNSAFE/FAILED stay queued); account-deletion prep **does not commit** |
-| Generate / provider | **Not implemented** · Stage A has **0** provider calls |
-| Hardening P0/P1 | **P0-1** accepted-version immutability + owner consistency (DB triggers) · **P0-2** typed unlink / accurate metrics · **P0-3** explicit consent + approved notice text · **P0-4** transactional account-deletion prep · **P1-5** no-clobber/symlink-safe storage · **P1-6** no global `Image.MAX_IMAGE_PIXELS` mutation · **P1-7** this status + verification |
-| Verification | Croquis focused **42 passed** · fabric+croquis **48 passed** · full backend pytest **624 passed**, **1 pre-existing failure** (`test_partial_cost_preserved_on_failure` KeyError `status` — same failure on parent `e6c34ca5`, tip `fc97072f`, and hardening) · ruff clean on Stage A modules (B008 FastAPI pattern ignored as elsewhere) · mypy clean on Stage A modules · Alembic smoke OK |
-| Security | Owner-scoped reads; cross-user 404; no `/static/uploads` croquis bytes; consent + adults required; upload gate fail-closed |
-| Remaining blockers | Final PM acceptance · owner/legal-approved consent notice text · retention/backup confirmation · authorization to enable upload gate / real photos / Stage B |
-| Production | **Unchanged** — FE `2dfcaba0` · BE/worker `6cc317ec` · Alembic `011` · no deploy, no BE restart, no prod migration, no merge, no provider |
-| Next PM action | **Final Technical PM acceptance of hardened Stage A DRAFT PR #139** · then decide Stage B authorization separately |
+| Migration | Alembic **`012`** + immutability/ownership triggers — disposable only; **not** applied in production |
+| Hardening P0/P1 | All P0-1…P0-4 and P1-5…P1-7 **PASS** (PM 2026-10-31) |
+| Verification (reported) | Croquis **42** · fabric+croquis **48** · full **624** + **1** pre-existing `test_partial_cost_preserved_on_failure` · ruff/mypy Stage A modules · Alembic 011↔012 |
+| Production | Unchanged · gates OFF · PR remains DRAFT/UNMERGED |
 
 ## Issue #135 — Create My Croquis V1 — DESIGN ACCEPTED (archive: PARTIAL PASS → PASS) (2026-10-30)
 
@@ -156,7 +164,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 | #127 Fill | **CLOSED** (owner acceptance) | FE `6ec73ba2` deployed; owner Fill/save/reopen accepted; do not reopen for #136 |
 | #128 POM integrity | **CLOSED** (owner acceptance) | BE `6cc317ec` deployed; owner measurement acceptance recorded; do not reopen for #136 |
 | #136 Studio gates | **CLOSED** (owner acceptance) | FE recovery `2dfcaba0` owner six-point PASS; do not reopen |
-| #135 Create My Croquis | **Stage A HARDENING · HOLD for final PM** | DRAFT PR #139; P0/P1 corrections applied; gates OFF; no Stage B |
+| #135 Create My Croquis | **Stage A ACCEPTED · Stage B HOLD for PM** | Stage A #139 @ `655f6d34`; Stage B stacked draft; gates OFF |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
 | #18 invite registration | **implemented / activation tracked** — keep open | Invite register UI + API; CF Access + public register **still gated** |
@@ -167,7 +175,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Remaining real defects / product priorities
 
-1. **#135 Create My Croquis** — Stage A hardening **HOLD** until final PM acceptance of DRAFT PR #139 (no Stage B until authorized)
+1. **#135 Create My Croquis** — Stage B **HOLD** until PM acceptance of stacked draft (no Stage C / real photos until authorized)
 2. Closure/gradient visual fidelity redesign (**PR #125 HOLD**)
 3. Canonical `main` adoption after PM approval of integration PR (no blind merge of undeployed stacks)
 4. Continue evidence-based PR closures from remaining open issues (no branch deletes)
@@ -176,7 +184,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Recommended next engineering milestone
 
-**Final Technical PM acceptance of hardened Stage A DRAFT PR #139.** Do **not** merge, deploy, run production Alembic `012`, collect photos, enable gates, call paid AI, or start Stage B until separately authorized. Keep live FE `2dfcaba0` / BE `6cc317ec` / Alembic `011`.
+**Technical PM Stage B code review** of stacked draft based on accepted Stage A `655f6d34`. Do **not** merge, deploy, run production Alembic `012`, collect photos, enable gates, call paid AI, or start Stage C until separately authorized. Keep live FE `2dfcaba0` / BE `6cc317ec` / Alembic `011`.
 
 
 ## Owner-authorized production release — Issue #131 (2026-10-29) — DEPLOYED
@@ -1384,6 +1392,8 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-10-31 | **#135 Stage B Studio+offline:** stacked draft on accepted Stage A `655f6d34` · consent-first wizard (UI gate OFF) · `model=personal` exact pins · owner asset resolver · front-only · fit-contain helpers · offline fixture only · #136 asserts preserved · **0** provider · **STOP for PM Stage B review**. |
+| 2026-10-31 | **#135 PR #139 Stage A ACCEPTED** @ `655f6d3486f5bd5b89f2191a1016054d0ade4894` (PM PASS) · Stage B offline authorized separately · prod unchanged · gates OFF. |
 | 2026-10-31 | **#135 PR #139 Stage A HARDENING:** P0-1 immutability triggers · P0-2 fail-closed cleanup · P0-3 explicit consent · P0-4 txn-safe account-deletion prep · P1-5 no-clobber/symlink-safe storage · P1-6 Pillow isolation · verification 42/48/624 + 1 baseline fail · Alembic 011↔012 · gates OFF · prod unchanged · **STOP for final Technical PM acceptance** — no Stage B. |
 | 2026-10-31 | **#135 PR #139 Stage A foundation:** private storage / consent / security · Alembic `012` · gates OFF · STOP for PM code review (later PARTIAL PASS → this hardening). |
 | 2026-10-30 | **#135 PR #138 PM PARTIAL PASS follow-up:** consent-before-upload · immutable version table · dedicated `private_croquis` storage · `MY_CROQUIS_UPLOAD_ENABLED` ≠ AI gate · mock test-only · spend reservations · fit-contain/EXIF geometry · Stage A **HOLD** · docs-only · **0** paid AI · **STOP for final PM**. |
