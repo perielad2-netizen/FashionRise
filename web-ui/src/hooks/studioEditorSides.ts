@@ -32,9 +32,16 @@ export function referenceUrlForModelSide(
   model: ModelChoice,
   side: StudioPaperSide,
   customUrl: string | null,
+  /** Authenticated object URL for model=personal (front only). */
+  personalUrl: string | null = null,
 ): string | null {
   if (model === 'custom') return customUrl
   if (model === 'blank') return null
+  if (model === 'personal') {
+    // Front-only V1 — never invent a rear underlay for personal croquis.
+    if (side === 'back') return null
+    return personalUrl
+  }
   if (!isStudioFrontBackEnabled()) return canvasSrcForModel(model, 'front')
   if (side === 'back') {
     if (!modelHasRearAsset(model)) return null
@@ -79,6 +86,8 @@ export function buildDocumentFromEditor(args: {
   model: ModelChoice
   customReferenceUrl: string | null
   customReferenceKey: string | null
+  personalCroquisId?: string | null
+  personalCroquisVersion?: number | null
   sizeId: BrushSizeId
   sizePx: number
   opacity: number
@@ -124,6 +133,14 @@ export function buildDocumentFromEditor(args: {
     model: args.model,
     customReferenceUrl: args.customReferenceUrl,
     customReferenceKey: args.customReferenceKey,
+    personalCroquisId:
+      args.personalCroquisId !== undefined
+        ? args.personalCroquisId
+        : (args.prev.personalCroquisId ?? null),
+    personalCroquisVersion:
+      args.personalCroquisVersion !== undefined
+        ? args.personalCroquisVersion
+        : (args.prev.personalCroquisVersion ?? null),
     sizeId: args.sizeId,
     sizePx: args.sizePx,
     opacity: args.opacity,

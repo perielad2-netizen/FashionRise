@@ -5,6 +5,9 @@ export function rearUnavailableReasonForModel(model: ModelChoice): string {
   if (model === 'female-atelier') {
     return 'Back view is not available for Female · Atelier yet. Keep sketching on the Front.'
   }
+  if (model === 'personal') {
+    return 'My Croquis is front-only in V1. Keep sketching on the Front.'
+  }
   if (model === 'custom' || model === 'blank' || model === 'female' || model === 'male') {
     return 'Back view is only available for library models with a paired rear croquis.'
   }

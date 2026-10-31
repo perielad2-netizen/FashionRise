@@ -53,6 +53,9 @@ export type SavedDesignSnapshot = {
   activeSide?: 'front' | 'back'
   back?: StudioSideBag
   model: ModelChoice
+  /** Exact Create My Croquis pins when model is personal (durable; kept on cloud). */
+  personalCroquisId?: string | null
+  personalCroquisVersion?: number | null
   brush: StudioBrushState
   dimmed: boolean
 }
@@ -138,6 +141,8 @@ export function snapshotFromDocument(doc: StudioDraftDocument): SavedDesignSnaps
     strokes: doc.strokes.map(canonicalStroke),
     fills: cloneFills(doc.fills ?? []),
     model: doc.model,
+    personalCroquisId: doc.personalCroquisId ?? null,
+    personalCroquisVersion: doc.personalCroquisVersion ?? null,
     brush: normalizeStudioBrush(doc.brush),
     dimmed: doc.dimmed,
   }
@@ -164,6 +169,8 @@ export function snapshotFingerprint(snapshot: SavedDesignSnapshot): string {
     strokes: snapshot.strokes.map(canonicalStroke),
     fills: snapshot.fills ?? [],
     model: snapshot.model,
+    personalCroquisId: snapshot.personalCroquisId ?? null,
+    personalCroquisVersion: snapshot.personalCroquisVersion ?? null,
     brush: normalizeStudioBrush(snapshot.brush),
     dimmed: snapshot.dimmed,
   }
@@ -288,10 +295,27 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
       fills.push(fill)
     }
   }
+  let personalCroquisId: string | null = null
+  let personalCroquisVersion: number | null = null
+  if (model === 'personal') {
+    if (typeof s.personalCroquisId !== 'string' || !s.personalCroquisId) return null
+    if (
+      typeof s.personalCroquisVersion !== 'number' ||
+      !Number.isInteger(s.personalCroquisVersion) ||
+      s.personalCroquisVersion < 1
+    ) {
+      return null
+    }
+    personalCroquisId = s.personalCroquisId
+    personalCroquisVersion = s.personalCroquisVersion
+  }
+
   const snapshot: SavedDesignSnapshot = {
     strokes,
     ...(fills ? { fills } : {}),
     model,
+    personalCroquisId,
+    personalCroquisVersion,
     brush: {
       sizeId: brush.sizeId as BrushSizeId,
       sizePx,
@@ -404,6 +428,8 @@ export function workingDocumentFromSnapshot(args: {
     model: args.snapshot.model,
     customReferenceUrl: null,
     customReferenceKey: null,
+    personalCroquisId: args.snapshot.personalCroquisId ?? null,
+    personalCroquisVersion: args.snapshot.personalCroquisVersion ?? null,
     brush: { ...args.snapshot.brush },
     dimmed: args.snapshot.dimmed,
     clientRevision: floor + 1,

@@ -41,6 +41,12 @@ import {
   exportSketchPng,
 } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
+import {
+  bindPersonalCroquisCacheToUser,
+  clearPersonalCroquisCache,
+  loadPersonalCroquisObjectUrl,
+} from '@/lib/personalCroquisCache'
+import { getPersonalCroquisVersion } from '@/services/personalCroquisApi'
 import { checkPersistableFill, solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
 import { MAX_SNAPSHOT_FILLS } from '@/lib/savedDesign'
 import { captureFabricSwatchForMagic } from '@/lib/fabricSwatchCapture'
@@ -206,6 +212,11 @@ export function useStudioEditor() {
   const [customUrl, setCustomUrl] = useState<string | null>(null)
   const [customKey, setCustomKey] = useState<string | null>(null)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [personalCroquisId, setPersonalCroquisId] = useState<string | null>(null)
+  const [personalCroquisVersion, setPersonalCroquisVersion] = useState<number | null>(null)
+  const [personalObjectUrl, setPersonalObjectUrl] = useState<string | null>(null)
+  const [personalUnavailable, setPersonalUnavailable] = useState(false)
+  const [croquisWizardOpen, setCroquisWizardOpen] = useState(false)
   const [dimmed, setDimmed] = useState(false)
   const [magicNotice, setMagicNotice] = useState<string | null>(null)
   const [magicOpen, setMagicOpen] = useState(false)
@@ -264,6 +275,54 @@ export function useStudioEditor() {
     }
   }, [blobUrl])
 
+  useEffect(() => {
+    bindPersonalCroquisCacheToUser(user?.id ?? null)
+    return () => {
+      clearPersonalCroquisCache()
+      setPersonalObjectUrl(null)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!user?.id || model !== 'personal' || !personalCroquisId || personalCroquisVersion == null) {
+      setPersonalObjectUrl(null)
+      return
+    }
+    let cancelled = false
+    const ac = new AbortController()
+    ;(async () => {
+      try {
+        const ver = await getPersonalCroquisVersion(
+          personalCroquisId,
+          personalCroquisVersion,
+          ac.signal,
+        )
+        const assetId = ver.generated_asset_id
+        if (!assetId) {
+          if (!cancelled) {
+            setPersonalObjectUrl(null)
+            setPersonalUnavailable(true)
+          }
+          return
+        }
+        const url = await loadPersonalCroquisObjectUrl(user.id, assetId, ac.signal)
+        if (!cancelled) {
+          setPersonalObjectUrl(url)
+          setPersonalUnavailable(false)
+        }
+      } catch {
+        if (!cancelled) {
+          setPersonalObjectUrl(null)
+          setPersonalUnavailable(true)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+      ac.abort()
+    }
+  }, [user?.id, model, personalCroquisId, personalCroquisVersion])
+
   const activeHistory = useCallback(() => {
     return activeSide === 'back' ? historyBack.current : historyFront.current
   }, [activeSide])
@@ -303,6 +362,9 @@ export function useStudioEditor() {
     setModelState(doc.model)
     setCustomUrl(doc.customReferenceUrl)
     setCustomKey(doc.customReferenceKey)
+    setPersonalCroquisId(doc.personalCroquisId ?? null)
+    setPersonalCroquisVersion(doc.personalCroquisVersion ?? null)
+    setPersonalUnavailable(false)
     setBrushSizePxState(resolveBrushSizePx(doc.brush))
     setOpacity(doc.brush.opacity)
     setColor(doc.brush.color)
@@ -481,6 +543,8 @@ export function useStudioEditor() {
       model?: ModelChoice
       customReferenceUrl?: string | null
       customReferenceKey?: string | null
+      personalCroquisId?: string | null
+      personalCroquisVersion?: number | null
       sizeId?: BrushSizeId
       sizePx?: number
       opacity?: number
@@ -510,6 +574,14 @@ export function useStudioEditor() {
           patch.customReferenceUrl !== undefined ? patch.customReferenceUrl : prev.customReferenceUrl,
         customReferenceKey:
           patch.customReferenceKey !== undefined ? patch.customReferenceKey : prev.customReferenceKey,
+        personalCroquisId:
+          patch.personalCroquisId !== undefined
+            ? patch.personalCroquisId
+            : (prev.personalCroquisId ?? null),
+        personalCroquisVersion:
+          patch.personalCroquisVersion !== undefined
+            ? patch.personalCroquisVersion
+            : (prev.personalCroquisVersion ?? null),
         sizeId: nearestBrushSizeId(sizePx),
         sizePx,
         opacity: patch.opacity ?? prev.brush.opacity,
@@ -633,6 +705,8 @@ export function useStudioEditor() {
       model,
       customReferenceUrl: customUrl,
       customReferenceKey: customKey,
+      personalCroquisId,
+      personalCroquisVersion,
       sizeId: nearestBrushSizeId(brushSizePx),
       sizePx: brushSizePx,
       opacity,
@@ -650,6 +724,8 @@ export function useStudioEditor() {
     model,
     customUrl,
     customKey,
+    personalCroquisId,
+    personalCroquisVersion,
     brushSizePx,
     opacity,
     color,
@@ -670,8 +746,13 @@ export function useStudioEditor() {
 
   const rearAvailable = rearReferenceAvailable(model)
   const referenceUrl = useMemo(() => {
-    return referenceUrlForModelSide(model, activeSide, blobUrl ?? customUrl)
-  }, [model, customUrl, blobUrl, activeSide])
+    return referenceUrlForModelSide(
+      model,
+      activeSide,
+      blobUrl ?? customUrl,
+      personalObjectUrl,
+    )
+  }, [model, customUrl, blobUrl, activeSide, personalObjectUrl])
 
   const referenceOpacity = dimmed ? 0.4 : 1
 
@@ -937,6 +1018,15 @@ export function useStudioEditor() {
 
   const commitModelChange = useCallback(
     (next: ModelChoice, clearStrokes: boolean) => {
+      const leavingPersonal = next !== 'personal'
+      const pinId = leavingPersonal ? null : personalCroquisId
+      const pinVer = leavingPersonal ? null : personalCroquisVersion
+      if (leavingPersonal) {
+        setPersonalCroquisId(null)
+        setPersonalCroquisVersion(null)
+        setPersonalObjectUrl(null)
+        setPersonalUnavailable(false)
+      }
       if (clearStrokes && designHasInk()) {
         historyFront.current.push(artwork())
         historyBack.current.push(artwork())
@@ -949,6 +1039,8 @@ export function useStudioEditor() {
         if (!rearReferenceAvailable(next) && activeSide === 'back') setActiveSide('front')
         commitFromEditor({
           model: next,
+          personalCroquisId: pinId,
+          personalCroquisVersion: pinVer,
           frontStrokes: [],
           frontFills: [],
           backStrokes: [],
@@ -959,12 +1051,31 @@ export function useStudioEditor() {
         setModelState(next)
         if (!rearReferenceAvailable(next) && activeSide === 'back') {
           setActiveSide('front')
-          commitFromEditor({ model: next, activeSide: 'front' })
+          commitFromEditor({
+            model: next,
+            personalCroquisId: pinId,
+            personalCroquisVersion: pinVer,
+            activeSide: 'front',
+          })
+        } else {
+          commitFromEditor({
+            model: next,
+            personalCroquisId: pinId,
+            personalCroquisVersion: pinVer,
+          })
         }
       }
       setModelSwitchPrompt(null)
     },
-    [activeSide, artwork, commitFromEditor, designHasInk, syncHistoryFlags],
+    [
+      activeSide,
+      artwork,
+      commitFromEditor,
+      designHasInk,
+      personalCroquisId,
+      personalCroquisVersion,
+      syncHistoryFlags,
+    ],
   )
 
   const requestModelChange = useCallback(
@@ -1094,9 +1205,19 @@ export function useStudioEditor() {
   const referenceUrlForDocument = useCallback(
     (doc: StudioDraftDocument, side: StudioPaperSide = 'front'): string | null => {
       if (doc.model === 'custom') return blobUrl ?? doc.customReferenceUrl
+      if (doc.model === 'personal') {
+        if (side === 'back') return null
+        if (
+          doc.personalCroquisId === personalCroquisId &&
+          doc.personalCroquisVersion === personalCroquisVersion
+        ) {
+          return personalObjectUrl
+        }
+        return null
+      }
       return referenceUrlForModelSide(doc.model, side, blobUrl ?? doc.customReferenceUrl)
     },
-    [blobUrl],
+    [blobUrl, personalCroquisId, personalCroquisVersion, personalObjectUrl],
   )
 
   const runMagicPipeline = useCallback(async () => {
@@ -2301,6 +2422,55 @@ export function useStudioEditor() {
     }
   }, [saveStatus])
 
+  const openCroquisWizard = useCallback(() => {
+    setCroquisWizardOpen(true)
+  }, [])
+
+  const closeCroquisWizard = useCallback(() => {
+    setCroquisWizardOpen(false)
+  }, [])
+
+  /** Pin an accepted personal croquis version as the Studio underlay (exact id+version). */
+  const applyPersonalCroquisPin = useCallback(
+    (croquisId: string, version: number, clearStrokes: boolean) => {
+      setPersonalCroquisId(croquisId)
+      setPersonalCroquisVersion(version)
+      setPersonalUnavailable(false)
+      setCroquisWizardOpen(false)
+      if (clearStrokes && designHasInk()) {
+        historyFront.current.push(artwork())
+        historyBack.current.push(artwork())
+        setFrontStrokes([])
+        setFrontFills([])
+        setBackStrokes([])
+        setBackFills([])
+        syncHistoryFlags()
+        setModelState('personal')
+        if (activeSide === 'back') setActiveSide('front')
+        commitFromEditor({
+          model: 'personal',
+          personalCroquisId: croquisId,
+          personalCroquisVersion: version,
+          frontStrokes: [],
+          frontFills: [],
+          backStrokes: [],
+          backFills: [],
+          activeSide: 'front',
+        })
+      } else {
+        setModelState('personal')
+        if (activeSide === 'back') setActiveSide('front')
+        commitFromEditor({
+          model: 'personal',
+          personalCroquisId: croquisId,
+          personalCroquisVersion: version,
+          activeSide: 'front',
+        })
+      }
+    },
+    [activeSide, artwork, commitFromEditor, designHasInk, syncHistoryFlags],
+  )
+
   return {
     user,
     ready,
@@ -2328,6 +2498,13 @@ export function useStudioEditor() {
     setModel: requestModelChange,
     customUrl: blobUrl ?? customUrl,
     onCustomFile,
+    personalCroquisId,
+    personalCroquisVersion,
+    personalUnavailable,
+    croquisWizardOpen,
+    openCroquisWizard,
+    closeCroquisWizard,
+    applyPersonalCroquisPin,
     dimmed,
     setDimmed,
     referenceUrl,

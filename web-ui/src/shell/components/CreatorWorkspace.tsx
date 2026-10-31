@@ -19,7 +19,9 @@ import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
 import { ImmersiveToolbar, type ImmersiveTool } from '@/shell/components/ImmersiveToolbar'
 import { ModelLibraryPanel } from '@/shell/components/ModelLibraryPanel'
+import { CreateMyCroquisWizard } from '@/shell/components/CreateMyCroquisWizard'
 import { BetaNotice } from '@/shell/components/BetaNotice'
+import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
 import { SettingsInspector } from '@/shell/components/SettingsInspector'
 import { WorkspaceHeader } from '@/shell/components/WorkspaceHeader'
@@ -309,6 +311,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
       customPreviewUrl={editor.customUrl}
       onSelect={editor.setModel}
       onCustomFile={editor.onCustomFile}
+      onCreateMyCroquis={editor.openCroquisWizard}
       variant={overlayPanels ? 'gallery' : 'sidebar'}
     />
   )
@@ -766,6 +769,26 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           customReferenceOmitted={editor.saveDesignDialog.customReferenceOmitted}
           onConfirm={(title) => void editor.confirmSaveDesign(title)}
           onCancel={editor.cancelSaveDesign}
+        />
+      ) : null}
+
+      {editor.model === 'personal' && editor.personalUnavailable ? (
+        <div className={styles.damagedCloudBanner} role="status">
+          <p>
+            Croquis unavailable — your strokes and fills are kept. The pinned My Croquis reference
+            could not be loaded (erased or inaccessible). Studio will not switch models
+            automatically.
+          </p>
+        </div>
+      ) : null}
+
+      {isMyCroquisUiEnabled() ? (
+        <CreateMyCroquisWizard
+          open={editor.croquisWizardOpen}
+          onClose={editor.closeCroquisWizard}
+          onPinAccepted={(croquisId, version) =>
+            editor.applyPersonalCroquisPin(croquisId, version, false)
+          }
         />
       ) : null}
     </section>
