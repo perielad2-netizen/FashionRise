@@ -25,7 +25,7 @@ Design: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md
 
 | Item | Status |
 |---|---|
-| Branch | `cursor/web-create-my-croquis-stage-b-77c6` @ **`PENDING_STAGE_B_SHA`** (stacked on accepted Stage A) |
+| Branch | `cursor/web-create-my-croquis-stage-b-77c6` @ **`db3b3c5c82a4cf064fb13cec119835dbfdbdde09`** (stacked on accepted Stage A) |
 | Base / Stage A accepted | Exact PR #139 HEAD **`655f6d3486f5bd5b89f2191a1016054d0ade4894`** (PM PASS 2026-10-31) · hardening impl `ae400baabe144faef5b76069bf25ba48ea184195` |
 | Design parent | `e6c34ca5f7475690bd8da610f22f8ac9d56de40d` (PR #138) |
 | Scope | Consent-first wizard (UI gate) · local photo preview · Stage A API client · `model=personal` + exact `(croquis_id,version)` pins · owner-scoped asset resolver · front-only Back · 768×1024 fit-contain geometry helpers · offline/test fixture only |
