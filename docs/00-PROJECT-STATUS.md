@@ -25,7 +25,7 @@ Design (accepted): [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V
 
 | Item | Status |
 |---|---|
-| Branch | `cursor/web-create-my-croquis-stage-a-77c6` @ `c01b65569673c1b91b603dc94309a2fab0d43272` (from exact accepted design commit `e6c34ca5`) |
+| Branch | `cursor/web-create-my-croquis-stage-a-77c6` @ `dc3e259c0d48c1e66e9d4cd25ce6ff90b2041671` (from exact accepted design commit `e6c34ca5`) |
 | Base | `cursor/web-create-my-croquis-v1-design-77c6` @ `e6c34ca5f7475690bd8da610f22f8ac9d56de40d` (PR #138) |
 | Migration | Alembic **`012`** (private assets + consent + personal croquis + versions + cleanup queue) — verified upgrade / downgrade-to-011 / re-upgrade / empty-DB upgrade on disposable DB only |
 | Storage | Dedicated `LocalStorageBackend` `private_croquis_*` methods (atomic write; not fabric `save_private_file`) |
