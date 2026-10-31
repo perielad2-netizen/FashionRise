@@ -59,14 +59,24 @@ def _enable_upload(monkeypatch):
     get_settings.cache_clear()
 
 
-def _enable_ai_spend(monkeypatch, *, ceiling_usd: str = "5", max_run: str = "1", max_day: str = "5"):
+def _enable_ai_spend(
+    monkeypatch,
+    *,
+    ceiling_usd: str = "5",
+    max_run: str = "1",
+    max_day: str = "5",
+    max_exposure_cents: str = "5",
+    estimate_cents: str = "5",
+):
     get_settings.cache_clear()
     monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
     monkeypatch.setenv("MY_CROQUIS_AI_SPEND_CEILING_USD", ceiling_usd)
     monkeypatch.setenv("MY_CROQUIS_AI_MAX_USD_PER_RUN", max_run)
     monkeypatch.setenv("MY_CROQUIS_AI_MAX_USD_PER_USER_DAY", max_day)
     monkeypatch.setenv("MY_CROQUIS_AI_MAX_GENERATIONS_PER_USER_DAY", "3")
-    monkeypatch.setenv("MY_CROQUIS_AI_ESTIMATE_CENTS", "5")
+    monkeypatch.setenv("MY_CROQUIS_AI_ESTIMATE_CENTS", estimate_cents)
+    # Hard reserved max exposure (not the soft estimate).
+    monkeypatch.setenv("MY_CROQUIS_AI_MAX_EXPOSURE_CENTS", max_exposure_cents)
     get_settings.cache_clear()
 
 
@@ -105,8 +115,12 @@ def _upload_ready(client, tokens, monkeypatch):
     return up.json()
 
 
-def _ai_consent(client, tokens) -> str:
-    r = client.post(f"{BASE}/consent/ai", headers=_auth(tokens), json=ai_body())
+def _ai_consent(client, tokens, croquis_id: str) -> str:
+    r = client.post(
+        f"{BASE}/consent/ai",
+        headers=_auth(tokens),
+        json=ai_body(croquis_id=croquis_id),
+    )
     assert r.status_code == 200, r.text
     return r.json()["id"]
 
@@ -118,7 +132,7 @@ def _drain_worker(db_session, *, n: int = 4) -> int:
 def test_generate_refused_when_ai_gate_off(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc1@example.com", "sc1")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     mock = MockCroquisProvider()
     set_croquis_provider_override(mock)
     r = client.post(
@@ -149,7 +163,7 @@ def test_generate_refused_without_ai_consent(client, monkeypatch, db_session):
 def test_generate_refused_when_spend_ceiling_zero(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc3@example.com", "sc3")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     get_settings.cache_clear()
     monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
     monkeypatch.setenv("MY_CROQUIS_AI_SPEND_CEILING_USD", "0")
@@ -168,7 +182,7 @@ def test_generate_refused_when_spend_ceiling_zero(client, monkeypatch, db_sessio
 def test_enqueue_worker_accept_idempotent(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc4@example.com", "sc4")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     _enable_ai_spend(monkeypatch)
     mock = MockCroquisProvider(cost_cents=3)
     set_croquis_provider_override(mock)
@@ -222,7 +236,7 @@ def test_enqueue_worker_accept_idempotent(client, monkeypatch, db_session):
 def test_reject_then_regenerate_v2_preserves_nothing_on_v1_reject(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc5@example.com", "sc5")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     _enable_ai_spend(monkeypatch)
     mock = MockCroquisProvider(cost_cents=2)
     set_croquis_provider_override(mock)
@@ -257,7 +271,7 @@ def test_reject_then_regenerate_v2_preserves_nothing_on_v1_reject(client, monkey
 def test_unknown_provider_outcome_holds_reservation_no_auto_retry(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc6@example.com", "sc6")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     _enable_ai_spend(monkeypatch)
     set_croquis_provider_override(UnknownOutcomeCroquisProvider())
 
@@ -286,12 +300,21 @@ def test_unknown_provider_outcome_holds_reservation_no_auto_retry(client, monkey
         json={"ai_consent_id": ai_id, "idempotency_key": "k-unknown"},
     )
     assert r2.status_code == 409
+    # New key against same croquis/source must also be denied (P0-2).
+    r3 = client.post(
+        f"{BASE}/{croquis['id']}/versions/generate",
+        headers=_auth(tokens),
+        json={"ai_consent_id": ai_id, "idempotency_key": "k-unknown-new-key"},
+    )
+    assert r3.status_code == 409
+    # Provider override was set but must not have been invoked again.
+    assert provider_network_tripwire_hits() == 0
 
 
 def test_crash_before_submit_releases_reservation(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc7@example.com", "sc7")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     _enable_ai_spend(monkeypatch)
     set_croquis_provider_override(CrashBeforeSubmitCroquisProvider())
     r = client.post(
@@ -313,7 +336,7 @@ def test_crash_before_submit_releases_reservation(client, monkeypatch, db_sessio
 def test_spend_ceiling_blocks_second_generation(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc8@example.com", "sc8")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     _enable_ai_spend(monkeypatch, ceiling_usd="0.05", max_run="1", max_day="1")
     mock = MockCroquisProvider(cost_cents=5)
     set_croquis_provider_override(mock)
@@ -337,17 +360,21 @@ def test_spend_ceiling_blocks_second_generation(client, monkeypatch, db_session)
 def test_cross_user_generate_denied(client, monkeypatch, db_session):
     a = register_with_invite(client, db_session, "sc9a@example.com", "sc9a")
     b = register_with_invite(client, db_session, "sc9b@example.com", "sc9b")
-    croquis = _upload_ready(client, a, monkeypatch)
-    # User B must attest adults before AI consent; still cannot generate on A's croquis.
-    assert (
-        client.post(f"{BASE}/attestations/adults", headers=_auth(b), json=adults_body()).status_code
-        == 200
-    )
-    ai_b = _ai_consent(client, b)
+    croquis_a = _upload_ready(client, a, monkeypatch)
+    croquis_b = _upload_ready(client, b, monkeypatch)
+    # B's AI consent is bound to B's source — cannot authorize generate on A's croquis.
+    ai_b = _ai_consent(client, b, croquis_b["id"])
     _enable_ai_spend(monkeypatch)
     set_croquis_provider_override(MockCroquisProvider())
+    # Binding AI consent to A's croquis as B must fail closed.
+    denied_bind = client.post(
+        f"{BASE}/consent/ai",
+        headers=_auth(b),
+        json=ai_body(croquis_id=croquis_a["id"]),
+    )
+    assert denied_bind.status_code == 404
     r = client.post(
-        f"{BASE}/{croquis['id']}/versions/generate",
+        f"{BASE}/{croquis_a['id']}/versions/generate",
         headers=_auth(b),
         json={"ai_consent_id": ai_b, "idempotency_key": "k-xuser"},
     )
@@ -357,7 +384,7 @@ def test_cross_user_generate_denied(client, monkeypatch, db_session):
 def test_duplicate_idempotency_key_single_reservation(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc10@example.com", "sc10")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     _enable_ai_spend(monkeypatch)
     set_croquis_provider_override(MockCroquisProvider())
     body = {"ai_consent_id": ai_id, "idempotency_key": "k-dup"}
@@ -378,7 +405,7 @@ def test_duplicate_idempotency_key_single_reservation(client, monkeypatch, db_se
 def test_erasure_during_pending_generation(client, monkeypatch, db_session):
     tokens = register_with_invite(client, db_session, "sc11@example.com", "sc11")
     croquis = _upload_ready(client, tokens, monkeypatch)
-    ai_id = _ai_consent(client, tokens)
+    ai_id = _ai_consent(client, tokens, croquis['id'])
     _enable_ai_spend(monkeypatch)
     set_croquis_provider_override(MockCroquisProvider())
     r = client.post(
@@ -390,9 +417,10 @@ def test_erasure_during_pending_generation(client, monkeypatch, db_session):
     erased = client.delete(f"{BASE}/{croquis['id']}", headers=_auth(tokens))
     assert erased.status_code == 200
     _drain_worker(db_session)
-    # Worker should fail closed without inventing a public asset
+    # Worker must not resurrect erased croquis into awaiting_review.
     poll = client.get(f"{BASE}/{croquis['id']}/versions/1", headers=_auth(tokens))
-    # erased croquis may 404 get_exact_version depending on include_erased — expect 404
     assert poll.status_code in (404, 200)
     if poll.status_code == 200:
-        assert poll.json()["status"] in ("failed", VERSION_STATUS_GENERATING, "awaiting_review")
+        assert poll.json()["status"] in ("failed", VERSION_STATUS_GENERATING)
+        assert poll.json()["status"] != "awaiting_review"
+        assert poll.json().get("generated_asset_id") in (None, "")

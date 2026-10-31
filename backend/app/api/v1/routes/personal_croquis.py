@@ -17,6 +17,7 @@ from app.db.session import get_db
 from app.schemas.personal_croquis import (
     AdultsAttestationRead,
     AdultsAttestationRequest,
+    AiConsentAcknowledgeRequest,
     ConsentAcknowledgeRequest,
     ConsentEventRead,
     GenerateVersionRequest,
@@ -82,11 +83,11 @@ def consent_storage(
 @limiter.limit("30/minute")
 def consent_ai(
     request: Request,
-    body: ConsentAcknowledgeRequest,
+    body: AiConsentAcknowledgeRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ConsentEventRead:
-    """Prepare AI-provider consent record only — Stage A never calls a provider."""
+    """AI-provider consent bound to an exact croquis source (no provider call)."""
     _ = request.url
     row = pcs.record_ai_consent(
         db,
@@ -95,6 +96,7 @@ def consent_ai(
         adults_attested=body.adults_attested,
         notice_version=body.notice_version,
         notice_text_hash=body.notice_text_hash,
+        croquis_id=body.croquis_id,
     )
     return consent_to_read(row)
 

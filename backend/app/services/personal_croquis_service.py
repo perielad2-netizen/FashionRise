@@ -292,8 +292,11 @@ def record_ai_consent(
     adults_attested: bool,
     notice_version: str,
     notice_text_hash: str,
+    croquis_id: uuid.UUID | None = None,
 ) -> UserConsentEvent:
-    """Record AI-provider consent only — Stage A does not execute providers."""
+    """Record AI-provider consent. Stage C requires croquis_id to bind consent to source."""
+    from app.models.personal_croquis_ai_consent import PersonalCroquisAiConsentBinding
+
     attestation = _latest_adults_attestation(db, user)
     if attestation is None:
         raise HTTPException(
@@ -307,6 +310,16 @@ def record_ai_consent(
         notice_version=notice_version,
         notice_text_hash=notice_text_hash,
     )
+    croquis = None
+    source_asset_id = None
+    if croquis_id is not None:
+        croquis = get_owned_croquis(db, user, croquis_id)
+        if croquis.source_asset_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Source photo required before AI-provider consent.",
+            )
+        source_asset_id = croquis.source_asset_id
     row = UserConsentEvent(
         id=uuid.uuid4(),
         owner_id=user.id,
@@ -316,6 +329,19 @@ def record_ai_consent(
         text_hash=text_hash,
     )
     db.add(row)
+    db.flush()
+    if croquis is not None and source_asset_id is not None:
+        db.add(
+            PersonalCroquisAiConsentBinding(
+                id=uuid.uuid4(),
+                owner_id=user.id,
+                consent_id=row.id,
+                croquis_id=croquis.id,
+                source_asset_id=source_asset_id,
+                notice_version=version,
+                notice_text_hash=text_hash,
+            )
+        )
     db.commit()
     db.refresh(row)
     return row

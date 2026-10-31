@@ -51,8 +51,14 @@ class Settings(BaseSettings):
     my_croquis_ai_max_usd_per_run: float = 0.0
     my_croquis_ai_max_usd_per_user_day: float = 0.0
     my_croquis_ai_max_generations_per_user_day: int = 3
-    # Soft estimate used for reservation preflight (cents). Not a live pricing guarantee.
+    # Soft expected cost (informational only). Not the reserved hard cap.
     my_croquis_ai_estimate_cents: int = 8
+    # Conservative maximum authorized exposure (cents) reserved before enqueue.
+    # Fail closed at 0 — must be explicitly configured for any live/test spend path.
+    # Soft MY_CROQUIS_AI_ESTIMATE_CENTS must never be treated as this hard cap.
+    my_croquis_ai_max_exposure_cents: int = 0
+    # Stale worker claim lease (seconds) before safe requeue / reconciliation.
+    my_croquis_ai_claim_lease_seconds: int = 120
     my_croquis_ai_consent_max_age_seconds: int = 3600
     # Consent notice versions. Collection remains fail-closed until approved notice text is set.
     my_croquis_storage_consent_version: str = "storage-2026-10-30-draft"

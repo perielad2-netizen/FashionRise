@@ -12,6 +12,7 @@ from app.models.magic_look_meta import MagicLookMeta
 from app.models.material_definition import MaterialDefinition
 from app.models.personal_croquis import PersonalCroquis, PersonalCroquisVersion
 from app.models import personal_croquis_ddl as _personal_croquis_ddl  # noqa: F401 — register DDL
+from app.models.personal_croquis_ai_consent import PersonalCroquisAiConsentBinding
 from app.models.personal_croquis_spend import PersonalCroquisSpendReservation
 from app.models.private_media_asset import PrivateMediaAsset
 from app.models.private_media_cleanup import PrivateMediaCleanupQueue
@@ -41,6 +42,7 @@ __all__ = [
     "MaterialDefinition",
     "PersonalCroquis",
     "PersonalCroquisVersion",
+    "PersonalCroquisAiConsentBinding",
     "PersonalCroquisSpendReservation",
     "PrivateMediaAsset",
     "PrivateMediaCleanupQueue",

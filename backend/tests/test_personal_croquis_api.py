@@ -184,8 +184,14 @@ def test_wrong_purpose_consent_rejected(client, db_session, monkeypatch):
     _enable_upload(monkeypatch)
     try:
         tokens = register_with_invite(client, db_session, "cq_purp@example.com", "cq_purp")
-        client.post(f"{BASE}/attestations/adults", headers=_auth(tokens), json=adults_body())
-        ai = client.post(f"{BASE}/consent/ai", headers=_auth(tokens), json=ai_body())
+        storage_id = _attest_and_consent(client, tokens)
+        created = _upload(client, tokens, storage_id)
+        assert created.status_code == 201, created.text
+        ai = client.post(
+            f"{BASE}/consent/ai",
+            headers=_auth(tokens),
+            json=ai_body(croquis_id=created.json()["id"]),
+        )
         assert ai.status_code == 200
         denied = _upload(client, tokens, ai.json()["id"])
         assert denied.status_code == 400
@@ -432,17 +438,21 @@ def test_ai_gate_independent_no_provider_calls(client, db_session, monkeypatch):
     try:
         assert get_settings().my_croquis_ai_enabled is False
         tokens = register_with_invite(client, db_session, "cq_ai@example.com", "cq_ai")
-        client.post(f"{BASE}/attestations/adults", headers=_auth(tokens), json=adults_body())
-        ai = client.post(f"{BASE}/consent/ai", headers=_auth(tokens), json=ai_body())
-        assert ai.status_code == 200
-        assert client.post(f"{BASE}/{uuid.uuid4()}/versions/generate", headers=_auth(tokens)).status_code in (
-            404,
-            405,
-            422,
+        consent_id = _attest_and_consent(client, tokens)
+        created = _upload(client, tokens, consent_id)
+        assert created.status_code == 201, created.text
+        ai = client.post(
+            f"{BASE}/consent/ai",
+            headers=_auth(tokens),
+            json=ai_body(croquis_id=created.json()["id"]),
         )
+        assert ai.status_code == 200
+        assert client.post(
+            f"{BASE}/{created.json()['id']}/versions/generate",
+            headers=_auth(tokens),
+            json={"ai_consent_id": ai.json()["id"], "idempotency_key": "gate-off"},
+        ).status_code == 403
         with patch("openai.OpenAI") as openai_ctor:
-            consent_id = _attest_and_consent(client, tokens)
-            _upload(client, tokens, consent_id)
             openai_ctor.assert_not_called()
     finally:
         _disable_upload(monkeypatch)

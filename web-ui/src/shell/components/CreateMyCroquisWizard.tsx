@@ -45,6 +45,7 @@ type Step =
   | 'generating'
   | 'preview'
   | 'library'
+  | 'reconciliation'
   | 'blocked'
 
 function newIdempotencyKey(): string {
@@ -172,7 +173,7 @@ export function CreateMyCroquisWizard({
   }, [handleClose, localFile, onPinAccepted, storageConsentId])
 
   const runAiConsent = useCallback(async () => {
-    if (!aiChecked || !aiNotice) {
+    if (!aiChecked || !aiNotice || !croquisId) {
       setError('Explicit AI-provider consent acknowledgment is required.')
       return
     }
@@ -184,6 +185,7 @@ export function CreateMyCroquisWizard({
         adults_attested: true,
         notice_version: croquisNoticeVersion('ai'),
         notice_text_hash: await sha256Hex(aiNotice),
+        croquis_id: croquisId,
       })
       setAiConsentId(event.id)
       setStep('generating')
@@ -192,7 +194,7 @@ export function CreateMyCroquisWizard({
     } finally {
       setBusy(false)
     }
-  }, [aiChecked, aiNotice])
+  }, [aiChecked, aiNotice, croquisId])
 
   const loadPreview = useCallback(async (assetId: string) => {
     const blob = await fetchCroquisAssetBlob(assetId)
@@ -236,11 +238,11 @@ export function CreateMyCroquisWizard({
             return
           }
           if (ver.status === 'reconciliation_required') {
+            // Do not mint a new idempotency key or return to a spend-capable AI step.
             setError(
-              'Provider outcome unknown — this attempt is held for reconciliation. No automatic paid retry. Use a new attempt after review.',
+              'Provider outcome unknown — this attempt is held for operator reconciliation. No automatic paid retry is available.',
             )
-            setIdempotencyKey(newIdempotencyKey())
-            setStep('ai')
+            setStep('reconciliation')
             return
           }
           if (ver.status === 'accepted' && ver.generated_asset_id) {
@@ -514,6 +516,28 @@ export function CreateMyCroquisWizard({
               Status: {pendingVersion?.status ?? 'queued'}. This can take a moment. Do not close
               until preview is ready.
             </p>
+          </div>
+        ) : null}
+
+        {step === 'reconciliation' ? (
+          <div className={styles.body}>
+            <p role="alert">
+              Provider outcome is unknown. This attempt is held for operator reconciliation.
+              FashionRise will not start another paid generate for this photo until that review
+              completes.
+            </p>
+            <p className={styles.hint}>
+              Do not retry from this wizard. Open My Croquis library later, or contact an
+              operator if this persists.
+            </p>
+            <div className={styles.actions}>
+              <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
+                My Croquis library
+              </button>
+              <button type="button" className={styles.primary} onClick={handleClose}>
+                Close
+              </button>
+            </div>
           </div>
         ) : null}
 

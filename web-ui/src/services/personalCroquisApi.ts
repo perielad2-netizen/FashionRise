@@ -73,6 +73,11 @@ export type ConsentAcknowledgeRequest = {
   notice_text_hash: string
 }
 
+/** AI-provider consent must bind to the exact croquis source being generated. */
+export type AiConsentAcknowledgeRequest = ConsentAcknowledgeRequest & {
+  croquis_id: string
+}
+
 export async function attestAdults(
   body: AdultsAttestationRequest,
   signal?: AbortSignal,
@@ -96,7 +101,7 @@ export async function acknowledgeStorageConsent(
 }
 
 export async function acknowledgeAiConsent(
-  body: ConsentAcknowledgeRequest,
+  body: AiConsentAcknowledgeRequest,
   signal?: AbortSignal,
 ): Promise<ConsentEventRead> {
   return apiRequest<ConsentEventRead>(`${BASE}/consent/ai`, {

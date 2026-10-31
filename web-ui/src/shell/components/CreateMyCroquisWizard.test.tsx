@@ -226,7 +226,11 @@ describe('CreateMyCroquisWizard offline harness', () => {
 
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(screen.getByRole('button', { name: /Generate My Croquis/i }))
-    await waitFor(() => expect(acknowledgeAiConsent).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(acknowledgeAiConsent).toHaveBeenCalledWith(
+        expect.objectContaining({ croquis_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' }),
+      ),
+    )
     await waitFor(() => expect(generatePersonalCroquisVersion).toHaveBeenCalled())
     await waitFor(() => expect(screen.getByAltText(/Generated croquis preview/i)).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: /Accept & use in Studio/i }))

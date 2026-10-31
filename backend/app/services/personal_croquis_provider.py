@@ -187,12 +187,16 @@ class CrashBeforeSubmitCroquisProvider:
 
 
 class OpenAICroquisImagesEditAdapter:
-    """Production adapter shell wrapping images.edit for croquis line art.
+    """INCOMPLETE / fail-closed production adapter shell for images.edit.
 
-    Construction and prompt assembly never open sockets. Live HTTP is blocked
-    unless gates + ceiling allow AND the offline tripwire is disarmed. Stage C
-    still refuses automatic paid execution until separate owner authorization.
+    Not activation-ready. Construction and prompt assembly never open sockets.
+    Live HTTP is blocked unless gates + ceiling allow AND the offline tripwire
+    is disarmed. ``generate_line_art`` always raises ProviderNotAvailableError
+    in this Stage C hardening build — a bounded mockable real adapter and
+    separate paid test review remain required before Stage D.
     """
+
+    incomplete = True  # explicit readiness marker for operators / tests
 
     def __init__(self) -> None:
         # Fail closed on construct if gates are off — no client creation / network.
@@ -213,6 +217,7 @@ class OpenAICroquisImagesEditAdapter:
             "size": f"{DESIGN_W}x{DESIGN_H}",
             "source_sha256": hashlib.sha256(source_png).hexdigest(),
             "geometry_profile": GEOMETRY_PROFILE_V1,
+            "adapter_incomplete": True,
         }
 
     def generate_line_art(self, source_png: bytes) -> CroquisProviderResult:
@@ -221,9 +226,31 @@ class OpenAICroquisImagesEditAdapter:
         assert_no_provider_network()
         # Explicitly refuse automatic paid execution in this Stage C PR.
         raise ProviderNotAvailableError(
+            "OpenAICroquisImagesEditAdapter is incomplete / not activation-ready. "
             "Live OpenAI croquis generation is not activated in this Stage C build. "
             "Use a mocked provider in tests; paid validation requires separate authorization."
         )
+
+
+class BlockingCroquisProvider:
+    """Test double: blocks inside generate_line_art until ``release`` is set.
+
+    Used for reject/erase-during-provider concurrency coverage.
+    """
+
+    def __init__(self, *, release_event, entered_event=None, cost_cents: int = 3) -> None:
+        self.release_event = release_event
+        self.entered_event = entered_event
+        self.cost_cents = cost_cents
+        self.calls = 0
+        self._inner = MockCroquisProvider(cost_cents=cost_cents)
+
+    def generate_line_art(self, source_png: bytes) -> CroquisProviderResult:
+        self.calls += 1
+        if self.entered_event is not None:
+            self.entered_event.set()
+        self.release_event.wait(timeout=30)
+        return self._inner.generate_line_art(source_png)
 
 
 _provider_override: CroquisProvider | None = None
