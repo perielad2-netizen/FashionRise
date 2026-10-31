@@ -27,7 +27,7 @@ Prior reviewed Stage A tip: `fc97072f408529e97940addc886b2181aacbaf8a` (PM PARTI
 
 | Item | Status |
 |---|---|
-| Branch | `cursor/web-create-my-croquis-stage-a-77c6` @ **`ae400baabe144faef5b76069bf25ba48ea184195`** (stacked on accepted design `e6c34ca5`) |
+| Branch | `cursor/web-create-my-croquis-stage-a-77c6` tip **`PENDING_TIP`** · hardening impl `ae400baabe144faef5b76069bf25ba48ea184195` (stacked on accepted design `e6c34ca5`) |
 | Base | `cursor/web-create-my-croquis-v1-design-77c6` @ `e6c34ca5f7475690bd8da610f22f8ac9d56de40d` (PR #138) |
 | Migration | Alembic **`012`** + PG triggers (`trg_personal_croquis_version_immutability`, `trg_personal_croquis_version_owner_consistency`) — disposable upgrade → downgrade `011` → re-upgrade; triggers present after both upgrades |
 | Storage | Dedicated `private_croquis_*` — no-clobber publish (`link`/`O_EXCL`+`os.replace`); symlink-component reject incl. in-root aliases; typed unlink outcomes |
