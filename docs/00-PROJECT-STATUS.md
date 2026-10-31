@@ -28,7 +28,7 @@ Final focused review: [comment 6548805507](https://github.com/perielad2-netizen/
 | Item | Status |
 |---|---|
 | Branch | `cursor/web-create-my-croquis-stage-c-77c6` (stacked on accepted Stage B PR #140) |
-| Final P0 implementation | Exact tip recorded after push (amends `4973c18b…`; code on top of hardening `5a5dbf98…`) |
+| Final P0 code | Exact **`072d72214b8eb5f2dbc89993bf7ecc22453955bf`** (amends reviewed `4973c18b7fe58df14edb9cf0ebfce759c0ce26c8`; acceptance tip = branch HEAD after docs stamp) |
 | Base / Stage B accepted | Exact PR #140 HEAD **`cab1c79359b7015db393073e4a8dafa236530e81`** |
 | Stage A accepted | Exact PR #139 HEAD **`655f6d3486f5bd5b89f2191a1016054d0ade4894`** |
 | Final P0-A Lease fencing | Atomic `claim_token` fence before `provider_called` + adapter; stale worker aborts with **0** extra provider calls · two-session reclaim test |
