@@ -40,6 +40,29 @@ class Settings(BaseSettings):
     private_fabric_subdir: str = "private_fabrics"
     # Private tech-pack PDFs — never mounted under /static/uploads.
     private_techpack_subdir: str = "private_techpacks"
+    # Private Create My Croquis bytes — sibling of private_fabrics; never public static.
+    private_croquis_subdir: str = "private_croquis"
+
+    # Create My Croquis gates (independent of Studio FRONT_BACK/MAGIC/DUAL). Fail closed.
+    my_croquis_upload_enabled: bool = False
+    my_croquis_ai_enabled: bool = False
+    # Draft consent version ids — final legal copy is NOT approved; do not collect live photos.
+    my_croquis_storage_consent_version: str = "storage-2026-10-30-draft"
+    my_croquis_ai_consent_version: str = "ai-provider-2026-10-30-draft"
+    my_croquis_adults_attestation_version: str = "adults-beta-2026-10-30-draft"
+    # Consent / attestation validity windows (seconds).
+    my_croquis_storage_consent_max_age_seconds: int = 3600
+    my_croquis_adults_attestation_max_age_seconds: int = 86400
+    # Upload bounds (source photos). Separate from fabric limits.
+    max_croquis_upload_size_mb: int = 10
+    max_croquis_dimension_px: int = 4096
+    max_croquis_total_pixels: int = 4096 * 4096
+    croquis_name_max_length: int = 80
+    # Retention defaults (design §6.2) — offline sweeper only; no production timers.
+    my_croquis_abandoned_upload_hours: int = 24
+    my_croquis_source_retention_days: int = 7
+    my_croquis_accepted_source_purge_hours: int = 24
+    my_croquis_cleanup_batch_size: int = 50
     # Create Real Design V1 flag (legacy). Prefer techpack_ai_enabled.
     techpack_ai_draft_enabled: bool = False
     # Create Real Design AI — fail closed without spend ceiling + (for professional) allowlist.
@@ -163,6 +186,10 @@ class Settings(BaseSettings):
     @property
     def max_fabric_upload_bytes(self) -> int:
         return max(1, self.max_fabric_upload_size_mb) * 1024 * 1024
+
+    @property
+    def max_croquis_upload_bytes(self) -> int:
+        return max(1, self.max_croquis_upload_size_mb) * 1024 * 1024
 
 
 @lru_cache

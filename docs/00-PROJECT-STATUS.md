@@ -3,34 +3,54 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-10-30 (**#135 design PR #138** — Technical PM **PARTIAL PASS / Stage A HOLD** · consent-first + immutable versions + dedicated `private_croquis` storage + upload≠AI gates + fit-contain geometry corrections · **#136 CLOSED** · **#127/#128 CLOSED** · live FE **`2dfcaba0`** · BE `6cc317ec` · **0 paid AI** · no Stage A code · no merge.)
+**Last updated:** 2026-10-31 (**#135 Create My Croquis Stage A** — private storage / consent / security foundation implemented on stacked draft PR · **STOP for Technical PM code review** · **no merge / no deploy / no production migration** · croquis gates remain **OFF** · **0 provider / 0 paid AI** · live production unchanged.)
 
-**Phase:** Protected family beta. #135 Create My Croquis design under **Stage A HOLD** until final PM acceptance of corrected `CREATE-MY-CROQUIS-V1-DESIGN.md`. Do **not** implement, migrate, deploy, collect real photos, or call paid AI.
+**Phase:** Protected family beta. #135 Create My Croquis **Stage A implementation complete (draft PR)** — awaiting Technical PM code review. Do **not** merge, deploy, run production Alembic `012`, install retention timers, collect real photos, enable upload/AI/UI gates, or begin Stage B.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`2dfcaba0`** — release `/var/www/fashionrise/releases/2dfcaba0` · source `2dfcaba0a97059adddceaa3ae8e0bee000fb32df` · App pill **`2dfcaba0`** · compiled gates FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, API `/api/v1`. Prior `6ec73ba2` + `ebcb1cc7` retained (gates OFF). |
-| Backend (FastAPI + PostgreSQL) | **`6cc317ecd55423403b6479e8bb185c3e4cde2bf1`** (PR #130). Alembic **`011`**. Rollback → `311e259a`. |
+| Backend (FastAPI + PostgreSQL) | **`6cc317ecd55423403b6479e8bb185c3e4cde2bf1`** (PR #130). Alembic **`011`** (production head unchanged — Stage A `012` not applied). Rollback → `311e259a`. |
 | AI worker | `fashionrise-ai-worker` @ **`6cc317ec`** (matched with API). |
-| Database | `fashionrise_beta` — Alembic **`011`** (no migration this release) |
+| Database | `fashionrise_beta` — Alembic **`011`** (no production migration this Stage A PR) |
 | Nginx | `root /var/www/fashionrise/current;` → `releases/2dfcaba0` · CF Access + AOP unchanged |
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## Issue #135 — Create My Croquis V1 — DESIGN PARTIAL PASS / Stage A HOLD (2026-10-30)
+## Issue #135 — Create My Croquis V1 — STAGE A IMPLEMENTATION (2026-10-31) — STOP for PM code review
+
+Design (accepted): [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md) @ PR [#138](https://github.com/perielad2-netizen/FashionRise/pull/138) tip `e6c34ca5f7475690bd8da610f22f8ac9d56de40d`. Issue [#135](https://github.com/perielad2-netizen/FashionRise/issues/135).
+
+| Item | Status |
+|---|---|
+| Branch | `cursor/web-create-my-croquis-stage-a-77c6` @ `facfbb9dda8f945343d325e6d5173c2ecfad2b57` (from exact accepted design commit `e6c34ca5`) |
+| Base | `cursor/web-create-my-croquis-v1-design-77c6` @ `e6c34ca5f7475690bd8da610f22f8ac9d56de40d` (PR #138) |
+| Migration | Alembic **`012`** (private assets + consent + personal croquis + versions + cleanup queue) — verified upgrade / downgrade-to-011 / re-upgrade / empty-DB upgrade on disposable DB only |
+| Storage | Dedicated `LocalStorageBackend` `private_croquis_*` methods (atomic write; not fabric `save_private_file`) |
+| API | `/api/v1/personal-croquis` — adults attestation, storage/AI consent, gated photos, list/get, exact version, asset image, archive, erase |
+| Gates (defaults) | `MY_CROQUIS_UPLOAD_ENABLED=false` · `MY_CROQUIS_AI_ENABLED=false` · `VITE_MY_CROQUIS_UI_ENABLED=false` (independent of Studio FRONT_BACK/MAGIC/DUAL) |
+| Retention | Offline sweeper `scripts/run_croquis_retention_sweep.py` (dry-run default) — **no production timer installed** |
+| Generate / provider | **Not implemented** · Stage A has **0** provider calls |
+| Verification | Croquis tests **30 passed** · fabric+croquis **36 passed** · full backend pytest **612 passed**, **1 pre-existing failure** (`test_partial_cost_preserved_on_failure` also fails on parent `e6c34ca5`) · ruff clean on Stage A modules (B008 FastAPI pattern ignored as elsewhere) · mypy clean on Stage A modules · Alembic smoke OK |
+| Security | Owner-scoped reads; cross-user 404; no `/static/uploads` croquis bytes; consent + adults required for upload; upload gate fail-closed |
+| Pending legal/owner | Final consent copy · adults policy wording · retention/backup confirmation · authorization to enable upload gate / real photos |
+| Production | **Unchanged** — no deploy, no BE restart, no prod migration, no merge |
+| Next PM action | **Code review Stage A draft PR** · then decide Stage B authorization separately |
+
+## Issue #135 — Create My Croquis V1 — DESIGN ACCEPTED (archive: PARTIAL PASS → PASS) (2026-10-30)
 
 Design doc: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md). Issue [#135](https://github.com/perielad2-netizen/FashionRise/issues/135). Draft PR [#138](https://github.com/perielad2-netizen/FashionRise/pull/138) (stacked on #137).
 
 | Item | Status |
 |---|---|
 | Dependency #136 | **CLOSED** — owner six-point acceptance on live FE `2dfcaba0` |
-| PM review | **PARTIAL PASS** — direction accepted; P0/P1 design corrections applied; **Stage A HOLD** |
+| PM review | **DESIGN ACCEPTED** after P0/P1 corrections A–E @ `e6c34ca5` · Stage A backend authorized 2026-10-31 |
 | Corrections | Consent-before-upload · append-only immutable versions · dedicated `private_croquis` (fabric `save_private_file` hardwired) · upload gate ≠ AI gate · mock test-only · spend reservations · fit-contain (no crop) + EXIF-before-strip |
-| Implementation | **NOT started** · no migration · no API · proposed defaults: `MY_CROQUIS_UPLOAD_ENABLED=false`, `MY_CROQUIS_AI_ENABLED=false`, `VITE_MY_CROQUIS_UI_ENABLED=false` |
+| Implementation | **Stage A draft PR** (see section above) · gates remain OFF |
 | Paid AI / real photos | **Forbidden** until separately authorized |
-| Next | Final Technical PM acceptance of corrected design · then separate Stage A authorization |
+| Next | Technical PM Stage A code review (no Stage B until authorized) |
 
 ## P0 #136 / PR #137 — FE recovery DEPLOYED + OWNER ACCEPTED (2026-10-30) — CLOSED
 
