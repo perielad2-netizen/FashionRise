@@ -17,8 +17,11 @@ if TYPE_CHECKING:
     from app.models.gallery_item import GalleryItem
     from app.models.gallery_like import GalleryLike
     from app.models.garment_design import GarmentDesign
+    from app.models.personal_croquis import PersonalCroquis, PersonalCroquisVersion
+    from app.models.private_media_asset import PrivateMediaAsset
     from app.models.rating import Rating
     from app.models.refresh_token import RefreshToken
+    from app.models.user_consent_event import UserConsentEvent
     from app.models.user_profile import UserProfile
 
 
@@ -51,3 +54,9 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     fabric_assets: Mapped[list["FabricAsset"]] = relationship(back_populates="owner")
+    private_media_assets: Mapped[list["PrivateMediaAsset"]] = relationship(back_populates="owner")
+    consent_events: Mapped[list["UserConsentEvent"]] = relationship(back_populates="owner")
+    personal_croquis: Mapped[list["PersonalCroquis"]] = relationship(back_populates="owner")
+    personal_croquis_versions: Mapped[list["PersonalCroquisVersion"]] = relationship(
+        back_populates="owner"
+    )

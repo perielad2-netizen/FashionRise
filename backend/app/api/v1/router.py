@@ -10,6 +10,7 @@ from app.api.v1.routes import (
     looks,
     materials,
     palettes,
+    personal_croquis,
     profiles,
     ratings,
     techpacks,
@@ -29,6 +30,9 @@ api_router.include_router(ratings.router, prefix="/ratings", tags=["ratings"])
 api_router.include_router(exports.router, prefix="/exports", tags=["exports"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 api_router.include_router(fabrics.router, prefix="/fabrics", tags=["fabrics"])
+api_router.include_router(
+    personal_croquis.router, prefix="/personal-croquis", tags=["personal-croquis"]
+)
 api_router.include_router(ai_routes.router, prefix="/ai", tags=["ai"])
 api_router.include_router(looks.router, prefix="/looks", tags=["looks"])
 api_router.include_router(techpacks.router, prefix="/techpacks", tags=["techpacks"])

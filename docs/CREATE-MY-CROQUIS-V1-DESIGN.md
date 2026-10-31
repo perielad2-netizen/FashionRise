@@ -522,6 +522,6 @@ Rollback: flags off; prior immutable FE/BE releases; sweeper continues erase req
 
 ## Appendix C — Verification of this docs checkpoint
 
-- Documentation-only amendments on PR #138  
-- **0** provider/paid calls · **0** production modifications · **0** migrations/runtime code  
-- Stage A **not** started  
+- Documentation-only amendments on PR #138 @ `e6c34ca5`  
+- **0** provider/paid calls · **0** production modifications at design acceptance  
+- Stage A implementation follows on stacked branch `cursor/web-create-my-croquis-stage-a-77c6` (separate draft PR; gates remain OFF; no production migration)  
