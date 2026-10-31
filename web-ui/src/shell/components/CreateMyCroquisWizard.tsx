@@ -6,7 +6,7 @@
  * Empty/draft notice text → fail closed (no affirmative consent recorded).
  * Stage B does not call providers; offline/tests use synthetic fixtures only.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/services/api/client'
 import {
   acknowledgeStorageConsent,
@@ -47,7 +47,11 @@ export function CreateMyCroquisWizard({
   onUseOfflineFixture,
 }: CreateMyCroquisWizardProps) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [step, setStep] = useState<Step>('eligibility')
+  const noticesOk = useMemo(() => croquisNoticesAuthorized(), [])
+  const adultsNotice = useMemo(() => approvedCroquisNoticeText('adults'), [])
+  const storageNotice = useMemo(() => approvedCroquisNoticeText('storage'), [])
+
+  const [step, setStep] = useState<Step>(() => (noticesOk ? 'eligibility' : 'blocked'))
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
   const [localFile, setLocalFile] = useState<File | null>(null)
   const [adultsChecked, setAdultsChecked] = useState(false)
@@ -57,32 +61,13 @@ export function CreateMyCroquisWizard({
   const [library, setLibrary] = useState<PersonalCroquisRead[]>([])
   const [storageConsentId, setStorageConsentId] = useState<string | null>(null)
 
-  const noticesOk = useMemo(() => croquisNoticesAuthorized(), [])
-  const adultsNotice = useMemo(() => approvedCroquisNoticeText('adults'), [])
-  const storageNotice = useMemo(() => approvedCroquisNoticeText('storage'), [])
-
-  const reset = useCallback(() => {
-    setStep(noticesOk ? 'eligibility' : 'blocked')
-    setAdultsChecked(false)
-    setStorageChecked(false)
-    setBusy(false)
-    setError(null)
-    setStorageConsentId(null)
-    setLocalFile(null)
+  const handleClose = useCallback(() => {
     setLocalPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev)
       return null
     })
-  }, [noticesOk])
-
-  useEffect(() => {
-    if (open) reset()
-  }, [open, reset])
-
-  const handleClose = useCallback(() => {
-    reset()
     onClose()
-  }, [onClose, reset])
+  }, [onClose])
 
   const onPickLocal = useCallback((file: File) => {
     setError(null)

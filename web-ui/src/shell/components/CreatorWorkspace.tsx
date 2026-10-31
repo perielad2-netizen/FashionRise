@@ -782,9 +782,9 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         </div>
       ) : null}
 
-      {isMyCroquisUiEnabled() ? (
+      {isMyCroquisUiEnabled() && editor.croquisWizardOpen ? (
         <CreateMyCroquisWizard
-          open={editor.croquisWizardOpen}
+          open
           onClose={editor.closeCroquisWizard}
           onPinAccepted={(croquisId, version) =>
             editor.applyPersonalCroquisPin(croquisId, version, false)
