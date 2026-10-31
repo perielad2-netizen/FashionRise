@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createEmptyDraftDocument, draftContentFingerprint, parseStudioDraftDocument } from '@/lib/draftDocument'
 import { parseSavedDesignSnapshot, snapshotFromDocument, snapshotFingerprint } from '@/lib/savedDesign'
 import { normalizeModelChoice, isModelChoice } from '@/assets/modelLibrary'
-import { fitContainDestRect } from '@/test/personalCroquisFixture'
+import { fitContainDestRect } from '@/lib/croquisGeometry'
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
 
 describe('personal croquis model + pins', () => {

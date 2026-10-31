@@ -25,6 +25,7 @@ import {
   PAPER_WIDTH,
   clampPointToPaper,
 } from '@/lib/paperBounds'
+import { fitContainDestRect } from '@/lib/croquisGeometry'
 import {
   clampPan,
   distance,
@@ -288,15 +289,8 @@ export function DrawingCanvas({
 
   const refFit = useMemo(() => {
     if (!refImage) return null
-    const s = Math.min(DESIGN_WIDTH / refImage.width, DESIGN_HEIGHT / refImage.height)
-    const w = refImage.width * s
-    const h = refImage.height * s
-    return {
-      x: (DESIGN_WIDTH - w) / 2,
-      y: (DESIGN_HEIGHT - h) / 2,
-      w,
-      h,
-    }
+    // Shared fit-contain profile (Create My Croquis / Studio underlay) — never crop.
+    return fitContainDestRect(refImage.width, refImage.height, DESIGN_WIDTH, DESIGN_HEIGHT)
   }, [refImage])
 
   const session = useCallback(

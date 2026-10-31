@@ -17,6 +17,7 @@ import {
   buildDocumentFromEditor,
   documentHasAnyInk,
   patchActiveSideInk,
+  canOpenBackPaper,
   rearReferenceAvailable,
   referenceUrlForModelSide,
   sideStateFromDocument,
@@ -45,6 +46,8 @@ import {
   bindPersonalCroquisCacheToUser,
   clearPersonalCroquisCache,
   loadPersonalCroquisObjectUrl,
+  underlayMatchesPin,
+  type PersonalCroquisUnderlayIdentity,
 } from '@/lib/personalCroquisCache'
 import { getPersonalCroquisVersion } from '@/services/personalCroquisApi'
 import { checkPersistableFill, solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
@@ -215,7 +218,10 @@ export function useStudioEditor() {
   const [personalCroquisId, setPersonalCroquisId] = useState<string | null>(null)
   const [personalCroquisVersion, setPersonalCroquisVersion] = useState<number | null>(null)
   const [personalObjectUrl, setPersonalObjectUrl] = useState<string | null>(null)
+  const [personalUnderlayIdentity, setPersonalUnderlayIdentity] =
+    useState<PersonalCroquisUnderlayIdentity | null>(null)
   const [personalUnavailable, setPersonalUnavailable] = useState(false)
+  const personalLoadGenRef = useRef(0)
   const [croquisWizardOpen, setCroquisWizardOpen] = useState(false)
   const [dimmed, setDimmed] = useState(false)
   const [magicNotice, setMagicNotice] = useState<string | null>(null)
@@ -285,36 +291,53 @@ export function useStudioEditor() {
 
   useEffect(() => {
     if (!user?.id || model !== 'personal' || !personalCroquisId || personalCroquisVersion == null) {
+      personalLoadGenRef.current += 1
       setPersonalObjectUrl(null)
+      setPersonalUnderlayIdentity(null)
       return
     }
+    const gen = ++personalLoadGenRef.current
+    const pinCroquisId = personalCroquisId
+    const pinVersion = personalCroquisVersion
+    const pinUserId = user.id
     let cancelled = false
     const ac = new AbortController()
     ;(async () => {
       try {
-        const ver = await getPersonalCroquisVersion(
-          personalCroquisId,
-          personalCroquisVersion,
-          ac.signal,
-        )
+        const ver = await getPersonalCroquisVersion(pinCroquisId, pinVersion, ac.signal)
+        if (cancelled || personalLoadGenRef.current !== gen) return
         const assetId = ver.generated_asset_id
         if (!assetId) {
-          if (!cancelled) {
-            setPersonalObjectUrl(null)
-            setPersonalUnavailable(true)
-          }
+          setPersonalObjectUrl(null)
+          setPersonalUnderlayIdentity(null)
+          setPersonalUnavailable(true)
           return
         }
-        const url = await loadPersonalCroquisObjectUrl(user.id, assetId, ac.signal)
-        if (!cancelled) {
-          setPersonalObjectUrl(url)
-          setPersonalUnavailable(false)
+        const identity = {
+          userId: pinUserId,
+          croquisId: pinCroquisId,
+          version: pinVersion,
+          assetId,
         }
+        const url = await loadPersonalCroquisObjectUrl(identity, ac.signal)
+        if (cancelled || personalLoadGenRef.current !== gen) return
+        // Only publish when the pin is still exactly this identity.
+        if (
+          model !== 'personal' ||
+          personalCroquisId !== pinCroquisId ||
+          personalCroquisVersion !== pinVersion ||
+          user?.id !== pinUserId
+        ) {
+          return
+        }
+        setPersonalUnderlayIdentity(identity)
+        setPersonalObjectUrl(url)
+        setPersonalUnavailable(false)
       } catch {
-        if (!cancelled) {
-          setPersonalObjectUrl(null)
-          setPersonalUnavailable(true)
-        }
+        if (cancelled || personalLoadGenRef.current !== gen) return
+        setPersonalObjectUrl(null)
+        setPersonalUnderlayIdentity(null)
+        setPersonalUnavailable(true)
       }
     })()
     return () => {
@@ -364,6 +387,9 @@ export function useStudioEditor() {
     setCustomKey(doc.customReferenceKey)
     setPersonalCroquisId(doc.personalCroquisId ?? null)
     setPersonalCroquisVersion(doc.personalCroquisVersion ?? null)
+    personalLoadGenRef.current += 1
+    setPersonalObjectUrl(null)
+    setPersonalUnderlayIdentity(null)
     setPersonalUnavailable(false)
     setBrushSizePxState(resolveBrushSizePx(doc.brush))
     setOpacity(doc.brush.opacity)
@@ -744,15 +770,27 @@ export function useStudioEditor() {
   const brushSize = brushSizePx
   const sizeId = nearestBrushSizeId(brushSizePx)
 
-  const rearAvailable = rearReferenceAvailable(model)
+  const rearAvailable = canOpenBackPaper(model)
+  const personalUnderlayMatchesPin = useMemo(() => {
+    if (model !== 'personal' || !personalObjectUrl) return false
+    return underlayMatchesPin(personalUnderlayIdentity, {
+      userId: user?.id,
+      croquisId: personalCroquisId,
+      version: personalCroquisVersion,
+    })
+  }, [
+    model,
+    personalObjectUrl,
+    personalUnderlayIdentity,
+    personalCroquisId,
+    personalCroquisVersion,
+    user?.id,
+  ])
+
   const referenceUrl = useMemo(() => {
-    return referenceUrlForModelSide(
-      model,
-      activeSide,
-      blobUrl ?? customUrl,
-      personalObjectUrl,
-    )
-  }, [model, customUrl, blobUrl, activeSide, personalObjectUrl])
+    const personalUrl = personalUnderlayMatchesPin ? personalObjectUrl : null
+    return referenceUrlForModelSide(model, activeSide, blobUrl ?? customUrl, personalUrl)
+  }, [model, customUrl, blobUrl, activeSide, personalObjectUrl, personalUnderlayMatchesPin])
 
   const referenceOpacity = dimmed ? 0.4 : 1
 
@@ -1022,9 +1060,11 @@ export function useStudioEditor() {
       const pinId = leavingPersonal ? null : personalCroquisId
       const pinVer = leavingPersonal ? null : personalCroquisVersion
       if (leavingPersonal) {
+        personalLoadGenRef.current += 1
         setPersonalCroquisId(null)
         setPersonalCroquisVersion(null)
         setPersonalObjectUrl(null)
+        setPersonalUnderlayIdentity(null)
         setPersonalUnavailable(false)
       }
       if (clearStrokes && designHasInk()) {
@@ -1036,7 +1076,7 @@ export function useStudioEditor() {
         setBackFills([])
         syncHistoryFlags()
         setModelState(next)
-        if (!rearReferenceAvailable(next) && activeSide === 'back') setActiveSide('front')
+        if (!canOpenBackPaper(next) && activeSide === 'back') setActiveSide('front')
         commitFromEditor({
           model: next,
           personalCroquisId: pinId,
@@ -1045,11 +1085,11 @@ export function useStudioEditor() {
           frontFills: [],
           backStrokes: [],
           backFills: [],
-          activeSide: rearReferenceAvailable(next) ? activeSide : 'front',
+          activeSide: canOpenBackPaper(next) ? activeSide : 'front',
         })
       } else {
         setModelState(next)
-        if (!rearReferenceAvailable(next) && activeSide === 'back') {
+        if (!canOpenBackPaper(next) && activeSide === 'back') {
           setActiveSide('front')
           commitFromEditor({
             model: next,
@@ -1094,7 +1134,7 @@ export function useStudioEditor() {
     (side: StudioPaperSide) => {
       if (!frontBackEnabled) return
       if (side === activeSide) return
-      if (side === 'back' && !rearReferenceAvailable(model)) return
+      if (side === 'back' && !canOpenBackPaper(model)) return
       skipNextAutosaveRef.current = true
       setActiveSide(side)
       syncHistoryFlags()
@@ -1208,6 +1248,7 @@ export function useStudioEditor() {
       if (doc.model === 'personal') {
         if (side === 'back') return null
         if (
+          personalUnderlayMatchesPin &&
           doc.personalCroquisId === personalCroquisId &&
           doc.personalCroquisVersion === personalCroquisVersion
         ) {
@@ -1217,7 +1258,13 @@ export function useStudioEditor() {
       }
       return referenceUrlForModelSide(doc.model, side, blobUrl ?? doc.customReferenceUrl)
     },
-    [blobUrl, personalCroquisId, personalCroquisVersion, personalObjectUrl],
+    [
+      blobUrl,
+      personalCroquisId,
+      personalCroquisVersion,
+      personalObjectUrl,
+      personalUnderlayMatchesPin,
+    ],
   )
 
   const runMagicPipeline = useCallback(async () => {
@@ -2067,6 +2114,12 @@ export function useStudioEditor() {
             ? doc.back ?? { strokes: [], fills: [] }
             : { strokes: doc.strokes, fills: doc.fills ?? [] }
         const refSide: StudioPaperSide = targetSide === 'back' ? 'back' : 'front'
+        const pinPending =
+          doc.model === 'personal' &&
+          Boolean(doc.personalCroquisId) &&
+          doc.personalCroquisVersion != null &&
+          refSide === 'front' &&
+          !personalUnderlayMatchesPin
         const { blob, referenceIncluded } = await exportSketchPng({
           strokes: bag.strokes,
           fills: bag.fills,
@@ -2078,9 +2131,11 @@ export function useStudioEditor() {
         downloadBlob(blob, exportFilename(null).replace('.png', `${suffix}.png`))
         const wantedReference = referenceUrlForDocument(doc, refSide) !== null
         publishStudioNotice(
-          wantedReference && !referenceIncluded
-            ? EXPORT_NO_REFERENCE
-            : 'PNG exported. Check your downloads.',
+          pinPending
+            ? 'PNG exported without My Croquis underlay — the pinned version is still loading or unavailable. Ink was not altered.'
+            : wantedReference && !referenceIncluded
+              ? EXPORT_NO_REFERENCE
+              : 'PNG exported. Check your downloads.',
         )
       } catch (err) {
         if (err instanceof FabricAssetLoadError) {
@@ -2095,7 +2150,7 @@ export function useStudioEditor() {
         setExporting(false)
       }
     },
-    [frontBackEnabled, publishStudioNotice, referenceUrlForDocument],
+    [frontBackEnabled, personalUnderlayMatchesPin, publishStudioNotice, referenceUrlForDocument],
   )
 
   const exportPng = useCallback(async () => {
@@ -2433,10 +2488,16 @@ export function useStudioEditor() {
   /** Pin an accepted personal croquis version as the Studio underlay (exact id+version). */
   const applyPersonalCroquisPin = useCallback(
     (croquisId: string, version: number, clearStrokes: boolean) => {
+      // Invalidate any prior underlay synchronously so A→B never paints A's PNG as B.
+      personalLoadGenRef.current += 1
+      setPersonalObjectUrl(null)
+      setPersonalUnderlayIdentity(null)
+      setPersonalUnavailable(false)
       setPersonalCroquisId(croquisId)
       setPersonalCroquisVersion(version)
-      setPersonalUnavailable(false)
       setCroquisWizardOpen(false)
+      // Keep Back accessible (blank underlay) — do not force Front solely because personal
+      // has no rear croquis image. Clear-strokes path still resets both bags.
       if (clearStrokes && designHasInk()) {
         historyFront.current.push(artwork())
         historyBack.current.push(artwork())
@@ -2446,7 +2507,8 @@ export function useStudioEditor() {
         setBackFills([])
         syncHistoryFlags()
         setModelState('personal')
-        if (activeSide === 'back') setActiveSide('front')
+        const nextSide = activeSide === 'back' && canOpenBackPaper('personal') ? 'back' : 'front'
+        if (activeSide !== nextSide) setActiveSide(nextSide)
         commitFromEditor({
           model: 'personal',
           personalCroquisId: croquisId,
@@ -2455,16 +2517,15 @@ export function useStudioEditor() {
           frontFills: [],
           backStrokes: [],
           backFills: [],
-          activeSide: 'front',
+          activeSide: nextSide,
         })
       } else {
         setModelState('personal')
-        if (activeSide === 'back') setActiveSide('front')
         commitFromEditor({
           model: 'personal',
           personalCroquisId: croquisId,
           personalCroquisVersion: version,
-          activeSide: 'front',
+          activeSide,
         })
       }
     },
@@ -2501,6 +2562,7 @@ export function useStudioEditor() {
     personalCroquisId,
     personalCroquisVersion,
     personalUnavailable,
+    personalUnderlayReady: personalUnderlayMatchesPin,
     croquisWizardOpen,
     openCroquisWizard,
     closeCroquisWizard,

@@ -9,6 +9,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/services/api/client'
 import {
+  acceptedVersionNumber,
   acknowledgeStorageConsent,
   attestAdults,
   listPersonalCroquis,
@@ -132,9 +133,9 @@ export function CreateMyCroquisWizard({
     setError(null)
     try {
       const created = await uploadPersonalCroquisPhoto(localFile, storageConsentId)
-      const latest = created.latest_accepted
-      if (latest?.version) {
-        onPinAccepted(created.id, latest.version)
+      const ver = acceptedVersionNumber(created)
+      if (ver) {
+        onPinAccepted(created.id, ver)
         handleClose()
         return
       }
@@ -336,7 +337,15 @@ export function CreateMyCroquisWizard({
             {library.length === 0 ? <p className={styles.hint}>No croquis yet.</p> : null}
             <ul className={styles.list}>
               {library.map((row) => {
-                const ver = row.latest_accepted?.version
+                const ver = acceptedVersionNumber(row)
+                const label = row.display_name || 'Untitled'
+                const statusBits = [
+                  ver ? `v${ver}` : 'no accepted version',
+                  row.archived ? 'archived' : null,
+                  row.erased ? 'erased' : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
                 return (
                   <li key={row.id}>
                     <button
@@ -349,7 +358,7 @@ export function CreateMyCroquisWizard({
                         handleClose()
                       }}
                     >
-                      {row.display_name || 'Untitled'} · v{ver ?? '—'}
+                      {label} · {statusBits}
                     </button>
                   </li>
                 )

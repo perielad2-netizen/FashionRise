@@ -3,9 +3,12 @@ import { tokenStore } from '@/services/auth/tokenStore'
 
 const BASE = '/personal-croquis'
 
+/** Mirrors Stage A `AdultsAttestationRead` / `ConsentEventRead`. */
 export type AdultsAttestationRead = {
   id: string
+  purpose: string
   consent_version: string
+  adults_attested: boolean
   created_at: string
 }
 
@@ -13,34 +16,48 @@ export type ConsentEventRead = {
   id: string
   purpose: string
   consent_version: string
+  adults_attested: boolean
   created_at: string
 }
 
+/** Mirrors Stage A `PersonalCroquisVersionSummary`. */
 export type PersonalCroquisVersionSummary = {
   version: number
   status: string
   generated_asset_id: string | null
+  geometry_profile: string | null
   accepted_at: string | null
 }
 
+/**
+ * Mirrors Stage A `PersonalCroquisRead` exactly.
+ * Field names: `latest_accepted_version`, `archived`, `erased` (not archived_at / latest_accepted).
+ */
 export type PersonalCroquisRead = {
   id: string
-  display_name: string | null
-  source_asset_id: string
-  archived_at: string | null
-  erase_requested_at: string | null
-  latest_accepted: PersonalCroquisVersionSummary | null
+  display_name: string
+  status: string
+  source_asset_id: string | null
+  storage_consent_id: string | null
+  adults_attestation_at: string | null
+  archived: boolean
+  erased: boolean
   created_at: string
   updated_at: string
+  latest_accepted_version: PersonalCroquisVersionSummary | null
 }
 
+/** Mirrors Stage A `PersonalCroquisVersionRead`. */
 export type PersonalCroquisVersionRead = {
+  id: string
   croquis_id: string
   version: number
   status: string
   generated_asset_id: string | null
-  accepted_at: string | null
   geometry_profile: string | null
+  prompt_version: string | null
+  created_at: string
+  accepted_at: string | null
 }
 
 export type AdultsAttestationRequest = {
@@ -62,7 +79,7 @@ export async function attestAdults(
 ): Promise<AdultsAttestationRead> {
   return apiRequest<AdultsAttestationRead>(`${BASE}/attestations/adults`, {
     method: 'POST',
-    json: body,
+    body,
     signal,
   })
 }
@@ -73,7 +90,7 @@ export async function acknowledgeStorageConsent(
 ): Promise<ConsentEventRead> {
   return apiRequest<ConsentEventRead>(`${BASE}/consent/storage`, {
     method: 'POST',
-    json: body,
+    body,
     signal,
   })
 }
@@ -84,7 +101,7 @@ export async function acknowledgeAiConsent(
 ): Promise<ConsentEventRead> {
   return apiRequest<ConsentEventRead>(`${BASE}/consent/ai`, {
     method: 'POST',
-    json: body,
+    body,
     signal,
   })
 }
@@ -209,4 +226,11 @@ export async function fetchCroquisAssetBlob(
     throw new ApiError('Personal croquis image unavailable.', response.status, null)
   }
   return response.blob()
+}
+
+/** Accepted pin version from a Stage A croquis read (null when none / erased). */
+export function acceptedVersionNumber(row: PersonalCroquisRead): number | null {
+  if (row.erased) return null
+  const ver = row.latest_accepted_version?.version
+  return typeof ver === 'number' && ver > 0 ? ver : null
 }

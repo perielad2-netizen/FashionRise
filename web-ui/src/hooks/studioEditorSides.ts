@@ -24,8 +24,20 @@ export type EditorSideState = {
   backFills: FillOp[]
 }
 
+/** True when a published rear croquis *image* exists for the model. */
 export function rearReferenceAvailable(model: ModelChoice): boolean {
   return isStudioFrontBackEnabled() && modelHasRearAsset(model)
+}
+
+/**
+ * True when Flip Paper may open the Back bag.
+ * Personal croquis is front-only for underlay imagery, but existing Back ink
+ * must remain accessible on a blank underlay (V2 back-draft semantics).
+ */
+export function canOpenBackPaper(model: ModelChoice): boolean {
+  if (!isStudioFrontBackEnabled()) return false
+  if (model === 'personal') return true
+  return modelHasRearAsset(model)
 }
 
 export function referenceUrlForModelSide(

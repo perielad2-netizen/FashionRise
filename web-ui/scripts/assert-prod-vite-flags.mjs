@@ -74,11 +74,20 @@ export function extractCompiledGates(bundleText) {
   }
   const dualId = dualMatch[1]
 
-  const magicMatch = bundleText.match(/,Ze=([A-Za-z0-9$]+)\(\),Qe=/)
+  // Magic UI helper fingerprints (minifier renames locals across builds):
+  // 1) Legacy Studio hook: `,Ze=<helper>(),Qe=`
+  // 2) Current: `useRef)(!1),<local>=<helper>(),…===`capturing`` next to magic phase busy check
+  const magicMatch =
+    bundleText.match(/,Ze=([A-Za-z0-9$]+)\(\),Qe=/) ||
+    bundleText.match(
+      /useRef\)\(!1\),([A-Za-z0-9$]+)=([A-Za-z0-9$]+)\(\),[A-Za-z0-9$]+=[A-Za-z0-9$]+===`capturing`/,
+    )
   if (!magicMatch) {
-    throw new Error('compiled bundle missing magicUi helper (Ze=<helper>(),Qe= pattern)')
+    throw new Error(
+      'compiled bundle missing magicUi helper (legacy Ze=…,Qe= or useRef)(!1),…capturing pattern)',
+    )
   }
-  const magicId = magicMatch[1]
+  const magicId = magicMatch[2] || magicMatch[1]
 
   const regMatch = bundleText.match(/path:`\/register`,element:([A-Za-z0-9$]+)\(\)\?/)
   if (!regMatch) {

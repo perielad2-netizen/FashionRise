@@ -198,7 +198,7 @@ export function normalizeModelChoice(value: unknown): ModelChoice {
 }
 
 export function getBuiltinModel(id: ModelChoice): BuiltinModelDef | null {
-  if (id === 'custom' || id === 'blank' || isLegacyModelId(id)) return null
+  if (id === 'custom' || id === 'blank' || id === 'personal' || isLegacyModelId(id)) return null
   return SELECTABLE_BY_ID.get(id) ?? null
 }
 

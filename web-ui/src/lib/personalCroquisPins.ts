@@ -38,5 +38,4 @@ export function personalPinFingerprint(pin: PersonalCroquisPin | null): string {
   return `${pin.croquisId}@${pin.version}`
 }
 
-/** Geometry profile locked for Stage B fit-contain underlays. */
-export const CROQUIS_GEOMETRY_PROFILE = 'fit_contain_768x1024_v1' as const
+export { CROQUIS_GEOMETRY_PROFILE } from '@/lib/croquisGeometry'
