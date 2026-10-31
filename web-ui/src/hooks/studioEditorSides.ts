@@ -24,17 +24,36 @@ export type EditorSideState = {
   backFills: FillOp[]
 }
 
+/** True when a published rear croquis *image* exists for the model. */
 export function rearReferenceAvailable(model: ModelChoice): boolean {
   return isStudioFrontBackEnabled() && modelHasRearAsset(model)
+}
+
+/**
+ * True when Flip Paper may open the Back bag.
+ * Personal croquis is front-only for underlay imagery, but existing Back ink
+ * must remain accessible on a blank underlay (V2 back-draft semantics).
+ */
+export function canOpenBackPaper(model: ModelChoice): boolean {
+  if (!isStudioFrontBackEnabled()) return false
+  if (model === 'personal') return true
+  return modelHasRearAsset(model)
 }
 
 export function referenceUrlForModelSide(
   model: ModelChoice,
   side: StudioPaperSide,
   customUrl: string | null,
+  /** Authenticated object URL for model=personal (front only). */
+  personalUrl: string | null = null,
 ): string | null {
   if (model === 'custom') return customUrl
   if (model === 'blank') return null
+  if (model === 'personal') {
+    // Front-only V1 — never invent a rear underlay for personal croquis.
+    if (side === 'back') return null
+    return personalUrl
+  }
   if (!isStudioFrontBackEnabled()) return canvasSrcForModel(model, 'front')
   if (side === 'back') {
     if (!modelHasRearAsset(model)) return null
@@ -79,6 +98,8 @@ export function buildDocumentFromEditor(args: {
   model: ModelChoice
   customReferenceUrl: string | null
   customReferenceKey: string | null
+  personalCroquisId?: string | null
+  personalCroquisVersion?: number | null
   sizeId: BrushSizeId
   sizePx: number
   opacity: number
@@ -124,6 +145,14 @@ export function buildDocumentFromEditor(args: {
     model: args.model,
     customReferenceUrl: args.customReferenceUrl,
     customReferenceKey: args.customReferenceKey,
+    personalCroquisId:
+      args.personalCroquisId !== undefined
+        ? args.personalCroquisId
+        : (args.prev.personalCroquisId ?? null),
+    personalCroquisVersion:
+      args.personalCroquisVersion !== undefined
+        ? args.personalCroquisVersion
+        : (args.prev.personalCroquisVersion ?? null),
     sizeId: args.sizeId,
     sizePx: args.sizePx,
     opacity: args.opacity,

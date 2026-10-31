@@ -33,7 +33,9 @@ function synthBundle({
     `function Ii(){return${rg}}`,
     `let n=t?.frontBackEnabled??Es();`,
     `a=Es(),o=jx(),s=1`,
+    // Legacy minify fingerprint (kept) + current useRef/capturing fingerprint.
     `,Ze=dS(),Qe=busy`,
+    'useRef)(!1),dt=dS(),ft=Le===`capturing`||Le===`submitting`||Le===`polling`',
     'path:`/register`,element:Ii()?(0,V.jsx)(Mo,{}):(0,V.jsx)(zt,{to:`/login`})',
   ].join('')
 }

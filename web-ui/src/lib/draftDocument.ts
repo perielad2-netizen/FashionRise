@@ -74,6 +74,12 @@ export type StudioDraftDocument = {
   model: ModelChoice
   customReferenceUrl: string | null
   customReferenceKey: string | null
+  /**
+   * Exact Create My Croquis pins when `model === 'personal'`.
+   * Null for builtins/custom/blank. Kept on cloud (unlike session custom blob URLs).
+   */
+  personalCroquisId: string | null
+  personalCroquisVersion: number | null
   brush: StudioBrushState
   dimmed: boolean
   /** Monotonic document revision used as optimistic concurrency token. */
@@ -100,6 +106,8 @@ export function createEmptyDraftDocument(now = new Date()): StudioDraftDocument 
     model: DEFAULT_MODEL,
     customReferenceUrl: null,
     customReferenceKey: null,
+    personalCroquisId: null,
+    personalCroquisVersion: null,
     brush: {
       sizeId: 'thin',
       sizePx: BRUSH_SIZE_DEFAULT_PX,
@@ -300,6 +308,27 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
     back = parsedBack
   }
 
+  const rawPinId = (raw as { personalCroquisId?: unknown }).personalCroquisId
+  const rawPinVersion = (raw as { personalCroquisVersion?: unknown }).personalCroquisVersion
+  let personalCroquisId: string | null = null
+  let personalCroquisVersion: number | null = null
+  if (model === 'personal') {
+    if (typeof rawPinId !== 'string' || !rawPinId) return null
+    if (
+      typeof rawPinVersion !== 'number' ||
+      !Number.isInteger(rawPinVersion) ||
+      rawPinVersion < 1
+    ) {
+      return null
+    }
+    personalCroquisId = rawPinId
+    personalCroquisVersion = rawPinVersion
+  } else if (rawPinId != null || rawPinVersion != null) {
+    // Non-personal models ignore stray pin fields rather than failing reopen.
+    personalCroquisId = null
+    personalCroquisVersion = null
+  }
+
   return {
     schema,
     strokes,
@@ -315,6 +344,8 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
       typeof raw.customReferenceKey === 'string' && raw.customReferenceKey
         ? raw.customReferenceKey
         : null,
+    personalCroquisId,
+    personalCroquisVersion,
     brush: { sizeId, sizePx, opacity, color },
     dimmed: Boolean(raw.dimmed),
     clientRevision:
@@ -363,6 +394,8 @@ export function draftContentFingerprint(doc: StudioDraftDocument): string {
     model: doc.model,
     customReferenceUrl: doc.customReferenceUrl,
     customReferenceKey: doc.customReferenceKey,
+    personalCroquisId: doc.personalCroquisId ?? null,
+    personalCroquisVersion: doc.personalCroquisVersion ?? null,
     brush: normalizeStudioBrush(doc.brush),
     dimmed: doc.dimmed,
     activeSide: normalizeActiveSide(doc),
@@ -490,6 +523,8 @@ export function documentFromEditorState(input: {
   model: StudioDraftDocument['model']
   customReferenceUrl: string | null
   customReferenceKey: string | null
+  personalCroquisId?: string | null
+  personalCroquisVersion?: number | null
   sizeId: StudioDraftDocument['brush']['sizeId']
   /** Authoritative continuous size; falls back to sizeId preset when omitted. */
   sizePx?: number
@@ -507,6 +542,14 @@ export function documentFromEditorState(input: {
     model: input.model,
     customReferenceUrl: input.customReferenceUrl,
     customReferenceKey: input.customReferenceKey,
+    personalCroquisId:
+      input.personalCroquisId !== undefined
+        ? input.personalCroquisId
+        : (input.prev.personalCroquisId ?? null),
+    personalCroquisVersion:
+      input.personalCroquisVersion !== undefined
+        ? input.personalCroquisVersion
+        : (input.prev.personalCroquisVersion ?? null),
     brush: {
       sizeId: BRUSH_SIZES[input.sizeId] === sizePx ? input.sizeId : nearestBrushSizeId(sizePx),
       sizePx,
