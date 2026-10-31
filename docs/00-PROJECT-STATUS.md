@@ -28,6 +28,7 @@ PM review that required hardening: [comment 6548514379](https://github.com/perie
 | Item | Status |
 |---|---|
 | Branch | `cursor/web-create-my-croquis-stage-c-77c6` (stacked on accepted Stage B PR #140) |
+| Hardening implementation | Exact **`5a5dbf982f6c560f2289a33e3b1ae2a46f82765b`** (amends prior reviewed `e72af0a4765647e4344c04f9d41f497d5685b2a6`; docs tip is branch HEAD after this stamp) |
 | Base / Stage B accepted | Exact PR #140 HEAD **`cab1c79359b7015db393073e4a8dafa236530e81`** |
 | Stage A accepted | Exact PR #139 HEAD **`655f6d3486f5bd5b89f2191a1016054d0ade4894`** |
 | P0-1 Global spend lock | `pg_advisory_xact_lock` global then per-user · multi-owner independent PostgreSQL session race test · spend FKs `ON DELETE SET NULL` (anonymized ceiling ledger) |
