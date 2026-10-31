@@ -88,10 +88,17 @@ def _disable_ai(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _synthetic_notices(monkeypatch):
+def _synthetic_notices(monkeypatch, db_session):
     enable_synthetic_croquis_notices(monkeypatch)
     set_croquis_provider_override(None)
     arm_provider_network_tripwire()
+    # Isolate from committed engine-concurrency leftovers (global ceiling + job queue).
+    from app.models.ai_job import AIJob
+    from app.models.personal_croquis import CROQUIS_GENERATE_JOB_TYPE
+
+    db_session.query(PersonalCroquisSpendReservation).delete()
+    db_session.query(AIJob).filter(AIJob.job_type == CROQUIS_GENERATE_JOB_TYPE).delete()
+    db_session.flush()
     yield
     disarm_provider_network_tripwire()
     set_croquis_provider_override(None)

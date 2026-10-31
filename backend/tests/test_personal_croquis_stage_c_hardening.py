@@ -116,10 +116,18 @@ def _disable_ai(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _synthetic_notices(monkeypatch):
+def _synthetic_notices(monkeypatch, request):
     enable_synthetic_croquis_notices(monkeypatch)
     set_croquis_provider_override(None)
     arm_provider_network_tripwire()
+    if "db_session" in request.fixturenames:
+        db_session = request.getfixturevalue("db_session")
+        from app.models.ai_job import AIJob
+        from app.models.personal_croquis import CROQUIS_GENERATE_JOB_TYPE
+
+        db_session.query(PersonalCroquisSpendReservation).delete()
+        db_session.query(AIJob).filter(AIJob.job_type == CROQUIS_GENERATE_JOB_TYPE).delete()
+        db_session.flush()
     yield
     disarm_provider_network_tripwire()
     set_croquis_provider_override(None)
@@ -687,5 +695,25 @@ def test_multi_user_global_ceiling_concurrency(engine, monkeypatch):
             .count()
         )
         assert opens == 1
+        # Cancel leftover queued jobs so later client tests are not polluted.
+        from app.models.ai_job import AIJob
+        from app.models.personal_croquis import CROQUIS_GENERATE_JOB_TYPE
+
+        for job in (
+            verify.query(AIJob)
+            .filter(
+                AIJob.job_type == CROQUIS_GENERATE_JOB_TYPE,
+                AIJob.status.in_(("queued", "claimed", "running")),
+            )
+            .all()
+        ):
+            job.status = "failed"
+            job.error_message = "test cleanup"
+            job.claim_token = None
+            verify.add(job)
+        verify.query(PersonalCroquisSpendReservation).filter(
+            PersonalCroquisSpendReservation.idempotency_key.in_(["ceil-a", "ceil-b"])
+        ).delete(synchronize_session=False)
+        verify.commit()
     finally:
         verify.close()

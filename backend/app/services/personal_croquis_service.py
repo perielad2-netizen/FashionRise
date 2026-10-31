@@ -25,6 +25,8 @@ from app.models.personal_croquis import (
     STATUS_ERASED,
     STATUS_UPLOADED,
     VERSION_STATUS_ACCEPTED,
+    VERSION_STATUS_FAILED,
+    VERSION_STATUS_GENERATING,
     PersonalCroquis,
     PersonalCroquisVersion,
 )
@@ -626,11 +628,15 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
 
     Idempotent: repeat calls on an already-erased croquis succeed without remapping.
     Does not mutate design drawing data or remap historical pins.
+
+    Locks the croquis row then its versions (same order as the generate worker attach
+    path) so erase cannot race past a fenced generated-asset attachment.
     """
     row = (
         db.query(PersonalCroquis)
         .filter(PersonalCroquis.id == croquis_id, PersonalCroquis.owner_id == user.id)
-        .first()
+        .with_for_update()
+        .one_or_none()
     )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Croquis not found")
@@ -640,6 +646,17 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
         db.refresh(row)
         return row
 
+    # Lock versions while holding croquis so worker attach cannot commit mid-erase.
+    versions = (
+        db.query(PersonalCroquisVersion)
+        .filter(
+            PersonalCroquisVersion.croquis_id == row.id,
+            PersonalCroquisVersion.owner_id == user.id,
+        )
+        .with_for_update()
+        .all()
+    )
+
     row.erase_requested_at = now
     row.deleted_at = now
     row.status = STATUS_ERASED
@@ -648,15 +665,11 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
     asset_ids: set[uuid.UUID] = set()
     if row.source_asset_id:
         asset_ids.add(row.source_asset_id)
-    versions = (
-        db.query(PersonalCroquisVersion)
-        .filter(
-            PersonalCroquisVersion.croquis_id == row.id,
-            PersonalCroquisVersion.owner_id == user.id,
-        )
-        .all()
-    )
     for ver in versions:
+        if ver.status == VERSION_STATUS_GENERATING and ver.generated_asset_id is None:
+            # Erase wins over an in-flight generate that has not attached yet.
+            ver.status = VERSION_STATUS_FAILED
+            db.add(ver)
         if ver.generated_asset_id:
             asset_ids.add(ver.generated_asset_id)
 
@@ -664,7 +677,8 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
         asset = (
             db.query(PrivateMediaAsset)
             .filter(PrivateMediaAsset.id == aid, PrivateMediaAsset.owner_id == user.id)
-            .first()
+            .with_for_update()
+            .one_or_none()
         )
         if asset is None:
             continue

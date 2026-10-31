@@ -4,8 +4,12 @@ Claims queued croquis jobs with a durable lease (SKIP LOCKED). Crash recovery
 distinguishes definitely-not-sent (safe requeue) from possibly-sent
 (reconciliation_required; hold spend; never auto paid retry).
 
-Never logs image bytes or credentials. Provider outputs are fit-contain
-normalized and CAS-attached so reject/erase cannot resurrect a version.
+Dispatch is fenced by claim_token: a stale worker cannot submit after reclaim.
+Generated-asset attach is serialized with permanent erase via croquis row locks.
+Authorization (consent/notice/source/adults) is revalidated immediately before
+the provider-dispatch marker.
+
+Never logs image bytes or credentials.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ import io
 import logging
 import secrets
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from PIL import Image
@@ -33,6 +38,7 @@ from app.models.personal_croquis import (
     PersonalCroquis,
     PersonalCroquisVersion,
 )
+from app.models.personal_croquis_ai_consent import PersonalCroquisAiConsentBinding
 from app.models.personal_croquis_spend import (
     RESERVATION_OPEN,
     RESERVATION_RECONCILIATION,
@@ -41,6 +47,8 @@ from app.models.personal_croquis_spend import (
     PersonalCroquisSpendReservation,
 )
 from app.models.private_media_asset import KIND_CROQUIS_GENERATED, PrivateMediaAsset
+from app.models.user import User
+from app.models.user_consent_event import PURPOSE_CROQUIS_AI_PROVIDER, UserConsentEvent
 from app.services import personal_croquis_service as pcs
 from app.services.personal_croquis_provider import (
     DESIGN_H,
@@ -55,6 +63,32 @@ from app.storage.local import LocalStorageBackend
 logger = logging.getLogger(__name__)
 
 _ACTIVE_CLAIM_STATUSES = ("claimed", "running")
+
+# Test-only hooks (never use in production):
+# - pre-provider: after authz, before claim-fence + provider_called (lease reclaim races)
+# - pre-attach: after provider returns, before croquis-locked attach (erase races)
+_pre_provider_dispatch_hook: Callable[[AIJob], None] | None = None
+_post_provider_pre_attach_hook: Callable[[AIJob], None] | None = None
+
+
+class StaleClaimError(RuntimeError):
+    """This worker no longer owns the job lease (recovered/reclaimed)."""
+
+
+class DispatchAuthzError(RuntimeError):
+    """Pre-provider authorization failed (consent/source/adults/erase)."""
+
+
+def set_pre_provider_dispatch_hook(hook: Callable[[AIJob], None] | None) -> None:
+    """Install/clear the offline test interleaving hook (never use in production)."""
+    global _pre_provider_dispatch_hook
+    _pre_provider_dispatch_hook = hook
+
+
+def set_post_provider_pre_attach_hook(hook: Callable[[AIJob], None] | None) -> None:
+    """Install/clear post-provider / pre-attach interleaving hook (tests only)."""
+    global _post_provider_pre_attach_hook
+    _post_provider_pre_attach_hook = hook
 
 
 def _utcnow() -> datetime:
@@ -86,6 +120,95 @@ def _assert_dispatch_gates() -> None:
         raise ProviderNotAvailableError(
             "Max exposure unset at dispatch (soft estimates are not a hard cap)"
         )
+
+
+def _assert_dispatch_authorization(
+    db: Session,
+    *,
+    croquis: PersonalCroquis,
+    version: PersonalCroquisVersion,
+    source_asset_id: uuid.UUID,
+    ai_consent_id: uuid.UUID | None,
+) -> bytes:
+    """Revalidate owner/source/consent/adults/notice immediately before provider fence.
+
+    Returns source PNG bytes when authorized. Raises DispatchAuthzError otherwise.
+    """
+    settings = get_settings()
+    if croquis.erase_requested_at is not None or croquis.deleted_at is not None:
+        raise DispatchAuthzError("Croquis erased or deleted at dispatch")
+    if croquis.source_asset_id is None or croquis.source_asset_id != source_asset_id:
+        raise DispatchAuthzError("Croquis source asset no longer matches job payload")
+    if version.owner_id != croquis.owner_id:
+        raise DispatchAuthzError("Version owner mismatch at dispatch")
+
+    owner = db.get(User, croquis.owner_id)
+    if owner is None or not owner.is_active:
+        raise DispatchAuthzError("Owner missing or inactive at dispatch")
+
+    # Adults attestation must still be current (not enqueue-time only).
+    attestation = pcs._latest_adults_attestation(db, owner)  # noqa: SLF001
+    if attestation is None:
+        raise DispatchAuthzError("Adults attestation missing/expired at dispatch")
+
+    consent_id = ai_consent_id or version.ai_consent_id
+    if consent_id is None:
+        raise DispatchAuthzError("AI consent missing at dispatch")
+
+    approved = (settings.my_croquis_ai_notice_text or "").strip()
+    if not approved:
+        raise DispatchAuthzError("AI notice text not approved at dispatch")
+    expected_hash = hashlib.sha256(approved.encode("utf-8")).hexdigest()
+
+    consent = (
+        db.query(UserConsentEvent)
+        .filter(
+            UserConsentEvent.id == consent_id,
+            UserConsentEvent.owner_id == owner.id,
+            UserConsentEvent.purpose == PURPOSE_CROQUIS_AI_PROVIDER,
+        )
+        .one_or_none()
+    )
+    if consent is None:
+        raise DispatchAuthzError("AI consent not found at dispatch")
+    max_age = int(settings.my_croquis_ai_consent_max_age_seconds or 3600)
+    if (_utcnow() - consent.created_at).total_seconds() > max_age:
+        raise DispatchAuthzError("AI consent expired at dispatch")
+    if consent.consent_version != settings.my_croquis_ai_consent_version:
+        raise DispatchAuthzError("AI consent version outdated at dispatch")
+    if consent.text_hash != expected_hash:
+        raise DispatchAuthzError("AI consent notice hash stale at dispatch")
+
+    binding = (
+        db.query(PersonalCroquisAiConsentBinding)
+        .filter(
+            PersonalCroquisAiConsentBinding.consent_id == consent_id,
+            PersonalCroquisAiConsentBinding.owner_id == owner.id,
+            PersonalCroquisAiConsentBinding.croquis_id == croquis.id,
+            PersonalCroquisAiConsentBinding.source_asset_id == source_asset_id,
+        )
+        .one_or_none()
+    )
+    if binding is None:
+        raise DispatchAuthzError("AI consent not bound to current croquis source at dispatch")
+    if binding.notice_text_hash != expected_hash:
+        raise DispatchAuthzError("Bound AI consent notice hash stale at dispatch")
+
+    source = db.get(PrivateMediaAsset, source_asset_id)
+    if (
+        source is None
+        or source.owner_id != owner.id
+        or source.erase_requested_at is not None
+        or source.deleted_at is not None
+        or source.bytes_purged_at is not None
+    ):
+        raise DispatchAuthzError("Source asset unavailable or retention-purged at dispatch")
+
+    try:
+        source_path = pcs.resolve_croquis_asset_file(db, owner, source_asset_id)
+        return source_path.read_bytes()
+    except Exception as exc:
+        raise DispatchAuthzError(f"Source bytes unavailable at dispatch: {exc}") from exc
 
 
 def validate_and_normalize_provider_png(raw_png: bytes) -> bytes:
@@ -148,6 +271,99 @@ def _safe_delete_asset_row(db: Session, asset: PrivateMediaAsset) -> None:
         db.rollback()
         return
     _delete_generated_bytes(key)
+
+
+def _fence_claim_and_mark_provider_called(
+    db: Session,
+    *,
+    job_id: uuid.UUID,
+    claim_token: str,
+    reservation_id: uuid.UUID | None,
+) -> AIJob:
+    """Atomically verify lease ownership, then mark provider_called before HTTP.
+
+    Raises StaleClaimError if another worker recovered/reclaimed this job.
+    """
+    job = (
+        db.query(AIJob)
+        .filter(AIJob.id == job_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if (
+        job is None
+        or job.job_type != CROQUIS_GENERATE_JOB_TYPE
+        or job.claim_token != claim_token
+        or job.status not in _ACTIVE_CLAIM_STATUSES
+    ):
+        raise StaleClaimError("Croquis claim fence lost before provider submission")
+
+    job.status = "running"
+    job.claimed_at = _utcnow()
+    db.add(job)
+
+    if reservation_id is not None:
+        reservation = (
+            db.query(PersonalCroquisSpendReservation)
+            .filter(PersonalCroquisSpendReservation.id == reservation_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if reservation is None or reservation.status != RESERVATION_OPEN:
+            raise StaleClaimError("Spend reservation not open under claim fence")
+        reservation.provider_called = True
+        db.add(reservation)
+
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def _attach_generated_under_croquis_lock(
+    db: Session,
+    *,
+    croquis_id: uuid.UUID,
+    version_id: uuid.UUID,
+    asset: PrivateMediaAsset,
+    prompt_version: str | None,
+    geometry_profile: str,
+    settled: int,
+) -> str:
+    """Serialize attach with permanent erase: lock croquis, then CAS version.
+
+    Returns 'attached' | 'erased' | 'rejected'.
+    """
+    croquis = (
+        db.query(PersonalCroquis)
+        .filter(PersonalCroquis.id == croquis_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    erased = (
+        croquis is None
+        or croquis.erase_requested_at is not None
+        or croquis.deleted_at is not None
+    )
+    if erased:
+        return "erased"
+
+    cas = db.execute(
+        update(PersonalCroquisVersion)
+        .where(
+            PersonalCroquisVersion.id == version_id,
+            PersonalCroquisVersion.status == VERSION_STATUS_GENERATING,
+        )
+        .values(
+            generated_asset_id=asset.id,
+            status=VERSION_STATUS_AWAITING_REVIEW,
+            prompt_version=prompt_version,
+            geometry_profile=geometry_profile,
+            cost_cents=settled,
+        )
+    )
+    if int(getattr(cas, "rowcount", 0) or 0) != 1:
+        return "rejected"
+    return "attached"
 
 
 def recover_stale_croquis_claims(db: Session) -> int:
@@ -215,11 +431,11 @@ def recover_stale_croquis_claims(db: Session) -> int:
             db.commit()
         else:
             # Definitely not sent — safe to requeue for another worker attempt.
+            # Clearing claim_token fences any still-running original worker.
             if reservation is not None and reservation.status == RESERVATION_OPEN:
                 reservation.provider_called = False
                 db.add(reservation)
             if version is not None and version.status == VERSION_STATUS_GENERATING:
-                # Keep generating; job returns to queue.
                 db.add(version)
             job.status = "queued"
             job.claimed_at = None
@@ -261,6 +477,14 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
     """Execute one claimed croquis generate job to awaiting_review / failure / reconciliation."""
     if job.job_type != CROQUIS_GENERATE_JOB_TYPE:
         return
+    expected_token = job.claim_token
+    if not expected_token:
+        job.status = "failed"
+        job.error_message = "Claimed croquis job missing claim_token."
+        db.add(job)
+        db.commit()
+        return
+
     payload = job.input_data if isinstance(job.input_data, dict) else {}
     try:
         version_id = uuid.UUID(str(payload["version_id"]))
@@ -274,15 +498,29 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         db.commit()
         raise ValueError("invalid croquis job payload") from exc
 
-    version = (
-        db.query(PersonalCroquisVersion)
-        .filter(PersonalCroquisVersion.id == version_id)
-        .with_for_update()
-        .one_or_none()
-    )
+    reservation_id = None
+    if payload.get("reservation_id"):
+        try:
+            reservation_id = uuid.UUID(str(payload["reservation_id"]))
+        except ValueError:
+            reservation_id = None
+    ai_consent_id = None
+    if payload.get("ai_consent_id"):
+        try:
+            ai_consent_id = uuid.UUID(str(payload["ai_consent_id"]))
+        except ValueError:
+            ai_consent_id = None
+
+    # Lock order: croquis → version → reservation (matches erase/reject serialization).
     croquis = (
         db.query(PersonalCroquis)
         .filter(PersonalCroquis.id == croquis_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    version = (
+        db.query(PersonalCroquisVersion)
+        .filter(PersonalCroquisVersion.id == version_id)
         .with_for_update()
         .one_or_none()
     )
@@ -294,6 +532,7 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             .with_for_update()
             .one()
         )
+        reservation_id = reservation.id
 
     if version is None or croquis is None:
         job.status = "failed"
@@ -307,7 +546,6 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         db.commit()
         return
 
-    # Owner cancelled / erased before provider — release if not submitted.
     if version.status == VERSION_STATUS_REJECTED:
         job.status = "failed"
         job.error_message = "Version rejected before processing."
@@ -336,7 +574,6 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         return
 
     if version.status not in (VERSION_STATUS_GENERATING,):
-        # Idempotent worker replay for already-finished rows.
         job.status = "completed" if version.status == VERSION_STATUS_AWAITING_REVIEW else "failed"
         job.result_data = {
             "version_id": str(version.id),
@@ -348,7 +585,6 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         db.commit()
         return
 
-    # Dispatch-time gate/ceiling check (fail closed in production defaults).
     try:
         _assert_dispatch_gates()
     except ProviderNotAvailableError as exc:
@@ -367,65 +603,120 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         return
 
     job.status = "running"
+    job.claimed_at = _utcnow()
     db.add(job)
     db.commit()
 
+    # Revalidate authorization + load source immediately before the fenced dispatch marker.
     try:
-        owner = croquis.owner
-        source_path = pcs.resolve_croquis_asset_file(db, owner, source_asset_id)
-        source_bytes = source_path.read_bytes()
-    except Exception as exc:  # source gone / IDOR closed
-        version.status = VERSION_STATUS_FAILED
-        job.status = "failed"
-        job.error_message = "Source photo unavailable."
-        job.claim_token = None
-        if reservation and reservation.status == RESERVATION_OPEN:
+        # Refresh croquis/version under lock for authz (short TX).
+        croquis = (
+            db.query(PersonalCroquis)
+            .filter(PersonalCroquis.id == croquis_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        version = (
+            db.query(PersonalCroquisVersion)
+            .filter(PersonalCroquisVersion.id == version_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if croquis is None or version is None or version.status != VERSION_STATUS_GENERATING:
+            raise DispatchAuthzError("Version no longer generating at dispatch authz")
+        source_bytes = _assert_dispatch_authorization(
+            db,
+            croquis=croquis,
+            version=version,
+            source_asset_id=source_asset_id,
+            ai_consent_id=ai_consent_id,
+        )
+        db.commit()
+    except DispatchAuthzError as exc:
+        version = db.get(PersonalCroquisVersion, version_id)
+        reservation = _reservation_for_version(db, version_id)
+        job_row = db.get(AIJob, job.id)
+        if version is not None and version.status == VERSION_STATUS_GENERATING:
+            version.status = VERSION_STATUS_FAILED
+            db.add(version)
+        if reservation is not None and reservation.status == RESERVATION_OPEN and not reservation.provider_called:
             reservation.status = RESERVATION_RELEASED
             reservation.actual_cost_cents = 0
             reservation.error_detail = str(exc)[:500]
             db.add(reservation)
-        db.add(version)
-        db.add(job)
+        if job_row is not None:
+            job_row.status = "failed"
+            job_row.error_message = f"Dispatch authorization failed: {exc}"[:500]
+            job_row.claim_token = None
+            db.add(job_row)
         db.commit()
         return
 
-    adapter = get_croquis_provider()
-    # Mark possibly-spent BEFORE adapter invocation (crash after this → reconciliation).
-    if reservation is not None:
-        reservation.provider_called = True
-        db.add(reservation)
-        db.commit()
+    # Deterministic interleaving point for lease-recovery / erase concurrency tests.
+    if _pre_provider_dispatch_hook is not None:
+        _pre_provider_dispatch_hook(job)
 
+    try:
+        job = _fence_claim_and_mark_provider_called(
+            db,
+            job_id=job.id,
+            claim_token=expected_token,
+            reservation_id=reservation_id,
+        )
+    except StaleClaimError:
+        # Another worker owns the lease — do not call provider and do not mutate their state.
+        logger.info("Aborting stale croquis worker for job %s (fence lost)", job.id)
+        db.rollback()
+        return
+
+    adapter = get_croquis_provider()
     try:
         result = adapter.generate_line_art(source_bytes)
         png_bytes = validate_and_normalize_provider_png(result.png_bytes)
-        asset = _store_generated_asset(db, owner_id=version.owner_id, png_bytes=png_bytes)
+        owner_id_for_asset = version.owner_id if version is not None else job.user_id
+        # Precise erase-vs-attach interleaving point (after provider, before store/attach).
+        if _post_provider_pre_attach_hook is not None:
+            _post_provider_pre_attach_hook(job)
+        asset = _store_generated_asset(db, owner_id=owner_id_for_asset, png_bytes=png_bytes)
         settled = (
             int(result.actual_cost_cents)
             if result.usage_source == "provider_usage"
             else int(result.estimated_cost_cents)
         )
-        # Cap settled label at reserved max exposure when configured on reservation.
-        if reservation is not None and reservation.max_exposure_cents:
-            # Still record actual; exposure accounting uses max(actual, reserved) at settle time
-            # for ceiling sums via settled actual. Do not invent a lower actual.
-            pass
 
-        # CAS: only attach if still generating and croquis not erased.
-        croquis_fresh = db.get(PersonalCroquis, croquis_id)
-        erased = (
-            croquis_fresh is None
-            or croquis_fresh.erase_requested_at is not None
-            or croquis_fresh.deleted_at is not None
+        # Re-fence before attach so a recovered peer cannot race past this worker's bytes.
+        try:
+            job = _fence_claim_and_mark_provider_called(
+                db,
+                job_id=job.id,
+                claim_token=expected_token,
+                reservation_id=None,  # already marked; only re-check lease
+            )
+        except StaleClaimError:
+            logger.info("Aborting stale croquis attach for job %s (fence lost)", job.id)
+            db.rollback()
+            _safe_delete_asset_row(db, asset)
+            return
+
+        outcome = _attach_generated_under_croquis_lock(
+            db,
+            croquis_id=croquis_id,
+            version_id=version_id,
+            asset=asset,
+            prompt_version=result.prompt_version,
+            geometry_profile=result.geometry_profile or GEOMETRY_PROFILE_V1,
+            settled=settled,
         )
-        if erased:
+        reservation = _reservation_for_version(db, version_id)
+        version = db.get(PersonalCroquisVersion, version_id)
+
+        if outcome == "erased":
             if reservation is not None and reservation.status == RESERVATION_OPEN:
-                # Provider already called — keep spend exposure (settle), discard asset.
                 reservation.status = RESERVATION_SETTLED
                 reservation.actual_cost_cents = settled
                 reservation.error_detail = "Croquis erased after provider response; result discarded."
                 db.add(reservation)
-            if version.status == VERSION_STATUS_GENERATING:
+            if version is not None and version.status == VERSION_STATUS_GENERATING:
                 version.status = VERSION_STATUS_FAILED
                 db.add(version)
             job.status = "failed"
@@ -436,34 +727,17 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             _safe_delete_asset_row(db, asset)
             return
 
-        cas = db.execute(
-            update(PersonalCroquisVersion)
-            .where(
-                PersonalCroquisVersion.id == version_id,
-                PersonalCroquisVersion.status == VERSION_STATUS_GENERATING,
-            )
-            .values(
-                generated_asset_id=asset.id,
-                status=VERSION_STATUS_AWAITING_REVIEW,
-                prompt_version=result.prompt_version,
-                geometry_profile=result.geometry_profile or GEOMETRY_PROFILE_V1,
-                cost_cents=settled,
-            )
-        )
-        if int(getattr(cas, "rowcount", 0) or 0) != 1:
-            # Rejected or otherwise transitioned — never resurrect.
-            db.refresh(version)
+        if outcome == "rejected":
             if reservation is not None and reservation.status == RESERVATION_OPEN:
                 reservation.status = RESERVATION_SETTLED
                 reservation.actual_cost_cents = settled
                 reservation.error_detail = (
-                    f"Provider completed but version status={version.status}; result discarded."
+                    f"Provider completed but version status="
+                    f"{getattr(version, 'status', '?')}; result discarded."
                 )
                 db.add(reservation)
             job.status = "failed"
-            job.error_message = (
-                f"Version no longer generating (status={version.status}); result discarded."
-            )
+            job.error_message = "Version no longer generating; result discarded."
             job.claim_token = None
             db.add(job)
             db.commit()
@@ -491,24 +765,27 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         db.add(job)
         db.commit()
     except ProviderNotAvailableError as exc:
-        # Prefer release only if we can prove the adapter refused before send.
-        # After provider_called=True we still release for explicit NotAvailable from
-        # fail-closed shells (no network). UnknownOutcome uses TimeoutError instead.
-        version.status = VERSION_STATUS_FAILED
+        version = db.get(PersonalCroquisVersion, version_id)
+        reservation = _reservation_for_version(db, version_id)
+        if version is not None:
+            version.status = VERSION_STATUS_FAILED
+            db.add(version)
         job.status = "failed"
         job.error_message = "Provider unavailable before spend."
         job.claim_token = None
         if reservation is not None:
             reservation.status = RESERVATION_RELEASED
             reservation.actual_cost_cents = 0
-            # Keep provider_called historical truth if we marked it; still release cost.
             reservation.error_detail = str(exc)[:500]
             db.add(reservation)
-        db.add(version)
         db.add(job)
         db.commit()
     except TimeoutError as exc:
-        version.status = VERSION_STATUS_RECONCILIATION
+        version = db.get(PersonalCroquisVersion, version_id)
+        reservation = _reservation_for_version(db, version_id)
+        if version is not None:
+            version.status = VERSION_STATUS_RECONCILIATION
+            db.add(version)
         job.status = "failed"
         job.error_message = "Provider outcome unknown — reconciliation required."
         job.claim_token = None
@@ -516,18 +793,26 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             reservation.status = RESERVATION_RECONCILIATION
             reservation.error_detail = str(exc)[:500]
             db.add(reservation)
-        db.add(version)
         db.add(job)
         db.commit()
+    except StaleClaimError:
+        db.rollback()
+        return
     except Exception as exc:
         logger.exception("Croquis job %s failed", job.id)
+        version = db.get(PersonalCroquisVersion, version_id)
+        reservation = _reservation_for_version(db, version_id)
         if reservation is not None and reservation.provider_called:
-            version.status = VERSION_STATUS_RECONCILIATION
+            if version is not None:
+                version.status = VERSION_STATUS_RECONCILIATION
+                db.add(version)
             reservation.status = RESERVATION_RECONCILIATION
             reservation.error_detail = str(exc)[:500]
             job.error_message = "Provider failure after send — reconciliation required."
         else:
-            version.status = VERSION_STATUS_FAILED
+            if version is not None:
+                version.status = VERSION_STATUS_FAILED
+                db.add(version)
             if reservation is not None:
                 reservation.status = RESERVATION_RELEASED
                 reservation.actual_cost_cents = 0
@@ -535,7 +820,6 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             job.error_message = "Generation failed before provider spend."
         job.status = "failed"
         job.claim_token = None
-        db.add(version)
         if reservation is not None:
             db.add(reservation)
         db.add(job)
