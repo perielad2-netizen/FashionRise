@@ -1,6 +1,5 @@
 /**
- * Offline Stage B wizard harness — mocked Stage A JSON only.
- * Never hits a provider; not a production mock generate path.
+ * Offline Stage B/C wizard harness — mocked Stage A/C JSON only.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,8 +7,14 @@ import type { PersonalCroquisRead } from '@/services/personalCroquisApi'
 
 const attestAdults = vi.fn()
 const acknowledgeStorageConsent = vi.fn()
+const acknowledgeAiConsent = vi.fn()
 const uploadPersonalCroquisPhoto = vi.fn()
 const listPersonalCroquis = vi.fn()
+const generatePersonalCroquisVersion = vi.fn()
+const getPersonalCroquisVersion = vi.fn()
+const acceptPersonalCroquisVersion = vi.fn()
+const rejectPersonalCroquisVersion = vi.fn()
+const fetchCroquisAssetBlob = vi.fn()
 
 vi.mock('@/services/personalCroquisApi', async () => {
   const actual = await vi.importActual<typeof import('@/services/personalCroquisApi')>(
@@ -19,8 +24,14 @@ vi.mock('@/services/personalCroquisApi', async () => {
     ...actual,
     attestAdults: (...args: unknown[]) => attestAdults(...args),
     acknowledgeStorageConsent: (...args: unknown[]) => acknowledgeStorageConsent(...args),
+    acknowledgeAiConsent: (...args: unknown[]) => acknowledgeAiConsent(...args),
     uploadPersonalCroquisPhoto: (...args: unknown[]) => uploadPersonalCroquisPhoto(...args),
     listPersonalCroquis: (...args: unknown[]) => listPersonalCroquis(...args),
+    generatePersonalCroquisVersion: (...args: unknown[]) => generatePersonalCroquisVersion(...args),
+    getPersonalCroquisVersion: (...args: unknown[]) => getPersonalCroquisVersion(...args),
+    acceptPersonalCroquisVersion: (...args: unknown[]) => acceptPersonalCroquisVersion(...args),
+    rejectPersonalCroquisVersion: (...args: unknown[]) => rejectPersonalCroquisVersion(...args),
+    fetchCroquisAssetBlob: (...args: unknown[]) => fetchCroquisAssetBlob(...args),
   }
 })
 
@@ -76,8 +87,55 @@ describe('CreateMyCroquisWizard offline harness', () => {
       adults_attested: true,
       created_at: '2026-10-31T12:00:00+00:00',
     })
+    acknowledgeAiConsent.mockResolvedValue({
+      id: 'ai-consent-1',
+      purpose: 'croquis_ai_provider',
+      consent_version: 'ai-provider-2026-10-30-draft',
+      adults_attested: true,
+      created_at: '2026-10-31T12:00:00+00:00',
+    })
     listPersonalCroquis.mockResolvedValue([libraryRow])
-    uploadPersonalCroquisPhoto.mockReset()
+    uploadPersonalCroquisPhoto.mockResolvedValue({
+      ...libraryRow,
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      latest_accepted_version: null,
+      source_asset_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    })
+    generatePersonalCroquisVersion.mockResolvedValue({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      croquis_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      version: 1,
+      status: 'generating',
+      generated_asset_id: null,
+      geometry_profile: 'fit_contain_768x1024_v1',
+      prompt_version: null,
+      created_at: '2026-10-31T12:00:00+00:00',
+      accepted_at: null,
+    })
+    getPersonalCroquisVersion.mockResolvedValue({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      croquis_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      version: 1,
+      status: 'awaiting_review',
+      generated_asset_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      geometry_profile: 'fit_contain_768x1024_v1',
+      prompt_version: 'croquis-lineart-v1',
+      created_at: '2026-10-31T12:00:00+00:00',
+      accepted_at: null,
+    })
+    fetchCroquisAssetBlob.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }))
+    acceptPersonalCroquisVersion.mockResolvedValue({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      croquis_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      version: 1,
+      status: 'accepted',
+      generated_asset_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      geometry_profile: 'fit_contain_768x1024_v1',
+      prompt_version: 'croquis-lineart-v1',
+      created_at: '2026-10-31T12:00:00+00:00',
+      accepted_at: '2026-10-31T12:06:00+00:00',
+    })
+    rejectPersonalCroquisVersion.mockReset()
   })
 
   afterEach(() => {
@@ -142,5 +200,38 @@ describe('CreateMyCroquisWizard offline harness', () => {
     await waitFor(() => expect(uploadPersonalCroquisPhoto).toHaveBeenCalled())
     expect(await screen.findByRole('alert')).toHaveTextContent(/not enabled/i)
     expect(onPin).not.toHaveBeenCalled()
+    expect(generatePersonalCroquisVersion).not.toHaveBeenCalled()
+  })
+
+  it('after upload shows AI consent and can accept a generated preview', async () => {
+    const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
+    const onPin = vi.fn()
+    const onClose = vi.fn()
+    render(<CreateMyCroquisWizard open onClose={onClose} onPinAccepted={onPin} />)
+
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(attestAdults).toHaveBeenCalled())
+    const file = new File([new Uint8Array([1, 2, 3])], 'pose.png', { type: 'image/png' })
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [file] },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Continue to storage consent/i }))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(acknowledgeStorageConsent).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: /Upload privately/i }))
+    await waitFor(() => expect(uploadPersonalCroquisPhoto).toHaveBeenCalled())
+    expect(await screen.findByText(/SYNTHETIC_TEST_AI_NOTICE_V1/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: /Generate My Croquis/i }))
+    await waitFor(() => expect(acknowledgeAiConsent).toHaveBeenCalled())
+    await waitFor(() => expect(generatePersonalCroquisVersion).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByAltText(/Generated croquis preview/i)).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /Accept & use in Studio/i }))
+    await waitFor(() => expect(acceptPersonalCroquisVersion).toHaveBeenCalled())
+    expect(onPin).toHaveBeenCalledWith('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 1)
+    expect(onClose).toHaveBeenCalled()
   })
 })

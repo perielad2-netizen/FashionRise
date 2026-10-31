@@ -127,6 +127,46 @@ export async function getPersonalCroquisVersion(
   })
 }
 
+export type GenerateVersionRequest = {
+  ai_consent_id: string
+  idempotency_key: string
+}
+
+/** Stage C enqueue — returns generating version; poll until awaiting_review / failed. */
+export async function generatePersonalCroquisVersion(
+  croquisId: string,
+  body: GenerateVersionRequest,
+  signal?: AbortSignal,
+): Promise<PersonalCroquisVersionRead> {
+  return apiRequest<PersonalCroquisVersionRead>(`${BASE}/${croquisId}/versions/generate`, {
+    method: 'POST',
+    body,
+    signal,
+  })
+}
+
+export async function acceptPersonalCroquisVersion(
+  croquisId: string,
+  version: number,
+  signal?: AbortSignal,
+): Promise<PersonalCroquisVersionRead> {
+  return apiRequest<PersonalCroquisVersionRead>(
+    `${BASE}/${croquisId}/versions/${version}/accept`,
+    { method: 'POST', signal },
+  )
+}
+
+export async function rejectPersonalCroquisVersion(
+  croquisId: string,
+  version: number,
+  signal?: AbortSignal,
+): Promise<PersonalCroquisVersionRead> {
+  return apiRequest<PersonalCroquisVersionRead>(
+    `${BASE}/${croquisId}/versions/${version}/reject`,
+    { method: 'POST', signal },
+  )
+}
+
 export async function uploadPersonalCroquisPhoto(
   file: File,
   storageConsentId: string,

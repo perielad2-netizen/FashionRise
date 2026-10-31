@@ -31,11 +31,15 @@ STATUS_UPLOADED = "uploaded"
 STATUS_ARCHIVED = "archived"
 STATUS_ERASED = "erased"
 
-VERSION_STATUS_GENERATING = "generating"
+VERSION_STATUS_GENERATING = "generating"  # queued or running in worker
+VERSION_STATUS_AWAITING_REVIEW = "awaiting_review"
 VERSION_STATUS_FAILED = "failed"
 VERSION_STATUS_REJECTED = "rejected"
 VERSION_STATUS_ACCEPTED = "accepted"
 VERSION_STATUS_RECONCILIATION = "reconciliation_required"
+
+# AIJob.job_type for Create My Croquis Stage C (separate from Magic sketch jobs).
+CROQUIS_GENERATE_JOB_TYPE = "personal_croquis_generate"
 
 
 class PersonalCroquis(Base):

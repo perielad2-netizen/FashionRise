@@ -190,13 +190,13 @@ def generate_croquis_version(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> PersonalCroquisVersionRead:
-    """Stage C generate — AI consent + AI gate + spend reservation + idempotency.
+    """Stage C enqueue — AI consent + AI gate + spend reservation + idempotency.
 
-    Defaults fail closed. Live paid providers are not activated in this build;
-    tests inject a mock adapter. Same idempotency_key never double-charges.
+    Returns a generating version. Worker settles to awaiting_review.
+    Defaults fail closed. Live paid providers are not activated in this build.
     """
     _ = request.url
-    row = pcg.generate_personal_croquis_version(
+    row = pcg.enqueue_personal_croquis_generate(
         db,
         user,
         croquis_id,
@@ -215,8 +215,43 @@ def get_croquis_version(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> PersonalCroquisVersionRead:
+    """Durable progress/status for a version (generating → awaiting_review → accepted)."""
     _ = request.url
     row = pcs.get_exact_version(db, user, croquis_id, version)
+    return version_to_read(row)
+
+
+@router.post(
+    "/{croquis_id}/versions/{version}/accept",
+    response_model=PersonalCroquisVersionRead,
+)
+@limiter.limit("30/minute")
+def accept_croquis_version(
+    request: Request,
+    croquis_id: uuid.UUID,
+    version: int,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PersonalCroquisVersionRead:
+    _ = request.url
+    row = pcg.accept_personal_croquis_version(db, user, croquis_id, version)
+    return version_to_read(row)
+
+
+@router.post(
+    "/{croquis_id}/versions/{version}/reject",
+    response_model=PersonalCroquisVersionRead,
+)
+@limiter.limit("30/minute")
+def reject_croquis_version(
+    request: Request,
+    croquis_id: uuid.UUID,
+    version: int,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PersonalCroquisVersionRead:
+    _ = request.url
+    row = pcg.reject_personal_croquis_version(db, user, croquis_id, version)
     return version_to_read(row)
 
 
