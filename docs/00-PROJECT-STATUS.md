@@ -25,7 +25,7 @@ Design: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md
 
 | Item | Status |
 |---|---|
-| Branch | `cursor/web-create-my-croquis-stage-b-77c6` @ **`e617c066c3b0a7ca733fd2965b9f309bd3a57bf8`** (stacked on accepted Stage A; same draft PR #140) |
+| Branch | `cursor/web-create-my-croquis-stage-b-77c6` @ **`5f3e84759ede2b3efb50f8f12ee81105806deacb`** (stacked on accepted Stage A; same draft PR #140) |
 | Base / Stage A accepted | Exact PR #139 HEAD **`655f6d3486f5bd5b89f2191a1016054d0ade4894`** (PM PASS 2026-10-31) |
 | Design parent | `e6c34ca5f7475690bd8da610f22f8ac9d56de40d` (PR #138) |
 | PM prior tip | `243f4915172af921d329a97fa7aa88829dedcaf2` (PARTIAL PASS / CHANGES REQUIRED) |
