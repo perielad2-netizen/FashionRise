@@ -25,7 +25,7 @@ Design: [`docs/CREATE-MY-CROQUIS-V1-DESIGN.md`](./CREATE-MY-CROQUIS-V1-DESIGN.md
 
 | Item | Status |
 |---|---|
-| Branch | `cursor/web-create-my-croquis-stage-c-77c6` (stacked on accepted Stage B) |
+| Branch | `cursor/web-create-my-croquis-stage-c-77c6` @ **`2fb37ef9723dd5bc1751278b7c0d846146e5dd6b`** (stacked on accepted Stage B) |
 | Base / Stage B accepted | Exact PR #140 HEAD **`cab1c79359b7015db393073e4a8dafa236530e81`** (PM ENGINEERING PASS 2026-10-31) |
 | Stage A accepted | Exact PR #139 HEAD **`655f6d3486f5bd5b89f2191a1016054d0ade4894`** |
 | Scope | `POST /versions/generate` · AI consent required · provider adapter boundary · MockCroquisProvider tests · spend reservations (ceiling default **0**) · idempotency · unknown-outcome reconciliation (no auto retry) · Alembic **`013`** (disposable only) |
