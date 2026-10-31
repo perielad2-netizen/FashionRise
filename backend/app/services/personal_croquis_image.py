@@ -82,9 +82,8 @@ def normalize_croquis_source_bytes(
     if probed is not None:
         _reject_if_dimensions_invalid(probed[0], probed[1])
 
-    # Decompression bomb guard before full pixel load.
-    Image.MAX_IMAGE_PIXELS = settings.max_croquis_total_pixels
-
+    # Do NOT mutate process-global Image.MAX_IMAGE_PIXELS (isolates Fabric/Magic).
+    # Bound via header probe + post-open size checks before full decode.
     try:
         opened = Image.open(io.BytesIO(raw))
     except (UnidentifiedImageError, OSError, ValueError) as exc:

@@ -1,7 +1,35 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class AdultsAttestationRequest(BaseModel):
+    """Explicit adults-only self-attestation (NOT independent age verification)."""
+
+    adults_attested: Literal[True] = Field(
+        description="Must be explicitly true; empty/omitted requests are rejected.",
+    )
+    notice_version: str = Field(min_length=1, max_length=64)
+    notice_text_hash: str = Field(
+        min_length=64,
+        max_length=64,
+        description="SHA-256 hex of the approved notice text shown to the user.",
+    )
+
+
+class ConsentAcknowledgeRequest(BaseModel):
+    """Explicit storage or AI-provider consent acknowledgment."""
+
+    acknowledged: Literal[True] = Field(
+        description="Must be explicitly true; empty/omitted requests are rejected.",
+    )
+    adults_attested: Literal[True] = Field(
+        description="Must reaffirm adults-only attestation on this consent record.",
+    )
+    notice_version: str = Field(min_length=1, max_length=64)
+    notice_text_hash: str = Field(min_length=64, max_length=64)
 
 
 class AdultsAttestationRead(BaseModel):

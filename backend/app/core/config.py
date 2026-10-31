@@ -46,10 +46,15 @@ class Settings(BaseSettings):
     # Create My Croquis gates (independent of Studio FRONT_BACK/MAGIC/DUAL). Fail closed.
     my_croquis_upload_enabled: bool = False
     my_croquis_ai_enabled: bool = False
-    # Draft consent version ids — final legal copy is NOT approved; do not collect live photos.
+    # Consent notice versions. Collection remains fail-closed until approved notice text is set.
     my_croquis_storage_consent_version: str = "storage-2026-10-30-draft"
     my_croquis_ai_consent_version: str = "ai-provider-2026-10-30-draft"
     my_croquis_adults_attestation_version: str = "adults-beta-2026-10-30-draft"
+    # Approved notice bodies. Empty (default) → refuse to record consent (not legal-authoritative).
+    # Tests may inject synthetic fixtures via env; never ship production-legal copy here.
+    my_croquis_adults_notice_text: str = ""
+    my_croquis_storage_notice_text: str = ""
+    my_croquis_ai_notice_text: str = ""
     # Consent / attestation validity windows (seconds).
     my_croquis_storage_consent_max_age_seconds: int = 3600
     my_croquis_adults_attestation_max_age_seconds: int = 86400

@@ -22,6 +22,7 @@ from app.models.personal_croquis import (
 )
 from app.models.private_media_asset import KIND_CROQUIS_SOURCE, PrivateMediaAsset
 from app.models.private_media_cleanup import PrivateMediaCleanupQueue
+from app.storage.croquis_unlink import CroquisUnlinkOutcome
 from app.storage.local import LocalStorageBackend
 
 logger = logging.getLogger(__name__)
@@ -40,11 +41,13 @@ class RetentionSweepResult:
     eligible_accepted_source: int = 0
     queue_processed: int = 0
     bytes_unlinked: int = 0
+    already_absent: int = 0
     failures: int = 0
+    unsafe: int = 0
     asset_ids_touched: list[str] = field(default_factory=list)
 
 
-def _safe_unlink(storage_key: str) -> bool:
+def _unlink_croquis(storage_key: str) -> CroquisUnlinkOutcome:
     storage = LocalStorageBackend()
     try:
         return storage.delete_private_croquis_file(key=storage_key)
@@ -53,7 +56,10 @@ def _safe_unlink(storage_key: str) -> bool:
             "croquis_retention_unlink_failed err_type=%s",
             type(exc).__name__,
         )
-        return False
+        # ValueError from validation → unsafe; OSError → failed
+        if isinstance(exc, ValueError):
+            return CroquisUnlinkOutcome.UNSAFE
+        return CroquisUnlinkOutcome.FAILED
 
 
 def _mark_source_for_purge(
@@ -103,7 +109,6 @@ def _mark_source_for_purge(
 def _find_abandoned_sources(db: Session, *, now: datetime, limit: int) -> list[PrivateMediaAsset]:
     settings = get_settings()
     cutoff = now - timedelta(hours=settings.my_croquis_abandoned_upload_hours)
-    # Uploaded source with no accepted version and older than abandoned window.
     candidates = (
         db.query(PrivateMediaAsset)
         .filter(
@@ -124,17 +129,17 @@ def _find_abandoned_sources(db: Session, *, now: datetime, limit: int) -> list[P
         )
         if croquis is None:
             out.append(asset)
-            continue
-        accepted = (
-            db.query(PersonalCroquisVersion)
-            .filter(
-                PersonalCroquisVersion.croquis_id == croquis.id,
-                PersonalCroquisVersion.status == VERSION_STATUS_ACCEPTED,
+        else:
+            accepted = (
+                db.query(PersonalCroquisVersion)
+                .filter(
+                    PersonalCroquisVersion.croquis_id == croquis.id,
+                    PersonalCroquisVersion.status == VERSION_STATUS_ACCEPTED,
+                )
+                .first()
             )
-            .first()
-        )
-        if accepted is None:
-            out.append(asset)
+            if accepted is None:
+                out.append(asset)
         if len(out) >= limit:
             break
     return out
@@ -199,6 +204,11 @@ def process_cleanup_queue(
     limit: int,
     result: RetentionSweepResult,
 ) -> None:
+    """Process pending unlinks with fail-closed semantics.
+
+    - REMOVED / ALREADY_ABSENT → mark processed; set bytes_purged_at when asset known
+    - UNSAFE / FAILED → keep queued, record error, increment failures (never purged)
+    """
     pending = (
         db.query(PrivateMediaCleanupQueue)
         .filter(PrivateMediaCleanupQueue.processed_at.is_(None))
@@ -213,15 +223,21 @@ def process_cleanup_queue(
         if dry_run:
             continue
         item.attempts = int(item.attempts or 0) + 1
-        _safe_unlink(item.storage_key)
-        # Missing file is treated as success (idempotent retry).
-        storage = LocalStorageBackend()
-        still_there = storage.resolve_private_croquis_file(key=item.storage_key)
-        if still_there is not None:
+        outcome = _unlink_croquis(item.storage_key)
+
+        if outcome is CroquisUnlinkOutcome.UNSAFE:
+            item.last_error = "unsafe_storage_key"
+            result.failures += 1
+            result.unsafe += 1
+            db.add(item)
+            continue
+        if outcome is CroquisUnlinkOutcome.FAILED:
             item.last_error = "unlink_failed"
             result.failures += 1
             db.add(item)
             continue
+
+        # Success paths: removed or verifiably already absent under private croquis root.
         item.processed_at = now
         item.last_error = None
         if item.asset_id is not None:
@@ -229,9 +245,12 @@ def process_cleanup_queue(
             if asset is not None and asset.bytes_purged_at is None:
                 asset.bytes_purged_at = now
                 db.add(asset)
-        result.bytes_unlinked += 1
-        if item.asset_id:
-            result.asset_ids_touched.append(str(item.asset_id))
+            if item.asset_id:
+                result.asset_ids_touched.append(str(item.asset_id))
+        if outcome is CroquisUnlinkOutcome.REMOVED:
+            result.bytes_unlinked += 1
+        else:
+            result.already_absent += 1
         db.add(item)
 
 
@@ -272,7 +291,6 @@ def run_retention_sweep(
             db, asset, reason="accepted_source_expiry", dry_run=dry_run, result=result
         )
 
-    # Also mark permanently erased croquis that still have live source refs.
     erased = (
         db.query(PersonalCroquis)
         .filter(
@@ -282,11 +300,10 @@ def run_retention_sweep(
         .limit(limit)
         .all()
     )
-    for croquis in erased:
+    for _croquis in erased:
         result.examined += 1
 
     if not dry_run:
-        # Ensure newly enqueued cleanup rows are visible to the queue query.
         db.flush()
     process_cleanup_queue(db, dry_run=dry_run, limit=limit, result=result)
 

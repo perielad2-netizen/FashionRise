@@ -48,10 +48,14 @@ logger = logging.getLogger(__name__)
 
 _CONTROL = re.compile(r"[\u0000-\u001F\u007F-\u009F\u2028\u2029]")
 
-# Draft placeholder only — final legal text is NOT approved.
-_DRAFT_STORAGE_TEXT = "UNAPPROVED_DRAFT_STORAGE_CONSENT_PLACEHOLDER"
-_DRAFT_AI_TEXT = "UNAPPROVED_DRAFT_AI_PROVIDER_CONSENT_PLACEHOLDER"
-_DRAFT_ADULTS_TEXT = "UNAPPROVED_DRAFT_ADULTS_BETA_ATTESTATION_PLACEHOLDER"
+# Non-authoritative draft markers — never accepted as configured notice text.
+_BLOCKED_DRAFT_MARKERS = frozenset(
+    {
+        "UNAPPROVED_DRAFT_STORAGE_CONSENT_PLACEHOLDER",
+        "UNAPPROVED_DRAFT_AI_PROVIDER_CONSENT_PLACEHOLDER",
+        "UNAPPROVED_DRAFT_ADULTS_BETA_ATTESTATION_PLACEHOLDER",
+    }
+)
 
 
 def _utcnow() -> datetime:
@@ -60,6 +64,93 @@ def _utcnow() -> datetime:
 
 def _hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _approved_notice_text(*, purpose: str) -> str:
+    """Return configured notice text or raise — empty/draft placeholders fail closed."""
+    settings = get_settings()
+    if purpose == PURPOSE_ADULTS_BETA:
+        text = (settings.my_croquis_adults_notice_text or "").strip()
+        version = settings.my_croquis_adults_attestation_version
+    elif purpose == PURPOSE_CROQUIS_STORAGE:
+        text = (settings.my_croquis_storage_notice_text or "").strip()
+        version = settings.my_croquis_storage_consent_version
+    elif purpose == PURPOSE_CROQUIS_AI_PROVIDER:
+        text = (settings.my_croquis_ai_notice_text or "").strip()
+        version = settings.my_croquis_ai_consent_version
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown consent purpose.")
+    if not text or text in _BLOCKED_DRAFT_MARKERS:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Create My Croquis consent collection is not authorized (notice text not approved).",
+        )
+    # Draft version ids are non-authoritative unless paired with synthetic test fixtures.
+    if "draft" in (version or "").lower() and not text.startswith("SYNTHETIC_TEST_"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Create My Croquis consent collection is not authorized (draft notice version).",
+        )
+    return text
+
+
+def _require_explicit_ack(
+    *,
+    purpose: str,
+    acknowledged: bool,
+    adults_attested: bool,
+    notice_version: str,
+    notice_text_hash: str,
+) -> tuple[str, str, str]:
+    """Validate explicit client acknowledgment against configured approved notice."""
+    settings = get_settings()
+    if purpose == PURPOSE_ADULTS_BETA:
+        expected_version = settings.my_croquis_adults_attestation_version
+        if not adults_attested:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Explicit adults-only attestation is required.",
+            )
+    elif purpose == PURPOSE_CROQUIS_STORAGE:
+        expected_version = settings.my_croquis_storage_consent_version
+        if not acknowledged:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Explicit storage consent acknowledgment is required.",
+            )
+        if not adults_attested:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Adults-only attestation flag is required on storage consent.",
+            )
+    elif purpose == PURPOSE_CROQUIS_AI_PROVIDER:
+        expected_version = settings.my_croquis_ai_consent_version
+        if not acknowledged:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Explicit AI-provider consent acknowledgment is required.",
+            )
+        if not adults_attested:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Adults-only attestation flag is required on AI consent.",
+            )
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown consent purpose.")
+
+    notice = _approved_notice_text(purpose=purpose)
+    if notice_version != expected_version:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Consent notice version is not current.",
+        )
+    expected_hash = _hash_text(notice)
+    if notice_text_hash != expected_hash:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Consent notice text hash does not match the approved notice.",
+        )
+    return expected_version, expected_hash, notice
 
 
 def normalize_croquis_display_name(raw: str | None, fallback: str = "My croquis") -> str:
@@ -101,16 +192,33 @@ def _require_upload_gate() -> None:
         )
 
 
-def record_adults_attestation(db: Session, user: User) -> UserConsentEvent:
-    """Self-attestation only — not independent age verification."""
-    settings = get_settings()
+def record_adults_attestation(
+    db: Session,
+    user: User,
+    *,
+    adults_attested: bool,
+    notice_version: str,
+    notice_text_hash: str,
+) -> UserConsentEvent:
+    """Self-attestation only — not independent age verification.
+
+    Requires explicit ``adults_attested=True`` and a hash of the configured
+    approved notice. Empty/draft placeholder notices fail closed.
+    """
+    version, text_hash, _notice = _require_explicit_ack(
+        purpose=PURPOSE_ADULTS_BETA,
+        acknowledged=True,
+        adults_attested=adults_attested,
+        notice_version=notice_version,
+        notice_text_hash=notice_text_hash,
+    )
     row = UserConsentEvent(
         id=uuid.uuid4(),
         owner_id=user.id,
         purpose=PURPOSE_ADULTS_BETA,
-        consent_version=settings.my_croquis_adults_attestation_version,
+        consent_version=version,
         adults_attested=True,
-        text_hash=_hash_text(_DRAFT_ADULTS_TEXT),
+        text_hash=text_hash,
     )
     db.add(row)
     db.commit()
@@ -120,6 +228,10 @@ def record_adults_attestation(db: Session, user: User) -> UserConsentEvent:
 
 def _latest_adults_attestation(db: Session, user: User) -> UserConsentEvent | None:
     settings = get_settings()
+    try:
+        expected_hash = _hash_text(_approved_notice_text(purpose=PURPOSE_ADULTS_BETA))
+    except HTTPException:
+        return None
     cutoff = _utcnow() - timedelta(seconds=settings.my_croquis_adults_attestation_max_age_seconds)
     return (
         db.query(UserConsentEvent)
@@ -128,6 +240,7 @@ def _latest_adults_attestation(db: Session, user: User) -> UserConsentEvent | No
             UserConsentEvent.purpose == PURPOSE_ADULTS_BETA,
             UserConsentEvent.adults_attested.is_(True),
             UserConsentEvent.consent_version == settings.my_croquis_adults_attestation_version,
+            UserConsentEvent.text_hash == expected_hash,
             UserConsentEvent.created_at >= cutoff,
         )
         .order_by(UserConsentEvent.created_at.desc())
@@ -135,21 +248,35 @@ def _latest_adults_attestation(db: Session, user: User) -> UserConsentEvent | No
     )
 
 
-def record_storage_consent(db: Session, user: User) -> UserConsentEvent:
-    settings = get_settings()
+def record_storage_consent(
+    db: Session,
+    user: User,
+    *,
+    acknowledged: bool,
+    adults_attested: bool,
+    notice_version: str,
+    notice_text_hash: str,
+) -> UserConsentEvent:
     attestation = _latest_adults_attestation(db, user)
     if attestation is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Adults-only beta attestation is required before storage consent.",
         )
+    version, text_hash, _notice = _require_explicit_ack(
+        purpose=PURPOSE_CROQUIS_STORAGE,
+        acknowledged=acknowledged,
+        adults_attested=adults_attested,
+        notice_version=notice_version,
+        notice_text_hash=notice_text_hash,
+    )
     row = UserConsentEvent(
         id=uuid.uuid4(),
         owner_id=user.id,
         purpose=PURPOSE_CROQUIS_STORAGE,
-        consent_version=settings.my_croquis_storage_consent_version,
+        consent_version=version,
         adults_attested=True,
-        text_hash=_hash_text(_DRAFT_STORAGE_TEXT),
+        text_hash=text_hash,
     )
     db.add(row)
     db.commit()
@@ -157,26 +284,36 @@ def record_storage_consent(db: Session, user: User) -> UserConsentEvent:
     return row
 
 
-def record_ai_consent(db: Session, user: User) -> UserConsentEvent:
-    """Record AI-provider consent schema only — Stage A does not execute providers.
-
-    Recording consent is allowed while ``MY_CROQUIS_AI_ENABLED`` remains false.
-    There is no Stage A generate endpoint; this never triggers provider spend.
-    """
-    settings = get_settings()
+def record_ai_consent(
+    db: Session,
+    user: User,
+    *,
+    acknowledged: bool,
+    adults_attested: bool,
+    notice_version: str,
+    notice_text_hash: str,
+) -> UserConsentEvent:
+    """Record AI-provider consent only — Stage A does not execute providers."""
     attestation = _latest_adults_attestation(db, user)
     if attestation is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Adults-only beta attestation is required before AI consent.",
         )
+    version, text_hash, _notice = _require_explicit_ack(
+        purpose=PURPOSE_CROQUIS_AI_PROVIDER,
+        acknowledged=acknowledged,
+        adults_attested=adults_attested,
+        notice_version=notice_version,
+        notice_text_hash=notice_text_hash,
+    )
     row = UserConsentEvent(
         id=uuid.uuid4(),
         owner_id=user.id,
         purpose=PURPOSE_CROQUIS_AI_PROVIDER,
-        consent_version=settings.my_croquis_ai_consent_version,
+        consent_version=version,
         adults_attested=True,
-        text_hash=_hash_text(_DRAFT_AI_TEXT),
+        text_hash=text_hash,
     )
     db.add(row)
     db.commit()
@@ -215,6 +352,18 @@ def _get_valid_storage_consent(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Adults-only attestation is required.",
         )
+    try:
+        expected_hash = _hash_text(_approved_notice_text(purpose=PURPOSE_CROQUIS_STORAGE))
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Create My Croquis consent collection is not authorized (notice text not approved).",
+        ) from exc
+    if row.text_hash != expected_hash:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Storage consent notice is not current.",
+        )
     created = row.created_at
     if created.tzinfo is None:
         created = created.replace(tzinfo=UTC)
@@ -247,15 +396,18 @@ def _enqueue_cleanup(
 
 
 def _safe_unlink_croquis(storage_key: str) -> bool:
+    from app.storage.croquis_unlink import CroquisUnlinkOutcome
+
     storage = LocalStorageBackend()
     try:
-        return storage.delete_private_croquis_file(key=storage_key)
+        outcome = storage.delete_private_croquis_file(key=storage_key)
     except ValueError:
         logger.warning("croquis_cleanup_rejected_key asset_namespace=private_croquis")
         return False
     except OSError as exc:
         logger.warning("croquis_cleanup_unlink_failed err_type=%s", type(exc).__name__)
         return False
+    return outcome in {CroquisUnlinkOutcome.REMOVED, CroquisUnlinkOutcome.ALREADY_ABSENT}
 
 
 def upload_source_photo(
@@ -579,9 +731,15 @@ def insert_accepted_version_for_tests(
 
 
 def prepare_owner_account_croquis_cleanup(db: Session, owner_id: uuid.UUID) -> int:
-    """Snapshot croquis storage keys before owner DB cascade. Returns enqueued count.
+    """Snapshot croquis storage keys into the cleanup queue (same DB transaction).
 
-    Call before deleting a user so filesystem cleanup retains key metadata.
+    **Does not commit.** Caller must include this in the same successful
+    transaction as account deletion. If that transaction rolls back, erase
+    markers and queue rows roll back with it — the sweeper must not delete
+    an active user's photos after a failed account deletion.
+
+    Queue rows intentionally have no FK to ``users``, so after a successful
+    commit that deletes the user, key metadata remains for filesystem unlink.
     Does not modify designs or fabric assets.
     """
     assets = (
@@ -603,5 +761,5 @@ def prepare_owner_account_croquis_cleanup(db: Session, owner_id: uuid.UUID) -> i
         )
         count += 1
         db.add(asset)
-    db.commit()
+    db.flush()
     return count

@@ -33,6 +33,15 @@ def _jpeg_with_exif_orientation(orientation: int = 6) -> bytes:
     return buf.getvalue()
 
 
+def test_normalize_does_not_mutate_global_max_image_pixels():
+    from PIL import Image
+
+    before = Image.MAX_IMAGE_PIXELS
+    raw = _png(32, 32)
+    normalize_croquis_source_bytes(raw, declared_content_type="image/png")
+    assert Image.MAX_IMAGE_PIXELS == before
+
+
 def test_exif_orientation_applied_before_strip():
     raw = _jpeg_with_exif_orientation(6)
     before = Image.open(io.BytesIO(raw))

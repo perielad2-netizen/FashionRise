@@ -1,3 +1,4 @@
+import errno
 import os
 import re
 import tempfile
@@ -6,6 +7,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from app.core.config import get_settings
+from app.storage.croquis_unlink import CroquisUnlinkOutcome
 
 _CROQUIS_KEY_RE = re.compile(
     r"^croquis/"
@@ -101,10 +103,24 @@ class LocalStorageBackend:
         # Rebuild from validated UUIDs only — never concatenate untrusted segments.
         return self.private_croquis_root() / "croquis" / str(owner_id) / f"{asset_id}.png"
 
+    def _reject_symlink_components(self, path: Path, *, private_root: Path) -> None:
+        """Reject any symlink on the path from private_root to ``path`` (incl. in-root aliases)."""
+        try:
+            rel = path.relative_to(private_root)
+        except ValueError as exc:
+            raise ValueError("private croquis path escapes private_croquis root") from exc
+        cur = private_root
+        for part in rel.parts:
+            cur = cur / part
+            if cur.is_symlink():
+                raise ValueError("symlink components are not allowed in croquis paths")
+
     def _assert_under_croquis_root(self, path: Path) -> Path:
-        resolved = path.resolve()
         private_root = self.private_croquis_root()
         public_root = self.public_upload_root()
+        # Lexical containment before resolve (blocks in-root symlink aliases).
+        self._reject_symlink_components(path, private_root=private_root)
+        resolved = path.resolve(strict=False)
         try:
             resolved.relative_to(private_root)
         except ValueError as exc:
@@ -115,16 +131,6 @@ class LocalStorageBackend:
             pass
         else:
             raise ValueError("refusing to store croquis under public upload root")
-        # Reject symlink parents that escape after resolve (defense in depth).
-        for parent in [resolved, *resolved.parents]:
-            if parent == private_root or private_root in parent.parents or parent == private_root.parent:
-                break
-            if parent.is_symlink():
-                link_target = parent.resolve()
-                try:
-                    link_target.relative_to(private_root)
-                except ValueError as exc:
-                    raise ValueError("croquis path symlink escapes private_croquis root") from exc
         return resolved
 
     def save_file(self, *, key: str | None, data: BinaryIO, content_type: str | None) -> str:
@@ -260,21 +266,52 @@ class LocalStorageBackend:
             return path
         return None
 
+    def _install_croquis_no_clobber(self, tmp_path: Path, path: Path) -> None:
+        """Atomically publish ``tmp_path`` to ``path`` without overwriting an existing file.
+
+        Prefer hard-link (fails with EEXIST if destination exists). Fall back to
+        exclusive create of a placeholder then rename onto that reserved name.
+        """
+        try:
+            os.link(tmp_path, path)
+        except FileExistsError as exc:
+            raise ValueError("refusing to overwrite existing croquis asset") from exc
+        except OSError as exc:
+            # EXDEV / EPERM / etc. — reserve the name with O_EXCL then replace.
+            if exc.errno not in {errno.EXDEV, errno.EPERM, errno.EOPNOTSUPP, errno.EINVAL}:
+                raise
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            try:
+                placeholder_fd = os.open(path, flags, 0o600)
+            except FileExistsError as exists_exc:
+                raise ValueError("refusing to overwrite existing croquis asset") from exists_exc
+            os.close(placeholder_fd)
+            os.replace(tmp_path, path)
+            return
+        else:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+            return
+        # Unreachable; kept for clarity.
+
     def save_private_croquis_file(
         self, *, key: str, data: BinaryIO, content_type: str | None = None
     ) -> Path:
         """Atomically write croquis bytes under ``private_croquis/`` (never public).
 
-        Uses a same-directory temp file + fsync + rename. Refuses overwrite of an
-        existing different path identity. Does **not** use ``save_private_file``
-        (fabric-hardwired).
+        Same-directory temp + fsync + no-clobber publish. Rejects symlink path
+        components (including in-root aliases). Does **not** use fabric
+        ``save_private_file``.
         """
         _ = content_type
         self.validate_croquis_storage_key(key)
-        path = self._assert_under_croquis_root(self._private_croquis_path(key))
-        if path.exists():
-            raise ValueError("refusing to overwrite existing croquis asset")
+        lexical = self._private_croquis_path(key)
+        path = self._assert_under_croquis_root(lexical)
         path.parent.mkdir(parents=True, exist_ok=True)
+        # Re-check after mkdir: parent must not have become a symlink alias.
+        self._assert_under_croquis_root(lexical)
         try:
             os.chmod(path.parent, 0o700)
         except OSError:
@@ -296,12 +333,11 @@ class LocalStorageBackend:
                 os.chmod(tmp_path, 0o600)
             except OSError:
                 pass
-            os.replace(tmp_path, path)
+            self._install_croquis_no_clobber(tmp_path, path)
             try:
                 os.chmod(path, 0o600)
             except OSError:
                 pass
-            # Best-effort directory fsync for durability of the rename.
             try:
                 dir_fd = os.open(str(path.parent), os.O_RDONLY)
             except OSError:
@@ -329,18 +365,27 @@ class LocalStorageBackend:
             return path
         return None
 
-    def delete_private_croquis_file(self, *, key: str) -> bool:
-        """Secure unlink of a private croquis file. Returns True if a file was removed.
+    def delete_private_croquis_file(self, *, key: str) -> CroquisUnlinkOutcome:
+        """Secure unlink with typed outcome (removed / absent / unsafe / failed).
 
         Does not claim that snapshots/backups are purged — only the live path.
         """
         try:
-            path = self._assert_under_croquis_root(self._private_croquis_path(key))
+            self.validate_croquis_storage_key(key)
+            lexical = self._private_croquis_path(key)
+            path = self._assert_under_croquis_root(lexical)
         except ValueError:
-            return False
+            return CroquisUnlinkOutcome.UNSAFE
         if path.is_symlink():
-            return False
-        if path.is_file():
+            return CroquisUnlinkOutcome.UNSAFE
+        if not path.exists():
+            return CroquisUnlinkOutcome.ALREADY_ABSENT
+        if not path.is_file():
+            return CroquisUnlinkOutcome.UNSAFE
+        try:
             path.unlink()
-            return True
-        return False
+        except OSError:
+            return CroquisUnlinkOutcome.FAILED
+        if path.exists():
+            return CroquisUnlinkOutcome.FAILED
+        return CroquisUnlinkOutcome.REMOVED

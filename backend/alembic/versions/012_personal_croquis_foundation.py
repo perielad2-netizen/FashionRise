@@ -198,8 +198,16 @@ def upgrade() -> None:
         ["processed_at", "enqueued_at"],
     )
 
+    # P0-1: accepted version immutability + owner-consistent associations (DB-enforced).
+    from app.models.personal_croquis_ddl import INSTALL_TRIGGERS_SQL
+
+    op.execute(INSTALL_TRIGGERS_SQL)
+
 
 def downgrade() -> None:
+    from app.models.personal_croquis_ddl import DROP_TRIGGERS_SQL
+
+    op.execute(DROP_TRIGGERS_SQL)
     op.drop_index("ix_private_media_cleanup_queue_pending", table_name="private_media_cleanup_queue")
     op.drop_table("private_media_cleanup_queue")
     op.drop_index(

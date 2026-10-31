@@ -15,6 +15,8 @@ from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.schemas.personal_croquis import (
     AdultsAttestationRead,
+    AdultsAttestationRequest,
+    ConsentAcknowledgeRequest,
     ConsentEventRead,
     PersonalCroquisRead,
     PersonalCroquisVersionRead,
@@ -31,12 +33,19 @@ router = APIRouter()
 @limiter.limit("30/minute")
 def attest_adults(
     request: Request,
+    body: AdultsAttestationRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> AdultsAttestationRead:
     """Record adults-only beta self-attestation (not independent age verification)."""
     _ = request.url
-    row = pcs.record_adults_attestation(db, user)
+    row = pcs.record_adults_attestation(
+        db,
+        user,
+        adults_attested=body.adults_attested,
+        notice_version=body.notice_version,
+        notice_text_hash=body.notice_text_hash,
+    )
     return AdultsAttestationRead(
         id=row.id,
         purpose=row.purpose,
@@ -50,11 +59,19 @@ def attest_adults(
 @limiter.limit("30/minute")
 def consent_storage(
     request: Request,
+    body: ConsentAcknowledgeRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ConsentEventRead:
     _ = request.url
-    row = pcs.record_storage_consent(db, user)
+    row = pcs.record_storage_consent(
+        db,
+        user,
+        acknowledged=body.acknowledged,
+        adults_attested=body.adults_attested,
+        notice_version=body.notice_version,
+        notice_text_hash=body.notice_text_hash,
+    )
     return consent_to_read(row)
 
 
@@ -62,12 +79,20 @@ def consent_storage(
 @limiter.limit("30/minute")
 def consent_ai(
     request: Request,
+    body: ConsentAcknowledgeRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ConsentEventRead:
     """Prepare AI-provider consent record only — Stage A never calls a provider."""
     _ = request.url
-    row = pcs.record_ai_consent(db, user)
+    row = pcs.record_ai_consent(
+        db,
+        user,
+        acknowledged=body.acknowledged,
+        adults_attested=body.adults_attested,
+        notice_version=body.notice_version,
+        notice_text_hash=body.notice_text_hash,
+    )
     return consent_to_read(row)
 
 
