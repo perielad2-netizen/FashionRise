@@ -29,7 +29,7 @@ Owner swimsuit Try On failed with provider **HTTP 400** `moderation_blocked` / `
 | Spend | Definite HTTP 400 → reservation **released**, `actual_cost_cents` null, **no** automatic paid retry |
 | Unchanged | V5 croquis · Fashion Magic · consent · My Croquis · #148 A→B · #154 compare/fidelity capture |
 | Tests | BE try-on **12** PASS · FE error sanitize / capture / MagicLookPanel PASS · **0** paid calls |
-| Deploy | FE+BE+worker **`e728a06c`** · backup `/var/backups/fashionrise/try-on-swimwear-TIMESTAMP` |
+| Deploy | FE+BE+worker **`e728a06c`** · backup `/var/backups/fashionrise/try-on-swimwear-20261101T235431Z` |
 | Owner verify | Hard-refresh App **`e728a06c`**. Optional owner-paid swimwear Try On. Expect no self-contradictory coverage instruction; on any future provider refusal, a short readable message (no raw JSON). Acceptance of a realistic swimsuit result still depends on the image provider. |
 
 ## #154 Try On Person V2 — DEPLOYED (awaiting owner live review) (2026-11-02)
