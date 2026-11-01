@@ -212,10 +212,18 @@ def assert_edit_kwargs_match_envelope(kwargs: dict[str, Any]) -> None:
     if "input_fidelity" in kwargs:
         raise OneCallGuardError("edit kwargs must not include input_fidelity for sunburst croquis")
     image = kwargs.get("image")
+    # Authorized croquis shape: pose photo + FashionRise house style reference.
     if isinstance(image, list):
-        raise OneCallGuardError("edit kwargs must use exactly one image input (not a list)")
-    if image is None:
+        if len(image) != 2:
+            raise OneCallGuardError(
+                f"edit kwargs must use pose photo + house style ref (2 images); got {len(image)}"
+            )
+    elif image is None:
         raise OneCallGuardError("edit kwargs missing image input")
+    else:
+        raise OneCallGuardError(
+            "edit kwargs must use pose photo + house style ref as a 2-image list"
+        )
 
 
 def assert_alembic_revision_014(engine: Engine) -> str:

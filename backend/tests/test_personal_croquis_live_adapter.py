@@ -139,11 +139,23 @@ def test_build_edit_kwargs_one_image_transparent_png(monkeypatch):
     assert "moderation" not in kwargs
     assert kwargs.get("extra_body", {}).get("moderation") == "low"
     assert "input_fidelity" not in kwargs
-    assert not isinstance(kwargs["image"], list)
-    name, bio, mime = kwargs["image"]
+    # Pose photo + FashionRise house croquis style anchor.
+    assert isinstance(kwargs["image"], list)
+    assert len(kwargs["image"]) == 2
+    name, bio, mime = kwargs["image"][0]
     assert name.endswith(".png")
     assert mime == "image/png"
     assert bio.read(8) == b"\x89PNG\r\n\x1a\n"
+    style_name, style_bio, style_mime = kwargs["image"][1]
+    assert style_name == "fashionrise_house_croquis.png"
+    assert style_mime == "image/png"
+    assert style_bio.read(8) == b"\x89PNG\r\n\x1a\n"
+    assert "croquis-lineart-v4" in (
+        __import__("app.services.personal_croquis_provider", fromlist=["PROMPT_VERSION_CURRENT"]).PROMPT_VERSION_CURRENT
+    )
+    assert "mannequin" in kwargs["prompt"].lower()
+    assert "clothing" in kwargs["prompt"].lower()
+    assert "fashion-look illustration" in kwargs["prompt"].lower()
 
 
 def test_mocked_http_edit_normalizes_to_768x1024(monkeypatch):

@@ -148,7 +148,7 @@ def test_exact_envelope_builds_matching_edit_kwargs(monkeypatch):
     assert preview["model"] == APPROVED_MODEL
     assert preview["size"] == APPROVED_SIZE
     assert preview["quality"] == APPROVED_QUALITY
-    assert preview["image_count"] == 1
+    assert preview["image_count"] == 2  # pose photo + house style ref
     assert preview["input_fidelity_present"] is False
     assert "image" not in preview
 

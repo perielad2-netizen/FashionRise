@@ -15,6 +15,7 @@ import hashlib
 import io
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 from PIL import Image, ImageDraw, ImageOps
@@ -25,12 +26,14 @@ logger = logging.getLogger(__name__)
 
 GEOMETRY_PROFILE_V1 = "fit_contain_768x1024_v1"
 # v2: fashion-underlay wording (historical).
-# v3: explicitly preserves clothed garment silhouettes — never asks to undress
-# or "not add garments" in a way that implies clothing removal from a photo.
+# v3: clothed fashion-illustration underlay (historical; over-retained garments).
+# v4: FashionRise house-style croquis mannequin — pose/proportions from photo,
+#     line language from built-in Studio croquis templates; no garment rendering.
 PROMPT_VERSION_V1 = "croquis-lineart-v1"  # historical
 PROMPT_VERSION_V2 = "croquis-lineart-v2"  # historical
-PROMPT_VERSION_V3 = "croquis-lineart-v3"
-PROMPT_VERSION_CURRENT = PROMPT_VERSION_V3
+PROMPT_VERSION_V3 = "croquis-lineart-v3"  # historical
+PROMPT_VERSION_V4 = "croquis-lineart-v4"
+PROMPT_VERSION_CURRENT = PROMPT_VERSION_V4
 DESIGN_W = 768
 DESIGN_H = 1024
 
@@ -39,20 +42,31 @@ DESIGN_H = 1024
 CROQUIS_PROVIDER_SIZE = "1024x1536"
 CROQUIS_PROVIDER_QUALITY_DEFAULT = "medium"
 
-# Versioned croquis prompt — clothed fashion-illustration underlay for garment design.
-CROQUIS_LINEART_PROMPT_V3 = (
-    "Create a fashion-design croquis underlay as clean black line art on a transparent "
-    "background for garment sketching. From the attached fully clothed fashion photograph, "
-    "draw a clothed fashion-illustration figure that preserves the model's pose, "
-    "proportions, and visible garment silhouettes (for example tops, bottoms, and shoes). "
-    "Keep the figure fully clothed — do not undress, remove clothing, or invent nude "
-    "anatomy. Do not add logos, text, color fills, shading, or photorealistic detail. "
-    "Keep the full figure visible (no crop)."
+# Bundled Studio house-style croquis (matches /models/library/female-straight.png).
+# Sent as images.edit image[1] style anchor only — pose comes from the photo.
+_HOUSE_STYLE_REL = Path(__file__).resolve().parent.parent / "assets" / "croquis" / "fashionrise_house_style.png"
+HOUSE_STYLE_REF_VERSION = "female-straight-v4d"
+
+# Versioned croquis prompt — blank FashionRise mannequin underlay for garment sketching.
+CROQUIS_LINEART_PROMPT_V4 = (
+    "Create a FashionRise house-style croquis mannequin underlay as clean black line art "
+    "on a transparent background for sketching clothes on top in a fashion design studio. "
+    "Image 1 is a fashion pose photograph — use it only for stance/pose and approximate "
+    "body proportions. Image 2 is a FashionRise built-in croquis template — match that "
+    "mannequin LINE STYLE and visual language only (blank bald mannequin head with simple "
+    "crosshair guides, elongated fashion-figure silhouette, light structural centerline and "
+    "joint hints, simplified hands and feet). "
+    "Do not render clothing, garment seams, folds, prints, pockets, decoration, shoes, "
+    "accessories, hair, facial features, skin texture, or photorealistic detail. "
+    "Do not produce a clothed fashion-look illustration or a portrait. "
+    "Output a blank Studio croquis/mannequin underlay with the full figure visible (no crop), "
+    "no logos, and no text."
 )
-# Back-compat aliases — current prompt is V3.
-CROQUIS_LINEART_PROMPT_V2 = CROQUIS_LINEART_PROMPT_V3
-CROQUIS_LINEART_PROMPT_V1 = CROQUIS_LINEART_PROMPT_V3
-CROQUIS_LINEART_PROMPT = CROQUIS_LINEART_PROMPT_V3
+# Back-compat aliases — current prompt is V4.
+CROQUIS_LINEART_PROMPT_V3 = CROQUIS_LINEART_PROMPT_V4
+CROQUIS_LINEART_PROMPT_V2 = CROQUIS_LINEART_PROMPT_V4
+CROQUIS_LINEART_PROMPT_V1 = CROQUIS_LINEART_PROMPT_V4
+CROQUIS_LINEART_PROMPT = CROQUIS_LINEART_PROMPT_V4
 
 # Official gpt-image-2.5-sunburst token rates (USD per 1M tokens) — design §9.1.
 _RATE_TEXT_IN = 5.0
@@ -271,6 +285,22 @@ def _croquis_image_quality(settings: Any) -> str:
 def _croquis_image_size(settings: Any) -> str:
     raw = (getattr(settings, "my_croquis_ai_image_size", None) or "").strip()
     return raw or CROQUIS_PROVIDER_SIZE
+
+
+def load_house_style_reference_png() -> bytes:
+    """Load the bundled FashionRise house croquis used as images.edit style anchor."""
+    path = _HOUSE_STYLE_REL
+    if not path.is_file():
+        raise ProviderNotAvailableError(
+            f"FashionRise house croquis style reference missing at {path.name}"
+        )
+    data = path.read_bytes()
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ProviderNotAvailableError("House croquis style reference must be PNG")
+    # Fail closed on empty / tiny placeholder.
+    if len(data) < 1024:
+        raise ProviderNotAvailableError("House croquis style reference is too small")
+    return data
 
 
 def _croquis_image_model(settings: Any) -> str:
@@ -571,7 +601,7 @@ class OpenAICroquisImagesEditAdapter:
         try:
             kwargs = build_image_edit_kwargs(
                 model=model,
-                prompt=CROQUIS_LINEART_PROMPT_V3,
+                prompt=CROQUIS_LINEART_PROMPT_V4,
                 sketch=(source_png, "image/png"),
                 size=size,
                 quality=quality,
@@ -592,9 +622,20 @@ class OpenAICroquisImagesEditAdapter:
         extra = dict(kwargs.get("extra_body") or {})
         extra["moderation"] = "low"
         kwargs["extra_body"] = extra
-        # Never send a second image / fabric swatch on this path.
-        if isinstance(kwargs.get("image"), list):
-            raise ProviderNotAvailableError("Croquis edit must use exactly one image input")
+        # Pose photo (image 1) + FashionRise house croquis style anchor (image 2).
+        # Not a fabric swatch — style-only grounding on built-in Studio templates.
+        photo = kwargs.get("image")
+        if isinstance(photo, list):
+            raise ProviderNotAvailableError(
+                "Croquis edit base kwargs must start as a single pose photo input"
+            )
+        style_png = load_house_style_reference_png()
+        style_img = (
+            "fashionrise_house_croquis.png",
+            io.BytesIO(style_png),
+            "image/png",
+        )
+        kwargs["image"] = [photo, style_img]
         # Refuse silent substitution from the shared helper.
         if kwargs.get("size") != size:
             raise ProviderNotAvailableError(
@@ -619,6 +660,8 @@ class OpenAICroquisImagesEditAdapter:
         estimate = max(1, int(settings.my_croquis_ai_estimate_cents or 0))
         max_exposure = int(settings.my_croquis_ai_max_exposure_cents or 0)
         extra = kwargs.get("extra_body") if isinstance(kwargs.get("extra_body"), dict) else {}
+        images = kwargs.get("image")
+        image_inputs = len(images) if isinstance(images, list) else 1
         return {
             "model": kwargs.get("model"),
             "size": kwargs.get("size"),
@@ -627,6 +670,8 @@ class OpenAICroquisImagesEditAdapter:
             "output_format": kwargs.get("output_format"),
             "moderation": (extra or {}).get("moderation"),
             "n": kwargs.get("n"),
+            "image_inputs": image_inputs,
+            "style_ref_version": HOUSE_STYLE_REF_VERSION,
             "prompt_version": PROMPT_VERSION_CURRENT,
             "geometry_profile": GEOMETRY_PROFILE_V1,
             "design_plane": f"{DESIGN_W}x{DESIGN_H}",
