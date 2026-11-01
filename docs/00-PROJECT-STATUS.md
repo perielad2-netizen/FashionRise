@@ -27,7 +27,7 @@ Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise
 |---|---|
 | Branch | `cursor/web-create-my-croquis-live-adapter-77c6` |
 | Code under test | Exact **`fba08a49c7e67643eb2b731ca5c5732e24f99efc`** · code **`f66e63deb638b685782598f0d44249fc0fa494c5`** |
-| Docs tip (this stamp) | Exact **`48bf716c07505aaa3b8c331d00fbb0b7683a13b1`** (docs-only after `1759dfb3`) |
+| Docs tip | Exact **`617355f92d06a3320eb7368dd04a6b7e0f31abe7`** (offline QA content) · pin follow-ups docs-only · code under test still `fba08a49` / `f66e63de` |
 | Owner authorization | [comment 6556829045](https://github.com/perielad2-netizen/FashionRise/pull/142#issuecomment-6556829045) — exactly **one** paid `images.edit` |
 | **Technical PM post-run** | **LIVE API INTEGRATION PASS**; visual + final billing **PENDING** — [comment 6557164841](https://github.com/perielad2-netizen/FashionRise/pull/142#issuecomment-6557164841) |
 | Base / Stage C accepted | Review SHA **`cd32104e2f301b0d84e4132e4094a7804a335b2b`** · tip `48fe6132` · PR #141 **untouched DRAFT** |
