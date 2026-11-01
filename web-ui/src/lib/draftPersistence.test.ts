@@ -425,6 +425,49 @@ describe('draftPersistence WEB-V2.1A/B', () => {
     }
   })
 
+  it('model switch with stray personal pins saves without a false conflict (issue #148)', async () => {
+    const seed = bumpDraftDocument(createEmptyDraftDocument(), {
+      model: 'female-straight',
+      personalCroquisId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      personalCroquisVersion: 3,
+    })
+    // bumpDraftDocument now strips pins on non-personal — reintroduce stray pins as
+    // an in-memory / pre-fix IndexedDB document would.
+    const seeded = {
+      ...seed,
+      personalCroquisId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      personalCroquisVersion: 3,
+    }
+    api.designs.set('d1', {
+      id: 'd1',
+      design_data: documentForCloud(seeded),
+      metadata: { draftKind: 'studio_working_draft', clientRevision: seeded.clientRevision },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    const switched = {
+      ...bumpDraftDocument(seeded, { model: 'female-hand-hip' }),
+      personalCroquisId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      personalCroquisVersion: 3,
+    }
+    const result = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'd1',
+      document: switched,
+      fingerprint: draftContentFingerprint(documentForCloud(switched)),
+      lastSyncedFingerprint: draftContentFingerprint(documentForCloud(seeded)),
+      expectedRevision: seeded.clientRevision,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.document.model).toBe('female-hand-hip')
+      expect(result.document.personalCroquisId).toBeNull()
+      expect(result.conflict).toBeUndefined()
+    }
+    // Local recovery is never auto-erased on success.
+    expect(localStore.records.get('u1')).toBeTruthy()
+  })
+
   it('reconciles a lost create response without spawning a second draft', async () => {
     api.failCreateOnce = true
     const doc = strokedDoc()

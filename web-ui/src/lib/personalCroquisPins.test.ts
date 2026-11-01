@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyDraftDocument, draftContentFingerprint, parseStudioDraftDocument } from '@/lib/draftDocument'
+import {
+  bumpDraftDocument,
+  createEmptyDraftDocument,
+  draftContentFingerprint,
+  parseStudioDraftDocument,
+} from '@/lib/draftDocument'
+import { documentForCloud } from '@/services/designsApi'
 import { parseSavedDesignSnapshot, snapshotFromDocument, snapshotFingerprint } from '@/lib/savedDesign'
 import { normalizeModelChoice, isModelChoice } from '@/assets/modelLibrary'
 import { fitContainDestRect } from '@/lib/croquisGeometry'
@@ -41,6 +47,23 @@ describe('personal croquis model + pins', () => {
     a.personalCroquisVersion = 1
     const b = { ...a, personalCroquisVersion: 2 }
     expect(draftContentFingerprint(a)).not.toBe(draftContentFingerprint(b))
+  })
+
+  it('ignores stray personal pins on builtin models for fingerprints and parse', () => {
+    const clean = bumpDraftDocument(createEmptyDraftDocument(), { model: 'female-hand-hip' })
+    const stray = {
+      ...clean,
+      personalCroquisId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      personalCroquisVersion: 2,
+    }
+    expect(draftContentFingerprint(clean)).toBe(draftContentFingerprint(stray))
+    const parsed = parseStudioDraftDocument(stray)
+    expect(parsed?.personalCroquisId).toBeNull()
+    expect(parsed?.personalCroquisVersion).toBeNull()
+    expect(draftContentFingerprint(parsed!)).toBe(draftContentFingerprint(clean))
+    // Cloud writes must strip pins so PUT 200 + extract cannot false-conflict.
+    expect(documentForCloud(stray).personalCroquisId).toBeNull()
+    expect(documentForCloud(stray).personalCroquisVersion).toBeNull()
   })
 
   it('saved design snapshot keeps personal pins (unlike session custom URLs)', () => {
