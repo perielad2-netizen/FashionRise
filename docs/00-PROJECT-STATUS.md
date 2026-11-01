@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis EXPEDITED PRODUCTION DEPLOY** · FE/BE **`623ef821`** · Alembic **`014`** · upload/AI/LIVE_HTTP **ON** · spend ceiling **$5** / **$1**/run / **$1**/user-day / exposure **100¢** · backup `croquis-prod-deploy-20261101T123132Z` · smoke no-bill **PASS** · owner Generate required for paid call · PR #141/#142 untouched drafts.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis DEPLOYED — READY FOR OWNER TEST** · FE/BE/worker **`623ef821`** · Alembic **`014`** · upload/AI/LIVE_HTTP **ON** · budget **$5** total / **$1**/run / **$5**/user-day / **100¢** exposure / **5** gens/day · backup `croquis-prod-deploy-20261101T123132Z` · no-bill smoke re-verified **PASS** · owner clicks Generate for paid call · drafts #141/#142 unmerged.)
 
 **Phase:** Protected family beta with Create My Croquis **live on fashionrise.app** for owner hands-on testing. Draft PRs #141/#142 remain unmerged; production runs the production-compatible integration tip `623ef821` (based on prior BE `6cc317ec` + croquis Stages A–C/live adapter). Do not treat synthetic visual quality as product acceptance.
 
@@ -16,7 +16,34 @@
 | AI worker | `fashionrise-ai-worker` @ **`623ef821`** (matched with API; processes croquis generate jobs). |
 | Database | `fashionrise_beta` — Alembic **`014`** (012/013/014 applied 2026-11-01) |
 | Nginx | `root /var/www/fashionrise/current;` → `releases/623ef821` · CF Access + AOP unchanged · **personal-croquis allowlist added** |
-| AI spend | Techpack ceiling **`$50`** unchanged. Create My Croquis: ceiling **`$5.00`** · max **`$1`/run** · **`$1`/user/day** · exposure **100¢** · estimate **40¢** soft · LIVE_HTTP **ON** |
+| AI spend | Techpack ceiling **`$50`** unchanged. Create My Croquis: ceiling **`$5.00`** · max **`$1`/run** · **`$5`/user/day** · exposure **100¢** · soft estimate **40¢** · max **5** generations/user/day · LIVE_HTTP **ON** |
+
+## #135 Create My Croquis — DEPLOYED on fashionrise.app (2026-11-01)
+
+Production-compatible port onto prior BE `6cc317ec` (not a blind swap of draft PR #142). Live tip **`623ef821`**.
+
+| Item | Detail |
+|---|---|
+| Live URL | https://fashionrise.app |
+| FE release | `/var/www/fashionrise/releases/623ef821` · `VITE_MY_CROQUIS_UI_ENABLED=true` · prior #137 gates preserved |
+| BE / worker | `APP_REVISION=623ef82177c64eaed599e2f399bfca4b0fca0710` · services `fashionrise-api` + `fashionrise-ai-worker` active |
+| Alembic | **`014`** head (012→013→014 applied) |
+| Gates | `MY_CROQUIS_UPLOAD_ENABLED` / `MY_CROQUIS_AI_ENABLED` / `MY_CROQUIS_AI_LIVE_HTTP` **true** |
+| Notices | Production adult / storage / AI notice texts + versions `*-2026-11-01` (bundled in FE; hash-matched on BE) |
+| Budget | `$5` ceiling · `$1`/run · `$5`/user-day · `100¢` max exposure · `5` gens/user/day |
+| Backup / rollback | `/var/backups/fashionrise/croquis-prod-deploy-20261101T123132Z/` · `ROLLBACK.sh` → prior FE `2dfcaba0` + BE tree/env dump |
+| No-bill smoke (re-verified) | auth/me · list · adults/storage consent · private photo upload · private asset GET · AI consent bind · DELETE erase (404 after) · looks list · **0** Generate / **0** OpenAI croquis calls by operator |
+| Drafts | #141 / #142 remain unmerged drafts |
+
+### Owner test clicks (paid Generate is owner-only)
+
+1. Open https://fashionrise.app → Cloudflare Access → sign in.
+2. Confirm App pill **`623ef821`**.
+3. Open **Studio** → open the **Models** / model library panel.
+4. Click **Create My Croquis**.
+5. Review adults + storage notices → check consent → choose a **fully clothed adult** personal photo → **Upload**.
+6. Review AI-provider notice → check consent → click **Generate** (this is the billable step; agent does not click it).
+7. Wait for preview → Accept to pin into Studio, or erase from Create My Croquis.
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
@@ -1176,7 +1203,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-11-01 | **#135 Create My Croquis EXPEDITED PRODUCTION DEPLOY:** tip `623ef821` · FE+BE+worker · Alembic **014** · MY_CROQUIS UI/upload/AI/LIVE_HTTP ON · budget $5/$1/$1/100¢ · nginx personal-croquis allowlist · backup `croquis-prod-deploy-20261101T123132Z` · no-bill smoke PASS · drafts #141/#142 unmerged. |
+| 2026-11-01 | **#135 Create My Croquis DEPLOYED — READY FOR OWNER TEST:** tip `623ef821` · FE+BE+worker · Alembic **014** · MY_CROQUIS UI/upload/AI/LIVE_HTTP ON · budget $5/$1/$5/100¢ + 5 gens/day · nginx personal-croquis allowlist · backup `croquis-prod-deploy-20261101T123132Z` · no-bill smoke re-verified PASS (upload+erase) · owner Generate only · drafts #141/#142 unmerged. |
 | 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; HEAD `c16acf41` / impl `0561bb56` / blob `e04fdbcf`; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 structural & visual identity:** authorized-snapshot artifact retention on piece-list drift; `color_treatment`/`visible_details` identity fingerprint; tip `991244fa727bf01a6aed15bf7471dae776239d62` / commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9`; 12 focused / 114 broader pass / 1 baseline async_worker fail; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 data-integrity closure:** garment-identity fingerprint fail-closed skip; PDF-assembly revision/meas/identity/dirty CAS; independent SQLAlchemy session concurrency tests; tip `44afea60f87cec2da59a8710c583c2e84314a5ae` / code `0e341c10e28998c84235c307414f7e0bb4a1c641`; verification 111 pass / 1 pre-existing async_worker fail on baseline `311e259a`; Ruff 9 / mypy 51 parity; production FE `bfbdd03f-decimal` / BE `311e259a` / Alembic `011` **unchanged**; **0 paid AI**; **#125 / #129 independent**; **STOP for Technical PM re-review — do not deploy**. |
