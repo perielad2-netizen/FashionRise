@@ -3,20 +3,35 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#148 personal A→B + #151 My Croquis DEPLOYED** · App **`85a50894`** · FE+BE fingerprint · Alembic **`015`** unchanged · **0** operator-paid OpenAI · #149 Try On Person preserved.)
+**Last updated:** 2026-11-02 (**#154 Try On Person V2 DEPLOYED** · App **`fe1e9e8b`** · FE+BE try-on fidelity · Alembic **`015`** unchanged · **0** operator-paid OpenAI · #148/#151 A→B + My Croquis preserved.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person remains live. My Croquis library is first-class nav.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person V2 live. My Croquis library is first-class nav.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`85a50894`** — release `/var/www/fashionrise/releases/85a50894` · source `85a5089407e4b6ffb37c34ab591a07800ebac185` · App pill **`85a50894`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `0676a9a6` kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | Tip includes `_normalize_personal_croquis_pins` in `design_service.py` (deployed on API host). Alembic **`015`**. |
-| AI worker | `fashionrise-ai-worker` restarted with same tree · **no** prompt/V5 changes |
+| Frontend (`web-ui`) | **`fe1e9e8b`** — release `/var/www/fashionrise/releases/fe1e9e8b` · source `fe1e9e8b6dcaac0a920883335c596dbc30c577fa` · App pill **`fe1e9e8b`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `85a50894` kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | Try-on prompt **`try-on-person-v2`** + optional `design_hints`; personal pin fingerprint (#148) remains. Alembic **`015`**. |
+| AI worker | `fashionrise-ai-worker` restarted with V2 try-on provider · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/85a50894` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
-| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v1`** unchanged |
+| Nginx | `current` → `releases/fe1e9e8b` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
+| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v2`** |
+
+## #154 Try On Person V2 — DEPLOYED (awaiting owner live review) (2026-11-02)
+
+Owner accepted V1 realism. Next ask: preserve patterns/colors/shapes/accessories (pink checkers→stripes / missing cap), better original-vs-generated compare + private Save/Download via My Looks, and small My Croquis polish — without changing V5 croquis, Fashion Magic, photo binding, one-checkbox consent, or spend caps.
+
+| Item | Detail |
+|---|---|
+| Diagnosis | Garment capture already includes strokes/fills; fidelity loss was primarily **provider prompt** (print topology / accessories under-emphasized). Capture also bumped to **2×** (1536×2048) so fine prints survive resize. |
+| BE | Prompt **`try-on-person-v2`** (checker≠stripes; include hats/caps). Optional bounded `design_hints` frozen on the job. Consent still `try-on-person-preview-v1`. Photo still bound server-side to accepted croquis `source_asset_id`. |
+| FE preview | Try-on panel: result → side-by-side original vs try-on → original → garment. **Download preview** + **Save in My Looks** reuse existing private looks path. |
+| My Croquis | Retry Delete works after API error; Create New returns to gallery for preview/selection (no auto Studio jump). #148/#151 A→B pin save unchanged. |
+| Unchanged | V5 croquis generator · Fashion Magic polish · owner-photo binding · one-checkbox consent · spend ceiling |
+| Tests | BE `test_personal_try_on` **12** PASS (mocked) · FE MagicLookPanel/MyCroquis/hints/API **13** PASS · **0** paid `images.edit` |
+| Deploy | FE+BE+worker **`fe1e9e8b`** · Alembic **015** · backup `/var/backups/fashionrise/try-on-v2-TIMESTAMP` |
+| Owner verify | Hard-refresh until App **`fe1e9e8b`**. Personal croquis → redraw pink checkers + shorts + cap → Magic → **Try On Person** (owner-paid). Expect checkers (not stripes), cap present, colors preserved. Use **Compare original** / side-by-side, Download, Save in My Looks. My Croquis: Create New stays in gallery; Retry Delete after a forced error. Do **not** clear IndexedDB. |
 
 ## #148 + #151 Personal croquis A→B fix + My Croquis library — DEPLOYED (2026-11-02)
 
@@ -71,7 +86,7 @@ Owner V4 acceptance: house mannequin **style PASS**, pose mostly preserved, but 
 | Tests | BE focused **42** · **0** paid `images.edit` |
 | Owner eval | Hard-refresh App **`faa7d91d`** → Upload & Generate → compare proportions visually (not cm claims) |
 
-## Try On Person — owner workflow (now live on App `0676a9a6`)
+## Try On Person — owner workflow (now live on App `fe1e9e8b`, prompt v2)
 
 1. Generate / accept a photo-faithful mannequin (Create My Croquis V5).
 2. Draw a clothing design in Studio on that underlay.
