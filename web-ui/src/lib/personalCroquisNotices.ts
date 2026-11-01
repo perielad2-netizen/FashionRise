@@ -50,7 +50,8 @@ export function croquisNoticeVersion(purpose: CroquisNoticePurpose): string {
 export function croquisNoticesAuthorized(): boolean {
   return (
     Boolean(approvedCroquisNoticeText('adults')) &&
-    Boolean(approvedCroquisNoticeText('storage'))
+    Boolean(approvedCroquisNoticeText('storage')) &&
+    Boolean(approvedCroquisNoticeText('ai'))
   )
 }
 
