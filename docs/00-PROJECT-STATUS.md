@@ -30,7 +30,7 @@ Owner accepted V1 realism. Next ask: preserve patterns/colors/shapes/accessories
 | My Croquis | Retry Delete works after API error; Create New returns to gallery for preview/selection (no auto Studio jump). #148/#151 A→B pin save unchanged. |
 | Unchanged | V5 croquis generator · Fashion Magic polish · owner-photo binding · one-checkbox consent · spend ceiling |
 | Tests | BE `test_personal_try_on` **12** PASS (mocked) · FE MagicLookPanel/MyCroquis/hints/API **13** PASS · **0** paid `images.edit` |
-| Deploy | FE+BE+worker **`fe1e9e8b`** · Alembic **015** · backup `/var/backups/fashionrise/try-on-v2-TIMESTAMP` |
+| Deploy | FE+BE+worker **`fe1e9e8b`** · Alembic **015** · backup `/var/backups/fashionrise/try-on-v2-20261101T233405Z` |
 | Owner verify | Hard-refresh until App **`fe1e9e8b`**. Personal croquis → redraw pink checkers + shorts + cap → Magic → **Try On Person** (owner-paid). Expect checkers (not stripes), cap present, colors preserved. Use **Compare original** / side-by-side, Download, Save in My Looks. My Croquis: Create New stays in gallery; Retry Delete after a forced error. Do **not** clear IndexedDB. |
 
 ## #148 + #151 Personal croquis A→B fix + My Croquis library — DEPLOYED (2026-11-02)
