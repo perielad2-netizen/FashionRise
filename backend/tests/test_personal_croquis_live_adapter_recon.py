@@ -264,6 +264,48 @@ def test_live_http_disabled_releases_zero(client, monkeypatch, db_session):
     assert res.actual_cost_cents == 0
 
 
+def test_http_400_bad_request_after_submit_releases_zero(client, monkeypatch, db_session):
+    """Completed HTTP 400 is a definitive rejection — fail + $0 release, not recon hold."""
+    tokens = register_with_invite(client, db_session, f"br_{uuid.uuid4().hex[:8]}@ex.com", f"br{uuid.uuid4().hex[:6]}")
+    croquis = _upload_ready(client, tokens, monkeypatch)
+    ai_id = _ai_consent(client, tokens, croquis["id"])
+
+    def on_edit(**_kw):
+        req = httpx.Request("POST", "https://api.openai.com/v1/images/edits")
+        resp = httpx.Response(
+            400,
+            request=req,
+            json={"error": {"message": "Invalid image.", "type": "invalid_request_error", "code": "invalid_image"}},
+        )
+        raise openai.BadRequestError(
+            "Invalid image.",
+            response=resp,
+            body={"error": {"message": "Invalid image.", "type": "invalid_request_error", "code": "invalid_image"}},
+        )
+
+    _wire_live_adapter(monkeypatch, on_edit)
+    key = "reject-400"
+    _enqueue_and_drain(client, tokens, croquis["id"], ai_id, db_session, key)
+    poll = client.get(f"{BASE}/{croquis['id']}/versions/1", headers=_auth(tokens))
+    assert poll.json()["status"] == "failed"
+    res = (
+        db_session.query(PersonalCroquisSpendReservation)
+        .filter(PersonalCroquisSpendReservation.idempotency_key == key)
+        .one()
+    )
+    assert res.status == RESERVATION_RELEASED
+    assert res.provider_called is True
+    assert res.actual_cost_cents == 0
+    assert res.error_detail and "BadRequestError" in res.error_detail
+    # New key allowed after definite failure (unlike reconciliation_required).
+    r_new = client.post(
+        f"{BASE}/{croquis['id']}/versions/generate",
+        headers=_auth(tokens),
+        json={"ai_consent_id": ai_id, "idempotency_key": f"{key}-retry"},
+    )
+    assert r_new.status_code == 201, r_new.text
+
+
 def test_adapter_unit_timeout_raises_outcome_unknown(monkeypatch):
     _enable_ai_spend(monkeypatch)
 
@@ -281,3 +323,17 @@ def test_adapter_unit_timeout_raises_outcome_unknown(monkeypatch):
         # Without client override, definite pre-submit.
         set_croquis_openai_client_override(None)
         OpenAICroquisImagesEditAdapter().generate_line_art(_png_bytes())
+
+
+def test_adapter_unit_bad_request_raises_not_available(monkeypatch):
+    _enable_ai_spend(monkeypatch)
+
+    def on_edit(**_kw):
+        req = httpx.Request("POST", "https://api.openai.com/v1/images/edits")
+        resp = httpx.Response(400, request=req, json={"error": {"message": "bad"}})
+        raise openai.BadRequestError("bad", response=resp, body={"error": {"message": "bad"}})
+
+    set_croquis_openai_client_override(_FakeClient(on_edit))
+    adapter = OpenAICroquisImagesEditAdapter()
+    with pytest.raises(ProviderNotAvailableError, match="rejected by provider"):
+        adapter.generate_line_art(_png_bytes())

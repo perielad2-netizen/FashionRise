@@ -127,7 +127,10 @@ def normalize_croquis_source_bytes(
 
     out = io.BytesIO()
     # Explicitly omit exif= — Pillow PNG writer will not embed EXIF/GPS.
-    converted.save(out, format="PNG", optimize=True)
+    # Drop ICC/other info bags so provider uploads stay a plain RGB/RGBA PNG.
+    converted.info.pop("icc_profile", None)
+    converted.info.pop("exif", None)
+    converted.save(out, format="PNG", optimize=True, icc_profile=None)
     data = out.getvalue()
     if len(data) > settings.max_croquis_upload_bytes:
         raise HTTPException(

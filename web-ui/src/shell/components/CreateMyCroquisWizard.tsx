@@ -232,7 +232,9 @@ export function CreateMyCroquisWizard({
             return
           }
           if (ver.status === 'failed') {
-            setError('Generation failed before provider spend. You may retry with a new attempt.')
+            setError(
+              'Generation failed (no croquis image was produced). You may retry with a new attempt.',
+            )
             setIdempotencyKey(newIdempotencyKey())
             setStep('ai')
             return

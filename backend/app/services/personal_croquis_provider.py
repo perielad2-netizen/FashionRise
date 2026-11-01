@@ -66,14 +66,21 @@ class CroquisProvider(Protocol):
 
 
 class ProviderNotAvailableError(RuntimeError):
-    """Definitely pre-submit refusal — safe to release reservation at $0."""
+    """Definite no-billable-result refusal — safe to release reservation at $0.
+
+    Covers pre-submit gate failures and definitive provider HTTP 4xx rejections
+    (e.g. ``BadRequestError``) where OpenAI returned a completed error response
+    with no generated image.
+    """
 
 
 class ProviderOutcomeUnknownError(RuntimeError):
     """Request may have been sent/billed; outcome unknown — reconciliation required.
 
-    Raised for any failure after ``images.edit`` invocation begins (SDK timeout,
-    connection error, HTTP 5xx, missing/malformed result bytes, etc.).
+    Raised for ambiguous post-submit failures: SDK timeout, connection error,
+    HTTP 5xx, missing/malformed result bytes after a 2xx response, etc.
+    Definitive HTTP 4xx rejections are NOT outcome-unknown — use
+    ``ProviderNotAvailableError`` instead.
     """
 
 
@@ -279,6 +286,71 @@ def _safe_request_id_from_exc(exc: BaseException) -> str | None:
     return None
 
 
+def _api_status_code(exc: BaseException) -> int | None:
+    raw = getattr(exc, "status_code", None)
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_definitive_images_edit_rejection(exc: BaseException) -> bool:
+    """True when the provider completed an HTTP 4xx rejection (no image result).
+
+    OpenAI ``images.edit`` 4xx responses (Bad Request, auth, permission, not found,
+    unprocessable, rate limit) do not return generated image bytes. Treat as a
+    definite no-billable-result for this attempt so spend can be released. Keep
+    timeouts, connection drops, and HTTP 5xx as outcome-unknown.
+    """
+    try:
+        import openai
+    except Exception:  # noqa: BLE001
+        openai = None  # type: ignore[assignment]
+
+    if openai is not None:
+        # Prefer named 4xx subclasses when the SDK is available.
+        named_4xx = tuple(
+            cls
+            for cls in (
+                getattr(openai, "BadRequestError", None),
+                getattr(openai, "AuthenticationError", None),
+                getattr(openai, "PermissionDeniedError", None),
+                getattr(openai, "NotFoundError", None),
+                getattr(openai, "ConflictError", None),
+                getattr(openai, "UnprocessableEntityError", None),
+                getattr(openai, "RateLimitError", None),
+            )
+            if cls is not None
+        )
+        if named_4xx and isinstance(exc, named_4xx):
+            return True
+        api_status = getattr(openai, "APIStatusError", None)
+        if api_status is not None and isinstance(exc, api_status):
+            code = _api_status_code(exc)
+            return code is not None and 400 <= code < 500
+
+    code = _api_status_code(exc)
+    return code is not None and 400 <= code < 500
+
+
+def _safe_api_error_summary(exc: BaseException) -> str:
+    """Short operator-safe summary — type, status, code, truncated message (no bytes)."""
+    parts = [type(exc).__name__]
+    status = _api_status_code(exc)
+    if status is not None:
+        parts.append(f"status={status}")
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and code.strip():
+        parts.append(f"code={code.strip()[:80]}")
+    rid = _safe_request_id_from_exc(exc)
+    if rid:
+        parts.append(f"request_id={rid}")
+    msg = str(exc).strip().replace("\n", " ")
+    if msg:
+        parts.append(msg[:180])
+    return " ".join(parts)[:400]
+
+
 def extract_edit_png_bytes(result: Any) -> bytes:
     """Pull PNG bytes from an images.edit response (b64 required).
 
@@ -474,6 +546,18 @@ class OpenAICroquisImagesEditAdapter:
             raise
         except Exception as exc:
             rid = _safe_request_id_from_exc(exc)
+            summary = _safe_api_error_summary(exc)
+            if _is_definitive_images_edit_rejection(exc):
+                # Completed HTTP 4xx — no generated image; safe $0 release path.
+                logger.warning(
+                    "Croquis images.edit rejected type=%s request_id=%s summary=%s",
+                    type(exc).__name__[:80],
+                    rid or "-",
+                    summary[:240],
+                )
+                raise ProviderNotAvailableError(
+                    f"images.edit rejected by provider: {summary}"
+                ) from exc
             logger.warning(
                 "Croquis images.edit outcome unknown type=%s request_id=%s",
                 type(exc).__name__[:80],
