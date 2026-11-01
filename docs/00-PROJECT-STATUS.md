@@ -3,49 +3,53 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis UX + moderation=low DEPLOYED** · tip **`a83007a5dc16207c34bbb84a09ae7f889289945e`** · one-checkbox Upload&Generate · kidswear copy clarified · Images Edit `moderation=low` · sanitized moderation_stage logging · mocked BE 39 / FE 7 pass · **0** operator paid calls.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis P0 TypeError hotfix DEPLOYED** · tip **** · SDK extra_body.moderation=low · claim lease ≥ timeout+120 · prompt **v3** clothed underlay · FE poll ~4min · held 17:02Z attempt released $0 · **0** operator paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis flow is simplified (select photo → one agreement → Upload & Generate → preview). Provider safety remains enforced; `moderation=low` is the documented less-restrictive Images Edit setting for legitimate fashion refs — it does **not** guarantee any particular photo is accepted.
+**Phase:** Protected family beta. Create My Croquis generate was broken by a **pre-HTTP SDK TypeError** (not photo selection). Production tip ****.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`a83007a5`** — release `/var/www/fashionrise/releases/a83007a5` · source `a83007a5dc16207c34bbb84a09ae7f889289945e` · App pill **`a83007a5`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
-| Backend (FastAPI + PostgreSQL) | **`a83007a5dc16207c34bbb84a09ae7f889289945e`**. Alembic **`014`**. |
-| AI worker | `fashionrise-ai-worker` @ **`a83007a5`** |
+| Frontend (`web-ui`) | **`441444fb`** — release `/var/www/fashionrise/releases/441444fb` · source `441444fb3899237f5c125b00c4f9a1af71c7e87c` · App pill **`441444fb`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
+| Backend (FastAPI + PostgreSQL) | **`441444fb3899237f5c125b00c4f9a1af71c7e87c`**. Alembic **`014`**. |
+| AI worker | `fashionrise-ai-worker` @ **`441444fb`** |
 | Database | `fashionrise_beta` — Alembic **`014`** |
-| Nginx | `current` → `releases/a83007a5` · personal-croquis allowlist |
-| AI spend | Croquis: **`$5`** ceiling · **`$1`/run** · **`$5`/user-day** · **100¢** exposure · **5** gens/day · LIVE_HTTP **ON** · Images Edit **`moderation=low`** |
+| Nginx | `current` → `releases/441444fb` · personal-croquis allowlist |
+| AI spend | Croquis: **`$5`** ceiling · **`$1`/run** · **`$5`/user-day** · **100¢** exposure · **5** gens/day · LIVE_HTTP **ON** · Images Edit moderation via **`extra_body.moderation=low`** · claim lease **≥300s** |
 
-## #135 Create My Croquis — one-checkbox UX + moderation=low (2026-11-01)
+## #135 Create My Croquis — 17:02Z TypeError root cause + fix (2026-11-01)
 
-### Owner product direction
-
-| Item | Result |
-|---|---|
-| UX | One conspicuous agreement covering photo rights + private storage + AI processing; **Upload & Generate** single CTA; preview → Accept / Delete |
-| Backend audit | Still records distinct adults / storage / AI consent events with notice hashes and croquis binding; **no upload before agreement** |
-| Age / kidswear | Removed separate 18+ wizard screen; copy clarifies kids clothing uses Studio templates/mannequins — **no child-photo expansion** |
-| Prompt | Kept **`croquis-lineart-v2`** (neutral fashion underlay). Prior `moderation_blocked` did **not** include `moderation_details` stage/categories in the live error body |
-| Moderation | Documented Images Edit **`moderation=low`** set on croquis `build_edit_kwargs`; provider safety still enforced; no auto-retry; no paid smoke |
-| Logging | Sanitized `moderation_stage` + coarse `categories` appended to operator error_detail when present; secrets stripped |
-| Tests | BE focused **39 passed** · FE wizard/notices **7 passed** · **0** paid `images.edit` |
-
-### Owner test (after tip `a83007a5`)
-
-1. Hard-refresh `https://fashionrise.app` (confirm App pill **`a83007a5`**).
-2. Open **Create My Croquis** — expect **one checkbox** and **Upload & Generate** (no three-step consent questionnaire).
-3. Select a **different** fully clothed fashion pose photo than the previously blocked one; check the agreement; Upload & Generate.
-4. Expect preview → Accept or Delete. If OpenAI still returns `moderation_blocked`, the wizard shows the safety message and the attempt is **not charged** — try another photo; do not expect the same blocked photo to pass.
-
-### Prior archive — second Generate EXACT BLOCKER (16:24 UTC on tip `a83007a5`)
+### Latest owner attempt (~19:02 Asia/Jerusalem / 17:02 UTC) — NEW attempt, not stale UI
 
 | Item | Finding |
 |---|---|
-| Provider | HTTP **400** · **`code=moderation_blocked`** · `request_id=req_1ba28d0fbf054ebaa3c37ef8f89ca2f6` · **no** `moderation_details` in returned body |
-| Reservation | released · **$0** |
-| Interim tip | `5c9c660f` (failure_code/message + prompt v2) |
+| App tip at fail | `a83007a5` (one-checkbox + top-level moderation=low) |
+| Croquis / version / job | `d11eed9f…` / v1 `2e73ae82…` / AIJob `769ff286…` |
+| Reservation | `9cf61e8c…` · `provider_called=true` · status was `reconciliation_required` |
+| Timing | created 17:02:02Z → failed 17:02:03Z (**~1s**) — **not** claim-lease expiry |
+| Exact exception | **`TypeError`**: `Images.edit() got an unexpected keyword argument 'moderation'` · `request_id=-` (no HTTP) |
+| Effective settings | `openai` SDK **1.109.1** · `Images.edit` has **no** top-level `moderation` · claim lease default was **120** vs timeout **180** (unsafe for long calls; **not** the cause of this ~1s fail) |
+| Prior 16:37Z attempt | separate photo · `moderation_blocked` · released $0 (before this tip) |
+
+### Fix tip `441444fb`
+
+| Change | Detail |
+|---|---|
+| moderation wire | `extra_body={"moderation":"low"}` (SDK-compatible); refuse top-level `moderation=` |
+| TypeError class | pre-HTTP SDK contract errors → `ProviderNotAvailableError` / $0 release (not recon) |
+| Claim lease | default **300s**; recovery floor `max(configured, openai_timeout+120)` |
+| Prompt | **`croquis-lineart-v3`** — preserve clothed garment silhouettes; never ask to undress |
+| FE poll | up to ~4 minutes; slow generation ≠ failure |
+| Held 17:02 attempt | operator reconcile → **released $0** (no request_id; no image bytes) |
+| Tests | BE focused **42** · FE **7** · **0** paid `images.edit` |
+
+### Owner test (after tip `441444fb`)
+
+1. Hard-refresh `https://fashionrise.app` (App pill **`441444fb`**).
+2. Create My Croquis → one checkbox → Upload & Generate with a normal fully clothed fashion photo.
+3. Keep the window open up to a few minutes for preview → Accept / Delete.
+4. Do **not** retry the held 17:02 photo under the old reconciliation state — that attempt is released; a new Upload & Generate starts a new attempt under the fixed adapter.
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
@@ -1205,7 +1209,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-11-01 | **#135 Create My Croquis UX + `moderation=low` DEPLOYED:** tip `a83007a5` / `a83007a5dc16207c34bbb84a09ae7f889289945e` · one-checkbox Upload&Generate · kidswear copy · Images Edit moderation=low · sanitized moderation_stage logs · mocked BE 39 / FE 7 · **0** paid calls · adults notice clarified (templates for kidswear; no child-photo expansion). |
+| 2026-11-01 | **#135 Create My Croquis P0 TypeError hotfix DEPLOYED:** tip  /  · SDK unexpected keyword  caused false recon at 17:02Z · fix  + lease≥timeout+120 + prompt v3 + FE poll · held reservation released $0 · mocked BE 42 / FE 7 · **0** paid calls. |
 | 2026-11-01 | **#135 Create My Croquis DEPLOYED — READY FOR OWNER TEST:** tip `623ef821` · FE+BE+worker · Alembic **014** · MY_CROQUIS UI/upload/AI/LIVE_HTTP ON · budget $5/$1/$5/100¢ + 5 gens/day · nginx personal-croquis allowlist · backup `croquis-prod-deploy-20261101T123132Z` · no-bill smoke re-verified PASS (upload+erase) · owner Generate only · drafts #141/#142 unmerged. |
 | 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; HEAD `c16acf41` / impl `0561bb56` / blob `e04fdbcf`; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 structural & visual identity:** authorized-snapshot artifact retention on piece-list drift; `color_treatment`/`visible_details` identity fingerprint; tip `991244fa727bf01a6aed15bf7471dae776239d62` / commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9`; 12 focused / 114 broader pass / 1 baseline async_worker fail; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
