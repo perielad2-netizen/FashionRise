@@ -3,47 +3,47 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis DEPLOYED — READY FOR OWNER TEST** · FE/BE/worker **`623ef821`** · Alembic **`014`** · upload/AI/LIVE_HTTP **ON** · budget **$5** total / **$1**/run / **$5**/user-day / **100¢** exposure / **5** gens/day · backup `croquis-prod-deploy-20261101T123132Z` · no-bill smoke re-verified **PASS** · owner clicks Generate for paid call · drafts #141/#142 unmerged.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis P0 BadRequest hotfix DEPLOYED** · FE/BE/worker **`bbfb900a`** · Alembic **`014`** · owner Generate ~15:59Z HTTP 400 reconciled $0 · owner may retry Generate · drafts #141/#142 unmerged.)
 
-**Phase:** Protected family beta with Create My Croquis **live on fashionrise.app** for owner hands-on testing. Draft PRs #141/#142 remain unmerged; production runs the production-compatible integration tip `623ef821` (based on prior BE `6cc317ec` + croquis Stages A–C/live adapter). Do not treat synthetic visual quality as product acceptance.
+**Phase:** Protected family beta with Create My Croquis **live on fashionrise.app**. Draft PRs #141/#142 remain unmerged; production tip **`bbfb900a`** (hotfix on prior `623ef821` / BE baseline `6cc317ec`).
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`623ef821`** — release `/var/www/fashionrise/releases/623ef821` · source `623ef82177c64eaed599e2f399bfca4b0fca0710` · App pill **`623ef821`** · gates FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior `2dfcaba0` retained for rollback. |
-| Backend (FastAPI + PostgreSQL) | **`623ef82177c64eaed599e2f399bfca4b0fca0710`** (croquis prod integration on prior `6cc317ec`). Alembic **`014`**. Rollback → backup `croquis-prod-deploy-20261101T123132Z` / FE `2dfcaba0`. |
-| AI worker | `fashionrise-ai-worker` @ **`623ef821`** (matched with API; processes croquis generate jobs). |
-| Database | `fashionrise_beta` — Alembic **`014`** (012/013/014 applied 2026-11-01) |
-| Nginx | `root /var/www/fashionrise/current;` → `releases/623ef821` · CF Access + AOP unchanged · **personal-croquis allowlist added** |
-| AI spend | Techpack ceiling **`$50`** unchanged. Create My Croquis: ceiling **`$5.00`** · max **`$1`/run** · **`$5`/user/day** · exposure **100¢** · soft estimate **40¢** · max **5** generations/user/day · LIVE_HTTP **ON** |
+| Frontend (`web-ui`) | **`bbfb900a`** — release `/var/www/fashionrise/releases/bbfb900a` · source `bbfb900adf25bf16b3d3cccaab05189d659e0fad` · App pill **`bbfb900a`** · gates FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior `623ef821` / `2dfcaba0` retained. |
+| Backend (FastAPI + PostgreSQL) | **`bbfb900adf25bf16b3d3cccaab05189d659e0fad`**. Alembic **`014`**. Hotfix module backup `croquis-badrequest-hotfix-20261101T160844Z`; full rollback still via `croquis-prod-deploy-20261101T123132Z`. |
+| AI worker | `fashionrise-ai-worker` @ **`bbfb900a`** (matched with API). |
+| Database | `fashionrise_beta` — Alembic **`014`** |
+| Nginx | `root /var/www/fashionrise/current;` → `releases/bbfb900a` · CF Access + AOP unchanged · personal-croquis allowlist |
+| AI spend | Techpack ceiling **`$50`** unchanged. Create My Croquis: ceiling **`$5.00`** · max **`$1`/run** · **`$5`/user/day** · exposure **100¢** · soft estimate **40¢** · max **5** gens/user/day · LIVE_HTTP **ON** |
 
-## #135 Create My Croquis — DEPLOYED on fashionrise.app (2026-11-01)
+## #135 Create My Croquis — P0 live Generate hotfix (2026-11-01)
 
-Production-compatible port onto prior BE `6cc317ec` (not a blind swap of draft PR #142). Live tip **`623ef821`**.
+### Incident (~17:59 Asia/Jerusalem / 15:59 UTC)
 
-| Item | Detail |
+Owner clicked Generate on a real photo. UI showed reconciliation hold.
+
+| Item | Finding |
 |---|---|
-| Live URL | https://fashionrise.app |
-| FE release | `/var/www/fashionrise/releases/623ef821` · `VITE_MY_CROQUIS_UI_ENABLED=true` · prior #137 gates preserved |
-| BE / worker | `APP_REVISION=623ef82177c64eaed599e2f399bfca4b0fca0710` · services `fashionrise-api` + `fashionrise-ai-worker` active |
-| Alembic | **`014`** head (012→013→014 applied) |
-| Gates | `MY_CROQUIS_UPLOAD_ENABLED` / `MY_CROQUIS_AI_ENABLED` / `MY_CROQUIS_AI_LIVE_HTTP` **true** |
-| Notices | Production adult / storage / AI notice texts + versions `*-2026-11-01` (bundled in FE; hash-matched on BE) |
-| Budget | `$5` ceiling · `$1`/run · `$5`/user-day · `100¢` max exposure · `5` gens/user/day |
-| Backup / rollback | `/var/backups/fashionrise/croquis-prod-deploy-20261101T123132Z/` · `ROLLBACK.sh` → prior FE `2dfcaba0` + BE tree/env dump |
-| No-bill smoke (re-verified) | auth/me · list · adults/storage consent · private photo upload · private asset GET · AI consent bind · DELETE erase (404 after) · looks list · **0** Generate / **0** OpenAI croquis calls by operator |
-| Drafts | #141 / #142 remain unmerged drafts |
+| Croquis / version / job | `d8f0a363…` / v1 `2436a7ef…` / AIJob `12a783cc…` |
+| Reservation | `3d209fe3…` · `provider_called=true` · was `reconciliation_required` · `actual_cost_cents` null |
+| Worker log | `HTTP/1.1 400 Bad Request` · `BadRequestError` · `request_id=req_411dd844420c4a2c86ac3299fc1bb69e` |
+| Generated asset | **none** — nothing to recover; source photo **preserved** (`uploaded`) |
+| Root cause | Adapter wrapped **all** post-submit exceptions (including definitive HTTP **400**) as `ProviderOutcomeUnknownError` |
+| Billing | No generated image; reservation **released at $0** after operator reconcile with journal evidence (no second paid call) |
+| Fix SHA | **`bbfb900a`** — HTTP 4xx → fail + $0 release; timeouts/5xx still recon |
+| Tests | mocked adapter/recon **17 passed** · **0** operator `images.edit` |
+| Owner next | Hard-refresh App **`bbfb900a`** → Create My Croquis → **Generate again** |
 
 ### Owner test clicks (paid Generate is owner-only)
 
 1. Open https://fashionrise.app → Cloudflare Access → sign in.
-2. Confirm App pill **`623ef821`**.
-3. Open **Studio** → open the **Models** / model library panel.
-4. Click **Create My Croquis**.
-5. Review adults + storage notices → check consent → choose a **fully clothed adult** personal photo → **Upload**.
-6. Review AI-provider notice → check consent → click **Generate** (this is the billable step; agent does not click it).
-7. Wait for preview → Accept to pin into Studio, or erase from Create My Croquis.
+2. Confirm App pill **`bbfb900a`**.
+3. Open **Studio** → **Models** → **Create My Croquis**.
+4. Consent → upload a fully clothed adult photo (keep under ~10MB; oversized uploads 413).
+5. AI consent → **Generate** (billable; agent does not click).
+6. Accept to pin, or erase from Create My Croquis.
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
@@ -1203,6 +1203,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-11-01 | **#135 Create My Croquis P0 BadRequest hotfix DEPLOYED:** tip `bbfb900a` · OpenAI HTTP 400 on owner Generate misclassified as recon; now definitive reject+$0 release; held attempt reconciled; source preserved; mocked 17 pass; **0** operator paid calls; owner may retry Generate. |
 | 2026-11-01 | **#135 Create My Croquis DEPLOYED — READY FOR OWNER TEST:** tip `623ef821` · FE+BE+worker · Alembic **014** · MY_CROQUIS UI/upload/AI/LIVE_HTTP ON · budget $5/$1/$5/100¢ + 5 gens/day · nginx personal-croquis allowlist · backup `croquis-prod-deploy-20261101T123132Z` · no-bill smoke re-verified PASS (upload+erase) · owner Generate only · drafts #141/#142 unmerged. |
 | 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; HEAD `c16acf41` / impl `0561bb56` / blob `e04fdbcf`; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
 | 2026-10-29 | **Issue #128 / PR #130 structural & visual identity:** authorized-snapshot artifact retention on piece-list drift; `color_treatment`/`visible_details` identity fingerprint; tip `991244fa727bf01a6aed15bf7471dae776239d62` / commit `4cb7d8f05a18ba47eea5c3c35b6f839f1d3cad35` / blob `2b684a28f257c3824a05405e3f75f54c0877edb9`; 12 focused / 114 broader pass / 1 baseline async_worker fail; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM re-review — do not deploy**. |
