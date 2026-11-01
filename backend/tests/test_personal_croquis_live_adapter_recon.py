@@ -436,17 +436,21 @@ def test_claim_lease_floor_exceeds_openai_timeout(monkeypatch):
     assert callable(recover_stale_croquis_claims)
 
 
-def test_prompt_v4_targets_house_mannequin_underlay():
+def test_prompt_v5_photo_faithful_over_style_template():
     from app.services import personal_croquis_provider as pcp
 
-    prompt = pcp.CROQUIS_LINEART_PROMPT_V4.lower()
-    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v4"
-    assert "mannequin" in prompt
-    assert "fashionrise" in prompt
-    assert "clothing" in prompt  # instruct not to render clothing
-    assert "fashion-look illustration" in prompt
+    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v5"
+    assert pcp.PROPORTION_MODE_CURRENT == "photo_faithful"
+    prompt = pcp.CROQUIS_LINEART_PROMPT_V5.lower()
+    assert "image 1" in prompt
+    assert "image 2 is only" in prompt
+    assert "do not automatically slim" in prompt
+    assert "do not copy image 2" in prompt
+    assert "elongated fashion-figure" not in prompt
     assert "transparent" in prompt
-    # Style reference asset must be present for images.edit grounding.
+    # V4 historical copy still contains the elongated phrasing; V5 must not.
+    assert "elongated fashion-figure silhouette" in pcp.CROQUIS_LINEART_PROMPT_V4.lower()
+    assert "elongated fashion-figure silhouette" not in prompt
     style = pcp.load_house_style_reference_png()
     assert style.startswith(b"\x89PNG\r\n\x1a\n")
     assert len(style) > 1024

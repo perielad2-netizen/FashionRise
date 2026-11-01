@@ -3,32 +3,45 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis house-style mannequin v4 DEPLOYED** · tip **`3ed1902f14379cda72da7b2496281cc1a582c532`** · prompt **croquis-lineart-v4** · style ref **female-straight** · pose/proportions from photo · no garment rendering · mocked BE 42 · **0** operator paid calls.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis V5 photo-faithful proportions DEPLOYED** · tip **`faa7d91d47be433e6cfa771d5c8f9a1b744545b4`** · prompt **croquis-lineart-v5** · proportion_mode **photo_faithful** · image1 geometry / image2 style-only · mocked BE 42 · **0** operator paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis now targets FashionRise **built-in croquis/mannequin underlay** style (not a clothed fashion illustration). Production tip **`3ed1902f`**.
+**Phase:** Protected family beta. Create My Croquis V5 prioritizes **photo-faithful body proportions** while keeping FashionRise house mannequin line style. Production tip **`faa7d91d`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`3ed1902f`** — release `/var/www/fashionrise/releases/3ed1902f` · source `3ed1902f14379cda72da7b2496281cc1a582c532` · App pill **`3ed1902f`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
-| Backend (FastAPI + PostgreSQL) | **`3ed1902f14379cda72da7b2496281cc1a582c532`**. Alembic **`014`**. |
-| AI worker | `fashionrise-ai-worker` @ **`3ed1902f`** |
+| Frontend (`web-ui`) | **`faa7d91d`** — release `/var/www/fashionrise/releases/faa7d91d` · source `faa7d91d47be433e6cfa771d5c8f9a1b744545b4` · App pill **`faa7d91d`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
+| Backend (FastAPI + PostgreSQL) | **`faa7d91d47be433e6cfa771d5c8f9a1b744545b4`**. Alembic **`014`**. |
+| AI worker | `fashionrise-ai-worker` @ **`faa7d91d`** |
 | Database | `fashionrise_beta` — Alembic **`014`** |
-| Nginx | `current` → `releases/3ed1902f` · personal-croquis allowlist |
-| AI spend | Croquis: **`$5`** ceiling · LIVE_HTTP **ON** · `extra_body.moderation=low` · claim lease **≥300s** · prompt **v4** + house style ref |
+| Nginx | `current` → `releases/faa7d91d` · personal-croquis allowlist |
+| AI spend | Croquis: **`$5`** ceiling · LIVE_HTTP **ON** · `extra_body.moderation=low` · claim lease **≥300s** · prompt **v5** + house style ref (style-only) |
 
-## #135 Create My Croquis — house-style mannequin underlay (2026-11-01)
+## #135 Create My Croquis — V5 photo-faithful proportions (2026-11-01)
 
-Owner feedback after first successful real-photo generate: output kept too much clothing / looked like a dressed illustration. Product target is a **FashionRise native croquis mannequin** for sketching clothes on top.
+Owner V4 acceptance: house mannequin **style PASS**, pose mostly preserved, but figure was too tall/slim vs photographed person. V5 makes **image 1 (photo) authoritative for geometry** and **image 2 (house croquis) style-only**.
 
 | Change | Detail |
 |---|---|
-| Prompt | **`croquis-lineart-v4`** — blank mannequin underlay; preserve pose + approximate proportions; forbid garments/hair/face/prints/folds |
-| Style ground | Bundled Studio `female-straight` PNG as images.edit **image[2]** style anchor (line language only) |
-| Keep | transparent PNG · full-body · Studio accept/reject flow · consent UX unchanged |
-| Tests | BE focused **42** passed · **0** paid `images.edit` |
-| Owner path | Hard-refresh App **`3ed1902f`** → Create My Croquis → Upload & Generate → preview should match built-in croquis theme |
+| Prompt | **`croquis-lineart-v5`** — preserve relative widths, head-to-body, torso-to-leg; forbid auto-slim / leg lengthening; do not copy image 2 body shape |
+| Removed | V4 “elongated fashion-figure silhouette” wording |
+| Mode | `proportion_mode=photo_faithful` (default; not fashion_elongated) |
+| Unchanged | consent · moderation=low via extra_body · spend bounds · private storage · transparent underlay · accept/delete |
+| Tests | BE focused **42** · **0** paid `images.edit` |
+| Owner eval | Hard-refresh App **`faa7d91d`** → Upload & Generate → compare proportions visually (not cm claims) |
+
+## Next high-priority feature — Try On Person (after V5)
+
+Not part of this deploy. Planned owner workflow:
+
+1. Generate a photo-faithful mannequin (Create My Croquis).
+2. Draw a clothing design in Studio on that underlay.
+3. Click **Try on person**.
+4. FashionRise uses the privately stored **original photo** + **isolated garment artwork layer** (not blank mannequin outlines) to create a realistic visual preview.
+5. User reviews, saves, or deletes — original photo and drawing are not overwritten.
+
+Treat as fashion visualization / concept preview — **not** guaranteed sizing or fit prediction. Requires explicit provider-processing consent and per-action spend cap when implemented.
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
@@ -1188,6 +1201,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-11-01 | **#135 Create My Croquis V5 photo-faithful proportions DEPLOYED:** tip `faa7d91d` / `faa7d91d47be433e6cfa771d5c8f9a1b744545b4` · croquis-lineart-v5 · image1 geometry / image2 style-only · no elongated silhouette · BE 42 mocked · **0** paid calls · next: Try On Person. |
 | 2026-11-01 | **#135 Create My Croquis house-style mannequin v4 DEPLOYED:** tip  /  · prompt croquis-lineart-v4 · style ref female-straight · no garment rendering · BE 42 mocked · **0** paid calls. |
 | 2026-11-01 | **#135 Create My Croquis P0 TypeError hotfix DEPLOYED:** tip  /  · SDK unexpected keyword  caused false recon at 17:02Z · fix  + lease≥timeout+120 + prompt v3 + FE poll · held reservation released $0 · mocked BE 42 / FE 7 · **0** paid calls. |
 | 2026-11-01 | **#135 Create My Croquis DEPLOYED — READY FOR OWNER TEST:** tip `623ef821` · FE+BE+worker · Alembic **014** · MY_CROQUIS UI/upload/AI/LIVE_HTTP ON · budget $5/$1/$5/100¢ + 5 gens/day · nginx personal-croquis allowlist · backup `croquis-prod-deploy-20261101T123132Z` · no-bill smoke re-verified PASS (upload+erase) · owner Generate only · drafts #141/#142 unmerged. |
