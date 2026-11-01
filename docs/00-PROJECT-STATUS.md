@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis LIVE ADAPTER — Technical PM LIVE API INTEGRATION PASS** · PR #142 · [comment 6557164841](https://github.com/perielad2-netizen/FashionRise/pull/142#issuecomment-6557164841) · offline PNG SHA/geometry verified · visual + billing still **PENDING** · **STOP** · no second paid call · PR #141 untouched · prod unchanged · gates OFF.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis LIVE ADAPTER — owner visual QA: synthetic does NOT validate product** · PR #142 · [comment 6557579362](https://github.com/perielad2-netizen/FashionRise/pull/142#issuecomment-6557579362) · live API/normalization/persistence still **PASS** · product visual **NOT accepted** · billing **OPEN** · paid count **1** · **STOP** · real-photo test **not authorized** · PR #141 untouched · prod unchanged · gates OFF.)
 
-**Phase:** Protected family beta. #135 Create My Croquis **Stage A + Stage B + Stage C ACCEPTED** (offline). Live adapter: **Technical PM LIVE API INTEGRATION PASS** on the owner-authorized one-call; **visual product acceptance** and **final billing reconciliation PENDING**. Do **not** merge PR #141/#142, deploy, run production Alembic `012`/`013`/`014`, collect real photos, permanently enable gates, rerun paid `images.edit`, or start Stage D without separate owner authorization.
+**Phase:** Protected family beta. #135 Create My Croquis **Stage A + Stage B + Stage C ACCEPTED** (offline). Live adapter: **Technical PM LIVE API / normalization / private persistence PASS**; **synthetic visual quality does not validate the product**. Next appropriate milestone is a separate owner-supervised real-person quality test — **not authorized for paid execution**. Do **not** merge PR #141/#142, deploy, run production Alembic `012`/`013`/`014`, permanently enable gates, rerun paid `images.edit`, or start Stage D without separate owner authorization.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -19,7 +19,7 @@
 | AI spend | Ceiling **`$50.00`** · max **`$8`/run** · **`$20`/user/day** · max images **6** |
 
 
-## Issue #135 — Create My Croquis V1 — LIVE ADAPTER DRAFT (2026-11-01) — LIVE API PASS · visual/billing PENDING · STOP
+## Issue #135 — Create My Croquis V1 — LIVE ADAPTER DRAFT (2026-11-01) — LIVE API PASS · synthetic visual NOT product validation · STOP
 
 Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise/pull/142) (does **not** modify accepted Stage C PR [#141](https://github.com/perielad2-netizen/FashionRise/pull/141)). Base = Stage C tip `48fe6132` / review SHA `cd32104e`.
 
@@ -27,15 +27,17 @@ Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise
 |---|---|
 | Branch | `cursor/web-create-my-croquis-live-adapter-77c6` |
 | Code under test | Exact **`fba08a49c7e67643eb2b731ca5c5732e24f99efc`** · code **`f66e63deb638b685782598f0d44249fc0fa494c5`** |
-| Docs tip | Exact **`617355f92d06a3320eb7368dd04a6b7e0f31abe7`** (offline QA content) · pin follow-ups docs-only · code under test still `fba08a49` / `f66e63de` |
-| Owner authorization | [comment 6556829045](https://github.com/perielad2-netizen/FashionRise/pull/142#issuecomment-6556829045) — exactly **one** paid `images.edit` |
-| **Technical PM post-run** | **LIVE API INTEGRATION PASS**; visual + final billing **PENDING** — [comment 6557164841](https://github.com/perielad2-netizen/FashionRise/pull/142#issuecomment-6557164841) |
+| Docs tip before this stamp | `34a2a472e8bf12f18a5797530ee4f4101c7d3229` · offline QA content `617355f9` |
+| Owner authorization (exhausted) | [comment 6556829045](https://github.com/perielad2-netizen/FashionRise/pull/142#issuecomment-6556829045) — exactly **one** paid synthetic `images.edit` (**used**) |
+| **Technical PM owner visual QA** | Live API / normalization / private persistence **PASS**; **synthetic visual does NOT validate product** — [comment 6557579362](https://github.com/perielad2-netizen/FashionRise/pull/142#issuecomment-6557579362) |
+| Owner feedback | Cartoon-only test is not a good product QA stand-in; next quality test should be owner-supervised with a real clothed adult photo (**not authorized yet**) |
 | Base / Stage C accepted | Review SHA **`cd32104e2f301b0d84e4132e4094a7804a335b2b`** · tip `48fe6132` · PR #141 **untouched DRAFT** |
 | Provider | `OpenAICroquisImagesEditAdapter` → `images.edit` / **`gpt-image-2.5-sunburst`** · `max_retries=0` |
-| Fixture | Synthetic clothed cartoon only · sha256 `489dcb82167d858a14ff0f2c91fe2e60d42c2aeceaccfe5d368f5d0ebc28e29d` · **not** photo-fidelity proof |
-| Paid invocations | **1** (complete — **no second call authorized**) |
+| Fixture used | Synthetic clothed cartoon only · sha256 `489dcb82167d858a14ff0f2c91fe2e60d42c2aeceaccfe5d368f5d0ebc28e29d` |
+| Paid invocations | **1 total** — **no second call authorized** |
+| Billing | **OPEN** — internal 2¢ not invoice-verified; token counts not persisted; OpenAI Usage/Costs still needed offline |
 | Production / gates | **Unchanged** — FE `2dfcaba0` · BE `6cc317ec` · Alembic `011` · upload/AI/UI **OFF** · `LIVE_HTTP=false` · ceiling `0` |
-| Explicitly NOT done | Merge · deploy · prod Alembic · permanent gates · real photos · Stage D · second paid call · PNG commit to GitHub |
+| Explicitly NOT done | Merge · deploy · prod Alembic · permanent gates · real-photo paid call · Stage D · PNG commit to GitHub |
 
 ### Live one-call result (2026-11-01 ~12:43 Asia/Jerusalem)
 
@@ -60,9 +62,20 @@ Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise
 | Visual (operator) | On white composite: clean black line-art fashion croquis silhouette; A-pose continuity vs geometric source; source fill colors not retained (outline-dominant). Raw transparent PNG reads blank on dark viewers. **Visual product acceptance remains PENDING** (PM/owner judgment). Synthetic cartoon ≠ photo-fidelity proof. |
 | Billing | Still **unknown** pending owner OpenAI Usage/Costs screenshot for this timestamp/model; do not treat 2¢ as confirmed provider charge |
 
+### Owner visual QA outcome (PM)
+
+Private owner/PM review of the white-composited generated PNG: clean thin black fashion-figure line art, roughly A-pose, blank head, transparent background; coherent anatomy from a crude geometric illustration. Continuous blue skirt-like source shape becomes a lower-body outline with visibly separate trouser-like legs — clothing details are substantially inferred. Spec target is a personal front-facing fashion illustration reference from an adult fully clothed photograph (not exact fit reconstruction); garment fidelity is a quality discussion point, not an automatic accepted-spec claim. **No product visual acceptance.**
+
+### Proposed next milestone (NOT authorization)
+
+1. Owner-supervised private, fully clothed adult self-photo (front, full body, A-pose, plain background) with explicit consent/erase protocol first.
+2. Offline preflight only — file/orientation, request preview, privacy isolation, one-call budget, evaluation criteria with owner.
+3. **Separate** explicit owner sign-off required before any additional paid `images.edit` (previous authorization exhausted). Prefer isolated test DB + private storage; no public URL/repo uploads.
+4. Keep billing reconciliation offline via OpenAI Usage/Costs — do not rerun the synthetic call for billing.
+
 ### Exact next action
 
-**STOP.** Offline evidence captured. **No second `images.edit`.** Owner/PM: (1) privately review preserved PNG / white composite; (2) capture OpenAI dashboard cost for ~12:43 Asia/Jerusalem sunburst edit; (3) decide separately on any next step. Do not merge, deploy, or enable gates without new authorization.
+**STOP.** Paid call count remains **1**. Do **not** execute a real-photo or second synthetic `images.edit` until the owner separately authorizes that plan after privacy/consent preflight. Do not merge, deploy, or enable gates without new authorization.
 
 ## Issue #135 — Create My Croquis V1 — STAGE C ACCEPTED (archive) (2026-11-01) — offline engineering only
 
@@ -211,7 +224,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 | #127 Fill | **CLOSED** (owner acceptance) | FE `6ec73ba2` deployed; owner Fill/save/reopen accepted; do not reopen for #136 |
 | #128 POM integrity | **CLOSED** (owner acceptance) | BE `6cc317ec` deployed; owner measurement acceptance recorded; do not reopen for #136 |
 | #136 Studio gates | **CLOSED** (owner acceptance) | FE recovery `2dfcaba0` owner six-point PASS; do not reopen |
-| #135 Create My Croquis | **A+B+C ACCEPTED · live API PASS · visual/billing PENDING** | A #139; B #140; C #141 `cd32104e`; #142 1× paid sunburst · PM live API PASS · STOP; gates OFF |
+| #135 Create My Croquis | **A+B+C ACCEPTED · live API PASS · synthetic ≠ product QA** | A #139; B #140; C #141 `cd32104e`; #142 1× paid · visual NOT accepted · real-photo test not authorized; gates OFF |
 | #124 decimal + fidelity | **partially-delivered** — keep open | Decimal in FE tip; closure/gradient → **PR #125 HOLD** |
 | #17 delete saved | **partially-delivered** — keep open | Code live (`DELETE /saved/{id}`); confirm owner QA before close |
 | #18 invite registration | **implemented / activation tracked** — keep open | Invite register UI + API; CF Access + public register **still gated** |
@@ -222,7 +235,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Remaining real defects / product priorities
 
-1. **#135 Create My Croquis** — Stage C ACCEPTED; live-adapter **PM LIVE API PASS** @ `fba08a49` (1× paid, internal 2¢, 768×1024 RGBA verified) — **visual + billing PENDING**; no second paid call
+1. **#135 Create My Croquis** — Stage C ACCEPTED; live-adapter **PM LIVE API PASS** @ `fba08a49` (1× paid) — **synthetic visual NOT product acceptance**; billing OPEN; real-photo test **not authorized**
 2. Closure/gradient visual fidelity redesign (**PR #125 HOLD**)
 3. Canonical `main` adoption after PM approval of integration PR (no blind merge of undeployed stacks)
 4. Continue evidence-based PR closures from remaining open issues (no branch deletes)
