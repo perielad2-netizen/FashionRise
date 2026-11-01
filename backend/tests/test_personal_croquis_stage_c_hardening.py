@@ -299,21 +299,21 @@ def test_provider_output_normalized_at_worker_boundary(client, monkeypatch, db_s
     assert asset.height == 1024
 
 
-def test_openai_adapter_marked_incomplete(monkeypatch):
+def test_openai_adapter_live_http_fail_closed_without_arming(monkeypatch):
+    """Live adapter is complete but refuses HTTP unless MY_CROQUIS_AI_LIVE_HTTP is armed."""
     get_settings.cache_clear()
     monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
     monkeypatch.setenv("MY_CROQUIS_AI_SPEND_CEILING_USD", "5")
+    monkeypatch.setenv("MY_CROQUIS_AI_LIVE_HTTP", "false")
     get_settings.cache_clear()
-    from app.services.personal_croquis_provider import (
-        ProviderNetworkForbiddenError,
-        ProviderNotAvailableError,
-    )
+    from app.services.personal_croquis_provider import ProviderNotAvailableError
 
     adapter = OpenAICroquisImagesEditAdapter()
-    assert adapter.incomplete is True
-    with pytest.raises((ProviderNetworkForbiddenError, ProviderNotAvailableError)):
+    assert adapter.incomplete is False
+    with pytest.raises(ProviderNotAvailableError, match="LIVE_HTTP"):
         adapter.generate_line_art(_png_bytes())
-    assert provider_network_tripwire_hits() >= 1
+    # Fail closed before opening a live client — tripwire must not fire.
+    assert provider_network_tripwire_hits() == 0
 
 
 def test_crash_lease_before_provider_safe_requeue(client, monkeypatch, db_session):
