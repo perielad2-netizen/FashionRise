@@ -140,6 +140,12 @@ export type ModelSwitchPrompt = {
   next: ModelChoice
 }
 
+/** Keep/Clear when switching between distinct personal croquis pins with ink present. */
+export type PersonalCroquisPinPrompt = {
+  croquisId: string
+  version: number
+}
+
 export type DraftConflictPrompt = {
   local: StudioDraftDocument
   server: StudioDraftDocument
@@ -278,6 +284,7 @@ export function useStudioEditor() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('restoring')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [modelSwitchPrompt, setModelSwitchPrompt] = useState<ModelSwitchPrompt | null>(null)
+  const [personalPinPrompt, setPersonalPinPrompt] = useState<PersonalCroquisPinPrompt | null>(null)
   const [draftConflict, setDraftConflict] = useState<DraftConflictPrompt | null>(null)
   const [damagedCloud, setDamagedCloud] = useState<DamagedCloudDraftPrompt | null>(null)
   const [damagedCloudDialogOpen, setDamagedCloudDialogOpen] = useState(false)
@@ -1072,6 +1079,9 @@ export function useStudioEditor() {
       const leavingPersonal = next !== 'personal'
       const pinId = leavingPersonal ? null : personalCroquisId
       const pinVer = leavingPersonal ? null : personalCroquisVersion
+      // Mirror effect watches model + pin state — skip the echo commit so this
+      // model change remains a single revision bump.
+      skipNextAutosaveRef.current = true
       if (leavingPersonal) {
         personalLoadGenRef.current += 1
         setPersonalCroquisId(null)
@@ -2705,17 +2715,31 @@ export function useStudioEditor() {
     setCroquisWizardOpen(false)
   }, [])
 
-  /** Pin an accepted personal croquis version as the Studio underlay (exact id+version). */
+  /**
+   * Pin an accepted personal croquis version as the Studio underlay (exact id+version).
+   * One atomic document commit — skip the React mirror echo so A→B is a single revision.
+   */
   const applyPersonalCroquisPin = useCallback(
     (croquisId: string, version: number, clearStrokes: boolean) => {
+      setPersonalPinPrompt(null)
+      setCroquisWizardOpen(false)
+      // Already on this exact accepted pin — no document change.
+      if (
+        model === 'personal' &&
+        personalCroquisId === croquisId &&
+        personalCroquisVersion === version &&
+        !(clearStrokes && designHasInk())
+      ) {
+        return
+      }
       // Invalidate any prior underlay synchronously so A→B never paints A's PNG as B.
       personalLoadGenRef.current += 1
+      skipNextAutosaveRef.current = true
       setPersonalObjectUrl(null)
       setPersonalUnderlayIdentity(null)
       setPersonalUnavailable(false)
       setPersonalCroquisId(croquisId)
       setPersonalCroquisVersion(version)
-      setCroquisWizardOpen(false)
       // Keep Back accessible (blank underlay) — do not force Front solely because personal
       // has no rear croquis image. Clear-strokes path still resets both bags.
       if (clearStrokes && designHasInk()) {
@@ -2749,7 +2773,38 @@ export function useStudioEditor() {
         })
       }
     },
-    [activeSide, artwork, commitFromEditor, designHasInk, syncHistoryFlags],
+    [
+      activeSide,
+      artwork,
+      commitFromEditor,
+      designHasInk,
+      model,
+      personalCroquisId,
+      personalCroquisVersion,
+      syncHistoryFlags,
+    ],
+  )
+
+  /** Select a personal croquis pin — prompt Keep/Clear when the canvas already has ink. */
+  const requestPersonalCroquisPin = useCallback(
+    (croquisId: string, version: number) => {
+      if (
+        model === 'personal' &&
+        personalCroquisId === croquisId &&
+        personalCroquisVersion === version
+      ) {
+        setCroquisWizardOpen(false)
+        setPersonalPinPrompt(null)
+        return
+      }
+      if (designHasInk()) {
+        setPersonalPinPrompt({ croquisId, version })
+        setCroquisWizardOpen(false)
+        return
+      }
+      applyPersonalCroquisPin(croquisId, version, false)
+    },
+    [applyPersonalCroquisPin, designHasInk, model, personalCroquisId, personalCroquisVersion],
   )
 
   return {
@@ -2787,6 +2842,17 @@ export function useStudioEditor() {
     openCroquisWizard,
     closeCroquisWizard,
     applyPersonalCroquisPin,
+    requestPersonalCroquisPin,
+    personalPinPrompt,
+    confirmPersonalPinKeepStrokes: () =>
+      personalPinPrompt
+        ? applyPersonalCroquisPin(personalPinPrompt.croquisId, personalPinPrompt.version, false)
+        : undefined,
+    confirmPersonalPinClearStrokes: () =>
+      personalPinPrompt
+        ? applyPersonalCroquisPin(personalPinPrompt.croquisId, personalPinPrompt.version, true)
+        : undefined,
+    cancelPersonalPinSwitch: () => setPersonalPinPrompt(null),
     dimmed,
     setDimmed,
     referenceUrl,

@@ -81,6 +81,31 @@ def test_fingerprint_absent_back_differs_from_empty_back():
     assert _studio_content_fingerprint(front) != _studio_content_fingerprint(empty_back)
 
 
+def test_fingerprint_includes_personal_croquis_pins():
+    """Pin-only personal A→B must change OCC content identity (#148 reopen)."""
+    base = {
+        "schema": STUDIO_DRAFT_V1,
+        "strokes": [_stroke("front")],
+        "fills": [],
+        "model": "personal",
+        "personalCroquisId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        "personalCroquisVersion": 1,
+        "brush": {"sizeId": "thin"},
+        "dimmed": False,
+    }
+    other = {
+        **base,
+        "personalCroquisId": "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+        "personalCroquisVersion": 2,
+    }
+    assert _studio_content_fingerprint(base) != _studio_content_fingerprint(other)
+    builtin = {**base, "model": "female-straight"}
+    # Non-personal models ignore stray pins (match FE normalizePersonalCroquisPins).
+    stray = {**builtin, "personalCroquisId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "personalCroquisVersion": 9}
+    clean = {**builtin, "personalCroquisId": None, "personalCroquisVersion": None}
+    assert _studio_content_fingerprint(stray) == _studio_content_fingerprint(clean)
+
+
 def test_fingerprint_includes_schema_and_active_side_and_back_only_edits():
     base = {
         "schema": STUDIO_DRAFT_V2,

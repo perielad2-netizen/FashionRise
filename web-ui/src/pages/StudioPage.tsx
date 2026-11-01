@@ -1,7 +1,9 @@
 import { useCallback, useMemo } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import { FashionRiseAppShell } from '@/shell/components/FashionRiseAppShell'
 import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
+import { MyCroquisScreen } from '@/shell/components/MyCroquisScreen'
 import { MyDesignsScreen } from '@/shell/components/MyDesignsScreen'
 import { MyLooksScreen } from '@/shell/components/MyLooksScreen'
 import { TechpackScreen } from '@/shell/components/TechpackScreen'
@@ -14,11 +16,13 @@ import styles from './StudioPage.module.css'
 export const STUDIO_PATH = '/studio'
 export const MY_DESIGNS_PATH = '/studio/designs'
 export const MY_LOOKS_PATH = '/studio/looks'
+export const MY_CROQUIS_PATH = '/studio/croquis'
 export const TECHPACK_PATH_PREFIX = '/studio/techpacks'
 
 /**
- * Studio, My Designs and My Looks share one mounted editor so the working draft's
- * autosave chain, IndexedDB recovery and conflict state survive screen switches.
+ * Studio, My Designs, My Looks and My Croquis share one mounted editor so the
+ * working draft's autosave chain, IndexedDB recovery and conflict state survive
+ * screen switches.
  */
 export function StudioPage() {
   const editor = useStudioEditor()
@@ -29,6 +33,7 @@ export function StudioPage() {
   const techpackDraftId = path.startsWith(`${TECHPACK_PATH_PREFIX}/`)
     ? path.slice(`${TECHPACK_PATH_PREFIX}/`.length).split('/').filter(Boolean)[0] || null
     : null
+  const croquisEnabled = isMyCroquisUiEnabled()
   const view =
     techpackDraftId
       ? 'techpack'
@@ -36,20 +41,32 @@ export function StudioPage() {
         ? 'library'
         : path === MY_LOOKS_PATH
           ? 'looks'
-          : path === STUDIO_PATH
-            ? 'studio'
-            : null
+          : path === MY_CROQUIS_PATH
+            ? croquisEnabled
+              ? 'croquis'
+              : null
+            : path === STUDIO_PATH
+              ? 'studio'
+              : null
 
   const onNavigate = useCallback(
     (destination: NavDestination) => {
       if (destination === 'designs') navigate(MY_DESIGNS_PATH)
       else if (destination === 'looks') navigate(MY_LOOKS_PATH)
+      else if (destination === 'croquis') navigate(MY_CROQUIS_PATH)
       else navigate(STUDIO_PATH)
     },
     [navigate],
   )
   const backToStudio = useCallback(() => navigate(STUDIO_PATH), [navigate])
   const backToLooks = useCallback(() => navigate(MY_LOOKS_PATH), [navigate])
+  const useCroquisInStudio = useCallback(
+    (croquisId: string, version: number) => {
+      editor.requestPersonalCroquisPin(croquisId, version)
+      navigate(STUDIO_PATH)
+    },
+    [editor, navigate],
+  )
   const focusLookId = searchParams.get('look')
   const clearFocusLook = useCallback(() => {
     if (!searchParams.has('look')) return
@@ -61,6 +78,7 @@ export function StudioPage() {
   const currentNav: NavDestination = useMemo(() => {
     if (view === 'library') return 'designs'
     if (view === 'looks' || view === 'techpack') return 'looks'
+    if (view === 'croquis') return 'croquis'
     return 'create'
   }, [view])
 
@@ -102,6 +120,13 @@ export function StudioPage() {
             onBackToStudio={backToStudio}
             onFocusConsumed={clearFocusLook}
             onOpenTechpack={(draftId) => navigate(`${TECHPACK_PATH_PREFIX}/${draftId}`)}
+          />
+        ) : view === 'croquis' ? (
+          <MyCroquisScreen
+            onBackToStudio={backToStudio}
+            onUseInStudio={useCroquisInStudio}
+            activeStudioPinId={editor.personalCroquisId}
+            libraryVersion={editor.libraryVersion}
           />
         ) : view === 'techpack' && techpackDraftId ? (
           <TechpackScreen draftId={techpackDraftId} onBack={backToLooks} />

@@ -1,0 +1,243 @@
+.screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--fr-radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, #141c2e 0%, #0f1626 100%);
+  box-shadow: var(--fr-shadow);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--fr-serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--fr-text);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--fr-muted);
+  max-width: 48ch;
+}
+
+.headActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ghostBtn,
+.primaryBtn,
+.openBtn,
+.deleteBtn {
+  min-height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghostBtn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fr-text);
+}
+
+.primaryBtn,
+.openBtn {
+  border: 0;
+  background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-soft));
+  color: white;
+}
+
+.deleteBtn {
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+}
+
+.ghostBtn:disabled,
+.primaryBtn:disabled,
+.openBtn:disabled,
+.deleteBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ghostBtn:focus-visible,
+.primaryBtn:focus-visible,
+.openBtn:focus-visible,
+.deleteBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.notice {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(134, 239, 172, 0.28);
+  background: rgba(20, 83, 45, 0.28);
+  color: #bbf7d0;
+  font-size: 12px;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
+  min-width: 0;
+}
+
+.previewWrap {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    linear-gradient(160deg, rgba(244, 114, 182, 0.12), transparent 40%),
+    #10182a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.previewImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #f7f1ea;
+}
+
+.previewPending {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--fr-muted);
+  font-size: 12px;
+  padding: 12px;
+  text-align: center;
+}
+
+.cardBody {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--fr-text);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.activeBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(214, 51, 132, 0.22);
+  color: #fce7f3;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+}
+
+.cardMeta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--fr-muted);
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.emptyBlock {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  padding: 24px 4px;
+}
+
+.empty {
+  margin: 0;
+  color: var(--fr-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .head {
+    padding: 12px;
+  }
+
+  .headActions {
+    width: 100%;
+  }
+
+  .headActions .ghostBtn,
+  .headActions .primaryBtn {
+    flex: 1 1 auto;
+  }
+
+  .scroll {
+    padding: 12px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

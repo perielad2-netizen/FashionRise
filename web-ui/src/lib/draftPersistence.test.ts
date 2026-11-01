@@ -425,6 +425,68 @@ describe('draftPersistence WEB-V2.1A/B', () => {
     }
   })
 
+  it('personal croquis A→B→A pin switch saves without a false conflict (issue #148 reopen)', async () => {
+    const pinA = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    const pinB = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff'
+    const withPin = (id: string, version: number, rev: number) => {
+      const base = createEmptyDraftDocument()
+      return {
+        ...base,
+        model: 'personal' as const,
+        personalCroquisId: id,
+        personalCroquisVersion: version,
+        clientRevision: rev,
+        strokes: [
+          {
+            id: 'garment-1',
+            tool: 'draw' as const,
+            points: [1, 2, 0.5, 3, 4, 0.6],
+            color: '#1C1C1E',
+            size: 2,
+            opacity: 1,
+          },
+        ],
+      }
+    }
+    const docA = withPin(pinA, 1, 2)
+    api.designs.set('d1', {
+      id: 'd1',
+      design_data: documentForCloud(docA),
+      metadata: { draftKind: 'studio_working_draft', clientRevision: docA.clientRevision },
+      visibility: 'private',
+      updated_at: new Date().toISOString(),
+    })
+    const docB = withPin(pinB, 2, 3)
+    const toB = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'd1',
+      document: docB,
+      fingerprint: draftContentFingerprint(documentForCloud(docB)),
+      lastSyncedFingerprint: draftContentFingerprint(documentForCloud(docA)),
+      expectedRevision: docA.clientRevision,
+    })
+    expect(toB.ok).toBe(true)
+    if (toB.ok) {
+      expect(toB.document.personalCroquisId).toBe(pinB)
+      expect(toB.document.personalCroquisVersion).toBe(2)
+      expect(toB.document.strokes[0]?.id).toBe('garment-1')
+    }
+    const docA2 = withPin(pinA, 1, 4)
+    const toA = await persistStudioDraft({
+      userId: 'u1',
+      designId: 'd1',
+      document: docA2,
+      fingerprint: draftContentFingerprint(documentForCloud(docA2)),
+      lastSyncedFingerprint: draftContentFingerprint(documentForCloud(docB)),
+      expectedRevision: docB.clientRevision,
+    })
+    expect(toA.ok).toBe(true)
+    if (toA.ok) {
+      expect(toA.document.personalCroquisId).toBe(pinA)
+      expect(toA.conflict).toBeUndefined()
+    }
+  })
+
   it('model switch with stray personal pins saves without a false conflict (issue #148)', async () => {
     const seed = bumpDraftDocument(createEmptyDraftDocument(), {
       model: 'female-straight',

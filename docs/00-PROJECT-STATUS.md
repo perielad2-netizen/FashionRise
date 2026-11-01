@@ -3,20 +3,34 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#149 Try On Person DEPLOYED** · App **`0676a9a6`** · FE+BE+worker · Alembic **`015`** · **0** operator-paid OpenAI calls · awaiting owner live Try On Person review.)
+**Last updated:** 2026-11-02 (**#148 personal A→B + #151 My Croquis DEPLOYED** · App **`85a50894`** · FE+BE fingerprint · Alembic **`015`** unchanged · **0** operator-paid OpenAI · #149 Try On Person preserved.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person is live behind Magic destination choice on personal croquis.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person remains live. My Croquis library is first-class nav.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`0676a9a6`** — release `/var/www/fashionrise/releases/0676a9a6` · source `0676a9a6397915121327df04c79081264edd1b11` · App pill **`0676a9a6`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `6668e382` kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | **`0676a9a6397915121327df04c79081264edd1b11`**. Alembic **`015`**. |
-| AI worker | `fashionrise-ai-worker` @ **`0676a9a6`** |
-| Database | `fashionrise_beta` — Alembic **`015`** (consent purpose `try_on_person`) |
-| Nginx | `current` → `releases/0676a9a6` · personal-croquis + AI polish + **personal-try-on** / preflight allowlist |
-| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · `extra_body.moderation=low` · croquis prompt **v5** unchanged · try-on prompt **`try-on-person-v1`** |
+| Frontend (`web-ui`) | **`85a50894`** — release `/var/www/fashionrise/releases/85a50894` · source `85a5089407e4b6ffb37c34ab591a07800ebac185` · App pill **`85a50894`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `0676a9a6` kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | Tip includes `_normalize_personal_croquis_pins` in `design_service.py` (deployed on API host). Alembic **`015`**. |
+| AI worker | `fashionrise-ai-worker` restarted with same tree · **no** prompt/V5 changes |
+| Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
+| Nginx | `current` → `releases/85a50894` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
+| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v1`** unchanged |
+
+## #148 + #151 Personal croquis A→B fix + My Croquis library — DEPLOYED (2026-11-02)
+
+Owner reopen of #148: built-in↔personal fixed on App `6668e382`, but **personal A → personal B** still false-conflicted. #151 asks for a first-class **My Croquis** gallery beside My Designs / My Looks.
+
+| Item | Detail |
+|---|---|
+| Root cause (#148 reopen) | BE `_studio_content_fingerprint` **omitted** `personalCroquisId` / `personalCroquisVersion`. Pin-only A→B (same strokes/model) looked like identical content → PUT **200** returned the **prior** pin → FE `acknowledgedFingerprint !== cloudFingerprint` → false Draft recovery. Distinct from the non-personal stray-pin bug. |
+| Fix | BE fingerprint + normalize pins (personal only). FE `applyPersonalCroquisPin` is one atomic commit (`skipNextAutosaveRef`) + Keep/Clear when ink; wizard/gallery use `requestPersonalCroquisPin`. |
+| My Croquis (#151) | Nav + `/studio/croquis` gallery: authenticated thumbnail preview, Use in Studio (exact accepted version), Delete with Studio-ref warning + private erase, Create New via existing one-checkbox wizard. No public photo URLs. |
+| Try On (#149) | Unchanged — still binds server-side `source_asset_id` to the active selected personal croquis + garment-only snapshot. |
+| Tests | FE: personal pin A→B fingerprint/persist, MyCroquisScreen, StudioPage notices — focused PASS. BE: fingerprint unit + concurrency pin-switch coverage. **0** paid OpenAI. |
+| Deploy | FE **`85a50894`** · BE `design_service.py` pin fingerprint · backup `/var/backups/fashionrise/my-croquis-switch-20261101T224921Z` · Alembic untouched |
+| Owner verify | Hard-refresh until App **`85a50894`**. Open **My Croquis** → preview A and B → **Use in Studio** on B → wait **Saved** → refresh still B → select A → **Saved** (no false conflict), with/without strokes (Keep/Clear). Create New + Delete from gallery; if Studio pins the deleted croquis, strokes remain / underlay unavailable. Try On Person still uses the active croquis photo. Do **not** clear IndexedDB. |
 
 ## #149 Try On Person — DEPLOYED (awaiting owner live review) (2026-11-01)
 
