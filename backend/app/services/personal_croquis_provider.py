@@ -27,13 +27,14 @@ logger = logging.getLogger(__name__)
 GEOMETRY_PROFILE_V1 = "fit_contain_768x1024_v1"
 # v2: fashion-underlay wording (historical).
 # v3: clothed fashion-illustration underlay (historical; over-retained garments).
-# v4: FashionRise house-style croquis mannequin — pose/proportions from photo,
-#     line language from built-in Studio croquis templates; no garment rendering.
+# v4: house mannequin style; still encouraged elongated silhouette (historical).
+# v5: photo-faithful proportions — image 1 authoritative geometry; image 2 style only.
 PROMPT_VERSION_V1 = "croquis-lineart-v1"  # historical
 PROMPT_VERSION_V2 = "croquis-lineart-v2"  # historical
 PROMPT_VERSION_V3 = "croquis-lineart-v3"  # historical
-PROMPT_VERSION_V4 = "croquis-lineart-v4"
-PROMPT_VERSION_CURRENT = PROMPT_VERSION_V4
+PROMPT_VERSION_V4 = "croquis-lineart-v4"  # historical
+PROMPT_VERSION_V5 = "croquis-lineart-v5"
+PROMPT_VERSION_CURRENT = PROMPT_VERSION_V5
 DESIGN_W = 768
 DESIGN_H = 1024
 
@@ -43,11 +44,27 @@ CROQUIS_PROVIDER_SIZE = "1024x1536"
 CROQUIS_PROVIDER_QUALITY_DEFAULT = "medium"
 
 # Bundled Studio house-style croquis (matches /models/library/female-straight.png).
-# Sent as images.edit image[1] style anchor only — pose comes from the photo.
+# Sent as images.edit image[1] STYLE ONLY — geometry comes from the photograph.
 _HOUSE_STYLE_REL = Path(__file__).resolve().parent.parent / "assets" / "croquis" / "fashionrise_house_style.png"
 HOUSE_STYLE_REF_VERSION = "female-straight-v4d"
+# Default geometry priority for Create My Croquis (not fashion_elongated).
+PROPORTION_MODE_PHOTO_FAITHFUL = "photo_faithful"
+PROPORTION_MODE_CURRENT = PROPORTION_MODE_PHOTO_FAITHFUL
 
-# Versioned croquis prompt — blank FashionRise mannequin underlay for garment sketching.
+# Versioned croquis prompt — photo-faithful blank mannequin underlay for garment sketching.
+CROQUIS_LINEART_PROMPT_V5 = (
+    "Create a clean FashionRise mannequin croquis for clothing design. "
+    "Use image 1 as the primary reference for the person's actual visible pose and proportions. "
+    "Preserve the relative shoulder, torso, waist, hip, thigh and calf widths; head-to-body ratio; "
+    "torso-to-leg length; arm positions; and leg stance. "
+    "Do not automatically slim the figure, narrow hips, reduce body width or lengthen the legs. "
+    "Image 2 is ONLY a reference for line-art styling, blank mannequin head, construction guides "
+    "and minimal black outlines. Do not copy image 2's body shape, height proportions or pose. "
+    "Remove garment decoration, hair and facial detail. "
+    "Output a full-length, transparent mannequin underlay. "
+    "Where clothing hides anatomy, estimate conservatively rather than inventing precise measurements."
+)
+# Historical V4 string retained for regression contrast only (not used at runtime).
 CROQUIS_LINEART_PROMPT_V4 = (
     "Create a FashionRise house-style croquis mannequin underlay as clean black line art "
     "on a transparent background for sketching clothes on top in a fashion design studio. "
@@ -62,11 +79,11 @@ CROQUIS_LINEART_PROMPT_V4 = (
     "Output a blank Studio croquis/mannequin underlay with the full figure visible (no crop), "
     "no logos, and no text."
 )
-# Back-compat aliases — current prompt is V4.
-CROQUIS_LINEART_PROMPT_V3 = CROQUIS_LINEART_PROMPT_V4
-CROQUIS_LINEART_PROMPT_V2 = CROQUIS_LINEART_PROMPT_V4
-CROQUIS_LINEART_PROMPT_V1 = CROQUIS_LINEART_PROMPT_V4
-CROQUIS_LINEART_PROMPT = CROQUIS_LINEART_PROMPT_V4
+# Back-compat aliases — current prompt is V5.
+CROQUIS_LINEART_PROMPT_V3 = CROQUIS_LINEART_PROMPT_V5
+CROQUIS_LINEART_PROMPT_V2 = CROQUIS_LINEART_PROMPT_V5
+CROQUIS_LINEART_PROMPT_V1 = CROQUIS_LINEART_PROMPT_V5
+CROQUIS_LINEART_PROMPT = CROQUIS_LINEART_PROMPT_V5
 
 # Official gpt-image-2.5-sunburst token rates (USD per 1M tokens) — design §9.1.
 _RATE_TEXT_IN = 5.0
@@ -601,7 +618,7 @@ class OpenAICroquisImagesEditAdapter:
         try:
             kwargs = build_image_edit_kwargs(
                 model=model,
-                prompt=CROQUIS_LINEART_PROMPT_V4,
+                prompt=CROQUIS_LINEART_PROMPT_V5,
                 sketch=(source_png, "image/png"),
                 size=size,
                 quality=quality,
@@ -672,6 +689,7 @@ class OpenAICroquisImagesEditAdapter:
             "n": kwargs.get("n"),
             "image_inputs": image_inputs,
             "style_ref_version": HOUSE_STYLE_REF_VERSION,
+            "proportion_mode": PROPORTION_MODE_CURRENT,
             "prompt_version": PROMPT_VERSION_CURRENT,
             "geometry_profile": GEOMETRY_PROFILE_V1,
             "design_plane": f"{DESIGN_W}x{DESIGN_H}",
