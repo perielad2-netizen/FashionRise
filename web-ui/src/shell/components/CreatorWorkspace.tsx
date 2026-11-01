@@ -737,6 +737,31 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         </ConfirmDialog>
       ) : null}
 
+      {editor.personalPinPrompt ? (
+        <ConfirmDialog
+          title="Switch personal croquis?"
+          actions={[
+            { label: 'Cancel', onClick: editor.cancelPersonalPinSwitch, variant: 'ghost' },
+            {
+              label: 'Keep strokes',
+              onClick: () => editor.confirmPersonalPinKeepStrokes(),
+              variant: 'primary',
+            },
+            {
+              label: 'Clear strokes',
+              onClick: () => editor.confirmPersonalPinClearStrokes(),
+              variant: 'danger',
+            },
+          ]}
+        >
+          <p>
+            Your current sketch will stay on the canvas if you keep strokes. Clearing removes ink
+            before switching to the selected My Croquis underlay. Front and Back artwork follow the
+            same choice.
+          </p>
+        </ConfirmDialog>
+      ) : null}
+
       {editor.draftConflict ? (
         <ConfirmDialog
           title="Draft recovery conflict"
@@ -799,7 +824,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         </div>
       ) : null}
 
-      {editor.saveDesignDialog && !editor.draftConflict && !editor.damagedCloudDialogOpen && !editor.modelSwitchPrompt ? (
+      {editor.saveDesignDialog &&
+      !editor.draftConflict &&
+      !editor.damagedCloudDialogOpen &&
+      !editor.modelSwitchPrompt &&
+      !editor.personalPinPrompt ? (
         <SaveDesignDialog
           defaultTitle={editor.saveDesignDialog.defaultTitle}
           saving={editor.saveDesignDialog.saving}
@@ -825,7 +854,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           open
           onClose={editor.closeCroquisWizard}
           onPinAccepted={(croquisId, version) =>
-            editor.applyPersonalCroquisPin(croquisId, version, false)
+            editor.requestPersonalCroquisPin(croquisId, version)
           }
         />
       ) : null}

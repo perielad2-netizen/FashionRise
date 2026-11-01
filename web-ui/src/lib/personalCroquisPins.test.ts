@@ -49,6 +49,37 @@ describe('personal croquis model + pins', () => {
     expect(draftContentFingerprint(a)).not.toBe(draftContentFingerprint(b))
   })
 
+  it('fingerprint changes when switching personal croquis A→B (same strokes)', () => {
+    const a = createEmptyDraftDocument()
+    a.model = 'personal'
+    a.personalCroquisId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    a.personalCroquisVersion = 1
+    a.strokes = [
+      {
+        id: 's1',
+        tool: 'draw',
+        points: [1, 2, 0.5, 3, 4, 0.6],
+        color: '#1C1C1E',
+        size: 2,
+        opacity: 1,
+      },
+    ]
+    const b = {
+      ...a,
+      personalCroquisId: 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff',
+      personalCroquisVersion: 2,
+    }
+    expect(draftContentFingerprint(documentForCloud(a))).not.toBe(
+      draftContentFingerprint(documentForCloud(b)),
+    )
+    // Round-trip parse of B must keep B pins so PUT 200 extract matches send.
+    const parsed = parseStudioDraftDocument(documentForCloud(b))
+    expect(parsed?.personalCroquisId).toBe('bbbbbbbb-cccc-4ddd-8eee-ffffffffffff')
+    expect(draftContentFingerprint(documentForCloud(parsed!))).toBe(
+      draftContentFingerprint(documentForCloud(b)),
+    )
+  })
+
   it('ignores stray personal pins on builtin models for fingerprints and parse', () => {
     const clean = bumpDraftDocument(createEmptyDraftDocument(), { model: 'female-hand-hip' })
     const stray = {

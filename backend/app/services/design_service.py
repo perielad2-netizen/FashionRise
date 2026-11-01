@@ -188,11 +188,35 @@ def _normalize_back_sentinel(design_data: dict[str, Any] | None) -> dict[str, An
     }
 
 
+def _normalize_personal_croquis_pins(
+    design_data: dict[str, Any] | None,
+) -> tuple[str | None, int | None]:
+    """Match FE draftDocument.normalizePersonalCroquisPins for OCC content identity.
+
+    Personal A→B pin changes must not look identical when strokes/model are unchanged;
+    otherwise PUT returns the prior document (HTTP 200) and the client opens a false
+    Draft recovery conflict after fingerprint mismatch.
+    """
+    data = design_data or {}
+    if data.get("model") != "personal":
+        return None, None
+    pin_id = data.get("personalCroquisId")
+    pin_ver = data.get("personalCroquisVersion")
+    normalized_id = pin_id if isinstance(pin_id, str) and pin_id else None
+    normalized_ver = (
+        int(pin_ver)
+        if isinstance(pin_ver, int) and not isinstance(pin_ver, bool) and pin_ver >= 1
+        else None
+    )
+    return normalized_id, normalized_ver
+
+
 def _studio_content_fingerprint(design_data: dict[str, Any] | None) -> str:
     data = design_data or {}
     schema = data.get("schema")
     if not _is_studio_schema(schema):
         schema = STUDIO_DRAFT_V1 if schema is None else schema
+    pin_id, pin_ver = _normalize_personal_croquis_pins(data)
     payload = {
         "schema": schema,
         "strokes": data.get("strokes"),
@@ -200,6 +224,8 @@ def _studio_content_fingerprint(design_data: dict[str, Any] | None) -> str:
         "model": data.get("model"),
         "customReferenceUrl": data.get("customReferenceUrl"),
         "customReferenceKey": data.get("customReferenceKey"),
+        "personalCroquisId": pin_id,
+        "personalCroquisVersion": pin_ver,
         "brush": data.get("brush"),
         "dimmed": data.get("dimmed"),
         "activeSide": _normalize_active_side(data),
