@@ -48,12 +48,31 @@ export type StudioBrushState = {
 /** Normalize brush for fingerprints / equality so missing sizePx does not fake a conflict. */
 export function normalizeStudioBrush(brush: StudioBrushState): StudioBrushState {
   const sizePx = resolveBrushSizePx(brush)
+  const rawColor = brush.color
+  const color =
+    typeof rawColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(rawColor)
+      ? rawColor.toUpperCase()
+      : rawColor
   return {
     sizeId: brush.sizeId,
     sizePx,
     opacity: brush.opacity,
-    color: brush.color,
+    color,
   }
+}
+
+/**
+ * Personal croquis pins are meaningful only when `model === 'personal'`.
+ * Stray pins on builtin/custom/blank drafts must not participate in fingerprints
+ * or cloud writes — parseStudioDraftDocument already strips them on read, and a
+ * send/receive mismatch was opening false Draft recovery conflicts after PUT 200.
+ */
+export function normalizePersonalCroquisPins<
+  T extends Pick<StudioDraftDocument, 'model' | 'personalCroquisId' | 'personalCroquisVersion'>,
+>(doc: T): T {
+  if (doc.model === 'personal') return doc
+  if (doc.personalCroquisId == null && doc.personalCroquisVersion == null) return doc
+  return { ...doc, personalCroquisId: null, personalCroquisVersion: null }
 }
 
 export type StudioDraftDocument = {
@@ -373,20 +392,21 @@ export function bumpDraftDocument(
     }
     brush = normalizeStudioBrush(merged)
   }
-  const next: StudioDraftDocument = {
+  const next: StudioDraftDocument = normalizePersonalCroquisPins({
     ...prev,
     ...patch,
     brush,
     schema: patch.schema ?? prev.schema,
     clientRevision: prev.clientRevision + 1,
     updatedAt: now.toISOString(),
-  }
+  })
   if (!patch.clearBackIntent) delete next.clearBackIntent
   return next
 }
 
 /** Stage B BE-aligned content fingerprint (sort_keys stable via ordered keys). */
 export function draftContentFingerprint(doc: StudioDraftDocument): string {
+  const pins = normalizePersonalCroquisPins(doc)
   const payload: Record<string, unknown> = {
     schema: doc.schema ?? STUDIO_DRAFT_SCHEMA,
     strokes: doc.strokes,
@@ -394,8 +414,8 @@ export function draftContentFingerprint(doc: StudioDraftDocument): string {
     model: doc.model,
     customReferenceUrl: doc.customReferenceUrl,
     customReferenceKey: doc.customReferenceKey,
-    personalCroquisId: doc.personalCroquisId ?? null,
-    personalCroquisVersion: doc.personalCroquisVersion ?? null,
+    personalCroquisId: pins.personalCroquisId ?? null,
+    personalCroquisVersion: pins.personalCroquisVersion ?? null,
     brush: normalizeStudioBrush(doc.brush),
     dimmed: doc.dimmed,
     activeSide: normalizeActiveSide(doc),
@@ -426,7 +446,8 @@ export function serializeStudioDraftDocument(
   options?: { frontBackEnabled?: boolean },
 ): StudioDraftDocument {
   const frontBackEnabled = options?.frontBackEnabled ?? isStudioFrontBackEnabled()
-  const { clearBackIntent: _clearBackIntent, ...rest } = doc
+  const { clearBackIntent: _clearBackIntent, ...rest } = normalizePersonalCroquisPins(doc)
+  const brush = normalizeStudioBrush(rest.brush)
   if (!frontBackEnabled && isStudioDraftV2(rest)) {
     throw new StudioDraftSerializeError(
       'Front/Back is disabled; refusing to downgrade or strip a v2 studio draft.',
@@ -438,6 +459,7 @@ export function serializeStudioDraftDocument(
       schema: STUDIO_DRAFT_SCHEMA,
       strokes: rest.strokes,
       fills: rest.fills ?? [],
+      brush,
     }
     delete (v1 as { activeSide?: unknown }).activeSide
     delete (v1 as { back?: unknown }).back
@@ -451,6 +473,7 @@ export function serializeStudioDraftDocument(
     strokes: rest.strokes,
     fills: rest.fills ?? [],
     back: cloneSideBag(back),
+    brush,
   }
 }
 
@@ -500,15 +523,18 @@ export function rebaseChosenLocalDraft(
   now = new Date(),
 ): StudioDraftDocument {
   const floor = Number.isFinite(serverRevision) ? serverRevision : 0
+  const cleaned = normalizePersonalCroquisPins(local)
   const rebased: StudioDraftDocument = {
-    ...local,
-    strokes: local.strokes.map((stroke) => ({ ...stroke, points: [...stroke.points] })),
-    fills: cloneFills(local.fills ?? []),
-    brush: normalizeStudioBrush(local.brush),
-    clientRevision: Math.max(local.clientRevision, floor) + 1,
+    ...cleaned,
+    strokes: cleaned.strokes.map((stroke) => ({ ...stroke, points: [...stroke.points] })),
+    fills: cloneFills(cleaned.fills ?? []),
+    brush: normalizeStudioBrush(cleaned.brush),
+    personalCroquisId: cleaned.personalCroquisId,
+    personalCroquisVersion: cleaned.personalCroquisVersion,
+    clientRevision: Math.max(cleaned.clientRevision, floor) + 1,
     updatedAt: now.toISOString(),
   }
-  if (local.back) rebased.back = cloneSideBag(local.back)
+  if (cleaned.back) rebased.back = cloneSideBag(cleaned.back)
   return rebased
 }
 
@@ -536,12 +562,7 @@ export function documentFromEditorState(input: {
     typeof input.sizePx === 'number' && Number.isFinite(input.sizePx)
       ? snapBrushSizePx(input.sizePx)
       : BRUSH_SIZES[input.sizeId]
-  const patch: Partial<StudioDraftDocument> = {
-    strokes: input.strokes,
-    fills: input.fills ?? input.prev.fills ?? [],
-    model: input.model,
-    customReferenceUrl: input.customReferenceUrl,
-    customReferenceKey: input.customReferenceKey,
+  const requestedPins = {
     personalCroquisId:
       input.personalCroquisId !== undefined
         ? input.personalCroquisId
@@ -550,6 +571,19 @@ export function documentFromEditorState(input: {
       input.personalCroquisVersion !== undefined
         ? input.personalCroquisVersion
         : (input.prev.personalCroquisVersion ?? null),
+  }
+  const pins =
+    input.model === 'personal'
+      ? requestedPins
+      : { personalCroquisId: null, personalCroquisVersion: null }
+  const patch: Partial<StudioDraftDocument> = {
+    strokes: input.strokes,
+    fills: input.fills ?? input.prev.fills ?? [],
+    model: input.model,
+    customReferenceUrl: input.customReferenceUrl,
+    customReferenceKey: input.customReferenceKey,
+    personalCroquisId: pins.personalCroquisId,
+    personalCroquisVersion: pins.personalCroquisVersion,
     brush: {
       sizeId: BRUSH_SIZES[input.sizeId] === sizePx ? input.sizeId : nearestBrushSizeId(sizePx),
       sizePx,

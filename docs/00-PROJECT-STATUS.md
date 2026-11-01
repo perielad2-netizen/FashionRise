@@ -3,20 +3,32 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis V5 photo-faithful proportions DEPLOYED** · tip **`faa7d91d47be433e6cfa771d5c8f9a1b744545b4`** · prompt **croquis-lineart-v5** · proportion_mode **photo_faithful** · image1 geometry / image2 style-only · mocked BE 42 · **0** operator paid calls.)
+**Last updated:** 2026-11-01 (**#148 Studio draft conflict FE hotfix DEPLOYED** · App **`6668e382`** · FE-only · BE/worker remain **`faa7d91d`** · **0** OpenAI calls · **0** DB clears.)
 
-**Phase:** Protected family beta. Create My Croquis V5 prioritizes **photo-faithful body proportions** while keeping FashionRise house mannequin line style. Production tip **`faa7d91d`**.
+**Phase:** Protected family beta. Create My Croquis V5 remains live on BE. Studio mannequin-switch draft sync hotfix is on FE **`6668e382`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`faa7d91d`** — release `/var/www/fashionrise/releases/faa7d91d` · source `faa7d91d47be433e6cfa771d5c8f9a1b744545b4` · App pill **`faa7d91d`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
-| Backend (FastAPI + PostgreSQL) | **`faa7d91d47be433e6cfa771d5c8f9a1b744545b4`**. Alembic **`014`**. |
-| AI worker | `fashionrise-ai-worker` @ **`faa7d91d`** |
+| Frontend (`web-ui`) | **`6668e382`** — release `/var/www/fashionrise/releases/6668e382` · source `6668e3824e95ad6f106a3713ba45b1f132924d52` · App pill **`6668e382`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `faa7d91d` kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | **`faa7d91d47be433e6cfa771d5c8f9a1b744545b4`** (unchanged). Alembic **`014`**. |
+| AI worker | `fashionrise-ai-worker` @ **`faa7d91d`** (unchanged) |
 | Database | `fashionrise_beta` — Alembic **`014`** |
-| Nginx | `current` → `releases/faa7d91d` · personal-croquis allowlist |
+| Nginx | `current` → `releases/6668e382` · personal-croquis allowlist |
 | AI spend | Croquis: **`$5`** ceiling · LIVE_HTTP **ON** · `extra_body.moderation=low` · claim lease **≥300s** · prompt **v5** + house style ref (style-only) |
+
+## #148 Studio draft conflict / Keep-this-device Save failed (2026-11-01) — DEPLOYED
+
+Owner: switch mannequin → **Draft recovery conflict** → **Keep this device** → **Save failed Retry**; **Use cloud draft** showed the new mannequin + Saved. Prod API window had **PUT 200s / 0× HTTP 409**.
+
+| Item | Detail |
+|---|---|
+| Root cause | Stray `personalCroquisId` / `personalCroquisVersion` on **non-personal** models survived cloud writes and fingerprints, while `parseStudioDraftDocument` strips them on read → fingerprint mismatch after **PUT 200** opened a **false** Draft recovery conflict. No-ink `requestModelChange` only called `setModelState`, so leaving personal / carrying pins never cleared. Keep-this-device rebased the stale conflict snapshot and hit the same mismatch → Save failed. Use-cloud only replaced IndexedDB with the parsed server doc (pins already null, new model) → Saved. |
+| Fix (FE-only) | Normalize/strip non-personal pins in fingerprints, serialize, editor commits, and rebase; no-ink model switch goes through `commitModelChange`; Keep uses **live canvas** + **one OCC rebase retry** (second concurrent race renews conflict); Use-cloud unchanged; local recovery never auto-erased. |
+| Tests | Vitest: `personalCroquisPins`, `draftPersistence` (#148 model-switch), `conflictResolution` (Keep rebase + dual-race), undo/queue Studio — **95** focused PASS; broader Studio designs/frontBack/restore **53** PASS. |
+| Deploy | FE release **`6668e382`**; backup `/var/backups/fashionrise/studio-draft-conflict-hotfix-20261101T180530Z`; BE/worker/Alembic untouched; **0** paid AI. |
+| Owner verify | Hard-refresh until App **`6668e382`**. Single tab: switch Female Standing → Hand on hip (no ink) → expect **Saved** (no conflict). With ink: confirm keep/clear strokes still works. Optional: open conflict via two tabs; **Keep this device** should preserve model/strokes/Front-Back; **Use cloud** still available. Refresh must keep chosen model. Do **not** clear IndexedDB. |
 
 ## #135 Create My Croquis — V5 photo-faithful proportions (2026-11-01)
 

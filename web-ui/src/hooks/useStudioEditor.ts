@@ -1125,9 +1125,12 @@ export function useStudioEditor() {
         setModelSwitchPrompt({ next })
         return
       }
-      setModelState(next)
+      // No-ink switches must go through commitModelChange so personal pins and
+      // Front/Back side state stay consistent. setModelState-only left stray
+      // personalCroquis pins on builtin models → PUT 200 then false conflict.
+      commitModelChange(next, false)
     },
-    [designHasInk, model],
+    [commitModelChange, designHasInk, model],
   )
 
   const changeActiveSide = useCallback(
@@ -1942,16 +1945,23 @@ export function useStudioEditor() {
     void (async () => {
       setSaveStatus('saving')
       setSaveError(null)
+      // Keep the live canvas (authoritative), not a possibly stale in-flight
+      // snapshot captured when the conflict opened — preserves the selected
+      // model / strokes / Front-Back after a model-switch race.
+      const live = authoritativeDocRef.current
+      const localToKeep =
+        live.clientRevision >= prompt.local.clientRevision ? live : prompt.local
       const result = await commitKeepDeviceChoice({
         userId: user.id,
         designId: prompt.designId,
-        local: prompt.local,
+        local: localToKeep,
         serverRevision: prompt.server.clientRevision,
       })
-      const rebased = rebaseChosenLocalDraft(prompt.local, prompt.server.clientRevision)
+      const rebased = rebaseChosenLocalDraft(localToKeep, prompt.server.clientRevision)
       if (result.ok) {
         const expectedFp = draftContentFingerprint(documentForCloud(rebased))
-        if (result.fingerprint !== expectedFp) {
+        const ackFp = draftContentFingerprint(documentForCloud(result.document))
+        if (result.fingerprint !== expectedFp && ackFp !== expectedFp) {
           conflictOpenRef.current = true
           setDraftConflict({
             local: rebased,
@@ -1974,6 +1984,7 @@ export function useStudioEditor() {
       }
       conflictOpenRef.current = true
       if (result.conflict) {
+        // Genuine concurrent cloud advance — renew choice; never blind-overwrite.
         setDraftConflict(result.conflict)
         setSaveError(result.error)
         setSaveStatus('error')

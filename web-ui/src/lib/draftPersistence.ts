@@ -603,6 +603,42 @@ export async function commitKeepDeviceChoice(args: {
   local: StudioDraftDocument
   serverRevision: number
 }): Promise<PersistResult> {
+  let serverRevision = args.serverRevision
+  let attempt = 0
+  // Bounded rebase retry: one concurrent cloud advance during Keep is recoverable
+  // without endless Save failed; a second divergent advance renews the conflict.
+  while (attempt < 2) {
+    attempt += 1
+    const rebased = rebaseChosenLocalDraft(args.local, serverRevision)
+    const result = await persistStudioDraft({
+      userId: args.userId,
+      designId: args.designId,
+      document: rebased,
+      fingerprint: draftContentFingerprint(documentForCloud(rebased)),
+      lastSyncedFingerprint: null,
+      expectedRevision: serverRevision,
+    })
+    if (result.ok) return result
+    if (!result.conflict || attempt >= 2) return result
+    const nextRev = result.conflict.server.clientRevision
+    if (nextRev <= serverRevision) return result
+    // Same-content after normalize (e.g. stray-pin strip) — treat as ACK.
+    if (
+      draftContentFingerprint(documentForCloud(rebased)) ===
+      draftContentFingerprint(documentForCloud(result.conflict.server))
+    ) {
+      return {
+        ok: true,
+        designId: result.conflict.designId,
+        document: result.conflict.server,
+        fingerprint: draftContentFingerprint(documentForCloud(result.conflict.server)),
+        syncedRevision: result.conflict.server.clientRevision,
+        localPersisted: result.localPersisted,
+      }
+    }
+    serverRevision = nextRev
+  }
+  // Unreachable — loop returns — keep TypeScript satisfied.
   const rebased = rebaseChosenLocalDraft(args.local, args.serverRevision)
   return persistStudioDraft({
     userId: args.userId,
