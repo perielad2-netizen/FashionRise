@@ -1,15 +1,27 @@
-import { useEffect, useState } from 'react'
-import { Maximize2, Minimize2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { modelLabel } from '@/assets/modelLibrary'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
+import { rearUnavailableReasonForModel } from '@/shell/rearUnavailableReason'
+import {
+  centerPan,
+  fitPage,
+  fitWidth,
+  hundredPercent,
+  type ViewportState,
+  zoomAt,
+  zoomPercent,
+} from '@/lib/viewportTransform'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { BrushControls } from '@/shell/components/BrushControls'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
+import { ImmersiveToolbar, type ImmersiveTool } from '@/shell/components/ImmersiveToolbar'
 import { ModelLibraryPanel } from '@/shell/components/ModelLibraryPanel'
+import { CreateMyCroquisWizard } from '@/shell/components/CreateMyCroquisWizard'
 import { BetaNotice } from '@/shell/components/BetaNotice'
+import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
 import { SettingsInspector } from '@/shell/components/SettingsInspector'
 import { WorkspaceHeader } from '@/shell/components/WorkspaceHeader'
@@ -21,17 +33,58 @@ type Dock = 'models' | 'materials' | 'settings' | 'brush' | null
 type Props = {
   editor: StudioEditor
   onOpenLibrary?: () => void
+  onOpenLooks?: (lookId?: string) => void
 }
 
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** True when a blocking dialog (save/confirm/color/magic) owns Escape — not dock overlays. */
 function modalOpen(): boolean {
-  return document.querySelector('[aria-modal="true"]') !== null
+  return (
+    document.querySelector('[aria-modal="true"]:not([data-dock-overlay="true"])') !== null
+  )
 }
 
-export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
+function focusableWithin(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+    if (el.getAttribute('aria-hidden') === 'true') return false
+    const style = window.getComputedStyle(el)
+    return style.display !== 'none' && style.visibility !== 'hidden'
+  })
+}
+
+function fullscreenElement(): Element | null {
+  const doc = document as Document & { webkitFullscreenElement?: Element | null }
+  return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null
+}
+
+export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) {
   const [dock, setDock] = useState<Dock>(null)
-  const [focusMode, setFocusMode] = useState(false)
+  const [immersive, setImmersive] = useState(false)
+  const [nativeFullscreen, setNativeFullscreen] = useState(false)
+  const [panTool, setPanTool] = useState(false)
+  const [viewport, setViewport] = useState<ViewportState>(() =>
+    fitPage({ width: 800, height: 1000 }),
+  )
   const [narrow, setNarrow] = useState(false)
   const [tablet, setTablet] = useState(false)
+  const workspaceRef = useRef<HTMLElement | null>(null)
+  const modelsDialogRef = useRef<HTMLDivElement | null>(null)
+  const modelsTriggerRef = useRef<HTMLElement | null>(null)
+  const immersiveTool: ImmersiveTool = panTool ? 'pan' : editor.tool
+  const preImmersiveTool = useRef(editor.tool)
+
+  const closeDock = useCallback(() => setDock(null), [])
+
+  const toggleModels = useCallback(() => {
+    setDock((current) => {
+      if (current === 'models') return null
+      const active = document.activeElement
+      if (active instanceof HTMLElement) modelsTriggerRef.current = active
+      return 'models'
+    })
+  }, [])
 
   useEffect(() => {
     const n = window.matchMedia('(max-width: 820px)')
@@ -50,36 +103,166 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
   }, [])
 
   const { setTool, undo, redo } = editor
+  /** Tablet / phone / immersive: panels open as overlays (do not shrink the canvas). */
+  const overlayPanels = tablet || narrow || immersive
+
+  const exitNativeFullscreen = useCallback(async () => {
+    const doc = document as Document & {
+      webkitExitFullscreen?: () => Promise<void> | void
+    }
+    if (!fullscreenElement()) return
+    try {
+      if (document.exitFullscreen) await document.exitFullscreen()
+      else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen()
+    } catch {
+      /* browser may reject; immersive CSS fallback still exits */
+    }
+  }, [])
+
+  const exitImmersive = useCallback(() => {
+    // Clear immersive UI immediately; fullscreen exit may reject or lag on some browsers.
+    setImmersive(false)
+    setNativeFullscreen(false)
+    setPanTool(false)
+    setDock(null)
+    // Restore last drawing tool if Hand was active (editor.tool is unchanged while panning).
+    setTool(preImmersiveTool.current)
+    void exitNativeFullscreen()
+  }, [exitNativeFullscreen, setTool])
+
+  const enterImmersive = useCallback(async () => {
+    preImmersiveTool.current = editor.tool
+    setDock(null)
+    setPanTool(false)
+    setImmersive(true)
+    setViewport(fitPage({ width: window.innerWidth, height: window.innerHeight }))
+    const el = workspaceRef.current
+    if (!el) return
+    const req =
+      el.requestFullscreen?.bind(el) ??
+      (el as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen?.bind(
+        el,
+      )
+    if (!req) return
+    try {
+      await req()
+      setNativeFullscreen(true)
+    } catch {
+      setNativeFullscreen(false)
+    }
+  }, [editor.tool])
+
+  useEffect(() => {
+    const onFs = () => {
+      const active = !!fullscreenElement()
+      setNativeFullscreen(active)
+      // Browser exited fullscreen independently — keep immersive CSS fallback until user exits.
+    }
+    document.addEventListener('fullscreenchange', onFs)
+    document.addEventListener('webkitfullscreenchange', onFs as EventListener)
+    return () => {
+      document.removeEventListener('fullscreenchange', onFs)
+      document.removeEventListener('webkitfullscreenchange', onFs as EventListener)
+    }
+  }, [])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const action = matchStudioShortcut(event)
       if (!action || modalOpen()) return
+      if (immersive && panTool) return
       event.preventDefault()
-      if (action === 'draw') setTool('draw')
-      else if (action === 'erase') setTool('erase')
-      else if (action === 'fill') setTool('fill')
-      else if (action === 'eyedropper') setTool('eyedropper')
-      else if (action === 'undo') undo()
+      if (action === 'draw') {
+        setPanTool(false)
+        setTool('draw')
+      } else if (action === 'erase') {
+        setPanTool(false)
+        setTool('erase')
+      } else if (action === 'fill') {
+        setPanTool(false)
+        setTool('fill')
+      } else if (action === 'eyedropper') {
+        setPanTool(false)
+        setTool('eyedropper')
+      } else if (action === 'undo') undo()
       else redo()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [setTool, undo, redo])
+  }, [immersive, panTool, redo, setTool, undo])
 
   useEffect(() => {
-    if (!dock && !focusMode) return
+    if (!dock && !immersive) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || modalOpen()) return
+      if (event.key !== 'Escape') return
+      // 1) Topmost modal / color picker / model-switch confirm
+      if (modalOpen()) return
+      // 2) Open dock / sheet
       if (dock) {
         setDock(null)
         return
       }
-      if (focusMode) setFocusMode(false)
+      // 3) Exit immersive / native fullscreen → normal Studio
+      if (immersive) {
+        event.preventDefault()
+        exitImmersive()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dock, focusMode])
+  }, [dock, exitImmersive, immersive])
+
+  /** Models gallery a11y: initial focus, Tab trap, restore Models trigger on close. */
+  useEffect(() => {
+    const open = overlayPanels && dock === 'models'
+    if (!open) return
+    const node = modelsDialogRef.current
+    if (!node) return
+
+    // Model-switch / save / color modals keep ownership while they are open.
+    if (!modalOpen()) {
+      const done = Array.from(node.querySelectorAll('button')).find(
+        (btn) => btn.textContent?.trim() === 'Done',
+      )
+      const selected = node.querySelector<HTMLElement>('button[aria-pressed="true"]')
+      ;(done ?? selected ?? node).focus()
+    }
+
+    return () => {
+      // Blocking dialogs own focus restoration while open.
+      if (modalOpen()) return
+      const previous = modelsTriggerRef.current
+      modelsTriggerRef.current = null
+      if (previous && document.contains(previous)) previous.focus()
+    }
+  }, [dock, overlayPanels])
+
+  useEffect(() => {
+    if (!(overlayPanels && dock === 'models')) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      // Confirm / save / color modals take precedence over the Models trap.
+      if (modalOpen()) return
+      const root = modelsDialogRef.current
+      if (!root) return
+      const nodes = focusableWithin(root)
+      if (nodes.length === 0) return
+      const first = nodes[0]!
+      const last = nodes[nodes.length - 1]!
+      const active = document.activeElement as HTMLElement | null
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+      } else if (active === last || !root.contains(active)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [dock, overlayPanels])
 
   const toolLabel =
     editor.tool === 'erase'
@@ -89,7 +272,9 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         : editor.tool === 'eyedropper'
           ? 'Eyedropper'
           : 'Pencil'
-  const brushOverlay = dock === 'brush' && tablet
+  const brushOverlay = dock === 'brush' && (tablet || immersive)
+  const panelScrim =
+    (dock === 'materials' || dock === 'settings' || dock === 'models') && overlayPanels
   const betaNotice = editor.magicNotice
     ? { message: editor.magicNotice, dismiss: () => editor.setMagicNotice(null) }
     : editor.comingSoon
@@ -98,32 +283,68 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         ? { message: editor.studioNotice, dismiss: () => editor.setStudioNotice(null) }
         : null
 
+  const applyImmersiveTool = (next: ImmersiveTool) => {
+    if (next === 'pan') {
+      setPanTool(true)
+      return
+    }
+    setPanTool(false)
+    setTool(next)
+  }
+
+  const zoomStep = (dir: 1 | -1) => {
+    const host = workspaceRef.current?.querySelector('[data-testid="drawing-canvas-host"]')
+    const rect = host?.getBoundingClientRect()
+    const box = {
+      width: rect?.width || window.innerWidth,
+      height: rect?.height || window.innerHeight,
+    }
+    const factor = dir > 0 ? 1.12 : 1 / 1.12
+    setViewport(
+      zoomAt(viewport, box, viewport.scale * factor, box.width / 2, box.height / 2),
+    )
+  }
+
+  const modelsPanel = (
+    <ModelLibraryPanel
+      selected={editor.model}
+      customPreviewUrl={editor.customUrl}
+      onSelect={editor.setModel}
+      onCustomFile={editor.onCustomFile}
+      onCreateMyCroquis={editor.openCroquisWizard}
+      variant={overlayPanels ? 'gallery' : 'sidebar'}
+    />
+  )
+
   return (
     <section
-      className={`${styles.workspace} ${focusMode ? styles.focusMode : ''}`}
+      ref={workspaceRef}
+      className={`${styles.workspace} ${immersive ? styles.immersiveMode : ''}`}
       aria-label="Creator workspace"
+      data-immersive={immersive ? 'true' : 'false'}
+      data-native-fullscreen={nativeFullscreen ? 'true' : 'false'}
     >
-      <WorkspaceHeader
-        canUndo={editor.canUndo}
-        canRedo={editor.canRedo}
-        onUndo={editor.undo}
-        onRedo={editor.redo}
-        onClear={editor.clear}
-        onMagic={editor.onMagic}
-        magicEnabled={editor.magicEnabled}
-        magicBusy={editor.magicBusy}
-        canRecoverLastMagic={editor.magicCanRecover}
-        onRecoverLastMagic={editor.recoverLastMagic}
-        onComingSoon={editor.showComingSoon}
-        saveStatus={editor.saveStatus}
-        saveStatusLabel={editor.saveStatusLabel}
-        saveError={editor.saveError}
-        onRetrySave={editor.retrySave}
-        onSaveDesign={editor.beginSaveDesign}
-        onExportPng={() => void editor.exportPng()}
-        exporting={editor.exporting}
-        onOpenLibrary={onOpenLibrary}
-      />
+      {!immersive ? (
+        <WorkspaceHeader
+          canUndo={editor.canUndo}
+          canRedo={editor.canRedo}
+          onUndo={editor.undo}
+          onRedo={editor.redo}
+          onClear={editor.clear}
+          onMagic={editor.onMagic}
+          magicEnabled={editor.magicEnabled}
+          magicBusy={editor.magicBusy}
+          canRecoverLastMagic={editor.magicCanRecover}
+          onRecoverLastMagic={editor.recoverLastMagic}
+          onComingSoon={editor.showComingSoon}
+          saveStatus={editor.saveStatus}
+          saveStatusLabel={editor.saveStatusLabel}
+          saveError={editor.saveError}
+          onRetrySave={editor.retrySave}
+          onSaveDesign={editor.beginSaveDesign}
+          onOpenLibrary={onOpenLibrary}
+        />
+      ) : null}
 
       {betaNotice ? (
         <BetaNotice message={betaNotice.message} onDismiss={betaNotice.dismiss} />
@@ -137,18 +358,46 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         sketchObjectUrl={editor.magicSketchUrl}
         error={editor.magicError}
         canRecover={editor.magicCanRecover}
+        dual={
+          editor.magicDualActive && editor.magicOperationId
+            ? {
+                operationId: editor.magicOperationId,
+                viewSide: editor.magicDualViewSide,
+                onViewSide: editor.setMagicDualViewSide,
+                front: editor.magicFront,
+                back: editor.magicBack,
+                onRetrySide: editor.retryMagicSide,
+                onDownloadSide: editor.downloadMagicSide,
+              }
+            : null
+        }
         onClose={editor.closeMagicPanel}
         onCancel={editor.cancelMagicWait}
         onDownload={editor.downloadMagicLook}
         onRecover={editor.recoverLastMagic}
         onBackToSketch={editor.backToSketchFromMagic}
+        onViewInMyLooks={
+          onOpenLooks
+            ? () => {
+                const lookId =
+                  editor.magicDualActive && editor.magicOperationId
+                    ? editor.magicOperationId
+                    : editor.magicResult?.jobId
+                editor.closeMagicPanel()
+                onOpenLooks(lookId)
+              }
+            : undefined
+        }
       />
 
-      <div className={styles.mobileDock} aria-label="Studio panels">
+      <div
+        className={`${styles.mobileDock} ${tablet && !immersive ? styles.mobileDockVisible : ''}`}
+        aria-label="Studio panels"
+      >
         <button
           type="button"
           className={dock === 'models' ? styles.dockActive : styles.dockBtn}
-          onClick={() => setDock(dock === 'models' ? null : 'models')}
+          onClick={toggleModels}
         >
           Models
         </button>
@@ -175,37 +424,67 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </button>
         <button
           type="button"
-          className={focusMode ? styles.dockActive : styles.dockBtn}
-          aria-pressed={focusMode}
+          className={styles.dockBtn}
           onClick={() => {
-            setFocusMode((v) => !v)
-            setDock(null)
+            void enterImmersive()
           }}
         >
-          {focusMode ? 'Exit focus' : 'Focus'}
+          Full screen
         </button>
       </div>
 
+      {panelScrim ? (
+        <button
+          type="button"
+          className={styles.panelScrim}
+          aria-label="Close panel"
+          onClick={closeDock}
+        />
+      ) : null}
+
       <div className={styles.body}>
-        <div className={`${styles.modelsSlot} ${dock === 'models' ? styles.slotOpen : ''}`}>
-          <ModelLibraryPanel
-            selected={editor.model}
-            customPreviewUrl={editor.customUrl}
-            onSelect={editor.setModel}
-            onCustomFile={editor.onCustomFile}
-          />
+        <div
+          className={`${styles.modelsSlot} ${dock === 'models' ? styles.slotOpen : ''}`}
+          data-testid="models-slot"
+        >
+          {overlayPanels && dock === 'models' ? (
+            <div
+              ref={modelsDialogRef}
+              className={styles.modelsSheet}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Models gallery"
+              data-dock-overlay="true"
+              tabIndex={-1}
+            >
+              <div className={styles.sheetHead}>
+                <strong>Models</strong>
+                <button type="button" className={styles.sheetClose} onClick={closeDock}>
+                  Done
+                </button>
+              </div>
+              <div className={styles.sheetBody}>{modelsPanel}</div>
+            </div>
+          ) : (
+            modelsPanel
+          )}
         </div>
 
         <div className={styles.center}>
-          <FloatingToolRail
-            tool={editor.tool}
-            canUndo={editor.canUndo}
-            canRedo={editor.canRedo}
-            onTool={editor.setTool}
-            onUndo={editor.undo}
-            onRedo={editor.redo}
-            orientation={narrow ? 'horizontal' : 'vertical'}
-          />
+          {!immersive ? (
+            <FloatingToolRail
+              tool={editor.tool}
+              canUndo={editor.canUndo}
+              canRedo={editor.canRedo}
+              onTool={editor.setTool}
+              onUndo={editor.undo}
+              onRedo={editor.redo}
+              orientation={narrow ? 'horizontal' : 'vertical'}
+              showCloseSmallGaps={editor.showCloseSmallGaps}
+              closeSmallGapsArmed={editor.fillCloseSmallGaps}
+              onCloseSmallGaps={editor.armCloseSmallGaps}
+            />
+          ) : null}
           <div className={styles.canvasStage}>
             <DrawingWorkspace
               strokes={editor.strokes}
@@ -220,65 +499,152 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               onStrokeComplete={editor.onStrokeComplete}
               onFillComplete={editor.onFillComplete}
               onFillError={editor.onFillError}
+              fillCloseSmallGaps={editor.fillCloseSmallGaps}
+              onFillCloseSmallGapsConsumed={editor.onFillCloseSmallGapsConsumed}
+              fillGapHint={editor.fillGapHint}
               onEyedropperSample={editor.onEyedropperSample}
+              onBrushSize={editor.setBrushSizePx}
+              immersive={immersive}
+              panTool={panTool}
+              viewport={immersive ? viewport : undefined}
+              onViewportChange={immersive ? setViewport : undefined}
+              frontBackEnabled={editor.frontBackEnabled}
+              activeSide={editor.activeSide}
+              rearAvailable={editor.rearAvailable}
+              rearUnavailableReason={rearUnavailableReasonForModel(editor.model)}
+              onSideChange={editor.changeActiveSide}
+              onUnavailableFlip={(reason) => editor.publishStudioNotice(reason)}
+              onEnterFullscreen={immersive ? undefined : () => void enterImmersive()}
             />
-            <button
-              type="button"
-              className={styles.focusToggle}
-              aria-pressed={focusMode}
-              aria-label={focusMode ? 'Exit focused sketch mode' : 'Enter focused sketch mode'}
-              title={focusMode ? 'Exit focus mode (Esc)' : 'Expand canvas'}
-              onClick={() => {
-                setFocusMode((v) => !v)
-                setDock(null)
-              }}
-            >
-              {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-              <span>{focusMode ? 'Exit focus' : 'Focus'}</span>
-            </button>
-            {focusMode ? (
-              <div className={styles.focusQuick} aria-label="Focus mode panels">
-                <button type="button" onClick={() => setDock('models')}>
-                  Models
-                </button>
-                <button type="button" onClick={() => setDock('materials')}>
-                  Materials
-                </button>
-                <button type="button" onClick={() => setDock('settings')}>
-                  Settings
-                </button>
-              </div>
+            {immersive ? (
+              <ImmersiveToolbar
+                tool={immersiveTool}
+                canUndo={editor.canUndo}
+                canRedo={editor.canRedo}
+                brushSize={editor.brushSize}
+                zoomPercent={zoomPercent(viewport.scale)}
+                nativeFullscreen={nativeFullscreen}
+                onTool={applyImmersiveTool}
+                onUndo={editor.undo}
+                onRedo={editor.redo}
+                onZoomIn={() => zoomStep(1)}
+                onZoomOut={() => zoomStep(-1)}
+                onFitPage={() =>
+                  setViewport(
+                    fitPage({
+                      width: workspaceRef.current?.clientWidth || window.innerWidth,
+                      height: workspaceRef.current?.clientHeight || window.innerHeight,
+                    }),
+                  )
+                }
+                onFitWidth={() =>
+                  setViewport(
+                    fitWidth({
+                      width: workspaceRef.current?.clientWidth || window.innerWidth,
+                      height: workspaceRef.current?.clientHeight || window.innerHeight,
+                    }),
+                  )
+                }
+                onHundred={() =>
+                  setViewport(
+                    hundredPercent({
+                      width: workspaceRef.current?.clientWidth || window.innerWidth,
+                      height: workspaceRef.current?.clientHeight || window.innerHeight,
+                    }),
+                  )
+                }
+                onCenter={() =>
+                  setViewport(
+                    centerPan(viewport.scale, {
+                      width: workspaceRef.current?.clientWidth || window.innerWidth,
+                      height: workspaceRef.current?.clientHeight || window.innerHeight,
+                    }),
+                  )
+                }
+                onOpenMaterials={() => setDock(dock === 'materials' ? null : 'materials')}
+                onOpenBrush={() => setDock(dock === 'brush' ? null : 'brush')}
+                onOpenModels={toggleModels}
+                onSave={editor.beginSaveDesign}
+                onExit={exitImmersive}
+                saveLabel={editor.saveStatusLabel || 'Save'}
+              />
             ) : null}
           </div>
           <div className={`${styles.materialsSlot} ${dock === 'materials' ? styles.slotOpen : ''}`}>
-            <ColorAndMaterialsPanel
-              color={editor.color}
-              onColor={editor.setColor}
-              onColorHex={editor.setColorHex}
-              fillStyle={editor.fillStyle}
-              onFillStyle={editor.setFillStyle}
-              eyedropperActive={editor.tool === 'eyedropper'}
-              onToggleEyedropper={() =>
-                editor.setTool(editor.tool === 'eyedropper' ? 'draw' : 'eyedropper')
-              }
-              onNotice={editor.publishStudioNotice}
-            />
+            {overlayPanels && dock === 'materials' ? (
+              <>
+                <div className={styles.sheetHead}>
+                  <strong>Materials</strong>
+                  <button type="button" className={styles.sheetClose} onClick={() => setDock(null)}>
+                    Done
+                  </button>
+                </div>
+                <div className={styles.sheetBody}>
+                  <ColorAndMaterialsPanel
+                    color={editor.color}
+                    onColor={editor.setColor}
+                    onColorHex={editor.setColorHex}
+                    fillStyle={editor.fillStyle}
+                    onFillStyle={editor.setFillStyle}
+                    eyedropperActive={editor.tool === 'eyedropper'}
+                    onToggleEyedropper={() =>
+                      editor.setTool(editor.tool === 'eyedropper' ? 'draw' : 'eyedropper')
+                    }
+                    onNotice={editor.publishStudioNotice}
+                  />
+                </div>
+              </>
+            ) : (
+              <ColorAndMaterialsPanel
+                color={editor.color}
+                onColor={editor.setColor}
+                onColorHex={editor.setColorHex}
+                fillStyle={editor.fillStyle}
+                onFillStyle={editor.setFillStyle}
+                eyedropperActive={editor.tool === 'eyedropper'}
+                onToggleEyedropper={() =>
+                  editor.setTool(editor.tool === 'eyedropper' ? 'draw' : 'eyedropper')
+                }
+                onNotice={editor.publishStudioNotice}
+              />
+            )}
           </div>
         </div>
 
         <div className={`${styles.settingsSlot} ${dock === 'settings' ? styles.slotOpen : ''}`}>
-          <SettingsInspector
-            sizeId={editor.sizeId}
-            brushSize={editor.brushSize}
-            opacity={editor.opacity}
-            dimmed={editor.dimmed}
-            toolLabel={toolLabel}
-            onSize={editor.setSizeId}
-            onBrushSize={editor.setBrushSizePx}
-            onOpacity={editor.setBrushOpacity}
-            onToggleDim={() => editor.setDimmed((v) => !v)}
-            onMagic={editor.onMagic}
-          />
+          {overlayPanels && dock === 'settings' ? (
+            <>
+              <div className={styles.sheetHead}>
+                <strong>Settings</strong>
+                <button type="button" className={styles.sheetClose} onClick={() => setDock(null)}>
+                  Done
+                </button>
+              </div>
+              <div className={styles.sheetBody}>
+                <SettingsInspector
+                  tool={editor.tool}
+                  brushSize={editor.brushSize}
+                  opacity={editor.opacity}
+                  dimmed={editor.dimmed}
+                  toolLabel={toolLabel}
+                  onBrushSize={editor.setBrushSizePx}
+                  onOpacity={editor.setBrushOpacity}
+                  onToggleDim={() => editor.setDimmed((v) => !v)}
+                />
+              </div>
+            </>
+          ) : (
+            <SettingsInspector
+              tool={editor.tool}
+              brushSize={editor.brushSize}
+              opacity={editor.opacity}
+              dimmed={editor.dimmed}
+              toolLabel={toolLabel}
+              onBrushSize={editor.setBrushSizePx}
+              onOpacity={editor.setBrushOpacity}
+              onToggleDim={() => editor.setDimmed((v) => !v)}
+            />
+          )}
         </div>
       </div>
 
@@ -356,7 +722,46 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </ConfirmDialog>
       ) : null}
 
-      {editor.saveDesignDialog && !editor.draftConflict && !editor.modelSwitchPrompt ? (
+      {editor.damagedCloud && editor.damagedCloudDialogOpen ? (
+        <ConfirmDialog
+          title="Damaged cloud draft"
+          actions={[
+            {
+              label: 'Continue on this device only',
+              onClick: editor.resolveDamagedCloudContinueLocal,
+              variant: 'ghost',
+            },
+            ...(editor.damagedCloud.hasLocalRecovery || editor.hasBackInk || editor.strokes.length > 0
+              ? [
+                  {
+                    label: 'Replace cloud with this device',
+                    onClick: editor.resolveDamagedCloudReplaceCloud,
+                    variant: 'danger' as const,
+                  },
+                ]
+              : []),
+          ]}
+        >
+          <p>
+            Your private cloud Studio draft exists but could not be read safely. The original cloud
+            row was left unchanged. Automatic sync is paused. Choose recovery deliberately — nothing
+            is overwritten until you confirm.
+          </p>
+        </ConfirmDialog>
+      ) : null}
+
+      {editor.damagedCloud && !editor.damagedCloudDialogOpen ? (
+        <div className={styles.damagedCloudBanner} role="alert">
+          <p>
+            Cloud draft recovery is still paused. The damaged private copy was not changed.
+          </p>
+          <button type="button" className={styles.damagedCloudBannerButton} onClick={editor.reopenDamagedCloudRecovery}>
+            Review recovery options
+          </button>
+        </div>
+      ) : null}
+
+      {editor.saveDesignDialog && !editor.draftConflict && !editor.damagedCloudDialogOpen && !editor.modelSwitchPrompt ? (
         <SaveDesignDialog
           defaultTitle={editor.saveDesignDialog.defaultTitle}
           saving={editor.saveDesignDialog.saving}
@@ -364,6 +769,26 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           customReferenceOmitted={editor.saveDesignDialog.customReferenceOmitted}
           onConfirm={(title) => void editor.confirmSaveDesign(title)}
           onCancel={editor.cancelSaveDesign}
+        />
+      ) : null}
+
+      {editor.model === 'personal' && editor.personalUnavailable ? (
+        <div className={styles.damagedCloudBanner} role="status">
+          <p>
+            Croquis unavailable — your strokes and fills are kept. The pinned My Croquis reference
+            could not be loaded (erased or inaccessible). Studio will not switch models
+            automatically.
+          </p>
+        </div>
+      ) : null}
+
+      {isMyCroquisUiEnabled() && editor.croquisWizardOpen ? (
+        <CreateMyCroquisWizard
+          open
+          onClose={editor.closeCroquisWizard}
+          onPinAccepted={(croquisId, version) =>
+            editor.applyPersonalCroquisPin(croquisId, version, false)
+          }
         />
       ) : null}
     </section>

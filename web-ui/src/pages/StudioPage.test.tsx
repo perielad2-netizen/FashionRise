@@ -251,8 +251,10 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     expect(screen.getAllByRole('slider', { name: 'Brush size' })).toHaveLength(1)
     expect(screen.getAllByRole('slider', { name: 'Brush opacity' })).toHaveLength(1)
     const size = within(settingsInspector()).getByRole('slider', { name: 'Brush size' })
-    fireEvent.change(size, { target: { value: '6' } })
-    expect(within(settingsInspector()).getByText('7 px')).toBeInTheDocument()
+    fireEvent.change(size, { target: { value: '6.5' } })
+    expect(
+      within(settingsInspector()).getByLabelText('Brush size in pixels'),
+    ).toHaveValue('6.5')
     const opacity = within(settingsInspector()).getByRole('slider', { name: 'Brush opacity' })
     fireEvent.change(opacity, { target: { value: '40' } })
     expect(within(settingsInspector()).getByText('40%')).toBeInTheDocument()
@@ -276,12 +278,14 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     const sheet = brushSheet()!
     expect(sheet).toBeVisible()
     fireEvent.change(within(sheet).getByRole('slider', { name: 'Brush size' }), {
-      target: { value: '6' },
+      target: { value: '6.5' },
     })
     fireEvent.change(within(sheet).getByRole('slider', { name: 'Brush opacity' }), {
       target: { value: '55' },
     })
-    expect(within(settingsInspector()).getByText('7 px')).toBeInTheDocument()
+    expect(
+      within(settingsInspector()).getByLabelText('Brush size in pixels'),
+    ).toHaveValue('6.5')
     expect(within(settingsInspector()).getByText('55%')).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -301,17 +305,22 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     [1180, 600],
     [1440, 900],
   ] as const) {
-    it(`Generate with AI stays unavailable and shows the beta notice at ${width}×${height}`, async () => {
+    it(`Settings has no Generate with AI footer; header Magic Soon still works at ${width}×${height}`, async () => {
       mockViewport(width, height)
       await openStudio()
 
-      const generate = within(settingsInspector()).getByRole('button', {
-        name: /Generate with AI/i,
-        hidden: true,
-      })
-      expect(generate).toHaveTextContent(/Soon/i)
-      expect(generate).toHaveAttribute('title', expect.stringMatching(/not available/i))
-      fireEvent.click(generate)
+      // WEB-V4I: obsolete Settings "Generate with AI — Soon" footer removed.
+      expect(
+        within(settingsInspector()).queryByRole('button', {
+          name: /Generate with AI/i,
+          hidden: true,
+        }),
+      ).toBeNull()
+
+      // Real Magic entry remains in the Studio header (Soon when magic UI is disabled).
+      const magic = screen.getByRole('button', { name: /^Magic/i })
+      expect(magic).toHaveTextContent(/Soon/i)
+      fireEvent.click(magic)
       const notice = noticeFor(/later milestone/i)
       expect(notice).toBeVisible()
       expect(settingsInspector().contains(notice)).toBe(false)
@@ -330,7 +339,7 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
 
     fireEvent.click(dockButton('Brush panel'))
     fireEvent.change(within(brushSheet()!).getByRole('slider', { name: 'Brush size' }), {
-      target: { value: '6' },
+      target: { value: '6.5' },
     })
 
     rotateTo(1024, 550)
@@ -340,13 +349,17 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     rotateTo(1180, 600)
     expect(brushSheet()).not.toBeInTheDocument()
     expect(screen.getByTestId('drawing-canvas')).toBe(canvas)
-    expect(within(settingsInspector()).getByText('7 px')).toBeInTheDocument()
+    expect(
+      within(settingsInspector()).getByLabelText('Brush size in pixels'),
+    ).toHaveValue('6.5')
 
     rotateTo(1440, 900)
     rotateTo(768, 1024)
     expect(screen.getByTestId('drawing-canvas')).toBe(canvas)
     for (const undo of screen.getAllByRole('button', { name: 'Undo' })) expect(undo).toBeEnabled()
-    expect(within(settingsInspector()).getByText('7 px')).toBeInTheDocument()
+    expect(
+      within(settingsInspector()).getByLabelText('Brush size in pixels'),
+    ).toHaveValue('6.5')
     expect(screen.queryByText(/save failed/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Undo' })[0]!)
@@ -361,8 +374,9 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     const nav = screen.getByRole('navigation', { name: 'FashionRise' })
     expect(nav.querySelector('img')).toBeNull()
     expect(within(nav).getByRole('button', { name: 'Create' })).toHaveAttribute('aria-current', 'page')
-    for (const label of ['Home', 'Design Book', 'Discover', 'My Looks']) {
+    for (const label of ['Home', 'Design Book', 'Discover']) {
       expect(within(nav).getByRole('button', { name: label })).toBeDisabled()
     }
+    expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
   })
 })

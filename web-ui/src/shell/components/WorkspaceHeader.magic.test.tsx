@@ -44,4 +44,30 @@ describe('WorkspaceHeader Magic recovery', () => {
     )
     expect(screen.getByRole('button', { name: /^Magic/i })).toBeDisabled()
   })
+
+  it('does not expose raw sketch export actions in More', () => {
+    render(
+      <WorkspaceHeader
+        canUndo={false}
+        canRedo={false}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        onClear={vi.fn()}
+        onMagic={vi.fn()}
+        magicEnabled
+        onSaveDesign={vi.fn()}
+        onOpenLibrary={vi.fn()}
+        onRetrySave={vi.fn()}
+        saveStatus="idle"
+        saveStatusLabel="Ready"
+        saveError={null}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
+    expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'My Designs' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Save now' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /Export/i })).toBeNull()
+  })
 })

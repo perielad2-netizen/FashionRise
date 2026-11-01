@@ -1,5 +1,12 @@
 /** Garment region fills (solid, gradient, fabric) stored alongside ink strokes. */
 
+import {
+  PAPER_HEIGHT,
+  PAPER_ORIGIN_X,
+  PAPER_ORIGIN_Y,
+  PAPER_WIDTH,
+} from '@/lib/paperBounds'
+
 export type SolidFillStyle = { kind: 'solid'; color: string }
 
 export type GradientFillStyle = {
@@ -49,6 +56,12 @@ export type FillOp = {
   /** Seed click used to create the fill (for debugging / UX). */
   seedX: number
   seedY: number
+  /**
+   * Stroke-list length when this fill was created. Eraser strokes at index >= this
+   * punch the fill; earlier erasers do not (fill-after-erase chronology).
+   * Missing on legacy saves → treat as 0 (all current erasers apply).
+   */
+  eraseAfterStrokeIndex?: number
 }
 
 export type FashionPaletteSwatch = {
@@ -121,7 +134,47 @@ export type GradientPreset = {
   preview: string
 }
 
+/**
+ * Canvas/export angles: 0° = left→right, 90° = top→bottom (Y-down).
+ * CSS linear-gradient uses 0° = upward, so preview CSS = canvasAngle + 90.
+ */
+export function gradientCssAngle(canvasAngleDeg: number): number {
+  const a = ((canvasAngleDeg % 360) + 360) % 360
+  return (a + 90) % 360
+}
+
+export function gradientPreviewCss(colors: [string, string], canvasAngleDeg: number): string {
+  const deg = gradientCssAngle(canvasAngleDeg)
+  return `linear-gradient(${deg}deg,${colors[0]},${colors[1]})`
+}
+
+export const CUSTOM_GRADIENT_ID = 'custom' as const
+
+export function normalizeGradientAngle(raw: number): number {
+  if (!Number.isFinite(raw)) return 135
+  let a = raw % 360
+  if (a < 0) a += 360
+  return Math.round(a * 10) / 10
+}
+
+export function customGradientStyle(
+  colors: [string, string],
+  angle: number,
+): GradientFillStyle | null {
+  const c0 = colors[0]?.toUpperCase()
+  const c1 = colors[1]?.toUpperCase()
+  if (!c0 || !c1) return null
+  if (!/^#[0-9A-F]{6}$/.test(c0) || !/^#[0-9A-F]{6}$/.test(c1)) return null
+  return {
+    kind: 'gradient',
+    gradientId: CUSTOM_GRADIENT_ID,
+    colors: [c0, c1],
+    angle: normalizeGradientAngle(angle),
+  }
+}
+
 export const GRADIENT_PRESETS: GradientPreset[] = [
+  // Original four — ids, colors, angles, and legacy CSS preview strings unchanged.
   {
     id: 'rose-violet',
     label: 'Rose violet',
@@ -150,14 +203,103 @@ export const GRADIENT_PRESETS: GradientPreset[] = [
     angle: 135,
     preview: 'linear-gradient(135deg,#111827,#9f1239)',
   },
+  // WEB-V4G expansions — preview CSS uses canvas→CSS angle mapping.
+  {
+    id: 'rose-gold',
+    label: 'Rose gold',
+    colors: ['#F6C1B0', '#B76E79'],
+    angle: 120,
+    preview: gradientPreviewCss(['#F6C1B0', '#B76E79'], 120),
+  },
+  {
+    id: 'sunset-coral',
+    label: 'Sunset coral',
+    colors: ['#FF8A5B', '#C2185B'],
+    angle: 150,
+    preview: gradientPreviewCss(['#FF8A5B', '#C2185B'], 150),
+  },
+  {
+    id: 'golden-champagne',
+    label: 'Golden champagne',
+    colors: ['#FFF4D6', '#D4A017'],
+    angle: 110,
+    preview: gradientPreviewCss(['#FFF4D6', '#D4A017'], 110),
+  },
+  {
+    id: 'sapphire-blue',
+    label: 'Sapphire blue',
+    colors: ['#60A5FA', '#1E3A8A'],
+    angle: 160,
+    preview: gradientPreviewCss(['#60A5FA', '#1E3A8A'], 160),
+  },
+  {
+    id: 'turquoise-lagoon',
+    label: 'Turquoise lagoon',
+    colors: ['#5EEAD4', '#0F766E'],
+    angle: 140,
+    preview: gradientPreviewCss(['#5EEAD4', '#0F766E'], 140),
+  },
+  {
+    id: 'emerald-mint',
+    label: 'Emerald mint',
+    colors: ['#A7F3D0', '#047857'],
+    angle: 125,
+    preview: gradientPreviewCss(['#A7F3D0', '#047857'], 125),
+  },
+  {
+    id: 'burgundy-velvet',
+    label: 'Burgundy velvet',
+    colors: ['#E11D48', '#4C0519'],
+    angle: 145,
+    preview: gradientPreviewCss(['#E11D48', '#4C0519'], 145),
+  },
+  {
+    id: 'midnight-violet',
+    label: 'Midnight violet',
+    colors: ['#C4B5FD', '#2E1065'],
+    angle: 155,
+    preview: gradientPreviewCss(['#C4B5FD', '#2E1065'], 155),
+  },
+  {
+    id: 'peach-blush',
+    label: 'Peach blush',
+    colors: ['#FFE4D6', '#FB7185'],
+    angle: 100,
+    preview: gradientPreviewCss(['#FFE4D6', '#FB7185'], 100),
+  },
+  {
+    id: 'lavender-haze',
+    label: 'Lavender haze',
+    colors: ['#EDE9FE', '#A78BFA'],
+    angle: 130,
+    preview: gradientPreviewCss(['#EDE9FE', '#A78BFA'], 130),
+  },
+  {
+    id: 'silver-pearl',
+    label: 'Silver pearl',
+    colors: ['#F8FAFC', '#94A3B8'],
+    angle: 90,
+    preview: gradientPreviewCss(['#F8FAFC', '#94A3B8'], 90),
+  },
+  {
+    id: 'black-cherry',
+    label: 'Black cherry',
+    colors: ['#7F1D1D', '#111827'],
+    angle: 170,
+    preview: gradientPreviewCss(['#7F1D1D', '#111827'], 170),
+  },
 ]
 
 /** Max flat contour values ([x,y,...]) accepted when parsing persisted fills. */
 export const MAX_FILL_CONTOUR_VALUES = 4_000
-/** Soft design-space pad: reject wildly out-of-range coordinates (malformed payloads). */
+/**
+ * Soft design-space pad beyond the extended paper — reject wildly out-of-range
+ * coordinates (malformed payloads) without blocking legitimate margin artwork.
+ */
 const DESIGN_PAD = 64
-const CONTOUR_COORD_MIN = -DESIGN_PAD
-const CONTOUR_COORD_MAX = 1024 + DESIGN_PAD
+const CONTOUR_COORD_MIN = Math.min(PAPER_ORIGIN_X, PAPER_ORIGIN_Y) - DESIGN_PAD
+const CONTOUR_COORD_MAX =
+  Math.max(PAPER_ORIGIN_X + PAPER_WIDTH, PAPER_ORIGIN_Y + PAPER_HEIGHT) + DESIGN_PAD
 
 export function createFillId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
@@ -207,12 +349,19 @@ export function parseFillOp(raw: unknown): FillOp | null {
   if (!style) return null
   const seedX = typeof f.seedX === 'number' && Number.isFinite(f.seedX) ? f.seedX : contour[0]!
   const seedY = typeof f.seedY === 'number' && Number.isFinite(f.seedY) ? f.seedY : contour[1]!
+  const eraseAfterStrokeIndex =
+    typeof f.eraseAfterStrokeIndex === 'number' &&
+    Number.isFinite(f.eraseAfterStrokeIndex) &&
+    f.eraseAfterStrokeIndex >= 0
+      ? Math.floor(f.eraseAfterStrokeIndex)
+      : undefined
   return {
     id: typeof f.id === 'string' && f.id ? f.id : createFillId(),
     contour,
     style,
     seedX,
     seedY,
+    ...(eraseAfterStrokeIndex !== undefined ? { eraseAfterStrokeIndex } : {}),
   }
 }
 
@@ -265,16 +414,22 @@ function parseFillStyle(raw: unknown): FillStyle | null {
   if (
     s.kind === 'gradient' &&
     typeof s.gradientId === 'string' &&
+    s.gradientId.length > 0 &&
+    s.gradientId.length <= 64 &&
     Array.isArray(s.colors) &&
     s.colors.length >= 2 &&
     typeof s.colors[0] === 'string' &&
     typeof s.colors[1] === 'string'
   ) {
+    const c0 = String(s.colors[0]).toUpperCase()
+    const c1 = String(s.colors[1]).toUpperCase()
+    // Historical gradients may use any stored HEX; keep them when parseable.
+    if (!/^#[0-9A-F]{6}$/.test(c0) || !/^#[0-9A-F]{6}$/.test(c1)) return null
     return {
       kind: 'gradient',
       gradientId: s.gradientId,
-      colors: [String(s.colors[0]).toUpperCase(), String(s.colors[1]).toUpperCase()],
-      angle: typeof s.angle === 'number' ? s.angle : 135,
+      colors: [c0, c1],
+      angle: normalizeGradientAngle(typeof s.angle === 'number' ? s.angle : 135),
     }
   }
   if (s.kind === 'fabric' && typeof s.fabricId === 'string') {
@@ -337,3 +492,11 @@ export function gradientStyleFromPreset(id: string): GradientFillStyle | null {
     angle: preset.angle,
   }
 }
+
+/** Original four presets must keep stable ids/values forever. */
+export const LEGACY_GRADIENT_IDS = [
+  'rose-violet',
+  'champagne',
+  'ocean-blush',
+  'noir-wine',
+] as const

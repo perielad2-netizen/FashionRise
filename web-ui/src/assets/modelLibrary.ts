@@ -1,3 +1,5 @@
+import { isRearCroquisPublished } from '@/assets/rearCroquisPublished'
+
 /**
  * WEB-V4D built-in croquis library.
  *
@@ -34,7 +36,10 @@ export type BuiltinModelId = LegacyModelId | SelectableBuiltinModelId
 
 export type UtilityModelId = 'custom' | 'blank'
 
-export type ModelChoice = BuiltinModelId | UtilityModelId
+/** Durable Create My Croquis underlay — resolved via exact (croquis_id, version) pins. */
+export type PersonalModelId = 'personal'
+
+export type ModelChoice = BuiltinModelId | UtilityModelId | PersonalModelId
 
 export type BuiltinModelDef = {
   id: SelectableBuiltinModelId
@@ -43,9 +48,17 @@ export type BuiltinModelDef = {
   /** Short subtitle under the card. */
   pose: string
   canvasSrc: string
+  /** Rear croquis when published (`/models/library/<id>-back.png`). */
+  backCanvasSrc?: string
   cardSrc: string
   /** Default selection when switching into this gender filter. */
   defaultForGender: boolean
+}
+
+export type ModelCanvasSide = 'front' | 'back'
+
+function libraryBackSrc(id: SelectableBuiltinModelId): string {
+  return `/models/library/${id}-back.png`
 }
 
 /** Original pre-V4D canvas references — keep forever for reopen fidelity. */
@@ -54,10 +67,10 @@ export const LEGACY_MODEL_CANVAS: Readonly<Record<LegacyModelId, string>> = {
   male: '/models/male_model_display.png',
 }
 
-export const BUILTIN_MODELS: readonly BuiltinModelDef[] = [
+const BUILTIN_MODELS_BASE = [
   {
-    id: 'female-straight',
-    gender: 'female',
+    id: 'female-straight' as const,
+    gender: 'female' as const,
     label: 'Female',
     pose: 'Standing',
     canvasSrc: '/models/library/female-straight.png',
@@ -147,6 +160,11 @@ export const BUILTIN_MODELS: readonly BuiltinModelDef[] = [
   },
 ] as const
 
+export const BUILTIN_MODELS: readonly BuiltinModelDef[] = BUILTIN_MODELS_BASE.map((m) => ({
+  ...m,
+  backCanvasSrc: libraryBackSrc(m.id),
+}))
+
 const SELECTABLE_BY_ID = new Map(BUILTIN_MODELS.map((m) => [m.id, m]))
 
 export const DEFAULT_FEMALE_MODEL: SelectableBuiltinModelId = 'female-straight'
@@ -159,6 +177,7 @@ export const MODEL_CHOICES: readonly ModelChoice[] = [
   ...BUILTIN_MODELS.map((m) => m.id),
   'custom',
   'blank',
+  'personal',
 ]
 
 export function isLegacyModelId(value: unknown): value is LegacyModelId {
@@ -179,15 +198,26 @@ export function normalizeModelChoice(value: unknown): ModelChoice {
 }
 
 export function getBuiltinModel(id: ModelChoice): BuiltinModelDef | null {
-  if (id === 'custom' || id === 'blank' || isLegacyModelId(id)) return null
+  if (id === 'custom' || id === 'blank' || id === 'personal' || isLegacyModelId(id)) return null
   return SELECTABLE_BY_ID.get(id) ?? null
 }
 
-/** Resolve the exact canvas URL for a stored model choice. */
-export function canvasSrcForModel(id: ModelChoice): string | null {
-  if (id === 'custom' || id === 'blank') return null
-  if (isLegacyModelId(id)) return LEGACY_MODEL_CANVAS[id]
-  return SELECTABLE_BY_ID.get(id)?.canvasSrc ?? null
+/** Resolve the exact canvas URL for a stored model choice and paper side. */
+export function canvasSrcForModel(id: ModelChoice, side: ModelCanvasSide = 'front'): string | null {
+  if (id === 'custom' || id === 'blank' || id === 'personal') return null
+  if (isLegacyModelId(id)) return side === 'back' ? null : LEGACY_MODEL_CANVAS[id]
+  const def = SELECTABLE_BY_ID.get(id)
+  if (!def) return null
+  if (side === 'back') return def.backCanvasSrc ?? libraryBackSrc(def.id)
+  return def.canvasSrc
+}
+
+export function modelHasRearAsset(id: ModelChoice): boolean {
+  // V1 personal croquis is front-only (design §2 / Stage B).
+  if (id === 'custom' || id === 'blank' || id === 'personal' || isLegacyModelId(id)) return false
+  const def = SELECTABLE_BY_ID.get(id)
+  if (!def) return false
+  return isRearCroquisPublished(def.id)
 }
 
 export function defaultModelForGender(gender: ModelGender): SelectableBuiltinModelId {
@@ -197,6 +227,7 @@ export function defaultModelForGender(gender: ModelGender): SelectableBuiltinMod
 export function modelLabel(model: ModelChoice): string {
   if (model === 'custom') return 'Custom reference'
   if (model === 'blank') return 'Blank paper'
+  if (model === 'personal') return 'My Croquis'
   if (model === 'female') return 'Female · Classic'
   if (model === 'male') return 'Male · Classic'
   const def = SELECTABLE_BY_ID.get(model)

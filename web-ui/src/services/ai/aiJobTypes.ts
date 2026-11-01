@@ -30,9 +30,24 @@ export function extractImageUrl(resultData: Record<string, unknown> | null | und
   return null
 }
 
+/** True when the provider refused the edit under safety/content-policy rules. */
+export function isMagicSafetyRefusal(summary: string | null | undefined): boolean {
+  if (!summary) return false
+  return /safety rules|content policy|content_policy|could not edit this sketch under/i.test(
+    summary,
+  )
+}
+
 export function extractMagicSummary(job: AiJobRead): string {
   if (job.status === 'failed') {
-    return job.error_message?.trim() || 'Magic could not finish this look.'
+    const raw = job.error_message?.trim() || 'Magic could not finish this look.'
+    if (isMagicSafetyRefusal(raw)) {
+      return (
+        `${raw} Edit the sketch, then start a new Magic operation — ` +
+        `identical retries are not sent automatically.`
+      )
+    }
+    return raw
   }
   const data = job.result_data
   if (!data) return job.status

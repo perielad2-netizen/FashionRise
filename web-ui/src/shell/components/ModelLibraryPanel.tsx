@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { BUILTIN_MODELS, type ModelChoice } from '@/assets/modelLibrary'
+import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import type { ModelLibraryCard } from '@/shell/modelTypes'
 import styles from './ModelLibraryPanel.module.css'
 
@@ -41,6 +42,10 @@ type Props = {
   customPreviewUrl: string | null
   onSelect: (choice: ModelChoice) => void
   onCustomFile: (file: File) => void
+  /** Create My Croquis wizard entry — only when UI gate is ON. */
+  onCreateMyCroquis?: () => void
+  /** Overlay gallery on tablet/immersive; sidebar on desktop. */
+  variant?: 'sidebar' | 'gallery'
 }
 
 export function ModelLibraryPanel({
@@ -48,9 +53,12 @@ export function ModelLibraryPanel({
   customPreviewUrl,
   onSelect,
   onCustomFile,
+  onCreateMyCroquis,
+  variant = 'sidebar',
 }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
   const inputRef = useRef<HTMLInputElement>(null)
+  const croquisUi = isMyCroquisUiEnabled()
 
   const cards = useMemo(() => {
     if (filter === 'all') return CARDS
@@ -58,7 +66,11 @@ export function ModelLibraryPanel({
   }, [filter])
 
   return (
-    <aside className={styles.panel} aria-label="Model library">
+    <aside
+      className={`${styles.panel} ${variant === 'gallery' ? styles.gallery : ''}`}
+      aria-label="Model library"
+      data-variant={variant}
+    >
       <div className={styles.tabs}>
         <button type="button" className={styles.tabActive} aria-current="page">
           Models
@@ -74,6 +86,25 @@ export function ModelLibraryPanel({
           <span className={styles.soon}>Soon</span>
         </button>
       </div>
+
+      {croquisUi && onCreateMyCroquis ? (
+        <div className={styles.filters} style={{ marginBottom: '0.35rem' }}>
+          <button
+            type="button"
+            className={styles.filter}
+            onClick={onCreateMyCroquis}
+            aria-label="Open Create My Croquis wizard"
+            data-testid="create-my-croquis-entry"
+          >
+            Create My Croquis
+          </button>
+          {selected === 'personal' ? (
+            <span className={styles.soon} aria-live="polite">
+              Active
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className={styles.filters} role="tablist" aria-label="Model filters">
         {(['all', 'female', 'male'] as const).map((id) => (

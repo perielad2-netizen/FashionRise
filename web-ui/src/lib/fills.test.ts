@@ -46,6 +46,15 @@ describe('fills schema', () => {
     })
     expect(fabric?.style).toEqual({ kind: 'fabric', fabricId: 'denim' })
 
+    const withEraseIndex = parseFillOp({
+      contour: [0, 0, 20, 0, 20, 20, 0, 20],
+      style: { kind: 'solid', color: '#BE185D' },
+      seedX: 5,
+      seedY: 5,
+      eraseAfterStrokeIndex: 3,
+    })
+    expect(withEraseIndex?.eraseAfterStrokeIndex).toBe(3)
+
     const uploaded = parseFillOp({
       contour: [0, 0, 20, 0, 20, 20, 0, 20],
       style: {

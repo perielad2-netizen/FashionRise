@@ -161,8 +161,12 @@ export function renderUploadedFabricTile(img: HTMLImageElement, scale: number): 
   return c
 }
 
-function renderFabricTile(fabricId: string): HTMLCanvasElement {
-  const size = 64
+/** Built-in fabric tile size used by Studio fill patterns (exact Magic swatch source). */
+export const BUILTIN_FABRIC_TILE_PX = 64
+
+/** Render the exact built-in fabric tile shown on the Studio canvas (source of truth). */
+export function renderFabricTile(fabricId: string): HTMLCanvasElement {
+  const size = BUILTIN_FABRIC_TILE_PX
   const c = document.createElement('canvas')
   c.width = size
   c.height = size

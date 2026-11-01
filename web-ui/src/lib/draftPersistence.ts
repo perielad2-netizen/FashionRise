@@ -19,15 +19,29 @@ import {
   documentForCloud,
   extractStudioDraft,
   getDesign,
+  isStudioWorkingDraftClaim,
   listMyDesigns,
   parseDraftConflict,
   pickLatestStudioDraft,
+  studioDraftRevisionHint,
   updateStudioDraft,
   type DesignRead,
 } from '@/services/designsApi'
 import { ApiError } from '@/services/api/client'
 
 export { documentFromEditorState, rebaseChosenLocalDraft }
+
+/** Present cloud Studio row that claims draft schema but fails strict parse. */
+export type DamagedCloudDraft = {
+  designId: string
+  /** Original server row — never rewritten automatically. */
+  rawDesign: DesignRead
+  /** OCC hint from raw design_data / metadata when parse fails. */
+  expectedRevision: number | null
+  /** Existing IndexedDB recovery document (not overwritten by restore). */
+  local: StudioDraftDocument | null
+  hasLocalRecovery: boolean
+}
 
 export type RestoreResult = {
   designId: string | null
@@ -41,7 +55,50 @@ export type RestoreResult = {
         server: StudioDraftDocument
         designId: string
       }
+  /** Set when cloud Studio draft exists but cannot be read safely. */
+  damagedCloud: DamagedCloudDraft | null
+  /**
+   * When true, callers must not auto flushCloudSave / PUT / POST until the operator
+   * explicitly recovers (keeps damaged cloud bytes intact).
+   */
+  blockAutomaticCloudWrites: boolean
   notice: string | null
+}
+
+const DAMAGED_CLOUD_NOTICE =
+  'Your private cloud Studio draft could not be read (damaged or unsupported Front/Back data). The cloud copy was left unchanged. Automatic sync is paused until you choose recovery.'
+
+function damagedCloudRestore(
+  design: DesignRead,
+  local: Awaited<ReturnType<typeof readLocalDraft>>,
+  noticeExtra: string | null = null,
+): RestoreResult {
+  const localDoc = local?.document ?? null
+  const notice = noticeExtra ? `${DAMAGED_CLOUD_NOTICE} ${noticeExtra}` : DAMAGED_CLOUD_NOTICE
+  return {
+    designId: design.id,
+    // Prefer preserved local recovery for the canvas; never invent a sync from empty.
+    document: localDoc ?? createEmptyDraftDocument(),
+    syncedRevision: null,
+    conflict: null,
+    damagedCloud: {
+      designId: design.id,
+      rawDesign: design,
+      expectedRevision: studioDraftRevisionHint(design),
+      local: localDoc,
+      hasLocalRecovery: Boolean(localDoc),
+    },
+    blockAutomaticCloudWrites: true,
+    notice: withCustomRefNotice(localDoc ?? createEmptyDraftDocument(), notice),
+  }
+}
+
+function cleanRestore(partial: Omit<RestoreResult, 'damagedCloud' | 'blockAutomaticCloudWrites'>): RestoreResult {
+  return {
+    ...partial,
+    damagedCloud: null,
+    blockAutomaticCloudWrites: false,
+  }
 }
 
 export type PersistResult =
@@ -119,8 +176,17 @@ export async function restoreStudioDraft(userId: string): Promise<RestoreResult>
     if (storedId) {
       try {
         const design = await getDesign(storedId)
-        serverDoc = extractStudioDraft(design)
         serverDesignId = design.id
+        if (isStudioWorkingDraftClaim(design)) {
+          serverDoc = extractStudioDraft(design)
+          if (!serverDoc) {
+            // Present-but-unreadable Studio V2/V1 row — do not fall through to empty/stale sync.
+            writeStoredDesignId(userId, design.id)
+            return damagedCloudRestore(design, local)
+          }
+        } else {
+          serverDoc = extractStudioDraft(design)
+        }
       } catch {
         serverDesignId = null
       }
@@ -131,63 +197,71 @@ export async function restoreStudioDraft(userId: string): Promise<RestoreResult>
       const latest = pickLatestStudioDraft(mine)
       if (latest) {
         serverDesignId = latest.id
-        serverDoc = extractStudioDraft(latest)
-        writeStoredDesignId(userId, latest.id)
+        if (isStudioWorkingDraftClaim(latest)) {
+          serverDoc = extractStudioDraft(latest)
+          if (!serverDoc) {
+            writeStoredDesignId(userId, latest.id)
+            return damagedCloudRestore(latest, local)
+          }
+        } else {
+          serverDoc = extractStudioDraft(latest)
+        }
+        if (serverDoc) writeStoredDesignId(userId, latest.id)
       }
     }
   } catch {
     notice = 'Working offline from this device. Changes save locally until the API is reachable.'
     if (local?.document) {
-      return {
+      return cleanRestore({
         designId: local.designId,
         document: local.document,
         syncedRevision: local.syncedRevision,
         conflict: null,
         notice: withCustomRefNotice(local.document, notice),
-      }
+      })
     }
-    return {
+    return cleanRestore({
       designId: null,
       document: createEmptyDraftDocument(),
       syncedRevision: null,
       conflict: null,
       notice,
-    }
+    })
   }
 
   if (local?.document && serverDoc && serverDesignId) {
     const decision = resolveDraftConflict(local.document, serverDoc)
     if (decision.needsUserChoice) {
-      return {
+      return cleanRestore({
         designId: serverDesignId,
         document: local.document,
         syncedRevision: local.syncedRevision ?? serverDoc.clientRevision,
         conflict: { local: local.document, server: serverDoc, designId: serverDesignId },
         notice: withCustomRefNotice(local.document, null),
-      }
+      })
     }
     // Content equal — prefer server snapshot for synced revision tracking.
-    return {
+    return cleanRestore({
       designId: serverDesignId,
       document: serverDoc,
       syncedRevision: serverDoc.clientRevision,
       conflict: null,
       notice: withCustomRefNotice(serverDoc, null),
-    }
+    })
   }
 
   if (serverDoc && serverDesignId) {
-    return {
+    return cleanRestore({
       designId: serverDesignId,
       document: serverDoc,
       syncedRevision: serverDoc.clientRevision,
       conflict: null,
       notice: withCustomRefNotice(serverDoc, null),
-    }
+    })
   }
 
   if (local?.document) {
-    return {
+    return cleanRestore({
       designId: local.designId,
       document: local.document,
       syncedRevision: local.syncedRevision,
@@ -196,16 +270,37 @@ export async function restoreStudioDraft(userId: string): Promise<RestoreResult>
         local.document,
         notice ?? 'Restored local recovery draft. Syncing to your private design…',
       ),
-    }
+    })
   }
 
-  return {
+  return cleanRestore({
     designId: null,
     document: createEmptyDraftDocument(),
     syncedRevision: null,
     conflict: null,
     notice: null,
-  }
+  })
+}
+
+/**
+ * Explicit operator recovery: replace an unreadable cloud Studio draft with this device's
+ * valid document. Never called automatically from restore/boot.
+ */
+export async function commitReplaceDamagedCloudDraft(args: {
+  userId: string
+  designId: string
+  local: StudioDraftDocument
+  expectedRevision: number
+}): Promise<PersistResult> {
+  const rebased = rebaseChosenLocalDraft(args.local, args.expectedRevision)
+  return persistStudioDraft({
+    userId: args.userId,
+    designId: args.designId,
+    document: rebased,
+    fingerprint: draftContentFingerprint(documentForCloud(rebased)),
+    lastSyncedFingerprint: null,
+    expectedRevision: args.expectedRevision,
+  })
 }
 
 /**
@@ -242,6 +337,9 @@ export async function ensureStudioDraft(
   expectedRevision: number | null,
   options: { createOnly?: boolean } = {},
 ): Promise<DesignRead> {
+  // Content compares use the serialized cloud shape. Wire create/update with the
+  // original document so transient clearBackIntent still reaches metadata
+  // (documentForCloud strips it — passing cloudDoc alone caused false 409s).
   const cloudDoc = documentForCloud(document)
   const createOnly = Boolean(options.createOnly)
 
@@ -257,7 +355,7 @@ export async function ensureStudioDraft(
         }
         token = serverDoc.clientRevision
       }
-      return await updateStudioDraft(preferredDesignId, cloudDoc, {
+      return await updateStudioDraft(preferredDesignId, document, {
         expectedRevision: token,
       })
     } catch (err) {
@@ -293,13 +391,13 @@ export async function ensureStudioDraft(
       )
     }
     writeStoredDesignId(userId, existing.id)
-    return updateStudioDraft(existing.id, cloudDoc, {
+    return updateStudioDraft(existing.id, document, {
       expectedRevision: serverRev,
     })
   }
 
   try {
-    const created = await createStudioDraft(cloudDoc)
+    const created = await createStudioDraft(document)
     writeStoredDesignId(userId, created.id)
     return created
   } catch (createErr) {
@@ -337,7 +435,7 @@ export async function ensureStudioDraft(
                 serverRev,
               )
         }
-        return updateStudioDraft(recovered.id, cloudDoc, {
+        return updateStudioDraft(recovered.id, document, {
           expectedRevision: serverRev,
         })
       }
@@ -403,9 +501,11 @@ export async function persistStudioDraft(args: {
   }
 
   try {
+    // Pass the original document (not cloudDoc) so clearBackIntent survives into
+    // createStudioDraft / updateStudioDraft → cloudDraftMetadata.
     const saved = await ensureStudioDraft(
       args.userId,
-      cloudDoc,
+      args.document,
       args.designId,
       args.expectedRevision,
       { createOnly: args.createOnly },
@@ -449,6 +549,25 @@ export async function persistStudioDraft(args: {
     if (conflictPayload) {
       const serverDoc =
         extractStudioDraft(conflictPayload.design) ?? createEmptyDraftDocument()
+      // Lost-response / same-content 409: treat as ACK — never open a false conflict.
+      if (sameCloudContent(serverDoc, cloudDoc)) {
+        writeStoredDesignId(args.userId, conflictPayload.design.id)
+        const localAfter = await writeLocalDraft({
+          userId: args.userId,
+          designId: conflictPayload.design.id,
+          document: args.document,
+          savedAt: new Date().toISOString(),
+          syncedRevision: serverDoc.clientRevision,
+        })
+        return {
+          ok: true,
+          designId: conflictPayload.design.id,
+          document: serverDoc,
+          fingerprint: draftContentFingerprint(documentForCloud(serverDoc)),
+          syncedRevision: serverDoc.clientRevision,
+          localPersisted: localPersisted || localAfter.ok,
+        }
+      }
       return {
         ok: false,
         conflict: {

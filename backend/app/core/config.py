@@ -40,6 +40,55 @@ class Settings(BaseSettings):
     private_fabric_subdir: str = "private_fabrics"
     # Private tech-pack PDFs — never mounted under /static/uploads.
     private_techpack_subdir: str = "private_techpacks"
+    # Private Create My Croquis bytes — sibling of private_fabrics; never public static.
+    private_croquis_subdir: str = "private_croquis"
+
+    # Create My Croquis gates (independent of Studio FRONT_BACK/MAGIC/DUAL). Fail closed.
+    my_croquis_upload_enabled: bool = False
+    my_croquis_ai_enabled: bool = False
+    # Stage C spend controls — operator ceiling default 0 → fail closed (no paid calls).
+    my_croquis_ai_spend_ceiling_usd: float = 0.0
+    my_croquis_ai_max_usd_per_run: float = 0.0
+    my_croquis_ai_max_usd_per_user_day: float = 0.0
+    my_croquis_ai_max_generations_per_user_day: int = 3
+    # Soft expected cost (informational only). Not the reserved hard cap.
+    my_croquis_ai_estimate_cents: int = 8
+    # Conservative maximum authorized exposure (cents) reserved before enqueue.
+    # Fail closed at 0 — must be explicitly configured for any live/test spend path.
+    # Soft MY_CROQUIS_AI_ESTIMATE_CENTS must never be treated as this hard cap.
+    my_croquis_ai_max_exposure_cents: int = 0
+    # Live images.edit arming switch (default false). Even with AI gate + ceiling on,
+    # real OpenAI HTTP requires this flag. Mocked client overrides bypass it in tests.
+    my_croquis_ai_live_http: bool = False
+    # Croquis-specific images.edit size/quality (must be allowlisted for the model).
+    # Provider size is NOT the design plane — output is always fit-contain 768×1024.
+    my_croquis_ai_image_size: str = "1024x1536"
+    my_croquis_ai_image_quality: str = "medium"
+    # Stale worker claim lease (seconds) before safe requeue / reconciliation.
+    my_croquis_ai_claim_lease_seconds: int = 120
+    my_croquis_ai_consent_max_age_seconds: int = 3600
+    # Consent notice versions. Collection remains fail-closed until approved notice text is set.
+    my_croquis_storage_consent_version: str = "storage-2026-11-01"
+    my_croquis_ai_consent_version: str = "ai-provider-2026-11-01"
+    my_croquis_adults_attestation_version: str = "adults-beta-2026-11-01"
+    # Approved notice bodies. Empty (default) → refuse to record consent (not legal-authoritative).
+    # Tests may inject synthetic fixtures via env; never ship production-legal copy here.
+    my_croquis_adults_notice_text: str = ""
+    my_croquis_storage_notice_text: str = ""
+    my_croquis_ai_notice_text: str = ""
+    # Consent / attestation validity windows (seconds).
+    my_croquis_storage_consent_max_age_seconds: int = 3600
+    my_croquis_adults_attestation_max_age_seconds: int = 86400
+    # Upload bounds (source photos). Separate from fabric limits.
+    max_croquis_upload_size_mb: int = 10
+    max_croquis_dimension_px: int = 4096
+    max_croquis_total_pixels: int = 4096 * 4096
+    croquis_name_max_length: int = 80
+    # Retention defaults (design §6.2) — offline sweeper only; no production timers.
+    my_croquis_abandoned_upload_hours: int = 24
+    my_croquis_source_retention_days: int = 7
+    my_croquis_accepted_source_purge_hours: int = 24
+    my_croquis_cleanup_batch_size: int = 50
     # Create Real Design V1 flag (legacy). Prefer techpack_ai_enabled.
     techpack_ai_draft_enabled: bool = False
     # Create Real Design AI — fail closed without spend ceiling + (for professional) allowlist.
@@ -163,6 +212,10 @@ class Settings(BaseSettings):
     @property
     def max_fabric_upload_bytes(self) -> int:
         return max(1, self.max_fabric_upload_size_mb) * 1024 * 1024
+
+    @property
+    def max_croquis_upload_bytes(self) -> int:
+        return max(1, self.max_croquis_upload_size_mb) * 1024 * 1024
 
 
 @lru_cache

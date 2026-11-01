@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Plus, Pipette } from 'lucide-react'
 import {
+  CUSTOM_GRADIENT_ID,
   FABRIC_PRESETS,
   FASHION_PALETTE,
   GRADIENT_PRESETS,
@@ -8,7 +9,9 @@ import {
   UPLOADED_FABRIC_SCALE_MAX,
   UPLOADED_FABRIC_SCALE_MIN,
   clampUploadedFabricScale,
+  gradientPreviewCss,
   type FillStyle,
+  type GradientFillStyle,
   uploadedFabricStyle,
 } from '@/lib/fills'
 import { INK_SWATCHES } from '@/lib/strokes'
@@ -20,6 +23,8 @@ import {
 } from '@/services/fabricAssetsApi'
 import { ApiError } from '@/services/api/client'
 import { loadFabricAssetImage } from '@/lib/fabricAssetCache'
+import { CustomGradientDesigner } from '@/shell/components/CustomGradientDesigner'
+import { ProfessionalColorPicker } from '@/shell/components/ProfessionalColorPicker'
 import styles from './ColorAndMaterialsPanel.module.css'
 
 type Props = {
@@ -56,6 +61,8 @@ export function ColorAndMaterialsPanel({
   const [pendingName, setPendingName] = useState('')
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [tab, setTab] = useState<'colors' | 'fabrics' | 'gradients'>('colors')
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
+  const [gradientDesignerOpen, setGradientDesignerOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const nameFieldId = useId()
   const scale =
@@ -241,10 +248,27 @@ export function ColorAndMaterialsPanel({
 
         {tab === 'colors' ? (
           <section className={styles.card} role="tabpanel" aria-label="Colors">
-            <div className={styles.currentInk}>
+            <button
+              type="button"
+              className={styles.currentInkBtn}
+              aria-label="Choose any color"
+              title="Choose any color"
+              onClick={() => setColorPickerOpen(true)}
+            >
               <span className={styles.currentSwatch} style={{ background: color }} />
-              <span>Current color</span>
-            </div>
+              <span className={styles.currentInkMeta}>
+                <strong>Current color</strong>
+                <em>Choose any color</em>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={styles.chooseAny}
+              onClick={() => setColorPickerOpen(true)}
+            >
+              Choose any color
+            </button>
+            <p className={styles.note}>Quick shortcuts</p>
             <div className={styles.swatches}>
               {INK_SWATCHES.map((s) => (
                 <button
@@ -287,13 +311,13 @@ export function ColorAndMaterialsPanel({
                   if (e.key === 'Enter') commitHex()
                 }}
               />
-              <input
-                type="color"
-                className={styles.nativePicker}
-                value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : '#1C1C1E'}
-                aria-label="Color picker"
-                title="Pick a color"
-                onChange={(e) => selectSolid(e.target.value.toUpperCase())}
+              <button
+                type="button"
+                className={styles.openPickerBtn}
+                aria-label="Open color picker"
+                title="Open professional color picker"
+                style={{ background: color }}
+                onClick={() => setColorPickerOpen(true)}
               />
               <button
                 type="button"
@@ -323,7 +347,7 @@ export function ColorAndMaterialsPanel({
                 Add Fabric
               </button>
             </div>
-            <p className={styles.note}>Select a fabric, then use Fill on a closed dress region.</p>
+            <p className={styles.note}>Select a fabric, then use Fill on a closed outline.</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -414,6 +438,31 @@ export function ColorAndMaterialsPanel({
         {tab === 'gradients' ? (
           <section className={styles.card} role="tabpanel" aria-label="Gradients">
             <p className={styles.note}>Select a gradient, then Fill a closed region.</p>
+            <button
+              type="button"
+              className={styles.createGradient}
+              onClick={() => setGradientDesignerOpen(true)}
+            >
+              Create gradient
+            </button>
+            {fillStyle.kind === 'gradient' && fillStyle.gradientId === CUSTOM_GRADIENT_ID ? (
+              <button
+                type="button"
+                className={styles.gradientActive}
+                style={{
+                  background: gradientPreviewCss(fillStyle.colors, fillStyle.angle),
+                  marginBottom: 8,
+                }}
+                aria-label="Custom gradient selected"
+                aria-pressed
+                title="Custom gradient"
+                onClick={() => setGradientDesignerOpen(true)}
+              >
+                <span className={styles.gradientLabel}>
+                  Custom · {Math.round(fillStyle.angle)}°
+                </span>
+              </button>
+            ) : null}
             <div className={styles.gradients}>
               {GRADIENT_PRESETS.map((g) => {
                 const active = fillStyle.kind === 'gradient' && fillStyle.gradientId === g.id
@@ -434,7 +483,9 @@ export function ColorAndMaterialsPanel({
                         angle: g.angle,
                       })
                     }
-                  />
+                  >
+                    <span className={styles.gradientLabel}>{g.label}</span>
+                  </button>
                 )
               })}
             </div>
@@ -490,6 +541,30 @@ export function ColorAndMaterialsPanel({
           </div>
         </div>
       ) : null}
+
+      <ProfessionalColorPicker
+        open={colorPickerOpen}
+        initialColor={color}
+        onApply={(hex) => {
+          selectSolid(hex)
+          setColorPickerOpen(false)
+        }}
+        onCancel={() => setColorPickerOpen(false)}
+      />
+
+      <CustomGradientDesigner
+        open={gradientDesignerOpen}
+        initial={
+          fillStyle.kind === 'gradient' && fillStyle.gradientId === CUSTOM_GRADIENT_ID
+            ? (fillStyle as GradientFillStyle)
+            : null
+        }
+        onCancel={() => setGradientDesignerOpen(false)}
+        onApply={(style) => {
+          onFillStyle(style)
+          setGradientDesignerOpen(false)
+        }}
+      />
     </div>
   )
 }

@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   saveDesignSnapshot: vi.fn(),
   listSavedDesigns: vi.fn(),
   fetchSavedDesign: vi.fn(),
+  deleteSavedDesign: vi.fn(),
   listMyDesigns: vi.fn(),
+  listLooks: vi.fn(),
   exportSketchPng: vi.fn(),
   downloadBlob: vi.fn(),
 }))
@@ -79,11 +81,17 @@ vi.mock('@/services/savedDesignsApi', () => ({
   saveDesignSnapshot: mocks.saveDesignSnapshot,
   listSavedDesigns: mocks.listSavedDesigns,
   fetchSavedDesign: mocks.fetchSavedDesign,
+  deleteSavedDesign: mocks.deleteSavedDesign,
 }))
 
 vi.mock('@/services/designsApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/designsApi')>()
   return { ...actual, listMyDesigns: mocks.listMyDesigns }
+})
+
+vi.mock('@/services/looksApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/looksApi')>()
+  return { ...actual, listLooks: mocks.listLooks, updateLook: vi.fn() }
 })
 
 vi.mock('@/lib/exportCanvas', async (importOriginal) => {
@@ -203,6 +211,7 @@ beforeEach(() => {
   mocks.listSavedDesigns.mockResolvedValue({ designs: [RECORD], damaged: [] })
   mocks.fetchSavedDesign.mockResolvedValue({ ok: true, record: RECORD })
   mocks.listMyDesigns.mockResolvedValue([])
+  mocks.listLooks.mockResolvedValue({ items: [], total: 0, limit: 24, offset: 0 })
 })
 
 afterEach(() => {
@@ -288,45 +297,21 @@ describe('Save as design', () => {
   })
 })
 
-describe('Export PNG', () => {
-  it('exports the authoritative document and downloads a PNG', async () => {
+describe('Studio More menu sketch export removal', () => {
+  it('keeps Save / My Designs / Clear / Save now and omits raw sketch export actions', async () => {
     cleanRestore(workingDoc({ dimmed: true }))
-    const blob = new Blob(['png'], { type: 'image/png' })
-    mocks.exportSketchPng.mockResolvedValue({ blob, referenceIncluded: true })
     renderAt('/studio')
     await ready()
     fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export PNG' }))
-    })
-    expect(mocks.exportSketchPng).toHaveBeenCalledWith({
-      strokes: [STROKE],
-      fills: [],
-      // Legacy model id must keep original croquis geometry.
-      referenceUrl: '/models/female_model.png',
-      referenceOpacity: 0.4,
-    })
-    expect(mocks.downloadBlob).toHaveBeenCalledWith(blob, expect.stringMatching(/^fashionrise-sketch-\d{4}-\d{2}-\d{2}-\d{4}\.png$/))
-    expect(screen.getByRole('status', { name: /PNG exported/ })).toBeInTheDocument()
-  })
-
-  it('reports a missing reference and failures honestly', async () => {
-    mocks.exportSketchPng
-      .mockResolvedValueOnce({ blob: new Blob(['x'], { type: 'image/png' }), referenceIncluded: false })
-      .mockRejectedValueOnce(new Error('Canvas 2D unavailable'))
-    renderAt('/studio')
-    await ready()
-    fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export PNG' }))
-    })
-    expect(screen.getByRole('status', { name: /without the reference image/ })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Export PNG' }))
-    })
-    expect(screen.getByRole('status', { name: /PNG export failed/ })).toBeInTheDocument()
-    expect(mocks.downloadBlob).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'My Designs' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Save now' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Export visible side/i })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /^Export front$/i })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /^Export back$/i })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /Export front \+ back sheet/i })).toBeNull()
+    expect(mocks.exportSketchPng).not.toHaveBeenCalled()
   })
 })
 
@@ -338,11 +323,24 @@ describe('My Designs navigation and library', () => {
     fireEvent.click(within(nav).getByRole('button', { name: 'My Designs' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'My Designs' })).toBeInTheDocument()
     expect(within(nav).getByRole('button', { name: 'My Designs' })).toHaveAttribute('aria-current', 'page')
-    for (const label of ['Home', 'Design Book', 'Discover', 'My Looks']) {
+    for (const label of ['Home', 'Design Book', 'Discover']) {
       expect(within(nav).getByRole('button', { name: label })).toBeDisabled()
     }
+    expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
     fireEvent.click(within(nav).getByRole('button', { name: 'Create' }))
     expect(screen.getByRole('heading', { name: 'New Design' })).toBeInTheDocument()
+  })
+
+  it('opens My Looks from the sidebar without touching Studio drafts', async () => {
+    renderAt('/studio')
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Mock stroke' }))
+    const nav = screen.getByRole('navigation', { name: 'FashionRise' })
+    fireEvent.click(within(nav).getByRole('button', { name: 'My Looks' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'My Looks' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'My Looks' })).toHaveAttribute('aria-current', 'page')
+    fireEvent.click(within(nav).getByRole('button', { name: 'Create' }))
+    expect(strokeIds()).toBe('restored-1,new-1')
   })
 
   it('keeps the same editor mounted across screens', async () => {
@@ -801,5 +799,96 @@ describe('Reopen a saved design', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Go to Studio' }))
     expect(await screen.findByRole('dialog', { name: 'Draft recovery conflict' })).toBeInTheDocument()
     expect(mocks.persistStudioDraft).not.toHaveBeenCalled()
+  })
+})
+
+describe('Delete saved design', () => {
+  const RECORD_B: SavedDesignRecord = {
+    ...RECORD,
+    id: 'saved-2',
+    title: 'Keep me',
+    saveRequestId: 'req-2',
+  }
+
+  it('cancel leaves the library unchanged', async () => {
+    renderAt('/studio/designs')
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Evening gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “Evening gown”?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(mocks.deleteSavedDesign).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Delete Evening gown' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Saved designs/ })).toHaveTextContent('1')
+  })
+
+  it('confirmed delete removes only that card and updates the count', async () => {
+    mocks.listSavedDesigns.mockResolvedValue({ designs: [RECORD, RECORD_B], damaged: [] })
+    mocks.deleteSavedDesign.mockResolvedValue({ ok: true, alreadyGone: false })
+    renderAt('/studio/designs')
+    await ready()
+    expect(screen.getByRole('heading', { name: /Saved designs/ })).toHaveTextContent('2')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Evening gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “Evening gown”?' })
+    expect(within(dialog).getByText(/permanently deletes/i)).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+    })
+
+    expect(mocks.deleteSavedDesign).toHaveBeenCalledWith('u1', 'saved-1')
+    expect(
+      await screen.findByText('“Evening gown” was permanently deleted.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Evening gown' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Delete Keep me' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Saved designs/ })).toHaveTextContent('1')
+    // Working draft section still present; Studio autosave untouched.
+    expect(screen.getByRole('heading', { name: 'Studio working draft' })).toBeInTheDocument()
+    expect(mocks.persistStudioDraft).not.toHaveBeenCalled()
+  })
+
+  it('disables duplicate submissions while deleting', async () => {
+    let resolveDelete!: (v: unknown) => void
+    mocks.deleteSavedDesign.mockReturnValue(new Promise((r) => (resolveDelete = r)))
+    renderAt('/studio/designs')
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Evening gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “Evening gown”?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+    expect(within(dialog).getByRole('button', { name: 'Deleting…' })).toBeDisabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Deleting…' }))
+    expect(mocks.deleteSavedDesign).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      resolveDelete({ ok: true, alreadyGone: false })
+    })
+  })
+
+  it('offline/error keeps the card and allows retry', async () => {
+    mocks.deleteSavedDesign
+      .mockResolvedValueOnce({
+        ok: false,
+        error: 'You are offline. The design was not deleted. Reconnect and try again.',
+        outcomeUncertain: false,
+        canRetry: true,
+      })
+      .mockResolvedValueOnce({ ok: true, alreadyGone: false })
+    renderAt('/studio/designs')
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Evening gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “Evening gown”?' })
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+    })
+    const err = await screen.findByRole('dialog', { name: 'Could not delete design' })
+    expect(within(err).getByRole('alert')).toHaveTextContent(/offline/i)
+    expect(screen.getByRole('button', { name: 'Delete Evening gown' })).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(within(err).getByRole('button', { name: 'Try again' }))
+    })
+    expect(mocks.deleteSavedDesign).toHaveBeenCalledTimes(2)
+    expect(await screen.findByRole('status')).toHaveTextContent(/permanently deleted/)
   })
 })
