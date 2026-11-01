@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis house-style mannequin v4 DEPLOYED** · tip **** · prompt **croquis-lineart-v4** · style ref **female-straight** · pose/proportions from photo · no garment rendering · mocked BE 42 · **0** operator paid calls.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis house-style mannequin v4 DEPLOYED** · tip **`3ed1902f14379cda72da7b2496281cc1a582c532`** · prompt **croquis-lineart-v4** · style ref **female-straight** · pose/proportions from photo · no garment rendering · mocked BE 42 · **0** operator paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis now targets FashionRise **built-in croquis/mannequin underlay** style (not a clothed fashion illustration). Production tip ****.
+**Phase:** Protected family beta. Create My Croquis now targets FashionRise **built-in croquis/mannequin underlay** style (not a clothed fashion illustration). Production tip **`3ed1902f`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
