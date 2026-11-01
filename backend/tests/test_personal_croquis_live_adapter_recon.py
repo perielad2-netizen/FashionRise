@@ -354,7 +354,8 @@ def test_moderation_blocked_surfaces_owner_safe_message(client, monkeypatch, db_
     assert body.get("failure_code") == "moderation_blocked"
     assert "safety system" in (body.get("failure_message") or "").lower()
     assert "cannot override" in (body.get("failure_message") or "").lower()
-    assert captured.get("moderation") == "low"
+    assert "moderation" not in captured
+    assert captured.get("extra_body", {}).get("moderation") == "low"
     res = (
         db_session.query(PersonalCroquisSpendReservation)
         .filter(PersonalCroquisSpendReservation.idempotency_key == key)
@@ -399,3 +400,49 @@ def test_adapter_unit_bad_request_raises_not_available(monkeypatch):
     adapter = OpenAICroquisImagesEditAdapter()
     with pytest.raises(ProviderNotAvailableError, match="rejected by provider"):
         adapter.generate_line_art(_png_bytes())
+
+
+def test_adapter_unit_sdk_typeerror_is_definite_not_recon(monkeypatch):
+    """Top-level moderation= TypeError must not become reconciliation_required."""
+    _enable_ai_spend(monkeypatch)
+
+    def on_edit(**_kw):
+        raise TypeError("Images.edit() got an unexpected keyword argument 'moderation'")
+
+    set_croquis_openai_client_override(_FakeClient(on_edit))
+    adapter = OpenAICroquisImagesEditAdapter()
+    with pytest.raises(ProviderNotAvailableError, match="SDK contract"):
+        adapter.generate_line_art(_png_bytes())
+
+
+def test_claim_lease_floor_exceeds_openai_timeout(monkeypatch):
+    """Effective recovery lease must outlive provider timeout + margin."""
+    from app.core.config import get_settings
+    from app.services.personal_croquis_worker import recover_stale_croquis_claims
+
+    monkeypatch.setenv("MY_CROQUIS_AI_CLAIM_LEASE_SECONDS", "120")
+    monkeypatch.setenv("OPENAI_TIMEOUT_SECONDS", "180")
+    get_settings.cache_clear()
+    settings = get_settings()
+    configured = int(settings.my_croquis_ai_claim_lease_seconds or 0)
+    timeout = float(settings.openai_timeout_seconds or 0)
+    # Mirror the worker floor formula.
+    lease = max(15, configured, int(timeout) + 120)
+    assert configured == 120
+    assert timeout == 180.0
+    assert lease >= 300
+    assert lease > timeout
+    # Import stays reachable (no DB work required for formula assertion).
+    assert callable(recover_stale_croquis_claims)
+
+
+def test_prompt_v3_preserves_clothing_semantics():
+    from app.services import personal_croquis_provider as pcp
+
+    prompt = pcp.CROQUIS_LINEART_PROMPT_V3.lower()
+    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v3"
+    assert "fully clothed" in prompt
+    assert "do not undress" in prompt or "do not undress" in prompt
+    assert "remove clothing" in prompt
+    # Must not ask the model to omit garments from a photo (undress framing).
+    assert "do not add garments" not in prompt

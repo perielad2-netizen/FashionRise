@@ -65,7 +65,10 @@ class Settings(BaseSettings):
     my_croquis_ai_image_size: str = "1024x1536"
     my_croquis_ai_image_quality: str = "medium"
     # Stale worker claim lease (seconds) before safe requeue / reconciliation.
-    my_croquis_ai_claim_lease_seconds: int = 120
+    # Must exceed openai_timeout_seconds (+ normalization/attach margin). A 120s
+    # lease with a 180s OpenAI timeout can mark a still-running images.edit as
+    # reconciliation_required. Default 300 = 180s timeout + 120s margin.
+    my_croquis_ai_claim_lease_seconds: int = 300
     my_croquis_ai_consent_max_age_seconds: int = 3600
     # Consent notice versions. Collection remains fail-closed until approved notice text is set.
     my_croquis_storage_consent_version: str = "storage-2026-11-01"

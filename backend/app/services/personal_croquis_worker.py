@@ -474,7 +474,11 @@ def recover_stale_croquis_claims(db: Session) -> int:
     Uses ``db.scalar`` (not ``scalars``) so lightweight worker test doubles stay compatible.
     """
     settings = get_settings()
-    lease = max(15, int(settings.my_croquis_ai_claim_lease_seconds or 120))
+    # Lease must outlive provider timeout + attach margin so a slow images.edit
+    # is not recovered mid-flight into reconciliation_required.
+    configured_lease = int(settings.my_croquis_ai_claim_lease_seconds or 300)
+    provider_timeout = float(getattr(settings, "openai_timeout_seconds", 180.0) or 180.0)
+    lease = max(15, configured_lease, int(provider_timeout) + 120)
     cutoff = _utcnow() - timedelta(seconds=lease)
     recovered = 0
     for _ in range(16):

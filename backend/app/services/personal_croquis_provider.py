@@ -24,11 +24,13 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 GEOMETRY_PROFILE_V1 = "fit_contain_768x1024_v1"
-# v2: fashion-underlay wording (avoids photo→person conversion framing that
-# over-triggers provider image moderation on legitimate clothed fashion refs).
+# v2: fashion-underlay wording (historical).
+# v3: explicitly preserves clothed garment silhouettes — never asks to undress
+# or "not add garments" in a way that implies clothing removal from a photo.
 PROMPT_VERSION_V1 = "croquis-lineart-v1"  # historical
-PROMPT_VERSION_V2 = "croquis-lineart-v2"
-PROMPT_VERSION_CURRENT = PROMPT_VERSION_V2
+PROMPT_VERSION_V2 = "croquis-lineart-v2"  # historical
+PROMPT_VERSION_V3 = "croquis-lineart-v3"
+PROMPT_VERSION_CURRENT = PROMPT_VERSION_V3
 DESIGN_W = 768
 DESIGN_H = 1024
 
@@ -37,17 +39,20 @@ DESIGN_H = 1024
 CROQUIS_PROVIDER_SIZE = "1024x1536"
 CROQUIS_PROVIDER_QUALITY_DEFAULT = "medium"
 
-# Versioned croquis prompt — fashion design figure underlay, not identity work.
-CROQUIS_LINEART_PROMPT_V2 = (
+# Versioned croquis prompt — clothed fashion-illustration underlay for garment design.
+CROQUIS_LINEART_PROMPT_V3 = (
     "Create a fashion-design croquis underlay as clean black line art on a transparent "
-    "background for garment sketching. Use the attached fully clothed fashion pose "
-    "reference only for stance and proportions. Draw a simple fashion-illustration "
-    "figure outline suitable for clothing design overlays. Do not add garments, logos, "
-    "text, color fills, shading, or photorealistic detail. Keep the full figure visible "
-    "(no crop)."
+    "background for garment sketching. From the attached fully clothed fashion photograph, "
+    "draw a clothed fashion-illustration figure that preserves the model's pose, "
+    "proportions, and visible garment silhouettes (for example tops, bottoms, and shoes). "
+    "Keep the figure fully clothed — do not undress, remove clothing, or invent nude "
+    "anatomy. Do not add logos, text, color fills, shading, or photorealistic detail. "
+    "Keep the full figure visible (no crop)."
 )
-# Back-compat alias for imports/tests that still reference V1 name.
-CROQUIS_LINEART_PROMPT_V1 = CROQUIS_LINEART_PROMPT_V2
+# Back-compat aliases — current prompt is V3.
+CROQUIS_LINEART_PROMPT_V2 = CROQUIS_LINEART_PROMPT_V3
+CROQUIS_LINEART_PROMPT_V1 = CROQUIS_LINEART_PROMPT_V3
+CROQUIS_LINEART_PROMPT = CROQUIS_LINEART_PROMPT_V3
 
 # Official gpt-image-2.5-sunburst token rates (USD per 1M tokens) — design §9.1.
 _RATE_TEXT_IN = 5.0
@@ -336,6 +341,23 @@ def _api_status_code(exc: BaseException) -> int | None:
         return None
 
 
+def _is_presubmit_sdk_contract_error(exc: BaseException) -> bool:
+    """True when the SDK rejected kwargs before any HTTP (definite no-spend).
+
+    Example: OpenAI Python 1.109 ``Images.edit()`` has no top-level ``moderation``
+    parameter — passing it raises TypeError with no request_id. That must not be
+    classified as outcome-unknown / reconciliation_required.
+    """
+    if not isinstance(exc, TypeError):
+        return False
+    msg = str(exc).lower()
+    return (
+        "unexpected keyword argument" in msg
+        or "got an unexpected keyword" in msg
+        or "images.edit()" in msg
+    )
+
+
 def _is_definitive_images_edit_rejection(exc: BaseException) -> bool:
     """True when the provider completed an HTTP 4xx rejection (no image result).
 
@@ -344,6 +366,8 @@ def _is_definitive_images_edit_rejection(exc: BaseException) -> bool:
     definite no-billable-result for this attempt so spend can be released. Keep
     timeouts, connection drops, and HTTP 5xx as outcome-unknown.
     """
+    if _is_presubmit_sdk_contract_error(exc):
+        return True
     try:
         import openai
     except Exception:  # noqa: BLE001
@@ -547,7 +571,7 @@ class OpenAICroquisImagesEditAdapter:
         try:
             kwargs = build_image_edit_kwargs(
                 model=model,
-                prompt=CROQUIS_LINEART_PROMPT_V2,
+                prompt=CROQUIS_LINEART_PROMPT_V3,
                 sketch=(source_png, "image/png"),
                 size=size,
                 quality=quality,
@@ -560,10 +584,14 @@ class OpenAICroquisImagesEditAdapter:
         kwargs["background"] = "transparent"
         kwargs["output_format"] = "png"
         kwargs["n"] = 1
-        # Official Images Edit API: moderation=auto|low (default auto).
-        # Use documented ``low`` for legitimate fully clothed fashion pose refs;
-        # provider safety enforcement remains — this is not a bypass.
-        kwargs["moderation"] = "low"
+        # Official Images Edit API supports moderation=auto|low. OpenAI Python SDK
+        # 1.109 Images.edit() has no top-level ``moderation`` kwarg — passing it
+        # raises TypeError before HTTP. Send via extra_body so the wire request
+        # still carries moderation=low without an SDK upgrade.
+        # Provider safety enforcement remains — this is not a bypass.
+        extra = dict(kwargs.get("extra_body") or {})
+        extra["moderation"] = "low"
+        kwargs["extra_body"] = extra
         # Never send a second image / fabric swatch on this path.
         if isinstance(kwargs.get("image"), list):
             raise ProviderNotAvailableError("Croquis edit must use exactly one image input")
@@ -577,6 +605,11 @@ class OpenAICroquisImagesEditAdapter:
                 f"Croquis edit quality substituted {quality!r} → {kwargs.get('quality')!r}; "
                 "refusing"
             )
+        if "moderation" in kwargs:
+            raise ProviderNotAvailableError(
+                "Croquis edit must not pass top-level moderation= (SDK TypeError); "
+                "use extra_body only"
+            )
         return kwargs
 
     def preflight_report(self, source_png: bytes) -> dict[str, Any]:
@@ -585,13 +618,14 @@ class OpenAICroquisImagesEditAdapter:
         kwargs = self.build_edit_kwargs(source_png)
         estimate = max(1, int(settings.my_croquis_ai_estimate_cents or 0))
         max_exposure = int(settings.my_croquis_ai_max_exposure_cents or 0)
+        extra = kwargs.get("extra_body") if isinstance(kwargs.get("extra_body"), dict) else {}
         return {
             "model": kwargs.get("model"),
             "size": kwargs.get("size"),
             "quality": kwargs.get("quality"),
             "background": kwargs.get("background"),
             "output_format": kwargs.get("output_format"),
-            "moderation": kwargs.get("moderation"),
+            "moderation": (extra or {}).get("moderation"),
             "n": kwargs.get("n"),
             "prompt_version": PROMPT_VERSION_CURRENT,
             "geometry_profile": GEOMETRY_PROFILE_V1,
@@ -666,6 +700,16 @@ class OpenAICroquisImagesEditAdapter:
         except Exception as exc:
             rid = _safe_request_id_from_exc(exc)
             summary = _safe_api_error_summary(exc)
+            if _is_presubmit_sdk_contract_error(exc):
+                # SDK rejected kwargs before HTTP — definite $0, never reconciliation.
+                logger.warning(
+                    "Croquis images.edit SDK contract error type=%s summary=%s",
+                    type(exc).__name__[:80],
+                    summary[:240],
+                )
+                raise ProviderNotAvailableError(
+                    f"images.edit refused before HTTP (SDK contract): {summary}"
+                ) from exc
             if _is_definitive_images_edit_rejection(exc):
                 # Completed HTTP 4xx — no generated image; safe $0 release path.
                 logger.warning(
