@@ -3,20 +3,34 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#154 Try On Person V2 DEPLOYED** · App **`fe1e9e8b`** · FE+BE try-on fidelity · Alembic **`015`** unchanged · **0** operator-paid OpenAI · #148/#151 A→B + My Croquis preserved.)
+**Last updated:** 2026-11-02 (**#156 Try On swimwear / moderation UX DEPLOYED** · App **`e728a06c`** · try-on **`try-on-person-v3`** · Alembic **`015`** unchanged · **0** operator-paid OpenAI · #154/#148/#151 preserved.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person V2 live. My Croquis library is first-class nav.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person V3 live (opaque fashion/swimwear coverage). My Croquis library is first-class nav.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`fe1e9e8b`** — release `/var/www/fashionrise/releases/fe1e9e8b` · source `fe1e9e8b6dcaac0a920883335c596dbc30c577fa` · App pill **`fe1e9e8b`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `85a50894` kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | Try-on prompt **`try-on-person-v2`** + optional `design_hints`; personal pin fingerprint (#148) remains. Alembic **`015`**. |
-| AI worker | `fashionrise-ai-worker` restarted with V2 try-on provider · croquis **v5** unchanged |
+| Frontend (`web-ui`) | **`e728a06c`** — release `/var/www/fashionrise/releases/e728a06c` · source `e728a06c10f60383c327d1d46ef7844dfffb87c6` · App pill **`e728a06c`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `fe1e9e8b` kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | Try-on prompt **`try-on-person-v3`** + sanitized `PROVIDER_MODERATION_BLOCKED` failures; #148 pin fingerprint remains. Alembic **`015`**. |
+| AI worker | `fashionrise-ai-worker` restarted with V3 try-on provider · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/fe1e9e8b` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
-| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v2`** |
+| Nginx | `current` → `releases/e728a06c` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
+| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v3`** |
+
+## #156 Try On Person swimwear moderation + clean mobile errors — DEPLOYED (2026-11-02)
+
+Owner swimsuit Try On failed with provider **HTTP 400** `moderation_blocked` / `input` / `sexual`. Offline job `be37d55e…` (≈01:40 Israel): photo = authorized `croquis_source`; garment = transparent RGBA 1536×2048 (~98% alpha, no mannequin/paper); effective prompt was **V2** with contradictory “do not expose body beyond image 1”; spend reservation **released** at $0. Capture was not the corruption source; prompt contradiction was a concrete product defect. Which input bit the classifier is still not proven.
+
+| Item | Detail |
+|---|---|
+| Prompt | **`try-on-person-v3`**: opaque fashion/swimwear lookbook; designed coverage authoritative; still forbids nudity / sheer intimate exposure / sexual framing; keeps V2 print/accessory fidelity |
+| Errors | Owner UI: short “could not be rendered… continue editing or Fashion Magic”. Diagnostics (`code`/`stage`/`request_id`) stay in private `result_data.provider_rejection`. Mobile error text wraps/scrolls. |
+| Spend | Definite HTTP 400 → reservation **released**, `actual_cost_cents` null, **no** automatic paid retry |
+| Unchanged | V5 croquis · Fashion Magic · consent · My Croquis · #148 A→B · #154 compare/fidelity capture |
+| Tests | BE try-on **12** PASS · FE error sanitize / capture / MagicLookPanel PASS · **0** paid calls |
+| Deploy | FE+BE+worker **`e728a06c`** · backup `/var/backups/fashionrise/try-on-swimwear-TIMESTAMP` |
+| Owner verify | Hard-refresh App **`e728a06c`**. Optional owner-paid swimwear Try On. Expect no self-contradictory coverage instruction; on any future provider refusal, a short readable message (no raw JSON). Acceptance of a realistic swimsuit result still depends on the image provider. |
 
 ## #154 Try On Person V2 — DEPLOYED (awaiting owner live review) (2026-11-02)
 
@@ -86,7 +100,7 @@ Owner V4 acceptance: house mannequin **style PASS**, pose mostly preserved, but 
 | Tests | BE focused **42** · **0** paid `images.edit` |
 | Owner eval | Hard-refresh App **`faa7d91d`** → Upload & Generate → compare proportions visually (not cm claims) |
 
-## Try On Person — owner workflow (now live on App `fe1e9e8b`, prompt v2)
+## Try On Person — owner workflow (now live on App `e728a06c`, prompt v3)
 
 1. Generate / accept a photo-faithful mannequin (Create My Croquis V5).
 2. Draw a clothing design in Studio on that underlay.
