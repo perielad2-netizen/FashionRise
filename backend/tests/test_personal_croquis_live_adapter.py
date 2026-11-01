@@ -36,7 +36,8 @@ def _enable_adapter_gates(monkeypatch, *, live_http: str = "false") -> None:
     monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
     monkeypatch.setenv("MY_CROQUIS_AI_SPEND_CEILING_USD", "1.00")
     monkeypatch.setenv("MY_CROQUIS_AI_MAX_USD_PER_RUN", "1.00")
-    monkeypatch.setenv("MY_CROQUIS_AI_MAX_EXPOSURE_CENTS", "80")
+    monkeypatch.setenv("MY_CROQUIS_AI_MAX_EXPOSURE_CENTS", "100")
+    monkeypatch.setenv("MY_CROQUIS_AI_MAX_USD_PER_USER_DAY", "1.00")
     monkeypatch.setenv("MY_CROQUIS_AI_ESTIMATE_CENTS", "40")
     monkeypatch.setenv("MY_CROQUIS_AI_LIVE_HTTP", live_http)
     monkeypatch.setenv("MY_CROQUIS_AI_IMAGE_SIZE", "1024x1536")
@@ -115,7 +116,7 @@ def test_adapter_complete_but_live_http_fail_closed(monkeypatch):
     assert report["n"] == 1
     assert report["design_plane"] == "768x1024"
     assert report["estimate_cents"] == 40
-    assert report["max_exposure_cents"] == 80
+    assert report["max_exposure_cents"] == 100
     assert report["live_http_armed"] is False
     with pytest.raises(ProviderNotAvailableError, match="LIVE_HTTP"):
         adapter.generate_line_art(source)

@@ -58,6 +58,7 @@ from app.services.personal_croquis_provider import (
     DESIGN_W,
     GEOMETRY_PROFILE_V1,
     ProviderNotAvailableError,
+    ProviderOutcomeUnknownError,
     fit_contain_normalize_png,
     get_croquis_provider,
 )
@@ -710,6 +711,36 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
     if _pre_provider_dispatch_hook is not None:
         _pre_provider_dispatch_hook(job)
 
+    # Definite pre-submit readiness BEFORE provider_called fence (LIVE_HTTP / key / model).
+    adapter = get_croquis_provider()
+    try:
+        pre_ready = getattr(adapter, "assert_pre_submit_ready", None)
+        if callable(pre_ready):
+            pre_ready()
+    except ProviderNotAvailableError as exc:
+        version = db.get(PersonalCroquisVersion, version_id)
+        reservation = _reservation_for_version(db, version_id)
+        if version is not None and version.status == VERSION_STATUS_GENERATING:
+            version.status = VERSION_STATUS_FAILED
+            db.add(version)
+        if (
+            reservation is not None
+            and reservation.status == RESERVATION_OPEN
+            and not reservation.provider_called
+        ):
+            reservation.status = RESERVATION_RELEASED
+            reservation.actual_cost_cents = 0
+            reservation.error_detail = str(exc)[:500]
+            db.add(reservation)
+        job_row = db.get(AIJob, job.id)
+        if job_row is not None and job_row.claim_token == expected_token:
+            job_row.status = "failed"
+            job_row.error_message = f"Provider unavailable before spend: {exc}"[:500]
+            job_row.claim_token = None
+            db.add(job_row)
+        db.commit()
+        return
+
     try:
         job, source_bytes = _fence_for_provider_dispatch(
             db,
@@ -756,7 +787,6 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
 
     # Request-in-flight boundary: provider_called is committed. If erase races after
     # this point, the provider may still be invoked; attach must discard the result.
-    adapter = get_croquis_provider()
     try:
         result = adapter.generate_line_art(source_bytes)
         png_bytes = validate_and_normalize_provider_png(result.png_bytes)
@@ -853,6 +883,9 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         db.add(job)
         db.commit()
     except ProviderNotAvailableError as exc:
+        # Typed definite pre-submit refusal — safe $0 release even if the fence
+        # already marked provider_called (CrashBeforeSubmit / LIVE_HTTP refuse).
+        # Post-submit may-have-billed failures MUST use ProviderOutcomeUnknownError.
         version = db.get(PersonalCroquisVersion, version_id)
         reservation = _reservation_for_version(db, version_id)
         if version is not None:
@@ -868,7 +901,8 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             db.add(reservation)
         db.add(job)
         db.commit()
-    except TimeoutError as exc:
+    except (ProviderOutcomeUnknownError, TimeoutError) as exc:
+        # Post-submit / may-have-billed — hold exposure; block new-key retry.
         version = db.get(PersonalCroquisVersion, version_id)
         reservation = _reservation_for_version(db, version_id)
         if version is not None:

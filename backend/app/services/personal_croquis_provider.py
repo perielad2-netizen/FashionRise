@@ -66,7 +66,15 @@ class CroquisProvider(Protocol):
 
 
 class ProviderNotAvailableError(RuntimeError):
-    """Raised when a provider would be required but is disabled / fail-closed."""
+    """Definitely pre-submit refusal — safe to release reservation at $0."""
+
+
+class ProviderOutcomeUnknownError(RuntimeError):
+    """Request may have been sent/billed; outcome unknown — reconciliation required.
+
+    Raised for any failure after ``images.edit`` invocation begins (SDK timeout,
+    connection error, HTTP 5xx, missing/malformed result bytes, etc.).
+    """
 
 
 class ProviderNetworkForbiddenError(RuntimeError):
@@ -183,11 +191,11 @@ class MockCroquisProvider:
 
 
 class UnknownOutcomeCroquisProvider:
-    """Test double: timeout after submission would have started."""
+    """Test double: outcome unknown after submission would have started."""
 
     def generate_line_art(self, source_png: bytes) -> CroquisProviderResult:
         _ = source_png
-        raise TimeoutError("simulated provider timeout after send")
+        raise ProviderOutcomeUnknownError("simulated provider outcome unknown after send")
 
 
 class CrashBeforeSubmitCroquisProvider:
@@ -254,11 +262,32 @@ def cost_cents_from_images_usage(usage: Any, *, fallback_cents: int) -> tuple[in
     return cents, "provider_usage"
 
 
+def _safe_request_id_from_exc(exc: BaseException) -> str | None:
+    """Best-effort request id for logs — never log bodies/secrets."""
+    for attr in ("request_id", "request"):
+        raw = getattr(exc, attr, None)
+        if isinstance(raw, str) and 8 <= len(raw.strip()) <= 128:
+            return raw.strip()[:128]
+        headers = getattr(raw, "headers", None) if raw is not None else None
+        if headers is not None:
+            try:
+                rid = headers.get("x-request-id") or headers.get("X-Request-Id")
+            except Exception:  # noqa: BLE001
+                rid = None
+            if isinstance(rid, str) and 8 <= len(rid.strip()) <= 128:
+                return rid.strip()[:128]
+    return None
+
+
 def extract_edit_png_bytes(result: Any) -> bytes:
-    """Pull PNG/JPEG bytes from an images.edit response item (b64 preferred)."""
+    """Pull PNG bytes from an images.edit response (b64 required).
+
+    Called only after a completed API response — failures here are outcome-unknown
+    (the request may already have been billed).
+    """
     data = getattr(result, "data", None) or []
     if not data:
-        raise ProviderNotAvailableError("images.edit returned no data")
+        raise ProviderOutcomeUnknownError("images.edit returned no data after submit")
     item = data[0]
     b64 = getattr(item, "b64_json", None)
     if b64 is None and isinstance(item, dict):
@@ -270,10 +299,11 @@ def extract_edit_png_bytes(result: Any) -> bytes:
         url = item.get("url")
     if url:
         # Croquis path refuses URL fetch — require b64 to avoid a second network hop.
-        raise ProviderNotAvailableError(
-            "images.edit returned URL without b64_json; croquis adapter requires b64_json"
+        raise ProviderOutcomeUnknownError(
+            "images.edit returned URL without b64_json after submit; "
+            "croquis adapter requires b64_json (outcome unknown / may be billed)"
         )
-    raise ProviderNotAvailableError("images.edit item missing b64_json")
+    raise ProviderOutcomeUnknownError("images.edit item missing b64_json after submit")
 
 
 class OpenAICroquisImagesEditAdapter:
@@ -361,8 +391,19 @@ class OpenAICroquisImagesEditAdapter:
             "incomplete": bool(self.incomplete),
         }
 
-    def _require_live_http_ready(self) -> None:
+    def assert_pre_submit_ready(self) -> None:
+        """Definite pre-submit checks — must run BEFORE ``provider_called`` fence.
+
+        When a test client override is installed, LIVE_HTTP/API key are not required
+        (mocked HTTP). Otherwise LIVE_HTTP + API key must be armed. Also fail closed
+        on retired/unknown image model before any spend marker.
+        """
+        from app.services.sketch_openai import assert_image_model_editable
+
         settings = get_settings()
+        assert_image_model_editable(_croquis_image_model(settings))
+        if _openai_client_override is not None:
+            return
         if not bool(getattr(settings, "my_croquis_ai_live_http", False)):
             raise ProviderNotAvailableError(
                 "MY_CROQUIS_AI_LIVE_HTTP is false — live images.edit not armed "
@@ -375,7 +416,7 @@ class OpenAICroquisImagesEditAdapter:
         """Create a real OpenAI client after LIVE_HTTP + tripwire checks."""
         # Prefer explicit LIVE_HTTP fail-closed before the offline tripwire so
         # unarmed environments never look like an accidental network attempt.
-        self._require_live_http_ready()
+        self.assert_pre_submit_ready()
         assert_no_provider_network()
         from openai import OpenAI
 
@@ -389,40 +430,56 @@ class OpenAICroquisImagesEditAdapter:
     def generate_line_art(self, source_png: bytes) -> CroquisProviderResult:
         settings = get_settings()
         estimate = max(1, int(settings.my_croquis_ai_estimate_cents or 0))
+        # Pre-submit (definite no-spend): config / gates / kwargs assembly.
         kwargs = self.build_edit_kwargs(source_png)
 
         client = _openai_client_override
         if client is None:
             client = self._live_openai_client()
 
+        # --- Request-in-flight boundary: images.edit may bill from this point. ---
         try:
             result = client.with_options(max_retries=0).images.edit(**kwargs)
         except ProviderNetworkForbiddenError:
+            # Tripwire during live-client construction path — definite no-spend.
             raise
         except ProviderNotAvailableError:
             raise
-        except TimeoutError:
+        except ProviderOutcomeUnknownError:
+            raise
+        except Exception as exc:
+            rid = _safe_request_id_from_exc(exc)
+            logger.warning(
+                "Croquis images.edit outcome unknown type=%s request_id=%s",
+                type(exc).__name__[:80],
+                rid or "-",
+            )
+            raise ProviderOutcomeUnknownError(
+                f"images.edit outcome unknown after submit: {type(exc).__name__}"
+            ) from exc
+
+        try:
+            raw = extract_edit_png_bytes(result)
+            normalized = fit_contain_normalize_png(raw)
+            with Image.open(io.BytesIO(normalized)) as img:
+                if img.size != (DESIGN_W, DESIGN_H):
+                    raise ProviderOutcomeUnknownError(
+                        f"Normalized croquis geometry invalid after submit: {img.size}"
+                    )
+                if img.mode != "RGBA":
+                    raise ProviderOutcomeUnknownError(
+                        f"Normalized croquis must be RGBA after submit, got {img.mode}"
+                    )
+        except ProviderOutcomeUnknownError:
             raise
         except Exception as exc:
             logger.warning(
-                "Croquis images.edit failed type=%s",
+                "Croquis post-submit result handling failed type=%s",
                 type(exc).__name__[:80],
             )
-            raise ProviderNotAvailableError(
-                f"Croquis images.edit failed: {type(exc).__name__}"
+            raise ProviderOutcomeUnknownError(
+                f"Post-submit croquis result handling failed: {type(exc).__name__}"
             ) from exc
-
-        raw = extract_edit_png_bytes(result)
-        normalized = fit_contain_normalize_png(raw)
-        with Image.open(io.BytesIO(normalized)) as img:
-            if img.size != (DESIGN_W, DESIGN_H):
-                raise ProviderNotAvailableError(
-                    f"Normalized croquis geometry invalid: {img.size}"
-                )
-            if img.mode != "RGBA":
-                raise ProviderNotAvailableError(
-                    f"Normalized croquis must be RGBA, got {img.mode}"
-                )
 
         usage = getattr(result, "usage", None)
         cost_cents, usage_source = cost_cents_from_images_usage(
