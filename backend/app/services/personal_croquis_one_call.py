@@ -240,3 +240,149 @@ def assert_alembic_revision_014(engine: Engine) -> str:
             f"got {rev!r}"
         )
     return rev
+
+
+# Path segment required in LOCAL_STORAGE_ROOT for the one-call executor.
+ONE_CALL_STORAGE_MARKER = "croquis-one-call"
+
+_FORBIDDEN_STORAGE_FRAGMENTS = (
+    "/var/www",
+    "/srv/fashionrise",
+    "fashionrise_beta",
+    "/var/lib/fashionrise",
+)
+
+
+def default_backend_storage_root() -> Path:
+    return (BACKEND_ROOT / "data" / "storage").resolve()
+
+
+def assert_dedicated_one_call_storage(settings: Any) -> Path:
+    """Fail closed before any private upload / DB write.
+
+    Requires an absolute dedicated ``local_storage_root`` containing
+    ``croquis-one-call`` — never the default backend ``data/storage`` or
+    production-looking paths.
+    """
+    raw = (getattr(settings, "local_storage_root", None) or "").strip()
+    if not raw:
+        raise OneCallGuardError(
+            "LOCAL_STORAGE_ROOT unset — set a dedicated …/croquis-one-call… path "
+            "before paid one-call"
+        )
+    root = Path(raw).expanduser()
+    if not root.is_absolute():
+        # Settings normally absolutizes relative paths under backend/ — still refuse
+        # anything that resolves to the default app storage tree.
+        root = Path(raw)
+        if not root.is_absolute():
+            raise OneCallGuardError(
+                f"LOCAL_STORAGE_ROOT must be absolute for one-call, got {raw!r}"
+            )
+    root = root.resolve()
+    default = default_backend_storage_root()
+    if root == default:
+        raise OneCallGuardError(
+            f"Refusing default app storage root {root}"
+        )
+    for a, b, label in (
+        (root, default, "under default app storage"),
+        (default, root, "contains default app storage"),
+    ):
+        try:
+            a.relative_to(b)
+        except ValueError:
+            continue
+        raise OneCallGuardError(
+            f"Refusing storage root {root} ({label}; default is {default})"
+        )
+    lowered = str(root).lower()
+    for frag in _FORBIDDEN_STORAGE_FRAGMENTS:
+        if frag in lowered:
+            raise OneCallGuardError(
+                f"Refusing production-looking storage path containing {frag!r}: {root}"
+            )
+    if ONE_CALL_STORAGE_MARKER not in str(root):
+        raise OneCallGuardError(
+            f"LOCAL_STORAGE_ROOT must contain {ONE_CALL_STORAGE_MARKER!r} "
+            f"(dedicated one-call private path); got {root}"
+        )
+    return root
+
+
+def assert_disposable_db_fresh_for_one_call(engine: Engine) -> None:
+    """Refuse a reused disposable DB that already has croquis jobs/rows.
+
+    Prevents ``run_croquis_worker_tick`` / oldest-queue claim from selecting an
+    unapproved earlier source. Must run before enqueue writes.
+    """
+    checks = (
+        (
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type = 'personal_croquis_generate'",
+            "personal_croquis_generate AI jobs",
+        ),
+        ("SELECT COUNT(*) FROM personal_croquis", "personal_croquis rows"),
+        (
+            "SELECT COUNT(*) FROM personal_croquis_spend_reservations",
+            "personal_croquis_spend_reservations",
+        ),
+        ("SELECT COUNT(*) FROM personal_croquis_versions", "personal_croquis_versions"),
+    )
+    with engine.connect() as conn:
+        for sql, label in checks:
+            try:
+                n = conn.execute(text(sql)).scalar()
+            except Exception as exc:
+                raise OneCallGuardError(
+                    f"Cannot verify disposable DB freshness ({label}): {exc}"
+                ) from exc
+            if int(n or 0) != 0:
+                raise OneCallGuardError(
+                    f"Refusing reused disposable DB: {label}={n} (must be empty "
+                    "before one-call enqueue)"
+                )
+
+
+def assert_source_asset_sha(
+    *,
+    storage_key: str,
+    expected_sha256: str = APPROVED_FIXTURE_SHA256,
+) -> str:
+    """Read private croquis bytes and require the approved fixture digest."""
+    from app.storage.local import LocalStorageBackend
+
+    path = LocalStorageBackend().resolve_private_croquis_file(key=storage_key)
+    if path is None or not path.is_file():
+        raise OneCallGuardError(
+            f"Source asset bytes missing for storage_key={storage_key!r}"
+        )
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != expected_sha256:
+        raise OneCallGuardError(
+            f"Stored source SHA256 mismatch: got {digest}, expected {expected_sha256}"
+        )
+    return digest
+
+
+def assert_only_target_croquis_job_queued(db: Any, job_id: Any) -> None:
+    """After enqueue, the only queued croquis job must be the authorized one."""
+    from app.models.ai_job import AIJob
+    from app.models.personal_croquis import CROQUIS_GENERATE_JOB_TYPE
+
+    queued = (
+        db.query(AIJob)
+        .filter(
+            AIJob.job_type == CROQUIS_GENERATE_JOB_TYPE,
+            AIJob.status == "queued",
+        )
+        .all()
+    )
+    if len(queued) != 1:
+        raise OneCallGuardError(
+            f"Expected exactly 1 queued croquis job before one-call claim, got {len(queued)}"
+        )
+    if queued[0].id != job_id:
+        raise OneCallGuardError(
+            f"Queued croquis job id {queued[0].id} != authorized job {job_id}"
+        )
+

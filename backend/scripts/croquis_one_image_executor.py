@@ -9,10 +9,11 @@ ALL of the following are present on argv AND env (after owner approval):
   MY_CROQUIS_AI_LIVE_HTTP=true
   Exact approved Settings envelope (see personal_croquis_one_call)
   OPENAI_API_KEY set
-  DATABASE_URL_TEST → disposable DB already at Alembic 014 (never fashionrise_beta)
+  DATABASE_URL_TEST → empty disposable DB already at Alembic 014 (never fashionrise_beta)
+  LOCAL_STORAGE_ROOT → absolute dedicated …/croquis-one-call… path (never default/prod storage)
 
-Uses the full Stage C enqueue → claim → fence → adapter → settle/reconcile path.
-Never bypasses spend reservation / consent / tripwire safeguards.
+Uses Stage C enqueue → claim **exact job ID** → fence → adapter → settle/reconcile.
+Never uses oldest-queue worker tick. Never bypasses spend/consent/tripwire safeguards.
 """
 
 from __future__ import annotations
@@ -35,18 +36,24 @@ from app.core.test_db_guard import (
 from app.services.personal_croquis_one_call import (
     APPROVED_ALEMBIC_REVISION,
     APPROVED_ESTIMATE_CENTS,
+    APPROVED_FIXTURE_SHA256,
     APPROVED_MAX_EXPOSURE_CENTS,
     APPROVED_MAX_USD_PER_RUN,
     APPROVED_MAX_USD_PER_USER_DAY,
     APPROVED_QUALITY,
     APPROVED_SIZE,
     APPROVED_SPEND_CEILING_USD,
+    ONE_CALL_STORAGE_MARKER,
     OneCallGuardError,
     approved_envelope,
     assert_alembic_revision_014,
+    assert_dedicated_one_call_storage,
+    assert_disposable_db_fresh_for_one_call,
     assert_edit_kwargs_match_envelope,
     assert_effective_one_call_settings,
     assert_official_effective_base_url,
+    assert_only_target_croquis_job_queued,
+    assert_source_asset_sha,
     edit_kwargs_public_preview,
     load_approved_fixture_bytes,
 )
@@ -97,7 +104,8 @@ def dry_run() -> int:
     print("  OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst \\")
     print("  OPENAI_API_KEY=... \\")
     print("  DATABASE_URL_TEST=postgresql+psycopg2://…/fashionrise_test \\")
-    print(f"  # disposable DB must already be alembic {APPROVED_ALEMBIC_REVISION}")
+    print(f"  LOCAL_STORAGE_ROOT=/tmp/…/{ONE_CALL_STORAGE_MARKER}/storage \\")
+    print(f"  # disposable DB must already be alembic {APPROVED_ALEMBIC_REVISION} and EMPTY of croquis rows")
     print("  python scripts/croquis_one_image_executor.py --i-approve-paid-one-call")
     print()
     print("This build still refuses paid execution until that exact flag set is present;")
@@ -177,13 +185,12 @@ def paid_guarded(args: argparse.Namespace) -> int:
     from app.core.security import hash_password
     from app.db.base import import_models
     from app.models.ai_job import AIJob
-    from app.models.personal_croquis import CROQUIS_GENERATE_JOB_TYPE
     from app.models.personal_croquis_spend import PersonalCroquisSpendReservation
     from app.models.private_media_asset import PrivateMediaAsset
     from app.models.user import User
     from app.services import personal_croquis_generate as pcg
     from app.services import personal_croquis_service as pcs
-    from app.services.personal_croquis_worker import run_croquis_worker_tick
+    from app.services.personal_croquis_worker import run_specific_croquis_job
     from app.storage.local import LocalStorageBackend
     from tests.croquis_test_fixtures import (
         SYNTHETIC_ADULTS_NOTICE,
@@ -200,16 +207,26 @@ def paid_guarded(args: argparse.Namespace) -> int:
     os.environ["MY_CROQUIS_AI_NOTICE_TEXT"] = SYNTHETIC_AI_NOTICE
     os.environ["MY_CROQUIS_UPLOAD_ENABLED"] = "true"
     get_settings.cache_clear()
+    settings = get_settings()
+
+    # Storage isolation BEFORE any DB writes / private uploads.
+    try:
+        storage_root = assert_dedicated_one_call_storage(settings)
+    except OneCallGuardError as exc:
+        print(f"Storage guard: {exc}")
+        return 2
+    print(f"Dedicated one-call storage ok: {storage_root}")
 
     import_models()
     engine = create_engine(safe_url, pool_pre_ping=True)
     try:
         rev = assert_alembic_revision_014(engine)
+        assert_disposable_db_fresh_for_one_call(engine)
     except OneCallGuardError as exc:
-        print(f"Migration guard: {exc}")
+        print(f"DB isolation guard: {exc}")
         engine.dispose()
         return 2
-    print(f"Alembic revision ok: {rev}")
+    print(f"Alembic revision ok: {rev}; disposable DB fresh for one-call")
 
     Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     db = Session()
@@ -244,6 +261,21 @@ def paid_guarded(args: argparse.Namespace) -> int:
             storage_consent_id=storage.id,
             display_name="synthetic-one-call",
         )
+        # Stored source must still be the approved fixture (not a swapped asset).
+        source_asset = db.get(PrivateMediaAsset, croquis.source_asset_id)
+        if source_asset is None:
+            print("Source asset missing after upload")
+            return 2
+        try:
+            stored_sha = assert_source_asset_sha(
+                storage_key=source_asset.storage_key,
+                expected_sha256=APPROVED_FIXTURE_SHA256,
+            )
+        except OneCallGuardError as exc:
+            print(f"Source SHA guard: {exc}")
+            return 2
+        print(f"Stored source SHA ok: {stored_sha}")
+
         ai_payload = ai_body(croquis_id=str(croquis.id))
         ai = pcs.record_ai_consent(
             db,
@@ -261,9 +293,20 @@ def paid_guarded(args: argparse.Namespace) -> int:
             ai_consent_id=ai.id,
             idempotency_key=f"one-call-{uuid.uuid4().hex}",
         )
-        print(f"enqueued version_id={ver.id} status={ver.status}")
-        n = run_croquis_worker_tick(db, limit=1)
-        print(f"worker_tick processed={n}")
+        if not ver.provider_job_id:
+            print("Enqueued version missing provider_job_id")
+            return 2
+        job_id = uuid.UUID(str(ver.provider_job_id))
+        try:
+            assert_only_target_croquis_job_queued(db, job_id)
+        except OneCallGuardError as exc:
+            print(f"Queue isolation guard: {exc}")
+            return 2
+        print(f"enqueued version_id={ver.id} job_id={job_id} status={ver.status}")
+
+        # Bind to exact job — never oldest-queue tick (would risk unapproved sources).
+        run_specific_croquis_job(db, job_id)
+        print(f"processed exact job_id={job_id}")
         db.refresh(ver)
 
         res = (
@@ -271,15 +314,7 @@ def paid_guarded(args: argparse.Namespace) -> int:
             .filter(PersonalCroquisSpendReservation.version_id == ver.id)
             .one_or_none()
         )
-        job = (
-            db.query(AIJob)
-            .filter(
-                AIJob.job_type == CROQUIS_GENERATE_JOB_TYPE,
-                AIJob.user_id == user.id,
-            )
-            .order_by(AIJob.created_at.desc())
-            .first()
-        )
+        job = db.get(AIJob, job_id)
         result_data = dict(job.result_data or {}) if job is not None else {}
         private_preview_path = None
         private_storage_key = None
@@ -294,10 +329,13 @@ def paid_guarded(args: argparse.Namespace) -> int:
 
         evidence = {
             "version_status": ver.status,
+            "authorized_job_id": str(job_id),
+            "job_status": getattr(job, "status", None),
             "generated_asset_id": str(ver.generated_asset_id) if ver.generated_asset_id else None,
             "provider_job_id": result_data.get("provider_job_id"),
             "cost_usage_source": result_data.get("cost_usage_source"),
             "cost_cents_settled": result_data.get("cost_cents_settled"),
+            "source_sha256": stored_sha,
             "reservation_status": getattr(res, "status", None),
             "provider_called": getattr(res, "provider_called", None),
             "actual_cost_cents": getattr(res, "actual_cost_cents", None),
@@ -305,11 +343,13 @@ def paid_guarded(args: argparse.Namespace) -> int:
             "error_detail": getattr(res, "error_detail", None),
             "private_storage_key": private_storage_key,
             "private_preview_path": private_preview_path,
+            "storage_root": str(storage_root),
             "request_preview": preview,
             "note": (
                 "Reservation/estimate is NOT a provider hard cap. "
                 "Reconcile provider_job_id + usage against OpenAI account billing independently. "
-                "Preview path is private local storage — never a public URL."
+                "Preview path is private local storage — never a public URL. "
+                "provider_job_id may be a derived fingerprint when the API omits a stable id."
             ),
         }
         print("AUDIT_EVIDENCE")

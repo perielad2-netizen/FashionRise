@@ -16,11 +16,15 @@ from app.services.personal_croquis_one_call import (
     APPROVED_MODEL,
     APPROVED_QUALITY,
     APPROVED_SIZE,
+    ONE_CALL_STORAGE_MARKER,
     OneCallGuardError,
     assert_alembic_revision_014,
+    assert_dedicated_one_call_storage,
+    assert_disposable_db_fresh_for_one_call,
     assert_edit_kwargs_match_envelope,
     assert_effective_one_call_settings,
     assert_official_effective_base_url,
+    default_backend_storage_root,
     edit_kwargs_public_preview,
     load_approved_fixture_bytes,
 )
@@ -210,3 +214,84 @@ def test_settings_namespace_smoke():
     )
     assert_effective_one_call_settings(s)
     assert_official_effective_base_url(s)
+
+
+def test_storage_refuses_default_backend_root():
+    with pytest.raises(OneCallGuardError, match="default app storage"):
+        assert_dedicated_one_call_storage(
+            SimpleNamespace(local_storage_root=str(default_backend_storage_root()))
+        )
+
+
+def test_storage_refuses_production_looking_path(tmp_path):
+    bad = tmp_path / "var" / "www" / ONE_CALL_STORAGE_MARKER / "storage"
+    bad.mkdir(parents=True)
+    # Path string must contain forbidden fragment when resolved under /var/www-style.
+    with pytest.raises(OneCallGuardError, match="production-looking|/var/www"):
+        assert_dedicated_one_call_storage(
+            SimpleNamespace(local_storage_root="/var/www/fashionrise/" + ONE_CALL_STORAGE_MARKER)
+        )
+
+
+def test_storage_refuses_missing_marker(tmp_path):
+    root = tmp_path / "executor-storage"
+    root.mkdir()
+    with pytest.raises(OneCallGuardError, match=ONE_CALL_STORAGE_MARKER):
+        assert_dedicated_one_call_storage(SimpleNamespace(local_storage_root=str(root)))
+
+
+def test_storage_accepts_dedicated_marker_path(tmp_path):
+    root = tmp_path / ONE_CALL_STORAGE_MARKER / "storage"
+    root.mkdir(parents=True)
+    assert assert_dedicated_one_call_storage(
+        SimpleNamespace(local_storage_root=str(root))
+    ) == root.resolve()
+
+
+def test_fresh_db_refuses_existing_croquis_jobs(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'reuse.db'}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE ai_jobs ("
+                "id VARCHAR PRIMARY KEY, job_type VARCHAR, status VARCHAR)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE TABLE personal_croquis (id VARCHAR PRIMARY KEY)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE TABLE personal_croquis_spend_reservations (id VARCHAR PRIMARY KEY)"
+            )
+        )
+        conn.execute(
+            text("CREATE TABLE personal_croquis_versions (id VARCHAR PRIMARY KEY)")
+        )
+        conn.execute(
+            text(
+                "INSERT INTO ai_jobs (id, job_type, status) "
+                "VALUES ('j1', 'personal_croquis_generate', 'queued')"
+            )
+        )
+    with pytest.raises(OneCallGuardError, match="reused disposable DB"):
+        assert_disposable_db_fresh_for_one_call(engine)
+
+
+def test_fresh_db_accepts_empty_croquis_tables(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE ai_jobs ("
+                "id VARCHAR PRIMARY KEY, job_type VARCHAR, status VARCHAR)"
+            )
+        )
+        conn.execute(text("CREATE TABLE personal_croquis (id VARCHAR PRIMARY KEY)"))
+        conn.execute(
+            text("CREATE TABLE personal_croquis_spend_reservations (id VARCHAR PRIMARY KEY)")
+        )
+        conn.execute(text("CREATE TABLE personal_croquis_versions (id VARCHAR PRIMARY KEY)"))
+    assert_disposable_db_fresh_for_one_call(engine)

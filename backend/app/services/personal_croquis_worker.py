@@ -151,7 +151,7 @@ def _assert_dispatch_authorization(
         raise DispatchAuthzError("Owner missing or inactive at dispatch")
 
     # Adults attestation must still be current (not enqueue-time only).
-    attestation = pcs._latest_adults_attestation(db, owner)  # noqa: SLF001
+    attestation = pcs._latest_adults_attestation(db, owner)
     if attestation is None:
         raise DispatchAuthzError("Adults attestation missing/expired at dispatch")
 
@@ -947,6 +947,56 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             db.add(reservation)
         db.add(job)
         db.commit()
+
+
+def claim_croquis_job_by_id(db: Session, job_id: uuid.UUID) -> AIJob:
+    """Claim exactly one queued croquis job by primary key (fail closed).
+
+    Used by the authorized one-call executor so a reused disposable DB cannot
+    accidentally submit an older queued job's source to the provider.
+    Does not scan/claim other queued jobs. Refuses if the row is missing,
+    wrong type/status, or locked by another worker.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    try:
+        job = db.scalar(
+            select(AIJob)
+            .where(AIJob.id == job_id)
+            .with_for_update(of=AIJob, nowait=True)
+        )
+    except OperationalError as exc:
+        db.rollback()
+        raise RuntimeError(
+            f"Croquis job {job_id} is locked by another worker — refusing one-call claim"
+        ) from exc
+    if job is None:
+        db.rollback()
+        raise RuntimeError(f"Croquis job {job_id} not found for one-call claim")
+    if job.job_type != CROQUIS_GENERATE_JOB_TYPE:
+        db.rollback()
+        raise RuntimeError(
+            f"Job {job_id} type={job.job_type!r} is not {CROQUIS_GENERATE_JOB_TYPE}"
+        )
+    if job.status != "queued":
+        db.rollback()
+        raise RuntimeError(
+            f"Croquis job {job_id} status={job.status!r} — expected queued for one-call claim"
+        )
+    job.status = "claimed"
+    job.claimed_at = _utcnow()
+    job.claim_token = secrets.token_hex(16)
+    job.error_message = None
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def run_specific_croquis_job(db: Session, job_id: uuid.UUID) -> None:
+    """Claim + process exactly ``job_id`` — never the oldest-queue tick path."""
+    job = claim_croquis_job_by_id(db, job_id)
+    process_claimed_croquis_job(db, job)
 
 
 def run_croquis_worker_tick(db: Session, *, limit: int = 4) -> int:
