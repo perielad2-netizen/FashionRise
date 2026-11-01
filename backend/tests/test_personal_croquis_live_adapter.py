@@ -135,6 +135,7 @@ def test_build_edit_kwargs_one_image_transparent_png(monkeypatch):
     assert kwargs["background"] == "transparent"
     assert kwargs["output_format"] == "png"
     assert kwargs["n"] == 1
+    assert kwargs["moderation"] == "low"
     assert "input_fidelity" not in kwargs
     assert not isinstance(kwargs["image"], list)
     name, bio, mime = kwargs["image"]
@@ -170,6 +171,7 @@ def test_mocked_http_edit_normalizes_to_768x1024(monkeypatch):
     assert captured["n"] == 1
     assert captured["size"] == "1024x1536"
     assert captured["quality"] == "medium"
+    assert captured["moderation"] == "low"
     with Image.open(io.BytesIO(result.png_bytes)) as img:
         assert img.size == (DESIGN_W, DESIGN_H)
         assert img.mode == "RGBA"

@@ -1,5 +1,5 @@
 /**
- * Offline Stage B/C wizard harness — mocked Stage A/C JSON only.
+ * Offline Create My Croquis harness — one-checkbox Upload & Generate flow.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,6 +71,13 @@ const libraryRow: PersonalCroquisRead = {
   },
 }
 
+async function selectPhotoAndAgree() {
+  const file = new File([new Uint8Array([1, 2, 3])], 'pose.png', { type: 'image/png' })
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement
+  fireEvent.change(input, { target: { files: [file] } })
+  fireEvent.click(screen.getByRole('checkbox'))
+}
+
 describe('CreateMyCroquisWizard offline harness', () => {
   beforeEach(() => {
     attestAdults.mockResolvedValue({
@@ -119,7 +126,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
       status: 'awaiting_review',
       generated_asset_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       geometry_profile: 'fit_contain_768x1024_v1',
-      prompt_version: 'croquis-lineart-v1',
+      prompt_version: 'croquis-lineart-v2',
       created_at: '2026-10-31T12:00:00+00:00',
       accepted_at: null,
     })
@@ -131,7 +138,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
       status: 'accepted',
       generated_asset_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       geometry_profile: 'fit_contain_768x1024_v1',
-      prompt_version: 'croquis-lineart-v1',
+      prompt_version: 'croquis-lineart-v2',
       created_at: '2026-10-31T12:00:00+00:00',
       accepted_at: '2026-10-31T12:06:00+00:00',
     })
@@ -142,28 +149,25 @@ describe('CreateMyCroquisWizard offline harness', () => {
     vi.clearAllMocks()
   })
 
-  it('keeps preview local until storage consent; does not upload early', async () => {
+  it('keeps preview local until agreement; does not upload early', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
 
-    expect(screen.getByText(/SYNTHETIC_TEST_ADULTS_NOTICE_V1/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('checkbox'))
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    await waitFor(() => expect(attestAdults).toHaveBeenCalled())
-
+    expect(screen.getByText(/Select a fully clothed fashion pose photo/i)).toBeTruthy()
+    expect(screen.getByText(/children.?s clothing/i)).toBeTruthy()
+    expect(screen.getByRole('checkbox')).toBeDisabled()
     expect(uploadPersonalCroquisPhoto).not.toHaveBeenCalled()
-    expect(screen.getByText(/Preview stays on this device/i)).toBeTruthy()
 
     const file = new File([new Uint8Array([1, 2, 3])], 'pose.png', { type: 'image/png' })
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement
-    fireEvent.change(input, { target: { files: [file] } })
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [file] },
+    })
     expect(uploadPersonalCroquisPhoto).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: /Continue to storage consent/i }))
-    expect(screen.getByText(/SYNTHETIC_TEST_STORAGE_NOTICE_V1/)).toBeTruthy()
-    expect(uploadPersonalCroquisPhoto).not.toHaveBeenCalled()
+    expect(screen.getByRole('checkbox')).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /Upload & Generate/i })).toBeDisabled()
   })
 
-  it('pins from library using latest_accepted_version (Stage A field name)', async () => {
+  it('pins from library using latest_accepted_version', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     const onPin = vi.fn()
     const onClose = vi.fn()
@@ -185,47 +189,33 @@ describe('CreateMyCroquisWizard offline harness', () => {
     const onPin = vi.fn()
     render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={onPin} />)
 
-    fireEvent.click(screen.getByRole('checkbox'))
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await selectPhotoAndAgree()
+    fireEvent.click(screen.getByRole('button', { name: /Upload & Generate/i }))
     await waitFor(() => expect(attestAdults).toHaveBeenCalled())
-
-    const file = new File([new Uint8Array([1, 2, 3])], 'pose.png', { type: 'image/png' })
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement
-    fireEvent.change(input, { target: { files: [file] } })
-    fireEvent.click(screen.getByRole('button', { name: /Continue to storage consent/i }))
-    fireEvent.click(screen.getByRole('checkbox'))
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await waitFor(() => expect(acknowledgeStorageConsent).toHaveBeenCalled())
-    fireEvent.click(screen.getByRole('button', { name: /Upload privately/i }))
     await waitFor(() => expect(uploadPersonalCroquisPhoto).toHaveBeenCalled())
     expect(await screen.findByRole('alert')).toHaveTextContent(/not enabled/i)
     expect(onPin).not.toHaveBeenCalled()
+    expect(acknowledgeAiConsent).not.toHaveBeenCalled()
     expect(generatePersonalCroquisVersion).not.toHaveBeenCalled()
   })
 
-  it('after upload shows AI consent and can accept a generated preview', async () => {
+  it('one checkbox records distinct consents then accepts generated preview', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     const onPin = vi.fn()
     const onClose = vi.fn()
     render(<CreateMyCroquisWizard open onClose={onClose} onPinAccepted={onPin} />)
 
-    fireEvent.click(screen.getByRole('checkbox'))
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    await waitFor(() => expect(attestAdults).toHaveBeenCalled())
-    const file = new File([new Uint8Array([1, 2, 3])], 'pose.png', { type: 'image/png' })
-    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
-      target: { files: [file] },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /Continue to storage consent/i }))
-    fireEvent.click(screen.getByRole('checkbox'))
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    await waitFor(() => expect(acknowledgeStorageConsent).toHaveBeenCalled())
-    fireEvent.click(screen.getByRole('button', { name: /Upload privately/i }))
-    await waitFor(() => expect(uploadPersonalCroquisPhoto).toHaveBeenCalled())
-    expect(await screen.findByText(/SYNTHETIC_TEST_AI_NOTICE_V1/)).toBeTruthy()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+    await selectPhotoAndAgree()
+    fireEvent.click(screen.getByRole('button', { name: /Upload & Generate/i }))
 
-    fireEvent.click(screen.getByRole('checkbox'))
-    fireEvent.click(screen.getByRole('button', { name: /Generate My Croquis/i }))
+    await waitFor(() => expect(attestAdults).toHaveBeenCalled())
+    await waitFor(() => expect(acknowledgeStorageConsent).toHaveBeenCalled())
+    await waitFor(() => expect(uploadPersonalCroquisPhoto).toHaveBeenCalledWith(
+      expect.any(File),
+      'consent-1',
+    ))
     await waitFor(() =>
       expect(acknowledgeAiConsent).toHaveBeenCalledWith(
         expect.objectContaining({ croquis_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' }),

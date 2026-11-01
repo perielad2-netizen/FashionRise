@@ -1,8 +1,13 @@
 /**
- * Create My Croquis wizard — Stage B consent/upload + Stage C AI generate/review.
+ * Create My Croquis wizard — one agreement, then Upload & Generate.
  *
  * UI gate `VITE_MY_CROQUIS_UI_ENABLED` must be ON for this to mount.
  * Upload/AI backend gates remain independent and default OFF.
+ *
+ * Single visible checkbox covers photo rights, private storage, and AI
+ * processing. Distinct backend consent events (adults / storage / AI) are
+ * still recorded with versioned notice hashes and source binding — bytes
+ * are not uploaded before the agreement.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/services/api/client'
@@ -36,17 +41,10 @@ export type CreateMyCroquisWizardProps = {
   onUseOfflineFixture?: (croquisId: string, version: number) => void
 }
 
-type Step =
-  | 'eligibility'
-  | 'local'
-  | 'storage'
-  | 'upload'
-  | 'ai'
-  | 'generating'
-  | 'preview'
-  | 'library'
-  | 'reconciliation'
-  | 'blocked'
+type Step = 'compose' | 'generating' | 'preview' | 'library' | 'reconciliation' | 'blocked'
+
+const COMBINED_AGREEMENT_LABEL =
+  'I have permission to use this photo and agree to private storage and AI processing to create my croquis.'
 
 function newIdempotencyKey(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
@@ -65,16 +63,14 @@ export function CreateMyCroquisWizard({
   const storageNotice = useMemo(() => approvedCroquisNoticeText('storage'), [])
   const aiNotice = useMemo(() => approvedCroquisNoticeText('ai'), [])
 
-  const [step, setStep] = useState<Step>(() => (noticesOk ? 'eligibility' : 'blocked'))
+  const [step, setStep] = useState<Step>(() => (noticesOk ? 'compose' : 'blocked'))
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
   const [localFile, setLocalFile] = useState<File | null>(null)
-  const [adultsChecked, setAdultsChecked] = useState(false)
-  const [storageChecked, setStorageChecked] = useState(false)
-  const [aiChecked, setAiChecked] = useState(false)
+  const [agreed, setAgreed] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [library, setLibrary] = useState<PersonalCroquisRead[]>([])
-  const [storageConsentId, setStorageConsentId] = useState<string | null>(null)
   const [aiConsentId, setAiConsentId] = useState<string | null>(null)
   const [croquisId, setCroquisId] = useState<string | null>(null)
   const [pendingVersion, setPendingVersion] = useState<PersonalCroquisVersionRead | null>(null)
@@ -100,101 +96,7 @@ export function CreateMyCroquisWizard({
       if (prev) URL.revokeObjectURL(prev)
       return URL.createObjectURL(file)
     })
-    setStep('local')
   }, [])
-
-  const runAdultsThenLocal = useCallback(async () => {
-    if (!adultsChecked || !adultsNotice) {
-      setError('Explicit adults-only acknowledgment is required.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      await attestAdults({
-        adults_attested: true,
-        notice_version: croquisNoticeVersion('adults'),
-        notice_text_hash: await sha256Hex(adultsNotice),
-      })
-      setStep('local')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not record attestation.')
-    } finally {
-      setBusy(false)
-    }
-  }, [adultsChecked, adultsNotice])
-
-  const runStorageConsent = useCallback(async () => {
-    if (!storageChecked || !storageNotice) {
-      setError('Explicit storage consent acknowledgment is required.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      const event = await acknowledgeStorageConsent({
-        acknowledged: true,
-        adults_attested: true,
-        notice_version: croquisNoticeVersion('storage'),
-        notice_text_hash: await sha256Hex(storageNotice),
-      })
-      setStorageConsentId(event.id)
-      setStep('upload')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not record storage consent.')
-    } finally {
-      setBusy(false)
-    }
-  }, [storageChecked, storageNotice])
-
-  const runUpload = useCallback(async () => {
-    if (!localFile || !storageConsentId) {
-      setError('Choose a photo and complete storage consent first.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      const created = await uploadPersonalCroquisPhoto(localFile, storageConsentId)
-      setCroquisId(created.id)
-      const ver = acceptedVersionNumber(created)
-      if (ver) {
-        onPinAccepted(created.id, ver)
-        handleClose()
-        return
-      }
-      // Proceed to separate AI-provider consent (Stage C). Generation stays gated OFF by default.
-      setStep('ai')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Upload failed.')
-    } finally {
-      setBusy(false)
-    }
-  }, [handleClose, localFile, onPinAccepted, storageConsentId])
-
-  const runAiConsent = useCallback(async () => {
-    if (!aiChecked || !aiNotice || !croquisId) {
-      setError('Explicit AI-provider consent acknowledgment is required.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      const event = await acknowledgeAiConsent({
-        acknowledged: true,
-        adults_attested: true,
-        notice_version: croquisNoticeVersion('ai'),
-        notice_text_hash: await sha256Hex(aiNotice),
-        croquis_id: croquisId,
-      })
-      setAiConsentId(event.id)
-      setStep('generating')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not record AI consent.')
-    } finally {
-      setBusy(false)
-    }
-  }, [aiChecked, aiNotice, croquisId])
 
   const loadPreview = useCallback(async (assetId: string) => {
     const blob = await fetchCroquisAssetBlob(assetId)
@@ -203,6 +105,59 @@ export function CreateMyCroquisWizard({
       return URL.createObjectURL(blob)
     })
   }, [])
+
+  const runUploadAndGenerate = useCallback(async () => {
+    if (!localFile) {
+      setError('Select a photo first.')
+      return
+    }
+    if (!agreed) {
+      setError('Confirm the agreement before uploading.')
+      return
+    }
+    if (!adultsNotice || !storageNotice || !aiNotice) {
+      setError('Consent notices are not authorized yet.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      // Distinct auditable backend records from one UI agreement. Order matters:
+      // adults → storage → upload (bytes) → AI consent bound to croquis → generate.
+      await attestAdults({
+        adults_attested: true,
+        notice_version: croquisNoticeVersion('adults'),
+        notice_text_hash: await sha256Hex(adultsNotice),
+      })
+      const storageEvent = await acknowledgeStorageConsent({
+        acknowledged: true,
+        adults_attested: true,
+        notice_version: croquisNoticeVersion('storage'),
+        notice_text_hash: await sha256Hex(storageNotice),
+      })
+      const created = await uploadPersonalCroquisPhoto(localFile, storageEvent.id)
+      setCroquisId(created.id)
+      const ver = acceptedVersionNumber(created)
+      if (ver) {
+        onPinAccepted(created.id, ver)
+        handleClose()
+        return
+      }
+      const aiEvent = await acknowledgeAiConsent({
+        acknowledged: true,
+        adults_attested: true,
+        notice_version: croquisNoticeVersion('ai'),
+        notice_text_hash: await sha256Hex(aiNotice),
+        croquis_id: created.id,
+      })
+      setAiConsentId(aiEvent.id)
+      setStep('generating')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Upload & Generate could not start.')
+    } finally {
+      setBusy(false)
+    }
+  }, [adultsNotice, agreed, aiNotice, handleClose, localFile, onPinAccepted, storageNotice])
 
   // Poll generating → awaiting_review / failed / reconciliation
   useEffect(() => {
@@ -220,7 +175,6 @@ export function CreateMyCroquisWizard({
         )
         if (cancelled) return
         setPendingVersion(enqueued)
-        // Poll durable status
         for (let i = 0; i < 40; i++) {
           await new Promise((r) => setTimeout(r, 400))
           if (cancelled) return
@@ -234,17 +188,16 @@ export function CreateMyCroquisWizard({
           if (ver.status === 'failed') {
             setError(
               ver.failure_message?.trim() ||
-                'Generation failed (no croquis image was produced). You may retry with a new attempt.',
+                'Generation failed (no croquis image was produced). You may try a different photo.',
             )
             setIdempotencyKey(newIdempotencyKey())
-            setStep('ai')
+            setStep('compose')
             return
           }
           if (ver.status === 'reconciliation_required') {
-            // Do not mint a new idempotency key or return to a spend-capable AI step.
             setError(
               ver.failure_message?.trim() ||
-                'Provider outcome unknown — this attempt is held for operator reconciliation. No automatic paid retry is available.',
+                'Provider outcome unknown — this attempt is held for review. No automatic paid retry is available.',
             )
             setStep('reconciliation')
             return
@@ -259,10 +212,8 @@ export function CreateMyCroquisWizard({
         setStep('library')
       } catch (err) {
         if (cancelled) return
-        const msg = err instanceof ApiError ? err.message : 'Generate could not start.'
-        setError(msg)
-        // Gate OFF / ceiling 0 → honest disabled state, stay on AI step
-        setStep('ai')
+        setError(err instanceof ApiError ? err.message : 'Generate could not start.')
+        setStep('compose')
       } finally {
         if (!cancelled) setBusy(false)
       }
@@ -300,7 +251,8 @@ export function CreateMyCroquisWizard({
         return null
       })
       setIdempotencyKey(newIdempotencyKey())
-      setStep('ai')
+      setAiConsentId(null)
+      setStep('compose')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not reject croquis.')
     } finally {
@@ -343,8 +295,8 @@ export function CreateMyCroquisWizard({
         {step === 'blocked' ? (
           <div className={styles.body}>
             <p>
-              Create My Croquis consent collection is not authorized yet. Owner/legal-approved
-              notice text must be configured before any attestation or photo upload.
+              Create My Croquis is not ready yet — consent notices must be configured before photo
+              upload.
             </p>
             {onUseOfflineFixture ? (
               <button
@@ -361,44 +313,28 @@ export function CreateMyCroquisWizard({
           </div>
         ) : null}
 
-        {step === 'eligibility' ? (
+        {step === 'compose' ? (
           <div className={styles.body}>
-            <p className={styles.notice}>{adultsNotice}</p>
-            <label className={styles.check}>
-              <input
-                type="checkbox"
-                checked={adultsChecked}
-                onChange={(e) => setAdultsChecked(e.target.checked)}
-              />
-              <span>I am 18 or older and acknowledge this adults-only beta notice.</span>
-            </label>
-            <p className={styles.hint}>Self-attestation is not independent age verification.</p>
-            <div className={styles.actions}>
-              <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
-                My Croquis library
-              </button>
-              <button
-                type="button"
-                className={styles.primary}
-                disabled={!adultsChecked || busy}
-                onClick={() => void runAdultsThenLocal()}
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        ) : null}
+            <p>
+              Select a fully clothed fashion pose photo, agree once, then upload and generate your
+              croquis.
+            </p>
+            <p className={styles.hint}>
+              Designing children&apos;s clothing uses Studio templates and mannequins — you do not
+              need to upload a child&apos;s photograph.
+            </p>
 
-        {step === 'local' ? (
-          <div className={styles.body}>
-            <p>Choose a fully clothed photo. Preview stays on this device until you consent to upload.</p>
             {localPreviewUrl ? (
               <img src={localPreviewUrl} alt="Local photo preview" className={styles.preview} />
-            ) : (
-              <button type="button" className={styles.secondary} onClick={() => inputRef.current?.click()}>
-                Select photo
-              </button>
-            )}
+            ) : null}
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={() => inputRef.current?.click()}
+              disabled={busy}
+            >
+              {localFile ? 'Change photo' : 'Select photo'}
+            </button>
             <input
               ref={inputRef}
               type="file"
@@ -410,93 +346,37 @@ export function CreateMyCroquisWizard({
                 e.target.value = ''
               }}
             />
-            <div className={styles.actions}>
-              <button type="button" className={styles.secondary} onClick={() => setStep('eligibility')}>
-                Back
-              </button>
-              <button
-                type="button"
-                className={styles.primary}
-                disabled={!localFile || busy}
-                onClick={() => setStep('storage')}
-              >
-                Continue to storage consent
-              </button>
-            </div>
-          </div>
-        ) : null}
 
-        {step === 'storage' ? (
-          <div className={styles.body}>
-            <p className={styles.notice}>{storageNotice}</p>
             <label className={styles.check}>
               <input
                 type="checkbox"
-                checked={storageChecked}
-                onChange={(e) => setStorageChecked(e.target.checked)}
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                disabled={busy || !localFile}
               />
-              <span>I explicitly consent to private storage of my photo for Create My Croquis.</span>
+              <span>{COMBINED_AGREEMENT_LABEL}</span>
             </label>
-            <div className={styles.actions}>
-              <button type="button" className={styles.secondary} onClick={() => setStep('local')}>
-                Back
-              </button>
-              <button
-                type="button"
-                className={styles.primary}
-                disabled={!storageChecked || busy}
-                onClick={() => void runStorageConsent()}
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        ) : null}
 
-        {step === 'upload' ? (
-          <div className={styles.body}>
-            <p>Upload stores your photo in private croquis storage (not /static/uploads).</p>
-            {localPreviewUrl ? (
-              <img src={localPreviewUrl} alt="Local photo preview" className={styles.preview} />
+            <button
+              type="button"
+              className={styles.detailsToggle}
+              onClick={() => setShowDetails((v) => !v)}
+            >
+              {showDetails ? 'Hide details' : 'Show details'}
+            </button>
+            {showDetails ? (
+              <div className={styles.notice}>
+                <p>{adultsNotice}</p>
+                <p>{storageNotice}</p>
+                <p>{aiNotice}</p>
+              </div>
             ) : null}
-            <div className={styles.actions}>
-              <button type="button" className={styles.secondary} onClick={() => setStep('storage')}>
-                Back
-              </button>
-              <button
-                type="button"
-                className={styles.primary}
-                disabled={!localFile || !storageConsentId || busy}
-                onClick={() => void runUpload()}
-              >
-                Upload privately
-              </button>
-            </div>
-          </div>
-        ) : null}
 
-        {step === 'ai' ? (
-          <div className={styles.body}>
-            <p className={styles.notice}>
-              {aiNotice ||
-                'AI-provider notice text is not authorized yet. Generation stays unavailable.'}
-            </p>
-            <label className={styles.check}>
-              <input
-                type="checkbox"
-                checked={aiChecked}
-                onChange={(e) => setAiChecked(e.target.checked)}
-                disabled={!aiNotice}
-              />
-              <span>
-                I explicitly consent to AI-provider processing of my private photo to generate a
-                fashion croquis (separate from storage consent).
-              </span>
-            </label>
             <p className={styles.hint}>
-              Generation requires the AI gate and spend ceiling to be enabled by an operator. When
-              disabled, FashionRise will not call a provider or charge spend.
+              Upload &amp; Generate sends your photo to the AI provider and may incur usage cost
+              under your account limits. Preview stays on this device until you agree.
             </p>
+
             <div className={styles.actions}>
               <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
                 My Croquis library
@@ -504,10 +384,10 @@ export function CreateMyCroquisWizard({
               <button
                 type="button"
                 className={styles.primary}
-                disabled={!aiChecked || !aiNotice || !croquisId || busy}
-                onClick={() => void runAiConsent()}
+                disabled={!localFile || !agreed || busy || !aiNotice}
+                onClick={() => void runUploadAndGenerate()}
               >
-                Generate My Croquis
+                Upload &amp; Generate
               </button>
             </div>
           </div>
@@ -515,10 +395,9 @@ export function CreateMyCroquisWizard({
 
         {step === 'generating' ? (
           <div className={styles.body}>
-            <p>Generating your croquis privately…</p>
+            <p>Generating your croquis…</p>
             <p className={styles.hint}>
-              Status: {pendingVersion?.status ?? 'queued'}. This can take a moment. Do not close
-              until preview is ready.
+              Status: {pendingVersion?.status ?? 'queued'}. This can take a moment.
             </p>
           </div>
         ) : null}
@@ -526,13 +405,8 @@ export function CreateMyCroquisWizard({
         {step === 'reconciliation' ? (
           <div className={styles.body}>
             <p role="alert">
-              Provider outcome is unknown. This attempt is held for operator reconciliation.
-              FashionRise will not start another paid generate for this photo until that review
-              completes.
-            </p>
-            <p className={styles.hint}>
-              Do not retry from this wizard. Open My Croquis library later, or contact an
-              operator if this persists.
+              Provider outcome is unknown. This attempt is held for review. FashionRise will not
+              start another paid generate for this photo until that review completes.
             </p>
             <div className={styles.actions}>
               <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
@@ -547,13 +421,13 @@ export function CreateMyCroquisWizard({
 
         {step === 'preview' ? (
           <div className={styles.body}>
-            <p>Preview the generated croquis. Accept pins this exact version in Studio.</p>
+            <p>Preview your croquis. Accept pins it in Studio, or delete and try again.</p>
             {previewUrl ? (
               <img src={previewUrl} alt="Generated croquis preview" className={styles.preview} />
             ) : null}
             <div className={styles.actions}>
               <button type="button" className={styles.secondary} disabled={busy} onClick={() => void runReject()}>
-                Reject
+                Delete
               </button>
               <button type="button" className={styles.primary} disabled={busy} onClick={() => void runAccept()}>
                 Accept &amp; use in Studio
@@ -564,7 +438,7 @@ export function CreateMyCroquisWizard({
 
         {step === 'library' ? (
           <div className={styles.body}>
-            <p>Select an accepted croquis version to pin in Studio (exact id + version).</p>
+            <p>Select an accepted croquis to use in Studio.</p>
             {library.length === 0 ? <p className={styles.hint}>No croquis yet.</p> : null}
             <ul className={styles.list}>
               {library.map((row) => {
@@ -596,7 +470,7 @@ export function CreateMyCroquisWizard({
               })}
             </ul>
             <div className={styles.actions}>
-              <button type="button" className={styles.secondary} onClick={() => setStep('eligibility')}>
+              <button type="button" className={styles.secondary} onClick={() => setStep('compose')}>
                 Back
               </button>
             </div>

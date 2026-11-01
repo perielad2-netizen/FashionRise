@@ -315,14 +315,21 @@ def test_moderation_blocked_surfaces_owner_safe_message(client, monkeypatch, db_
     tokens = register_with_invite(client, db_session, f"mb_{uuid.uuid4().hex[:8]}@ex.com", f"mb{uuid.uuid4().hex[:6]}")
     croquis = _upload_ready(client, tokens, monkeypatch)
     ai_id = _ai_consent(client, tokens, croquis["id"])
+    captured: dict = {}
 
-    def on_edit(**_kw):
+    def on_edit(**kw):
+        captured.update({k: v for k, v in kw.items() if k != "image"})
         req = httpx.Request("POST", "https://api.openai.com/v1/images/edits")
         payload = {
             "error": {
                 "message": "Your request was rejected by the safety system.",
-                "type": "invalid_request_error",
+                "type": "image_generation_user_error",
                 "code": "moderation_blocked",
+                "moderation_details": {
+                    "moderation_stage": "input",
+                    "categories": ["sexual"],
+                    "SECRET_INTERNAL": True,
+                },
             }
         }
         resp = httpx.Response(400, request=req, json=payload)
@@ -347,6 +354,7 @@ def test_moderation_blocked_surfaces_owner_safe_message(client, monkeypatch, db_
     assert body.get("failure_code") == "moderation_blocked"
     assert "safety system" in (body.get("failure_message") or "").lower()
     assert "cannot override" in (body.get("failure_message") or "").lower()
+    assert captured.get("moderation") == "low"
     res = (
         db_session.query(PersonalCroquisSpendReservation)
         .filter(PersonalCroquisSpendReservation.idempotency_key == key)
@@ -355,6 +363,9 @@ def test_moderation_blocked_surfaces_owner_safe_message(client, monkeypatch, db_
     assert res.status == RESERVATION_RELEASED
     assert res.actual_cost_cents == 0
     assert "moderation_blocked" in (res.error_detail or "")
+    assert "moderation_stage=input" in (res.error_detail or "")
+    assert "categories=sexual" in (res.error_detail or "")
+    assert "SECRET_INTERNAL" not in (res.error_detail or "")
 
 
 def test_adapter_unit_timeout_raises_outcome_unknown(monkeypatch):

@@ -403,6 +403,43 @@ def _api_error_code(exc: BaseException) -> str | None:
     return provider_rejection_code_from_text(str(exc))
 
 
+def _moderation_details_sanitized(exc: BaseException) -> dict[str, Any] | None:
+    """Extract coarse moderation_stage + categories only (never raw body secrets)."""
+    body = getattr(exc, "body", None)
+    details: Any = None
+    if isinstance(body, dict):
+        err = body.get("error") if isinstance(body.get("error"), dict) else body
+        if isinstance(err, dict):
+            details = err.get("moderation_details")
+    if not isinstance(details, dict):
+        resp = getattr(exc, "response", None)
+        if resp is not None:
+            try:
+                data = resp.json()
+            except Exception:  # noqa: BLE001
+                data = None
+            if isinstance(data, dict):
+                err = data.get("error") if isinstance(data.get("error"), dict) else data
+                if isinstance(err, dict):
+                    details = err.get("moderation_details")
+    if not isinstance(details, dict):
+        return None
+    out: dict[str, Any] = {}
+    stage = details.get("moderation_stage")
+    if isinstance(stage, str) and stage.strip().lower() in {"input", "output", "unknown"}:
+        out["moderation_stage"] = stage.strip().lower()
+    cats = details.get("categories")
+    if isinstance(cats, list):
+        cleaned = [
+            c.strip().lower()[:48]
+            for c in cats
+            if isinstance(c, str) and c.strip() and len(c.strip()) <= 64
+        ]
+        if cleaned:
+            out["categories"] = cleaned[:8]
+    return out or None
+
+
 def _safe_api_error_summary(exc: BaseException) -> str:
     """Short operator-safe summary — type, status, code, truncated message (no bytes)."""
     parts = [type(exc).__name__]
@@ -415,6 +452,13 @@ def _safe_api_error_summary(exc: BaseException) -> str:
     rid = _safe_request_id_from_exc(exc)
     if rid:
         parts.append(f"request_id={rid}")
+    mod = _moderation_details_sanitized(exc)
+    if mod:
+        if "moderation_stage" in mod:
+            parts.append(f"moderation_stage={mod['moderation_stage']}")
+        cats = mod.get("categories")
+        if isinstance(cats, list) and cats:
+            parts.append("categories=" + ",".join(str(c) for c in cats))
     msg = str(exc).strip().replace("\n", " ")
     if msg:
         parts.append(msg[:180])
@@ -516,6 +560,10 @@ class OpenAICroquisImagesEditAdapter:
         kwargs["background"] = "transparent"
         kwargs["output_format"] = "png"
         kwargs["n"] = 1
+        # Official Images Edit API: moderation=auto|low (default auto).
+        # Use documented ``low`` for legitimate fully clothed fashion pose refs;
+        # provider safety enforcement remains — this is not a bypass.
+        kwargs["moderation"] = "low"
         # Never send a second image / fabric swatch on this path.
         if isinstance(kwargs.get("image"), list):
             raise ProviderNotAvailableError("Croquis edit must use exactly one image input")
@@ -543,6 +591,7 @@ class OpenAICroquisImagesEditAdapter:
             "quality": kwargs.get("quality"),
             "background": kwargs.get("background"),
             "output_format": kwargs.get("output_format"),
+            "moderation": kwargs.get("moderation"),
             "n": kwargs.get("n"),
             "prompt_version": PROMPT_VERSION_CURRENT,
             "geometry_profile": GEOMETRY_PROFILE_V1,
