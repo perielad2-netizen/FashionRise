@@ -175,8 +175,12 @@ export function CreateMyCroquisWizard({
         )
         if (cancelled) return
         setPendingVersion(enqueued)
-        for (let i = 0; i < 40; i++) {
-          await new Promise((r) => setTimeout(r, 400))
+        // Image generation can take 1–3 minutes. Poll durable status for up to
+        // ~4 minutes without launching a new provider request.
+        const pollMs = import.meta.env.MODE === 'test' ? 20 : 2000
+        const maxPolls = import.meta.env.MODE === 'test' ? 50 : 120
+        for (let i = 0; i < maxPolls; i++) {
+          await new Promise((r) => setTimeout(r, pollMs))
           if (cancelled) return
           const ver = await getPersonalCroquisVersion(croquisId, enqueued.version, ac.signal)
           setPendingVersion(ver)
@@ -188,7 +192,7 @@ export function CreateMyCroquisWizard({
           if (ver.status === 'failed') {
             setError(
               ver.failure_message?.trim() ||
-                'Generation failed (no croquis image was produced). You may try a different photo.',
+                'Generation failed (no croquis image was produced). You may try again with Upload & Generate.',
             )
             setIdempotencyKey(newIdempotencyKey())
             setStep('compose')
@@ -207,8 +211,14 @@ export function CreateMyCroquisWizard({
             handleClose()
             return
           }
+          if (ver.status === 'generating' || ver.status === 'queued') {
+            // Keep waiting — do not treat slow generation as failure.
+            continue
+          }
         }
-        setError('Still generating — open My Croquis library later, or wait and retry status.')
+        setError(
+          'Still generating on the server. Keep this page open a bit longer, or reopen Create My Croquis / library later — no new paid attempt was started.',
+        )
         setStep('library')
       } catch (err) {
         if (cancelled) return
@@ -397,7 +407,8 @@ export function CreateMyCroquisWizard({
           <div className={styles.body}>
             <p>Generating your croquis…</p>
             <p className={styles.hint}>
-              Status: {pendingVersion?.status ?? 'queued'}. This can take a moment.
+              Status: {pendingVersion?.status ?? 'queued'}. Fashion illustration can take up to a
+              few minutes — please keep this window open.
             </p>
           </div>
         ) : null}
