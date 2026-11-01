@@ -436,13 +436,17 @@ def test_claim_lease_floor_exceeds_openai_timeout(monkeypatch):
     assert callable(recover_stale_croquis_claims)
 
 
-def test_prompt_v3_preserves_clothing_semantics():
+def test_prompt_v4_targets_house_mannequin_underlay():
     from app.services import personal_croquis_provider as pcp
 
-    prompt = pcp.CROQUIS_LINEART_PROMPT_V3.lower()
-    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v3"
-    assert "fully clothed" in prompt
-    assert "do not undress" in prompt or "do not undress" in prompt
-    assert "remove clothing" in prompt
-    # Must not ask the model to omit garments from a photo (undress framing).
-    assert "do not add garments" not in prompt
+    prompt = pcp.CROQUIS_LINEART_PROMPT_V4.lower()
+    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v4"
+    assert "mannequin" in prompt
+    assert "fashionrise" in prompt
+    assert "clothing" in prompt  # instruct not to render clothing
+    assert "fashion-look illustration" in prompt
+    assert "transparent" in prompt
+    # Style reference asset must be present for images.edit grounding.
+    style = pcp.load_house_style_reference_png()
+    assert style.startswith(b"\x89PNG\r\n\x1a\n")
+    assert len(style) > 1024
