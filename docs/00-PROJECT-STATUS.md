@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis P0 TypeError hotfix DEPLOYED** · tip **** · SDK extra_body.moderation=low · claim lease ≥ timeout+120 · prompt **v3** clothed underlay · FE poll ~4min · held 17:02Z attempt released $0 · **0** operator paid calls.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis P0 TypeError hotfix DEPLOYED** · tip **`441444fb3899237f5c125b00c4f9a1af71c7e87c`** · SDK `extra_body.moderation=low` · claim lease ≥ timeout+120 · prompt **v3** clothed underlay · FE poll ~4min · held 17:02Z attempt released $0 · **0** operator paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis generate was broken by a **pre-HTTP SDK TypeError** (not photo selection). Production tip ****.
+**Phase:** Protected family beta. Create My Croquis generate was broken by a **pre-HTTP SDK TypeError** (not photo selection). Production tip **`441444fb`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
