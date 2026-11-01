@@ -3,47 +3,49 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis P0 BadRequest hotfix DEPLOYED** · FE/BE/worker **`bbfb900a`** · Alembic **`014`** · owner Generate ~15:59Z HTTP 400 reconciled $0 · owner may retry Generate · drafts #141/#142 unmerged.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis EXACT BLOCKER: OpenAI `moderation_blocked`** · tip **`56629947`** · second Generate 16:24Z · reservation **released $0** · owner-safe failure messaging + prompt v2 deployed · **do not retry same photo** · drafts #141/#142 unmerged.)
 
-**Phase:** Protected family beta with Create My Croquis **live on fashionrise.app**. Draft PRs #141/#142 remain unmerged; production tip **`bbfb900a`** (hotfix on prior `623ef821` / BE baseline `6cc317ec`).
+**Phase:** Protected family beta. Create My Croquis is live, but **this owner photo is blocked by OpenAI image safety** (`code=moderation_blocked`). FashionRise cannot override that. Production tip **`56629947`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`bbfb900a`** — release `/var/www/fashionrise/releases/bbfb900a` · source `bbfb900adf25bf16b3d3cccaab05189d659e0fad` · App pill **`bbfb900a`** · gates FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior `623ef821` / `2dfcaba0` retained. |
-| Backend (FastAPI + PostgreSQL) | **`bbfb900adf25bf16b3d3cccaab05189d659e0fad`**. Alembic **`014`**. Hotfix module backup `croquis-badrequest-hotfix-20261101T160844Z`; full rollback still via `croquis-prod-deploy-20261101T123132Z`. |
-| AI worker | `fashionrise-ai-worker` @ **`bbfb900a`** (matched with API). |
+| Frontend (`web-ui`) | **`56629947`** — release `/var/www/fashionrise/releases/56629947` · source `5662994710f8d503288be9883d31e5be9a9139ca` · App pill **`56629947`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
+| Backend (FastAPI + PostgreSQL) | **`5662994710f8d503288be9883d31e5be9a9139ca`**. Alembic **`014`**. |
+| AI worker | `fashionrise-ai-worker` @ **`56629947`** |
 | Database | `fashionrise_beta` — Alembic **`014`** |
-| Nginx | `root /var/www/fashionrise/current;` → `releases/bbfb900a` · CF Access + AOP unchanged · personal-croquis allowlist |
-| AI spend | Techpack ceiling **`$50`** unchanged. Create My Croquis: ceiling **`$5.00`** · max **`$1`/run** · **`$5`/user/day** · exposure **100¢** · soft estimate **40¢** · max **5** gens/user/day · LIVE_HTTP **ON** |
+| Nginx | `current` → `releases/56629947` · personal-croquis allowlist |
+| AI spend | Croquis: **`$5`** ceiling · **`$1`/run** · **`$5`/user-day** · **100¢** exposure · **5** gens/day · LIVE_HTTP **ON** |
 
-## #135 Create My Croquis — P0 live Generate hotfix (2026-11-01)
+## #135 Create My Croquis — second Generate EXACT BLOCKER (2026-11-01 16:24 UTC)
 
-### Incident (~17:59 Asia/Jerusalem / 15:59 UTC)
-
-Owner clicked Generate on a real photo. UI showed reconciliation hold.
+### Second attempt (~18:24 Asia/Jerusalem)
 
 | Item | Finding |
 |---|---|
-| Croquis / version / job | `d8f0a363…` / v1 `2436a7ef…` / AIJob `12a783cc…` |
-| Reservation | `3d209fe3…` · `provider_called=true` · was `reconciliation_required` · `actual_cost_cents` null |
-| Worker log | `HTTP/1.1 400 Bad Request` · `BadRequestError` · `request_id=req_411dd844420c4a2c86ac3299fc1bb69e` |
-| Generated asset | **none** — nothing to recover; source photo **preserved** (`uploaded`) |
-| Root cause | Adapter wrapped **all** post-submit exceptions (including definitive HTTP **400**) as `ProviderOutcomeUnknownError` |
-| Billing | No generated image; reservation **released at $0** after operator reconcile with journal evidence (no second paid call) |
-| Fix SHA | **`bbfb900a`** — HTTP 4xx → fail + $0 release; timeouts/5xx still recon |
-| Tests | mocked adapter/recon **17 passed** · **0** operator `images.edit` |
-| Owner next | Hard-refresh App **`bbfb900a`** → Create My Croquis → **Generate again** |
+| App tip at fail | `bbfb900a` (classification hotfix already live) |
+| Croquis / version / job | `dea2fcd7…` / v1 `49416656…` / AIJob `522975a0…` |
+| Source asset | **new upload** after hotfix (`f5a75212…`, PNG RGB 600×900, 289691 B, **no ICC**) — different SHA from first attempt |
+| Outgoing kwargs | model `gpt-image-2.5-sunburst` · size `1024x1536` · quality `medium` · `background=transparent` · `output_format=png` · n=1 |
+| Provider | HTTP **400** · `BadRequestError` · **`code=moderation_blocked`** · `request_id=req_1ba28d0fbf054ebaa3c37ef8f89ca2f6` · message: safety system rejection |
+| Encoding/params | **Not** the root cause (clean PNG; allowlisted size/quality/model) |
+| Root cause | OpenAI **image safety moderation** rejected this photo+request. **Must not bypass.** |
+| Reservation | `1d4a851f…` · `provider_called=true` · **`released`** · **`actual_cost_cents=0`** |
+| Generated asset | **none**; source **preserved** |
 
-### Owner test clicks (paid Generate is owner-only)
+### Deployed mitigation tip `56629947` (not a safety bypass)
 
-1. Open https://fashionrise.app → Cloudflare Access → sign in.
-2. Confirm App pill **`bbfb900a`**.
-3. Open **Studio** → **Models** → **Create My Croquis**.
-4. Consent → upload a fully clothed adult photo (keep under ~10MB; oversized uploads 413).
-5. AI consent → **Generate** (billable; agent does not click).
-6. Accept to pin, or erase from Create My Croquis.
+| Change | Detail |
+|---|---|
+| Owner messaging | Version API returns `failure_code` / `failure_message`; wizard shows moderation explanation |
+| Prompt | `croquis-lineart-v2` fashion-underlay wording (future attempts only; **unverified** without a new owner Generate) |
+| Tests | mocked adapter/recon **18 passed** · **0** operator paid `images.edit` |
+| Owner guidance | **Do not retry the same photo.** Use a different fully clothed fashion pose photo that complies with OpenAI image policies, only after reading the in-app moderation message on App **`56629947`**. |
+
+### Prior first attempt (15:59 UTC) — classification fix
+
+Still recorded: first failure was also HTTP 400 (code not logged then); tip `bbfb900a` fixed misclassification as recon. That did **not** remove provider moderation.
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
