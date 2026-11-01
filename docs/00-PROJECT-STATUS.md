@@ -3,53 +3,32 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis P0 TypeError hotfix DEPLOYED** · tip **`441444fb3899237f5c125b00c4f9a1af71c7e87c`** · SDK `extra_body.moderation=low` · claim lease ≥ timeout+120 · prompt **v3** clothed underlay · FE poll ~4min · held 17:02Z attempt released $0 · **0** operator paid calls.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis house-style mannequin v4 DEPLOYED** · tip **** · prompt **croquis-lineart-v4** · style ref **female-straight** · pose/proportions from photo · no garment rendering · mocked BE 42 · **0** operator paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis generate was broken by a **pre-HTTP SDK TypeError** (not photo selection). Production tip **`441444fb`**.
+**Phase:** Protected family beta. Create My Croquis now targets FashionRise **built-in croquis/mannequin underlay** style (not a clothed fashion illustration). Production tip ****.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`441444fb`** — release `/var/www/fashionrise/releases/441444fb` · source `441444fb3899237f5c125b00c4f9a1af71c7e87c` · App pill **`441444fb`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
-| Backend (FastAPI + PostgreSQL) | **`441444fb3899237f5c125b00c4f9a1af71c7e87c`**. Alembic **`014`**. |
-| AI worker | `fashionrise-ai-worker` @ **`441444fb`** |
+| Frontend (`web-ui`) | **`3ed1902f`** — release `/var/www/fashionrise/releases/3ed1902f` · source `3ed1902f14379cda72da7b2496281cc1a582c532` · App pill **`3ed1902f`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
+| Backend (FastAPI + PostgreSQL) | **`3ed1902f14379cda72da7b2496281cc1a582c532`**. Alembic **`014`**. |
+| AI worker | `fashionrise-ai-worker` @ **`3ed1902f`** |
 | Database | `fashionrise_beta` — Alembic **`014`** |
-| Nginx | `current` → `releases/441444fb` · personal-croquis allowlist |
-| AI spend | Croquis: **`$5`** ceiling · **`$1`/run** · **`$5`/user-day** · **100¢** exposure · **5** gens/day · LIVE_HTTP **ON** · Images Edit moderation via **`extra_body.moderation=low`** · claim lease **≥300s** |
+| Nginx | `current` → `releases/3ed1902f` · personal-croquis allowlist |
+| AI spend | Croquis: **`$5`** ceiling · LIVE_HTTP **ON** · `extra_body.moderation=low` · claim lease **≥300s** · prompt **v4** + house style ref |
 
-## #135 Create My Croquis — 17:02Z TypeError root cause + fix (2026-11-01)
+## #135 Create My Croquis — house-style mannequin underlay (2026-11-01)
 
-### Latest owner attempt (~19:02 Asia/Jerusalem / 17:02 UTC) — NEW attempt, not stale UI
-
-| Item | Finding |
-|---|---|
-| App tip at fail | `a83007a5` (one-checkbox + top-level moderation=low) |
-| Croquis / version / job | `d11eed9f…` / v1 `2e73ae82…` / AIJob `769ff286…` |
-| Reservation | `9cf61e8c…` · `provider_called=true` · status was `reconciliation_required` |
-| Timing | created 17:02:02Z → failed 17:02:03Z (**~1s**) — **not** claim-lease expiry |
-| Exact exception | **`TypeError`**: `Images.edit() got an unexpected keyword argument 'moderation'` · `request_id=-` (no HTTP) |
-| Effective settings | `openai` SDK **1.109.1** · `Images.edit` has **no** top-level `moderation` · claim lease default was **120** vs timeout **180** (unsafe for long calls; **not** the cause of this ~1s fail) |
-| Prior 16:37Z attempt | separate photo · `moderation_blocked` · released $0 (before this tip) |
-
-### Fix tip `441444fb`
+Owner feedback after first successful real-photo generate: output kept too much clothing / looked like a dressed illustration. Product target is a **FashionRise native croquis mannequin** for sketching clothes on top.
 
 | Change | Detail |
 |---|---|
-| moderation wire | `extra_body={"moderation":"low"}` (SDK-compatible); refuse top-level `moderation=` |
-| TypeError class | pre-HTTP SDK contract errors → `ProviderNotAvailableError` / $0 release (not recon) |
-| Claim lease | default **300s**; recovery floor `max(configured, openai_timeout+120)` |
-| Prompt | **`croquis-lineart-v3`** — preserve clothed garment silhouettes; never ask to undress |
-| FE poll | up to ~4 minutes; slow generation ≠ failure |
-| Held 17:02 attempt | operator reconcile → **released $0** (no request_id; no image bytes) |
-| Tests | BE focused **42** · FE **7** · **0** paid `images.edit` |
-
-### Owner test (after tip `441444fb`)
-
-1. Hard-refresh `https://fashionrise.app` (App pill **`441444fb`**).
-2. Create My Croquis → one checkbox → Upload & Generate with a normal fully clothed fashion photo.
-3. Keep the window open up to a few minutes for preview → Accept / Delete.
-4. Do **not** retry the held 17:02 photo under the old reconciliation state — that attempt is released; a new Upload & Generate starts a new attempt under the fixed adapter.
+| Prompt | **`croquis-lineart-v4`** — blank mannequin underlay; preserve pose + approximate proportions; forbid garments/hair/face/prints/folds |
+| Style ground | Bundled Studio `female-straight` PNG as images.edit **image[2]** style anchor (line language only) |
+| Keep | transparent PNG · full-body · Studio accept/reject flow · consent UX unchanged |
+| Tests | BE focused **42** passed · **0** paid `images.edit` |
+| Owner path | Hard-refresh App **`3ed1902f`** → Create My Croquis → Upload & Generate → preview should match built-in croquis theme |
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
@@ -1209,6 +1188,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-11-01 | **#135 Create My Croquis house-style mannequin v4 DEPLOYED:** tip  /  · prompt croquis-lineart-v4 · style ref female-straight · no garment rendering · BE 42 mocked · **0** paid calls. |
 | 2026-11-01 | **#135 Create My Croquis P0 TypeError hotfix DEPLOYED:** tip  /  · SDK unexpected keyword  caused false recon at 17:02Z · fix  + lease≥timeout+120 + prompt v3 + FE poll · held reservation released $0 · mocked BE 42 / FE 7 · **0** paid calls. |
 | 2026-11-01 | **#135 Create My Croquis DEPLOYED — READY FOR OWNER TEST:** tip `623ef821` · FE+BE+worker · Alembic **014** · MY_CROQUIS UI/upload/AI/LIVE_HTTP ON · budget $5/$1/$5/100¢ + 5 gens/day · nginx personal-croquis allowlist · backup `croquis-prod-deploy-20261101T123132Z` · no-bill smoke re-verified PASS (upload+erase) · owner Generate only · drafts #141/#142 unmerged. |
 | 2026-10-29 | **Issue #128 / PR #130 Magic source provenance:** generation-boundary look/front/back IDs on paid artifacts (bind + skip paths); mid-run Magic swap keeps original provenance / newer draft source / unbound artwork / cost / one provider call; HEAD `c16acf41` / impl `0561bb56` / blob `e04fdbcf`; Ruff 9 / mypy 51; production FE `bfbdd03f-decimal` / BE `311e259a` **unchanged**; **0 paid AI**; **STOP for Technical PM final acceptance — do not deploy**. |
