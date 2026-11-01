@@ -21,12 +21,13 @@
 
 ## Issue #135 — Create My Croquis V1 — LIVE ADAPTER DRAFT (2026-11-01) — STOP before first paid request
 
-Stacked **new** draft PR (does **not** modify accepted Stage C PR [#141](https://github.com/perielad2-netizen/FashionRise/pull/141)). Base = Stage C tip `48fe6132` / review SHA `cd32104e`.
+Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise/pull/142) (does **not** modify accepted Stage C PR [#141](https://github.com/perielad2-netizen/FashionRise/pull/141)). Base = Stage C tip `48fe6132` / review SHA `cd32104e`.
 
 | Item | Status |
 |---|---|
 | Branch | `cursor/web-create-my-croquis-live-adapter-77c6` |
 | Live adapter code | Exact **`56f2727aedfeeb1ea481468299ba06ea9f20c4f8`** |
+| Live adapter tip | Exact **`03a7786d7e6c542d409f87d1c3779eee035b7058`** |
 | Base / Stage C accepted | Review SHA **`cd32104e2f301b0d84e4132e4094a7804a335b2b`** · tip `48fe6132` · PR #141 **untouched DRAFT** |
 | Provider | `OpenAICroquisImagesEditAdapter` → `images.edit` / **`gpt-image-2.5-sunburst`** |
 | Request shape | 1 image in · `n=1` · `size=1024x1536` · `quality=medium` · `background=transparent` · `output_format=png` · no `input_fidelity` |
