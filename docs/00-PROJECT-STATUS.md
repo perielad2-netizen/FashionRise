@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis LIVE ADAPTER P0 HOLD amendment — STOP before first paid request** · stacked draft PR #142 on Stage C ACCEPTED `cd32104e` · `ProviderOutcomeUnknownError` post-submit recon · pre-submit readiness before `provider_called` fence · revised envelope **$1.00** / **100¢** / **$1**/user/day · soft estimate **40¢** · disposable-DB executor dry-run only · synthetic clothed fixture · `MY_CROQUIS_AI_LIVE_HTTP=false` · **0 paid calls executed** · PR #141 untouched/DRAFT · prod unchanged · gates OFF.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis LIVE ADAPTER one-call guard P0 — STOP before first paid request** · PR #142 · exact Settings/fixture SHA/effective base URL/`build_edit_kwargs` match · Alembic **014** required on disposable DB · no silent size/quality fallback · focused **57** PASS · **0 paid** · PR #141 untouched · prod unchanged · gates OFF.)
 
-**Phase:** Protected family beta. #135 Create My Croquis **Stage A + Stage B + Stage C ACCEPTED** (offline). Live adapter draft is **mock-validated only** — **STOP for owner+PM approval** of the revised dollar ceiling and one-call plan before any paid `images.edit`. Do **not** merge PR #141 or the live-adapter PR, deploy, run production Alembic `012`/`013`/`014`, collect real photos, permanently enable gates, or start full Stage D without separate owner authorization.
+**Phase:** Protected family beta. #135 Create My Croquis **Stage A + Stage B + Stage C ACCEPTED** (offline). Live adapter draft is **mock-validated only** — PM ledger fix PASS; one-call executor guards amended; **STOP for owner authorization** of exactly one paid call after PM PASS of this tip. Do **not** merge PR #141 or the live-adapter PR, deploy, run production Alembic `012`/`013`/`014`, collect real photos, permanently enable gates, or start full Stage D without separate owner authorization.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -26,31 +26,32 @@ Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise
 | Item | Status |
 |---|---|
 | Branch | `cursor/web-create-my-croquis-live-adapter-77c6` |
-| Live adapter code (P0 amendment) | Exact **`e6f9d39aab95bd42c63363019cfba4ca2a43b089`** |
-| Live adapter tip | Exact **`e6f9d39aab95bd42c63363019cfba4ca2a43b089`** (docs stamp follows) |
+| Live adapter code (one-call guards) | Exact **** |
+| Live adapter tip | Exact **** (docs stamp follows) |
 | Base / Stage C accepted | Review SHA **`cd32104e2f301b0d84e4132e4094a7804a335b2b`** · tip `48fe6132` · PR #141 **untouched DRAFT** |
 | Provider | `OpenAICroquisImagesEditAdapter` → `images.edit` / **`gpt-image-2.5-sunburst`** |
 | Request shape | 1 image in · `n=1` · `size=1024x1536` · `quality=medium` · `background=transparent` · `output_format=png` · no `input_fidelity` |
 | Output | Fit-contain normalize to exactly **768×1024** RGBA (`fit_contain_768x1024_v1`) |
 | P0 classification | `ProviderNotAvailableError` = definite pre-submit → **$0 RELEASE**; `ProviderOutcomeUnknownError` (timeout/connection/5xx/missing b64) = may-have-billed → **RECON** + new-key blocked |
 | Fence order | `assert_pre_submit_ready()` (LIVE_HTTP / key / model) runs **before** `_fence_for_provider_dispatch` so LIVE_HTTP-off never sets `provider_called` |
+| One-call guards (PM re-review) | Exact effective Settings (enabled/LIVE_HTTP/ceiling/run/day/exposure/estimate/size=`1024x1536`/quality=`medium`/model) · fixture SHA256 enforced · effective `settings.openai_base_url` official-only · final `build_edit_kwargs` must match envelope (**no silent size/quality fallback**) · disposable DB must be Alembic **014** (refuse `create_all`-only) |
 | Safeguards reused | Stage C consent / privacy storage / AIJob / spend reservation / idempotency / lease crash recovery / reconciliation / tripwire |
 | Live arming | **`MY_CROQUIS_AI_LIVE_HTTP=false`** (default) — even with AI gate + ceiling, no real HTTP until armed |
-| Fixture | Procedural clothed cartoon PNG only (`tests/fixtures/croquis/synthetic_clothed_adult_model.png`, sha256 `489dcb82…e29d`) — validates integration/normalization, **not** photo fidelity · **no real customer photos** |
-| Offline verification | Live-adapter **9** + recon/ledger **6** + Stage C generate/hardening/final **28** = **43** focused PASS · preflight + executor dry-run **0 HTTP** · mypy clean on adapter/worker |
-| Proposed one-call ceiling | **$1.00** spend ceiling · **$1.00**/run · **$1.00**/user/day · **100¢** max exposure · **40¢** soft estimate only (not a provider hard cap) |
-| Executor | `scripts/croquis_one_image_executor.py` — dry-run default; paid path needs `CONFIRM_PAID_CROQUIS_ONE_CALL=YES` + `--i-approve-paid-one-call` + still stops unless `--execute-now`; disposable `DATABASE_URL_TEST` only |
-| Paid calls | **0 executed** — **STOP for owner+PM approval** of revised ceiling + specific one-call test |
+| Fixture | Procedural clothed cartoon PNG only (`tests/fixtures/croquis/synthetic_clothed_adult_model.png`, sha256 `489dcb82167d858a14ff0f2c91fe2e60d42c2aeceaccfe5d368f5d0ebc28e29d`) — validates integration/normalization, **not** photo fidelity · **no real customer photos** |
+| Offline verification | One-call guards + live-adapter + recon + Stage C generate/hardening/final = **57** focused PASS · preflight + executor dry-run **0 HTTP** · mypy clean |
+| Proposed one-call ceiling | **$1.00** spend ceiling · **$1.00**/run · **$1.00**/user/day · **100¢** max exposure · **40¢** soft estimate only (not a provider hard cap; PM accepts scope in principle — not a guaranteed $1 bill) |
+| Executor | `scripts/croquis_one_image_executor.py` + `personal_croquis_one_call.py` — dry-run default; prints operator request preview (no secrets); audit evidence includes `provider_job_id` / usage source / private preview path; paid path needs confirm flags + `--execute-now`; DB must already be Alembic **014** |
+| Paid calls | **0 executed** — **STOP** — this tip is **not** owner permission to spend; after PM PASS request explicit owner OK for exactly one call |
 | Production / gates | **Unchanged** — FE `2dfcaba0` · BE `6cc317ec` · Alembic `011` · upload/AI/UI **OFF** |
 | Explicitly NOT done | Merge · deploy · permanent gate ON · real photos · public storage · Stage D release · any paid `images.edit` |
 
 ### One-call execution plan (owner must approve before arming)
 
 1. Keep PR #141 and production untouched; use this draft branch only.
-2. Temporary process env (not production flags): `MY_CROQUIS_AI_ENABLED=true`, ceiling `$1.00`, max/run `$1.00`, max/user/day `$1.00`, max exposure `100`, estimate `40`, `MY_CROQUIS_AI_LIVE_HTTP=true`, official `https://api.openai.com/v1` only, valid `OPENAI_API_KEY`, disposable `DATABASE_URL_TEST`.
-3. Source = synthetic fixture only; one `images.edit` via Stage C enqueue→fence→adapter→settle/recon (executor `--i-approve-paid-one-call --execute-now` after approval).
-4. Evaluate returned 768×1024 transparent line-art + independent invoice/usage check; then disarm `LIVE_HTTP` and restore ceiling 0.
-5. **Do not run step 2–4 until owner explicitly approves this revised $1.00 / 100¢ envelope and test.**
+2. Temporary process env (not production flags): exact envelope via `personal_croquis_one_call` (`ENABLED`/`LIVE_HTTP` true, ceiling/run/day `$1.00`, exposure `100`, estimate `40`, size `1024x1536`, quality `medium`, model sunburst), official effective base URL only, valid `OPENAI_API_KEY`, disposable `DATABASE_URL_TEST` **already migrated to Alembic 014**.
+3. Source = approved fixture SHA only; executor validates final `build_edit_kwargs` then one `images.edit` via Stage C enqueue→fence→adapter→settle/recon (`--i-approve-paid-one-call --execute-now` after owner OK).
+4. Inspect private preview path + `provider_job_id` / usage source; reconcile against OpenAI billing independently (do not trust 40¢ estimate); then disarm `LIVE_HTTP` and restore ceiling 0.
+5. **Do not run step 2–4 until owner explicitly authorizes this exact one-call test at the STOP tip SHA.**
 
 ## Issue #135 — Create My Croquis V1 — STAGE C ACCEPTED (archive) (2026-11-01) — offline engineering only
 
@@ -210,7 +211,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Remaining real defects / product priorities
 
-1. **#135 Create My Croquis** — Stage C ACCEPTED; **live-adapter draft STOP** awaiting **owner+PM approval** of revised **$1.00 / 100¢ / $1/user/day** one-call plan (0 paid so far)
+1. **#135 Create My Croquis** — Stage C ACCEPTED; **live-adapter draft STOP** — PM ledger PASS; one-call guards amended; awaiting **PM PASS of tip + explicit owner authorization** for exactly one paid call (0 paid so far)
 2. Closure/gradient visual fidelity redesign (**PR #125 HOLD**)
 3. Canonical `main` adoption after PM approval of integration PR (no blind merge of undeployed stacks)
 4. Continue evidence-based PR closures from remaining open issues (no branch deletes)
@@ -219,7 +220,7 @@ Closed only with pre-close provenance comments. Branches **not** deleted. Diverg
 
 ### Recommended next engineering milestone
 
-**Owner+PM approval** of the live-adapter one-call plan (ceiling **$1.00**, exposure **100¢**, max/user/day **$1.00**, soft estimate **40¢**, synthetic fixture only) — or reject/revise. Do **not** arm `MY_CROQUIS_AI_LIVE_HTTP`, merge, deploy, run production Alembic `012`/`013`/`014`, collect real photos, or permanently enable gates until separately authorized. Keep live FE `2dfcaba0` / BE `6cc317ec` / Alembic `011`.
+**PM re-review of one-call guard tip**, then **explicit owner authorization** for exactly one paid call (ceiling **$1.00**, exposure **100¢**, max/user/day **$1.00**, soft estimate **40¢**, synthetic fixture SHA enforced) — or reject/revise. Do **not** arm `MY_CROQUIS_AI_LIVE_HTTP`, merge, deploy, run production Alembic `012`/`013`/`014`, collect real photos, or permanently enable gates until separately authorized. Keep live FE `2dfcaba0` / BE `6cc317ec` / Alembic `011`.
 
 
 ## Owner-authorized production release — Issue #131 (2026-10-29) — DEPLOYED
@@ -1427,6 +1428,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-11-01 | **#135 LIVE ADAPTER one-call guard P0 (PR #142):** code  · exact Settings/fixture SHA/effective base URL/`build_edit_kwargs` match · refuse silent size/quality fallback · Alembic **014** required · private preview + `provider_job_id` evidence · focused **57** PASS · **0 paid** · **STOP** · PR #141 untouched. |
 | 2026-11-01 | **#135 LIVE ADAPTER P0 HOLD amendment (PR #142):** code `e6f9d39a` · post-submit SDK failures → `ProviderOutcomeUnknownError` / RECON (not $0-release) · `assert_pre_submit_ready` before `provider_called` fence · envelope **$1.00**/run/day · exposure **100¢** · soft estimate **40¢** · executor dry-run · focused **43** PASS · **0 paid** · **STOP** · PR #141 untouched. |
 | 2026-11-01 | **#135 LIVE ADAPTER DRAFT (stacked on Stage C):** `gpt-image-2.5-sunburst` images.edit · transparent PNG · 1024x1536 medium → fit-contain 768×1024 · mocked HTTP tests green · synthetic fixture · `LIVE_HTTP=false` · proposed ceiling **$1.00**/exposure **80¢** (superseded by 100¢ amendment above) · **0 paid** · **STOP for owner approval** · PR #141 untouched. |
 | 2026-11-01 | **#135 PR #141 Stage C ACCEPTED** @ review SHA `cd32104e2f301b0d84e4132e4094a7804a335b2b` (PM OFFLINE ENGINEERING PASS) · code `4a99ce37` · DRAFT/unmerged · prod unchanged · gates OFF · **no Stage D / merge / deploy / paid AI**. |
