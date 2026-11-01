@@ -1,0 +1,153 @@
+/* Always span the safe viewport — never center with transform (clips on narrow tablets). */
+.bar {
+  position: absolute;
+  left: max(8px, env(safe-area-inset-left, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: none;
+  width: auto;
+  box-sizing: border-box;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(12, 16, 28, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+
+.rowPrimary {
+  justify-content: space-between;
+}
+
+.rowSecondary {
+  justify-content: flex-start;
+}
+
+.cluster {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.exitCluster {
+  flex: 0 0 auto;
+  margin-left: auto;
+  background: transparent;
+  padding: 0;
+}
+
+.btn,
+.btnActive {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btnActive {
+  background: rgba(214, 51, 132, 0.28);
+  color: #ffd0e6;
+}
+
+.textBtn,
+.exitBtn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.textBtn:hover,
+.exitBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.exitBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(214, 51, 132, 0.28);
+  color: #ffd6e8;
+  font-weight: 700;
+}
+
+.zoomReadout {
+  min-width: 48px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Narrow phones: keep two compact rows, slightly denser labels. */
+@media (max-width: 420px) {
+  .textBtn {
+    padding: 0 8px;
+    font-size: 11px;
+  }
+}
+
+/* Short viewports: keep toolbar but reduce vertical footprint. */
+@media (max-height: 700px) {
+  .bar {
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .btn,
+  .btnActive,
+  .textBtn,
+  .exitBtn {
+    min-height: 40px;
+    height: 40px;
+  }
+
+  .btn,
+  .btnActive {
+    width: 40px;
+  }
+}

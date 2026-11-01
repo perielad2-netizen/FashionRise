@@ -2,6 +2,23 @@
 
 **Living checklist.** Update checkboxes and notes when work completes. For a **one-page handoff**, see [`00-PROJECT-STATUS.md`](./00-PROJECT-STATUS.md).
 
+**Active frontend (2026-10-18):** `web-ui/` React/PWA. Unity checklist items below are **historical** unless noted.
+
+---
+
+## Web Reboot — WEB-1 (active)
+
+- [x] New `web-ui/` Vite + React + TypeScript + PWA
+- [x] Flow: Login → Creator Studio (`/studio`)
+- [x] Real FastAPI auth session
+- [x] Konva + perfect-freehand structured strokes
+- [x] Female / Male / Custom / Blank references
+- [x] Draw / Erase / Undo / Redo / Clear + brush/color + Dim reference
+- [x] Magic CTA placeholder (no paid AI)
+- [x] Docs reset: Unity marked LEGACY
+- [ ] Operator visual approval of WEB-1
+- [ ] WEB-2: connect Magic to existing backend AI pipeline
+
 ---
 
 ## Product pillars — full FashionRise (pro + beginners + makers)

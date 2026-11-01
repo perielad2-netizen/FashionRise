@@ -1,0 +1,128 @@
+.measureRow {
+  display: grid;
+  grid-template-columns: 1.2fr 0.55fr 0.9fr;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.measureRowCompact {
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.fieldLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field label,
+.fieldLabelRow label {
+  font-size: 11px;
+  color: var(--fr-muted);
+}
+
+.measureRowCompact .field label,
+.measureRowCompact .fieldLabelRow label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fr-text);
+}
+
+.field input,
+.field select {
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-text);
+  font-size: 13px;
+}
+
+.measureRowCompact .field input,
+.measureRowCompact .field select {
+  min-height: 48px;
+  font-size: 16px; /* avoids iOS zoom */
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.measureRowValueFirst {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 10px;
+}
+
+.valueFirstRow {
+  display: grid;
+  gap: 8px;
+}
+
+.valueUnitGroup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.valueUnitGroup input {
+  min-height: 52px;
+  font-size: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fr-text);
+}
+
+.valueUnitGroup input:focus {
+  outline: 2px solid rgba(244, 114, 182, 0.65);
+  outline-offset: 1px;
+  border-color: rgba(244, 114, 182, 0.7);
+}
+
+.unitBadge {
+  min-width: 48px;
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.metaToggle {
+  margin-top: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: #f9a8d4;
+  font-size: 12px;
+  text-align: left;
+}
+
+.metaPanel {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .measureRow:not(.measureRowCompact) {
+    grid-template-columns: 1fr;
+  }
+}
