@@ -28,8 +28,10 @@ from app.services.personal_try_on_provider import (
     TRY_ON_CONSENT_VERSION,
     TRY_ON_JOB_TYPE,
     TRY_ON_PROMPT_V1,
+    TRY_ON_PROMPT_V2,
     TRY_ON_PROMPT_VERSION,
     OpenAITryOnImagesEditAdapter,
+    build_try_on_prompt,
     set_try_on_provider_override,
 )
 from tests.auth_test_helpers import register_with_invite
@@ -99,12 +101,14 @@ class MockTryOnProvider:
         self.fail = fail
         self.last_photo: bytes | None = None
         self.last_garment: bytes | None = None
+        self.last_design_hints: list[str] | None = None
         self.cost_cents = cost_cents
 
-    def generate(self, *, photo_png: bytes, garment_png: bytes):
+    def generate(self, *, photo_png: bytes, garment_png: bytes, design_hints=None):
         self.calls += 1
         self.last_photo = photo_png
         self.last_garment = garment_png
+        self.last_design_hints = list(design_hints) if design_hints else []
         if self.fail is not None:
             raise self.fail
         out = _png_bytes((80, 120), (10, 20, 30, 255))
@@ -166,6 +170,23 @@ def test_try_on_prompt_is_not_sketch_polish():
     assert "flat sketch" not in TRY_ON_PROMPT_V1.lower()
 
 
+def test_try_on_prompt_v2_fidelity_rules():
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2"
+    assert "checkerboard" in TRY_ON_PROMPT_V2.lower()
+    assert "hats/caps" in TRY_ON_PROMPT_V2.lower() or "hat/cap" in TRY_ON_PROMPT_V2.lower()
+    assert "fashion illustration" not in TRY_ON_PROMPT_V2.lower()
+    with_hints = build_try_on_prompt(["pink checkerboard print", "upper-plane ink present"])
+    assert with_hints.startswith(TRY_ON_PROMPT_V2)
+    assert "pink checkerboard print" in with_hints
+    assert "upper-plane ink present" in with_hints
+    # Bound + sanitize
+    long = "x" * 200
+    clipped = build_try_on_prompt([long, "", "  keep  me  ", long])
+    assert long not in clipped
+    assert "x" * 120 in clipped
+    assert "keep me" in clipped
+
+
 def test_try_on_edit_kwargs_photo_then_garment(monkeypatch):
     _enable_ai_spend(monkeypatch)
     monkeypatch.setenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst")
@@ -173,8 +194,14 @@ def test_try_on_edit_kwargs_photo_then_garment(monkeypatch):
     adapter = OpenAITryOnImagesEditAdapter()
     photo = _png_bytes((32, 48))
     garment = _png_bytes((32, 48), (0, 0, 255, 128))
-    kwargs = adapter.build_edit_kwargs(photo_png=photo, garment_png=garment)
-    assert kwargs["prompt"] == TRY_ON_PROMPT_V1
+    kwargs = adapter.build_edit_kwargs(
+        photo_png=photo,
+        garment_png=garment,
+        design_hints=["exact designer colors: #FF69B4", "preserve print topology"],
+    )
+    assert kwargs["prompt"].startswith(TRY_ON_PROMPT_V2)
+    assert "exact designer colors: #FF69B4" in kwargs["prompt"]
+    assert "preserve print topology" in kwargs["prompt"]
     assert isinstance(kwargs["image"], list) and len(kwargs["image"]) == 2
     assert "moderation" not in kwargs
     assert (kwargs.get("extra_body") or {}).get("moderation") == "low"
@@ -507,3 +534,49 @@ def test_consent_required(client, monkeypatch, db_session):
     r = client.post(TRY_ON, headers=_auth(tokens), json=body)
     assert r.status_code == 400
     assert mock.calls == 0
+
+def test_enqueue_passes_design_hints_to_provider(client, monkeypatch, db_session):
+    tokens = register_with_invite(client, db_session, "to-hints@example.com", "tohints")
+    croquis = _upload_ready(client, tokens, monkeypatch)
+    _enable_ai_spend(monkeypatch)
+    set_croquis_provider_override(MockCroquisProvider(cost_cents=2))
+    ai = client.post(
+        f"{BASE}/consent/ai",
+        headers=_auth(tokens),
+        json=ai_body(croquis_id=croquis["id"]),
+    )
+    gen = client.post(
+        f"{BASE}/{croquis['id']}/versions/generate",
+        headers=_auth(tokens),
+        json={"ai_consent_id": ai.json()["id"], "idempotency_key": "g-tohints"},
+    )
+    assert gen.status_code == 201, gen.text
+    from app.services.personal_croquis_worker import run_croquis_worker_tick
+
+    run_croquis_worker_tick(db_session, limit=4)
+    acc = client.post(
+        f"{BASE}/{croquis['id']}/versions/1/accept",
+        headers=_auth(tokens),
+        json={},
+    )
+    assert acc.status_code == 200, acc.text
+
+    mock = MockTryOnProvider(cost_cents=4)
+    set_try_on_provider_override(mock)
+    body = _try_on_body(croquis_id=croquis["id"], key="try_on:hints-1")
+    body["design_hints"] = [
+        "pink checkerboard print — keep exact Studio print geometry",
+        "upper-plane ink present — include any drawn hat/cap accessory from image 2",
+        "",
+        "x" * 200,
+    ]
+    r = client.post(TRY_ON, headers=_auth(tokens), json=body)
+    assert r.status_code == 201, r.text
+    run_magic_worker_tick(db_session, limit=4)
+    assert mock.calls == 1
+    assert mock.last_design_hints is not None
+    assert any("checkerboard" in h for h in mock.last_design_hints)
+    assert any("hat/cap" in h for h in mock.last_design_hints)
+    assert all(len(h) <= 120 for h in mock.last_design_hints)
+    assert provider_network_tripwire_hits() == 0
+

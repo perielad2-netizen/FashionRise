@@ -49,7 +49,12 @@ import {
   underlayMatchesPin,
   type PersonalCroquisUnderlayIdentity,
 } from '@/lib/personalCroquisCache'
-import { getPersonalCroquisVersion } from '@/services/personalCroquisApi'
+import {
+  fetchCroquisAssetBlob,
+  getPersonalCroquis,
+  getPersonalCroquisVersion,
+} from '@/services/personalCroquisApi'
+import { buildTryOnDesignHints } from '@/lib/tryOnDesignHints'
 import { checkPersistableFill, solidStyle, type FillOp, type FillStyle } from '@/lib/fills'
 import { MAX_SNAPSHOT_FILLS } from '@/lib/savedDesign'
 import { captureFabricSwatchForMagic } from '@/lib/fabricSwatchCapture'
@@ -244,6 +249,8 @@ export function useStudioEditor() {
   const [magicError, setMagicError] = useState<string | null>(null)
   const [magicLookUrl, setMagicLookUrl] = useState<string | null>(null)
   const [magicSketchUrl, setMagicSketchUrl] = useState<string | null>(null)
+  /** Authenticated original croquis photo for Try On before/after compare. */
+  const [magicOriginalPhotoUrl, setMagicOriginalPhotoUrl] = useState<string | null>(null)
   const [magicJobId, setMagicJobId] = useState<string | null>(null)
   const [magicResultMode, setMagicResultMode] = useState<MagicResultMode>('fashion')
   const [magicDestinationOpen, setMagicDestinationOpen] = useState(false)
@@ -259,6 +266,7 @@ export function useStudioEditor() {
   const magicAbortRef = useRef<AbortController | null>(null)
   const magicLookUrlRef = useRef<string | null>(null)
   const magicSketchUrlRef = useRef<string | null>(null)
+  const magicOriginalPhotoUrlRef = useRef<string | null>(null)
   const magicSideLookUrlsRef = useRef<{ front: string | null; back: string | null }>({
     front: null,
     back: null,
@@ -1219,6 +1227,10 @@ export function useStudioEditor() {
       URL.revokeObjectURL(magicSketchUrlRef.current)
       magicSketchUrlRef.current = null
     }
+    if (magicOriginalPhotoUrlRef.current) {
+      URL.revokeObjectURL(magicOriginalPhotoUrlRef.current)
+      magicOriginalPhotoUrlRef.current = null
+    }
     for (const side of ['front', 'back'] as const) {
       const look = magicSideLookUrlsRef.current[side]
       if (look) URL.revokeObjectURL(look)
@@ -1229,6 +1241,7 @@ export function useStudioEditor() {
     }
     setMagicLookUrl(null)
     setMagicSketchUrl(null)
+    setMagicOriginalPhotoUrl(null)
     setMagicDualActive(false)
     setMagicOperationId(null)
     setMagicFront(emptyMagicSide())
@@ -1674,6 +1687,22 @@ export function useStudioEditor() {
       magicSketchUrlRef.current = sketchUrl
       setMagicSketchUrl(sketchUrl)
 
+      // Load original source photo for before/after compare (owner-auth private bytes).
+      try {
+        const croquisRow = await getPersonalCroquis(croquisId, controller.signal)
+        const sourceId = croquisRow.source_asset_id
+        if (sourceId) {
+          const photoBlob = await fetchCroquisAssetBlob(sourceId, controller.signal)
+          const photoUrl = URL.createObjectURL(photoBlob)
+          if (magicOriginalPhotoUrlRef.current) URL.revokeObjectURL(magicOriginalPhotoUrlRef.current)
+          magicOriginalPhotoUrlRef.current = photoUrl
+          setMagicOriginalPhotoUrl(photoUrl)
+        }
+      } catch {
+        // Compare falls back to garment-only if photo cannot load; try-on itself still proceeds.
+      }
+      if (controller.signal.aborted) return
+
       setMagicPhase('submitting')
       let preflight = tryOnPreflightRef.current
       if (!preflight) {
@@ -1691,6 +1720,10 @@ export function useStudioEditor() {
           ? `try_on:${crypto.randomUUID()}`
           : `try_on:${Date.now()}`
       const contentFingerprint = draftContentFingerprint(docAtStart)
+      const designHints = buildTryOnDesignHints({
+        strokes: frontBag.strokes,
+        fills: frontBag.fills,
+      })
       const job = await enqueuePersonalTryOn({
         croquisId,
         croquisVersion,
@@ -1701,6 +1734,7 @@ export function useStudioEditor() {
         contentFingerprint,
         consentAcknowledged: true,
         consentVersion: preflight.consent_version,
+        designHints,
         signal: controller.signal,
       })
       setMagicJobId(job.id)
@@ -2883,6 +2917,7 @@ export function useStudioEditor() {
     magicError,
     magicLookUrl,
     magicSketchUrl,
+    magicOriginalPhotoUrl,
     magicResultMode,
     magicDestinationOpen,
     magicDestinationBusy,

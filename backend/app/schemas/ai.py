@@ -272,6 +272,8 @@ class PersonalTryOnBody(BaseModel):
     content_fingerprint: str = Field(min_length=1, max_length=128)
     consent_acknowledged: bool = False
     consent_version: str = Field(min_length=1, max_length=64)
+    # Optional Studio-derived color/material/accessory hints (never invent beyond image 2).
+    design_hints: list[str] | None = Field(default=None, max_length=8)
 
     model_config = ConfigDict(extra="forbid")
 
