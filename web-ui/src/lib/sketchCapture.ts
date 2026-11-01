@@ -1,6 +1,8 @@
 import { exportSketchPng, type ExportOptions } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 import { artworkExceedsLegacyBounds } from '@/lib/paperBounds'
+import type { FillOp } from '@/lib/fills'
+import type { Stroke } from '@/lib/strokes'
 
 /** Soft client bound; backend also enforces max_upload_size_mb. */
 export const MAGIC_MAX_SKETCH_BYTES = 8 * 1024 * 1024
@@ -78,6 +80,52 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
     ) {
       throw new Error(
         'Could not capture the model reference for Magic. Check your connection and try again — your sketch was not sent.',
+      )
+    }
+    throw err
+  }
+}
+
+/**
+ * Transparent garment-only PNG for Try On Person — strokes + fills + fabrics,
+ * no paper background and no croquis/mannequin underlay. Preserves spatial
+ * alignment with the Studio design plane.
+ */
+export async function captureGarmentArtworkForTryOn(options: {
+  strokes: Stroke[]
+  fills?: FillOp[]
+}): Promise<CapturedSketch> {
+  const fills = options.fills ?? []
+  const hasArtwork = options.strokes.length > 0 || fills.length > 0
+  if (!hasArtwork) {
+    throw new Error('Draw a garment before using Try On Person.')
+  }
+  if (artworkExceedsLegacyBounds(options.strokes, fills)) {
+    throw new Error(
+      'This sketch extends beyond the standard try-on frame. Pull oversized strokes inside the croquis area — Try On Person was not started.',
+    )
+  }
+  try {
+    const { blob, referenceIncluded } = await exportSketchPng({
+      strokes: options.strokes,
+      fills,
+      referenceUrl: null,
+      garmentOnly: true,
+      onReferenceError: 'skip',
+      onFabricError: 'throw',
+    })
+    if (referenceIncluded) {
+      throw new Error('Try On Person capture unexpectedly included a croquis underlay.')
+    }
+    if (blob.size > MAGIC_MAX_SKETCH_BYTES) {
+      throw new Error('Garment artwork is too large for Try On Person.')
+    }
+    const dataUrl = await blobToDataUrl(blob)
+    return { blob, dataUrl, byteLength: blob.size, referenceIncluded: false }
+  } catch (err) {
+    if (err instanceof FabricAssetLoadError) {
+      throw new Error(
+        'A custom fabric in this sketch could not be loaded. Check your connection or re-upload the fabric — Try On Person was not started.',
       )
     }
     throw err

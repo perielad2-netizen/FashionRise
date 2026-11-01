@@ -213,7 +213,10 @@ def _load_polish_jobs(db: Session, user: User) -> list[AIJob]:
     return list(
         db.scalars(
             select(AIJob)
-            .where(AIJob.user_id == user.id, AIJob.job_type == "sketch_polish")
+            .where(
+                AIJob.user_id == user.id,
+                AIJob.job_type.in_(("sketch_polish", "personal_try_on")),
+            )
             .order_by(AIJob.created_at.desc())
         ).all()
     )

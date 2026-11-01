@@ -22,6 +22,11 @@ export type ExportOptions = {
   background?: string
   width?: number
   height?: number
+  /**
+   * When true, omit paper fill and croquis/reference — transparent garment
+   * artwork only (Try On Person). Erasers still punch fills+ink only.
+   */
+  garmentOnly?: boolean
 }
 
 export type Canvas2DLike = {
@@ -296,11 +301,17 @@ export async function renderSketchCanvas(options: RenderOptions): Promise<Render
   const baseCtx = base.getContext('2d')
   if (!baseCtx) throw new Error('Canvas 2D unavailable')
 
-  baseCtx.fillStyle = options.background ?? PAPER_BACKGROUND
-  baseCtx.fillRect(0, 0, width, height)
+  const garmentOnly = options.garmentOnly === true
+  if (!garmentOnly) {
+    baseCtx.fillStyle = options.background ?? PAPER_BACKGROUND
+    baseCtx.fillRect(0, 0, width, height)
+  } else {
+    // Transparent canvas — clear explicitly for garment-only try-on capture.
+    baseCtx.clearRect(0, 0, width, height)
+  }
 
   let referenceIncluded = false
-  if (options.referenceUrl) {
+  if (!garmentOnly && options.referenceUrl) {
     try {
       const img = await (options.loadReference ?? loadImage)(options.referenceUrl)
       const fit = fitContain(img.width, img.height, DESIGN_WIDTH, DESIGN_HEIGHT)

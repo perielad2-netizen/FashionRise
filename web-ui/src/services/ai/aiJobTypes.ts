@@ -60,10 +60,18 @@ export function extractMagicSummary(job: AiJobRead): string {
 
 export function extractPolishBullets(job: AiJobRead): string[] {
   const structured = job.result_data?.structured
-  if (!structured || typeof structured !== 'object') return []
-  const bullets = (structured as { polish_bullets?: unknown }).polish_bullets
-  if (!Array.isArray(bullets)) return []
-  return bullets.filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+  if (structured && typeof structured === 'object') {
+    const bullets = (structured as { polish_bullets?: unknown }).polish_bullets
+    if (Array.isArray(bullets)) {
+      return bullets.filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+    }
+  }
+  // Try On Person (and similar) store bullets at result_data.bullets.
+  const top = job.result_data?.bullets
+  if (Array.isArray(top)) {
+    return top.filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+  }
+  return []
 }
 
 export function toMagicLookResult(job: AiJobRead): MagicLookResult {

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { captureSketchForMagic, MAGIC_MAX_SKETCH_BYTES } from '@/lib/sketchCapture'
+import {
+  captureGarmentArtworkForTryOn,
+  captureSketchForMagic,
+  MAGIC_MAX_SKETCH_BYTES,
+} from '@/lib/sketchCapture'
 import { exportSketchPng } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 
@@ -147,5 +151,71 @@ describe('captureSketchForMagic', () => {
         referenceUrl: 'https://example.com/model.png',
       }),
     ).rejects.toThrow(/Could not capture the model reference/i)
+  })
+})
+
+describe('captureGarmentArtworkForTryOn', () => {
+  beforeEach(() => {
+    exportMock.mockReset()
+  })
+
+  it('rejects empty garment artwork', async () => {
+    await expect(captureGarmentArtworkForTryOn({ strokes: [], fills: [] })).rejects.toThrow(
+      /Draw a garment/i,
+    )
+    expect(exportMock).not.toHaveBeenCalled()
+  })
+
+  it('captures transparent garment-only PNG without croquis underlay', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
+    const stroke = {
+      id: 's1',
+      tool: 'draw' as const,
+      color: '#111111',
+      size: 4,
+      opacity: 1,
+      points: [
+        { x: 10, y: 10, p: 0.5 },
+        { x: 20, y: 24, p: 0.5 },
+      ],
+    }
+    const result = await captureGarmentArtworkForTryOn({ strokes: [stroke], fills: [] })
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        referenceUrl: null,
+        garmentOnly: true,
+        onReferenceError: 'skip',
+        onFabricError: 'throw',
+      }),
+    )
+    expect(result.referenceIncluded).toBe(false)
+    expect(result.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+  })
+
+  it('fails closed if export unexpectedly includes a croquis underlay', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+      referenceIncluded: true,
+    })
+    await expect(
+      captureGarmentArtworkForTryOn({
+        strokes: [
+          {
+            id: 's1',
+            tool: 'draw',
+            color: '#111',
+            size: 4,
+            opacity: 1,
+            points: [
+              { x: 1, y: 1, p: 0.5 },
+              { x: 2, y: 2, p: 0.5 },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/croquis underlay/i)
   })
 })

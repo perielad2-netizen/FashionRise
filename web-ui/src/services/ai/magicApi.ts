@@ -138,6 +138,63 @@ export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJ
   })
 }
 
+/** GET /ai/personal-try-on/preflight — notice + budget (no billable work). */
+export type PersonalTryOnPreflight = {
+  enabled: boolean
+  live_http: boolean
+  consent_version: string
+  notice_text: string
+  notice_hash: string
+  prompt_version: string
+  estimate_cents: number
+  max_exposure_cents: number
+}
+
+export async function fetchPersonalTryOnPreflight(
+  signal?: AbortSignal,
+): Promise<PersonalTryOnPreflight> {
+  return apiRequest<PersonalTryOnPreflight>('/ai/personal-try-on/preflight', {
+    method: 'GET',
+    signal,
+  })
+}
+
+export type PersonalTryOnInput = {
+  croquisId: string
+  croquisVersion: number
+  garmentImageBase64: string
+  idempotencyKey: string
+  designId?: string | null
+  sourceRevision: number
+  contentFingerprint: string
+  consentAcknowledged: boolean
+  consentVersion: string
+  signal?: AbortSignal
+}
+
+/** POST /ai/personal-try-on — photorealistic try-on on the owner's original photo. */
+export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<AiJobRead> {
+  const contentFingerprint = await toApiContentFingerprint(input.contentFingerprint)
+  if (!contentFingerprint) {
+    throw new ApiError('content_fingerprint is required for Try On Person', 400, null)
+  }
+  return apiRequest<AiJobRead>('/ai/personal-try-on', {
+    method: 'POST',
+    body: {
+      croquis_id: input.croquisId,
+      croquis_version: input.croquisVersion,
+      garment_image_base64: input.garmentImageBase64,
+      idempotency_key: input.idempotencyKey,
+      design_id: input.designId ?? null,
+      source_revision: input.sourceRevision,
+      content_fingerprint: contentFingerprint,
+      consent_acknowledged: input.consentAcknowledged,
+      consent_version: input.consentVersion,
+    },
+    signal: input.signal,
+  })
+}
+
 export async function fetchAiJob(jobId: string, signal?: AbortSignal): Promise<AiJobRead> {
   return apiRequest<AiJobRead>(`/ai/jobs/${jobId}`, { signal })
 }

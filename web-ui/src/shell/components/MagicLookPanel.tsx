@@ -26,6 +26,8 @@ export type MagicDualPanelState = {
   onDownloadSide: (side: 'front' | 'back') => void
 }
 
+export type MagicResultMode = 'fashion' | 'try_on'
+
 type Props = {
   open: boolean
   phase: MagicPhase
@@ -34,6 +36,8 @@ type Props = {
   sketchObjectUrl: string | null
   error: string | null
   canRecover: boolean
+  /** Fashion Magic (illustration) vs Try On Person (photorealistic). */
+  resultMode?: MagicResultMode
   dual?: MagicDualPanelState | null
   onClose: () => void
   onCancel: () => void
@@ -58,6 +62,7 @@ export function MagicLookPanel({
   sketchObjectUrl,
   error,
   canRecover,
+  resultMode = 'fashion',
   dual,
   onClose,
   onCancel,
@@ -71,6 +76,7 @@ export function MagicLookPanel({
 
   if (!open) return null
 
+  const tryOn = resultMode === 'try_on' && !dual
   const dualActive = Boolean(dual)
   const activeSide = dual?.viewSide ?? 'front'
   const activeSideState = dual ? (activeSide === 'front' ? dual.front : dual.back) : null
@@ -89,23 +95,49 @@ export function MagicLookPanel({
     (dualActive
       ? Boolean(dual?.front.lookObjectUrl || dual?.back.lookObjectUrl)
       : Boolean(lookObjectUrl))
+  const compareLabel = tryOn
+    ? comparing
+      ? 'Show try-on'
+      : 'Compare garment'
+    : comparing
+      ? 'Show look'
+      : 'Compare sketch'
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Your Look">
+    <div
+      className={styles.overlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label={tryOn ? 'Try On Person' : 'Your Look'}
+    >
       <div className={styles.panel}>
         <div className={styles.header}>
           <div className={styles.titleBlock}>
-            <h2>{phase === 'ready' ? 'Your Look' : 'Magic'}</h2>
+            <h2>
+              {phase === 'ready'
+                ? tryOn
+                  ? 'Try On Person'
+                  : 'Your Look'
+                : tryOn
+                  ? 'Try On Person'
+                  : 'Magic'}
+            </h2>
             <p>
               {busy
                 ? dualActive
                   ? 'Polishing Front and Back…'
-                  : 'Turning your sketch into a finished fashion illustration…'
+                  : tryOn
+                    ? 'Creating a photorealistic preview on your original photo…'
+                    : 'Turning your sketch into a finished fashion illustration…'
                 : phase === 'ready'
                   ? dualActive
                     ? 'Both sides stay in Studio. These looks are private results for you.'
-                    : 'Your original sketch stays in Studio. This look is a private result for you.'
-                  : 'FashionRise Magic'}
+                    : tryOn
+                      ? 'Concept preview only — not a fit guarantee. Your photo and sketch stay private and unchanged.'
+                      : 'Your original sketch stays in Studio. This look is a private result for you.'
+                  : tryOn
+                    ? 'FashionRise Try On Person'
+                    : 'FashionRise Magic'}
             </p>
           </div>
           <button type="button" className={styles.close} aria-label="Close Magic" onClick={onClose}>
@@ -143,12 +175,18 @@ export function MagicLookPanel({
               <div className={styles.spinner} aria-hidden />
               <strong>
                 {phase === 'capturing'
-                  ? 'Capturing sketch…'
+                  ? tryOn
+                    ? 'Capturing garment artwork…'
+                    : 'Capturing sketch…'
                   : phase === 'submitting'
-                    ? 'Starting Magic…'
+                    ? tryOn
+                      ? 'Starting Try On Person…'
+                      : 'Starting Magic…'
                     : dualActive
                       ? 'Creating your looks…'
-                      : 'Creating your look…'}
+                      : tryOn
+                        ? 'Creating your try-on preview…'
+                        : 'Creating your look…'}
               </strong>
               <span>You can leave this open — we recover the same job if the network blips.</span>
             </div>
@@ -195,16 +233,24 @@ export function MagicLookPanel({
           ) : null}
 
           {!dualActive && showLook && activeLookUrl ? (
-            <img className={styles.image} src={activeLookUrl} alt="Magic fashion look" />
+            <img
+              className={styles.image}
+              src={activeLookUrl}
+              alt={tryOn ? 'Try On Person preview' : 'Magic fashion look'}
+            />
           ) : null}
 
           {showSketchCompare && activeSketchUrl ? (
-            <img className={styles.sketchPreview} src={activeSketchUrl} alt="Original sketch" />
+            <img
+              className={styles.sketchPreview}
+              src={activeSketchUrl}
+              alt={tryOn ? 'Garment artwork' : 'Original sketch'}
+            />
           ) : null}
 
           {phase === 'failed' ? (
             <div className={styles.statusBox}>
-              <strong>Magic did not finish</strong>
+              <strong>{tryOn ? 'Try On Person did not finish' : 'Magic did not finish'}</strong>
               <span>{error || 'Something went wrong.'}</span>
             </div>
           ) : null}
@@ -291,10 +337,10 @@ export function MagicLookPanel({
                 onClick={() => setCompareSketch((v) => !v)}
                 disabled={!sketchObjectUrl}
               >
-                {comparing ? 'Show look' : 'Compare sketch'}
+                {compareLabel}
               </button>
               <button type="button" className={styles.primary} onClick={onDownload}>
-                Download look
+                {tryOn ? 'Download preview' : 'Download look'}
               </button>
               {canViewInLooks ? (
                 <button type="button" onClick={onViewInMyLooks}>

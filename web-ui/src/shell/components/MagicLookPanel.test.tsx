@@ -49,6 +49,38 @@ describe('MagicLookPanel', () => {
     expect(screen.getByAltText('Original sketch')).toBeTruthy()
   })
 
+  it('labels Try On Person results without changing Fashion Magic copy', () => {
+    render(
+      <MagicLookPanel
+        open
+        phase="ready"
+        resultMode="try_on"
+        result={{
+          jobId: 'job-try',
+          status: 'completed',
+          summary: 'Try On Person preview ready',
+          bullets: ['Original photo preserved'],
+          hasImage: true,
+        }}
+        lookObjectUrl="blob:tryon"
+        sketchObjectUrl="blob:garment"
+        error={null}
+        canRecover={false}
+        onClose={() => undefined}
+        onCancel={() => undefined}
+        onDownload={() => undefined}
+        onRecover={() => undefined}
+        onBackToSketch={() => undefined}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'Try On Person' })).toBeTruthy()
+    expect(screen.getByAltText('Try On Person preview')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Compare garment' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Download preview' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Compare garment' }))
+    expect(screen.getByAltText('Garment artwork')).toBeTruthy()
+  })
+
   it('keeps dual Front/Back Magic look downloads', () => {
     const onDownloadSide = vi.fn()
     const onViewSide = vi.fn()

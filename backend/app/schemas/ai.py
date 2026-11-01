@@ -258,3 +258,30 @@ class MagicOperationJobsRead(BaseModel):
 
     magic_operation_id: uuid.UUID
     jobs: list[AIJobRead]
+
+
+class PersonalTryOnBody(BaseModel):
+    """POST /ai/personal-try-on — photorealistic try-on on original croquis photo."""
+
+    croquis_id: uuid.UUID
+    croquis_version: int = Field(ge=1)
+    garment_image_base64: str = Field(min_length=32)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    design_id: uuid.UUID | None = None
+    source_revision: int = Field(ge=1)
+    content_fingerprint: str = Field(min_length=1, max_length=128)
+    consent_acknowledged: bool = False
+    consent_version: str = Field(min_length=1, max_length=64)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PersonalTryOnPreflightRead(BaseModel):
+    enabled: bool
+    live_http: bool
+    consent_version: str
+    notice_text: str
+    notice_hash: str
+    prompt_version: str
+    estimate_cents: int
+    max_exposure_cents: int

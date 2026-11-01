@@ -735,6 +735,8 @@ _REDACTED_IMAGE_KEYS = (
     "imageBase64",
     "fabric_swatch_base64",
     "fabricSwatchBase64",
+    "garment_image_base64",
+    "garmentImageBase64",
 )
 
 

@@ -11,11 +11,14 @@ from app.schemas.ai import (
     AIJobCreate,
     AIJobRead,
     MagicOperationJobsRead,
+    PersonalTryOnBody,
+    PersonalTryOnPreflightRead,
     SketchPipelineBody,
     SketchPolishDualBody,
     SketchPolishDualRead,
 )
 from app.services import ai_service
+from app.services import personal_try_on as try_on_service
 
 router = APIRouter()
 
@@ -107,6 +110,45 @@ def style_suggest(
 ) -> AIJobRead:
     _ = request.url
     return _sketch_enqueue(db, user, "style_suggest", body)
+
+
+@router.get("/personal-try-on/preflight", response_model=PersonalTryOnPreflightRead)
+@limiter.limit("60/minute")
+def personal_try_on_preflight(request: Request, user: CurrentUser) -> PersonalTryOnPreflightRead:
+    """Consent notice + budget envelope for Try On Person (no billable work)."""
+    _ = request.url
+    _ = user
+    return PersonalTryOnPreflightRead(**try_on_service.try_on_preflight_public())
+
+
+@router.post(
+    "/personal-try-on",
+    response_model=AIJobRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("20/minute")
+def personal_try_on(
+    request: Request,
+    user: CurrentUser,
+    body: PersonalTryOnBody,
+    db: Session = Depends(get_db),
+) -> AIJobRead:
+    """Enqueue photorealistic Try On Person using the owner's original croquis photo."""
+    _ = request.url
+    job = try_on_service.enqueue_personal_try_on(
+        db,
+        user,
+        croquis_id=body.croquis_id,
+        croquis_version=body.croquis_version,
+        garment_image_base64=body.garment_image_base64,
+        idempotency_key=body.idempotency_key,
+        design_id=body.design_id,
+        source_revision=body.source_revision,
+        content_fingerprint=body.content_fingerprint,
+        consent_acknowledged=body.consent_acknowledged,
+        consent_version=body.consent_version,
+    )
+    return AIJobRead.from_job(job)
 
 
 @router.post("/jobs", response_model=AIJobRead, status_code=status.HTTP_201_CREATED)

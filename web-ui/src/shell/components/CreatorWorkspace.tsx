@@ -350,6 +350,43 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         <BetaNotice message={betaNotice.message} onDismiss={betaNotice.dismiss} />
       ) : null}
 
+      {editor.magicDestinationOpen ? (
+        <ConfirmDialog
+          title="Magic"
+          busy={editor.magicDestinationBusy}
+          onEscape={editor.cancelMagicDestination}
+          actions={[
+            {
+              label: 'Cancel',
+              onClick: editor.cancelMagicDestination,
+              variant: 'ghost',
+            },
+            {
+              label: 'Fashion Magic',
+              onClick: editor.chooseFashionMagic,
+              variant: 'ghost',
+            },
+            {
+              label: 'Try On Person',
+              onClick: editor.chooseTryOnPerson,
+              variant: 'primary',
+            },
+          ]}
+        >
+          <p>
+            Fashion Magic polishes this sketch into an illustration. Try On Person shows your design
+            on the original Create My Croquis photo — concept preview only, not a fit guarantee.
+          </p>
+          {editor.magicTryOnNotice ? <p>{editor.magicTryOnNotice}</p> : null}
+          {editor.magicTryOnEstimateCents != null ? (
+            <p>
+              Estimated provider cost about {editor.magicTryOnEstimateCents}¢ per Try On Person
+              (capped by your daily Create My Croquis budget).
+            </p>
+          ) : null}
+        </ConfirmDialog>
+      ) : null}
+
       <MagicLookPanel
         open={editor.magicOpen}
         phase={editor.magicPhase}
@@ -358,6 +395,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         sketchObjectUrl={editor.magicSketchUrl}
         error={editor.magicError}
         canRecover={editor.magicCanRecover}
+        resultMode={editor.magicResultMode}
         dual={
           editor.magicDualActive && editor.magicOperationId
             ? {
