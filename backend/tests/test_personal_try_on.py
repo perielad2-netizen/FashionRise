@@ -29,7 +29,9 @@ from app.services.personal_try_on_provider import (
     TRY_ON_JOB_TYPE,
     TRY_ON_PROMPT_V1,
     TRY_ON_PROMPT_V2,
+    TRY_ON_PROMPT_V3,
     TRY_ON_PROMPT_VERSION,
+    TRY_ON_USER_MODERATION_MESSAGE,
     OpenAITryOnImagesEditAdapter,
     build_try_on_prompt,
     set_try_on_provider_override,
@@ -170,16 +172,25 @@ def test_try_on_prompt_is_not_sketch_polish():
     assert "flat sketch" not in TRY_ON_PROMPT_V1.lower()
 
 
-def test_try_on_prompt_v2_fidelity_rules():
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2"
-    assert "checkerboard" in TRY_ON_PROMPT_V2.lower()
-    assert "hats/caps" in TRY_ON_PROMPT_V2.lower() or "hat/cap" in TRY_ON_PROMPT_V2.lower()
-    assert "fashion illustration" not in TRY_ON_PROMPT_V2.lower()
+def test_try_on_prompt_v3_swimwear_and_fidelity_rules():
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-v3"
+    # V2 historical contradiction must not remain in the live prompt.
+    assert "beyond what image 1 already shows" not in TRY_ON_PROMPT_V3.lower()
+    assert "do not undress the person or expose body beyond" not in TRY_ON_PROMPT_V3.lower()
+    # Legitimate opaque swimwear / fashion coverage is allowed.
+    assert "swimwear" in TRY_ON_PROMPT_V3.lower()
+    assert "opaque" in TRY_ON_PROMPT_V3.lower()
+    assert "nudity" in TRY_ON_PROMPT_V3.lower()
+    # V2 fidelity rules retained.
+    assert "checkerboard" in TRY_ON_PROMPT_V3.lower()
+    assert "hats/caps" in TRY_ON_PROMPT_V3.lower() or "hat/cap" in TRY_ON_PROMPT_V3.lower()
+    assert "fashion illustration" not in TRY_ON_PROMPT_V3.lower()
+    # Historical V2 kept for archive comparison only.
+    assert "beyond what image 1 already shows" in TRY_ON_PROMPT_V2.lower()
     with_hints = build_try_on_prompt(["pink checkerboard print", "upper-plane ink present"])
-    assert with_hints.startswith(TRY_ON_PROMPT_V2)
+    assert with_hints.startswith(TRY_ON_PROMPT_V3)
     assert "pink checkerboard print" in with_hints
     assert "upper-plane ink present" in with_hints
-    # Bound + sanitize
     long = "x" * 200
     clipped = build_try_on_prompt([long, "", "  keep  me  ", long])
     assert long not in clipped
@@ -199,7 +210,9 @@ def test_try_on_edit_kwargs_photo_then_garment(monkeypatch):
         garment_png=garment,
         design_hints=["exact designer colors: #FF69B4", "preserve print topology"],
     )
-    assert kwargs["prompt"].startswith(TRY_ON_PROMPT_V2)
+    assert kwargs["prompt"].startswith(TRY_ON_PROMPT_V3)
+    assert "beyond what image 1 already shows" not in kwargs["prompt"].lower()
+    assert "swimwear" in kwargs["prompt"].lower()
     assert "exact designer colors: #FF69B4" in kwargs["prompt"]
     assert "preserve print topology" in kwargs["prompt"]
     assert isinstance(kwargs["image"], list) and len(kwargs["image"]) == 2
@@ -428,7 +441,22 @@ def test_provider_refusal_releases_reservation(client, monkeypatch, db_session):
         == 200
     )
     key = f"try_on:refuse-{uuid.uuid4()}"
-    mock = MockTryOnProvider(fail=ProviderNotAvailableError("safety refusal"))
+    raw = (
+        "images.edit rejected by provider: BadRequestError status=400 "
+        "code=moderation_blocked request_id=req_test moderation_stage=input "
+        "categories=sexual Error code: 400 - {'error': {'message': 'Your request was rejected'}}"
+    )
+    exc = ProviderNotAvailableError(raw)
+    exc.safe_meta = {
+        "error_code": "PROVIDER_MODERATION_BLOCKED",
+        "provider_code": "moderation_blocked",
+        "http_status": 400,
+        "moderation_stage": "input",
+        "categories": ["sexual"],
+        "request_id": "req_test",
+        "operator_summary": raw[:400],
+    }
+    mock = MockTryOnProvider(fail=exc)
     set_try_on_provider_override(mock)
     r = client.post(
         TRY_ON,
@@ -438,14 +466,29 @@ def test_provider_refusal_releases_reservation(client, monkeypatch, db_session):
     assert r.status_code == 201
     run_magic_worker_tick(db_session, limit=2)
     assert mock.calls == 1
+    # Definite refusal must never auto-retry.
+    run_magic_worker_tick(db_session, limit=2)
+    assert mock.calls == 1
     job = client.get(f"/api/v1/ai/jobs/{r.json()['id']}", headers=_auth(tokens)).json()
     assert job["status"] == "failed"
+    assert job["error_message"] == TRY_ON_USER_MODERATION_MESSAGE
+    assert "BadRequestError" not in (job["error_message"] or "")
+    assert "moderation_blocked" not in (job["error_message"] or "")
+    assert "categories=sexual" not in (job["error_message"] or "")
+    rd = job.get("result_data") or {}
+    assert rd.get("summary") == TRY_ON_USER_MODERATION_MESSAGE
+    assert rd.get("error_code") == "PROVIDER_MODERATION_BLOCKED"
+    assert (rd.get("provider_rejection") or {}).get("request_id") == "req_test"
+    assert (rd.get("provider_rejection") or {}).get("moderation_stage") == "input"
+    # Support diagnostics stay out of the owner-facing error_message.
+    assert "req_test" not in (job["error_message"] or "")
     res = (
         db_session.query(PersonalCroquisSpendReservation)
         .filter(PersonalCroquisSpendReservation.idempotency_key == key)
         .one()
     )
     assert res.status == RESERVATION_RELEASED
+    assert res.actual_cost_cents is None
 
 
 def test_looks_list_includes_try_on_and_delete(client, monkeypatch, db_session):

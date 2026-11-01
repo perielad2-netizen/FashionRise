@@ -3,7 +3,9 @@ import {
   captureGarmentArtworkForTryOn,
   captureSketchForMagic,
   MAGIC_MAX_SKETCH_BYTES,
+  TRY_ON_GARMENT_CAPTURE_SCALE,
 } from '@/lib/sketchCapture'
+import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
 import { exportSketchPng } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 
@@ -187,6 +189,8 @@ describe('captureGarmentArtworkForTryOn', () => {
       expect.objectContaining({
         referenceUrl: null,
         garmentOnly: true,
+        width: DESIGN_WIDTH * TRY_ON_GARMENT_CAPTURE_SCALE,
+        height: DESIGN_HEIGHT * TRY_ON_GARMENT_CAPTURE_SCALE,
         onReferenceError: 'skip',
         onFabricError: 'throw',
       }),

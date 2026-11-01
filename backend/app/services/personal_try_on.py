@@ -51,6 +51,8 @@ from app.services.personal_try_on_provider import (
     TRY_ON_JOB_TYPE,
     TRY_ON_NOTICE_TEXT,
     TRY_ON_PROMPT_VERSION,
+    TRY_ON_USER_MODERATION_MESSAGE,
+    TRY_ON_USER_PROVIDER_REJECT_MESSAGE,
     estimate_try_on_cost_cents,
     get_try_on_provider,
     try_on_notice_text_hash,
@@ -363,6 +365,48 @@ def enqueue_personal_try_on(
     return job
 
 
+def _try_on_user_failure_payload(exc: BaseException) -> tuple[str, dict[str, Any]]:
+    """Build owner-safe UI copy + private support diagnostics for a definite refusal."""
+    safe_meta = getattr(exc, "safe_meta", None)
+    meta = safe_meta if isinstance(safe_meta, dict) else {}
+    detail = str(exc)
+    error_code = str(meta.get("error_code") or "")
+    if not error_code:
+        from app.services.personal_croquis_provider import provider_rejection_code_from_text
+
+        code = provider_rejection_code_from_text(detail)
+        error_code = (
+            "PROVIDER_MODERATION_BLOCKED"
+            if code == "moderation_blocked"
+            else "PROVIDER_REJECTED"
+        )
+    user_msg = (
+        TRY_ON_USER_MODERATION_MESSAGE
+        if error_code == "PROVIDER_MODERATION_BLOCKED"
+        else TRY_ON_USER_PROVIDER_REJECT_MESSAGE
+    )
+    provider_rejection = {
+        "code": meta.get("provider_code") or ("moderation_blocked" if error_code == "PROVIDER_MODERATION_BLOCKED" else None),
+        "http_status": meta.get("http_status"),
+        "moderation_stage": meta.get("moderation_stage"),
+        "categories": meta.get("categories"),
+        "request_id": meta.get("request_id"),
+    }
+    # Drop empty diagnostic keys; keep only support-useful fields.
+    provider_rejection = {k: v for k, v in provider_rejection.items() if v not in (None, "", [])}
+    result = {
+        "status": "failed",
+        "summary": user_msg,
+        "error_code": error_code,
+        "mode": "try_on_person",
+        "prompt_version": TRY_ON_PROMPT_VERSION,
+        "provider_rejection": provider_rejection or None,
+        # Operator-only hint in result_data (not shown by FE extractMagicSummary).
+        "operator_summary": (meta.get("operator_summary") or detail)[:400],
+    }
+    return user_msg, result
+
+
 def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
     """Worker entry: call provider once, store private look image, settle spend."""
     if job.job_type != TRY_ON_JOB_TYPE:
@@ -376,14 +420,32 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             reservation = None
 
-    def _fail(msg: str, *, settle_release: bool = True) -> dict[str, Any]:
+    def _fail(
+        msg: str,
+        *,
+        settle_release: bool = True,
+        error_code: str | None = None,
+        result_extra: dict[str, Any] | None = None,
+        operator_detail: str | None = None,
+    ) -> dict[str, Any]:
         job.status = "failed"
         job.error_message = msg[:240]
+        result: dict[str, Any] = {
+            "status": "failed",
+            "summary": msg,
+            "mode": "try_on_person",
+            "prompt_version": TRY_ON_PROMPT_VERSION,
+        }
+        if error_code:
+            result["error_code"] = error_code
+        if result_extra:
+            result.update(result_extra)
+        job.result_data = result
         if reservation is not None and reservation.status == RESERVATION_OPEN:
             if settle_release:
                 reservation.status = RESERVATION_RELEASED
-                reservation.error_detail = msg[:500]
-        return {"status": "failed", "summary": msg, "mode": "try_on_person"}
+                reservation.error_detail = (operator_detail or msg)[:500]
+        return result
 
     try:
         user = db.get(User, job.user_id)
@@ -421,7 +483,19 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         )
     except ProviderNotAvailableError as exc:
         # Definitive pre-submit or HTTP 4xx refusal — release reservation at $0.
-        return _fail(str(exc)[:240], settle_release=True)
+        # Never auto-retry. Do not leak raw provider JSON into owner UI.
+        user_msg, result = _try_on_user_failure_payload(exc)
+        return _fail(
+            user_msg,
+            settle_release=True,
+            error_code=str(result.get("error_code") or "PROVIDER_REJECTED"),
+            result_extra={
+                k: v
+                for k, v in result.items()
+                if k not in {"status", "summary", "mode", "prompt_version"}
+            },
+            operator_detail=str(exc)[:500],
+        )
     except ProviderOutcomeUnknownError as exc:
         # Ambiguous post-dispatch — hold reservation in reconciliation, no auto-retry.
         if reservation is not None and reservation.status == RESERVATION_OPEN:
@@ -432,12 +506,16 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
             "Try On Person outcome is unknown after the provider call. "
             "No automatic retry — contact support if you were charged."
         )[:240]
-        return {
+        result = {
             "status": "failed",
             "summary": job.error_message,
             "mode": "try_on_person",
+            "error_code": "PROVIDER_OUTCOME_UNKNOWN",
             "reconciliation_required": True,
+            "prompt_version": TRY_ON_PROMPT_VERSION,
         }
+        job.result_data = result
+        return result
 
     key = f"ai/{job.id.hex}_tryon_{uuid.uuid4().hex[:10]}.png"
     storage = LocalStorageBackend()
