@@ -29,7 +29,8 @@ from app.services.personal_croquis_provider import (
 logger = logging.getLogger(__name__)
 
 TRY_ON_JOB_TYPE = "personal_try_on"
-TRY_ON_PROMPT_VERSION = "try-on-person-v1"
+# V1 kept for historical jobs; live enqueue uses V2.
+TRY_ON_PROMPT_VERSION = "try-on-person-v2"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.
@@ -56,6 +57,49 @@ TRY_ON_PROMPT_V1 = (
     "beyond what image 1 already shows. Do not copy mannequin outlines into the photo. "
     "Output a single realistic photograph."
 )
+
+# V2 — garment print/accessory fidelity (#154). Photo identity rules unchanged from V1.
+TRY_ON_PROMPT_V2 = (
+    "Create a photorealistic photograph of the person from image 1 wearing the garment "
+    "design shown in image 2. "
+    "Image 1 is the authoritative full-body photograph — preserve the person's exact face, "
+    "hairstyle, skin tone, body proportions, pose, stance, visible skin, non-design "
+    "accessories already on the person, and the original background/scene. Do not slim, "
+    "elongate, beautify, or reshape the person. Do not alter the environment. "
+    "Image 2 is an isolated transparent fashion-design artwork (no mannequin, no paper). "
+    "It is authoritative for garment type, cut, placement, neckline, sleeves, hemline, "
+    "coverage, exact chosen colors, and print geometry. Read print topology from image 2 "
+    "pixels literally: a checkerboard must stay a checkerboard (not stripes); plaids, dots, "
+    "and freehand motifs must keep their structure; do not invent a different graphic. "
+    "Include every deliberately drawn garment piece and design accessory in image 2 — "
+    "tops, bottoms, dresses, hats/caps, belts, scarves — placed on the corresponding body "
+    "region. Hats/caps may cover hair while keeping identity recognizable. "
+    "Adapt garments naturally to pose and folds as an approximate drape only. "
+    "Do not invent extra garments, logos, text, or accessories absent from image 2. "
+    "Do not undress the person or expose body beyond what image 1 already shows. "
+    "Do not copy mannequin outlines into the photo. "
+    "Output a single realistic photograph."
+)
+
+
+def build_try_on_prompt(design_hints: list[str] | None = None) -> str:
+    """Active try-on prompt (V2) plus optional Studio-derived design hints."""
+    prompt = TRY_ON_PROMPT_V2
+    cleaned: list[str] = []
+    for raw in design_hints or []:
+        if not isinstance(raw, str):
+            continue
+        text = " ".join(raw.split())
+        if not text:
+            continue
+        cleaned.append(text[:120])
+        if len(cleaned) >= 8:
+            break
+    if cleaned:
+        prompt += " Studio design evidence (do not invent beyond this or image 2): " + "; ".join(
+            cleaned
+        ) + "."
+    return prompt
 
 
 def try_on_notice_text_hash() -> str:
@@ -84,7 +128,13 @@ class OpenAITryOnImagesEditAdapter:
         if float(settings.my_croquis_ai_spend_ceiling_usd or 0) <= 0:
             raise ProviderNotAvailableError("MY_CROQUIS_AI_SPEND_CEILING_USD is 0 (fail closed)")
 
-    def build_edit_kwargs(self, *, photo_png: bytes, garment_png: bytes) -> dict[str, Any]:
+    def build_edit_kwargs(
+        self,
+        *,
+        photo_png: bytes,
+        garment_png: bytes,
+        design_hints: list[str] | None = None,
+    ) -> dict[str, Any]:
         from app.services.sketch_openai import (
             SketchCompletionError,
             assert_image_model_editable,
@@ -106,7 +156,7 @@ class OpenAITryOnImagesEditAdapter:
             # Reuse shared builder: image[0]=photo, image[1]=garment (via fabric_swatch slot).
             kwargs = build_image_edit_kwargs(
                 model=model,
-                prompt=TRY_ON_PROMPT_V1,
+                prompt=build_try_on_prompt(design_hints),
                 sketch=(photo_png, "image/png"),
                 size=size,
                 quality=quality,
@@ -131,9 +181,17 @@ class OpenAITryOnImagesEditAdapter:
             raise ProviderNotAvailableError("Try-on edit requires exactly photo + garment inputs")
         return kwargs
 
-    def preflight_report(self, *, photo_png: bytes, garment_png: bytes) -> dict[str, Any]:
+    def preflight_report(
+        self,
+        *,
+        photo_png: bytes,
+        garment_png: bytes,
+        design_hints: list[str] | None = None,
+    ) -> dict[str, Any]:
         settings = get_settings()
-        kwargs = self.build_edit_kwargs(photo_png=photo_png, garment_png=garment_png)
+        kwargs = self.build_edit_kwargs(
+            photo_png=photo_png, garment_png=garment_png, design_hints=design_hints
+        )
         return {
             "prompt_version": TRY_ON_PROMPT_VERSION,
             "consent_version": TRY_ON_CONSENT_VERSION,
@@ -146,7 +204,13 @@ class OpenAITryOnImagesEditAdapter:
             "live_http": bool(settings.my_croquis_ai_live_http),
         }
 
-    def generate(self, *, photo_png: bytes, garment_png: bytes) -> tuple[bytes, dict[str, Any]]:
+    def generate(
+        self,
+        *,
+        photo_png: bytes,
+        garment_png: bytes,
+        design_hints: list[str] | None = None,
+    ) -> tuple[bytes, dict[str, Any]]:
         """Run one images.edit. Returns (png_bytes, usage_meta)."""
         settings = get_settings()
         if not settings.my_croquis_ai_live_http:
@@ -156,7 +220,9 @@ class OpenAITryOnImagesEditAdapter:
         if not (settings.openai_api_key or "").strip():
             raise ProviderNotAvailableError("OPENAI_API_KEY missing")
 
-        kwargs = self.build_edit_kwargs(photo_png=photo_png, garment_png=garment_png)
+        kwargs = self.build_edit_kwargs(
+            photo_png=photo_png, garment_png=garment_png, design_hints=design_hints
+        )
         from openai import OpenAI
 
         client = OpenAI(

@@ -34,6 +34,8 @@ type Props = {
   result: MagicLookResult | null
   lookObjectUrl: string | null
   sketchObjectUrl: string | null
+  /** Original croquis photo for Try On Person before/after compare. */
+  originalPhotoUrl?: string | null
   error: string | null
   canRecover: boolean
   /** Fashion Magic (illustration) vs Try On Person (photorealistic). */
@@ -54,12 +56,15 @@ function sideStatusLabel(side: MagicSidePanelState): string {
   return 'Pending'
 }
 
+export type TryOnCompareMode = 'result' | 'original' | 'garment' | 'side_by_side'
+
 export function MagicLookPanel({
   open,
   phase,
   result,
   lookObjectUrl,
   sketchObjectUrl,
+  originalPhotoUrl = null,
   error,
   canRecover,
   resultMode = 'fashion',
@@ -72,6 +77,7 @@ export function MagicLookPanel({
   onViewInMyLooks,
 }: Props) {
   const [compareSketch, setCompareSketch] = useState(false)
+  const [tryOnCompare, setTryOnCompare] = useState<TryOnCompareMode>('result')
   const [detailsOpen, setDetailsOpen] = useState(false)
 
   if (!open) return null
@@ -85,9 +91,19 @@ export function MagicLookPanel({
   const activeResult = dualActive ? activeSideState?.result : result
 
   const busy = phase === 'capturing' || phase === 'submitting' || phase === 'polling'
-  const comparing = phase === 'ready' && compareSketch
-  const showLook = phase === 'ready' && activeLookUrl && !comparing
+  const comparing = !tryOn && phase === 'ready' && compareSketch
+  const showLook =
+    phase === 'ready' &&
+    activeLookUrl &&
+    (tryOn ? tryOnCompare === 'result' : !comparing)
   const showSketchCompare = comparing && Boolean(activeSketchUrl)
+  const showTryOnOriginal = tryOn && tryOnCompare === 'original' && Boolean(originalPhotoUrl)
+  const showTryOnGarment = tryOn && tryOnCompare === 'garment' && Boolean(activeSketchUrl)
+  const showTryOnSideBySide =
+    tryOn &&
+    tryOnCompare === 'side_by_side' &&
+    Boolean(activeLookUrl) &&
+    Boolean(originalPhotoUrl)
   const hasDetails = Boolean(activeResult?.summary || activeResult?.bullets?.length)
   const canViewInLooks =
     phase === 'ready' &&
@@ -95,13 +111,32 @@ export function MagicLookPanel({
     (dualActive
       ? Boolean(dual?.front.lookObjectUrl || dual?.back.lookObjectUrl)
       : Boolean(lookObjectUrl))
-  const compareLabel = tryOn
-    ? comparing
-      ? 'Show try-on'
-      : 'Compare garment'
-    : comparing
-      ? 'Show look'
-      : 'Compare sketch'
+  const compareLabel = comparing ? 'Show look' : 'Compare sketch'
+  const cycleTryOnCompare = () => {
+    const order: TryOnCompareMode[] = originalPhotoUrl
+      ? ['result', 'side_by_side', 'original', 'garment']
+      : ['result', 'garment']
+    const available = order.filter((mode) => {
+      if (mode === 'garment') return Boolean(activeSketchUrl)
+      if (mode === 'original' || mode === 'side_by_side') return Boolean(originalPhotoUrl)
+      return true
+    })
+    const idx = available.indexOf(tryOnCompare)
+    const next = available[(idx + 1) % available.length] ?? 'result'
+    setTryOnCompare(next)
+  }
+  const tryOnCompareLabel =
+    tryOnCompare === 'result'
+      ? originalPhotoUrl
+        ? 'Compare original'
+        : 'Compare garment'
+      : tryOnCompare === 'side_by_side'
+        ? 'Show original only'
+        : tryOnCompare === 'original'
+          ? activeSketchUrl
+            ? 'Compare garment'
+            : 'Show try-on'
+          : 'Show try-on'
 
   return (
     <div
@@ -240,11 +275,40 @@ export function MagicLookPanel({
             />
           ) : null}
 
+          {showTryOnSideBySide && activeLookUrl && originalPhotoUrl ? (
+            <div className={styles.compareGrid} aria-label="Original versus try-on">
+              <figure className={styles.comparePane}>
+                <figcaption>Original photo</figcaption>
+                <img src={originalPhotoUrl} alt="Original croquis photo" />
+              </figure>
+              <figure className={styles.comparePane}>
+                <figcaption>Try-on preview</figcaption>
+                <img src={activeLookUrl} alt="Try On Person preview" />
+              </figure>
+            </div>
+          ) : null}
+
+          {showTryOnOriginal && originalPhotoUrl ? (
+            <img
+              className={styles.image}
+              src={originalPhotoUrl}
+              alt="Original croquis photo"
+            />
+          ) : null}
+
+          {showTryOnGarment && activeSketchUrl ? (
+            <img
+              className={styles.sketchPreview}
+              src={activeSketchUrl}
+              alt="Garment artwork"
+            />
+          ) : null}
+
           {showSketchCompare && activeSketchUrl ? (
             <img
               className={styles.sketchPreview}
               src={activeSketchUrl}
-              alt={tryOn ? 'Garment artwork' : 'Original sketch'}
+              alt="Original sketch"
             />
           ) : null}
 
@@ -332,19 +396,29 @@ export function MagicLookPanel({
           ) : null}
           {phase === 'ready' && !dualActive && lookObjectUrl ? (
             <>
-              <button
-                type="button"
-                onClick={() => setCompareSketch((v) => !v)}
-                disabled={!sketchObjectUrl}
-              >
-                {compareLabel}
-              </button>
+              {tryOn ? (
+                <button
+                  type="button"
+                  onClick={cycleTryOnCompare}
+                  disabled={!originalPhotoUrl && !sketchObjectUrl}
+                >
+                  {tryOnCompareLabel}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCompareSketch((v) => !v)}
+                  disabled={!sketchObjectUrl}
+                >
+                  {compareLabel}
+                </button>
+              )}
               <button type="button" className={styles.primary} onClick={onDownload}>
                 {tryOn ? 'Download preview' : 'Download look'}
               </button>
               {canViewInLooks ? (
                 <button type="button" onClick={onViewInMyLooks}>
-                  View in My Looks
+                  {tryOn ? 'Save in My Looks' : 'View in My Looks'}
                 </button>
               ) : null}
             </>

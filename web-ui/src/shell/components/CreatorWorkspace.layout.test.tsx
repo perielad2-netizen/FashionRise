@@ -86,6 +86,7 @@ function mockEditor(overrides: Partial<StudioEditor> = {}): StudioEditor {
     magicError: null,
     magicLookUrl: null,
     magicSketchUrl: null,
+    magicOriginalPhotoUrl: null,
     magicResultMode: 'fashion' as const,
     magicDestinationOpen: false,
     magicDestinationBusy: false,

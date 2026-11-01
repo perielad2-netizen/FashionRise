@@ -2,10 +2,13 @@ import { exportSketchPng, type ExportOptions } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
 import { artworkExceedsLegacyBounds } from '@/lib/paperBounds'
 import type { FillOp } from '@/lib/fills'
-import type { Stroke } from '@/lib/strokes'
+import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 
 /** Soft client bound; backend also enforces max_upload_size_mb. */
 export const MAGIC_MAX_SKETCH_BYTES = 8 * 1024 * 1024
+
+/** Try On garment capture at 2× design plane so fine prints survive provider resize. */
+export const TRY_ON_GARMENT_CAPTURE_SCALE = 2
 
 export type CapturedSketch = {
   blob: Blob
@@ -106,11 +109,15 @@ export async function captureGarmentArtworkForTryOn(options: {
     )
   }
   try {
+    const width = DESIGN_WIDTH * TRY_ON_GARMENT_CAPTURE_SCALE
+    const height = DESIGN_HEIGHT * TRY_ON_GARMENT_CAPTURE_SCALE
     const { blob, referenceIncluded } = await exportSketchPng({
       strokes: options.strokes,
       fills,
       referenceUrl: null,
       garmentOnly: true,
+      width,
+      height,
       onReferenceError: 'skip',
       onFabricError: 'throw',
     })

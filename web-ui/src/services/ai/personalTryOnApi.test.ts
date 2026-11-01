@@ -60,6 +60,7 @@ describe('personal try-on API client', () => {
       contentFingerprint: 'fp-1',
       consentAcknowledged: true,
       consentVersion: 'try-on-person-preview-v1',
+      designHints: ['pink checkerboard print', 'upper-plane ink present'],
     })
     expect(apiMock).toHaveBeenCalledWith(
       '/ai/personal-try-on',
@@ -73,6 +74,7 @@ describe('personal try-on API client', () => {
           garment_image_base64: 'data:image/png;base64,AAAA',
           source_revision: 7,
           content_fingerprint: 'fp-1',
+          design_hints: ['pink checkerboard print', 'upper-plane ink present'],
         }),
       }),
     )

@@ -171,7 +171,9 @@ export function MyCroquisScreen({
   )
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteDialog || deleteDialog.phase === 'error') return
+    // Allow Retry delete after an API error (phase === 'error' with canRetry).
+    if (!deleteDialog) return
+    if (deleteDialog.phase === 'error' && !deleteDialog.canRetry) return
     if (deleteInFlightRef.current) return
     const { row, version, referencedInStudio } = deleteDialog
     deleteInFlightRef.current = true
@@ -206,11 +208,14 @@ export function MyCroquisScreen({
   }, [deleteDialog, reload])
 
   const onPinAccepted = useCallback(
-    (croquisId: string, version: number) => {
+    (_croquisId: string, _version: number) => {
+      // Stay on My Croquis gallery after Create New so the owner can preview
+      // and choose Use in Studio explicitly (#154). Do not auto-navigate away.
       setWizardOpen(false)
-      onUseInStudio(croquisId, version)
+      setNotice('New croquis ready — preview it here, then Use in Studio when you want.')
+      reload()
     },
-    [onUseInStudio],
+    [reload],
   )
 
   if (!isMyCroquisUiEnabled()) {

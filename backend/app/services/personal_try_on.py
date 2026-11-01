@@ -151,6 +151,21 @@ def _find_try_on_by_idempotency(db: Session, user_id: uuid.UUID, key: str) -> AI
     )
 
 
+def _normalize_design_hints(raw: list[str] | None) -> list[str]:
+    """Bound Studio-derived hints for prompt appendix (never invent details)."""
+    out: list[str] = []
+    for item in raw or []:
+        if not isinstance(item, str):
+            continue
+        text = " ".join(item.split())
+        if not text:
+            continue
+        out.append(text[:120])
+        if len(out) >= 8:
+            break
+    return out
+
+
 def enqueue_personal_try_on(
     db: Session,
     user: User,
@@ -164,10 +179,12 @@ def enqueue_personal_try_on(
     content_fingerprint: str,
     consent_acknowledged: bool,
     consent_version: str,
+    design_hints: list[str] | None = None,
 ) -> AIJob:
     """Validate, reserve spend, freeze garment, enqueue ``personal_try_on`` job."""
     _require_ai_gate()
     settings = get_settings()
+    hints = _normalize_design_hints(design_hints)
 
     key = (idempotency_key or "").strip()
     if not key or len(key) > 128:
@@ -318,6 +335,7 @@ def enqueue_personal_try_on(
         "prompt_version": TRY_ON_PROMPT_VERSION,
         "reservation_id": str(reservation.id),
         "mode": "try_on_person",
+        "design_hints": hints,
     }
 
     job = AIJob(
@@ -395,7 +413,12 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         if reservation is not None:
             reservation.provider_called = True
             db.flush()
-        png, meta = provider.generate(photo_png=photo_png, garment_png=garment_png)
+        hints = _normalize_design_hints(
+            data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
+        )
+        png, meta = provider.generate(
+            photo_png=photo_png, garment_png=garment_png, design_hints=hints
+        )
     except ProviderNotAvailableError as exc:
         # Definitive pre-submit or HTTP 4xx refusal — release reservation at $0.
         return _fail(str(exc)[:240], settle_release=True)

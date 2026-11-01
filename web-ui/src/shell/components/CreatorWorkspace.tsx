@@ -393,6 +393,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         result={editor.magicResult}
         lookObjectUrl={editor.magicLookUrl}
         sketchObjectUrl={editor.magicSketchUrl}
+        originalPhotoUrl={editor.magicOriginalPhotoUrl}
         error={editor.magicError}
         canRecover={editor.magicCanRecover}
         resultMode={editor.magicResultMode}

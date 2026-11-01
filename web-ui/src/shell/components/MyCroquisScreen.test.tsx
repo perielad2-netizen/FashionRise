@@ -133,14 +133,64 @@ describe('MyCroquisScreen', () => {
     expect(onUse).toHaveBeenCalledWith('croquis-b', 2)
   })
 
-  it('opens create wizard and pins accepted croquis into Studio', async () => {
+  it('opens create wizard and returns to gallery after accept (no auto Studio pin)', async () => {
     const onUse = vi.fn()
+    mocks.listPersonalCroquis
+      .mockResolvedValueOnce(sampleRows)
+      .mockResolvedValueOnce([
+        ...sampleRows,
+        {
+          id: 'new-croquis',
+          display_name: 'New croquis',
+          status: 'ready',
+          source_asset_id: 'src-n',
+          storage_consent_id: 'consent-n',
+          adults_attestation_at: '2026-11-02T00:00:00Z',
+          archived: false,
+          erased: false,
+          created_at: '2026-11-02T00:00:00Z',
+          updated_at: '2026-11-02T00:00:00Z',
+          latest_accepted_version: {
+            version: 1,
+            status: 'accepted',
+            generated_asset_id: 'asset-n',
+            geometry_profile: null,
+            accepted_at: '2026-11-02T00:00:00Z',
+          },
+        },
+      ])
     render(<MyCroquisScreen onBackToStudio={() => undefined} onUseInStudio={onUse} />)
     await screen.findByText('Croquis A')
     fireEvent.click(screen.getByRole('button', { name: 'Create New Croquis' }))
     expect(screen.getByRole('dialog', { name: 'Create My Croquis wizard' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Accept new' }))
-    expect(onUse).toHaveBeenCalledWith('new-croquis', 1)
+    expect(onUse).not.toHaveBeenCalled()
+    expect(await screen.findByText(/New croquis ready/i)).toBeInTheDocument()
+    expect(await screen.findByText('New croquis')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My Croquis' })).toBeInTheDocument()
+  })
+
+  it('retries delete after an API error', async () => {
+    const { ApiError } = await import('@/services/api/client')
+    mocks.erasePersonalCroquis
+      .mockRejectedValueOnce(new ApiError('temporary failure', 500, null))
+      .mockResolvedValueOnce({ ...sampleRows[0], erased: true })
+    render(
+      <MyCroquisScreen
+        onBackToStudio={() => undefined}
+        onUseInStudio={() => undefined}
+        activeStudioPinId={null}
+      />,
+    )
+    await screen.findByText('Croquis A')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Croquis A' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    expect(await screen.findByRole('heading', { name: 'Could not delete croquis' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry delete' }))
+    await waitFor(() => expect(mocks.erasePersonalCroquis).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Could not delete croquis' })).not.toBeInTheDocument(),
+    )
   })
 
   it('confirms delete and warns when croquis is pinned in Studio', async () => {

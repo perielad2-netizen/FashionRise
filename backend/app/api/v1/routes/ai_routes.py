@@ -147,6 +147,7 @@ def personal_try_on(
         content_fingerprint=body.content_fingerprint,
         consent_acknowledged=body.consent_acknowledged,
         consent_version=body.consent_version,
+        design_hints=body.design_hints,
     )
     return AIJobRead.from_job(job)
 

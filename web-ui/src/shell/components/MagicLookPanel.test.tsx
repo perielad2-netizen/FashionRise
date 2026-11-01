@@ -64,6 +64,7 @@ describe('MagicLookPanel', () => {
         }}
         lookObjectUrl="blob:tryon"
         sketchObjectUrl="blob:garment"
+        originalPhotoUrl="blob:photo"
         error={null}
         canRecover={false}
         onClose={() => undefined}
@@ -71,12 +72,19 @@ describe('MagicLookPanel', () => {
         onDownload={() => undefined}
         onRecover={() => undefined}
         onBackToSketch={() => undefined}
+        onViewInMyLooks={() => undefined}
       />,
     )
     expect(screen.getByRole('heading', { name: 'Try On Person' })).toBeTruthy()
     expect(screen.getByAltText('Try On Person preview')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Compare garment' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Compare original' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Download preview' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save in My Looks' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Compare original' }))
+    expect(screen.getByAltText('Original croquis photo')).toBeTruthy()
+    expect(screen.getByLabelText('Original versus try-on')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show original only' }))
+    expect(screen.getByAltText('Original croquis photo')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Compare garment' }))
     expect(screen.getByAltText('Garment artwork')).toBeTruthy()
   })

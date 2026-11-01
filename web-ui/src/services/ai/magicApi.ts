@@ -169,6 +169,8 @@ export type PersonalTryOnInput = {
   contentFingerprint: string
   consentAcknowledged: boolean
   consentVersion: string
+  /** Optional Studio-derived color/material/accessory hints (V2). */
+  designHints?: string[] | null
   signal?: AbortSignal
 }
 
@@ -178,6 +180,10 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
   if (!contentFingerprint) {
     throw new ApiError('content_fingerprint is required for Try On Person', 400, null)
   }
+  const designHints = (input.designHints ?? [])
+    .filter((h): h is string => typeof h === 'string' && h.trim().length > 0)
+    .map((h) => h.trim().slice(0, 120))
+    .slice(0, 8)
   return apiRequest<AiJobRead>('/ai/personal-try-on', {
     method: 'POST',
     body: {
@@ -190,6 +196,7 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
       content_fingerprint: contentFingerprint,
       consent_acknowledged: input.consentAcknowledged,
       consent_version: input.consentVersion,
+      ...(designHints.length ? { design_hints: designHints } : {}),
     },
     signal: input.signal,
   })
