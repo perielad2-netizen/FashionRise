@@ -331,8 +331,14 @@ class OpenAICroquisImagesEditAdapter:
             raise ProviderNotAvailableError("MY_CROQUIS_AI_SPEND_CEILING_USD is 0 (fail closed)")
 
     def build_edit_kwargs(self, source_png: bytes) -> dict[str, Any]:
-        """Assemble images.edit kwargs without performing HTTP."""
+        """Assemble images.edit kwargs without performing HTTP.
+
+        Croquis path refuses silent size/quality substitution: configured size and
+        quality must be allowlisted and must survive ``build_image_edit_kwargs``
+        unchanged.
+        """
         from app.services.sketch_openai import (
+            SketchCompletionError,
             assert_image_model_editable,
             build_image_edit_kwargs,
         )
@@ -343,18 +349,27 @@ class OpenAICroquisImagesEditAdapter:
         settings = get_settings()
         model = _croquis_image_model(settings)
         # Fail closed on retired/unknown before any paid HTTP.
-        assert_image_model_editable(model)
+        caps = assert_image_model_editable(model)
         size = _croquis_image_size(settings)
         quality = _croquis_image_quality(settings)
+        if size not in caps.sizes:
+            raise ProviderNotAvailableError(
+                f"Croquis image size {size!r} not allowlisted for {model} "
+                "(no silent size fallback)"
+            )
 
-        kwargs = build_image_edit_kwargs(
-            model=model,
-            prompt=CROQUIS_LINEART_PROMPT_V1,
-            sketch=(source_png, "image/png"),
-            size=size,
-            quality=quality,
-            fabric_swatch=None,
-        )
+        try:
+            kwargs = build_image_edit_kwargs(
+                model=model,
+                prompt=CROQUIS_LINEART_PROMPT_V1,
+                sketch=(source_png, "image/png"),
+                size=size,
+                quality=quality,
+                fabric_swatch=None,
+            )
+        except SketchCompletionError as exc:
+            raise ProviderNotAvailableError(str(exc)) from exc
+
         # Croquis-specific: transparent PNG background; single output already n=1.
         kwargs["background"] = "transparent"
         kwargs["output_format"] = "png"
@@ -362,6 +377,16 @@ class OpenAICroquisImagesEditAdapter:
         # Never send a second image / fabric swatch on this path.
         if isinstance(kwargs.get("image"), list):
             raise ProviderNotAvailableError("Croquis edit must use exactly one image input")
+        # Refuse silent substitution from the shared helper.
+        if kwargs.get("size") != size:
+            raise ProviderNotAvailableError(
+                f"Croquis edit size substituted {size!r} → {kwargs.get('size')!r}; refusing"
+            )
+        if kwargs.get("quality") != quality:
+            raise ProviderNotAvailableError(
+                f"Croquis edit quality substituted {quality!r} → {kwargs.get('quality')!r}; "
+                "refusing"
+            )
         return kwargs
 
     def preflight_report(self, source_png: bytes) -> dict[str, Any]:

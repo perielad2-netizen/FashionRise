@@ -874,6 +874,7 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             "version": int(payload.get("version") or 0) or None,
             "status": VERSION_STATUS_AWAITING_REVIEW,
             "generated_asset_id": str(asset.id),
+            "provider_job_id": result.provider_job_id,
             "cost_cents_settled": settled,
             "cost_usage_source": result.usage_source,
             "estimate_cents": int(payload.get("estimate_cents") or 0),
