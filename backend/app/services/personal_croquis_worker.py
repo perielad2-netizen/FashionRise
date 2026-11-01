@@ -58,6 +58,7 @@ from app.services.personal_croquis_provider import (
     DESIGN_W,
     GEOMETRY_PROFILE_V1,
     ProviderNotAvailableError,
+    ProviderOutcomeUnknownError,
     fit_contain_normalize_png,
     get_croquis_provider,
 )
@@ -150,7 +151,7 @@ def _assert_dispatch_authorization(
         raise DispatchAuthzError("Owner missing or inactive at dispatch")
 
     # Adults attestation must still be current (not enqueue-time only).
-    attestation = pcs._latest_adults_attestation(db, owner)  # noqa: SLF001
+    attestation = pcs._latest_adults_attestation(db, owner)
     if attestation is None:
         raise DispatchAuthzError("Adults attestation missing/expired at dispatch")
 
@@ -710,6 +711,36 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
     if _pre_provider_dispatch_hook is not None:
         _pre_provider_dispatch_hook(job)
 
+    # Definite pre-submit readiness BEFORE provider_called fence (LIVE_HTTP / key / model).
+    adapter = get_croquis_provider()
+    try:
+        pre_ready = getattr(adapter, "assert_pre_submit_ready", None)
+        if callable(pre_ready):
+            pre_ready()
+    except ProviderNotAvailableError as exc:
+        version = db.get(PersonalCroquisVersion, version_id)
+        reservation = _reservation_for_version(db, version_id)
+        if version is not None and version.status == VERSION_STATUS_GENERATING:
+            version.status = VERSION_STATUS_FAILED
+            db.add(version)
+        if (
+            reservation is not None
+            and reservation.status == RESERVATION_OPEN
+            and not reservation.provider_called
+        ):
+            reservation.status = RESERVATION_RELEASED
+            reservation.actual_cost_cents = 0
+            reservation.error_detail = str(exc)[:500]
+            db.add(reservation)
+        job_row = db.get(AIJob, job.id)
+        if job_row is not None and job_row.claim_token == expected_token:
+            job_row.status = "failed"
+            job_row.error_message = f"Provider unavailable before spend: {exc}"[:500]
+            job_row.claim_token = None
+            db.add(job_row)
+        db.commit()
+        return
+
     try:
         job, source_bytes = _fence_for_provider_dispatch(
             db,
@@ -756,7 +787,6 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
 
     # Request-in-flight boundary: provider_called is committed. If erase races after
     # this point, the provider may still be invoked; attach must discard the result.
-    adapter = get_croquis_provider()
     try:
         result = adapter.generate_line_art(source_bytes)
         png_bytes = validate_and_normalize_provider_png(result.png_bytes)
@@ -844,6 +874,7 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             "version": int(payload.get("version") or 0) or None,
             "status": VERSION_STATUS_AWAITING_REVIEW,
             "generated_asset_id": str(asset.id),
+            "provider_job_id": result.provider_job_id,
             "cost_cents_settled": settled,
             "cost_usage_source": result.usage_source,
             "estimate_cents": int(payload.get("estimate_cents") or 0),
@@ -853,6 +884,9 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         db.add(job)
         db.commit()
     except ProviderNotAvailableError as exc:
+        # Typed definite pre-submit refusal — safe $0 release even if the fence
+        # already marked provider_called (CrashBeforeSubmit / LIVE_HTTP refuse).
+        # Post-submit may-have-billed failures MUST use ProviderOutcomeUnknownError.
         version = db.get(PersonalCroquisVersion, version_id)
         reservation = _reservation_for_version(db, version_id)
         if version is not None:
@@ -868,7 +902,8 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             db.add(reservation)
         db.add(job)
         db.commit()
-    except TimeoutError as exc:
+    except (ProviderOutcomeUnknownError, TimeoutError) as exc:
+        # Post-submit / may-have-billed — hold exposure; block new-key retry.
         version = db.get(PersonalCroquisVersion, version_id)
         reservation = _reservation_for_version(db, version_id)
         if version is not None:
@@ -912,6 +947,56 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             db.add(reservation)
         db.add(job)
         db.commit()
+
+
+def claim_croquis_job_by_id(db: Session, job_id: uuid.UUID) -> AIJob:
+    """Claim exactly one queued croquis job by primary key (fail closed).
+
+    Used by the authorized one-call executor so a reused disposable DB cannot
+    accidentally submit an older queued job's source to the provider.
+    Does not scan/claim other queued jobs. Refuses if the row is missing,
+    wrong type/status, or locked by another worker.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    try:
+        job = db.scalar(
+            select(AIJob)
+            .where(AIJob.id == job_id)
+            .with_for_update(of=AIJob, nowait=True)
+        )
+    except OperationalError as exc:
+        db.rollback()
+        raise RuntimeError(
+            f"Croquis job {job_id} is locked by another worker — refusing one-call claim"
+        ) from exc
+    if job is None:
+        db.rollback()
+        raise RuntimeError(f"Croquis job {job_id} not found for one-call claim")
+    if job.job_type != CROQUIS_GENERATE_JOB_TYPE:
+        db.rollback()
+        raise RuntimeError(
+            f"Job {job_id} type={job.job_type!r} is not {CROQUIS_GENERATE_JOB_TYPE}"
+        )
+    if job.status != "queued":
+        db.rollback()
+        raise RuntimeError(
+            f"Croquis job {job_id} status={job.status!r} — expected queued for one-call claim"
+        )
+    job.status = "claimed"
+    job.claimed_at = _utcnow()
+    job.claim_token = secrets.token_hex(16)
+    job.error_message = None
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def run_specific_croquis_job(db: Session, job_id: uuid.UUID) -> None:
+    """Claim + process exactly ``job_id`` — never the oldest-queue tick path."""
+    job = claim_croquis_job_by_id(db, job_id)
+    process_claimed_croquis_job(db, job)
 
 
 def run_croquis_worker_tick(db: Session, *, limit: int = 4) -> int:

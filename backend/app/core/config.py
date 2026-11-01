@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     # Fail closed at 0 — must be explicitly configured for any live/test spend path.
     # Soft MY_CROQUIS_AI_ESTIMATE_CENTS must never be treated as this hard cap.
     my_croquis_ai_max_exposure_cents: int = 0
+    # Live images.edit arming switch (default false). Even with AI gate + ceiling on,
+    # real OpenAI HTTP requires this flag. Mocked client overrides bypass it in tests.
+    my_croquis_ai_live_http: bool = False
+    # Croquis-specific images.edit size/quality (must be allowlisted for the model).
+    # Provider size is NOT the design plane — output is always fit-contain 768×1024.
+    my_croquis_ai_image_size: str = "1024x1536"
+    my_croquis_ai_image_quality: str = "medium"
     # Stale worker claim lease (seconds) before safe requeue / reconciliation.
     my_croquis_ai_claim_lease_seconds: int = 120
     my_croquis_ai_consent_max_age_seconds: int = 3600
