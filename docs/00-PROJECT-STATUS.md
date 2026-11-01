@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#135 Create My Croquis LIVE ADAPTER job/storage isolation P0 — STOP before first paid request** · PR #142 · claim **exact AIJob ID** (never oldest-queue tick) · refuse reused disposable DB · dedicated `…/croquis-one-call…` `LOCAL_STORAGE_ROOT` · stored source SHA enforced · focused **65** PASS · **0 paid** · PR #141 untouched · prod unchanged · gates OFF.)
+**Last updated:** 2026-11-01 (**#135 Create My Croquis LIVE ADAPTER table-name + PG014 smoke P0 — STOP before first paid request** · PR #142 · freshness SQL uses mapped `personal_croquis_version` (singular) · real disposable Postgres Alembic-014 smoke · focused **68** PASS · **0 paid** · PR #141 untouched · prod unchanged · gates OFF.)
 
 **Phase:** Protected family beta. #135 Create My Croquis **Stage A + Stage B + Stage C ACCEPTED** (offline). Live adapter draft is **mock-validated only** — PM executor-guard PASS with isolation amendment; **STOP for owner authorization** of exactly one paid call after PM PASS of this tip. Do **not** merge PR #141 or the live-adapter PR, deploy, run production Alembic `012`/`013`/`014`, collect real photos, permanently enable gates, or start full Stage D without separate owner authorization.
 
@@ -26,19 +26,19 @@ Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise
 | Item | Status |
 |---|---|
 | Branch | `cursor/web-create-my-croquis-live-adapter-77c6` |
-| Live adapter code (job/storage isolation) | Exact **`dd4dc413c791376db2495f06de66da1c12c436aa`** |
-| Live adapter tip | Exact **`d62241c9940e976b19362f406434a98df488d903`** |
+| Live adapter code (tablename + PG014 smoke) | Exact **`f66e63deb638b685782598f0d44249fc0fa494c5`** |
+| Live adapter tip | Exact **`f66e63deb638b685782598f0d44249fc0fa494c5`** (docs stamp follows) |
 | Base / Stage C accepted | Review SHA **`cd32104e2f301b0d84e4132e4094a7804a335b2b`** · tip `48fe6132` · PR #141 **untouched DRAFT** |
 | Provider | `OpenAICroquisImagesEditAdapter` → `images.edit` / **`gpt-image-2.5-sunburst`** |
 | Request shape | 1 image in · `n=1` · `size=1024x1536` · `quality=medium` · `background=transparent` · `output_format=png` · no `input_fidelity` |
 | Output | Fit-contain normalize to exactly **768×1024** RGBA (`fit_contain_768x1024_v1`) |
 | P0 classification | `ProviderNotAvailableError` = definite pre-submit → **$0 RELEASE**; `ProviderOutcomeUnknownError` (timeout/connection/5xx/missing b64) = may-have-billed → **RECON** + new-key blocked |
 | Fence order | `assert_pre_submit_ready()` (LIVE_HTTP / key / model) runs **before** `_fence_for_provider_dispatch` so LIVE_HTTP-off never sets `provider_called` |
-| One-call guards | Exact Settings + fixture SHA + effective official base URL + final kwargs match · Alembic **014** · **empty** disposable DB (no prior croquis jobs/rows) · dedicated absolute `LOCAL_STORAGE_ROOT` containing `croquis-one-call` (never default/`/var/www`) · claim **exact** `provider_job_id` via `run_specific_croquis_job` (never oldest-queue tick) · stored source SHA re-checked |
+| One-call guards | Exact Settings + fixture SHA + effective official base URL + final kwargs match · Alembic **014** · **empty** disposable DB (freshness COUNT SQL from mapped `__tablename__`, incl. singular `personal_croquis_version`) · dedicated absolute `LOCAL_STORAGE_ROOT` containing `croquis-one-call` · claim **exact** job ID · stored source SHA re-checked |
 | Safeguards reused | Stage C consent / privacy storage / AIJob / spend reservation / idempotency / lease crash recovery / reconciliation / tripwire |
 | Live arming | **`MY_CROQUIS_AI_LIVE_HTTP=false`** (default) — even with AI gate + ceiling, no real HTTP until armed |
 | Fixture | Procedural clothed cartoon PNG only (`tests/fixtures/croquis/synthetic_clothed_adult_model.png`, sha256 `489dcb82167d858a14ff0f2c91fe2e60d42c2aeceaccfe5d368f5d0ebc28e29d`) — validates integration/normalization, **not** photo fidelity · **no real customer photos** |
-| Offline verification | Isolation + guards + live + recon + Stage C = **65** focused PASS · competing-job bind proven · storage negatives refuse · preflight/executor dry-run **0 HTTP** |
+| Offline verification | Isolation + guards + live + recon + Stage C + **real PG Alembic-014 smoke** = **68** focused PASS · table-name regression · stored-source SHA on 014 · dry-run **0 HTTP** |
 | Proposed one-call ceiling | **$1.00** spend ceiling · **$1.00**/run · **$1.00**/user/day · **100¢** max exposure · **40¢** soft estimate only (not a provider hard cap; PM accepts scope in principle — not a guaranteed $1 bill) |
 | Executor | dry-run default; paid path needs confirm flags + `--execute-now`; empty Alembic-014 DB + dedicated storage; exact job bind; audit includes authorized job id / `provider_job_id` / usage source / private preview path |
 | Paid calls | **0 executed** — **STOP** — this tip is **not** owner permission to spend; after PM PASS request explicit owner OK for exactly one call |
@@ -1428,6 +1428,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
+| 2026-11-01 | **#135 LIVE ADAPTER tablename + PG014 smoke P0 (PR #142):** code `f66e63de` · freshness SQL uses mapped singular `personal_croquis_version` · real disposable Postgres Alembic-014 freshness + stored-source SHA smoke · focused **68** PASS · **0 paid** · **STOP** · PR #141 untouched. |
 | 2026-11-01 | **#135 LIVE ADAPTER job/storage isolation P0 (PR #142):** code `dd4dc413` · exact job-ID claim (not oldest-queue) · refuse reused disposable DB · dedicated `croquis-one-call` storage root · stored source SHA · competing-job + storage negatives · focused **65** PASS · **0 paid** · **STOP** · PR #141 untouched. |
 | 2026-11-01 | **#135 LIVE ADAPTER one-call guard P0 (PR #142):** code `f9e8af63` · exact Settings/fixture SHA/effective base URL/`build_edit_kwargs` match · refuse silent size/quality fallback · Alembic **014** required · private preview + `provider_job_id` evidence · focused **57** PASS · **0 paid** · **STOP** · PR #141 untouched. |
 | 2026-11-01 | **#135 LIVE ADAPTER P0 HOLD amendment (PR #142):** code `e6f9d39a` · post-submit SDK failures → `ProviderOutcomeUnknownError` / RECON (not $0-release) · `assert_pre_submit_ready` before `provider_called` fence · envelope **$1.00**/run/day · exposure **100¢** · soft estimate **40¢** · executor dry-run · focused **43** PASS · **0 paid** · **STOP** · PR #141 untouched. |
