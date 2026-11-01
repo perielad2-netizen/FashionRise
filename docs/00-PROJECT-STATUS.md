@@ -3,20 +3,34 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-01 (**#148 Studio draft conflict FE hotfix DEPLOYED** · App **`6668e382`** · FE-only · BE/worker remain **`faa7d91d`** · **0** OpenAI calls · **0** DB clears.)
+**Last updated:** 2026-11-01 (**#149 Try On Person DEPLOYED** · App **`0676a9a6`** · FE+BE+worker · Alembic **`015`** · **0** operator-paid OpenAI calls · awaiting owner live Try On Person review.)
 
-**Phase:** Protected family beta. Create My Croquis V5 remains live on BE. Studio mannequin-switch draft sync hotfix is on FE **`6668e382`**.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person is live behind Magic destination choice on personal croquis.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`6668e382`** — release `/var/www/fashionrise/releases/6668e382` · source `6668e3824e95ad6f106a3713ba45b1f132924d52` · App pill **`6668e382`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `faa7d91d` kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | **`faa7d91d47be433e6cfa771d5c8f9a1b744545b4`** (unchanged). Alembic **`014`**. |
-| AI worker | `fashionrise-ai-worker` @ **`faa7d91d`** (unchanged) |
-| Database | `fashionrise_beta` — Alembic **`014`** |
-| Nginx | `current` → `releases/6668e382` · personal-croquis allowlist |
-| AI spend | Croquis: **`$5`** ceiling · LIVE_HTTP **ON** · `extra_body.moderation=low` · claim lease **≥300s** · prompt **v5** + house style ref (style-only) |
+| Frontend (`web-ui`) | **`0676a9a6`** — release `/var/www/fashionrise/releases/0676a9a6` · source `0676a9a6397915121327df04c79081264edd1b11` · App pill **`0676a9a6`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `6668e382` kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | **`0676a9a6397915121327df04c79081264edd1b11`**. Alembic **`015`**. |
+| AI worker | `fashionrise-ai-worker` @ **`0676a9a6`** |
+| Database | `fashionrise_beta` — Alembic **`015`** (consent purpose `try_on_person`) |
+| Nginx | `current` → `releases/0676a9a6` · personal-croquis + AI polish + **personal-try-on** / preflight allowlist |
+| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · `extra_body.moderation=low` · croquis prompt **v5** unchanged · try-on prompt **`try-on-person-v1`** |
+
+## #149 Try On Person — DEPLOYED (awaiting owner live review) (2026-11-01)
+
+Owner-accepted Create My Croquis V5. Next product ask: sketch on personal croquis → Magic → choose **Fashion Magic** (unchanged illustration polish) or **Try On Person** (photorealistic garment on the original photo).
+
+| Item | Detail |
+|---|---|
+| UX | Personal croquis + Magic → destination dialog. Built-ins keep existing Magic only. User can return to sketch and choose either path independently. |
+| Capture | Transparent **garment-only** PNG (`garmentOnly`) — strokes/fills/fabrics, no paper/mannequin; frozen with `clientRevision` + fingerprint at enqueue. Mid-flight mannequin switch refuses try-on start. |
+| BE | Job type `personal_try_on`; prompt `try-on-person-v1` (photo = identity/pose/background; garment = design). Server resolves `source_asset_id` from owned accepted croquis. Consent `try-on-person-preview-v1`. Spend via `PersonalCroquisSpendReservation` (`try_on:` idempotency). Private look image + My Looks + delete. |
+| Unchanged | V5 croquis generator · Fashion Magic polish prompt · #148 draft pin hotfix |
+| Tests | BE `test_personal_try_on` + nginx allowlist **11** PASS · FE garment capture / MagicLookPanel try-on / API client / Studio Magic regressions PASS · **0** paid `images.edit` by agent |
+| Deploy | FE+BE+worker **`0676a9a6`** · Alembic **015** · nginx try-on allowlist · backup `/var/backups/fashionrise/try-on-person-20261101T182849Z` |
+| Owner verify | Hard-refresh until App **`0676a9a6`**. Open accepted personal croquis → draw garment → Magic → **Try On Person** (owner triggers first paid call). Expect photorealistic preview of original person in the design; sketch + original photo unchanged. Fashion Magic still available. Built-in mannequin Magic unchanged. Do **not** treat deploy as successful realistic try-on until owner reviews a real result. |
 
 ## #148 Studio draft conflict / Keep-this-device Save failed (2026-11-01) — DEPLOYED
 
@@ -43,17 +57,15 @@ Owner V4 acceptance: house mannequin **style PASS**, pose mostly preserved, but 
 | Tests | BE focused **42** · **0** paid `images.edit` |
 | Owner eval | Hard-refresh App **`faa7d91d`** → Upload & Generate → compare proportions visually (not cm claims) |
 
-## Next high-priority feature — Try On Person (after V5)
+## Try On Person — owner workflow (now live on App `0676a9a6`)
 
-Not part of this deploy. Planned owner workflow:
-
-1. Generate a photo-faithful mannequin (Create My Croquis).
+1. Generate / accept a photo-faithful mannequin (Create My Croquis V5).
 2. Draw a clothing design in Studio on that underlay.
-3. Click **Try on person**.
-4. FashionRise uses the privately stored **original photo** + **isolated garment artwork layer** (not blank mannequin outlines) to create a realistic visual preview.
-5. User reviews, saves, or deletes — original photo and drawing are not overwritten.
+3. Click **Magic** → **Try On Person** (or **Fashion Magic** for the illustration path).
+4. FashionRise uses the privately stored **original photo** + **isolated garment artwork layer** to create a private photorealistic preview.
+5. Review, download / My Looks, or delete — original photo and drawing are not overwritten.
 
-Treat as fashion visualization / concept preview — **not** guaranteed sizing or fit prediction. Requires explicit provider-processing consent and per-action spend cap when implemented.
+Concept preview only — **not** a fit or measurement guarantee.
 
 ## Issue #128 / PR #130 — Magic source provenance closure — STOP for Technical PM final acceptance (2026-10-29)
 
