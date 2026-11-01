@@ -205,7 +205,8 @@ def generate_croquis_version(
         ai_consent_id=body.ai_consent_id,
         idempotency_key=body.idempotency_key,
     )
-    return version_to_read(row)
+    code, msg = pcg.enrich_version_failure_fields(db, row)
+    return version_to_read(row, failure_code=code, failure_message=msg)
 
 
 @router.get("/{croquis_id}/versions/{version}", response_model=PersonalCroquisVersionRead)
@@ -220,7 +221,8 @@ def get_croquis_version(
     """Durable progress/status for a version (generating → awaiting_review → accepted)."""
     _ = request.url
     row = pcs.get_exact_version(db, user, croquis_id, version)
-    return version_to_read(row)
+    code, msg = pcg.enrich_version_failure_fields(db, row)
+    return version_to_read(row, failure_code=code, failure_message=msg)
 
 
 @router.post(
@@ -237,7 +239,8 @@ def accept_croquis_version(
 ) -> PersonalCroquisVersionRead:
     _ = request.url
     row = pcg.accept_personal_croquis_version(db, user, croquis_id, version)
-    return version_to_read(row)
+    code, msg = pcg.enrich_version_failure_fields(db, row)
+    return version_to_read(row, failure_code=code, failure_message=msg)
 
 
 @router.post(
@@ -254,7 +257,8 @@ def reject_croquis_version(
 ) -> PersonalCroquisVersionRead:
     _ = request.url
     row = pcg.reject_personal_croquis_version(db, user, croquis_id, version)
-    return version_to_read(row)
+    code, msg = pcg.enrich_version_failure_fields(db, row)
+    return version_to_read(row, failure_code=code, failure_message=msg)
 
 
 @router.post("/{croquis_id}/archive", response_model=PersonalCroquisRead)

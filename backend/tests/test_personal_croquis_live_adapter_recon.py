@@ -287,7 +287,11 @@ def test_http_400_bad_request_after_submit_releases_zero(client, monkeypatch, db
     key = "reject-400"
     _enqueue_and_drain(client, tokens, croquis["id"], ai_id, db_session, key)
     poll = client.get(f"{BASE}/{croquis['id']}/versions/1", headers=_auth(tokens))
-    assert poll.json()["status"] == "failed"
+    body = poll.json()
+    assert body["status"] == "failed"
+    assert body.get("failure_code") == "invalid_image"
+    assert body.get("failure_message")
+    assert "not charged" in body["failure_message"].lower()
     res = (
         db_session.query(PersonalCroquisSpendReservation)
         .filter(PersonalCroquisSpendReservation.idempotency_key == key)
@@ -304,6 +308,53 @@ def test_http_400_bad_request_after_submit_releases_zero(client, monkeypatch, db
         json={"ai_consent_id": ai_id, "idempotency_key": f"{key}-retry"},
     )
     assert r_new.status_code == 201, r_new.text
+
+
+def test_moderation_blocked_surfaces_owner_safe_message(client, monkeypatch, db_session):
+    """OpenAI moderation_blocked must not be bypassed; owner gets explicit explanation."""
+    tokens = register_with_invite(client, db_session, f"mb_{uuid.uuid4().hex[:8]}@ex.com", f"mb{uuid.uuid4().hex[:6]}")
+    croquis = _upload_ready(client, tokens, monkeypatch)
+    ai_id = _ai_consent(client, tokens, croquis["id"])
+
+    def on_edit(**_kw):
+        req = httpx.Request("POST", "https://api.openai.com/v1/images/edits")
+        payload = {
+            "error": {
+                "message": "Your request was rejected by the safety system.",
+                "type": "invalid_request_error",
+                "code": "moderation_blocked",
+            }
+        }
+        resp = httpx.Response(400, request=req, json=payload)
+        err = openai.BadRequestError(
+            "Error code: 400 - " + str(payload),
+            response=resp,
+            body=payload,
+        )
+        # SDK populates .code from body in real calls; set explicitly for the fake.
+        try:
+            err.code = "moderation_blocked"
+        except Exception:
+            pass
+        raise err
+
+    _wire_live_adapter(monkeypatch, on_edit)
+    key = "reject-moderation"
+    _enqueue_and_drain(client, tokens, croquis["id"], ai_id, db_session, key)
+    poll = client.get(f"{BASE}/{croquis['id']}/versions/1", headers=_auth(tokens))
+    body = poll.json()
+    assert body["status"] == "failed"
+    assert body.get("failure_code") == "moderation_blocked"
+    assert "safety system" in (body.get("failure_message") or "").lower()
+    assert "cannot override" in (body.get("failure_message") or "").lower()
+    res = (
+        db_session.query(PersonalCroquisSpendReservation)
+        .filter(PersonalCroquisSpendReservation.idempotency_key == key)
+        .one()
+    )
+    assert res.status == RESERVATION_RELEASED
+    assert res.actual_cost_cents == 0
+    assert "moderation_blocked" in (res.error_detail or "")
 
 
 def test_adapter_unit_timeout_raises_outcome_unknown(monkeypatch):

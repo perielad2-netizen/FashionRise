@@ -601,3 +601,60 @@ def _safe_delete_generated_asset(db: Session, asset_id: uuid.UUID) -> None:
         LocalStorageBackend().delete_private_croquis_file(key=key)
     except Exception:
         pass
+
+
+def enrich_version_failure_fields(
+    db: Session, row: PersonalCroquisVersion
+) -> tuple[str | None, str | None]:
+    """Owner-safe failure_code / failure_message for failed or recon versions."""
+    from app.services.personal_croquis_provider import (
+        provider_rejection_code_from_text,
+        user_safe_provider_rejection_message,
+    )
+
+    if row.status not in (VERSION_STATUS_FAILED, VERSION_STATUS_RECONCILIATION):
+        return None, None
+
+    detail: str | None = None
+    res = (
+        db.query(PersonalCroquisSpendReservation)
+        .filter(PersonalCroquisSpendReservation.version_id == row.id)
+        .order_by(PersonalCroquisSpendReservation.created_at.desc())
+        .first()
+    )
+    if res is not None and res.error_detail:
+        detail = res.error_detail
+    elif row.provider_job_id:
+        try:
+            job_uuid = uuid.UUID(str(row.provider_job_id))
+        except (ValueError, TypeError):
+            job_uuid = None
+        if job_uuid is not None:
+            job = db.get(AIJob, job_uuid)
+            if job is not None and job.error_message:
+                detail = job.error_message
+
+    if row.status == VERSION_STATUS_RECONCILIATION:
+        return (
+            "reconciliation_required",
+            (
+                "Provider outcome is unknown. This attempt is held for operator "
+                "reconciliation. FashionRise will not start another paid generate "
+                "for this photo until that review completes."
+            ),
+        )
+
+    code = provider_rejection_code_from_text(detail)
+    if detail and (
+        "rejected by provider" in detail
+        or "moderation_blocked" in detail
+        or code is not None
+    ):
+        return code, user_safe_provider_rejection_message(code=code, detail=detail)
+    if detail and detail.startswith("Provider unavailable"):
+        return None, "Generation failed before provider spend. You may retry with a new attempt."
+    return code, (
+        user_safe_provider_rejection_message(code=code, detail=detail)
+        if detail
+        else "Generation failed (no croquis image was produced). You may retry with a new attempt."
+    )

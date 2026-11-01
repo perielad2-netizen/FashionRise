@@ -233,7 +233,8 @@ export function CreateMyCroquisWizard({
           }
           if (ver.status === 'failed') {
             setError(
-              'Generation failed (no croquis image was produced). You may retry with a new attempt.',
+              ver.failure_message?.trim() ||
+                'Generation failed (no croquis image was produced). You may retry with a new attempt.',
             )
             setIdempotencyKey(newIdempotencyKey())
             setStep('ai')
@@ -242,7 +243,8 @@ export function CreateMyCroquisWizard({
           if (ver.status === 'reconciliation_required') {
             // Do not mint a new idempotency key or return to a spend-capable AI step.
             setError(
-              'Provider outcome unknown — this attempt is held for operator reconciliation. No automatic paid retry is available.',
+              ver.failure_message?.trim() ||
+                'Provider outcome unknown — this attempt is held for operator reconciliation. No automatic paid retry is available.',
             )
             setStep('reconciliation')
             return

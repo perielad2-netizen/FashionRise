@@ -58,6 +58,9 @@ export type PersonalCroquisVersionRead = {
   prompt_version: string | null
   created_at: string
   accepted_at: string | null
+  /** Present when status is failed / reconciliation_required (owner-safe). */
+  failure_code?: string | null
+  failure_message?: string | null
 }
 
 export type AdultsAttestationRequest = {

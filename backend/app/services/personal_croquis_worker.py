@@ -888,6 +888,8 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         # fence already marked provider_called (LIVE_HTTP refuse, CrashBeforeSubmit,
         # or definitive HTTP 4xx rejection with no generated image).
         # Ambiguous post-submit failures MUST use ProviderOutcomeUnknownError.
+        from app.services.personal_croquis_provider import user_safe_provider_rejection_message
+
         version = db.get(PersonalCroquisVersion, version_id)
         reservation = _reservation_for_version(db, version_id)
         if version is not None:
@@ -895,8 +897,9 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             db.add(version)
         job.status = "failed"
         called = bool(reservation is not None and reservation.provider_called)
+        detail = str(exc)[:500]
         job.error_message = (
-            "Provider rejected the request (no generated image). You may retry with a new attempt."
+            user_safe_provider_rejection_message(detail=detail)
             if called
             else "Provider unavailable before spend."
         )
@@ -904,7 +907,7 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
         if reservation is not None:
             reservation.status = RESERVATION_RELEASED
             reservation.actual_cost_cents = 0
-            reservation.error_detail = str(exc)[:500]
+            reservation.error_detail = detail
             db.add(reservation)
         db.add(job)
         db.commit()

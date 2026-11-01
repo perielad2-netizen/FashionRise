@@ -24,7 +24,11 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 GEOMETRY_PROFILE_V1 = "fit_contain_768x1024_v1"
-PROMPT_VERSION_V1 = "croquis-lineart-v1"
+# v2: fashion-underlay wording (avoids photo→person conversion framing that
+# over-triggers provider image moderation on legitimate clothed fashion refs).
+PROMPT_VERSION_V1 = "croquis-lineart-v1"  # historical
+PROMPT_VERSION_V2 = "croquis-lineart-v2"
+PROMPT_VERSION_CURRENT = PROMPT_VERSION_V2
 DESIGN_W = 768
 DESIGN_H = 1024
 
@@ -33,19 +37,57 @@ DESIGN_H = 1024
 CROQUIS_PROVIDER_SIZE = "1024x1536"
 CROQUIS_PROVIDER_QUALITY_DEFAULT = "medium"
 
-# Versioned croquis prompt — fashion line art, not identity recreation / measurements.
-CROQUIS_LINEART_PROMPT_V1 = (
-    "Convert the attached full-body fashion photograph into a neutral fashion croquis "
-    "line-art figure for garment design. Output a clean black line drawing on a "
-    "transparent background. Preserve pose proportions suitable for fashion illustration. "
-    "Do not recreate a realistic facial likeness, do not invent measurements, do not add "
-    "garments, logos, text, or color fills. Keep the entire figure visible (no crop)."
+# Versioned croquis prompt — fashion design figure underlay, not identity work.
+CROQUIS_LINEART_PROMPT_V2 = (
+    "Create a fashion-design croquis underlay as clean black line art on a transparent "
+    "background for garment sketching. Use the attached fully clothed fashion pose "
+    "reference only for stance and proportions. Draw a simple fashion-illustration "
+    "figure outline suitable for clothing design overlays. Do not add garments, logos, "
+    "text, color fills, shading, or photorealistic detail. Keep the full figure visible "
+    "(no crop)."
 )
+# Back-compat alias for imports/tests that still reference V1 name.
+CROQUIS_LINEART_PROMPT_V1 = CROQUIS_LINEART_PROMPT_V2
 
 # Official gpt-image-2.5-sunburst token rates (USD per 1M tokens) — design §9.1.
 _RATE_TEXT_IN = 5.0
 _RATE_IMAGE_IN = 8.0
 _RATE_IMAGE_OUT = 30.0
+
+
+# User-visible copy for definitive provider rejections (never bypass safety).
+_MODERATION_USER_MESSAGE = (
+    "OpenAI's safety system rejected this photo for croquis generation "
+    "(moderation_blocked). FashionRise cannot override that provider decision. "
+    "Try a different fully clothed fashion pose photo with clear lighting and "
+    "no sensitive content. This attempt was not charged."
+)
+_GENERIC_REJECT_USER_MESSAGE = (
+    "The image provider rejected this generate request and produced no croquis. "
+    "You may try a different photo. This attempt was not charged."
+)
+
+
+def provider_rejection_code_from_text(detail: str | None) -> str | None:
+    """Extract structured provider rejection code from error_detail / exception text."""
+    if not detail:
+        return None
+    import re
+
+    m = re.search(r"\bcode=([A-Za-z0-9_\-]+)", detail)
+    if m:
+        return m.group(1)[:64]
+    if "moderation_blocked" in detail:
+        return "moderation_blocked"
+    return None
+
+
+def user_safe_provider_rejection_message(*, code: str | None = None, detail: str | None = None) -> str:
+    """Owner-facing explanation for definite provider rejections (no secrets/bytes)."""
+    resolved = (code or provider_rejection_code_from_text(detail) or "").strip().lower()
+    if resolved == "moderation_blocked":
+        return _MODERATION_USER_MESSAGE
+    return _GENERIC_REJECT_USER_MESSAGE
 
 
 @dataclass(frozen=True)
@@ -56,7 +98,7 @@ class CroquisProviderResult:
     actual_cost_cents: int
     estimated_cost_cents: int
     geometry_profile: str = GEOMETRY_PROFILE_V1
-    prompt_version: str = PROMPT_VERSION_V1
+    prompt_version: str = PROMPT_VERSION_CURRENT
     usage_source: str = "estimate"  # "provider_usage" | "estimate"
 
 
@@ -333,15 +375,43 @@ def _is_definitive_images_edit_rejection(exc: BaseException) -> bool:
     return code is not None and 400 <= code < 500
 
 
+def _api_error_code(exc: BaseException) -> str | None:
+    """Best-effort OpenAI error code from SDK attrs or response/body JSON."""
+    raw = getattr(exc, "code", None)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()[:64]
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        err = body.get("error") if isinstance(body.get("error"), dict) else body
+        if isinstance(err, dict):
+            code = err.get("code")
+            if isinstance(code, str) and code.strip():
+                return code.strip()[:64]
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        try:
+            data = resp.json()
+        except Exception:  # noqa: BLE001
+            data = None
+        if isinstance(data, dict):
+            err = data.get("error") if isinstance(data.get("error"), dict) else data
+            if isinstance(err, dict):
+                code = err.get("code")
+                if isinstance(code, str) and code.strip():
+                    return code.strip()[:64]
+    # Fall back to scanning the stringified exception.
+    return provider_rejection_code_from_text(str(exc))
+
+
 def _safe_api_error_summary(exc: BaseException) -> str:
     """Short operator-safe summary — type, status, code, truncated message (no bytes)."""
     parts = [type(exc).__name__]
     status = _api_status_code(exc)
     if status is not None:
         parts.append(f"status={status}")
-    code = getattr(exc, "code", None)
-    if isinstance(code, str) and code.strip():
-        parts.append(f"code={code.strip()[:80]}")
+    code = _api_error_code(exc)
+    if code:
+        parts.append(f"code={code}")
     rid = _safe_request_id_from_exc(exc)
     if rid:
         parts.append(f"request_id={rid}")
@@ -433,7 +503,7 @@ class OpenAICroquisImagesEditAdapter:
         try:
             kwargs = build_image_edit_kwargs(
                 model=model,
-                prompt=CROQUIS_LINEART_PROMPT_V1,
+                prompt=CROQUIS_LINEART_PROMPT_V2,
                 sketch=(source_png, "image/png"),
                 size=size,
                 quality=quality,
@@ -474,7 +544,7 @@ class OpenAICroquisImagesEditAdapter:
             "background": kwargs.get("background"),
             "output_format": kwargs.get("output_format"),
             "n": kwargs.get("n"),
-            "prompt_version": PROMPT_VERSION_V1,
+            "prompt_version": PROMPT_VERSION_CURRENT,
             "geometry_profile": GEOMETRY_PROFILE_V1,
             "design_plane": f"{DESIGN_W}x{DESIGN_H}",
             "source_sha256": hashlib.sha256(source_png).hexdigest(),

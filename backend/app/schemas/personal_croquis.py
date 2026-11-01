@@ -96,6 +96,9 @@ class PersonalCroquisVersionRead(BaseModel):
     prompt_version: str | None = None
     created_at: datetime
     accepted_at: datetime | None = None
+    # Populated for failed / reconciliation outcomes (owner-safe; no secrets/bytes).
+    failure_code: str | None = None
+    failure_message: str | None = None
 
 
 def consent_to_read(row) -> ConsentEventRead:
@@ -133,7 +136,12 @@ def croquis_to_read(row, *, latest=None) -> PersonalCroquisRead:
     )
 
 
-def version_to_read(row) -> PersonalCroquisVersionRead:
+def version_to_read(
+    row,
+    *,
+    failure_code: str | None = None,
+    failure_message: str | None = None,
+) -> PersonalCroquisVersionRead:
     return PersonalCroquisVersionRead(
         id=row.id,
         croquis_id=row.croquis_id,
@@ -144,6 +152,8 @@ def version_to_read(row) -> PersonalCroquisVersionRead:
         prompt_version=row.prompt_version,
         created_at=row.created_at,
         accepted_at=row.accepted_at,
+        failure_code=failure_code,
+        failure_message=failure_message,
     )
 
 
