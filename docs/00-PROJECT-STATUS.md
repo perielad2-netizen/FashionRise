@@ -26,8 +26,8 @@ Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise
 | Item | Status |
 |---|---|
 | Branch | `cursor/web-create-my-croquis-live-adapter-77c6` |
-| Live adapter code (one-call guards) | Exact **** |
-| Live adapter tip | Exact **** |
+| Live adapter code (one-call guards) | Exact `f9e8af635a3464a43993cbbfd8666445092461c6` |
+| Live adapter tip | Exact `258a89aadbc25c841a654ae06fd40944158d9816` (docs pin; will update after this fix commit) |
 | Base / Stage C accepted | Review SHA **`cd32104e2f301b0d84e4132e4094a7804a335b2b`** · tip `48fe6132` · PR #141 **untouched DRAFT** |
 | Provider | `OpenAICroquisImagesEditAdapter` → `images.edit` / **`gpt-image-2.5-sunburst`** |
 | Request shape | 1 image in · `n=1` · `size=1024x1536` · `quality=medium` · `background=transparent` · `output_format=png` · no `input_fidelity` |
@@ -1428,7 +1428,7 @@ Detail: docs-only draft PR [#36](https://github.com/perielad2-netizen/FashionRis
 
 | Date | Summary |
 |------|---------|
-| 2026-11-01 | **#135 LIVE ADAPTER one-call guard P0 (PR #142):** code  · exact Settings/fixture SHA/effective base URL/`build_edit_kwargs` match · refuse silent size/quality fallback · Alembic **014** required · private preview + `provider_job_id` evidence · focused **57** PASS · **0 paid** · **STOP** · PR #141 untouched. |
+| 2026-11-01 | **#135 LIVE ADAPTER one-call guard P0 (PR #142):** code `f9e8af63` · exact Settings/fixture SHA/effective base URL/`build_edit_kwargs` match · refuse silent size/quality fallback · Alembic **014** required · private preview + `provider_job_id` evidence · focused **57** PASS · **0 paid** · **STOP** · PR #141 untouched. |
 | 2026-11-01 | **#135 LIVE ADAPTER P0 HOLD amendment (PR #142):** code `e6f9d39a` · post-submit SDK failures → `ProviderOutcomeUnknownError` / RECON (not $0-release) · `assert_pre_submit_ready` before `provider_called` fence · envelope **$1.00**/run/day · exposure **100¢** · soft estimate **40¢** · executor dry-run · focused **43** PASS · **0 paid** · **STOP** · PR #141 untouched. |
 | 2026-11-01 | **#135 LIVE ADAPTER DRAFT (stacked on Stage C):** `gpt-image-2.5-sunburst` images.edit · transparent PNG · 1024x1536 medium → fit-contain 768×1024 · mocked HTTP tests green · synthetic fixture · `LIVE_HTTP=false` · proposed ceiling **$1.00**/exposure **80¢** (superseded by 100¢ amendment above) · **0 paid** · **STOP for owner approval** · PR #141 untouched. |
 | 2026-11-01 | **#135 PR #141 Stage C ACCEPTED** @ review SHA `cd32104e2f301b0d84e4132e4094a7804a335b2b` (PM OFFLINE ENGINEERING PASS) · code `4a99ce37` · DRAFT/unmerged · prod unchanged · gates OFF · **no Stage D / merge / deploy / paid AI**. |
