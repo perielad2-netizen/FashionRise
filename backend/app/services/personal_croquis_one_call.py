@@ -310,24 +310,50 @@ def assert_dedicated_one_call_storage(settings: Any) -> Path:
     return root
 
 
+def _croquis_freshness_count_sql() -> tuple[tuple[str, str], ...]:
+    """Build freshness COUNT SQL from mapped ``__tablename__`` values only.
+
+    Never hand-invent schema names — a plural typo would refuse a real Alembic-014
+    DB before the authorized one-call can run.
+    """
+    from app.models.ai_job import AIJob
+    from app.models.personal_croquis import (
+        CROQUIS_GENERATE_JOB_TYPE,
+        PersonalCroquis,
+        PersonalCroquisVersion,
+    )
+    from app.models.personal_croquis_spend import PersonalCroquisSpendReservation
+
+    return (
+        (
+            (
+                f"SELECT COUNT(*) FROM {AIJob.__tablename__} "
+                f"WHERE job_type = '{CROQUIS_GENERATE_JOB_TYPE}'"
+            ),
+            f"{CROQUIS_GENERATE_JOB_TYPE} AI jobs",
+        ),
+        (
+            f"SELECT COUNT(*) FROM {PersonalCroquis.__tablename__}",
+            f"{PersonalCroquis.__tablename__} rows",
+        ),
+        (
+            f"SELECT COUNT(*) FROM {PersonalCroquisSpendReservation.__tablename__}",
+            f"{PersonalCroquisSpendReservation.__tablename__} rows",
+        ),
+        (
+            f"SELECT COUNT(*) FROM {PersonalCroquisVersion.__tablename__}",
+            f"{PersonalCroquisVersion.__tablename__} rows",
+        ),
+    )
+
+
 def assert_disposable_db_fresh_for_one_call(engine: Engine) -> None:
     """Refuse a reused disposable DB that already has croquis jobs/rows.
 
     Prevents ``run_croquis_worker_tick`` / oldest-queue claim from selecting an
     unapproved earlier source. Must run before enqueue writes.
     """
-    checks = (
-        (
-            "SELECT COUNT(*) FROM ai_jobs WHERE job_type = 'personal_croquis_generate'",
-            "personal_croquis_generate AI jobs",
-        ),
-        ("SELECT COUNT(*) FROM personal_croquis", "personal_croquis rows"),
-        (
-            "SELECT COUNT(*) FROM personal_croquis_spend_reservations",
-            "personal_croquis_spend_reservations",
-        ),
-        ("SELECT COUNT(*) FROM personal_croquis_versions", "personal_croquis_versions"),
-    )
+    checks = _croquis_freshness_count_sql()
     with engine.connect() as conn:
         for sql, label in checks:
             try:

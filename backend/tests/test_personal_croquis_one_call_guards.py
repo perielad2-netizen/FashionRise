@@ -248,32 +248,41 @@ def test_storage_accepts_dedicated_marker_path(tmp_path):
     ) == root.resolve()
 
 
+def _sqlite_freshness_schema(conn) -> None:
+    """Mirror mapped ``__tablename__`` values (singular version table)."""
+    from app.models.ai_job import AIJob
+    from app.models.personal_croquis import PersonalCroquis, PersonalCroquisVersion
+    from app.models.personal_croquis_spend import PersonalCroquisSpendReservation
+
+    conn.execute(
+        text(
+            f"CREATE TABLE {AIJob.__tablename__} ("
+            "id VARCHAR PRIMARY KEY, job_type VARCHAR, status VARCHAR)"
+        )
+    )
+    conn.execute(text(f"CREATE TABLE {PersonalCroquis.__tablename__} (id VARCHAR PRIMARY KEY)"))
+    conn.execute(
+        text(
+            f"CREATE TABLE {PersonalCroquisSpendReservation.__tablename__} "
+            "(id VARCHAR PRIMARY KEY)"
+        )
+    )
+    conn.execute(
+        text(f"CREATE TABLE {PersonalCroquisVersion.__tablename__} (id VARCHAR PRIMARY KEY)")
+    )
+
+
 def test_fresh_db_refuses_existing_croquis_jobs(tmp_path):
+    from app.models.ai_job import AIJob
+    from app.models.personal_croquis import CROQUIS_GENERATE_JOB_TYPE
+
     engine = create_engine(f"sqlite:///{tmp_path / 'reuse.db'}")
     with engine.begin() as conn:
+        _sqlite_freshness_schema(conn)
         conn.execute(
             text(
-                "CREATE TABLE ai_jobs ("
-                "id VARCHAR PRIMARY KEY, job_type VARCHAR, status VARCHAR)"
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE TABLE personal_croquis (id VARCHAR PRIMARY KEY)"
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE TABLE personal_croquis_spend_reservations (id VARCHAR PRIMARY KEY)"
-            )
-        )
-        conn.execute(
-            text("CREATE TABLE personal_croquis_versions (id VARCHAR PRIMARY KEY)")
-        )
-        conn.execute(
-            text(
-                "INSERT INTO ai_jobs (id, job_type, status) "
-                "VALUES ('j1', 'personal_croquis_generate', 'queued')"
+                f"INSERT INTO {AIJob.__tablename__} (id, job_type, status) "
+                f"VALUES ('j1', '{CROQUIS_GENERATE_JOB_TYPE}', 'queued')"
             )
         )
     with pytest.raises(OneCallGuardError, match="reused disposable DB"):
@@ -283,15 +292,15 @@ def test_fresh_db_refuses_existing_croquis_jobs(tmp_path):
 def test_fresh_db_accepts_empty_croquis_tables(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                "CREATE TABLE ai_jobs ("
-                "id VARCHAR PRIMARY KEY, job_type VARCHAR, status VARCHAR)"
-            )
-        )
-        conn.execute(text("CREATE TABLE personal_croquis (id VARCHAR PRIMARY KEY)"))
-        conn.execute(
-            text("CREATE TABLE personal_croquis_spend_reservations (id VARCHAR PRIMARY KEY)")
-        )
-        conn.execute(text("CREATE TABLE personal_croquis_versions (id VARCHAR PRIMARY KEY)"))
+        _sqlite_freshness_schema(conn)
     assert_disposable_db_fresh_for_one_call(engine)
+
+
+def test_freshness_sql_uses_singular_version_tablename():
+    from app.models.personal_croquis import PersonalCroquisVersion
+    from app.services.personal_croquis_one_call import _croquis_freshness_count_sql
+
+    assert PersonalCroquisVersion.__tablename__ == "personal_croquis_version"
+    sqls = " ".join(sql for sql, _ in _croquis_freshness_count_sql())
+    assert "personal_croquis_version" in sqls
+    assert "personal_croquis_versions" not in sqls
