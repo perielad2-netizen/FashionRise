@@ -26,8 +26,8 @@ Stacked **new** draft PR [#142](https://github.com/perielad2-netizen/FashionRise
 | Item | Status |
 |---|---|
 | Branch | `cursor/web-create-my-croquis-live-adapter-77c6` |
-| Live adapter code (one-call guards) | Exact `f9e8af635a3464a43993cbbfd8666445092461c6` |
-| Live adapter tip | Exact `258a89aadbc25c841a654ae06fd40944158d9816` (docs pin; will update after this fix commit) |
+| Live adapter code (one-call guards) | Exact **`f9e8af635a3464a43993cbbfd8666445092461c6`** |
+| Live adapter tip | Exact **`3390bc30feedcf5d3951e5364e5c4105f2040d63`** |
 | Base / Stage C accepted | Review SHA **`cd32104e2f301b0d84e4132e4094a7804a335b2b`** · tip `48fe6132` · PR #141 **untouched DRAFT** |
 | Provider | `OpenAICroquisImagesEditAdapter` → `images.edit` / **`gpt-image-2.5-sunburst`** |
 | Request shape | 1 image in · `n=1` · `size=1024x1536` · `quality=medium` · `background=transparent` · `output_format=png` · no `input_fidelity` |
