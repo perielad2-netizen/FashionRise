@@ -55,11 +55,15 @@ def storage_body() -> dict:
     }
 
 
-def ai_body() -> dict:
+def ai_body(*, croquis_id: str | None = None) -> dict:
+    """AI consent body. Stage C requires croquis_id to bind consent to the source photo."""
     settings = get_settings()
-    return {
+    body: dict = {
         "acknowledged": True,
         "adults_attested": True,
         "notice_version": settings.my_croquis_ai_consent_version,
         "notice_text_hash": _sha(SYNTHETIC_AI_NOTICE),
     }
+    if croquis_id is not None:
+        body["croquis_id"] = croquis_id
+    return body

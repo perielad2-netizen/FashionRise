@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.ai_job import AIJob
+from app.models.personal_croquis import CROQUIS_GENERATE_JOB_TYPE
 from app.services import sketch_openai
+from app.services.personal_croquis_worker import run_croquis_worker_tick
 from app.services.techpack_ai_worker import run_techpack_worker_tick
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,10 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
     for _ in range(limit):
         job = db.scalar(
             select(AIJob)
-            .where(AIJob.status == "queued")
+            .where(
+                AIJob.status == "queued",
+                AIJob.job_type != CROQUIS_GENERATE_JOB_TYPE,
+            )
             .order_by(AIJob.created_at.asc())
             .limit(1)
             .with_for_update(of=AIJob, skip_locked=True)
@@ -65,7 +70,8 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
 
 
 def run_worker_tick(db: Session, *, limit: int = 12) -> int:
-    """Process Magic AIJobs then up to 2 Techpack Professional runs per tick."""
+    """Process Magic AIJobs, croquis generate jobs, then Techpack Professional runs."""
     magic_n = run_magic_worker_tick(db, limit=limit)
+    croquis_n = run_croquis_worker_tick(db, limit=min(4, limit))
     tech_n = run_techpack_worker_tick(db, limit=2)
-    return magic_n + tech_n
+    return magic_n + croquis_n + tech_n

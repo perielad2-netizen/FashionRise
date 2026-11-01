@@ -73,6 +73,11 @@ export type ConsentAcknowledgeRequest = {
   notice_text_hash: string
 }
 
+/** AI-provider consent must bind to the exact croquis source being generated. */
+export type AiConsentAcknowledgeRequest = ConsentAcknowledgeRequest & {
+  croquis_id: string
+}
+
 export async function attestAdults(
   body: AdultsAttestationRequest,
   signal?: AbortSignal,
@@ -96,7 +101,7 @@ export async function acknowledgeStorageConsent(
 }
 
 export async function acknowledgeAiConsent(
-  body: ConsentAcknowledgeRequest,
+  body: AiConsentAcknowledgeRequest,
   signal?: AbortSignal,
 ): Promise<ConsentEventRead> {
   return apiRequest<ConsentEventRead>(`${BASE}/consent/ai`, {
@@ -125,6 +130,46 @@ export async function getPersonalCroquisVersion(
   return apiRequest<PersonalCroquisVersionRead>(`${BASE}/${croquisId}/versions/${version}`, {
     signal,
   })
+}
+
+export type GenerateVersionRequest = {
+  ai_consent_id: string
+  idempotency_key: string
+}
+
+/** Stage C enqueue — returns generating version; poll until awaiting_review / failed. */
+export async function generatePersonalCroquisVersion(
+  croquisId: string,
+  body: GenerateVersionRequest,
+  signal?: AbortSignal,
+): Promise<PersonalCroquisVersionRead> {
+  return apiRequest<PersonalCroquisVersionRead>(`${BASE}/${croquisId}/versions/generate`, {
+    method: 'POST',
+    body,
+    signal,
+  })
+}
+
+export async function acceptPersonalCroquisVersion(
+  croquisId: string,
+  version: number,
+  signal?: AbortSignal,
+): Promise<PersonalCroquisVersionRead> {
+  return apiRequest<PersonalCroquisVersionRead>(
+    `${BASE}/${croquisId}/versions/${version}/accept`,
+    { method: 'POST', signal },
+  )
+}
+
+export async function rejectPersonalCroquisVersion(
+  croquisId: string,
+  version: number,
+  signal?: AbortSignal,
+): Promise<PersonalCroquisVersionRead> {
+  return apiRequest<PersonalCroquisVersionRead>(
+    `${BASE}/${croquisId}/versions/${version}/reject`,
+    { method: 'POST', signal },
+  )
 }
 
 export async function uploadPersonalCroquisPhoto(

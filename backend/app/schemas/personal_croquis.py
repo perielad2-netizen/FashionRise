@@ -32,6 +32,14 @@ class ConsentAcknowledgeRequest(BaseModel):
     notice_text_hash: str = Field(min_length=64, max_length=64)
 
 
+class AiConsentAcknowledgeRequest(ConsentAcknowledgeRequest):
+    """AI-provider consent must bind to the exact croquis source being generated."""
+
+    croquis_id: uuid.UUID = Field(
+        description="Personal croquis id whose current source_asset_id this AI consent covers.",
+    )
+
+
 class AdultsAttestationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -144,3 +152,10 @@ class PhotoUploadFormNote(BaseModel):
 
     storage_consent_id: uuid.UUID = Field(description="Valid croquis_storage consent id")
     display_name: str | None = None
+
+
+class GenerateVersionRequest(BaseModel):
+    """Stage C generate — requires AI consent + AI gate + spend reservation."""
+
+    ai_consent_id: uuid.UUID
+    idempotency_key: str = Field(min_length=1, max_length=128)

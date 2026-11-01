@@ -1,6 +1,7 @@
-"""Create My Croquis Stage A authenticated routes.
+"""Create My Croquis authenticated routes (Stage A storage + Stage C generate).
 
-Gates default OFF. No generate / provider endpoint. Ownership enforced on all reads.
+Gates default OFF. Generate requires MY_CROQUIS_AI_ENABLED + spend ceiling > 0.
+Ownership enforced on all reads. No paid provider calls under default config.
 """
 
 import uuid
@@ -16,14 +17,17 @@ from app.db.session import get_db
 from app.schemas.personal_croquis import (
     AdultsAttestationRead,
     AdultsAttestationRequest,
+    AiConsentAcknowledgeRequest,
     ConsentAcknowledgeRequest,
     ConsentEventRead,
+    GenerateVersionRequest,
     PersonalCroquisRead,
     PersonalCroquisVersionRead,
     consent_to_read,
     croquis_to_read,
     version_to_read,
 )
+from app.services import personal_croquis_generate as pcg
 from app.services import personal_croquis_service as pcs
 
 router = APIRouter()
@@ -79,11 +83,11 @@ def consent_storage(
 @limiter.limit("30/minute")
 def consent_ai(
     request: Request,
-    body: ConsentAcknowledgeRequest,
+    body: AiConsentAcknowledgeRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ConsentEventRead:
-    """Prepare AI-provider consent record only — Stage A never calls a provider."""
+    """AI-provider consent bound to an exact croquis source (no provider call)."""
     _ = request.url
     row = pcs.record_ai_consent(
         db,
@@ -92,6 +96,7 @@ def consent_ai(
         adults_attested=body.adults_attested,
         notice_version=body.notice_version,
         notice_text_hash=body.notice_text_hash,
+        croquis_id=body.croquis_id,
     )
     return consent_to_read(row)
 
@@ -174,6 +179,35 @@ def get_croquis(
     return croquis_to_read(row, latest=latest)
 
 
+@router.post(
+    "/{croquis_id}/versions/generate",
+    response_model=PersonalCroquisVersionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("10/minute")
+def generate_croquis_version(
+    request: Request,
+    croquis_id: uuid.UUID,
+    body: GenerateVersionRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PersonalCroquisVersionRead:
+    """Stage C enqueue — AI consent + AI gate + spend reservation + idempotency.
+
+    Returns a generating version. Worker settles to awaiting_review.
+    Defaults fail closed. Live paid providers are not activated in this build.
+    """
+    _ = request.url
+    row = pcg.enqueue_personal_croquis_generate(
+        db,
+        user,
+        croquis_id,
+        ai_consent_id=body.ai_consent_id,
+        idempotency_key=body.idempotency_key,
+    )
+    return version_to_read(row)
+
+
 @router.get("/{croquis_id}/versions/{version}", response_model=PersonalCroquisVersionRead)
 @limiter.limit("120/minute")
 def get_croquis_version(
@@ -183,8 +217,43 @@ def get_croquis_version(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> PersonalCroquisVersionRead:
+    """Durable progress/status for a version (generating → awaiting_review → accepted)."""
     _ = request.url
     row = pcs.get_exact_version(db, user, croquis_id, version)
+    return version_to_read(row)
+
+
+@router.post(
+    "/{croquis_id}/versions/{version}/accept",
+    response_model=PersonalCroquisVersionRead,
+)
+@limiter.limit("30/minute")
+def accept_croquis_version(
+    request: Request,
+    croquis_id: uuid.UUID,
+    version: int,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PersonalCroquisVersionRead:
+    _ = request.url
+    row = pcg.accept_personal_croquis_version(db, user, croquis_id, version)
+    return version_to_read(row)
+
+
+@router.post(
+    "/{croquis_id}/versions/{version}/reject",
+    response_model=PersonalCroquisVersionRead,
+)
+@limiter.limit("30/minute")
+def reject_croquis_version(
+    request: Request,
+    croquis_id: uuid.UUID,
+    version: int,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> PersonalCroquisVersionRead:
+    _ = request.url
+    row = pcg.reject_personal_croquis_version(db, user, croquis_id, version)
     return version_to_read(row)
 
 

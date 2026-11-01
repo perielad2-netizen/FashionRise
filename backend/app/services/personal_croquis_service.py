@@ -25,6 +25,8 @@ from app.models.personal_croquis import (
     STATUS_ERASED,
     STATUS_UPLOADED,
     VERSION_STATUS_ACCEPTED,
+    VERSION_STATUS_FAILED,
+    VERSION_STATUS_GENERATING,
     PersonalCroquis,
     PersonalCroquisVersion,
 )
@@ -292,8 +294,11 @@ def record_ai_consent(
     adults_attested: bool,
     notice_version: str,
     notice_text_hash: str,
+    croquis_id: uuid.UUID | None = None,
 ) -> UserConsentEvent:
-    """Record AI-provider consent only — Stage A does not execute providers."""
+    """Record AI-provider consent. Stage C requires croquis_id to bind consent to source."""
+    from app.models.personal_croquis_ai_consent import PersonalCroquisAiConsentBinding
+
     attestation = _latest_adults_attestation(db, user)
     if attestation is None:
         raise HTTPException(
@@ -307,6 +312,16 @@ def record_ai_consent(
         notice_version=notice_version,
         notice_text_hash=notice_text_hash,
     )
+    croquis = None
+    source_asset_id = None
+    if croquis_id is not None:
+        croquis = get_owned_croquis(db, user, croquis_id)
+        if croquis.source_asset_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Source photo required before AI-provider consent.",
+            )
+        source_asset_id = croquis.source_asset_id
     row = UserConsentEvent(
         id=uuid.uuid4(),
         owner_id=user.id,
@@ -316,6 +331,19 @@ def record_ai_consent(
         text_hash=text_hash,
     )
     db.add(row)
+    db.flush()
+    if croquis is not None and source_asset_id is not None:
+        db.add(
+            PersonalCroquisAiConsentBinding(
+                id=uuid.uuid4(),
+                owner_id=user.id,
+                consent_id=row.id,
+                croquis_id=croquis.id,
+                source_asset_id=source_asset_id,
+                notice_version=version,
+                notice_text_hash=text_hash,
+            )
+        )
     db.commit()
     db.refresh(row)
     return row
@@ -600,11 +628,15 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
 
     Idempotent: repeat calls on an already-erased croquis succeed without remapping.
     Does not mutate design drawing data or remap historical pins.
+
+    Locks the croquis row then its versions (same order as the generate worker attach
+    path) so erase cannot race past a fenced generated-asset attachment.
     """
     row = (
         db.query(PersonalCroquis)
         .filter(PersonalCroquis.id == croquis_id, PersonalCroquis.owner_id == user.id)
-        .first()
+        .with_for_update()
+        .one_or_none()
     )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Croquis not found")
@@ -614,6 +646,17 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
         db.refresh(row)
         return row
 
+    # Lock versions while holding croquis so worker attach cannot commit mid-erase.
+    versions = (
+        db.query(PersonalCroquisVersion)
+        .filter(
+            PersonalCroquisVersion.croquis_id == row.id,
+            PersonalCroquisVersion.owner_id == user.id,
+        )
+        .with_for_update()
+        .all()
+    )
+
     row.erase_requested_at = now
     row.deleted_at = now
     row.status = STATUS_ERASED
@@ -622,15 +665,11 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
     asset_ids: set[uuid.UUID] = set()
     if row.source_asset_id:
         asset_ids.add(row.source_asset_id)
-    versions = (
-        db.query(PersonalCroquisVersion)
-        .filter(
-            PersonalCroquisVersion.croquis_id == row.id,
-            PersonalCroquisVersion.owner_id == user.id,
-        )
-        .all()
-    )
     for ver in versions:
+        if ver.status == VERSION_STATUS_GENERATING and ver.generated_asset_id is None:
+            # Erase wins over an in-flight generate that has not attached yet.
+            ver.status = VERSION_STATUS_FAILED
+            db.add(ver)
         if ver.generated_asset_id:
             asset_ids.add(ver.generated_asset_id)
 
@@ -638,7 +677,8 @@ def request_permanent_erase(db: Session, user: User, croquis_id: uuid.UUID) -> P
         asset = (
             db.query(PrivateMediaAsset)
             .filter(PrivateMediaAsset.id == aid, PrivateMediaAsset.owner_id == user.id)
-            .first()
+            .with_for_update()
+            .one_or_none()
         )
         if asset is None:
             continue
