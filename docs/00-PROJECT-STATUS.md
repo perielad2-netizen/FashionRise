@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#156** FASHN Try On v1.6 **LIVE-ARMED** App **`9aeea3f3`** · private `FASHN_API_KEY` installed · `fashn_configured=true` · OpenAI path preserved · **0** operator-paid calls · awaiting owner first in-app swimwear test.)
+**Last updated:** 2026-11-02 (**#158+#159** P0 dual-fix **DEPLOYED** App **`f102cbc4`** on FASHN branch · Create My Croquis notices restored · Fashion Magic accepts `personal` · FASHN still live-armed · **0** operator-paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear) **live-armed**.
 
@@ -11,12 +11,35 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`9aeea3f3`** — release `/var/www/fashionrise/releases/9aeea3f3` · source `9aeea3f3991e8be505db7e34e423c786e716cb2d` · App pill **`9aeea3f3`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `e728a06c` kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN adapter **`tryon-v1.6`** + garment prep + sanitized failures; Alembic **`015`**. |
+| Frontend (`web-ui`) | **`f102cbc4`** — release `/var/www/fashionrise/releases/f102cbc4` · source `f102cbc46eee40598c26b7ccd1fea419f81723e4` · App pill **`f102cbc4`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, croquis notices **baked + SHA-asserted**, API `/api/v1`. Prior FE **`9aeea3f3`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN adapter **`tryon-v1.6`** + garment prep · **`reference_model_id=personal`** allowed for Fashion Magic (#159); Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted with FASHN+OpenAI try-on · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/9aeea3f3` · + exact `POST /api/v1/ai/personal-try-on/fashn/prepare` |
+| Nginx | `current` → `releases/f102cbc4` · + exact `POST /api/v1/ai/personal-try-on/fashn/prepare` |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · croquis **v5** · try-on OpenAI **`try-on-person-v3`** · daily gen count **OFF** |
+
+## #158+#159 P0 Create My Croquis notices + personal Fashion Magic — DEPLOYED (2026-11-02)
+
+Owner found two production regressions while #156 FASHN swimwear work continued. Both fixed in one release on the FASHN branch (no overwrite of FASHN / V5 croquis prompt).
+
+| Bug | Root cause | Fix |
+|---|---|---|
+| **#158** Create My Croquis blocked (“consent notices must be configured”) | `personalCroquisNotices.ts` used dynamic `import.meta.env[name]` — Vite production does not replace dynamic keys, so all three notices shipped empty | Static `import.meta.env.VITE_MY_CROQUIS_{ADULTS,STORAGE,AI}_NOTICE_TEXT`; prod build asserts non-empty + SHA256 match backend + embed in bundle (`COMPILED_NOTICES.json`) |
+| **#159** Fashion Magic on personal croquis → `reference_model_id is not a recognized Studio model` | `doc.model=personal` sent as `reference_model_id`, but BE allowlist only had builtins/legacy/custom/blank | `PERSONAL_IDS={"personal"}` with `kind=personal`, `family=None`; vision/edit instructions preserve personal figure (no map to `female-straight`); single + dual enqueue paths covered |
+
+| Item | Detail |
+|---|---|
+| App SHA | **`f102cbc4`** (`f102cbc46eee40598c26b7ccd1fea419f81723e4`) |
+| Notice versions | `adults-beta-2026-11-01` · `storage-2026-11-01` · `ai-provider-2026-11-01` |
+| Notice SHA256 (FE=BE) | adults `882c9ed4…` · storage `27882295…` · AI `c3226ed3…` |
+| Tests | BE `test_reference_croquis_identity` **50 PASS** · FE notices+assert **22 PASS** · CreateMyCroquisWizard **4 PASS** · prod build `ASSERT_PROD_CROQUIS_NOTICES=pass` · **0** paid OpenAI/FASHN |
+| Backup / rollback | `/var/backups/fashionrise/p0-158-159-deploy-20261102T012218Z/ROLLBACK.sh` → prior FE **`9aeea3f3`** + prior BE files |
+| Preserved | FASHN live-arm (`key_present` / `FASHN_TRY_ON_LIVE_HTTP=true`) · croquis **v5** · Studio saves · My Croquis · My Looks · Try On Person · consent/finance controls |
+
+### Owner verification (no agent-paid calls)
+1. **Test A (#158):** Hard-refresh App **`f102cbc4`** → My Croquis → **Create New Croquis** → expect one-checkbox photo upload (not the “not ready yet” blocker). Do not need to upload.
+2. **Test B (#159):** Open a saved personal croquis with a garment sketch → Magic → **Fashion Magic** → request must pass model validation (no `reference_model_id` error) and reach normal image-generation. Owner runs the paid polish after deploy.
+3. Optional: still hard-refresh and run the first paid **FASHN Try On** swimwear test for #156 when ready.
 
 ## #156 P0 FASHN Try On v1.6 — LIVE-ARMED (awaiting owner first paid test) (2026-11-02)
 
@@ -33,7 +56,7 @@ OpenAI prompt tweaks stopped. Ordinary two-piece swimwear still fails OpenAI inp
 | Tests | BE prep + try-on + nginx **17** PASS · FE API/layout **30** PASS · **0** paid calls |
 | Deploy | App **`9aeea3f3`** · backup `/var/backups/fashionrise/try-on-fashn-20261102T010309Z` · nginx prepare allowlist live · `FASHN_TRY_ON_ENABLED=true` · `FASHN_TRY_ON_LIVE_HTTP=true` |
 | Provider readiness | `key_present=true` · `fashn_configured=true` · `live_armed=true` · OpenAI try-on still live · **0** agent-paid FASHN calls |
-| Owner first test | Hard-refresh App **`9aeea3f3`** → personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → inspect prepared plate (~16¢ / 2 credits for two-piece) → confirm → expect realistic preview on original photo. |
+| Owner first test | Hard-refresh App **`f102cbc4`** → personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → inspect prepared plate (~16¢ / 2 credits for two-piece) → confirm → expect realistic preview on original photo. |
 
 ### Owner next (product acceptance)
 1. Credits confirmed by owner.
