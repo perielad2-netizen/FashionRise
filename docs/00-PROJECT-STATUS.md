@@ -31,11 +31,13 @@ OpenAI prompt tweaks stopped. Ordinary two-piece swimwear still fails OpenAI inp
 | Spend | Shared croquis ceilings · idempotency `try_on:fashn:…` · reservation estimate = credits × `FASHN_TRY_ON_ESTIMATE_CENTS` (default 8¢) |
 | Env | `FASHN_API_KEY` (secret) · `FASHN_TRY_ON_ENABLED` · `FASHN_TRY_ON_LIVE_HTTP` · estimate/base URL/poll timeouts |
 | Tests | BE prep + try-on + nginx **17** PASS · FE API/layout **30** PASS · **0** paid calls |
-| Owner first test | After key live-armed: personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → inspect plate → confirm cost → expect realistic preview on original photo. |
+| Deploy | App **`9aeea3f3`** · backup `/var/backups/fashionrise/try-on-fashn-20261102T010309Z` · nginx prepare allowlist live · `FASHN_TRY_ON_ENABLED=true` · live **false** until key |
+| Provider readiness | `key_present=false` · `fashn_configured=false` · OpenAI try-on still live |
+| Owner first test | After key live-armed: hard-refresh App **`9aeea3f3`** → personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → inspect plate → confirm cost → expect realistic preview on original photo. |
 
 ### Still required from owner (private)
-1. Enter **`FASHN_API_KEY`** into Cursor secrets / production VPS `.env` (never chat/GitHub/FE).
-2. Confirm API credits available (~1–2 credits for first swimwear test).
+1. Enter **`FASHN_API_KEY`** into Cursor Secrets for this agent **or** on the VPS via `/opt/fashionrise/src/backend/scripts/install_fashn_api_key.sh` (never chat/GitHub/FE).
+2. Confirm API credits available (~1–2 credits for first swimwear test; two-piece = 2).
 3. Initiate the first paid FASHN run **in-app** after reviewing the plate cost.
 
 ## #156 P0 ordinary swimwear — provider suitability (2026-11-02) — OPEN (FASHN path shipping)
