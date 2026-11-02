@@ -4,6 +4,10 @@
  * Production defaults are empty → fail closed (wizard cannot record consent).
  * Synthetic fixtures are for Vitest / offline harness only — never ship as
  * production-legal copy. Version strings must match backend settings.
+ *
+ * Vite production builds only replace **static** `import.meta.env.VITE_*`
+ * property access. Dynamic `import.meta.env[name]` is unsupported and ships
+ * as empty — that regression blocked Create My Croquis (#158).
  */
 
 export const CROQUIS_ADULTS_NOTICE_VERSION = 'adults-beta-2026-11-01'
@@ -17,9 +21,14 @@ export const SYNTHETIC_AI_NOTICE = 'SYNTHETIC_TEST_AI_NOTICE_V1'
 
 export type CroquisNoticePurpose = 'adults' | 'storage' | 'ai'
 
-function envNotice(name: string): string {
-  const raw = (import.meta.env[name] as string | undefined) ?? ''
-  return raw.trim()
+function sanitizeNotice(raw: string | undefined): string {
+  const text = (raw ?? '').trim()
+  if (!text) return ''
+  const lower = text.toLowerCase()
+  if (lower.includes('draft') || lower.includes('placeholder') || lower.includes('todo')) {
+    return ''
+  }
+  return text
 }
 
 /**
@@ -27,18 +36,14 @@ function envNotice(name: string): string {
  * Draft/placeholder markers are rejected the same as empty.
  */
 export function approvedCroquisNoticeText(purpose: CroquisNoticePurpose): string {
-  const text =
-    purpose === 'adults'
-      ? envNotice('VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT')
-      : purpose === 'storage'
-        ? envNotice('VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT')
-        : envNotice('VITE_MY_CROQUIS_AI_NOTICE_TEXT')
-  if (!text) return ''
-  const lower = text.toLowerCase()
-  if (lower.includes('draft') || lower.includes('placeholder') || lower.includes('todo')) {
-    return ''
+  // Static dotted access only — required for Vite production env replacement (#158).
+  if (purpose === 'adults') {
+    return sanitizeNotice(import.meta.env.VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT)
   }
-  return text
+  if (purpose === 'storage') {
+    return sanitizeNotice(import.meta.env.VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT)
+  }
+  return sanitizeNotice(import.meta.env.VITE_MY_CROQUIS_AI_NOTICE_TEXT)
 }
 
 export function croquisNoticeVersion(purpose: CroquisNoticePurpose): string {

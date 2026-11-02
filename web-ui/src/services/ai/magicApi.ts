@@ -148,6 +148,14 @@ export type PersonalTryOnPreflight = {
   prompt_version: string
   estimate_cents: number
   max_exposure_cents: number
+  fashn_enabled?: boolean
+  fashn_configured?: boolean
+  fashn_live_http?: boolean
+  fashn_consent_version?: string | null
+  fashn_notice_text?: string | null
+  fashn_notice_hash?: string | null
+  fashn_estimate_cents_per_call?: number | null
+  fashn_prompt_version?: string | null
 }
 
 export async function fetchPersonalTryOnPreflight(
@@ -155,6 +163,39 @@ export async function fetchPersonalTryOnPreflight(
 ): Promise<PersonalTryOnPreflight> {
   return apiRequest<PersonalTryOnPreflight>('/ai/personal-try-on/preflight', {
     method: 'GET',
+    signal,
+  })
+}
+
+export type FashnGarmentPrepareResult = {
+  layout: 'one_piece' | 'two_piece' | string
+  fashn_calls: number
+  estimate_cents: number
+  garment_fingerprint: string
+  composite_preview_base64: string
+  pieces: Array<{
+    category: string
+    image_base64: string
+    bbox: number[]
+    opaque_pixels: number
+  }>
+  notes: string
+  consent_version: string
+  notice_text: string
+  notice_hash: string
+  provider: string
+  configured: boolean
+  live_http: boolean
+}
+
+/** POST /ai/personal-try-on/fashn/prepare — offline flat-lay preview (no paid call). */
+export async function prepareFashnGarmentReference(
+  garmentImageBase64: string,
+  signal?: AbortSignal,
+): Promise<FashnGarmentPrepareResult> {
+  return apiRequest<FashnGarmentPrepareResult>('/ai/personal-try-on/fashn/prepare', {
+    method: 'POST',
+    body: { garment_image_base64: garmentImageBase64 },
     signal,
   })
 }
@@ -171,6 +212,8 @@ export type PersonalTryOnInput = {
   consentVersion: string
   /** Optional Studio-derived color/material/accessory hints (V2). */
   designHints?: string[] | null
+  /** Explicit provider — never auto-switched after a refusal. */
+  provider?: 'openai' | 'fashn'
   signal?: AbortSignal
 }
 
@@ -184,6 +227,7 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
     .filter((h): h is string => typeof h === 'string' && h.trim().length > 0)
     .map((h) => h.trim().slice(0, 120))
     .slice(0, 8)
+  const provider = input.provider === 'fashn' ? 'fashn' : 'openai'
   return apiRequest<AiJobRead>('/ai/personal-try-on', {
     method: 'POST',
     body: {
@@ -196,6 +240,7 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
       content_fingerprint: contentFingerprint,
       consent_acknowledged: input.consentAcknowledged,
       consent_version: input.consentVersion,
+      provider,
       ...(designHints.length ? { design_hints: designHints } : {}),
     },
     signal: input.signal,

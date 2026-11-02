@@ -3,6 +3,7 @@ import { apiRequest } from '@/services/api/client'
 import {
   enqueuePersonalTryOn,
   fetchPersonalTryOnPreflight,
+  prepareFashnGarmentReference,
 } from '@/services/ai/magicApi'
 
 vi.mock('@/services/api/client', () => ({
@@ -74,11 +75,59 @@ describe('personal try-on API client', () => {
           garment_image_base64: 'data:image/png;base64,AAAA',
           source_revision: 7,
           content_fingerprint: 'fp-1',
+          provider: 'openai',
           design_hints: ['pink checkerboard print', 'upper-plane ink present'],
         }),
       }),
     )
     const path = apiMock.mock.calls[0]?.[0]
     expect(path).not.toContain('sketch/polish')
+  })
+
+  it('prepares FASHN garment reference offline and enqueues with fashn provider', async () => {
+    apiMock.mockResolvedValueOnce({
+      layout: 'two_piece',
+      fashn_calls: 2,
+      estimate_cents: 16,
+      garment_fingerprint: 'abc',
+      composite_preview_base64: 'data:image/png;base64,AAAA',
+      pieces: [],
+      notes: 'two',
+      consent_version: 'try-on-fashn-preview-v1',
+      notice_text: 'fashn notice',
+      notice_hash: 'hash',
+      provider: 'fashn',
+      configured: true,
+      live_http: true,
+    })
+    const prep = await prepareFashnGarmentReference('data:image/png;base64,AAAA')
+    expect(apiMock).toHaveBeenCalledWith('/ai/personal-try-on/fashn/prepare', {
+      method: 'POST',
+      body: { garment_image_base64: 'data:image/png;base64,AAAA' },
+      signal: undefined,
+    })
+    expect(prep.layout).toBe('two_piece')
+
+    apiMock.mockResolvedValueOnce({ id: 'job-fashn', job_type: 'personal_try_on', status: 'queued' })
+    await enqueuePersonalTryOn({
+      croquisId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      croquisVersion: 2,
+      garmentImageBase64: 'data:image/png;base64,AAAA',
+      idempotencyKey: 'try_on:fashn:key-1',
+      sourceRevision: 7,
+      contentFingerprint: 'fp-1',
+      consentAcknowledged: true,
+      consentVersion: 'try-on-fashn-preview-v1',
+      provider: 'fashn',
+    })
+    expect(apiMock).toHaveBeenLastCalledWith(
+      '/ai/personal-try-on',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          provider: 'fashn',
+          consent_version: 'try-on-fashn-preview-v1',
+        }),
+      }),
+    )
   })
 })

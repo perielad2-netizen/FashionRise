@@ -14,9 +14,10 @@ from typing import Any, Literal
 from app.core.errors import ValidationAppError
 
 CroquisFamily = Literal["female", "male"]
-ReferenceKind = Literal["builtin", "legacy", "utility"]
+ReferenceKind = Literal["builtin", "legacy", "utility", "personal"]
 
-# Exact allowlist — must stay aligned with web-ui/src/assets/modelLibrary.ts.
+# Exact allowlist — must stay aligned with web-ui/src/assets/modelLibrary.ts
+# plus Studio personal croquis drafts (`doc.model === "personal"`).
 SELECTABLE_FEMALE_IDS = frozenset(
     {
         "female-straight",
@@ -37,8 +38,10 @@ SELECTABLE_MALE_IDS = frozenset(
 )
 LEGACY_IDS = frozenset({"female", "male"})
 UTILITY_IDS = frozenset({"custom", "blank"})
+# Personal Create My Croquis underlay — not a built-in mannequin; no gender family.
+PERSONAL_IDS = frozenset({"personal"})
 ALLOWED_REFERENCE_MODEL_IDS = (
-    SELECTABLE_FEMALE_IDS | SELECTABLE_MALE_IDS | LEGACY_IDS | UTILITY_IDS
+    SELECTABLE_FEMALE_IDS | SELECTABLE_MALE_IDS | LEGACY_IDS | UTILITY_IDS | PERSONAL_IDS
 )
 
 
@@ -48,7 +51,7 @@ class ReferenceCroquis:
 
     model_id: str
     kind: ReferenceKind
-    family: CroquisFamily | None  # None for custom/blank — do not invent
+    family: CroquisFamily | None  # None for custom/blank/personal — do not invent
 
 
 def parse_reference_model_id(raw: Any) -> ReferenceCroquis | None:
@@ -65,6 +68,8 @@ def parse_reference_model_id(raw: Any) -> ReferenceCroquis | None:
         return None
     if model_id not in ALLOWED_REFERENCE_MODEL_IDS:
         raise ValidationAppError("reference_model_id is not a recognized Studio model")
+    if model_id in PERSONAL_IDS:
+        return ReferenceCroquis(model_id=model_id, kind="personal", family=None)
     if model_id in UTILITY_IDS:
         return ReferenceCroquis(model_id=model_id, kind="utility", family=None)
     if model_id in LEGACY_IDS:
@@ -130,6 +135,17 @@ def vision_reference_instructions(ref: ReferenceCroquis | None) -> str:
             "Infer the croquis presentation only from the attached sketch. "
             "Do not invent or force a female fashion figure when evidence is ambiguous."
         )
+    if ref.kind == "personal":
+        return (
+            "SELECTED STUDIO REFERENCE: `personal` (Create My Croquis underlay — photo-faithful "
+            "personal figure, not a built-in mannequin library entry). "
+            "Preserve the person, body proportions, pose, stance, limbs, and visible anatomy "
+            "exactly as drawn in the attached sketch. "
+            "Do NOT replace the figure with female-straight, male-straight, or any other "
+            "generic library croquis. Do NOT invent a male or female fashion-model family. "
+            "Do NOT default to a female-presenting runway figure. "
+            "Refine garment construction, textiles, colors, and presentation only."
+        )
     if ref.kind == "utility":
         return (
             f"SELECTED STUDIO REFERENCE: `{ref.model_id}` (no explicit male/female library selection). "
@@ -159,6 +175,15 @@ def edit_reference_instructions(ref: ReferenceCroquis | None) -> str:
         return (
             "SELECTED STUDIO REFERENCE: not provided. Preserve the figure presentation visible "
             "in the uploaded sketch; do not invent a different fashion-model family."
+        )
+    if ref.kind == "personal":
+        return (
+            "SELECTED STUDIO REFERENCE (authoritative): `personal` Create My Croquis underlay. "
+            "Preserve this exact personal figure's proportions, pose, stance, arms, legs, and "
+            "appearance as drawn in the sketch. "
+            "Do NOT replace with female-straight or any other built-in mannequin. "
+            "Do NOT invent a male or female library croquis identity. "
+            "Professionally refine the garment construction, textiles, colors, and presentation only."
         )
     if ref.kind == "utility":
         return (

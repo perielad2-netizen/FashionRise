@@ -340,8 +340,17 @@ def set_try_on_provider_override(provider: Any | None) -> None:
     _try_on_provider_override = provider
 
 
-def get_try_on_provider() -> Any:
-    """Factory — tests inject via ``set_try_on_provider_override``."""
+def get_try_on_provider(provider: str | None = None) -> Any:
+    """Factory — tests inject via ``set_try_on_provider_override``.
+
+    ``provider`` is frozen on the job at enqueue (``openai`` default, or ``fashn``).
+    Never auto-switch after a refusal.
+    """
     if _try_on_provider_override is not None:
         return _try_on_provider_override
+    name = (provider or "openai").strip().lower()
+    if name in {"fashn", "fashn_tryon_v1_6", "tryon-v1.6"}:
+        from app.services.fashn_try_on_provider import FashnTryOnV16Adapter
+
+        return FashnTryOnV16Adapter()
     return OpenAITryOnImagesEditAdapter()

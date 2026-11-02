@@ -230,6 +230,10 @@ def test_preflight_and_gate(client, monkeypatch, db_session):
     assert body["prompt_version"] == TRY_ON_PROMPT_VERSION
     assert body["enabled"] is True
     assert "notice_text" in body and body["notice_text"]
+    assert body["fashn_enabled"] is False
+    assert body["fashn_configured"] is False
+    assert body["fashn_consent_version"] == "try-on-fashn-preview-v1"
+    assert "FASHN" in (body.get("fashn_notice_text") or "")
 
 
 def test_enqueue_refused_when_ai_gate_off(client, monkeypatch, db_session):
@@ -623,3 +627,118 @@ def test_enqueue_passes_design_hints_to_provider(client, monkeypatch, db_session
     assert all(len(h) <= 120 for h in mock.last_design_hints)
     assert provider_network_tripwire_hits() == 0
 
+
+
+def _accept_personal_croquis(client, tokens, monkeypatch, db_session, croquis_id: str, key: str):
+    _enable_ai_spend(monkeypatch)
+    set_croquis_provider_override(MockCroquisProvider(cost_cents=2))
+    ai = client.post(
+        f"{BASE}/consent/ai",
+        headers=_auth(tokens),
+        json=ai_body(croquis_id=croquis_id),
+    )
+    gen = client.post(
+        f"{BASE}/{croquis_id}/versions/generate",
+        headers=_auth(tokens),
+        json={"ai_consent_id": ai.json()["id"], "idempotency_key": key},
+    )
+    assert gen.status_code == 201, gen.text
+    from app.services.personal_croquis_worker import run_croquis_worker_tick
+
+    run_croquis_worker_tick(db_session, limit=4)
+    acc = client.post(
+        f"{BASE}/{croquis_id}/versions/1/accept",
+        headers=_auth(tokens),
+        json={},
+    )
+    assert acc.status_code == 200, acc.text
+
+
+def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_session):
+    from app.services.fashn_try_on_provider import FASHN_CONSENT_VERSION
+
+    tokens = register_with_invite(client, db_session, "to-fashn@example.com", "tofashn")
+    croquis = _upload_ready(client, tokens, monkeypatch)
+    _accept_personal_croquis(client, tokens, monkeypatch, db_session, croquis["id"], "g-tofashn")
+
+    # Enable FASHN flags with a non-empty key — never assert the value.
+    get_settings.cache_clear()
+    monkeypatch.setenv("FASHN_TRY_ON_ENABLED", "true")
+    monkeypatch.setenv("FASHN_TRY_ON_LIVE_HTTP", "true")
+    monkeypatch.setenv("FASHN_API_KEY", "test-fashn-key-not-real")
+    monkeypatch.setenv("FASHN_TRY_ON_ESTIMATE_CENTS", "8")
+    get_settings.cache_clear()
+
+    prep = client.post(
+        f"{TRY_ON}/fashn/prepare",
+        headers=_auth(tokens),
+        json={"garment_image_base64": _garment_data_url()},
+    )
+    assert prep.status_code == 200, prep.text
+    pbody = prep.json()
+    assert pbody["provider"] == "fashn"
+    assert pbody["configured"] is True
+    assert pbody["consent_version"] == FASHN_CONSENT_VERSION
+    assert pbody["composite_preview_base64"].startswith("data:image/png;base64,")
+    assert pbody["fashn_calls"] >= 1
+    assert pbody["estimate_cents"] == 8 * pbody["fashn_calls"]
+
+    class MockFashn:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, *, photo_png, garment_png, design_hints=None, prep=None):
+            self.calls += 1
+            assert photo_png and garment_png
+            assert prep is not None
+            out = _png_bytes((80, 120), (12, 34, 56, 255))
+            return out, {
+                "actual_cost_cents": 8 * prep.fashn_calls,
+                "prompt_version": "fashn-tryon-v1.6",
+                "provider": "fashn_tryon_v1_6",
+                "fashn_calls": prep.fashn_calls,
+                "layout": prep.layout,
+                "prediction_ids": ["pred-mock-1"],
+            }
+
+    mock = MockFashn()
+    set_try_on_provider_override(mock)
+    body = _try_on_body(croquis_id=croquis["id"], key="try_on:fashn:mock-1")
+    body["provider"] = "fashn"
+    body["consent_version"] = FASHN_CONSENT_VERSION
+    r = client.post(TRY_ON, headers=_auth(tokens), json=body)
+    assert r.status_code == 201, r.text
+    job_id = r.json()["id"]
+    run_magic_worker_tick(db_session, limit=4)
+    assert mock.calls == 1
+    job = db_session.get(AIJob, uuid.UUID(job_id))
+    assert job is not None
+    assert job.status == "completed"
+    assert job.input_data.get("provider") == "fashn"
+    assert job.result_data.get("provider") == "fashn_tryon_v1_6"
+    res = (
+        db_session.query(PersonalCroquisSpendReservation)
+        .filter(PersonalCroquisSpendReservation.idempotency_key == "try_on:fashn:mock-1")
+        .one()
+    )
+    assert res.status == RESERVATION_SETTLED
+    assert provider_network_tripwire_hits() == 0
+
+
+def test_fashn_enqueue_refuses_without_key(client, monkeypatch, db_session):
+    from app.services.fashn_try_on_provider import FASHN_CONSENT_VERSION
+
+    tokens = register_with_invite(client, db_session, "to-fashn2@example.com", "tofashn2")
+    croquis = _upload_ready(client, tokens, monkeypatch)
+    _accept_personal_croquis(client, tokens, monkeypatch, db_session, croquis["id"], "g-tofashn2")
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("FASHN_TRY_ON_ENABLED", "true")
+    monkeypatch.delenv("FASHN_API_KEY", raising=False)
+    get_settings.cache_clear()
+
+    body = _try_on_body(croquis_id=croquis["id"], key="try_on:fashn:nokey")
+    body["provider"] = "fashn"
+    body["consent_version"] = FASHN_CONSENT_VERSION
+    r = client.post(TRY_ON, headers=_auth(tokens), json=body)
+    assert r.status_code == 403

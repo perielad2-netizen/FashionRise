@@ -1,9 +1,25 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 describe('personalCroquisNotices fail-closed', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.resetModules()
+  })
+
+  it('uses static import.meta.env.VITE_* access only (#158 Vite replacement)', () => {
+    const srcPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'personalCroquisNotices.ts')
+    const src = readFileSync(srcPath, 'utf8')
+    // Strip block + line comments so the #158 docstring mentioning dynamic access is ignored.
+    const code = src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    expect(code).toContain('import.meta.env.VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT')
+    expect(code).toContain('import.meta.env.VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT')
+    expect(code).toContain('import.meta.env.VITE_MY_CROQUIS_AI_NOTICE_TEXT')
+    expect(code).not.toMatch(/import\.meta\.env\s*\[/)
   })
 
   it('rejects empty and draft/placeholder notice text', async () => {

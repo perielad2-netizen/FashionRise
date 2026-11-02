@@ -46,6 +46,17 @@ from app.services.personal_croquis_provider import (
     ProviderNotAvailableError,
     ProviderOutcomeUnknownError,
 )
+from app.services.fashn_try_on_provider import (
+    FASHN_CONSENT_VERSION,
+    FASHN_NOTICE_TEXT,
+    FASHN_PROMPT_VERSION,
+    FASHN_PROVIDER_ID,
+    estimate_fashn_cost_cents,
+    fashn_configured,
+    fashn_live_armed,
+    fashn_notice_text_hash,
+)
+from app.services.fashn_garment_prep import prepare_garment_reference
 from app.services.personal_try_on_provider import (
     TRY_ON_CONSENT_VERSION,
     TRY_ON_JOB_TYPE,
@@ -57,6 +68,9 @@ from app.services.personal_try_on_provider import (
     get_try_on_provider,
     try_on_notice_text_hash,
 )
+
+TRY_ON_PROVIDER_OPENAI = "openai"
+TRY_ON_PROVIDER_FASHN = "fashn"
 from app.storage.local import LocalStorageBackend
 
 _DATA_URL_RE = re.compile(r"^data:(image/(?:png|jpeg|jpg|webp));base64,(.+)$", re.DOTALL | re.IGNORECASE)
@@ -119,7 +133,23 @@ def _decode_garment_png(data_url: str) -> bytes:
         ) from exc
 
 
-def _record_try_on_consent(db: Session, user: User) -> UserConsentEvent:
+def _normalize_provider(raw: str | None, *, strict: bool = True) -> str:
+    name = (raw or TRY_ON_PROVIDER_OPENAI).strip().lower()
+    if name in {TRY_ON_PROVIDER_FASHN, "fashn_tryon_v1_6", "tryon-v1.6", FASHN_PROVIDER_ID}:
+        return TRY_ON_PROVIDER_FASHN
+    if name in {TRY_ON_PROVIDER_OPENAI, "openai_images_edit"}:
+        return TRY_ON_PROVIDER_OPENAI
+    if not strict:
+        return TRY_ON_PROVIDER_OPENAI
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Try On Person provider must be openai or fashn.",
+    )
+
+
+def _record_try_on_consent(
+    db: Session, user: User, *, provider: str
+) -> UserConsentEvent:
     """Record one-action try-on consent for this enqueue (immutable event)."""
     attestation = pcs._latest_adults_attestation(db, user)
     if attestation is None:
@@ -127,13 +157,19 @@ def _record_try_on_consent(db: Session, user: User) -> UserConsentEvent:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Adults-only beta attestation is required before Try On Person.",
         )
+    if provider == TRY_ON_PROVIDER_FASHN:
+        version = FASHN_CONSENT_VERSION
+        text_hash = fashn_notice_text_hash()
+    else:
+        version = TRY_ON_CONSENT_VERSION
+        text_hash = try_on_notice_text_hash()
     row = UserConsentEvent(
         id=uuid.uuid4(),
         owner_id=user.id,
         purpose=PURPOSE_TRY_ON_PERSON,
-        consent_version=TRY_ON_CONSENT_VERSION,
+        consent_version=version,
         adults_attested=True,
-        text_hash=try_on_notice_text_hash(),
+        text_hash=text_hash,
     )
     db.add(row)
     db.flush()
@@ -182,11 +218,13 @@ def enqueue_personal_try_on(
     consent_acknowledged: bool,
     consent_version: str,
     design_hints: list[str] | None = None,
+    provider: str = TRY_ON_PROVIDER_OPENAI,
 ) -> AIJob:
     """Validate, reserve spend, freeze garment, enqueue ``personal_try_on`` job."""
     _require_ai_gate()
     settings = get_settings()
     hints = _normalize_design_hints(design_hints)
+    provider_name = _normalize_provider(provider)
 
     key = (idempotency_key or "").strip()
     if not key or len(key) > 128:
@@ -194,19 +232,44 @@ def enqueue_personal_try_on(
     if not key.startswith("try_on:"):
         # Namespace spend unique constraint away from croquis generate keys.
         key = f"try_on:{key}"
+    # Keep OpenAI and FASHN idempotency namespaces distinct to block cross-provider replays.
+    if provider_name == TRY_ON_PROVIDER_FASHN and ":fashn:" not in key:
+        key = key.replace("try_on:", "try_on:fashn:", 1)
 
     if not consent_acknowledged:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Try On Person requires explicit consent acknowledgment.",
         )
-    if consent_version != TRY_ON_CONSENT_VERSION:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Try On Person consent version is outdated.",
-        )
-    if try_on_notice_text_hash() != hashlib.sha256(TRY_ON_NOTICE_TEXT.encode("utf-8")).hexdigest():
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Notice hash mismatch.")
+    if provider_name == TRY_ON_PROVIDER_FASHN:
+        if not fashn_configured():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="FASHN Try On is not configured on this server.",
+            )
+        if consent_version != FASHN_CONSENT_VERSION:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="FASHN Try On consent version is outdated.",
+            )
+        if fashn_notice_text_hash() != hashlib.sha256(FASHN_NOTICE_TEXT.encode("utf-8")).hexdigest():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="FASHN notice hash mismatch."
+            )
+        expected_prompt_version = FASHN_PROMPT_VERSION
+        consent_ver = FASHN_CONSENT_VERSION
+    else:
+        if consent_version != TRY_ON_CONSENT_VERSION:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Try On Person consent version is outdated.",
+            )
+        if try_on_notice_text_hash() != hashlib.sha256(TRY_ON_NOTICE_TEXT.encode("utf-8")).hexdigest():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Notice hash mismatch."
+            )
+        expected_prompt_version = TRY_ON_PROMPT_VERSION
+        consent_ver = TRY_ON_CONSENT_VERSION
 
     fp = (content_fingerprint or "").strip()
     if not fp or len(fp) > 128:
@@ -253,8 +316,28 @@ def enqueue_personal_try_on(
     garment_png = _decode_garment_png(garment_image_base64)
     garment_fp = hashlib.sha256(garment_png).hexdigest()
 
+    fashn_prep_meta: dict[str, Any] | None = None
+    if provider_name == TRY_ON_PROVIDER_FASHN:
+        try:
+            prep = prepare_garment_reference(garment_png)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        estimate = estimate_fashn_cost_cents(fashn_calls=prep.fashn_calls)
+        fashn_prep_meta = {
+            "layout": prep.layout,
+            "fashn_calls": prep.fashn_calls,
+            "garment_fingerprint": prep.source_fingerprint,
+        }
+    else:
+        estimate = estimate_try_on_cost_cents()
+
     max_exposure = resolve_max_exposure_cents()
-    estimate = estimate_try_on_cost_cents()
+    # Reservation must cover the provider-specific estimate (two-piece FASHN = 2 credits).
+    if estimate > max_exposure > 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Estimated Try On cost exceeds the configured max exposure per run.",
+        )
     ceiling_cents = int(round(float(settings.my_croquis_ai_spend_ceiling_usd or 0) * 100))
     day_cap = int(round(float(settings.my_croquis_ai_max_usd_per_user_day or 0) * 100))
     max_gens = int(settings.my_croquis_ai_max_generations_per_user_day or 0)
@@ -305,7 +388,7 @@ def enqueue_personal_try_on(
                 detail="Daily AI spend limit would be exceeded.",
             )
 
-    consent = _record_try_on_consent(db, user)
+    consent = _record_try_on_consent(db, user, provider=provider_name)
     reservation = PersonalCroquisSpendReservation(
         id=uuid.uuid4(),
         owner_id=user.id,
@@ -333,12 +416,15 @@ def enqueue_personal_try_on(
         "content_fingerprint": fp,
         "source_revision": int(source_revision),
         "consent_id": str(consent.id),
-        "consent_version": TRY_ON_CONSENT_VERSION,
-        "prompt_version": TRY_ON_PROMPT_VERSION,
+        "consent_version": consent_ver,
+        "prompt_version": expected_prompt_version,
+        "provider": provider_name,
         "reservation_id": str(reservation.id),
         "mode": "try_on_person",
         "design_hints": hints,
     }
+    if fashn_prep_meta is not None:
+        input_data["fashn_prep"] = fashn_prep_meta
 
     job = AIJob(
         id=uuid.uuid4(),
@@ -470,17 +556,30 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         return _fail("Try On Person could not load the frozen photo or garment.")
 
+    provider_name = _normalize_provider(
+        str(data.get("provider") or TRY_ON_PROVIDER_OPENAI), strict=False
+    )
+    prompt_version = str(
+        data.get("prompt_version")
+        or (FASHN_PROMPT_VERSION if provider_name == TRY_ON_PROVIDER_FASHN else TRY_ON_PROMPT_VERSION)
+    )
     try:
-        provider = get_try_on_provider()
+        provider = get_try_on_provider(provider_name)
         if reservation is not None:
             reservation.provider_called = True
             db.flush()
         hints = _normalize_design_hints(
             data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
         )
-        png, meta = provider.generate(
-            photo_png=photo_png, garment_png=garment_png, design_hints=hints
-        )
+        generate_kwargs: dict[str, Any] = {
+            "photo_png": photo_png,
+            "garment_png": garment_png,
+            "design_hints": hints,
+        }
+        if provider_name == TRY_ON_PROVIDER_FASHN:
+            # Recompute prep deterministically from frozen garment (no client-supplied plates).
+            generate_kwargs["prep"] = prepare_garment_reference(garment_png)
+        png, meta = provider.generate(**generate_kwargs)
     except ProviderNotAvailableError as exc:
         # Definitive pre-submit or HTTP 4xx refusal — release reservation at $0.
         # Never auto-retry. Do not leak raw provider JSON into owner UI.
@@ -533,11 +632,13 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         "bullets": [
             "Original photo and sketch were not overwritten.",
             "Face, pose and background preserved where the model allowed.",
-            f"Prompt {TRY_ON_PROMPT_VERSION}",
+            f"Prompt {prompt_version}",
+            f"Provider {meta.get('provider') or provider_name}",
         ],
         "image_url": url,
         "mode": "try_on_person",
-        "prompt_version": TRY_ON_PROMPT_VERSION,
+        "prompt_version": prompt_version,
+        "provider": meta.get("provider") or provider_name,
         "croquis_id": str(data.get("croquis_id")),
         "croquis_version": data.get("croquis_version"),
         "source_asset_id": str(data.get("source_asset_id")),
@@ -546,6 +647,10 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         "source_revision": data.get("source_revision"),
         "cost_cents": reservation.actual_cost_cents if reservation else actual,
     }
+    if provider_name == TRY_ON_PROVIDER_FASHN:
+        result["fashn_prediction_ids"] = meta.get("prediction_ids")
+        result["fashn_calls"] = meta.get("fashn_calls")
+        result["fashn_layout"] = meta.get("layout")
     job.status = "completed"
     job.error_message = None
     job.result_data = result
@@ -553,8 +658,9 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
 
 
 def try_on_preflight_public() -> dict[str, Any]:
-    """Safe public preflight for FE (no image bytes)."""
+    """Safe public preflight for FE (no image bytes / no secret values)."""
     settings = get_settings()
+    fashn_ready = fashn_configured()
     return {
         "enabled": bool(settings.my_croquis_ai_enabled and settings.my_croquis_ai_spend_ceiling_usd > 0),
         "live_http": bool(settings.my_croquis_ai_live_http),
@@ -564,4 +670,41 @@ def try_on_preflight_public() -> dict[str, Any]:
         "prompt_version": TRY_ON_PROMPT_VERSION,
         "estimate_cents": estimate_try_on_cost_cents(),
         "max_exposure_cents": int(settings.my_croquis_ai_max_exposure_cents or 0),
+        "fashn_enabled": bool(settings.fashn_try_on_enabled),
+        "fashn_configured": fashn_ready,
+        "fashn_live_http": bool(settings.fashn_try_on_live_http) and fashn_ready,
+        "fashn_consent_version": FASHN_CONSENT_VERSION,
+        "fashn_notice_text": FASHN_NOTICE_TEXT,
+        "fashn_notice_hash": fashn_notice_text_hash(),
+        "fashn_estimate_cents_per_call": int(settings.fashn_try_on_estimate_cents or 8),
+        "fashn_prompt_version": FASHN_PROMPT_VERSION,
     }
+
+
+def prepare_fashn_garment_public(garment_image_base64: str) -> dict[str, Any]:
+    """Offline FASHN garment prep preview — no provider HTTP, no spend."""
+    _require_ai_gate()
+    settings = get_settings()
+    if not settings.fashn_try_on_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="FASHN Try On is not enabled.",
+        )
+    garment_png = _decode_garment_png(garment_image_base64)
+    try:
+        prep = prepare_garment_reference(garment_png)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    per = int(settings.fashn_try_on_estimate_cents or 8)
+    payload = prep.public_dict(cents_per_call=per)
+    payload.update(
+        {
+            "consent_version": FASHN_CONSENT_VERSION,
+            "notice_text": FASHN_NOTICE_TEXT,
+            "notice_hash": fashn_notice_text_hash(),
+            "provider": TRY_ON_PROVIDER_FASHN,
+            "configured": fashn_configured(),
+            "live_http": fashn_live_armed(),
+        }
+    )
+    return payload
