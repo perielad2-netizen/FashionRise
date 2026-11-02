@@ -35,6 +35,7 @@ class LowerGarmentGeometry:
     looks_like_jumpsuit: bool
     looks_like_narrow_legs: bool
     looks_like_wide_legs: bool
+    looks_like_high_slit_dress: bool
 
     def public_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +51,7 @@ class LowerGarmentGeometry:
             "looks_like_jumpsuit": self.looks_like_jumpsuit,
             "looks_like_narrow_legs": self.looks_like_narrow_legs,
             "looks_like_wide_legs": self.looks_like_wide_legs,
+            "looks_like_high_slit_dress": self.looks_like_high_slit_dress,
         }
 
 
@@ -132,6 +134,7 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
         looks_like_jumpsuit=False,
         looks_like_narrow_legs=False,
         looks_like_wide_legs=False,
+        looks_like_high_slit_dress=False,
     )
     if not xs:
         return empty
@@ -204,6 +207,54 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
         if early_n and (early / early_n) < 0.35:
             trousers = False
 
+    # High-slit dress / gown: connected hip/waist panel (one run) that later opens into
+    # an asymmetric dual-lobe gap. True trousers/jumpsuits already show two legs at the hip.
+    # Without this, a thigh-high slit is mis-hinted as "jumpsuit — not a dress" (#174).
+    high_slit_dress = False
+    if trousers and mid_connected and coverage >= 0.45:
+        hip_dual = 0
+        hip_n = 0
+        hip_widths: list[tuple[float, float]] = []
+        for t in (0.32, 0.38, 0.44, 0.50):
+            hip_y = y0 + int(t * bh)
+            if hip_y > y1:
+                continue
+            runs = _runs(mask[hip_y][x0 : x1 + 1])
+            min_run = max(2, int(0.03 * bw))
+            runs = [(a, b) for a, b in runs if (b - a) >= min_run]
+            hip_n += 1
+            if len(runs) == 2 and (runs[1][0] - runs[0][1]) >= max(2, int(0.04 * bw)):
+                hip_dual += 1
+                hip_widths.append(
+                    ((runs[0][1] - runs[0][0]) / bw, (runs[1][1] - runs[1][0]) / bw)
+                )
+        hip_dual_ratio = hip_dual / max(hip_n, 1)
+        asymmetric = False
+        if width_fracs:
+            # Compare mean left vs right lobe width across lower dual-lobe samples.
+            left_ws: list[float] = []
+            right_ws: list[float] = []
+            for y in range(sample_y0, sample_y1 + 1, max(1, bh // 40)):
+                runs = _runs(mask[y][x0 : x1 + 1])
+                min_run = max(2, int(0.03 * bw))
+                runs = [(a, b) for a, b in runs if (b - a) >= min_run]
+                if len(runs) == 2 and (runs[1][0] - runs[0][1]) >= max(2, int(0.04 * bw)):
+                    left_ws.append((runs[0][1] - runs[0][0]) / bw)
+                    right_ws.append((runs[1][1] - runs[1][0]) / bw)
+            if left_ws and right_ws:
+                lw = sum(left_ws) / len(left_ws)
+                rw = sum(right_ws) / len(right_ws)
+                lo, hi = (lw, rw) if lw <= rw else (rw, lw)
+                asymmetric = lo > 0 and (hi / lo) >= 1.55
+        # Connected hip (few dual lobes) + later dual lobes ⇒ fashion slit, not pant crotch.
+        if hip_dual_ratio < 0.40:
+            high_slit_dress = True
+            trousers = False
+        elif asymmetric and hip_dual_ratio < 0.75:
+            # Strong lobe asymmetry with mostly-connected hip ⇒ hanging slit panel.
+            high_slit_dress = True
+            trousers = False
+
     jumpsuit = trousers and mid_connected and coverage >= 0.45 and y0 < int(0.45 * h)
     narrow = trousers and avg_w > 0 and avg_w <= 0.32
     wide = trousers and avg_w >= 0.33
@@ -221,11 +272,19 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
         looks_like_jumpsuit=bool(jumpsuit),
         looks_like_narrow_legs=bool(narrow),
         looks_like_wide_legs=bool(wide),
+        looks_like_high_slit_dress=bool(high_slit_dress),
     )
 
 
 def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
-    """Additive V2 hints only when trouser geometry is clear. Empty when ambiguous."""
+    """Additive V2 hints for clear trouser OR high-slit dress geometry. Empty when ambiguous."""
+    if geometry.looks_like_high_slit_dress:
+        return [
+            "garment type: dress or gown with a high fashion slit — not trousers or a jumpsuit",
+            "preserve the designed leg opening/slit from image 2; do not close it into pant legs",
+            "keep one continuous skirt/dress panel beside the slit; do not invent a second pant leg",
+            "match the slit height and which side opens from image 2",
+        ]
     if not geometry.looks_like_trousers:
         return []
     hints: list[str] = []

@@ -363,7 +363,7 @@ def test_openai_try_on_unaffected_by_fashn_accept_gate(client, monkeypatch, db_s
             out = _png_bytes((80, 120), (9, 9, 9, 255))
             return out, {
                 "actual_cost_cents": 3,
-                "prompt_version": "try-on-person-v2",
+                "prompt_version": "try-on-person-v2.1",
                 "provider": "openai_images_edit",
             }
 

@@ -246,6 +246,12 @@ export function useStudioEditor() {
     useState<PersonalCroquisUnderlayIdentity | null>(null)
   const [personalUnavailable, setPersonalUnavailable] = useState(false)
   const personalLoadGenRef = useRef(0)
+  /**
+   * Bumped whenever applyDocument clears the personal underlay so the load effect
+   * re-runs even when model + pin id/version are unchanged (open same My Croquis
+   * design from My Designs). Without this, underlay stays blank after open.
+   */
+  const [personalUnderlayReloadToken, setPersonalUnderlayReloadToken] = useState(0)
   const [croquisWizardOpen, setCroquisWizardOpen] = useState(false)
   const [dimmed, setDimmed] = useState(false)
   const [magicNotice, setMagicNotice] = useState<string | null>(null)
@@ -419,7 +425,7 @@ export function useStudioEditor() {
       cancelled = true
       ac.abort()
     }
-  }, [user?.id, model, personalCroquisId, personalCroquisVersion])
+  }, [user?.id, model, personalCroquisId, personalCroquisVersion, personalUnderlayReloadToken])
 
   const activeHistory = useCallback(() => {
     return activeSide === 'back' ? historyBack.current : historyFront.current
@@ -462,10 +468,13 @@ export function useStudioEditor() {
     setCustomKey(doc.customReferenceKey)
     setPersonalCroquisId(doc.personalCroquisId ?? null)
     setPersonalCroquisVersion(doc.personalCroquisVersion ?? null)
+    // Invalidate any in-flight underlay and force the load effect to re-fetch even
+    // when the opened design reuses the same personal croquis pin (deps unchanged).
     personalLoadGenRef.current += 1
     setPersonalObjectUrl(null)
     setPersonalUnderlayIdentity(null)
     setPersonalUnavailable(false)
+    setPersonalUnderlayReloadToken((n) => n + 1)
     setBrushSizePxState(resolveBrushSizePx(doc.brush))
     setOpacity(doc.brush.opacity)
     setColor(doc.brush.color)

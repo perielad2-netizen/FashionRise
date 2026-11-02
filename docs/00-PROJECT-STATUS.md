@@ -3,16 +3,16 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#173 FASHN Try-On Max owner experiment** **DEPLOYED** App **`751840fb`** · OpenAI Try On stays **`try-on-person-v2`** · **0** paid calls during implementation.)
+**Last updated:** 2026-11-02 (**#174 open personal underlay + high-slit dress try-on** — shipping · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits + additive trouser hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2.1** (ordinary outfits + trouser **or** high-slit-dress geometry hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`751840fb`** — release `/var/www/fashionrise/releases/751840fb` · #173 Try-On Max owner experiment UI · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`c0e2cb8d`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + structure review **v3** (server provenance `openai_try_on_photo`) · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
+| Frontend (`web-ui`) | **#174 pending deploy** — open-from-My-Designs personal underlay reload · prior App **`751840fb`** (#173 Max UI) kept until switch. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2.1`** + high-slit dress geometry hints · structure review **v3** · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → new release |

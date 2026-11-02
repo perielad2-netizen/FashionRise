@@ -173,14 +173,15 @@ def test_try_on_prompt_is_not_sketch_polish():
 
 
 def test_try_on_prompt_v2_restored_for_ordinary_openai_path():
-    """#168 — live OpenAI Try On uses V2; V3 swimwear wording stays archive-only.
+    """#168/#174 — live OpenAI Try On uses V2.1; V3 swimwear wording stays archive-only.
 
     Production evidence: every try-on-person-v3 job failed with
     PROVIDER_MODERATION_BLOCKED / moderation_stage=input / categories=sexual,
     including ordinary magenta top + orange shorts + cap (461c9419…). Last
     successful ordinary outfit used try-on-person-v2 on the same croquis photo.
+    V2.1 keeps that base and clarifies fashion slits must not become trousers.
     """
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.1"
     active = build_try_on_prompt(None)
     assert active == TRY_ON_PROMPT_V2
     # Live prompt must not carry V3 swimwear / skin-uncovering language.
@@ -193,6 +194,9 @@ def test_try_on_prompt_v2_restored_for_ordinary_openai_path():
     assert "hats/caps" in active.lower() or "hat/cap" in active.lower()
     assert "photorealistic" in active.lower()
     assert "fashion illustration" not in active.lower()
+    # #174 — slit dress must not be coerced into trousers/jumpsuit.
+    assert "slit" in active.lower()
+    assert "jumpsuit" in active.lower()
     # V3 archive retained but not activated.
     assert "swimwear" in TRY_ON_PROMPT_V3.lower()
     assert "opaque" in TRY_ON_PROMPT_V3.lower()
@@ -236,7 +240,7 @@ def test_openai_try_on_route_independent_from_fashn_prompt_versions():
     from app.services.fashn_garment_realism import GARMENT_REALISM_PROMPT_VERSION
     from app.services.personal_try_on import FASHN_PROMPT_VERSION
 
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.1"
     assert TRY_ON_PROMPT_VERSION != GARMENT_REALISM_PROMPT_VERSION
     assert TRY_ON_PROMPT_VERSION != FASHN_PROMPT_VERSION
     assert FASHN_PROMPT_VERSION.startswith("fashn-")
