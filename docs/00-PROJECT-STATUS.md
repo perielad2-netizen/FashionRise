@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**CONFIG** daily AI gen quota **OFF** · `MY_CROQUIS_AI_MAX_GENERATIONS_PER_USER_DAY=0` · App **`e728a06c`** · money caps unchanged · **0** operator-paid OpenAI this change.)
+**Last updated:** 2026-11-02 (**#156** V3 live-fail confirmed · OpenAI prompt cycles **stopped** · FASHN AI evaluated · **BLOCKED** on owner FASHN account/API key/credits · App **`e728a06c`** unchanged · **0** new paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person V3 live (opaque fashion/swimwear coverage). My Croquis library is first-class nav.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person V3 live — ordinary swimwear still fails OpenAI input moderation. Specialist provider evaluation complete; integration waiting on credentials.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -17,6 +17,58 @@
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | `current` → `releases/e728a06c` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
 | AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v3`** · **daily generation count OFF** (`MAX_GENERATIONS_PER_USER_DAY=0`) |
+
+## #156 P0 ordinary swimwear — provider suitability (2026-11-02) — OPEN / BLOCKED
+
+OpenAI prompt tweaks **stopped**. V3 is live and still unsuitable for ordinary two-piece swimwear. Next path is a **separate specialist try-on provider** (first candidate: FASHN AI), keeping the working OpenAI path for outfits that already succeed.
+
+### 1) Latest production failure (safe diagnostics only)
+
+| Field | Job ≈00:15 UTC | Follow-up ≈00:24 UTC |
+|---|---|---|
+| Job id | `d3e83594-57c3-4ea4-b3a3-fca2aa075e36` | `8ba362df-716c-458f-969c-5859772da3e2` |
+| Created (UTC) | **2026-11-02 00:14:55Z** | 2026-11-02 00:24:16Z |
+| Created (Asia/Jerusalem) | **2026-11-02 02:14:55** | 2026-11-02 02:24:16 |
+| Prompt | `try-on-person-v3` | `try-on-person-v3` |
+| Consent | `try-on-person-preview-v1` | same |
+| Error | `PROVIDER_MODERATION_BLOCKED` | same |
+| Provider rejection | `moderation_blocked` · HTTP **400** · stage **`input`** · categories **`["sexual"]`** · `req_d5eecc5453ad4ad2b05e744f760f954b` | same shape · `req_096d9dbafa5e4c0da8aef7342c893536` |
+| Reservation | **released** · `actual_cost_cents` **null** · `provider_called` **true** · estimate 40¢ | same |
+| App | **`e728a06c`** | same |
+
+No new paid OpenAI retries by the agent. UI still shows the sanitized owner message; diagnostics stay in private `result_data.provider_rejection`.
+
+### 2) FASHN AI evaluation (docs only — no network/paid FASHN calls)
+
+| Topic | Finding |
+|---|---|
+| Best first endpoint for swimwear policy | **`tryon-v1.6`** — documents `moderation_level=permissive` (default) allowing swimwear/underwear while still blocking explicit nudity. `conservative` explicitly blocks swimwear. |
+| Higher-fidelity candidate | **`tryon-max`** — better quality (up to 4K, prompt styling) but **no** documented moderation_level / swimwear policy control. Use after garment prep is proven, not as the first swimwear policy fix. |
+| Model / person photo | Authorized original adult croquis photo maps cleanly to `model_image` (URL or data URI). Prefer **base64 + `return_base64: true`** so private photos are not left as long-lived CDN URLs. |
+| FashionRise garment capture | Current capture is a **transparent Studio garment-only sketch PNG** (not a product / flat-lay / ghost-mannequin photo). FASHN examples and guides assume **product photographs**. **Do not assume the existing capture can be sent raw.** A legitimate product-image preparation step is required (e.g. composite two-piece onto a flat / ghost-mannequin style plate; two-piece may need one composite `one-pieces`-style plate or separate top/bottom runs). |
+| Pricing (API on-demand) | **$0.075 / credit** · minimum purchase **100 credits ($7.50)**. v1.6 = **1 credit / output image**. Max = **1–5 credits** by `generation_mode` × `resolution` (× `num_images`). |
+| Commercial rights | API plans include a **commercial use license** for generated images in products/PDPs/marketing per FASHN terms; uploader must hold rights / model consent (FashionRise already gates Try On with `try-on-person-preview-v1`). |
+| Private-photo / retention | No training/fine-tune on Customer Content without separate opt-in. Base64 inputs deleted after processing (1-day backstop). Default CDN outputs ~3 days; `return_base64: true` → ~60 minutes. Request history retains parameters/URLs (base64 shown as placeholders). |
+| Consent / ethics | FASHN ToS forbids misuse without consent of identifiable individuals; FashionRise must keep explicit user-triggered generation + existing adults/storage/AI consent — do **not** set `moderation_level=none` for this product. |
+
+### 3) Preserve working FashionRise features
+
+- Keep OpenAI Try On Person for clothing designs that already work.
+- Add a **separate** FASHN adapter only for categories OpenAI rejects (or explicit routing), not a wholesale provider swap.
+- Preserve V5 croquis, garment fidelity, My Looks, My Croquis, Fashion Magic, private photo binding, spend caps, safe failure UX, explicit user trigger.
+- Do **not** disable moderation, auto-retry provider refusals, or introduce uncontrolled charges.
+
+### 4) EXACT BLOCKER — owner configuration required
+
+Prod `.env` and agent secrets have **no** `FASHN_*` credentials (OpenAI-only try-on stack). Integration and live swimwear validation **cannot** proceed without:
+
+1. Create a FASHN account at [app.fashn.ai](https://app.fashn.ai).
+2. Buy **API** credits under Billing → **FASHN API** (on-demand min **$7.50 / 100 credits**, or a commitment tier).
+3. Create an API key at [app.fashn.ai/api](https://app.fashn.ai/api) (shown once).
+4. Provide the key for server-side deploy only as e.g. `FASHN_API_KEY` (never client-side / never commit).
+5. Explicitly authorize the first paid FASHN swimwear validation on the authorized original photograph + prepared garment plate.
+
+Until those exist, **no adapter deploy and no mocked “success.”** #156 stays **OPEN**. Success = realistic Try On Person of an ordinary two-piece swimsuit on the authorized photo.
 
 ## CONFIG — daily AI generation quota disabled (2026-11-02)
 
