@@ -3,20 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#156** FASHN Try On v1.6 **implemented** · explicit FE option + garment prep preview · OpenAI path preserved · **0** operator-paid FASHN/OpenAI · awaiting private `FASHN_API_KEY` on VPS for live arming.)
+**Last updated:** 2026-11-02 (**#156** FASHN Try On v1.6 **DEPLOYED** App **`9aeea3f3`** · OpenAI path preserved · `FASHN_TRY_ON_ENABLED=true` · **`FASHN_API_KEY` still missing** → FASHN UI gated · **0** operator-paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear). FASHN UI appears only when server has key + flags.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear). FASHN UI appears only when server has key + live arming.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`e728a06c`** — release `/var/www/fashionrise/releases/e728a06c` · source `e728a06c10f60383c327d1d46ef7844dfffb87c6` · App pill **`e728a06c`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `fe1e9e8b` kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | Try-on prompt **`try-on-person-v3`** + sanitized `PROVIDER_MODERATION_BLOCKED` failures; #148 pin fingerprint remains. Alembic **`015`**. |
-| AI worker | `fashionrise-ai-worker` restarted with V3 try-on provider · croquis **v5** unchanged |
+| Frontend (`web-ui`) | **`9aeea3f3`** — release `/var/www/fashionrise/releases/9aeea3f3` · source `9aeea3f3991e8be505db7e34e423c786e716cb2d` · App pill **`9aeea3f3`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE `e728a06c` kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN adapter **`tryon-v1.6`** + garment prep + sanitized failures; Alembic **`015`**. |
+| AI worker | `fashionrise-ai-worker` restarted with FASHN+OpenAI try-on · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/e728a06c` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
-| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v3`** · **daily generation count OFF** (`MAX_GENERATIONS_PER_USER_DAY=0`) |
+| Nginx | `current` → `releases/9aeea3f3` · + exact `POST /api/v1/ai/personal-try-on/fashn/prepare` |
+| AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **OFF until key** · croquis **v5** · try-on OpenAI **`try-on-person-v3`** · daily gen count **OFF** |
 
 ## #156 P0 FASHN Try On v1.6 — IMPLEMENTED (awaiting private key + owner first paid test) (2026-11-02)
 
