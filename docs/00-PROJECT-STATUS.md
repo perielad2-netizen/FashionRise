@@ -11,7 +11,7 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`PENDING_SHA`** — see #170 deploy block · Accept 403 UX · capture completeness · trouser design hints · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`6ef5c109`** kept for rollback. |
+| Frontend (`web-ui`) | **`dcee9eac`** — release `/var/www/fashionrise/releases/dcee9eac` · Accept 403 UX · capture completeness · trouser design hints · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`6ef5c109`** kept for rollback. |
 | Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + soft structure review · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
