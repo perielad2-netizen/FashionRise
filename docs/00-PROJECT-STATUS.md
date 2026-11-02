@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#156** V3 live-fail confirmed · OpenAI prompt cycles **stopped** · FASHN AI evaluated · **BLOCKED** on owner FASHN account/API key/credits · App **`e728a06c`** unchanged · **0** new paid calls.)
+**Last updated:** 2026-11-02 (**#156** FASHN Try On v1.6 **implemented** · explicit FE option + garment prep preview · OpenAI path preserved · **0** operator-paid FASHN/OpenAI · awaiting private `FASHN_API_KEY` on VPS for live arming.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person V3 live — ordinary swimwear still fails OpenAI input moderation. Specialist provider evaluation complete; integration waiting on credentials.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear). FASHN UI appears only when server has key + flags.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -18,9 +18,29 @@
 | Nginx | `current` → `releases/e728a06c` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
 | AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v3`** · **daily generation count OFF** (`MAX_GENERATIONS_PER_USER_DAY=0`) |
 
-## #156 P0 ordinary swimwear — provider suitability (2026-11-02) — OPEN / BLOCKED
+## #156 P0 FASHN Try On v1.6 — IMPLEMENTED (awaiting private key + owner first paid test) (2026-11-02)
 
-OpenAI prompt tweaks **stopped**. V3 is live and still unsuitable for ordinary two-piece swimwear. Next path is a **separate specialist try-on provider** (first candidate: FASHN AI), keeping the working OpenAI path for outfits that already succeed.
+OpenAI prompt tweaks stopped. Ordinary two-piece swimwear still fails OpenAI input moderation under V3. **FASHN Virtual Try-On v1.6** is now an explicit second Try On Person option.
+
+| Item | Detail |
+|---|---|
+| Provider | `POST https://api.fashn.ai/v1/run` · `model_name=tryon-v1.6` · `moderation_level=permissive` · `num_samples=1` · `return_base64=true` · status poll · **no auto-retry** |
+| Garment prep | Offline `fashn_garment_prep` → white flat-lay plate(s) from transparent Studio sketch (colors/shape preserved). Two-piece → **2 sequential credits** (tops then bottoms) — not a guess that one `auto` call applies both. |
+| UX | Magic → **FASHN Try On** (when configured) → review prepared plate + cost → confirm → job. OpenAI **Try On Person** unchanged. Never auto-switch after refusal. |
+| Consent | Separate `try-on-fashn-preview-v1` notice (FASHN-specific). |
+| Spend | Shared croquis ceilings · idempotency `try_on:fashn:…` · reservation estimate = credits × `FASHN_TRY_ON_ESTIMATE_CENTS` (default 8¢) |
+| Env | `FASHN_API_KEY` (secret) · `FASHN_TRY_ON_ENABLED` · `FASHN_TRY_ON_LIVE_HTTP` · estimate/base URL/poll timeouts |
+| Tests | BE prep + try-on + nginx **17** PASS · FE API/layout **30** PASS · **0** paid calls |
+| Owner first test | After key live-armed: personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → inspect plate → confirm cost → expect realistic preview on original photo. |
+
+### Still required from owner (private)
+1. Enter **`FASHN_API_KEY`** into Cursor secrets / production VPS `.env` (never chat/GitHub/FE).
+2. Confirm API credits available (~1–2 credits for first swimwear test).
+3. Initiate the first paid FASHN run **in-app** after reviewing the plate cost.
+
+## #156 P0 ordinary swimwear — provider suitability (2026-11-02) — OPEN (FASHN path shipping)
+
+OpenAI prompt tweaks **stopped**. V3 is live and still unsuitable for ordinary two-piece swimwear. Specialist path: **FASHN AI** (see section above).
 
 ### 1) Latest production failure (safe diagnostics only)
 

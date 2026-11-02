@@ -369,8 +369,17 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
             {
               label: 'Try On Person',
               onClick: editor.chooseTryOnPerson,
-              variant: 'primary',
+              variant: editor.magicFashnAvailable ? 'ghost' : 'primary',
             },
+            ...(editor.magicFashnAvailable
+              ? [
+                  {
+                    label: 'FASHN Try On',
+                    onClick: editor.chooseFashnTryOn,
+                    variant: 'primary' as const,
+                  },
+                ]
+              : []),
           ]}
         >
           <p>
@@ -380,10 +389,63 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           {editor.magicTryOnNotice ? <p>{editor.magicTryOnNotice}</p> : null}
           {editor.magicTryOnEstimateCents != null ? (
             <p>
-              Estimated provider cost about {editor.magicTryOnEstimateCents}¢ per Try On Person
+              Estimated OpenAI cost about {editor.magicTryOnEstimateCents}¢ per Try On Person
               (capped by your daily Create My Croquis budget).
             </p>
           ) : null}
+          {editor.magicFashnAvailable ? (
+            <p>
+              FASHN Try On is a separate swimwear-capable provider. You will review a prepared
+              garment plate and cost before any paid credit is used
+              {editor.magicFashnEstimatePerCall != null
+                ? ` (~${editor.magicFashnEstimatePerCall}¢ per FASHN credit; two-piece = 2 credits)`
+                : ''}
+              . Providers are never switched automatically after a refusal.
+            </p>
+          ) : null}
+        </ConfirmDialog>
+      ) : null}
+
+      {editor.fashnPrepOpen && editor.fashnPrep ? (
+        <ConfirmDialog
+          title="Review FASHN garment plate"
+          busy={editor.fashnPrepBusy}
+          onEscape={editor.cancelFashnPrep}
+          actions={[
+            {
+              label: 'Cancel',
+              onClick: editor.cancelFashnPrep,
+              variant: 'ghost',
+            },
+            {
+              label: `Run FASHN (${editor.fashnPrep.estimate_cents}¢ · ${editor.fashnPrep.fashn_calls} credit${editor.fashnPrep.fashn_calls === 1 ? '' : 's'})`,
+              onClick: () => {
+                void editor.confirmFashnTryOn()
+              },
+              variant: 'primary',
+              disabled: !editor.fashnPrep.configured || !editor.fashnPrep.live_http,
+            },
+          ]}
+        >
+          <p>{editor.fashnPrep.notice_text}</p>
+          <p>
+            Layout: <strong>{editor.fashnPrep.layout}</strong>. {editor.fashnPrep.notes}
+          </p>
+          <p>
+            Estimated FashionRise reservation about {editor.fashnPrep.estimate_cents}¢ for this run
+            ({editor.fashnPrep.fashn_calls} FASHN credit
+            {editor.fashnPrep.fashn_calls === 1 ? '' : 's'}). No charge until you confirm.
+          </p>
+          {!editor.fashnPrep.live_http ? (
+            <p>FASHN is not live-armed yet (FASHN_TRY_ON_LIVE_HTTP). Confirm is disabled.</p>
+          ) : null}
+          <div style={{ marginTop: 12, textAlign: 'center' }}>
+            <img
+              src={editor.fashnPrep.composite_preview_base64}
+              alt="Prepared FASHN garment reference"
+              style={{ maxWidth: '100%', maxHeight: 360, background: '#fff' }}
+            />
+          </div>
         </ConfirmDialog>
       ) : null}
 

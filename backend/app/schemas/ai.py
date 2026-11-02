@@ -274,8 +274,34 @@ class PersonalTryOnBody(BaseModel):
     consent_version: str = Field(min_length=1, max_length=64)
     # Optional Studio-derived color/material/accessory hints (never invent beyond image 2).
     design_hints: list[str] | None = Field(default=None, max_length=8)
+    # Explicit provider choice — never auto-switched after a refusal.
+    provider: Literal["openai", "fashn"] = "openai"
 
     model_config = ConfigDict(extra="forbid")
+
+
+class PersonalTryOnFashnPrepareBody(BaseModel):
+    """POST /ai/personal-try-on/fashn/prepare — offline garment plate preview (no paid call)."""
+
+    garment_image_base64: str = Field(min_length=32)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PersonalTryOnFashnPrepareRead(BaseModel):
+    layout: str
+    fashn_calls: int
+    estimate_cents: int
+    garment_fingerprint: str
+    composite_preview_base64: str
+    pieces: list[dict]
+    notes: str
+    consent_version: str
+    notice_text: str
+    notice_hash: str
+    provider: str = "fashn"
+    configured: bool
+    live_http: bool
 
 
 class PersonalTryOnPreflightRead(BaseModel):
@@ -287,3 +313,12 @@ class PersonalTryOnPreflightRead(BaseModel):
     prompt_version: str
     estimate_cents: int
     max_exposure_cents: int
+    # Optional FASHN specialist path (explicit user choice).
+    fashn_enabled: bool = False
+    fashn_configured: bool = False
+    fashn_live_http: bool = False
+    fashn_consent_version: str | None = None
+    fashn_notice_text: str | None = None
+    fashn_notice_hash: str | None = None
+    fashn_estimate_cents_per_call: int | None = None
+    fashn_prompt_version: str | None = None

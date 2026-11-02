@@ -38,6 +38,11 @@ location = /api/v1/ai/personal-try-on/preflight {
     proxy_pass http://127.0.0.1:8010;
 }
 
+location = /api/v1/ai/personal-try-on/fashn/prepare {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
 location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {
     limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
@@ -54,6 +59,8 @@ MATRIX = [
     ("GET", "/api/v1/ai/personal-try-on", "deny_method_try_on"),
     ("GET", "/api/v1/ai/personal-try-on/preflight", "allow_exact_try_on_preflight"),
     ("POST", "/api/v1/ai/personal-try-on/preflight", "deny_method_try_on_preflight"),
+    ("POST", "/api/v1/ai/personal-try-on/fashn/prepare", "allow_exact_fashn_prepare"),
+    ("GET", "/api/v1/ai/personal-try-on/fashn/prepare", "deny_method_fashn_prepare"),
     ("GET", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111", "allow_regex_job"),
     ("GET", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111/image", "allow_regex_image"),
     ("POST", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111", "deny_method_job"),
@@ -81,6 +88,8 @@ def _assert_snippet_precedence(text: str) -> None:
         raise SystemExit("FAIL: missing exact personal-try-on allowlist")
     if "location = /api/v1/ai/personal-try-on/preflight" not in text:
         raise SystemExit("FAIL: missing exact personal-try-on preflight allowlist")
+    if "location = /api/v1/ai/personal-try-on/fashn/prepare" not in text:
+        raise SystemExit("FAIL: missing exact personal-try-on fashn prepare allowlist")
     regex_at = text.find("location ~ ^/api/v1/ai/jobs/")
     prefix_at = text.find("location /api/v1/ai/ {")
     if regex_at < 0 or prefix_at < 0 or regex_at > prefix_at:
@@ -100,6 +109,12 @@ def _classify(method: str, path: str) -> str:
             "allow_exact_try_on_preflight"
             if method == "GET"
             else "deny_method_try_on_preflight"
+        )
+    if path == "/api/v1/ai/personal-try-on/fashn/prepare":
+        return (
+            "allow_exact_fashn_prepare"
+            if method == "POST"
+            else "deny_method_fashn_prepare"
         )
     job = _JOB_RE.fullmatch(path)
     if job:

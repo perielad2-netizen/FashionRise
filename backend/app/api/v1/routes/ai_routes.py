@@ -12,6 +12,8 @@ from app.schemas.ai import (
     AIJobRead,
     MagicOperationJobsRead,
     PersonalTryOnBody,
+    PersonalTryOnFashnPrepareBody,
+    PersonalTryOnFashnPrepareRead,
     PersonalTryOnPreflightRead,
     SketchPipelineBody,
     SketchPolishDualBody,
@@ -122,6 +124,24 @@ def personal_try_on_preflight(request: Request, user: CurrentUser) -> PersonalTr
 
 
 @router.post(
+    "/personal-try-on/fashn/prepare",
+    response_model=PersonalTryOnFashnPrepareRead,
+)
+@limiter.limit("30/minute")
+def personal_try_on_fashn_prepare(
+    request: Request,
+    user: CurrentUser,
+    body: PersonalTryOnFashnPrepareBody,
+) -> PersonalTryOnFashnPrepareRead:
+    """Offline FASHN garment flat-lay prep preview — no paid provider call."""
+    _ = request.url
+    _ = user
+    return PersonalTryOnFashnPrepareRead(
+        **try_on_service.prepare_fashn_garment_public(body.garment_image_base64)
+    )
+
+
+@router.post(
     "/personal-try-on",
     response_model=AIJobRead,
     status_code=status.HTTP_201_CREATED,
@@ -148,6 +168,7 @@ def personal_try_on(
         consent_acknowledged=body.consent_acknowledged,
         consent_version=body.consent_version,
         design_hints=body.design_hints,
+        provider=body.provider,
     )
     return AIJobRead.from_job(job)
 

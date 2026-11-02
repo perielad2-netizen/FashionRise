@@ -76,6 +76,8 @@ import {
   fetchJobImageBlob,
   fetchMagicOperationJobs,
   fetchPersonalTryOnPreflight,
+  prepareFashnGarmentReference,
+  type FashnGarmentPrepareResult,
   mapMagicOperationJobsBySide,
   type PersonalTryOnPreflight,
 } from '@/services/ai/magicApi'
@@ -257,6 +259,18 @@ export function useStudioEditor() {
   const [magicDestinationBusy, setMagicDestinationBusy] = useState(false)
   const [magicTryOnNotice, setMagicTryOnNotice] = useState<string | null>(null)
   const [magicTryOnEstimateCents, setMagicTryOnEstimateCents] = useState<number | null>(null)
+  const [magicFashnAvailable, setMagicFashnAvailable] = useState(false)
+  const [magicFashnEstimatePerCall, setMagicFashnEstimatePerCall] = useState<number | null>(null)
+  const [fashnPrepOpen, setFashnPrepOpen] = useState(false)
+  const [fashnPrepBusy, setFashnPrepBusy] = useState(false)
+  const [fashnPrep, setFashnPrep] = useState<FashnGarmentPrepareResult | null>(null)
+  const [fashnPrepGarmentDataUrl, setFashnPrepGarmentDataUrl] = useState<string | null>(null)
+  const [fashnPrepCroquis, setFashnPrepCroquis] = useState<{
+    croquisId: string
+    croquisVersion: number
+    sourceRevision: number
+    contentFingerprint: string
+  } | null>(null)
   const tryOnPreflightRef = useRef<PersonalTryOnPreflight | null>(null)
   const [magicDualActive, setMagicDualActive] = useState(false)
   const [magicOperationId, setMagicOperationId] = useState<string | null>(null)
@@ -1610,135 +1624,281 @@ export function useStudioEditor() {
     user?.id,
   ])
 
-  const runTryOnPipeline = useCallback(async () => {
-    if (!user?.id) {
-      setMagicNotice('Sign in to use Try On Person.')
-      return
-    }
-    if (magicInFlightRef.current) {
+  const runTryOnPipeline = useCallback(
+    async (provider: 'openai' | 'fashn' = 'openai') => {
+      if (!user?.id) {
+        setMagicNotice('Sign in to use Try On Person.')
+        return
+      }
+      if (magicInFlightRef.current) {
+        setMagicOpen(true)
+        return
+      }
+
+      // Freeze personal croquis binding + garment ink at click — refuse mid-flight model drift.
+      const docAtStart = authoritativeDocRef.current
+      const croquisId = docAtStart.personalCroquisId
+      const croquisVersion = docAtStart.personalCroquisVersion
+      if (
+        docAtStart.model !== 'personal' ||
+        !croquisId ||
+        croquisVersion == null ||
+        !Number.isInteger(croquisVersion) ||
+        croquisVersion < 1
+      ) {
+        setMagicNotice(
+          'Try On Person needs an accepted personal croquis with its original photo. Fashion Magic still works on built-in models.',
+        )
+        return
+      }
+
+      const frontBag = { strokes: docAtStart.strokes, fills: docAtStart.fills ?? [] }
+      if (!sideHasInk(frontBag)) {
+        setMagicNotice('Draw a garment on the front before using Try On Person.')
+        return
+      }
+
+      magicInFlightRef.current = true
+      setStudioNotice(null)
+      setComingSoon(null)
+      setMagicNotice(null)
+      setMagicError(null)
+      setMagicResult(null)
+      setMagicResultMode('try_on')
+      setMagicDualActive(false)
+      setMagicDestinationOpen(false)
+      setMagicDestinationBusy(false)
+      setFashnPrepOpen(false)
+      setFashnPrepBusy(false)
+      revokeMagicUrls()
       setMagicOpen(true)
-      return
-    }
+      setMagicPhase('capturing')
 
-    // Freeze personal croquis binding + garment ink at click — refuse mid-flight model drift.
-    const docAtStart = authoritativeDocRef.current
-    const croquisId = docAtStart.personalCroquisId
-    const croquisVersion = docAtStart.personalCroquisVersion
-    if (
-      docAtStart.model !== 'personal' ||
-      !croquisId ||
-      croquisVersion == null ||
-      !Number.isInteger(croquisVersion) ||
-      croquisVersion < 1
-    ) {
-      setMagicNotice(
-        'Try On Person needs an accepted personal croquis with its original photo. Fashion Magic still works on built-in models.',
-      )
-      return
-    }
+      magicAbortRef.current?.abort()
+      const controller = new AbortController()
+      magicAbortRef.current = controller
 
-    const frontBag = { strokes: docAtStart.strokes, fills: docAtStart.fills ?? [] }
-    if (!sideHasInk(frontBag)) {
-      setMagicNotice('Draw a garment on the front before using Try On Person.')
+      try {
+        // Capture garment-only transparent layer immediately (immutable for this job).
+        const garment = await captureGarmentArtworkForTryOn({
+          strokes: frontBag.strokes,
+          fills: frontBag.fills,
+        })
+        if (controller.signal.aborted) return
+
+        // Re-check pins after async capture — refuse if mannequin switched mid-flight (#148).
+        const live = authoritativeDocRef.current
+        if (
+          live.model !== 'personal' ||
+          live.personalCroquisId !== croquisId ||
+          live.personalCroquisVersion !== croquisVersion
+        ) {
+          setMagicPhase('failed')
+          setMagicError(
+            'The personal croquis changed while Try On Person was starting. Your sketch is unchanged — pick Magic again after the mannequin is stable.',
+          )
+          return
+        }
+
+        const sketchUrl = URL.createObjectURL(garment.blob)
+        magicSketchUrlRef.current = sketchUrl
+        setMagicSketchUrl(sketchUrl)
+
+        // Load original source photo for before/after compare (owner-auth private bytes).
+        try {
+          const croquisRow = await getPersonalCroquis(croquisId, controller.signal)
+          const sourceId = croquisRow.source_asset_id
+          if (sourceId) {
+            const photoBlob = await fetchCroquisAssetBlob(sourceId, controller.signal)
+            const photoUrl = URL.createObjectURL(photoBlob)
+            if (magicOriginalPhotoUrlRef.current) URL.revokeObjectURL(magicOriginalPhotoUrlRef.current)
+            magicOriginalPhotoUrlRef.current = photoUrl
+            setMagicOriginalPhotoUrl(photoUrl)
+          }
+        } catch {
+          // Compare falls back to garment-only if photo cannot load; try-on itself still proceeds.
+        }
+        if (controller.signal.aborted) return
+
+        let preflight = tryOnPreflightRef.current
+        if (!preflight) {
+          preflight = await fetchPersonalTryOnPreflight(controller.signal)
+          tryOnPreflightRef.current = preflight
+        }
+        if (!preflight.enabled) {
+          setMagicPhase('failed')
+          setMagicError('Try On Person is not available right now.')
+          return
+        }
+
+        // FASHN: show offline prepared garment plate before any paid call.
+        if (provider === 'fashn') {
+          if (!preflight.fashn_enabled || !preflight.fashn_configured) {
+            setMagicPhase('failed')
+            setMagicError('FASHN Try On is not configured on this server yet.')
+            return
+          }
+          setMagicPhase('submitting')
+          const prep = await prepareFashnGarmentReference(garment.dataUrl, controller.signal)
+          if (controller.signal.aborted) return
+          setFashnPrep(prep)
+          setFashnPrepGarmentDataUrl(garment.dataUrl)
+          setFashnPrepCroquis({
+            croquisId,
+            croquisVersion,
+            sourceRevision: docAtStart.clientRevision,
+            contentFingerprint: draftContentFingerprint(docAtStart),
+          })
+          setMagicOpen(false)
+          setFashnPrepOpen(true)
+          magicInFlightRef.current = false
+          return
+        }
+
+        setMagicPhase('submitting')
+        const idempotencyKey =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? `try_on:${crypto.randomUUID()}`
+            : `try_on:${Date.now()}`
+        const contentFingerprint = draftContentFingerprint(docAtStart)
+        const designHints = buildTryOnDesignHints({
+          strokes: frontBag.strokes,
+          fills: frontBag.fills,
+        })
+        const job = await enqueuePersonalTryOn({
+          croquisId,
+          croquisVersion,
+          garmentImageBase64: garment.dataUrl,
+          idempotencyKey,
+          designId: designIdRef.current,
+          sourceRevision: docAtStart.clientRevision,
+          contentFingerprint,
+          consentAcknowledged: true,
+          consentVersion: preflight.consent_version,
+          designHints,
+          provider: 'openai',
+          signal: controller.signal,
+        })
+        setMagicJobId(job.id)
+        persistMagicJobId(user.id, job.id)
+
+        setMagicPhase('polling')
+        const settled = await settleMagicJobWithImage(job.id, controller.signal)
+        const look = settled.look
+        setMagicResult(look)
+        if (look.status === 'failed') {
+          setMagicPhase('failed')
+          setMagicError(look.summary)
+          return
+        }
+        if (settled.lookObjectUrl) {
+          magicLookUrlRef.current = settled.lookObjectUrl
+          setMagicLookUrl(settled.lookObjectUrl)
+        }
+        setMagicPhase('ready')
+      } catch (err) {
+        if (controller.signal.aborted) {
+          setMagicPhase('failed')
+          setMagicError(
+            'Try On Person wait cancelled. Your sketch and photo are unchanged — recover if the job already finished.',
+          )
+          return
+        }
+        const message =
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : 'Try On Person could not complete.'
+        setMagicPhase('failed')
+        setMagicError(message)
+        setMagicOpen(true)
+      } finally {
+        magicInFlightRef.current = false
+      }
+    },
+    [revokeMagicUrls, user?.id],
+  )
+
+  const cancelMagicDestination = useCallback(() => {
+    if (magicDestinationBusy) return
+    setMagicDestinationOpen(false)
+    setMagicTryOnNotice(null)
+    setMagicTryOnEstimateCents(null)
+    setMagicFashnAvailable(false)
+    setMagicFashnEstimatePerCall(null)
+  }, [magicDestinationBusy])
+
+  const cancelFashnPrep = useCallback(() => {
+    if (fashnPrepBusy) return
+    setFashnPrepOpen(false)
+    setFashnPrep(null)
+    setFashnPrepGarmentDataUrl(null)
+    setFashnPrepCroquis(null)
+  }, [fashnPrepBusy])
+
+  const confirmFashnTryOn = useCallback(async () => {
+    if (!user?.id || !fashnPrep || !fashnPrepGarmentDataUrl || !fashnPrepCroquis) return
+    if (magicInFlightRef.current || fashnPrepBusy) return
+    if (!fashnPrep.configured || !fashnPrep.live_http) {
+      setMagicNotice('FASHN Try On is configured but not live-armed yet. Ask an operator to enable FASHN_TRY_ON_LIVE_HTTP.')
       return
     }
 
     magicInFlightRef.current = true
-    setStudioNotice(null)
-    setComingSoon(null)
-    setMagicNotice(null)
+    setFashnPrepBusy(true)
+    setFashnPrepOpen(false)
     setMagicError(null)
     setMagicResult(null)
     setMagicResultMode('try_on')
-    setMagicDualActive(false)
-    setMagicDestinationOpen(false)
-    setMagicDestinationBusy(false)
-    revokeMagicUrls()
     setMagicOpen(true)
-    setMagicPhase('capturing')
+    setMagicPhase('submitting')
 
     magicAbortRef.current?.abort()
     const controller = new AbortController()
     magicAbortRef.current = controller
 
     try {
-      // Capture garment-only transparent layer immediately (immutable for this job).
-      const garment = await captureGarmentArtworkForTryOn({
-        strokes: frontBag.strokes,
-        fills: frontBag.fills,
-      })
-      if (controller.signal.aborted) return
-
-      // Re-check pins after async capture — refuse if mannequin switched mid-flight (#148).
       const live = authoritativeDocRef.current
       if (
         live.model !== 'personal' ||
-        live.personalCroquisId !== croquisId ||
-        live.personalCroquisVersion !== croquisVersion
+        live.personalCroquisId !== fashnPrepCroquis.croquisId ||
+        live.personalCroquisVersion !== fashnPrepCroquis.croquisVersion
       ) {
         setMagicPhase('failed')
         setMagicError(
-          'The personal croquis changed while Try On Person was starting. Your sketch is unchanged — pick Magic again after the mannequin is stable.',
+          'The personal croquis changed before FASHN Try On was confirmed. Your sketch is unchanged.',
         )
-        return
-      }
-
-      const sketchUrl = URL.createObjectURL(garment.blob)
-      magicSketchUrlRef.current = sketchUrl
-      setMagicSketchUrl(sketchUrl)
-
-      // Load original source photo for before/after compare (owner-auth private bytes).
-      try {
-        const croquisRow = await getPersonalCroquis(croquisId, controller.signal)
-        const sourceId = croquisRow.source_asset_id
-        if (sourceId) {
-          const photoBlob = await fetchCroquisAssetBlob(sourceId, controller.signal)
-          const photoUrl = URL.createObjectURL(photoBlob)
-          if (magicOriginalPhotoUrlRef.current) URL.revokeObjectURL(magicOriginalPhotoUrlRef.current)
-          magicOriginalPhotoUrlRef.current = photoUrl
-          setMagicOriginalPhotoUrl(photoUrl)
-        }
-      } catch {
-        // Compare falls back to garment-only if photo cannot load; try-on itself still proceeds.
-      }
-      if (controller.signal.aborted) return
-
-      setMagicPhase('submitting')
-      let preflight = tryOnPreflightRef.current
-      if (!preflight) {
-        preflight = await fetchPersonalTryOnPreflight(controller.signal)
-        tryOnPreflightRef.current = preflight
-      }
-      if (!preflight.enabled) {
-        setMagicPhase('failed')
-        setMagicError('Try On Person is not available right now.')
         return
       }
 
       const idempotencyKey =
         typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? `try_on:${crypto.randomUUID()}`
-          : `try_on:${Date.now()}`
-      const contentFingerprint = draftContentFingerprint(docAtStart)
+          ? `try_on:fashn:${crypto.randomUUID()}`
+          : `try_on:fashn:${Date.now()}`
       const designHints = buildTryOnDesignHints({
-        strokes: frontBag.strokes,
-        fills: frontBag.fills,
+        strokes: live.strokes,
+        fills: live.fills ?? [],
       })
       const job = await enqueuePersonalTryOn({
-        croquisId,
-        croquisVersion,
-        garmentImageBase64: garment.dataUrl,
+        croquisId: fashnPrepCroquis.croquisId,
+        croquisVersion: fashnPrepCroquis.croquisVersion,
+        garmentImageBase64: fashnPrepGarmentDataUrl,
         idempotencyKey,
         designId: designIdRef.current,
-        sourceRevision: docAtStart.clientRevision,
-        contentFingerprint,
+        sourceRevision: fashnPrepCroquis.sourceRevision,
+        contentFingerprint: fashnPrepCroquis.contentFingerprint,
         consentAcknowledged: true,
-        consentVersion: preflight.consent_version,
+        consentVersion: fashnPrep.consent_version,
         designHints,
+        provider: 'fashn',
         signal: controller.signal,
       })
       setMagicJobId(job.id)
       persistMagicJobId(user.id, job.id)
+      setFashnPrep(null)
+      setFashnPrepGarmentDataUrl(null)
+      setFashnPrepCroquis(null)
 
       setMagicPhase('polling')
       const settled = await settleMagicJobWithImage(job.id, controller.signal)
@@ -1758,7 +1918,7 @@ export function useStudioEditor() {
       if (controller.signal.aborted) {
         setMagicPhase('failed')
         setMagicError(
-          'Try On Person wait cancelled. Your sketch and photo are unchanged — recover if the job already finished.',
+          'FASHN Try On wait cancelled. Your sketch and photo are unchanged — recover if the job already finished.',
         )
         return
       }
@@ -1767,20 +1927,14 @@ export function useStudioEditor() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Try On Person could not complete.'
+            : 'FASHN Try On could not complete.'
       setMagicPhase('failed')
       setMagicError(message)
     } finally {
+      setFashnPrepBusy(false)
       magicInFlightRef.current = false
     }
-  }, [revokeMagicUrls, user?.id])
-
-  const cancelMagicDestination = useCallback(() => {
-    if (magicDestinationBusy) return
-    setMagicDestinationOpen(false)
-    setMagicTryOnNotice(null)
-    setMagicTryOnEstimateCents(null)
-  }, [magicDestinationBusy])
+  }, [fashnPrep, fashnPrepBusy, fashnPrepCroquis, fashnPrepGarmentDataUrl, user?.id])
 
   const chooseFashionMagic = useCallback(() => {
     setMagicDestinationOpen(false)
@@ -1788,7 +1942,11 @@ export function useStudioEditor() {
   }, [runMagicPipeline])
 
   const chooseTryOnPerson = useCallback(() => {
-    void runTryOnPipeline()
+    void runTryOnPipeline('openai')
+  }, [runTryOnPipeline])
+
+  const chooseFashnTryOn = useCallback(() => {
+    void runTryOnPipeline('fashn')
   }, [runTryOnPipeline])
 
   const onMagic = useCallback(() => {
@@ -1817,22 +1975,30 @@ export function useStudioEditor() {
       return
     }
 
-    // Personal croquis → destination choice (Fashion Magic vs Try On Person).
+    // Personal croquis → destination choice (Fashion Magic vs Try On Person / FASHN).
     setMagicDestinationBusy(true)
     setMagicDestinationOpen(true)
     setMagicTryOnNotice(null)
     setMagicTryOnEstimateCents(null)
+    setMagicFashnAvailable(false)
+    setMagicFashnEstimatePerCall(null)
     void (async () => {
       try {
         const preflight = await fetchPersonalTryOnPreflight()
         tryOnPreflightRef.current = preflight
         setMagicTryOnNotice(preflight.notice_text)
         setMagicTryOnEstimateCents(preflight.estimate_cents)
+        const fashnOk = Boolean(preflight.fashn_enabled && preflight.fashn_configured)
+        setMagicFashnAvailable(fashnOk)
+        setMagicFashnEstimatePerCall(
+          fashnOk ? (preflight.fashn_estimate_cents_per_call ?? 8) : null,
+        )
       } catch {
         setMagicTryOnNotice(
           'Try On Person uses your original Create My Croquis photo with this garment sketch for a private photorealistic preview. Concept preview only — not a fit guarantee.',
         )
         setMagicTryOnEstimateCents(null)
+        setMagicFashnAvailable(false)
       } finally {
         setMagicDestinationBusy(false)
       }
@@ -2923,9 +3089,17 @@ export function useStudioEditor() {
     magicDestinationBusy,
     magicTryOnNotice,
     magicTryOnEstimateCents,
+    magicFashnAvailable,
+    magicFashnEstimatePerCall,
+    fashnPrepOpen,
+    fashnPrepBusy,
+    fashnPrep,
+    cancelFashnPrep,
+    confirmFashnTryOn,
     cancelMagicDestination,
     chooseFashionMagic,
     chooseTryOnPerson,
+    chooseFashnTryOn,
     magicCanRecover: Boolean(
       magicJobId ||
         (user?.id &&
