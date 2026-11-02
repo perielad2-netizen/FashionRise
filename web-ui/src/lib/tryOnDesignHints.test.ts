@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTryOnDesignHints } from '@/lib/tryOnDesignHints'
+import { buildTryOnDesignHints, detectTrouserLegFills } from '@/lib/tryOnDesignHints'
 import type { FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
 
@@ -47,5 +47,66 @@ describe('buildTryOnDesignHints', () => {
     ]
     const hints = buildTryOnDesignHints({ strokes: [], fills })
     expect(hints.some((h) => /Floral repeating fabric fill/i.test(h))).toBe(true)
+  })
+
+  it('adds jumpsuit/narrow-leg hints when two lower fills are clear', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'bodice',
+        contour: [300, 80, 460, 80, 460, 420, 300, 420],
+        seedX: 380,
+        seedY: 240,
+        style: { kind: 'solid', color: '#166534' },
+      },
+      {
+        id: 'leftLeg',
+        contour: [300, 500, 360, 500, 360, 900, 300, 900],
+        seedX: 330,
+        seedY: 700,
+        style: { kind: 'solid', color: '#166534' },
+      },
+      {
+        id: 'rightLeg',
+        contour: [400, 500, 460, 500, 460, 900, 400, 900],
+        seedX: 430,
+        seedY: 700,
+        style: { kind: 'solid', color: '#166534' },
+      },
+    ]
+    const detected = detectTrouserLegFills(fills)
+    expect(detected.looksLikeTrousers).toBe(true)
+    expect(detected.looksLikeJumpsuit).toBe(true)
+    const hints = buildTryOnDesignHints({ strokes: [], fills })
+    expect(hints.some((h) => /jumpsuit/i.test(h))).toBe(true)
+    expect(hints.some((h) => /separate/i.test(h))).toBe(true)
+    expect(hints.some((h) => /skirt panel/i.test(h))).toBe(true)
+  })
+
+  it('does not inject trousers hints for a dress/skirt fill', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'dress',
+        contour: [200, 100, 560, 100, 600, 900, 160, 900],
+        seedX: 380,
+        seedY: 500,
+        style: { kind: 'solid', color: '#B91C1C' },
+      },
+    ]
+    expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
+    const hints = buildTryOnDesignHints({ strokes: [], fills })
+    expect(hints.some((h) => /jumpsuit|trousers|pant legs/i.test(h))).toBe(false)
+  })
+
+  it('does not inject trousers hints for swimsuit-like high fills', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'swim',
+        contour: [320, 120, 448, 120, 480, 420, 288, 420],
+        seedX: 380,
+        seedY: 260,
+        style: { kind: 'solid', color: '#0E7490' },
+      },
+    ]
+    expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
   })
 })

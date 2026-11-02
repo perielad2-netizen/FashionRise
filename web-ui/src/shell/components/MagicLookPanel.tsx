@@ -53,7 +53,10 @@ type Props = {
 
 function sideStatusLabel(side: MagicSidePanelState): string {
   if (side.phase === 'polling') return 'Working…'
-  if (side.phase === 'ready') return side.result?.status === 'completed' ? 'Ready' : String(side.result?.status ?? 'Ready')
+  if (side.phase === 'ready') {
+    if (side.result?.status === 'completed_unverified') return 'Review needed'
+    return side.result?.status === 'completed' ? 'Ready' : String(side.result?.status ?? 'Ready')
+  }
   if (side.phase === 'failed') return 'Failed'
   return 'Pending'
 }

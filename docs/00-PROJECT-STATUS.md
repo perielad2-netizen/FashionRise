@@ -3,22 +3,70 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#169 manual Accept before FASHN** **DEPLOYED** App **`6ef5c109`** · OpenAI Try On stays **`try-on-person-v2`** · FASHN realism **v5** + owner review gate · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#170 P0 jumpsuit fidelity + Accept nginx 403** **DEPLOYED** — see section below · OpenAI Try On stays **`try-on-person-v2`** · **0** operator-paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits) + optional FASHN v1.6 (swimwear) **live-armed** with **manual Accept** of OpenAI product images before FASHN credits.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits + additive trouser hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`6ef5c109`** — release `/var/www/fashionrise/releases/6ef5c109` · App pill **`6ef5c109`** · FASHN path stops at Accept review · Try On Person (OpenAI) unchanged · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`d6caad30`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v5`** + **`owner_accepted`** gate + accept route · Alembic **`015`**. |
+| Frontend (`web-ui`) | **`dcee9eac`** — release `/var/www/fashionrise/releases/dcee9eac` · Accept 403 UX · capture completeness · trouser design hints · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`6ef5c109`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + soft structure review · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/6ef5c109` |
+| Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → new release |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
 
+## #170 P0 Garment identity fidelity + FASHN post-Accept failure — DEPLOYED (2026-11-02)
 
+### Diagnosis (stored evidence only — **0** paid calls)
+
+| Attempt | Realism job | Accept | FASHN job | Class | Credits |
+|---|---|---|---|---|---|
+| 1 | `95e8f3a7-…` (fp `08f488…`) | nginx **403** 12:59:33 UTC | **none** | **1 — local validation/enqueue (edge allowlist)** | **0 FASHN** · realism reservation **settled 8¢** (prior paid step) |
+| 2 | `1011d39a-…` (fp `08f488…`) | nginx **403** 13:01:07 UTC | **none** | **1 — same** | **0 FASHN** · realism **settled 8¢** |
+
+- `owner_accepted` stayed **false**; Accept never reached FastAPI; no `/v1/run`; no prediction IDs; nothing to recover from FASHN.
+- Root cause: #169 shipped Accept route + FE, but nginx only allowlisted exact `POST .../garment-realism` (enqueue). Path `.../garment-realism/{uuid}/accept` fell through `location /api/v1/ai/ { return 403; }`. FE mapped bare 403 → “Something went wrong.”
+
+### Trouser legs / green jumpsuit
+
+| Stage | `08f488…` (failed FASHN review) | `ab5f725b…` / OpenAI `bf31ce76` |
+|---|---|---|
+| Studio UI | Long green legs visible | Long green legs |
+| Captured garment / studio_context | **Bodice-only** (lower55%=0) | Full legs present |
+| Prep plate | Bodysuit-like `one-pieces` | Legs retained through prep historically |
+| Realism product | Swimsuit/bodysuit | n/a (OpenAI try-on) |
+| OpenAI Try On result | n/a | Completed but **wide flares** (owner rejects) |
+
+**Legs lost at/before garment capture input to prep** for `08f488` — not inside OpenAI realism. Prep then correctly classified the truncated plate as swimsuit-like `one-pieces`. OpenAI V2 flare on `bf31ce76` is model behavior given weak hints; garment PNG still had narrow legs.
+
+### Fixes
+
+1. Nginx regex allowlist `POST .../garment-realism/{uuid}/accept` + verifier/docs/tests.
+2. Prep completeness + **jumpsuit/trousers fail-closed** (do not map to swimsuit `one-pieces`); bikini/two-piece preserved.
+3. FE capture completeness vs live ink span; clearer Accept **403** message.
+4. Additive OpenAI V2 trouser design hints (FE fills + BE garment geometry) — **prompt version stays `try-on-person-v2`**.
+5. Soft post-generation structure review → `completed_unverified` when legs merged/flared; does not auto-refund.
+
+### Owner next (single controlled test)
+
+Hard-refresh new App SHA → same green jumpsuit → **Try On Person (OpenAI)** once. Expect trouser hints in job + no silent flare presented as faithful if soft review fails. For FASHN: jumpsuit should **block at prep** with an explicit message (use OpenAI path). Swimwear two-piece Accept should work after nginx fix.
+
+### Deployed
+
+| Field | Value |
+|---|---|
+| App / FE / BE / worker SHA | **`dcee9eac31ea6891177911896036542b321d4581`** (App **`dcee9eac`**) |
+| Alembic | **`015`** (unchanged) |
+| Nginx | Accept regex allowlisted (quoted) · health/ready **200** |
+| Provider calls this window | **0** |
+| Backup / rollback | `/var/backups/fashionrise/p0-170-jumpsuit-deploy-20261102T134040Z/ROLLBACK.sh` → FE **`6ef5c109`** |
+
+### Rollback
+
+`/var/backups/fashionrise/p0-170-jumpsuit-deploy-20261102T134040Z/ROLLBACK.sh` → FE **`6ef5c109`** + prior BE overlays + prior nginx.
 
 ## #169 Restore manual garment approval before FASHN — DEPLOYED (2026-11-02)
 

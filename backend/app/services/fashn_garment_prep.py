@@ -29,6 +29,7 @@ from app.services.fashn_garment_fidelity import (
     compute_silhouette_features,
     recommend_fashn_category,
 )
+from app.services.garment_leg_geometry import analyze_lower_garment_geometry
 
 PieceCategory = Literal["tops", "bottoms", "one-pieces", "auto"]
 PieceLayout = Literal["one_piece", "two_piece"]
@@ -46,6 +47,9 @@ _CLOSE_RADIUS = 2
 _MAX_OUTLINE_EDGE_RATIO = 0.78
 _MIN_FILL_COLOR_PIXELS = 40
 _NEAR_BLACK = 36  # RGB max channel below this ≈ stroke ink on white plates
+# Completeness: prepared opaque mass vs source (reject silent leg discard).
+_MIN_PREP_OPAQUE_RETENTION = 0.72
+_MIN_PREP_Y_SPAN_RETENTION = 0.82
 
 
 @dataclass(frozen=True)
@@ -326,6 +330,67 @@ def _quality_gate(pieces: list[PreparedPiece]) -> tuple[bool, str]:
     return True, "Prepared plates retain filled garment regions suitable for product generation."
 
 
+def _completeness_gate(
+    *,
+    source_opaque: int,
+    source_bbox: tuple[int, int, int, int],
+    source_h: int,
+    pieces: list[PreparedPiece],
+    discarded_opaque: int,
+) -> tuple[bool, str]:
+    """Fail closed when prep drops meaningful garment mass (e.g. trouser legs)."""
+    if source_opaque <= 0 or not pieces:
+        return False, "Prepared plates are empty — FASHN is blocked."
+    kept = sum(p.opaque_pixels for p in pieces)
+    retention = kept / max(source_opaque, 1)
+    sy0, sy1 = source_bbox[1], source_bbox[3]
+    source_span = max(1, sy1 - sy0)
+    # Union vertical span across pieces (two-piece tops+bottoms must cover together).
+    union_y0 = min(p.bbox[1] for p in pieces)
+    union_y1 = max(p.bbox[3] for p in pieces)
+    span_retention = max(1, union_y1 - union_y0) / source_span
+    if discarded_opaque >= max(_MIN_COMPONENT_PIXELS, int(source_opaque * 0.08)):
+        return False, (
+            "Garment preparation dropped substantial regions of your design "
+            f"(≈{discarded_opaque} opaque pixels). Long trouser legs or separate panels "
+            "must stay in the plate. Adjust the fill so legs stay connected and solid, "
+            "then retry. No paid realism or FASHN call was started."
+        )
+    if retention < _MIN_PREP_OPAQUE_RETENTION:
+        return False, (
+            "Prepared plates are missing large parts of your original garment silhouette "
+            f"(kept {retention:.0%}). FASHN is blocked until the full design is preserved."
+        )
+    if source_span >= int(0.35 * max(source_h, 1)) and span_retention < _MIN_PREP_Y_SPAN_RETENTION:
+        return False, (
+            "Prepared plates shortened your garment height vs the Studio capture "
+            f"(kept {span_retention:.0%} of the original vertical span). "
+            "Trouser legs or long hems appear truncated — FASHN is blocked."
+        )
+    return True, ""
+
+
+def _unsupported_silhouette_gate(
+    *,
+    source_png: bytes,
+    layout: PieceLayout,
+    pieces: list[PreparedPiece],
+) -> tuple[bool, str]:
+    """Fail closed for jumpsuit/trousers — do not reclassify as swimsuit one-pieces."""
+    if layout == "two_piece":
+        return True, ""
+    geo = analyze_lower_garment_geometry(source_png)
+    if geo.looks_like_jumpsuit or geo.looks_like_trousers:
+        return False, (
+            "This design looks like a jumpsuit or trousers with separate leg openings. "
+            "FASHN Try On currently supports swimwear / two-piece plates only — "
+            "it must not rewrite trousers into a swimsuit or bodysuit. "
+            "Use Try On Person (OpenAI) for this silhouette, or redesign as supported swimwear. "
+            "No paid realism or FASHN call was started."
+        )
+    return True, ""
+
+
 def prep_from_approved_product_pieces(
     *,
     pieces: list[tuple[PieceCategory, bytes]],
@@ -383,14 +448,19 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
     if opaque < _MIN_COMPONENT_PIXELS:
         raise ValueError("Garment artwork has no visible design pixels")
 
+    source_cells = {(x, y) for y, row in enumerate(raw_mask) for x, v in enumerate(row) if v}
+    source_bbox = _bbox(source_cells) if source_cells else (0, 0, 0, 0)
+
     fp = hashlib.sha256(garment_png).hexdigest()
     # Close small gaps so stroke contours reconnect to their fills before CC.
     mask = _close_mask(raw_mask, _CLOSE_RADIUS)
     comps = _connected_components(mask)
     min_px = max(_MIN_COMPONENT_PIXELS, int(opaque * _MIN_COMPONENT_FRACTION))
     significant = [(cells, n) for cells, n in comps if n >= min_px]
+    discarded_opaque = sum(n for cells, n in comps if n < min_px)
     if not significant:
         significant = sorted(comps, key=lambda t: t[1], reverse=True)[:1]
+        discarded_opaque = sum(n for cells, n in comps if cells is not significant[0][0])
 
     # Sort top → bottom by bbox y0.
     significant.sort(key=lambda t: _bbox(t[0])[1])
@@ -429,22 +499,51 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
             pieces.append(_piece_from_cells(src, top_merged, "tops"))
             pieces.append(_piece_from_cells(src, bot_merged, "bottoms"))
             fashn_calls = 2
+            # Components outside the two bands still count as discarded mass.
+            kept_cells = top_merged | bot_merged
+            extra = sum(n for cells, n in significant if not cells.issubset(kept_cells))
+            discarded_opaque += extra
 
     if layout == "one_piece":
         merged: set[tuple[int, int]] = set()
         for cells, _n in significant:
             merged |= cells
         if not merged:
-            merged = {(x, y) for y, row in enumerate(raw_mask) for x, v in enumerate(row) if v}
+            merged = set(source_cells)
         # Owner incident: category=auto let FASHN turn a high-cut swimsuit into a dress.
         # Classify silhouette and prefer explicit one-pieces for swimsuit-like one-piece art.
+        # #170: never quietly map jumpsuit/trousers → swimsuit one-pieces (fail closed below).
         probe = _piece_from_cells(src, merged, "auto")
         feats = compute_silhouette_features(probe.png_bytes)
-        cat = recommend_fashn_category(layout="one_piece", features=feats)
-        pieces = [_piece_from_cells(src, merged, cat)]
+        geo = analyze_lower_garment_geometry(garment_png)
+        if geo.looks_like_jumpsuit or geo.looks_like_trousers:
+            cat = "auto"  # placeholder; unsupported gate blocks paid path
+        else:
+            cat = recommend_fashn_category(layout="one_piece", features=feats)
+        pieces = [_piece_from_cells(src, merged, cat)]  # type: ignore[arg-type]
         fashn_calls = 1
 
     quality_ok, quality_notes = _quality_gate(pieces)
+    if quality_ok:
+        ok_c, note_c = _completeness_gate(
+            source_opaque=opaque,
+            source_bbox=source_bbox,
+            source_h=src.height,
+            pieces=pieces,
+            discarded_opaque=discarded_opaque,
+        )
+        if not ok_c:
+            quality_ok = False
+            quality_notes = note_c
+    if quality_ok:
+        ok_s, note_s = _unsupported_silhouette_gate(
+            source_png=garment_png,
+            layout=layout,
+            pieces=pieces,
+        )
+        if not ok_s:
+            quality_ok = False
+            quality_notes = note_s
     return GarmentPrepResult(
         layout=layout,
         pieces=tuple(pieces),
