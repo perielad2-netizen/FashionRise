@@ -41,6 +41,7 @@
 | Alembic | **`015`** (unchanged) |
 | Nginx Accept | Unchanged allowlist |
 | Nginx FE root | **Fixed 2026-11-02 15:02 UTC** — live TLS `root` was still hardcoded to **`28bc5e8d`** (localhost API). Now **`/var/www/fashionrise/current` → `071ea03d`**. Backup `/var/backups/fashionrise/p0-172-nginx-root-fix-20261102T150208Z/` |
+| Nginx allowlist | **Restored 2026-11-02 15:06 UTC** — truncated TLS config had dropped Looks/Croquis/Techpacks/cf-access allowlists; reload exposed 403s. Restored from #170 backup + Accept regex. Backup `/var/backups/fashionrise/p0-172-nginx-allowlist-restore-20261102T150630Z/` |
 | Provider calls | **0** |
 | Rollback | `/var/backups/fashionrise/p0-172-structure-harden-deploy-20261102T141257Z/ROLLBACK.sh` → FE **`e176f464`** |
 
