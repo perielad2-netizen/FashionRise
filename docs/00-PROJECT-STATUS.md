@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#174 open personal underlay + high-slit dress try-on** **DEPLOYED** App **`1cf0e2b3`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls.)
+**Last updated:** 2026-11-02 (**#175 owner spend unlock** **LIVE** · App still **`1cf0e2b3`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2.1** (ordinary outfits + trouser **or** high-slit-dress geometry hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
@@ -16,7 +16,32 @@
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → **`1cf0e2b3`** |
-| AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
+| AI spend | **Owner-only unlock (#175):** croquis/try-on ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · FASHN Max soft budget **100000** credits · techpack ceilings matched. Fail-closed zeros still refuse; these are high positives. |
+
+## #175 Owner spend unlock — LIVE (2026-11-02)
+
+### Symptom
+Try On failed with: **“Max exposure exceeds per-run Create My Croquis spend limit.”**  
+Cause: #173 raised `MY_CROQUIS_AI_MAX_EXPOSURE_CENTS` to **200** while `MY_CROQUIS_AI_MAX_USD_PER_RUN` stayed **$1.00** (100¢). Settled spend was only ~**$2.66** — not a real ceiling hit.
+
+### Owner decision
+Single-user beta — remove practical spend blocks (high positives; zero still fail-closes providers).
+
+### Applied on VPS `.env` (API + worker restarted)
+| Key | Value |
+|---|---|
+| `MY_CROQUIS_AI_SPEND_CEILING_USD` | `100000.00` |
+| `MY_CROQUIS_AI_MAX_USD_PER_RUN` | `1000.00` |
+| `MY_CROQUIS_AI_MAX_USD_PER_USER_DAY` | `100000.00` |
+| `MY_CROQUIS_AI_MAX_EXPOSURE_CENTS` | `100000` |
+| `MY_CROQUIS_AI_MAX_GENERATIONS_PER_USER_DAY` | `0` |
+| `FASHN_TRY_ON_MAX_SOFT_BUDGET_CREDITS` | `100000` |
+| `TECHPACK_AI_SPEND_CEILING_USD` / per-run / day | `100000` / `1000` / `100000` |
+
+Rollback: `/var/backups/fashionrise/owner-spend-unlimited-175-*/ROLLBACK.sh`
+
+### Owner verify
+Retry the same Try On (no FE rebuild required). Spend-limit modal should not appear.
 
 ## #174 Open personal underlay + high-slit dress Try On — DEPLOYED (2026-11-02)
 
