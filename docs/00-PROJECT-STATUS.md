@@ -11,7 +11,7 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`PENDING_171`** — see #171 deploy · visible fidelity banner · My Looks gate · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`dcee9eac`** kept for rollback. |
+| Frontend (`web-ui`) | **`e176f464`** — release `/var/www/fashionrise/releases/e176f464` · visible fidelity banner · My Looks gate · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`dcee9eac`** kept for rollback. |
 | Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + structure review **v2** (no person-mask compares) · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
@@ -31,6 +31,16 @@
 3. Only like-for-like isolated plate mismatches → **`failed`** / `fidelity_ok=false` / visible banner / excluded from My Looks gallery.
 4. Additive trouser hints from Studio garment geometry preserved; **`try-on-person-v2`** base prompt unchanged.
 5. #170 nginx Accept allowlist re-verified: direct API Accept probe → **401 Not authenticated** (reaches FastAPI, not edge 403). Prior owner Accept failures still **0 FASHN** credits; two realism attempts separately settled.
+
+### Deployed
+
+| Field | Value |
+|---|---|
+| App / FE / BE / worker SHA | **`e176f464478a3012534f1bb9bfd09de71e0a3a26`** (App **`e176f464`**) |
+| Alembic | **`015`** (unchanged) |
+| Nginx Accept | Still allowlisted; direct probe **401** (app), not edge 403 |
+| Provider calls | **0** |
+| Rollback | `/var/backups/fashionrise/p0-171-fidelity-review-deploy-*/ROLLBACK.sh` → FE **`dcee9eac`** |
 
 ### Remaining limitation
 
