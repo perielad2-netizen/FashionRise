@@ -306,7 +306,51 @@ export type PersonalTryOnInput = {
   fashnMaxResolution?: '1k' | '2k' | '4k' | null
   fashnMaxPrompt?: string | null
   fashnMaxSeed?: number | null
+  /** Owner-only v1.6 experiment knobs (#176) — ignored unless provider=fashn. */
+  fashnV16Category?: 'one-pieces' | 'auto' | null
+  fashnV16SegmentationFree?: boolean | null
+  fashnV16Mode?: 'performance' | 'balanced' | 'quality' | null
+  fashnV16Seed?: number | null
   signal?: AbortSignal
+}
+
+export type AcceptedGarmentRealismJob = {
+  job_id: string
+  accepted_at?: string | null
+  croquis_id?: string | null
+  croquis_version?: number | null
+  garment_fingerprint?: string | null
+  piece_count: number
+  piece_categories: string[]
+  piece_shas: string[]
+  prompt_version?: string | null
+  source_revision?: number | null
+  content_fingerprint?: string | null
+}
+
+/** GET /ai/personal-try-on/fashn/garment-realism/accepted — owner reuse catalog (#176). */
+export async function listAcceptedGarmentRealismJobs(
+  signal?: AbortSignal,
+): Promise<AcceptedGarmentRealismJob[]> {
+  return apiRequest<AcceptedGarmentRealismJob[]>(
+    '/ai/personal-try-on/fashn/garment-realism/accepted',
+    { signal },
+  )
+}
+
+export type TryOnExperimentVerdict = 'accepted' | 'rejected' | 'unreviewed'
+
+/** POST /ai/personal-try-on/{id}/experiment-verdict — owner comparison mark (#176). */
+export async function setTryOnExperimentVerdict(
+  jobId: string,
+  verdict: TryOnExperimentVerdict,
+  signal?: AbortSignal,
+): Promise<AiJobRead> {
+  return apiRequest<AiJobRead>(`/ai/personal-try-on/${jobId}/experiment-verdict`, {
+    method: 'POST',
+    body: { verdict },
+    signal,
+  })
 }
 
 /** POST /ai/personal-try-on — photorealistic try-on on the owner's original photo. */
@@ -348,6 +392,18 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
             fashn_max_resolution: input.fashnMaxResolution ?? '1k',
             fashn_max_prompt: input.fashnMaxPrompt ?? null,
             fashn_max_seed: input.fashnMaxSeed ?? 42,
+          }
+        : {}),
+      ...(provider === 'fashn'
+        ? {
+            ...(input.fashnV16Category != null
+              ? { fashn_v16_category: input.fashnV16Category }
+              : {}),
+            ...(input.fashnV16SegmentationFree != null
+              ? { fashn_v16_segmentation_free: input.fashnV16SegmentationFree }
+              : {}),
+            ...(input.fashnV16Mode != null ? { fashn_v16_mode: input.fashnV16Mode } : {}),
+            ...(input.fashnV16Seed != null ? { fashn_v16_seed: input.fashnV16Seed } : {}),
           }
         : {}),
     },

@@ -295,6 +295,35 @@ class PersonalTryOnBody(BaseModel):
     fashn_max_resolution: Literal["1k", "2k", "4k"] | None = None
     fashn_max_prompt: str | None = Field(default=None, max_length=1000)
     fashn_max_seed: int | None = Field(default=None, ge=0, le=4_294_967_295)
+    # Owner-only v1.6 experiment knobs (#176) — ignored for non-owners / openai.
+    fashn_v16_category: Literal["one-pieces", "auto"] | None = None
+    fashn_v16_segmentation_free: bool | None = None
+    fashn_v16_mode: Literal["performance", "balanced", "quality"] | None = None
+    fashn_v16_seed: int | None = Field(default=None, ge=0, le=4_294_967_295)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AcceptedGarmentRealismJobRead(BaseModel):
+    """Owner-facing summary of an accepted realistic garment job for reuse (#176)."""
+
+    job_id: uuid.UUID
+    accepted_at: str | None = None
+    croquis_id: uuid.UUID | None = None
+    croquis_version: int | None = None
+    garment_fingerprint: str | None = None
+    piece_count: int = 0
+    piece_categories: list[str] = Field(default_factory=list)
+    piece_shas: list[str] = Field(default_factory=list)
+    prompt_version: str | None = None
+    source_revision: int | None = None
+    content_fingerprint: str | None = None
+
+
+class TryOnExperimentVerdictBody(BaseModel):
+    """Owner experimental quality verdict for a completed FASHN try-on (#176)."""
+
+    verdict: Literal["accepted", "rejected", "unreviewed"]
 
     model_config = ConfigDict(extra="forbid")
 

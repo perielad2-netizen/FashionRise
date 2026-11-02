@@ -124,6 +124,13 @@ TRY_ON_USER_MODERATION_MESSAGE = (
     "This design could not be rendered by our image provider. Your sketch is saved. "
     "You can continue editing or choose Fashion Magic."
 )
+# #176 — clearer copy when the provider blocked the generated OUTPUT (not the input sketch).
+TRY_ON_USER_OUTPUT_MODERATION_MESSAGE = (
+    "Our image provider blocked the generated preview after creating it "
+    "(output safety filter). Your sketch and photo are unchanged and were not rejected "
+    "as uploads. Try Fashion Magic / FASHN Try On for this silhouette, or adjust coverage "
+    "if you want to retry OpenAI Try On."
+)
 TRY_ON_USER_PROVIDER_REJECT_MESSAGE = (
     "Try On Person could not finish this preview. Your sketch and photo are unchanged. "
     "You can continue editing or choose Fashion Magic."

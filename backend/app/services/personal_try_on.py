@@ -103,6 +103,7 @@ from app.services.personal_try_on_provider import (
     TRY_ON_NOTICE_TEXT,
     TRY_ON_PROMPT_VERSION,
     TRY_ON_USER_MODERATION_MESSAGE,
+    TRY_ON_USER_OUTPUT_MODERATION_MESSAGE,
     TRY_ON_USER_PROVIDER_REJECT_MESSAGE,
     estimate_try_on_cost_cents,
     get_try_on_provider,
@@ -278,6 +279,10 @@ def enqueue_personal_try_on(
     fashn_max_resolution: str | None = None,
     fashn_max_prompt: str | None = None,
     fashn_max_seed: int | None = None,
+    fashn_v16_category: str | None = None,
+    fashn_v16_segmentation_free: bool | None = None,
+    fashn_v16_mode: str | None = None,
+    fashn_v16_seed: int | None = None,
 ) -> AIJob:
     """Validate, reserve spend, freeze garment, enqueue ``personal_try_on`` job."""
     _require_ai_gate()
@@ -303,6 +308,7 @@ def enqueue_personal_try_on(
             detail="Try On Person requires explicit consent acknowledgment.",
         )
     max_experiment: dict[str, Any] | None = None
+    v16_experiment: dict[str, Any] | None = None
     if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
         if not fashn_max_configured():
             raise HTTPException(
@@ -358,6 +364,44 @@ def enqueue_personal_try_on(
             )
         expected_prompt_version = FASHN_PROMPT_VERSION
         consent_ver = FASHN_CONSENT_VERSION
+        # #176 — owner-only v1.6 experiment knobs. Non-owners always get documented defaults.
+        from app.services.fashn_try_on_provider import (
+            normalize_v16_category,
+            normalize_v16_mode,
+            normalize_v16_seed,
+            normalize_v16_segmentation_free,
+            V16_DEFAULT_MODE,
+            V16_DEFAULT_SEED,
+            V16_DEFAULT_SEGMENTATION_FREE,
+        )
+
+        owner_exp = user_on_fashn_max_allowlist(user)
+        if owner_exp and any(
+            v is not None
+            for v in (
+                fashn_v16_category,
+                fashn_v16_segmentation_free,
+                fashn_v16_mode,
+                fashn_v16_seed,
+            )
+        ):
+            v16_experiment = {
+                "category": normalize_v16_category(fashn_v16_category),
+                "segmentation_free": normalize_v16_segmentation_free(fashn_v16_segmentation_free),
+                "mode": normalize_v16_mode(fashn_v16_mode),
+                "seed": normalize_v16_seed(fashn_v16_seed),
+                "num_samples": 1,
+                "owner_experiment": True,
+            }
+        else:
+            v16_experiment = {
+                "category": None,  # piece category retained
+                "segmentation_free": V16_DEFAULT_SEGMENTATION_FREE,
+                "mode": V16_DEFAULT_MODE,
+                "seed": V16_DEFAULT_SEED,
+                "num_samples": 1,
+                "owner_experiment": bool(owner_exp),
+            }
     else:
         if consent_version != TRY_ON_CONSENT_VERSION:
             raise HTTPException(
@@ -716,6 +760,12 @@ def enqueue_personal_try_on(
         input_data["fashn_max_experiment"] = max_experiment
         input_data["experiment"] = True
         input_data["looks_eligible"] = False
+    if v16_experiment is not None:
+        input_data["fashn_v16_experiment"] = v16_experiment
+        if v16_experiment.get("owner_experiment"):
+            # Owner comparison lane stays private (not auto My Looks).
+            input_data["experiment"] = True
+            input_data["looks_eligible"] = False
 
     job = AIJob(
         id=uuid.uuid4(),
@@ -759,11 +809,13 @@ def _try_on_user_failure_payload(exc: BaseException) -> tuple[str, dict[str, Any
             if code == "moderation_blocked"
             else "PROVIDER_REJECTED"
         )
-    user_msg = (
-        TRY_ON_USER_MODERATION_MESSAGE
-        if error_code == "PROVIDER_MODERATION_BLOCKED"
-        else TRY_ON_USER_PROVIDER_REJECT_MESSAGE
-    )
+    stage = str(meta.get("moderation_stage") or "").strip().lower()
+    if error_code == "PROVIDER_MODERATION_BLOCKED" and stage == "output":
+        user_msg = TRY_ON_USER_OUTPUT_MODERATION_MESSAGE
+    elif error_code == "PROVIDER_MODERATION_BLOCKED":
+        user_msg = TRY_ON_USER_MODERATION_MESSAGE
+    else:
+        user_msg = TRY_ON_USER_PROVIDER_REJECT_MESSAGE
     provider_rejection = {
         "code": meta.get("provider_code") or ("moderation_blocked" if error_code == "PROVIDER_MODERATION_BLOCKED" else None),
         "http_status": meta.get("http_status"),
@@ -914,6 +966,10 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
                 generate_kwargs["prompt"] = normalize_max_prompt(exp.get("prompt"))
                 generate_kwargs["seed"] = normalize_max_seed(exp.get("seed"))
                 generate_kwargs["num_images"] = max(1, min(4, int(exp.get("num_images") or 1)))
+            elif provider_name == TRY_ON_PROVIDER_FASHN:
+                v16 = data.get("fashn_v16_experiment")
+                if isinstance(v16, dict):
+                    generate_kwargs["v16_experiment"] = v16
         png, meta = provider.generate(**generate_kwargs)
     except ProviderNotAvailableError as exc:
         # Definitive pre-submit or HTTP 4xx refusal — release reservation at $0.
@@ -982,6 +1038,20 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         "source_revision": data.get("source_revision"),
         "cost_cents": reservation.actual_cost_cents if reservation else actual,
         "design_hints": hints if provider_name == TRY_ON_PROVIDER_OPENAI else None,
+        "experiment": bool(data.get("experiment")),
+        "looks_eligible": data.get("looks_eligible") is not False,
+        "experiment_verdict": "unreviewed",
+        "prediction_ids": meta.get("prediction_ids"),
+        "v16_settings": meta.get("v16_settings") or data.get("fashn_v16_experiment"),
+        "fashn_max_experiment": data.get("fashn_max_experiment"),
+        "garment_realism_job_id": data.get("garment_realism_job_id"),
+        "approved_garment_shas": [
+            str(p.get("sha256") or "")
+            for p in (data.get("approved_garment_pieces") or [])
+            if isinstance(p, dict)
+        ]
+        if isinstance(data.get("approved_garment_pieces"), list)
+        else None,
     }
     if provider_name == TRY_ON_PROVIDER_OPENAI:
         # Soft structural review (#170/#171/#172). Server provenance marks the provider PNG as
@@ -1595,6 +1665,120 @@ def accept_garment_realism_job(db: Session, user: User, job_id: uuid.UUID) -> AI
     # JSONB assignment must be marked + committed: get_db() does not auto-commit,
     # and a bare flush was rolled back on session close (#172 hotfix). Accept then
     # returned 200 from the in-memory object while FASHN enqueue still saw false.
+    job.result_data = updated
+    flag_modified(job, "result_data")
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def list_accepted_garment_realism_jobs(
+    db: Session, user: User, *, limit: int = 20
+) -> list[dict[str, Any]]:
+    """Owner-only catalog of accepted realism jobs for reuse without OpenAI regen (#176)."""
+    _require_ai_gate()
+    if not user_on_fashn_max_allowlist(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Approved-garment reuse catalog is owner-only.",
+        )
+    rows = (
+        db.query(AIJob)
+        .filter(
+            AIJob.user_id == user.id,
+            AIJob.job_type == GARMENT_REALISM_JOB_TYPE,
+            AIJob.status == "completed",
+        )
+        .order_by(AIJob.created_at.desc())
+        .limit(max(1, min(50, int(limit or 20))))
+        .all()
+    )
+    out: list[dict[str, Any]] = []
+    for job in rows:
+        data = job.result_data if isinstance(job.result_data, dict) else {}
+        if data.get("owner_accepted") is not True:
+            continue
+        if data.get("fidelity_ok") is False or data.get("block_fashn"):
+            continue
+        if str(data.get("provider") or "") != GARMENT_REALISM_PROVIDER_ID:
+            continue
+        pieces = data.get("pieces") if isinstance(data.get("pieces"), list) else []
+        if not pieces:
+            continue
+        inp = job.input_data if isinstance(job.input_data, dict) else {}
+        cats: list[str] = []
+        shas: list[str] = []
+        for p in pieces:
+            if not isinstance(p, dict):
+                continue
+            cats.append(str(p.get("category") or "auto"))
+            shas.append(str(p.get("sha256") or ""))
+        croquis_raw = inp.get("croquis_id")
+        try:
+            croquis_id = uuid.UUID(str(croquis_raw)) if croquis_raw else None
+        except Exception:  # noqa: BLE001
+            croquis_id = None
+        out.append(
+            {
+                "job_id": job.id,
+                "accepted_at": data.get("owner_accepted_at"),
+                "croquis_id": croquis_id,
+                "croquis_version": inp.get("croquis_version"),
+                "garment_fingerprint": inp.get("garment_fingerprint"),
+                "piece_count": len(pieces),
+                "piece_categories": cats,
+                "piece_shas": [s for s in shas if s],
+                "prompt_version": data.get("prompt_version"),
+                "source_revision": inp.get("source_revision"),
+                "content_fingerprint": inp.get("content_fingerprint"),
+            }
+        )
+    return out
+
+
+def set_try_on_experiment_verdict(
+    db: Session, user: User, job_id: uuid.UUID, *, verdict: str
+) -> AIJob:
+    """Record owner Accepted/Rejected/Unreviewed on a completed experiment try-on (#176)."""
+    _require_ai_gate()
+    if not user_on_fashn_max_allowlist(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Experiment verdicts are owner-only.",
+        )
+    clean = (verdict or "").strip().lower()
+    if clean not in {"accepted", "rejected", "unreviewed"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="verdict must be accepted, rejected, or unreviewed.",
+        )
+    job = db.get(AIJob, job_id)
+    if job is None or job.user_id != user.id or job.job_type != TRY_ON_JOB_TYPE:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Try On job not found.")
+    if job.status not in {"completed", "completed_unverified"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only a completed Try On preview can receive an experiment verdict.",
+        )
+    inp = job.input_data if isinstance(job.input_data, dict) else {}
+    provider = str(inp.get("provider") or "")
+    if not _is_fashn_family(provider):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Experiment verdicts apply to FASHN v1.6 / Max comparison jobs only.",
+        )
+    data = job.result_data if isinstance(job.result_data, dict) else {}
+    updated = {
+        **data,
+        "experiment_verdict": clean,
+        "experiment_verdict_at": _utcnow().isoformat(),
+        "experiment": True,
+        # Rejected / unreviewed stay out of My Looks; accepted still requires looks_eligible.
+        "looks_eligible": bool(data.get("looks_eligible")) and clean == "accepted",
+    }
+    if clean != "accepted":
+        updated["looks_eligible"] = False
     job.result_data = updated
     flag_modified(job, "result_data")
     db.add(job)

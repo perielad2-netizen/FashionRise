@@ -8,6 +8,7 @@ from app.auth.dependencies import CurrentUser
 from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.schemas.ai import (
+    AcceptedGarmentRealismJobRead,
     AIJobCreate,
     AIJobRead,
     MagicOperationJobsRead,
@@ -19,6 +20,7 @@ from app.schemas.ai import (
     SketchPipelineBody,
     SketchPolishDualBody,
     SketchPolishDualRead,
+    TryOnExperimentVerdictBody,
 )
 from app.services import ai_service
 from app.services import personal_try_on as try_on_service
@@ -188,6 +190,42 @@ def personal_try_on_garment_realism_accept(
     return AIJobRead.from_job(job)
 
 
+@router.get(
+    "/personal-try-on/fashn/garment-realism/accepted",
+    response_model=list[AcceptedGarmentRealismJobRead],
+)
+@limiter.limit("60/minute")
+def personal_try_on_list_accepted_realism(
+    request: Request,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> list[AcceptedGarmentRealismJobRead]:
+    """Owner catalog of accepted realistic garments for reuse without OpenAI regen (#176)."""
+    _ = request.url
+    rows = try_on_service.list_accepted_garment_realism_jobs(db, user)
+    return [AcceptedGarmentRealismJobRead(**row) for row in rows]
+
+
+@router.post(
+    "/personal-try-on/{job_id}/experiment-verdict",
+    response_model=AIJobRead,
+)
+@limiter.limit("60/minute")
+def personal_try_on_experiment_verdict(
+    request: Request,
+    job_id: uuid.UUID,
+    user: CurrentUser,
+    body: TryOnExperimentVerdictBody,
+    db: Session = Depends(get_db),
+) -> AIJobRead:
+    """Owner Accepted / Rejected / Unreviewed mark for FASHN comparison results (#176)."""
+    _ = request.url
+    job = try_on_service.set_try_on_experiment_verdict(
+        db, user, job_id, verdict=body.verdict
+    )
+    return AIJobRead.from_job(job)
+
+
 @router.post(
     "/personal-try-on",
     response_model=AIJobRead,
@@ -226,6 +264,10 @@ def personal_try_on(
         fashn_max_resolution=body.fashn_max_resolution,
         fashn_max_prompt=body.fashn_max_prompt,
         fashn_max_seed=body.fashn_max_seed,
+        fashn_v16_category=body.fashn_v16_category,
+        fashn_v16_segmentation_free=body.fashn_v16_segmentation_free,
+        fashn_v16_mode=body.fashn_v16_mode,
+        fashn_v16_seed=body.fashn_v16_seed,
     )
     return AIJobRead.from_job(job)
 

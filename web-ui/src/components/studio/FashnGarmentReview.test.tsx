@@ -192,3 +192,63 @@ describe('FASHN Accept dialog actions (#169)', () => {
     expect(screen.getByRole('button', { name: 'Regenerate Garment' }).textContent).not.toMatch(/¢/)
   })
 })
+
+describe('FASHN owner experiment panel (#176)', () => {
+  it('shows Max + v1.6 controls for owner even before realistic pieces exist', () => {
+    const onProviderChange = vi.fn()
+    render(
+      <FashnGarmentReview
+        prep={prep({ layout: 'one_piece', pieces: [
+          { category: 'one-pieces', image_base64: TINY, bbox: [0, 0, 10, 10], opaque_pixels: 40 },
+        ], fashn_calls: 1, estimate_cents: 8, realism_calls: 1, realism_estimate_cents: 8, combined_estimate_cents: 16 })}
+        realisticPieces={null}
+        realismBusy={false}
+        realismError={null}
+        detailsOpen={false}
+        onToggleDetails={() => undefined}
+        experiment={{
+          ownerAllowed: true,
+          provider: 'fashn',
+          onProviderChange,
+          mode: 'balanced',
+          onModeChange: () => undefined,
+          resolution: '1k',
+          onResolutionChange: () => undefined,
+          prompt: '',
+          onPromptChange: () => undefined,
+          promptOpen: false,
+          onTogglePrompt: () => undefined,
+          softBudgetCredits: 90,
+          creditsBalanced: 2,
+          creditsQuality: 3,
+          estimateBalancedCents: 16,
+          estimateQualityCents: 24,
+          v16Category: 'one-pieces',
+          onV16CategoryChange: () => undefined,
+          v16SegmentationFree: true,
+          onV16SegmentationFreeChange: () => undefined,
+          v16Mode: 'balanced',
+          onV16ModeChange: () => undefined,
+          v16Seed: 42,
+          onV16SeedChange: () => undefined,
+          acceptedOptions: [
+            { jobId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', label: 'accepted · one-pieces', pieceCount: 1, categories: ['one-pieces'] },
+          ],
+          selectedAcceptedJobId: null,
+          onSelectAcceptedJobId: () => undefined,
+          onLoadAcceptedJob: () => undefined,
+          acceptedLoadBusy: false,
+        }}
+      />,
+    )
+    expect(screen.getByTestId('fashn-max-experiment')).toBeInTheDocument()
+    expect(screen.getByTestId('fashn-v16-controls')).toBeInTheDocument()
+    expect(screen.getByTestId('fashn-reuse-accepted')).toBeInTheDocument()
+    const maxRadio = screen
+      .getByText('FASHN Try-On Max')
+      .closest('label')!
+      .querySelector('input') as HTMLInputElement
+    fireEvent.click(maxRadio)
+    expect(onProviderChange).toHaveBeenCalledWith('fashn_max')
+  })
+})

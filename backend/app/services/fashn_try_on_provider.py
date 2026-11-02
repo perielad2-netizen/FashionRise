@@ -31,6 +31,93 @@ FASHN_MODEL_NAME = "tryon-v1.6"
 FASHN_CONSENT_VERSION = "try-on-fashn-oneclick-v1"
 FASHN_PROMPT_VERSION = "fashn-tryon-v1.6"
 
+# Documented v1.6 defaults (docs.fashn.ai/api-reference/tryon-v1-6). Customer path uses these.
+V16_DEFAULT_CATEGORY = "one-pieces"  # FashionRise one-piece swimwear default (not auto)
+V16_DEFAULT_SEGMENTATION_FREE = True
+V16_DEFAULT_MODE = "balanced"
+V16_DEFAULT_SEED = 42
+V16_DEFAULT_NUM_SAMPLES = 1
+V16_DEFAULT_GARMENT_PHOTO_TYPE = "flat-lay"
+V16_DEFAULT_MODERATION_LEVEL = "permissive"
+V16_ALLOWED_CATEGORIES = frozenset({"auto", "tops", "bottoms", "one-pieces"})
+V16_ALLOWED_MODES = frozenset({"performance", "balanced", "quality"})
+
+
+def normalize_v16_category(raw: str | None, *, piece_category: str | None = None) -> str:
+    """Owner experiment may choose one-pieces or auto; otherwise keep piece category."""
+    text = (raw or "").strip().lower()
+    if text in {"one-pieces", "auto"}:
+        return text
+    piece = (piece_category or "").strip().lower()
+    if piece in V16_ALLOWED_CATEGORIES:
+        return piece
+    return V16_DEFAULT_CATEGORY
+
+
+def normalize_v16_mode(raw: str | None) -> str:
+    text = (raw or "").strip().lower()
+    return text if text in V16_ALLOWED_MODES else V16_DEFAULT_MODE
+
+
+def normalize_v16_segmentation_free(raw: Any) -> bool:
+    if raw is None:
+        return V16_DEFAULT_SEGMENTATION_FREE
+    if isinstance(raw, bool):
+        return raw
+    text = str(raw).strip().lower()
+    if text in {"0", "false", "no", "off"}:
+        return False
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    return V16_DEFAULT_SEGMENTATION_FREE
+
+
+def normalize_v16_seed(raw: Any) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return V16_DEFAULT_SEED
+    if value < 0 or value > 4_294_967_295:
+        return V16_DEFAULT_SEED
+    return value
+
+
+def build_tryon_v16_run_payload(
+    *,
+    model_image: str,
+    garment_image: str,
+    category: str,
+    segmentation_free: bool = V16_DEFAULT_SEGMENTATION_FREE,
+    mode: str = V16_DEFAULT_MODE,
+    seed: int = V16_DEFAULT_SEED,
+    num_samples: int = V16_DEFAULT_NUM_SAMPLES,
+    garment_photo_type: str = V16_DEFAULT_GARMENT_PHOTO_TYPE,
+    moderation_level: str = V16_DEFAULT_MODERATION_LEVEL,
+) -> dict[str, Any]:
+    """Exact v1.6 /v1/run body — documented field names only (no prompt)."""
+    cat = category if category in V16_ALLOWED_CATEGORIES else V16_DEFAULT_CATEGORY
+    mode_n = mode if mode in V16_ALLOWED_MODES else V16_DEFAULT_MODE
+    return {
+        "model_name": FASHN_MODEL_NAME,
+        "inputs": {
+            "model_image": model_image,
+            "garment_image": garment_image,
+            "category": cat,
+            "garment_photo_type": garment_photo_type
+            if garment_photo_type in {"auto", "flat-lay", "model"}
+            else V16_DEFAULT_GARMENT_PHOTO_TYPE,
+            "moderation_level": moderation_level
+            if moderation_level in {"conservative", "permissive", "none"}
+            else V16_DEFAULT_MODERATION_LEVEL,
+            "segmentation_free": bool(segmentation_free),
+            "mode": mode_n,
+            "seed": normalize_v16_seed(seed),
+            "num_samples": max(1, min(4, int(num_samples or 1))),
+            "output_format": "png",
+            "return_base64": True,
+        },
+    }
+
 FASHN_NOTICE_TEXT = (
     "FASHN Try On is a one-click, bounded two-provider preview: FashionRise prepares your "
     "sketch, generates a realistic garment product image with OpenAI, runs automatic "
@@ -107,6 +194,7 @@ class FashnTryOnV16Adapter:
         garment_png: bytes,
         design_hints: list[str] | None = None,
         prep: GarmentPrepResult | None = None,
+        v16_experiment: dict[str, Any] | None = None,
     ) -> tuple[bytes, dict[str, Any]]:
         _ = design_hints  # FASHN v1.6 has no prompt field; hints are inspection-only.
         settings = get_settings()
@@ -122,6 +210,13 @@ class FashnTryOnV16Adapter:
         model_bytes = _ensure_rgb_jpegish_png(photo_png)
         prediction_ids: list[str] = []
         credits_used = 0
+        exp = v16_experiment if isinstance(v16_experiment, dict) else {}
+        exp_mode = normalize_v16_mode(exp.get("mode"))
+        exp_seg = normalize_v16_segmentation_free(exp.get("segmentation_free"))
+        exp_seed = normalize_v16_seed(exp.get("seed"))
+        exp_samples = max(1, min(1, int(exp.get("num_samples") or V16_DEFAULT_NUM_SAMPLES)))
+        # Owner may override category to one-pieces|auto; otherwise use piece category.
+        exp_category_override = exp.get("category")
 
         timeout = float(settings.fashn_poll_timeout_seconds or 120)
         interval = float(settings.fashn_poll_interval_seconds or 2)
@@ -132,13 +227,21 @@ class FashnTryOnV16Adapter:
                 current_model = model_bytes
                 final_png: bytes | None = None
                 for piece in prepared.pieces:
+                    category = normalize_v16_category(
+                        exp_category_override if isinstance(exp_category_override, str) else None,
+                        piece_category=piece.category,
+                    )
                     pred_id = self._run(
                         client,
                         base=base,
                         api_key=api_key,
                         model_image=_to_data_uri_png(current_model),
                         garment_image=_to_data_uri_png(piece.png_bytes),
-                        category=piece.category,
+                        category=category,
+                        segmentation_free=exp_seg,
+                        mode=exp_mode,
+                        seed=exp_seed,
+                        num_samples=exp_samples,
                     )
                     prediction_ids.append(pred_id)
                     status_body, used = self._poll(
@@ -182,6 +285,18 @@ class FashnTryOnV16Adapter:
             "actual_cost_cents": estimate_fashn_cost_cents(
                 fashn_calls=credits_used or prepared.fashn_calls
             ),
+            "v16_settings": {
+                "category": normalize_v16_category(
+                    exp_category_override if isinstance(exp_category_override, str) else None,
+                    piece_category=prepared.pieces[0].category if prepared.pieces else None,
+                ),
+                "segmentation_free": exp_seg,
+                "mode": exp_mode,
+                "seed": exp_seed,
+                "num_samples": exp_samples,
+                "garment_photo_type": V16_DEFAULT_GARMENT_PHOTO_TYPE,
+                "moderation_level": V16_DEFAULT_MODERATION_LEVEL,
+            },
         }
         return final_png, meta
 
@@ -194,22 +309,20 @@ class FashnTryOnV16Adapter:
         model_image: str,
         garment_image: str,
         category: str,
+        segmentation_free: bool = V16_DEFAULT_SEGMENTATION_FREE,
+        mode: str = V16_DEFAULT_MODE,
+        seed: int = V16_DEFAULT_SEED,
+        num_samples: int = V16_DEFAULT_NUM_SAMPLES,
     ) -> str:
-        payload = {
-            "model_name": FASHN_MODEL_NAME,
-            "inputs": {
-                "model_image": model_image,
-                "garment_image": garment_image,
-                "category": category,
-                "garment_photo_type": "flat-lay",
-                "moderation_level": "permissive",
-                "segmentation_free": True,
-                "mode": "balanced",
-                "num_samples": 1,
-                "output_format": "png",
-                "return_base64": True,
-            },
-        }
+        payload = build_tryon_v16_run_payload(
+            model_image=model_image,
+            garment_image=garment_image,
+            category=category,
+            segmentation_free=segmentation_free,
+            mode=mode,
+            seed=seed,
+            num_samples=num_samples,
+        )
         try:
             resp = client.post(
                 f"{base}/v1/run",

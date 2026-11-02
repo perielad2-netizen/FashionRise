@@ -748,13 +748,18 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
         def __init__(self):
             self.calls = 0
 
-        def generate(self, *, photo_png, garment_png, design_hints=None, prep=None):
+        def generate(
+            self, *, photo_png, garment_png, design_hints=None, prep=None, v16_experiment=None
+        ):
             self.calls += 1
             assert photo_png and garment_png
             assert prep is not None
             assert getattr(prep, "quality_ok", True) is True
             # One-piece swimwear must not be sent as category=auto.
             assert all(p.category != "auto" for p in prep.pieces)
+            # #176 — customer path freezes documented v1.6 defaults (no owner override).
+            if isinstance(v16_experiment, dict):
+                assert v16_experiment.get("owner_experiment") in (False, True, None)
             out = _png_bytes((80, 120), (12, 34, 56, 255))
             return out, {
                 "actual_cost_cents": 8 * prep.fashn_calls,
@@ -763,6 +768,7 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
                 "fashn_calls": prep.fashn_calls,
                 "layout": prep.layout,
                 "prediction_ids": ["pred-mock-1"],
+                "v16_settings": v16_experiment,
             }
 
     # Seed a completed OpenAI realism job with product pieces that differ from sketch plates.

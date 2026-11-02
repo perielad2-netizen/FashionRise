@@ -141,6 +141,34 @@ location ~ "^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/a
     add_header Cache-Control "no-store" always;
 }
 
+# #176 — owner catalog of accepted realistic garments (reuse without OpenAI regen).
+location = /api/v1/ai/personal-try-on/fashn/garment-realism/accepted {
+    limit_except GET { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    add_header Cache-Control "no-store" always;
+}
+
+# #176 — owner Accepted/Rejected/Unreviewed mark on a completed FASHN experiment.
+location ~ "^/api/v1/ai/personal-try-on/[0-9a-fA-F-]{36}/experiment-verdict$" {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    add_header Cache-Control "no-store" always;
+}
+
 # Job status + authenticated image (GET only). Must be regex so it beats
 # the plain prefix deny below (do not mark the deny with ^~).
 location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {
@@ -176,6 +204,10 @@ Run against an isolated candidate config (never production) with `nginx -t`, the
 | `POST /api/v1/ai/personal-try-on/fashn/garment-realism` | Proxied (allowlist) |
 | `POST /api/v1/ai/personal-try-on/fashn/garment-realism/{uuid}/accept` | Proxied (regex) |
 | `GET /api/v1/ai/personal-try-on/fashn/garment-realism/{uuid}/accept` | Denied (`limit_except`) |
+| `GET /api/v1/ai/personal-try-on/fashn/garment-realism/accepted` | Proxied (exact, #176) |
+| `POST /api/v1/ai/personal-try-on/fashn/garment-realism/accepted` | Denied (`limit_except`) |
+| `POST /api/v1/ai/personal-try-on/{uuid}/experiment-verdict` | Proxied (regex, #176) |
+| `GET /api/v1/ai/personal-try-on/{uuid}/experiment-verdict` | Denied (`limit_except`) |
 | `GET /api/v1/ai/jobs/{uuid}` | Proxied (regex) |
 | `GET /api/v1/ai/jobs/{uuid}/image` | Proxied (regex) |
 | `POST /api/v1/ai/jobs/{uuid}` | Denied (`limit_except`) |
