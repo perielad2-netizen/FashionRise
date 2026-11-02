@@ -52,7 +52,8 @@ Hard-refresh App **`e26b9a43`** → purple bikini → Magic → **FASHN Try On**
 ### Tests / deploy
 
 - BE bikini/prep/realism/fidelity: **26 PASS** · FE layout CTA + try-on API: **13 PASS** · **0** paid calls in deploy window
-- Rollback: `/var/backups/fashionrise/p1-167-fm-realism-fidelity-deploy-*/ROLLBACK.sh` → FE **`6c6140ef`** + prior BE overlay
+- Rollback: `/var/backups/fashionrise/p1-167-fm-realism-fidelity-deploy-20261102T090347Z/ROLLBACK.sh` → FE **`6c6140ef`** + prior BE overlay
+- Deployed SHA: **`e26b9a43dc16100f99e17c3e19b988ab4f2a870d`** (App **`e26b9a43`**)
 
 ## #166 FASHN requires OpenAI realism (no sketch-plate input) — DEPLOYED (2026-11-02)
 
