@@ -285,7 +285,7 @@ class PersonalTryOnBody(BaseModel):
     # Optional Studio-derived color/material/accessory hints (never invent beyond image 2).
     design_hints: list[str] | None = Field(default=None, max_length=8)
     # Explicit provider choice — never auto-switched after a refusal.
-    # fashn_max = owner-only Try-On Max experiment (#173).
+    # fashn_max = Try-On Max (#173 owner experiment, or #178 smart public fallback).
     provider: Literal["openai", "fashn", "fashn_max"] = "openai"
     # Owner-accepted realistic product plates (required for FASHN after #161).
     approved_garment_pieces: list[ApprovedGarmentPiece] | None = None
@@ -300,6 +300,13 @@ class PersonalTryOnBody(BaseModel):
     fashn_v16_segmentation_free: bool | None = None
     fashn_v16_mode: Literal["performance", "balanced", "quality"] | None = None
     fashn_v16_seed: int | None = Field(default=None, ge=0, le=4_294_967_295)
+    # #178 — invisible OpenAI→Max public fallback. Forces Max balanced/1k, bypasses
+    # owner-allowlist (still requires Max live), auto-accepts fidelity-OK realism,
+    # and keeps the result as a normal (non-experiment) try-on delivery.
+    smart_fallback: bool = False
+    # Shared operation id for OpenAI primary + Max fallback (diagnostics / spend link).
+    smart_operation_id: str | None = Field(default=None, max_length=64)
+    smart_fallback_reason: str | None = Field(default=None, max_length=128)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -403,6 +410,8 @@ class PersonalTryOnPreflightRead(BaseModel):
     fashn_owner_experiment_allowed: bool = False
     # Max selectable only when allowlisted AND Max configured + live-armed.
     fashn_max_owner_allowed: bool = False
+    # #178 — normal Try On Person may auto-fall back to Max when OpenAI fails hard.
+    smart_try_on_max_fallback_available: bool = False
     fashn_max_prompt_version: str | None = None
     fashn_max_default_prompt: str | None = None
     fashn_max_default_generation_mode: str | None = None

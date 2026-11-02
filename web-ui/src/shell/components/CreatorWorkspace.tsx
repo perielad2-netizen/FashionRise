@@ -371,14 +371,14 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
             {
               label: 'Try On Person',
               onClick: editor.chooseTryOnPerson,
-              variant: editor.magicFashnAvailable ? 'ghost' : 'primary',
+              variant: 'primary',
             },
-            ...(editor.magicFashnAvailable
+            ...(editor.magicOwnerExperimentAvailable
               ? [
                   {
-                    label: 'FASHN Try On',
+                    label: 'Owner FASHN experiment',
                     onClick: editor.chooseFashnTryOn,
-                    variant: 'primary' as const,
+                    variant: 'ghost' as const,
                   },
                 ]
               : []),
@@ -389,26 +389,10 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
             on the original Create My Croquis photo — concept preview only, not a fit guarantee.
           </p>
           {editor.magicTryOnNotice ? <p>{editor.magicTryOnNotice}</p> : null}
-          {editor.magicTryOnEstimateCents != null ? (
+          {editor.magicOwnerExperimentAvailable ? (
             <p>
-              Estimated OpenAI cost about {editor.magicTryOnEstimateCents}¢ per Try On Person
-              (capped by your daily Create My Croquis budget).
-            </p>
-          ) : null}
-          {editor.magicFashnAvailable ? (
-            <p>
-              FASHN Try On has two paid stages. First, OpenAI builds a realistic garment product
-              image (~
-              {editor.magicFashnCombinedEstimateCents != null
-                ? Math.max(8, Math.round((editor.magicFashnCombinedEstimateCents || 16) / 2))
-                : 8}
-              ¢ per piece). You review that product against your Studio sketch, then Accept before
-              FASHN Virtual Try-On v1.6 (~8¢ per credit) runs. Combined estimate about{' '}
-              {editor.magicFashnCombinedEstimateCents != null
-                ? `${editor.magicFashnCombinedEstimateCents}¢`
-                : '16¢'}{' '}
-              for a one-piece (two-piece doubles both stages). Sketch plates are never sent to
-              FASHN. Canceling the review never starts FASHN. No automatic paid regenerations.
+              Owner FASHN experiment keeps the manual v1.6 / Max comparison tools for internal
+              testing. Ordinary Try On Person stays one button with no review dialog.
             </p>
           ) : null}
         </ConfirmDialog>

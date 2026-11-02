@@ -93,6 +93,7 @@ function mockEditor(overrides: Partial<StudioEditor> = {}): StudioEditor {
     magicTryOnNotice: null,
     magicTryOnEstimateCents: null,
     magicFashnAvailable: false,
+    magicOwnerExperimentAvailable: false,
     magicFashnEstimatePerCall: null,
     magicFashnCombinedEstimateCents: null,
     magicStatusHint: null,
@@ -335,25 +336,41 @@ describe('CreatorWorkspace tablet layout controls (WEB-V4I)', () => {
     expect(document.activeElement).toBe(first)
   })
 
-  it('FASHN button is clean "FASHN Try On"; cost stays in confirmation copy (#164)', () => {
+  it('normal Magic destination is one-button Try On without cost/provider copy (#178)', () => {
     render(
       <CreatorWorkspace
         editor={mockEditor({
           magicDestinationOpen: true,
-          magicFashnAvailable: true,
+          magicFashnAvailable: false,
+          magicOwnerExperimentAvailable: false,
           magicFashnCombinedEstimateCents: 16,
           magicTryOnEstimateCents: 8,
         })}
       />,
     )
     const dialog = screen.getByRole('dialog')
-    const fashnBtn = within(dialog).getByRole('button', { name: 'FASHN Try On' })
-    expect(fashnBtn).toBeTruthy()
-    expect(within(dialog).queryByRole('button', { name: /FASHN Try On \(~/ })).toBeNull()
-    expect(within(dialog).getByText(/two paid stages/i)).toBeTruthy()
-    expect(within(dialog).getByText(/Combined estimate about/i)).toBeTruthy()
-    expect(within(dialog).getByText(/16¢/)).toBeTruthy()
-    expect(within(dialog).getByText(/Sketch plates are never sent to FASHN/i)).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Try On Person' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: /FASHN/i })).toBeNull()
+    expect(within(dialog).queryByText(/¢/)).toBeNull()
+    expect(within(dialog).queryByText(/credit/i)).toBeNull()
+    expect(within(dialog).queryByText(/two paid stages/i)).toBeNull()
+  })
+
+  it('owner experiment entry stays available without public cost copy (#178)', () => {
+    render(
+      <CreatorWorkspace
+        editor={mockEditor({
+          magicDestinationOpen: true,
+          magicFashnAvailable: true,
+          magicOwnerExperimentAvailable: true,
+        })}
+      />,
+    )
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Try On Person' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Owner FASHN experiment' })).toBeTruthy()
+    expect(within(dialog).queryByText(/¢/)).toBeNull()
+    expect(within(dialog).getByText(/manual v1\.6 \/ Max comparison/i)).toBeTruthy()
   })
 
   it('gives model-switch confirmation precedence for focus and Escape over Models gallery', () => {

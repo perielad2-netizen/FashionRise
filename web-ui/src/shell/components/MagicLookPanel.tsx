@@ -240,20 +240,22 @@ export function MagicLookPanel({
             <div className={styles.statusBox}>
               <div className={styles.spinner} aria-hidden />
               <strong>
-                {statusHint
-                  ? statusHint
-                  : phase === 'capturing'
-                    ? tryOn
-                      ? 'Capturing garment artwork…'
-                      : 'Capturing sketch…'
-                    : phase === 'submitting'
-                      ? tryOn
-                        ? 'Starting Try On Person…'
-                        : 'Starting Magic…'
-                      : dualActive
-                        ? 'Creating your looks…'
-                        : tryOn
-                          ? 'Creating your try-on preview…'
+                {tryOn
+                  ? // #178 — normal try-on never exposes provider/stage/cost text.
+                    statusHint &&
+                    !/fashn|openai|credit|¢|max\b|v1\.6|provider|realistic garment/i.test(
+                      statusHint,
+                    )
+                    ? statusHint
+                    : 'Generating your try-on preview...'
+                  : statusHint
+                    ? statusHint
+                    : phase === 'capturing'
+                      ? 'Capturing sketch…'
+                      : phase === 'submitting'
+                        ? 'Starting Magic…'
+                        : dualActive
+                          ? 'Creating your looks…'
                           : 'Creating your look…'}
               </strong>
               <span>You can leave this open — we recover the same job if the network blips.</span>
