@@ -266,6 +266,64 @@ def assert_structural_fidelity(
             recommended_category=recommended,
         )
 
+    # #164 — reject OpenAI restyles that invent asymmetry / twist on a symmetric top.
+    src_sym = _symmetry_score(source_png)
+    prod_sym = _symmetry_score(product_png)
+    if src_sym >= 0.82 and prod_sym <= 0.62:
+        return FidelityVerdict(
+            ok=False,
+            code="FIDELITY_ASYMMETRY_INVENTED",
+            message=(
+                "Fidelity check failed: the sketch top/bottom is roughly symmetric, but the "
+                "generated product introduced a twisted or asymmetric redesign. FASHN was not started."
+            ),
+            source=source,
+            product=product,
+            recommended_category=recommended,
+        )
+
+    # #164 — deep-V / open neckline filled in (wrapped/twisted tops inflate the top band).
+    # width_profile samples at 15%, 35%, 50%, ... of garment height.
+    src_w15, _src_w35, src_w50 = source.width_profile[0], source.width_profile[1], source.width_profile[2]
+    prod_w15, _prod_w35, prod_w50 = (
+        product.width_profile[0],
+        product.width_profile[1],
+        product.width_profile[2],
+    )
+    src_top_ratio = src_w15 / max(src_w50, 1)
+    prod_top_ratio = prod_w15 / max(prod_w50, 1)
+    top_growth = prod_top_ratio / max(src_top_ratio, 0.01)
+    # Absolute fill-in (wrap covering the V) OR relative deep-V collapse (owner #164).
+    neckline_changed = src_top_ratio <= 0.55 and (
+        prod_top_ratio >= max(0.70, src_top_ratio * 1.75) or top_growth >= 2.5
+    )
+    if neckline_changed:
+        return FidelityVerdict(
+            ok=False,
+            code="FIDELITY_NECKLINE_CHANGED",
+            message=(
+                "Fidelity check failed: the sketch has an open / deep neckline, but the "
+                "generated product filled it in (wrap/twist redesign). FASHN was not started."
+            ),
+            source=source,
+            product=product,
+            recommended_category=recommended,
+        )
+
+    color_corr = _color_correlation(source_png, product_png)
+    if color_corr is not None and color_corr < 0.35:
+        return FidelityVerdict(
+            ok=False,
+            code="FIDELITY_COLOR_DRIFT",
+            message=(
+                "Fidelity check failed: garment colors / gradient placement drifted too far "
+                "from your sketch. FASHN was not started."
+            ),
+            source=source,
+            product=product,
+            recommended_category=recommended,
+        )
+
     return FidelityVerdict(
         ok=True,
         code="FIDELITY_OK",
@@ -274,3 +332,76 @@ def assert_structural_fidelity(
         product=product,
         recommended_category=recommended,
     )
+
+
+def _garment_rgb_pixels(png: bytes) -> list[tuple[int, int, int]]:
+    rgba = _load_rgba(png)
+    mask = _garment_mask(rgba)
+    pix = rgba.load()
+    assert pix is not None
+    out: list[tuple[int, int, int]] = []
+    h = len(mask)
+    w = len(mask[0]) if h else 0
+    for y in range(h):
+        for x in range(w):
+            if not mask[y][x]:
+                continue
+            r, g, b, _a = pix[x, y]
+            if r < 40 and g < 40 and b < 40:
+                continue
+            out.append((r, g, b))
+    return out
+
+
+def _symmetry_score(png: bytes) -> float:
+    """1.0 = left/right mirror match of garment mask; low = invented asymmetry."""
+    rgba = _load_rgba(png)
+    mask = _garment_mask(rgba)
+    h = len(mask)
+    w = len(mask[0]) if h else 0
+    if w < 8 or h < 8:
+        return 1.0
+    # Crop to bbox
+    xs = [x for y in range(h) for x in range(w) if mask[y][x]]
+    ys = [y for y in range(h) for x in range(w) if mask[y][x]]
+    if not xs:
+        return 1.0
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    bw = x1 - x0 + 1
+    mid = bw // 2
+    agree = 0
+    total = 0
+    for y in range(y0, y1 + 1):
+        for dx in range(mid):
+            lx = x0 + dx
+            rx = x1 - dx
+            if lx >= w or rx < 0:
+                continue
+            total += 1
+            if mask[y][lx] == mask[y][rx]:
+                agree += 1
+    return agree / max(total, 1)
+
+
+def _color_correlation(source_png: bytes, product_png: bytes) -> float | None:
+    """Rough RGB mean proximity in [0,1]; None if insufficient samples."""
+    a = _garment_rgb_pixels(source_png)
+    b = _garment_rgb_pixels(product_png)
+    if len(a) < 32 or len(b) < 32:
+        return None
+
+    def mean(px: list[tuple[int, int, int]]) -> tuple[float, float, float]:
+        n = len(px)
+        return (
+            sum(p[0] for p in px) / n,
+            sum(p[1] for p in px) / n,
+            sum(p[2] for p in px) / n,
+        )
+
+    ma, mb = mean(a), mean(b)
+    # Distance in RGB cube normalized
+    dist = (
+        (ma[0] - mb[0]) ** 2 + (ma[1] - mb[1]) ** 2 + (ma[2] - mb[2]) ** 2
+    ) ** 0.5
+    return max(0.0, 1.0 - dist / (255.0 * (3**0.5)))

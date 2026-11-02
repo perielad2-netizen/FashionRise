@@ -74,9 +74,18 @@ class GarmentPrepResult:
     def estimate_cents(self, cents_per_call: int) -> int:
         return max(1, int(cents_per_call)) * int(self.fashn_calls)
 
+    def prefer_local_product(self) -> bool:
+        """Filled opaque plates: skip OpenAI redesign (owner bikini restyle incident #164)."""
+        if not self.quality_ok or not self.pieces:
+            return False
+        return all(p.fill_ratio >= 0.50 and p.edge_ratio <= 0.45 for p in self.pieces)
+
     def public_dict(self, *, cents_per_call: int, realism_cents_per_piece: int = 8) -> dict[str, Any]:
-        realism_calls = len(self.pieces)
-        realism_estimate = max(1, int(realism_cents_per_piece)) * realism_calls
+        local = self.prefer_local_product()
+        realism_calls = 0 if local else len(self.pieces)
+        realism_estimate = (
+            0 if local else max(1, int(realism_cents_per_piece)) * max(1, realism_calls)
+        )
         fashn_estimate = self.estimate_cents(cents_per_call)
         return {
             "layout": self.layout,
@@ -85,6 +94,7 @@ class GarmentPrepResult:
             "realism_calls": realism_calls,
             "realism_estimate_cents": realism_estimate,
             "combined_estimate_cents": realism_estimate + fashn_estimate,
+            "prefer_local_product": local,
             "garment_fingerprint": self.source_fingerprint,
             "quality_ok": self.quality_ok,
             "quality_notes": self.quality_notes,
@@ -103,14 +113,19 @@ class GarmentPrepResult:
                 for p in self.pieces
             ],
             "notes": (
-                "Two-piece swimwear uses sequential FASHN calls (tops then bottoms) — "
-                "v1.6 applies one category per garment_image. One click runs realism + "
-                "fidelity checks, then FASHN only if the silhouette stays faithful."
+                (
+                    "Filled two-piece plates keep exact Studio colors/cut — OpenAI redesign is "
+                    "skipped to avoid restyling. Sequential FASHN calls (tops then bottoms)."
+                    if local
+                    else "Two-piece swimwear: OpenAI product images then sequential FASHN "
+                    "(tops then bottoms) only if fidelity passes."
+                )
                 if self.layout == "two_piece"
                 else (
-                    "Single garment plate uses FASHN category one-pieces when the silhouette "
-                    "is swimsuit-like (never auto for one-piece swimwear). One click runs "
-                    "realism + fidelity, then FASHN."
+                    "Filled one-piece plate keeps exact Studio design — OpenAI redesign skipped."
+                    if local
+                    else "One-piece uses FASHN category one-pieces; OpenAI product image then "
+                    "FASHN only if fidelity passes."
                 )
             ),
         }

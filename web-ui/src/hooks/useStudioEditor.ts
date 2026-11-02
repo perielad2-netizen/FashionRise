@@ -1774,7 +1774,9 @@ export function useStudioEditor() {
             setMagicStatusHint(null)
             return
           }
-          if (prep.openai_live_http === false) {
+          const preferLocalProduct = prep.prefer_local_product === true
+          // OpenAI live arming only required when redesign is needed (#164 local product path).
+          if (!preferLocalProduct && prep.openai_live_http === false) {
             setMagicPhase('failed')
             setMagicError('Realistic garment generation is not live-armed on this server yet.')
             setMagicStatusHint(null)
@@ -1792,7 +1794,9 @@ export function useStudioEditor() {
           })
 
           setMagicStatusHint(
-            `Generating realistic garment (~${prep.realism_estimate_cents ?? 8}¢)…`,
+            preferLocalProduct
+              ? 'Keeping exact Studio cut and colors (no OpenAI redesign)…'
+              : `Generating realistic garment (~${prep.realism_estimate_cents ?? 8}¢)…`,
           )
           setMagicPhase('polling')
           const realismJob = await enqueueFashnGarmentRealism({

@@ -9,9 +9,11 @@ from PIL import Image
 
 from app.services.fashn_garment_realism import (
     GARMENT_REALISM_PROMPT_VERSION,
+    LOCAL_PRODUCT_PROVIDER_ID,
     OpenAIGarmentRealismAdapter,
     estimate_garment_realism_cents,
     garment_realism_prompt,
+    productize_filled_plate,
 )
 from app.services.personal_croquis_provider import ProviderNotAvailableError
 
@@ -30,11 +32,21 @@ def test_prompt_forbids_person_and_preserves_design():
     text = garment_realism_prompt(category="tops")
     assert "photorealistic commercial clothing product photograph" in text
     assert "No person" in text
-    assert "swimsuit top" in text.lower() or "upper garment" in text.lower()
-    assert GARMENT_REALISM_PROMPT_VERSION.startswith("fashn-garment-realism-v2")
+    assert "swimsuit top" in text.lower() or "bikini" in text.lower()
+    assert GARMENT_REALISM_PROMPT_VERSION.startswith("fashn-garment-realism-v3")
+    assert "twist" in text.lower()
     assert "Do not turn a swimsuit" in text or "must not become a mini dress" in garment_realism_prompt(
         category="one-pieces"
     )
+
+
+def test_productize_filled_plate_preserves_colors():
+    product, meta = productize_filled_plate(_plate_png())
+    assert meta["provider"] == LOCAL_PRODUCT_PROVIDER_ID
+    assert meta["local_product"] is True
+    img = Image.open(io.BytesIO(product)).convert("RGB")
+    colors = img.getcolors(maxcolors=100000) or []
+    assert any(c[1][0] > 180 and c[1][1] < 80 for c in colors)
 
 
 def test_estimate_scales_with_pieces(monkeypatch):
