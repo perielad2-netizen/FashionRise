@@ -316,10 +316,12 @@ export type PersonalTryOnInput = {
   fashnV16SegmentationFree?: boolean | null
   fashnV16Mode?: 'performance' | 'balanced' | 'quality' | null
   fashnV16Seed?: number | null
-  /** #178 — invisible OpenAI→Max public fallback (forces Balanced · 1k). */
+  /** #178/#179 — invisible OpenAI→Max public fallback (forces Balanced · 1k). */
   smartFallback?: boolean
   smartOperationId?: string | null
   smartFallbackReason?: string | null
+  /** Primary OpenAI try-on job id for server-authoritative smart Max auth (#179). */
+  primaryTryOnJobId?: string | null
   signal?: AbortSignal
 }
 
@@ -420,6 +422,9 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
             smart_fallback: true,
             smart_operation_id: input.smartOperationId ?? null,
             smart_fallback_reason: input.smartFallbackReason ?? null,
+            ...(input.primaryTryOnJobId
+              ? { primary_try_on_job_id: input.primaryTryOnJobId }
+              : {}),
           }
         : input.smartOperationId
           ? { smart_operation_id: input.smartOperationId }

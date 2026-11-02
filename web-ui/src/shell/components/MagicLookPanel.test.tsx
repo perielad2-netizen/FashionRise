@@ -259,5 +259,88 @@ describe('MagicLookPanel', () => {
     expect(screen.getByText('Generating your try-on preview...')).toBeTruthy()
     expect(screen.queryByText(/FASHN/i)).toBeNull()
     expect(screen.queryByText(/credit/i)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Stop waiting' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Cancel wait' })).toBeNull()
+  })
+
+  it('hides experiment metadata on normal smart try-on results (#179)', () => {
+    render(
+      <MagicLookPanel
+        open
+        phase="ready"
+        resultMode="try_on"
+        result={{
+          jobId: 'job-smart',
+          status: 'completed',
+          summary: 'Try On Person preview ready',
+          bullets: [],
+          hasImage: true,
+          // Smart public Max must not populate experimentMeta / verdicts.
+          experimentMeta: null,
+        }}
+        lookObjectUrl="blob:smart"
+        sketchObjectUrl="blob:garment"
+        error={null}
+        canRecover={false}
+        onClose={() => undefined}
+        onCancel={() => undefined}
+        onDownload={() => undefined}
+        onRecover={() => undefined}
+        onBackToSketch={() => undefined}
+        onViewInMyLooks={() => undefined}
+      />,
+    )
+    expect(screen.queryByTestId('try-on-experiment-meta')).toBeNull()
+    expect(screen.queryByText(/Accepted/i)).toBeNull()
+    expect(screen.queryByText(/Experiment ·/i)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Save in My Looks' })).toBeTruthy()
+  })
+
+  it('keeps owner experiment verdict controls when experiment provenance is true (#179)', () => {
+    const onVerdict = vi.fn()
+    render(
+      <MagicLookPanel
+        open
+        phase="ready"
+        resultMode="try_on"
+        result={{
+          jobId: 'job-exp',
+          status: 'completed',
+          summary: 'experiment',
+          bullets: [],
+          hasImage: true,
+          experimentMeta: {
+            experiment: true,
+            verdict: 'unreviewed',
+            provider: 'fashn_tryon_max',
+            promptVersion: 'max-v1',
+            costCents: 12,
+            predictionIds: ['pred-12345678'],
+            garmentRealismJobId: null,
+            approvedGarmentShas: ['abc123456789'],
+            croquisId: 'croq-1',
+            croquisVersion: 1,
+            v16Settings: null,
+            fashnMaxExperiment: { generation_mode: 'quality', resolution: '1k', seed: 1 },
+          },
+        }}
+        lookObjectUrl="blob:exp"
+        sketchObjectUrl="blob:garment"
+        error={null}
+        canRecover={false}
+        experimentVerdictBusy={false}
+        onExperimentVerdict={onVerdict}
+        onClose={() => undefined}
+        onCancel={() => undefined}
+        onDownload={() => undefined}
+        onRecover={() => undefined}
+        onBackToSketch={() => undefined}
+      />,
+    )
+    expect(screen.getByTestId('try-on-experiment-meta')).toBeTruthy()
+    expect(screen.getByTestId('try-on-experiment-verdict')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Accepted' })).toBeTruthy()
+    // Experiment results block Save in My Looks.
+    expect(screen.queryByRole('button', { name: 'Save in My Looks' })).toBeNull()
   })
 })

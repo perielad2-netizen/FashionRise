@@ -83,6 +83,7 @@ from app.services.fashn_try_on_provider import (
 from app.services.garment_leg_geometry import (
     analyze_lower_garment_geometry,
     RESULT_KIND_OPENAI_TRY_ON_PHOTO,
+    garment_structure_contradiction,
     merge_openai_design_hints,
     openai_trouser_design_hints,
     soft_try_on_structure_review,
@@ -121,15 +122,23 @@ def _is_fashn_family(provider: str) -> bool:
     return provider in {TRY_ON_PROVIDER_FASHN, TRY_ON_PROVIDER_FASHN_MAX}
 
 
-# Terminal OpenAI failure codes that authorize invisible Max fallback (#178).
+# #179 — only confirmed *technical* OpenAI failures authorize invisible Max fallback.
+# Moderation/safety refusals must not be auto-rerouted solely to circumvent the provider.
+# Unknown outcomes must reconcile/recover before any new paid generation.
 SMART_FALLBACK_ERROR_CODES = frozenset(
     {
-        "PROVIDER_MODERATION_BLOCKED",
-        "PROVIDER_REJECTED",
-        "PROVIDER_OUTCOME_UNKNOWN",
         "PROVIDER_TIMEOUT",
         "PROVIDER_FAILED",
         "GENERATION_FAILED",
+        "PROVIDER_REJECTED",
+    }
+)
+
+# Codes that are definitive terminal non-results for the user, but MUST NOT auto-Max.
+SMART_FALLBACK_EXCLUDED_CODES = frozenset(
+    {
+        "PROVIDER_MODERATION_BLOCKED",
+        "PROVIDER_OUTCOME_UNKNOWN",
     }
 )
 
@@ -140,25 +149,214 @@ def is_openai_try_on_terminal_failure(
     result_data: dict[str, Any] | None = None,
     error_message: str | None = None,
 ) -> bool:
-    """True when OpenAI try-on ended without a usable delivered image (Max fallback eligible)."""
+    """True when OpenAI try-on ended without a usable delivered image.
+
+    #179 — this alone does **not** authorize Max. Use
+    ``is_openai_try_on_eligible_for_max_fallback`` for paid fallback permission.
+    """
     _ = error_message
     status_l = str(job_status or "").strip().lower()
-    data = result_data if isinstance(result_data, dict) else {}
     # Successful delivery (including soft structure flag) must not trigger fallback.
     if status_l == "completed":
         return False
-    if status_l != "failed":
+    return status_l == "failed"
+
+
+def is_openai_try_on_eligible_for_max_fallback(
+    *,
+    job_status: str | None,
+    result_data: dict[str, Any] | None = None,
+    error_message: str | None = None,
+) -> bool:
+    """True only for server-confirmed technical failures that may invoke Max (#179)."""
+    if not is_openai_try_on_terminal_failure(
+        job_status=job_status,
+        result_data=result_data,
+        error_message=error_message,
+    ):
         return False
+    data = result_data if isinstance(result_data, dict) else {}
     code = str(data.get("error_code") or "").strip().upper()
+    if code in SMART_FALLBACK_EXCLUDED_CODES:
+        return False
+    if data.get("reconciliation_required") is True:
+        return False
     if code in SMART_FALLBACK_ERROR_CODES:
         return True
-    # Unknown failed jobs without a code still count as terminal non-results.
-    return True
+    # Failed without a structured code is not proof of an eligible technical failure.
+    # Prefer recover/reconcile over another paid generation.
+    return False
 
 
 def smart_max_fallback_available() -> bool:
     """Public smart path may use Max when configured + live (no allowlist)."""
     return bool(fashn_max_configured() and fashn_max_live_armed())
+
+
+def _authorize_smart_max_fallback(
+    db: Session,
+    user: User,
+    *,
+    smart_operation_id: str | None,
+    primary_try_on_job_id: uuid.UUID | None,
+    croquis_id: uuid.UUID,
+    croquis_version: int,
+    garment_fingerprint: str,
+    content_fingerprint: str,
+    source_revision: int,
+    client_reason: str | None,
+) -> dict[str, Any]:
+    """Server-authoritative proof for smart Max enqueue (#179).
+
+    Client ``smart_fallback=true`` / reason strings are never sufficient by themselves.
+    """
+    _ = client_reason  # diagnostic only — never treated as authorization proof
+    op_id = (smart_operation_id or "").strip()[:64]
+    if not op_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="smart_operation_id is required for smart Max fallback.",
+        )
+    if not smart_max_fallback_available():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Try-On Max fallback is not available on this server.",
+        )
+
+    primary: AIJob | None = None
+    if primary_try_on_job_id is not None:
+        primary = db.get(AIJob, primary_try_on_job_id)
+    if primary is None:
+        # Resolve by shared smart_operation_id + OpenAI provider.
+        candidates = db.scalars(
+            select(AIJob)
+            .where(
+                AIJob.user_id == user.id,
+                AIJob.job_type == TRY_ON_JOB_TYPE,
+                AIJob.input_data["provider"].astext == TRY_ON_PROVIDER_OPENAI,
+                AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op_id,
+            )
+            .order_by(AIJob.created_at.desc())
+            .limit(5)
+        ).all()
+        primary = candidates[0] if candidates else None
+
+    if primary is None or primary.user_id != user.id or primary.job_type != TRY_ON_JOB_TYPE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Smart Max fallback requires a matching primary OpenAI try-on job.",
+        )
+    p_in = primary.input_data if isinstance(primary.input_data, dict) else {}
+    if str(p_in.get("provider") or "").strip().lower() != TRY_ON_PROVIDER_OPENAI:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Smart Max fallback primary job must be an OpenAI try-on.",
+        )
+    p_smart = p_in.get("smart_pipeline") if isinstance(p_in.get("smart_pipeline"), dict) else {}
+    if str(p_smart.get("smart_operation_id") or "").strip() != op_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Smart Max fallback operation id does not match the primary OpenAI job.",
+        )
+    if str(p_in.get("croquis_id") or "") != str(croquis_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Smart Max fallback croquis does not match the primary OpenAI job.",
+        )
+    try:
+        p_ver = int(p_in.get("croquis_version") or -1)
+    except (TypeError, ValueError):
+        p_ver = -1
+    if p_ver != int(croquis_version):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Smart Max fallback croquis version does not match the primary OpenAI job.",
+        )
+    if str(p_in.get("garment_fingerprint") or "") != str(garment_fingerprint or ""):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Smart Max fallback garment fingerprint does not match the primary OpenAI job.",
+        )
+    if str(p_in.get("content_fingerprint") or "") != str(content_fingerprint or ""):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Smart Max fallback design fingerprint does not match the primary OpenAI job.",
+        )
+    try:
+        p_rev = int(p_in.get("source_revision") or -1)
+    except (TypeError, ValueError):
+        p_rev = -1
+    if p_rev != int(source_revision):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Smart Max fallback design revision does not match the primary OpenAI job.",
+        )
+
+    p_result = primary.result_data if isinstance(primary.result_data, dict) else {}
+    if primary.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Primary OpenAI try-on already completed — Max fallback is not authorized.",
+        )
+    if primary.status in {"queued", "running"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Primary OpenAI try-on is still in progress — recover that job instead of falling back.",
+        )
+    if not is_openai_try_on_eligible_for_max_fallback(
+        job_status=primary.status,
+        result_data=p_result,
+        error_message=primary.error_message,
+    ):
+        code = str(p_result.get("error_code") or "").strip().upper()
+        if code in SMART_FALLBACK_EXCLUDED_CODES or p_result.get("reconciliation_required"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "This try-on cannot use automatic Max fallback for this outcome. "
+                    "Recover the existing job or edit the design."
+                ),
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Primary OpenAI try-on is not an eligible technical failure for Max fallback.",
+        )
+
+    # Reject duplicate paid Max fallback for the same smart operation.
+    prior_max = db.scalars(
+        select(AIJob)
+        .where(
+            AIJob.user_id == user.id,
+            AIJob.job_type == TRY_ON_JOB_TYPE,
+            AIJob.input_data["provider"].astext == TRY_ON_PROVIDER_FASHN_MAX,
+            AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op_id,
+        )
+        .order_by(AIJob.created_at.desc())
+        .limit(3)
+    ).all()
+    for existing in prior_max:
+        e_in = existing.input_data if isinstance(existing.input_data, dict) else {}
+        if e_in.get("smart_fallback") is not True and not (
+            isinstance(e_in.get("smart_pipeline"), dict)
+            and e_in["smart_pipeline"].get("lane") == "smart_public"
+        ):
+            continue
+        # Recover existing Max job rather than starting another paid prediction.
+        if existing.status in {"queued", "running", "completed"}:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Smart Max fallback already exists for this operation "
+                    f"(job {existing.id}). Recover that result instead of regenerating."
+                ),
+            )
+
+    server_reason = str(p_result.get("error_code") or "openai_technical_failure").strip()[:128]
+    return {
+        "primary_job_id": str(primary.id),
+        "smart_operation_id": op_id,
+        "server_fallback_reason": server_reason,
+    }
 
 
 _DATA_URL_RE = re.compile(r"^data:(image/(?:png|jpeg|jpg|webp));base64,(.+)$", re.DOTALL | re.IGNORECASE)
@@ -327,6 +525,7 @@ def enqueue_personal_try_on(
     smart_fallback: bool = False,
     smart_operation_id: str | None = None,
     smart_fallback_reason: str | None = None,
+    primary_try_on_job_id: uuid.UUID | None = None,
 ) -> AIJob:
     """Validate, reserve spend, freeze garment, enqueue ``personal_try_on`` job."""
     _require_ai_gate()
@@ -355,6 +554,7 @@ def enqueue_personal_try_on(
     max_experiment: dict[str, Any] | None = None
     v16_experiment: dict[str, Any] | None = None
     smart_pipeline: dict[str, Any] | None = None
+    smart_auth: dict[str, Any] | None = None
     if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
         if not fashn_max_configured():
             raise HTTPException(
@@ -367,6 +567,8 @@ def enqueue_personal_try_on(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Try-On Max fallback is not live-armed on this server.",
                 )
+            # #179 — server-authoritative primary OpenAI proof (before spend/reservation).
+            # Garment fingerprint is computed after decode below; authorize after freeze.
         elif not user_on_fashn_max_allowlist(user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -407,7 +609,8 @@ def enqueue_personal_try_on(
         }
         if smart_lane:
             op_id = (smart_operation_id or "").strip()[:64] or None
-            reason = (smart_fallback_reason or "").strip()[:128] or "openai_terminal_failure"
+            # Placeholder — server reason + primary job id filled after authorize (#179).
+            reason = (smart_fallback_reason or "").strip()[:128] or "openai_technical_failure"
             smart_pipeline = {
                 "lane": "smart_public",
                 "primary_provider": TRY_ON_PROVIDER_OPENAI,
@@ -536,6 +739,26 @@ def enqueue_personal_try_on(
     garment_png = _decode_garment_png(garment_image_base64)
     garment_fp = hashlib.sha256(garment_png).hexdigest()
 
+    if smart_lane:
+        # #179 — authorize against the real primary OpenAI job before any Max spend.
+        smart_auth = _authorize_smart_max_fallback(
+            db,
+            user,
+            smart_operation_id=smart_operation_id,
+            primary_try_on_job_id=primary_try_on_job_id,
+            croquis_id=croquis_id,
+            croquis_version=int(croquis_version),
+            garment_fingerprint=garment_fp,
+            content_fingerprint=fp,
+            source_revision=int(source_revision),
+            client_reason=smart_fallback_reason,
+        )
+        if smart_pipeline is not None:
+            smart_pipeline["fallback_reason"] = smart_auth.get(
+                "server_fallback_reason"
+            ) or smart_pipeline.get("fallback_reason")
+            smart_pipeline["primary_try_on_job_id"] = smart_auth.get("primary_job_id")
+
     fashn_prep_meta: dict[str, Any] | None = None
     approved_frozen: list[dict[str, str]] | None = None
     if _is_fashn_family(provider_name):
@@ -581,9 +804,31 @@ def enqueue_personal_try_on(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=str(rdata.get("summary") or "Garment realism failed fidelity checks."),
                 )
+            # #179 — semantic dress↔trousers contradiction blocks smart Max auto-accept.
+            # Prefer Studio croquis context (full figure) over isolated product alone.
+            r_pieces_probe = rdata.get("pieces") if isinstance(rdata.get("pieces"), list) else []
+            for piece in r_pieces_probe:
+                if not isinstance(piece, dict):
+                    continue
+                try:
+                    product_png = decode_data_url_png(str(piece.get("image_base64") or ""))
+                except Exception:
+                    continue
+                contradiction = garment_structure_contradiction(
+                    source_png=garment_png,
+                    product_png=product_png,
+                )
+                if contradiction is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=str(
+                            contradiction.get("message")
+                            or "Garment structure contradiction — FASHN was not started."
+                        ),
+                    )
             # #169 — FASHN requires explicit owner acceptance of the OpenAI product images.
             # #178 — smart public Max fallback may auto-stamp accept after fidelity OK
-            # (no user-facing review dialog). Fidelity failures still refuse.
+            # (no user-facing review dialog). Fidelity / structure failures still refuse.
             if rdata.get("owner_accepted") is not True:
                 if smart_lane:
                     updated = {
@@ -1653,10 +1898,60 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                 product_png=product_png,
                 layout="two_piece" if cat in {"tops", "bottoms"} else "one_piece",
             )
+            # #179 — dress↔trousers semantic contradiction (studio context preferred).
+            structure_contra = garment_structure_contradiction(
+                source_png=studio_context_png or plate_png,
+                product_png=product_png,
+            )
             meta = {**meta, "fidelity": verdict.public_dict(), "category": gen_cat}
+            if structure_contra is not None:
+                meta["structure_contradiction"] = structure_contra
             # Always persist product bytes (including fidelity failures) for private diagnosis (#167).
             key = f"ai/{job.id.hex}_garment_{gen_cat}_{uuid.uuid4().hex[:8]}.png"
             url = storage.save_file(key=key, data=io.BytesIO(product_png), content_type="image/png")
+            if structure_contra is not None:
+                if reservation is not None and reservation.status == RESERVATION_OPEN:
+                    reservation.status = RESERVATION_SETTLED
+                    reservation.actual_cost_cents = reservation.estimate_cents
+                    reservation.provider_called = True
+                failed_piece = {
+                    "category": gen_cat,
+                    "image_base64": "data:image/png;base64,"
+                    + base64.b64encode(product_png).decode("ascii"),
+                    "image_url": url,
+                    "sha256": hashlib.sha256(product_png).hexdigest(),
+                    "source_plate_sha256": str(item.get("sha256") or ""),
+                    "fidelity": verdict.public_dict(),
+                    "structure_contradiction": structure_contra,
+                }
+                review_pieces = [*out_pieces, failed_piece]
+                job.status = "completed"
+                job.error_message = None
+                job.result_data = {
+                    "status": "completed",
+                    "summary": str(structure_contra.get("message") or verdict.message),
+                    "mode": "garment_realism",
+                    "error_code": structure_contra.get("code") or "STRUCTURE_CATEGORY_CONTRADICTION",
+                    "fidelity": verdict.public_dict(),
+                    "structure_contradiction": structure_contra,
+                    "prompt_version": prompt_version,
+                    "provider": provider_id,
+                    "prefer_local_product": False,
+                    "pieces": review_pieces,
+                    "failed_product": {
+                        "category": gen_cat,
+                        "image_url": url,
+                        "sha256": hashlib.sha256(product_png).hexdigest(),
+                        "source_plate_sha256": str(item.get("sha256") or ""),
+                    },
+                    "garment_fingerprint": data.get("garment_fingerprint"),
+                    "cost_cents": reservation.actual_cost_cents if reservation else data.get("estimate_cents"),
+                    "requires_owner_acceptance": True,
+                    "owner_accepted": False,
+                    "fidelity_ok": False,
+                    "block_fashn": True,
+                }
+                return job.result_data
             if not verdict.ok:
                 # Paid OpenAI already ran — settle realism spend, but block FASHN.
                 # Keep status completed so the owner can review the product image (#169);

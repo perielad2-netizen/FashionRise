@@ -533,7 +533,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         resultMode={editor.magicResultMode}
         experimentVerdictBusy={editor.experimentVerdictBusy}
         onExperimentVerdict={
-          editor.magicResult?.experimentMeta
+          editor.magicResult?.experimentMeta?.experiment
             ? (verdict) => {
                 void editor.setExperimentVerdict(verdict)
               }
@@ -560,12 +560,22 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         onViewInMyLooks={
           onOpenLooks
             ? () => {
-                const lookId =
-                  editor.magicDualActive && editor.magicOperationId
-                    ? editor.magicOperationId
-                    : editor.magicResult?.jobId
-                editor.closeMagicPanel()
-                onOpenLooks(lookId)
+                void (async () => {
+                  // #179 — confirm My Looks eligibility before navigating (no fake save).
+                  if (editor.magicResultMode === 'try_on') {
+                    const savedId = await editor.saveTryOnInMyLooks()
+                    if (!savedId) return
+                    editor.closeMagicPanel()
+                    onOpenLooks(savedId)
+                    return
+                  }
+                  const lookId =
+                    editor.magicDualActive && editor.magicOperationId
+                      ? editor.magicOperationId
+                      : editor.magicResult?.jobId
+                  editor.closeMagicPanel()
+                  onOpenLooks(lookId)
+                })()
               }
             : undefined
         }

@@ -120,6 +120,7 @@ function mockEditor(): StudioEditor {
     magicCanRecover: false,
     closeMagicPanel: vi.fn(),
     cancelMagicWait: vi.fn(),
+    saveTryOnInMyLooks: vi.fn(async () => null),
     recoverLastMagic: vi.fn(),
     downloadMagicLook: vi.fn(),
     backToSketchFromMagic: vi.fn(),

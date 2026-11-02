@@ -172,35 +172,53 @@ export function toMagicLookResult(job: AiJobRead): MagicLookResult {
     : null
   const costRaw = data?.cost_cents
   const costCents = typeof costRaw === 'number' && Number.isFinite(costRaw) ? costRaw : null
-  const experimentMeta: TryOnExperimentMeta | null =
-    data?.experiment === true ||
-    provider === 'fashn_tryon_v1_6' ||
-    provider === 'fashn_tryon_max' ||
-    job.input_data?.provider === 'fashn' ||
-    job.input_data?.provider === 'fashn_max'
-      ? {
-          experiment: data?.experiment === true || Boolean(job.input_data?.experiment),
-          verdict,
-          provider,
-          promptVersion: typeof data?.prompt_version === 'string' ? data.prompt_version : null,
-          costCents,
-          predictionIds,
-          garmentRealismJobId:
-            typeof data?.garment_realism_job_id === 'string' ? data.garment_realism_job_id : null,
-          approvedGarmentShas: approvedShas,
-          croquisId: typeof data?.croquis_id === 'string' ? data.croquis_id : null,
-          croquisVersion:
-            typeof data?.croquis_version === 'number' ? data.croquis_version : null,
-          v16Settings:
-            data?.v16_settings && typeof data.v16_settings === 'object'
-              ? (data.v16_settings as Record<string, unknown>)
-              : null,
-          fashnMaxExperiment:
-            data?.fashn_max_experiment && typeof data.fashn_max_experiment === 'object'
-              ? (data.fashn_max_experiment as Record<string, unknown>)
-              : null,
-        }
-      : null
+  // #179 — experiment UI depends on provenance, not account role or Max provider alone.
+  // Smart public Max stamps experiment=false; owner experiment stamps experiment=true.
+  const isSmartPublic =
+    data?.smart_fallback === true ||
+    job.input_data?.smart_fallback === true ||
+    (data?.smart_pipeline &&
+      typeof data.smart_pipeline === 'object' &&
+      (data.smart_pipeline as { lane?: string }).lane === 'smart_public') ||
+    (job.input_data?.smart_pipeline &&
+      typeof job.input_data.smart_pipeline === 'object' &&
+      (job.input_data.smart_pipeline as { lane?: string }).lane === 'smart_public')
+  const isOwnerExperiment =
+    !isSmartPublic &&
+    (data?.experiment === true ||
+      job.input_data?.experiment === true ||
+      // Legacy owner v1.6 / Max experiment results without an explicit false stamp.
+      ((provider === 'fashn_tryon_v1_6' ||
+        provider === 'fashn_tryon_max' ||
+        job.input_data?.provider === 'fashn' ||
+        job.input_data?.provider === 'fashn_max') &&
+        data?.experiment !== false &&
+        job.input_data?.experiment !== false &&
+        data?.looks_eligible !== true))
+  const experimentMeta: TryOnExperimentMeta | null = isOwnerExperiment
+    ? {
+        experiment: true,
+        verdict,
+        provider,
+        promptVersion: typeof data?.prompt_version === 'string' ? data.prompt_version : null,
+        costCents,
+        predictionIds,
+        garmentRealismJobId:
+          typeof data?.garment_realism_job_id === 'string' ? data.garment_realism_job_id : null,
+        approvedGarmentShas: approvedShas,
+        croquisId: typeof data?.croquis_id === 'string' ? data.croquis_id : null,
+        croquisVersion:
+          typeof data?.croquis_version === 'number' ? data.croquis_version : null,
+        v16Settings:
+          data?.v16_settings && typeof data.v16_settings === 'object'
+            ? (data.v16_settings as Record<string, unknown>)
+            : null,
+        fashnMaxExperiment:
+          data?.fashn_max_experiment && typeof data.fashn_max_experiment === 'object'
+            ? (data.fashn_max_experiment as Record<string, unknown>)
+            : null,
+      }
+    : null
   return {
     jobId: job.id,
     status,

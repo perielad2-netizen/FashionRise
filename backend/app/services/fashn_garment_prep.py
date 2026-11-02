@@ -484,10 +484,19 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
                 top_cy = (top_box[1] + top_box[3]) / 2.0 / src.height
                 bot_cy = (bot_box[1] + bot_box[3]) / 2.0 / src.height
                 if top_cy < 0.55 and bot_cy > 0.40 and bot_cy > top_cy + 0.08:
-                    layout = "two_piece"
-                    mid = (top_box[3] + bot_box[1]) // 2
-                    top_band = (0, mid)
-                    bot_band = (mid, src.height)
+                    # #179 — a high fashion slit / open-leg dress can look like two
+                    # vertically stacked components. Prefer one continuous dress plate
+                    # when geometry confidently says high-slit dress (not trousers).
+                    geo_probe = analyze_lower_garment_geometry(garment_png)
+                    if geo_probe.looks_like_high_slit_dress and not geo_probe.looks_like_trousers:
+                        layout = "one_piece"
+                        top_band = None
+                        bot_band = None
+                    else:
+                        layout = "two_piece"
+                        mid = (top_box[3] + bot_box[1]) // 2
+                        top_band = (0, mid)
+                        bot_band = (mid, src.height)
 
     pieces: list[PreparedPiece] = []
     if layout == "two_piece" and top_band and bot_band:

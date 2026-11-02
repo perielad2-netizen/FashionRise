@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.services.personal_try_on import (
     TRY_ON_PROVIDER_FASHN_MAX,
     TRY_ON_PROVIDER_OPENAI,
+    is_openai_try_on_eligible_for_max_fallback,
     is_openai_try_on_terminal_failure,
     smart_max_fallback_available,
     try_on_preflight_public,
@@ -72,6 +73,28 @@ def test_terminal_failure_classifier_hard_codes(code):
             result_data={"error_code": code, "summary": "blocked"},
         )
         is True
+    )
+
+
+@pytest.mark.parametrize(
+    "code,eligible",
+    [
+        ("PROVIDER_TIMEOUT", True),
+        ("PROVIDER_FAILED", True),
+        ("GENERATION_FAILED", True),
+        ("PROVIDER_REJECTED", True),
+        ("PROVIDER_MODERATION_BLOCKED", False),
+        ("PROVIDER_OUTCOME_UNKNOWN", False),
+    ],
+)
+def test_max_fallback_eligibility_excludes_moderation_and_unknown(code, eligible):
+    """#179 — Max auto-fallback is technical failures only."""
+    assert (
+        is_openai_try_on_eligible_for_max_fallback(
+            job_status="failed",
+            result_data={"error_code": code, "summary": "x"},
+        )
+        is eligible
     )
 
 

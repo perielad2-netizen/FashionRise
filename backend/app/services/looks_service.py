@@ -89,9 +89,16 @@ def _structural_fidelity_rejected(job: AIJob) -> bool:
 
 
 def _experiment_lane_excluded(job: AIJob) -> bool:
-    """#173 — Max experiment results never auto-enter accepted My Looks."""
-    result = job.result_data if isinstance(job.result_data, dict) else {}
-    if result.get("experiment") is True:
+    """#173/#179 — owner experiment / private Max stay out of My Looks.
+
+    #178 smart public Max stamps ``looks_eligible=True`` / ``experiment=False`` /
+    ``archive_status=accepted``. Those must enter the gallery. Do **not** blanket-ban
+    every ``fashn_tryon_max`` provider — that hid successful smart fallback Saves.
+    Fail closed for Max-family results that lack an explicit public/smart stamp.
+    """
+    result = job.result_data if isinstance(getattr(job, "result_data", None), dict) else {}
+    inp = job.input_data if isinstance(getattr(job, "input_data", None), dict) else {}
+    if result.get("experiment") is True or inp.get("experiment") is True:
         return True
     if result.get("looks_eligible") is False:
         return True
@@ -99,8 +106,21 @@ def _experiment_lane_excluded(job: AIJob) -> bool:
     if archive in {"rejected", "private", "accepted_comparison"}:
         # Comparison archive / reject / private stay out of accepted gallery.
         return True
-    provider = str(result.get("provider") or "").strip().lower()
-    return provider in {"fashn_tryon_max", "fashn_max", "tryon-max"}
+    # Explicit smart public delivery is gallery-eligible even when provider is Max.
+    if result.get("smart_fallback") is True or inp.get("smart_fallback") is True:
+        return False
+    smart = result.get("smart_pipeline") or inp.get("smart_pipeline")
+    if isinstance(smart, dict) and smart.get("lane") == "smart_public":
+        return False
+    provider = str(result.get("provider") or inp.get("provider") or "").strip().lower()
+    if provider in {"fashn_tryon_max", "fashn_max", "tryon-max"}:
+        # Require explicit non-experiment + eligible stamps (smart public path).
+        if result.get("looks_eligible") is True and result.get("experiment") is False:
+            return False
+        if inp.get("looks_eligible") is True and inp.get("experiment") is False:
+            return False
+        return True
+    return False
 
 
 def _image_available(job: AIJob, storage: LocalStorageBackend) -> bool:

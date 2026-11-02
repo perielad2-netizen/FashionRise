@@ -300,13 +300,17 @@ class PersonalTryOnBody(BaseModel):
     fashn_v16_segmentation_free: bool | None = None
     fashn_v16_mode: Literal["performance", "balanced", "quality"] | None = None
     fashn_v16_seed: int | None = Field(default=None, ge=0, le=4_294_967_295)
-    # #178 — invisible OpenAI→Max public fallback. Forces Max balanced/1k, bypasses
-    # owner-allowlist (still requires Max live), auto-accepts fidelity-OK realism,
-    # and keeps the result as a normal (non-experiment) try-on delivery.
+    # #178/#179 — invisible OpenAI→Max public fallback. Forces Max balanced/1k when
+    # the server verifies a matching failed primary OpenAI job (client flags alone
+    # never authorize Max). Auto-accepts fidelity-OK realism without structure
+    # contradiction; keeps the result as a normal (non-experiment) try-on delivery.
     smart_fallback: bool = False
     # Shared operation id for OpenAI primary + Max fallback (diagnostics / spend link).
     smart_operation_id: str | None = Field(default=None, max_length=64)
+    # Client-reported reason is diagnostic only — server derives authorization (#179).
     smart_fallback_reason: str | None = Field(default=None, max_length=128)
+    # Optional hint to the primary OpenAI job; server still verifies ownership/match.
+    primary_try_on_job_id: uuid.UUID | None = None
 
     model_config = ConfigDict(extra="forbid")
 
