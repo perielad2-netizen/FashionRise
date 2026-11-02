@@ -77,6 +77,7 @@ describe('MagicLookPanel', () => {
     )
     expect(screen.getByRole('heading', { name: 'Try On Person' })).toBeTruthy()
     expect(screen.getByAltText('Try On Person preview')).toBeTruthy()
+    expect(screen.queryByText('Not a faithful try-on')).toBeNull()
     expect(screen.getByRole('button', { name: 'Compare original' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Download preview' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Save in My Looks' })).toBeTruthy()
@@ -87,6 +88,43 @@ describe('MagicLookPanel', () => {
     expect(screen.getByAltText('Original croquis photo')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Compare garment' }))
     expect(screen.getByAltText('Garment artwork')).toBeTruthy()
+  })
+
+  it('shows a visible fidelity banner and hides Save in My Looks for rejected try-ons', () => {
+    render(
+      <MagicLookPanel
+        open
+        phase="ready"
+        resultMode="try_on"
+        result={{
+          jobId: 'job-bad',
+          status: 'completed_unverified',
+          summary: 'Separate trouser legs are missing or merged.',
+          bullets: ['Not production-ready'],
+          hasImage: true,
+          fidelityOk: false,
+          structureReviewState: 'failed',
+          structureReviewMessage: 'Separate trouser legs are missing or merged.',
+          structureRejected: true,
+        }}
+        lookObjectUrl="blob:tryon-bad"
+        sketchObjectUrl="blob:garment"
+        originalPhotoUrl="blob:photo"
+        error={null}
+        canRecover={false}
+        onClose={() => undefined}
+        onCancel={() => undefined}
+        onDownload={() => undefined}
+        onRecover={() => undefined}
+        onBackToSketch={() => undefined}
+        onViewInMyLooks={() => undefined}
+      />,
+    )
+    expect(screen.getByText('Not a faithful try-on')).toBeTruthy()
+    expect(screen.getByText(/Separate trouser legs are missing or merged/i)).toBeTruthy()
+    expect(screen.getByAltText(/structural mismatch flagged/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Save in My Looks' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Download preview' })).toBeTruthy()
   })
 
   it('keeps dual Front/Back Magic look downloads', () => {

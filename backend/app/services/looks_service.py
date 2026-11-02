@@ -79,8 +79,20 @@ def _job_summary(job: AIJob) -> str | None:
     return None
 
 
+def _structural_fidelity_rejected(job: AIJob) -> bool:
+    """#171 — verified structure failures must not appear as accepted My Looks."""
+    result = job.result_data if isinstance(job.result_data, dict) else {}
+    if result.get("fidelity_ok") is False:
+        return True
+    review = result.get("structure_review")
+    return isinstance(review, dict) and str(review.get("state") or "") == "failed"
+
+
 def _image_available(job: AIJob, storage: LocalStorageBackend) -> bool:
     if job.status != "completed":
+        return False
+    # Keep rejected try-ons privately reviewable via job image, but not gallery-accepted.
+    if _structural_fidelity_rejected(job):
         return False
     url = extract_result_image_url(job.result_data if isinstance(job.result_data, dict) else None)
     if not url:

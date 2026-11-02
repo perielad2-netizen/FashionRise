@@ -879,28 +879,29 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         "design_hints": hints if provider_name == TRY_ON_PROVIDER_OPENAI else None,
     }
     if provider_name == TRY_ON_PROVIDER_OPENAI:
-        # Soft structural review — never treat a provider PNG as automatically faithful.
+        # Soft structural review (#170/#171). Never treat a provider PNG as certified faithful.
+        # Only confirmed like-for-like plate failures downgrade presentation / My Looks.
         review = soft_try_on_structure_review(source_png=garment_png, result_png=png)
         result["structure_review"] = review
-        if review.get("state") == "failed":
+        state = str(review.get("state") or "")
+        if state == "failed":
             result["status"] = "completed_unverified"
             result["fidelity_ok"] = False
             result["summary"] = str(review.get("message") or result["summary"])
             result["bullets"] = [
                 "Provider returned an image, but FashionRise flagged a major silhouette mismatch.",
                 "This is not a faithful try-on of your sketch — do not treat it as production-ready.",
+                "This preview is kept for private review and is not presented as an accepted My Look.",
                 "Provider charges may still apply; FashionRise customer credit is a separate owner decision.",
                 f"Prompt {prompt_version}",
             ]
-        elif review.get("state") == "unverified":
-            result["status"] = "completed_unverified"
-            result["fidelity_ok"] = None
-            result["summary"] = (
-                "Try On Person preview ready — silhouette fidelity unverified "
-                "(concept preview, not a fit guarantee)."
-            )
         else:
-            result["fidelity_ok"] = None  # soft pass ≠ certified faithful
+            # not_applicable / inconclusive / passed_soft — keep ordinary completed preview.
+            # Soft pass or skip is not a fidelity certificate.
+            result["fidelity_ok"] = None
+            if state == "inconclusive":
+                # Non-alarming diagnostic only; ordinary concept-preview copy stays primary.
+                result["structure_review_note"] = str(review.get("message") or "")
     if provider_name == TRY_ON_PROVIDER_FASHN:
         result["fashn_prediction_ids"] = meta.get("prediction_ids")
         result["fashn_calls"] = meta.get("fashn_calls")
