@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#176 Try-On quality opt** **DEPLOYING** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-02 (**#176 Try-On quality opt** **LIVE** · App **`45221226`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2.1** (ordinary outfits + trouser **or** high-slit-dress geometry hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Owner-only v1.6 / Max comparison controls + accepted-garment reuse (#176). Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
@@ -11,14 +11,14 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`#176 tip`** — owner experiment panel (v1.6 + Max) visible when allowlisted; accepted-garment reuse; experiment verdicts. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**. Prior FE **`1cf0e2b3`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2.1`** · FASHN v1.6 experiment knobs · accepted realism catalog · experiment verdict · output-moderation copy · Alembic **`015`**. |
+| Frontend (`web-ui`) | **`45221226`** — release `/var/www/fashionrise/releases/45221226` · owner experiment panel (v1.6 + Max) when allowlisted; accepted-garment reuse; experiment verdicts. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`1cf0e2b3`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | tip **`45221226`** · OpenAI **`try-on-person-v2.1`** · FASHN v1.6 experiment knobs · accepted realism catalog · experiment verdict · output-moderation copy · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #176) |
-| Nginx | + `GET .../garment-realism/accepted` · + `POST .../{uuid}/experiment-verdict` · Accept regex retained |
-| AI spend | **#175 unlock preserved** (do not reset): ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+| Nginx | + `GET .../garment-realism/accepted` · + `POST .../{uuid}/experiment-verdict` · Accept regex retained · `current` → **`45221226`** |
+| AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
-## #176 Try-On quality optimization + OpenAI refusal diagnosis — DEPLOYING (2026-11-02)
+## #176 Try-On quality optimization + OpenAI refusal diagnosis — LIVE (2026-11-02)
 
 ### OpenAI refusal (≈18:20 Asia/Jerusalem)
 | Job | UTC | Evidence |
@@ -39,10 +39,21 @@ Root cause: experiment panel required `hasRealistic` so Max/v1.6 controls were i
 2. Choose v1.6 or Max; set category/seg/mode/seed (v1.6) or Balanced/Quality 1k + prompt (Max).
 3. Confirm estimate → one Try On → private result + Accepted/Rejected/Unreviewed.
 
-### Deploy notes
-- Do **not** reset #175 spend env.
-- No Alembic migration.
-- Agent paid provider calls during implement/deploy: **0**.
+### Deployed
+| Field | Value |
+|---|---|
+| App / FE / BE tip | **`45221226`** (`45221226b98036f3c8f1c02d03cc210c5b83c43b`) |
+| API / worker | restarted · `/health` ok · new routes return **401 Not authenticated** (reach FastAPI) |
+| Alembic | **`015`** unchanged |
+| #175 spend env | verified preserved |
+| Rollback | `/var/backups/fashionrise/tryon-quality-176-*/ROLLBACK.sh` → FE **`1cf0e2b3`** + prior BE files |
+| Agent paid calls | **0** |
+
+### Owner verify (STOP — no agent paid generation)
+1. Hard-refresh until App **`45221226`**.
+2. Magic → FASHN Try On → owner experiment panel visible **before** Generate (v1.6 + Max).
+3. Load an accepted garment (no OpenAI regen) → pick one of five comparison configs → Accept & Try On → mark verdict.
+4. Optional: OpenAI Try On on filled green dress — if refused, expect clearer **output safety** copy; design unchanged.
 
 ## #175 Owner spend unlock — LIVE (2026-11-02)
 
