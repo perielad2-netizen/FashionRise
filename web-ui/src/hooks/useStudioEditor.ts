@@ -1759,6 +1759,15 @@ export function useStudioEditor() {
             sourceRevision: docAtStart.clientRevision,
             contentFingerprint: draftContentFingerprint(docAtStart),
           })
+          setFashnRealisticPieces(null)
+          setFashnRealismJobId(null)
+          setFashnRealismError(
+            prep.quality_ok === false
+              ? prep.quality_notes ||
+                  'Prepared plates do not look like a filled garment. Adjust fills, then retry.'
+              : null,
+          )
+          setFashnDetailsOpen(false)
           setMagicOpen(false)
           setFashnPrepOpen(true)
           magicInFlightRef.current = false
