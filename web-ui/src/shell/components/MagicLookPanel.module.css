@@ -257,6 +257,18 @@
   font-size: 1.05rem;
 }
 
+.errorText {
+  margin: 0;
+  max-width: 36rem;
+  max-height: min(28dvh, 160px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
+  font-size: 0.9rem;
+  -webkit-overflow-scrolling: touch;
+}
+
 .spinner {
   width: 36px;
   height: 36px;
@@ -353,7 +365,14 @@
   border: 1px solid rgba(248, 113, 113, 0.35);
   color: #fecaca;
   font-size: 0.88rem;
-  flex-shrink: 0;
+  line-height: 1.4;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(28dvh, 160px);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 820px) {

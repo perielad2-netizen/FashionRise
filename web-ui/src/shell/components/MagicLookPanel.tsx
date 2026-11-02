@@ -315,7 +315,7 @@ export function MagicLookPanel({
           {phase === 'failed' ? (
             <div className={styles.statusBox}>
               <strong>{tryOn ? 'Try On Person did not finish' : 'Magic did not finish'}</strong>
-              <span>{error || 'Something went wrong.'}</span>
+              <p className={styles.errorText}>{error || 'Something went wrong.'}</p>
             </div>
           ) : null}
 

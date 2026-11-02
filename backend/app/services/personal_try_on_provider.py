@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 TRY_ON_JOB_TYPE = "personal_try_on"
 # V1 kept for historical jobs; live enqueue uses V2.
-TRY_ON_PROMPT_VERSION = "try-on-person-v2"
+TRY_ON_PROMPT_VERSION = "try-on-person-v3"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.
@@ -81,10 +81,51 @@ TRY_ON_PROMPT_V2 = (
     "Output a single realistic photograph."
 )
 
+# V3 — legitimate opaque fashion/swimwear coverage (#156).
+# Removes V2's contradiction that forbade showing skin newly uncovered by a swimsuit
+# when image 1 is street clothes. Still forbids nudity / sexual framing.
+TRY_ON_PROMPT_V3 = (
+    "Create a photorealistic fashion photograph of the person from image 1 wearing the "
+    "opaque garment design shown in image 2. "
+    "Image 1 is the authoritative full-body photograph — preserve the person's exact face, "
+    "hairstyle, skin tone, body proportions, pose, stance, non-design accessories already "
+    "on the person, and the original background/scene. Do not slim, elongate, beautify, "
+    "or reshape the person. Do not alter the environment. "
+    "Image 2 is an isolated transparent fashion-design artwork (no mannequin, no paper). "
+    "It is authoritative for garment type, cut, placement, neckline, straps, sleeves, "
+    "hemline, coverage, exact chosen colors, and print geometry — including ordinary "
+    "two-piece swimwear, one-piece swimsuits, dresses, tops, and bottoms when drawn. "
+    "Replace the person's current clothing with that opaque design as a clothed fashion "
+    "lookbook / catalog visualization. The designed coverage in image 2 is authoritative: "
+    "skin previously covered by street clothes may appear only where the opaque swimsuit "
+    "or garment leaves it uncovered in a normal fashion presentation. "
+    "Read print topology from image 2 pixels literally: a checkerboard must stay a "
+    "checkerboard (not stripes); plaids, dots, and freehand motifs must keep their "
+    "structure; do not invent a different graphic. "
+    "Include every deliberately drawn garment piece and design accessory in image 2 — "
+    "tops, bottoms, swimwear pieces, dresses, hats/caps, belts, scarves — placed on the "
+    "corresponding body region. Hats/caps may cover hair while keeping identity "
+    "recognizable. Adapt garments naturally to pose and folds as an approximate drape only. "
+    "All garments must remain fully opaque fabric. Do not create nudity, sheer or "
+    "transparent intimate exposure, lingerie presentation, sexual posing, or sexualized "
+    "framing. Do not invent extra garments, logos, text, or accessories absent from image 2. "
+    "Do not copy mannequin outlines into the photo. "
+    "Output a single realistic photograph."
+)
+
+TRY_ON_USER_MODERATION_MESSAGE = (
+    "This design could not be rendered by our image provider. Your sketch is saved. "
+    "You can continue editing or choose Fashion Magic."
+)
+TRY_ON_USER_PROVIDER_REJECT_MESSAGE = (
+    "Try On Person could not finish this preview. Your sketch and photo are unchanged. "
+    "You can continue editing or choose Fashion Magic."
+)
+
 
 def build_try_on_prompt(design_hints: list[str] | None = None) -> str:
-    """Active try-on prompt (V2) plus optional Studio-derived design hints."""
-    prompt = TRY_ON_PROMPT_V2
+    """Active try-on prompt (V3) plus optional Studio-derived design hints."""
+    prompt = TRY_ON_PROMPT_V3
     cleaned: list[str] = []
     for raw in design_hints or []:
         if not isinstance(raw, str):
@@ -239,9 +280,33 @@ class OpenAITryOnImagesEditAdapter:
                     f"images.edit refused before HTTP (SDK contract): {summary}"
                 ) from exc
             if _is_definitive_images_edit_rejection(exc):
-                raise ProviderNotAvailableError(
+                from app.services.personal_croquis_provider import (
+                    _api_error_code,
+                    _api_status_code,
+                    _moderation_details_sanitized,
+                    _safe_request_id_from_exc,
+                )
+
+                code = _api_error_code(exc)
+                mod = _moderation_details_sanitized(exc) or {}
+                safe_meta = {
+                    "error_code": (
+                        "PROVIDER_MODERATION_BLOCKED"
+                        if (code == "moderation_blocked" or "moderation_blocked" in summary)
+                        else "PROVIDER_REJECTED"
+                    ),
+                    "provider_code": code,
+                    "http_status": _api_status_code(exc),
+                    "moderation_stage": mod.get("moderation_stage"),
+                    "categories": mod.get("categories"),
+                    "request_id": _safe_request_id_from_exc(exc),
+                    "operator_summary": summary[:400],
+                }
+                err = ProviderNotAvailableError(
                     f"images.edit rejected by provider: {summary}"
-                ) from exc
+                )
+                err.safe_meta = safe_meta  # type: ignore[attr-defined]
+                raise err from exc
             raise ProviderOutcomeUnknownError(
                 f"images.edit outcome unknown after submit: {type(exc).__name__}"
             ) from exc
