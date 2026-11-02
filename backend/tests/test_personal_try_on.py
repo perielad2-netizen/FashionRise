@@ -358,6 +358,13 @@ def test_enqueue_worker_idempotent_and_binding(client, monkeypatch, db_session):
     assert done.json()["result_data"]["mode"] == "try_on_person"
     assert done.json()["result_data"]["image_url"]
     assert done.json()["result_data"]["source_asset_id"] == croquis["source_asset_id"]
+    # #172 — OpenAI completion stamps trusted photo provenance; ordinary preview stays completed.
+    review = done.json()["result_data"].get("structure_review") or {}
+    assert review.get("result_kind") == "openai_try_on_photo"
+    assert review.get("version") == "try-on-structure-review-v3"
+    assert review.get("state") in {"not_applicable", "inconclusive"}
+    assert done.json()["result_data"].get("fidelity_ok") is None
+    assert done.json()["result_data"].get("status") == "completed"
 
     img = client.get(f"/api/v1/ai/jobs/{job_id}/image", headers=_auth(tokens))
     assert img.status_code == 200

@@ -3,20 +3,55 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#171 P0 structure-review correction** **DEPLOYED** — see section below · OpenAI Try On stays **`try-on-person-v2`** · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#172 P0 structure-review provenance hardening** **DEPLOYED** — see section below · OpenAI Try On stays **`try-on-person-v2`** · **0** operator-paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits + additive trouser hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is plate-vs-plate only.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits + additive trouser hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`e176f464`** — release `/var/www/fashionrise/releases/e176f464` · visible fidelity banner · My Looks gate · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`dcee9eac`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + structure review **v2** (no person-mask compares) · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
+| Frontend (`web-ui`) | **`071ea03d`** — release `/var/www/fashionrise/releases/071ea03d` · trouser hints prioritized in 8-hint budget · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`e176f464`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + structure review **v3** (server provenance `openai_try_on_photo`) · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → new release |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
+
+## #172 P0 Final structure-review hardening — DEPLOYED (2026-11-02)
+
+### Defect (Technical PM on #171)
+
+`classify_structure_image_role()` could still label a legitimate full-body try-on photo as `isolated_garment` when the background is mostly white, clothing is dark, or little skin is recognized. That allowed plate geometry comparison to falsely fail (or soft-pass) a paid OpenAI Try On.
+
+### Correction
+
+1. OpenAI Try On completion stamps trusted server provenance `result_kind=openai_try_on_photo`.
+2. Structure review **v3** never authorizes garment-mask comparison from white-bg / skin / opacity heuristics on those outputs.
+3. Clear non-trouser source → `not_applicable`; clear trouser/jumpsuit source → `inconclusive` until garment-region isolation exists. No false structural failure; no fidelity certificate on the photograph.
+4. Trusted isolated plate↔plate comparisons preserved (`result_kind` / `source_kind` = `isolated_garment_plate`).
+5. Narrow 8-hint budget priority: trouser/jumpsuit geometry hints win over lower-priority color/print hints (FE + BE). V2 prompt unchanged.
+6. Ordinary completed concept previews unchanged; FASHN Accept / nginx / capture safeguards preserved.
+
+### Deployed
+
+| Field | Value |
+|---|---|
+| App / FE / BE / worker SHA | **`071ea03d5c1f2e05d7d2ac6a713fb293fc9662a0`** (App **`071ea03d`**) |
+| Alembic | **`015`** (unchanged) |
+| Nginx Accept | Unchanged allowlist |
+| Nginx FE root | **Fixed 2026-11-02 15:02 UTC** — live TLS `root` was still hardcoded to **`28bc5e8d`** (localhost API). Now **`/var/www/fashionrise/current` → `071ea03d`**. Backup `/var/backups/fashionrise/p0-172-nginx-root-fix-20261102T150208Z/` |
+| Nginx allowlist | **Restored 2026-11-02 15:06 UTC** — truncated TLS config had dropped Looks/Croquis/Techpacks/cf-access allowlists; reload exposed 403s. Restored from #170 backup + Accept regex. Backup `/var/backups/fashionrise/p0-172-nginx-allowlist-restore-20261102T150630Z/` |
+| Provider calls | **0** |
+| Rollback | `/var/backups/fashionrise/p0-172-structure-harden-deploy-20261102T141257Z/ROLLBACK.sh` → FE **`e176f464`** |
+
+### Remaining limitation
+
+Automated fidelity still cannot certify OpenAI try-on photographs without garment-region isolation. No paid vision/segmentation added. Soft plate checks remain diagnostic only for trusted isolated plates.
+
+### Owner next
+
+**STOP before paid owner tests.** After hard-refresh to App **`071ea03d`**, owner may later re-test ordinary OpenAI Try On and green jumpsuit — expect normal `completed` preview (never false `completed_unverified` from white-bg photo pixels).
 
 ## #171 P0 Post-generation fidelity review correction — DEPLOYED (2026-11-02)
 

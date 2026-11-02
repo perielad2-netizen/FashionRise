@@ -109,4 +109,47 @@ describe('buildTryOnDesignHints', () => {
     ]
     expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
   })
+
+  it('keeps trouser geometry hints inside the 8-hint budget (#172)', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'bodice',
+        contour: [300, 80, 460, 80, 460, 420, 300, 420],
+        seedX: 380,
+        seedY: 240,
+        style: { kind: 'solid', color: '#166534' },
+      },
+      {
+        id: 'leftLeg',
+        contour: [300, 500, 360, 500, 360, 900, 300, 900],
+        seedX: 330,
+        seedY: 700,
+        style: { kind: 'solid', color: '#166534' },
+      },
+      {
+        id: 'rightLeg',
+        contour: [400, 500, 460, 500, 460, 900, 400, 900],
+        seedX: 430,
+        seedY: 700,
+        style: { kind: 'solid', color: '#166534' },
+      },
+      // Extra fills that would previously crowd out geometry hints.
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: `extra-${i}`,
+        contour: [10 + i * 20, 20, 40 + i * 20, 20, 40 + i * 20, 50, 10 + i * 20, 50],
+        seedX: 20 + i * 20,
+        seedY: 30,
+        style: { kind: 'solid' as const, color: `#${(0x111111 * (i + 1)).toString(16).padStart(6, '0')}` },
+      })),
+    ]
+    const strokes: Stroke[] = [
+      stroke({ id: 'hat', points: [100, 40, 0.5, 140, 60, 0.5], color: '#222222' }),
+      stroke({ id: 's2', points: [200, 50, 0.5, 240, 70, 0.5], color: '#ABCDEF' }),
+    ]
+    const hints = buildTryOnDesignHints({ strokes, fills })
+    expect(hints.length).toBeLessThanOrEqual(8)
+    expect(hints.some((h) => /jumpsuit/i.test(h))).toBe(true)
+    expect(hints.some((h) => /separate/i.test(h))).toBe(true)
+    expect(hints.some((h) => /skirt panel/i.test(h))).toBe(true)
+  })
 })

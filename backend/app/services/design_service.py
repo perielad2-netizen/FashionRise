@@ -47,6 +47,9 @@ SAVED_SNAPSHOT_KEYS = frozenset(
         "customReferenceKey",
         "activeSide",
         "back",
+        # Personal croquis pins (My Croquis → Studio → Save as design). FE always sends these.
+        "personalCroquisId",
+        "personalCroquisVersion",
         # Legacy nested keys observed in older clients / tests — accepted and fingerprinted.
         "schema",
         "clientRevision",

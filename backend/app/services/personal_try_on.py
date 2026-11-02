@@ -20,6 +20,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import get_settings
 from app.models.ai_job import AIJob
@@ -66,6 +67,8 @@ from app.services.fashn_try_on_provider import (
 )
 from app.services.garment_leg_geometry import (
     analyze_lower_garment_geometry,
+    RESULT_KIND_OPENAI_TRY_ON_PHOTO,
+    merge_openai_design_hints,
     openai_trouser_design_hints,
     soft_try_on_structure_review,
 )
@@ -770,18 +773,15 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         hints = _normalize_design_hints(
             data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
         )
-        # #170 — additive trouser/jumpsuit hints from frozen garment geometry (OpenAI V2 only).
+        # #170/#172 — additive trouser/jumpsuit hints from frozen garment geometry (OpenAI V2 only).
+        # Geometry hints take priority in the 8-hint budget so they cannot be crowded out.
         # Does not rewrite TRY_ON_PROMPT_VERSION; skips FASHN and ambiguous silhouettes.
         if provider_name == TRY_ON_PROVIDER_OPENAI:
             geo_hints = openai_trouser_design_hints(analyze_lower_garment_geometry(garment_png))
             if geo_hints:
-                merged = list(hints)
-                for h in geo_hints:
-                    if len(merged) >= 8:
-                        break
-                    if h not in merged:
-                        merged.append(h)
-                hints = _normalize_design_hints(merged)
+                hints = _normalize_design_hints(
+                    merge_openai_design_hints(hints, geo_hints, max_hints=8)
+                )
         generate_kwargs: dict[str, Any] = {
             "photo_png": photo_png,
             "garment_png": garment_png,
@@ -879,9 +879,14 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         "design_hints": hints if provider_name == TRY_ON_PROVIDER_OPENAI else None,
     }
     if provider_name == TRY_ON_PROVIDER_OPENAI:
-        # Soft structural review (#170/#171). Never treat a provider PNG as certified faithful.
-        # Only confirmed like-for-like plate failures downgrade presentation / My Looks.
-        review = soft_try_on_structure_review(source_png=garment_png, result_png=png)
+        # Soft structural review (#170/#171/#172). Server provenance marks the provider PNG as
+        # a photoreal try-on photo — never authorize plate comparison from pixel heuristics.
+        # Only confirmed like-for-like trusted plate failures downgrade presentation / My Looks.
+        review = soft_try_on_structure_review(
+            source_png=garment_png,
+            result_png=png,
+            result_kind=RESULT_KIND_OPENAI_TRY_ON_PHOTO,
+        )
         result["structure_review"] = review
         state = str(review.get("state") or "")
         if state == "failed":
@@ -1425,7 +1430,12 @@ def accept_garment_realism_job(db: Session, user: User, job_id: uuid.UUID) -> AI
         "owner_accepted_at": _utcnow().isoformat(),
         "requires_owner_acceptance": True,
     }
+    # JSONB assignment must be marked + committed: get_db() does not auto-commit,
+    # and a bare flush was rolled back on session close (#172 hotfix). Accept then
+    # returned 200 from the in-memory object while FASHN enqueue still saw false.
     job.result_data = updated
+    flag_modified(job, "result_data")
     db.add(job)
-    db.flush()
+    db.commit()
+    db.refresh(job)
     return job
