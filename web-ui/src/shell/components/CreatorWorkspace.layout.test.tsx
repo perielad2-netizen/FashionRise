@@ -317,6 +317,25 @@ describe('CreatorWorkspace tablet layout controls (WEB-V4I)', () => {
     expect(document.activeElement).toBe(first)
   })
 
+  it('FASHN button is clean "FASHN Try On"; cost stays in confirmation copy (#164)', () => {
+    render(
+      <CreatorWorkspace
+        editor={mockEditor({
+          magicDestinationOpen: true,
+          magicFashnAvailable: true,
+          magicFashnCombinedEstimateCents: 16,
+          magicTryOnEstimateCents: 8,
+        })}
+      />,
+    )
+    const dialog = screen.getByRole('dialog')
+    const fashnBtn = within(dialog).getByRole('button', { name: 'FASHN Try On' })
+    expect(fashnBtn).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: /FASHN Try On \(~/ })).toBeNull()
+    expect(within(dialog).getByText(/Combined OpenAI \+ FASHN estimate about/i)).toBeTruthy()
+    expect(within(dialog).getByText(/16¢/)).toBeTruthy()
+  })
+
   it('gives model-switch confirmation precedence for focus and Escape over Models gallery', () => {
     const { rerender } = render(<CreatorWorkspace editor={mockEditor()} />)
     const modelsBtn = within(screen.getByLabelText('Studio panels')).getByRole('button', {

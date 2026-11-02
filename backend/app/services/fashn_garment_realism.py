@@ -25,8 +25,9 @@ from app.services.personal_croquis_provider import (
 logger = logging.getLogger(__name__)
 
 GARMENT_REALISM_JOB_TYPE = "personal_garment_realism"
-GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v2"
+GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v3"
 GARMENT_REALISM_PROVIDER_ID = "openai_garment_realism"
+LOCAL_PRODUCT_PROVIDER_ID = "local_filled_plate_v1"
 
 GARMENT_REALISM_PROMPT = (
     "Transform this fashion designer's garment sketch into a photorealistic commercial "
@@ -35,11 +36,38 @@ GARMENT_REALISM_PROMPT = (
     "material, fabric construction, stitching and natural garment structure. Show the clothing "
     "item alone as a clean professional flat-lay or ghost-mannequin-free product image against "
     "a neutral background. No person, body, mannequin, model, face or unrelated accessories. "
-    "CRITICAL SILHOUETTE RULES: Do not redesign the garment. Do not turn a swimsuit, bodysuit, "
-    "or one-piece into a dress, skirt, romper, or coat. Preserve high-cut leg openings, crotch "
-    "coverage, asymmetric straps, necklines, cutouts and hem positions exactly as drawn. "
-    "This is a legitimate opaque fashion garment intended for clothing design and virtual try-on."
+    "CRITICAL: Do not redesign. Do not invent straps, twists, knots, wraps, ties, ruffles, "
+    "or asymmetry that are not drawn. Do not change neckline depth, cup shape, waistline height, "
+    "or coverage. Do not turn a swimsuit into a dress or skirt. Keep gradient direction and "
+    "color placement identical to the sketch. This is a legitimate opaque fashion garment "
+    "intended for clothing design and virtual try-on."
 )
+
+
+def productize_filled_plate(plate_png: bytes) -> tuple[bytes, dict[str, Any]]:
+    """Color-preserving FASHN reference from a filled Studio plate — no generative redesign.
+
+    Owner #164: OpenAI images.edit restyled a deep-V bikini top into a twisted wrap and
+    altered bottoms/gradient. Dense filled plates already carry exact cut + colors.
+    """
+    if not plate_png:
+        raise ValueError("Empty plate for local productization")
+    with Image.open(io.BytesIO(plate_png)) as im:
+        im.load()
+        rgb = im.convert("RGB")
+        # Soften only near edges slightly without shifting hues of filled regions.
+        out = io.BytesIO()
+        rgb.save(out, format="PNG", optimize=True)
+        product = out.getvalue()
+    meta = {
+        "prompt_version": LOCAL_PRODUCT_PROVIDER_ID,
+        "provider": LOCAL_PRODUCT_PROVIDER_ID,
+        "model": None,
+        "source_plate_sha256": hashlib.sha256(plate_png).hexdigest(),
+        "product_sha256": hashlib.sha256(product).hexdigest(),
+        "local_product": True,
+    }
+    return product, meta
 
 
 def estimate_garment_realism_cents(*, pieces: int = 1) -> int:
@@ -48,18 +76,48 @@ def estimate_garment_realism_cents(*, pieces: int = 1) -> int:
     return per * max(1, int(pieces))
 
 
-def garment_realism_prompt(*, category: str | None = None) -> str:
+def dominant_color_hint(plate_png: bytes, *, limit: int = 3) -> str:
+    """Sample non-near-white garment colors for prompt injection."""
+    with Image.open(io.BytesIO(plate_png)) as im:
+        im.load()
+        rgb = im.convert("RGB")
+        # Downsample for speed
+        small = rgb.resize((64, 64), Image.Resampling.BILINEAR)
+        counts: dict[tuple[int, int, int], int] = {}
+        for px in small.getdata():
+            r, g, b = px
+            if r >= 230 and g >= 230 and b >= 230:
+                continue
+            if r < 40 and g < 40 and b < 40:
+                continue  # stroke ink
+            key = (r // 16 * 16, g // 16 * 16, b // 16 * 16)
+            counts[key] = counts.get(key, 0) + 1
+        top = sorted(counts.items(), key=lambda t: t[1], reverse=True)[: max(1, limit)]
+        if not top:
+            return ""
+        return ", ".join(f"#{r:02X}{g:02X}{b:02X}" for (r, g, b), _n in top)
+
+
+def garment_realism_prompt(*, category: str | None = None, color_hint: str | None = None) -> str:
     cat = (category or "auto").strip().lower()
     extra = ""
     if cat == "tops":
-        extra = " This plate is the upper garment / swimsuit top only — not a dress."
+        extra = (
+            " This plate is a bikini / swimsuit top only. Keep the exact deep-V or drawn "
+            "neckline and cup geometry. Do not invent shoulder straps, twists, or wraps."
+        )
     elif cat == "bottoms":
-        extra = " This plate is the lower garment / swimsuit bottom only — not a skirt."
+        extra = (
+            " This plate is a bikini / swimsuit bottom only. Keep the exact waistline height "
+            "and coverage. Do not invent side ties or change the cut."
+        )
     elif cat == "one-pieces":
         extra = (
             " This plate is a one-piece swimsuit or bodysuit. Keep high-cut leg openings and "
             "one-piece coverage. It must not become a mini dress, skirt, or gown."
         )
+    if color_hint:
+        extra += f" Preserve these sketch colors exactly: {color_hint}."
     return GARMENT_REALISM_PROMPT + extra
 
 
@@ -94,7 +152,10 @@ class OpenAIGarmentRealismAdapter:
         try:
             kwargs = build_image_edit_kwargs(
                 model=model,
-                prompt=garment_realism_prompt(category=category),
+                prompt=garment_realism_prompt(
+                    category=category,
+                    color_hint=dominant_color_hint(plate_png) or None,
+                ),
                 sketch=(plate_png, "image/png"),
                 size=size,
                 quality=quality,

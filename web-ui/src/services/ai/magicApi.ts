@@ -177,6 +177,7 @@ export type FashnGarmentPrepareResult = {
   realism_calls?: number
   realism_estimate_cents?: number
   combined_estimate_cents?: number
+  prefer_local_product?: boolean
   garment_fingerprint: string
   quality_ok?: boolean
   quality_notes?: string
