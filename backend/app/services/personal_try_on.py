@@ -120,6 +120,47 @@ def _is_fashn_family(provider: str) -> bool:
     """v1.6 and Max both require accepted realistic product plates."""
     return provider in {TRY_ON_PROVIDER_FASHN, TRY_ON_PROVIDER_FASHN_MAX}
 
+
+# Terminal OpenAI failure codes that authorize invisible Max fallback (#178).
+SMART_FALLBACK_ERROR_CODES = frozenset(
+    {
+        "PROVIDER_MODERATION_BLOCKED",
+        "PROVIDER_REJECTED",
+        "PROVIDER_OUTCOME_UNKNOWN",
+        "PROVIDER_TIMEOUT",
+        "PROVIDER_FAILED",
+        "GENERATION_FAILED",
+    }
+)
+
+
+def is_openai_try_on_terminal_failure(
+    *,
+    job_status: str | None,
+    result_data: dict[str, Any] | None = None,
+    error_message: str | None = None,
+) -> bool:
+    """True when OpenAI try-on ended without a usable delivered image (Max fallback eligible)."""
+    _ = error_message
+    status_l = str(job_status or "").strip().lower()
+    data = result_data if isinstance(result_data, dict) else {}
+    # Successful delivery (including soft structure flag) must not trigger fallback.
+    if status_l == "completed":
+        return False
+    if status_l != "failed":
+        return False
+    code = str(data.get("error_code") or "").strip().upper()
+    if code in SMART_FALLBACK_ERROR_CODES:
+        return True
+    # Unknown failed jobs without a code still count as terminal non-results.
+    return True
+
+
+def smart_max_fallback_available() -> bool:
+    """Public smart path may use Max when configured + live (no allowlist)."""
+    return bool(fashn_max_configured() and fashn_max_live_armed())
+
+
 _DATA_URL_RE = re.compile(r"^data:(image/(?:png|jpeg|jpg|webp));base64,(.+)$", re.DOTALL | re.IGNORECASE)
 _BILLABLE = (RESERVATION_OPEN, RESERVATION_SETTLED, RESERVATION_RECONCILIATION)
 
@@ -283,12 +324,16 @@ def enqueue_personal_try_on(
     fashn_v16_segmentation_free: bool | None = None,
     fashn_v16_mode: str | None = None,
     fashn_v16_seed: int | None = None,
+    smart_fallback: bool = False,
+    smart_operation_id: str | None = None,
+    smart_fallback_reason: str | None = None,
 ) -> AIJob:
     """Validate, reserve spend, freeze garment, enqueue ``personal_try_on`` job."""
     _require_ai_gate()
     settings = get_settings()
     hints = _normalize_design_hints(design_hints)
     provider_name = _normalize_provider(provider)
+    smart_lane = bool(smart_fallback) and provider_name == TRY_ON_PROVIDER_FASHN_MAX
 
     key = (idempotency_key or "").strip()
     if not key or len(key) > 128:
@@ -309,13 +354,20 @@ def enqueue_personal_try_on(
         )
     max_experiment: dict[str, Any] | None = None
     v16_experiment: dict[str, Any] | None = None
+    smart_pipeline: dict[str, Any] | None = None
     if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
         if not fashn_max_configured():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="FASHN Try-On Max experiment is not configured on this server.",
             )
-        if not user_on_fashn_max_allowlist(user):
+        if smart_lane:
+            if not fashn_max_live_armed():
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Try-On Max fallback is not live-armed on this server.",
+                )
+        elif not user_on_fashn_max_allowlist(user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="FASHN Try-On Max is an owner-only experimental lane.",
@@ -329,10 +381,17 @@ def enqueue_personal_try_on(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="FASHN notice hash mismatch."
             )
-        mode = normalize_max_generation_mode(fashn_max_generation_mode)
-        resolution = normalize_max_resolution(fashn_max_resolution)
-        prompt_text = normalize_max_prompt(fashn_max_prompt)
-        seed_value = normalize_max_seed(fashn_max_seed)
+        # #178 smart public fallback always uses Balanced · 1k · default prompt.
+        if smart_lane:
+            mode = normalize_max_generation_mode("balanced")
+            resolution = normalize_max_resolution("1k")
+            prompt_text = normalize_max_prompt(None)
+            seed_value = normalize_max_seed(42)
+        else:
+            mode = normalize_max_generation_mode(fashn_max_generation_mode)
+            resolution = normalize_max_resolution(fashn_max_resolution)
+            prompt_text = normalize_max_prompt(fashn_max_prompt)
+            seed_value = normalize_max_seed(fashn_max_seed)
         max_experiment = {
             "generation_mode": mode,
             "resolution": resolution,
@@ -344,7 +403,24 @@ def enqueue_personal_try_on(
             "soft_budget_credits": int(
                 getattr(settings, "fashn_try_on_max_soft_budget_credits", 90) or 90
             ),
+            "smart_fallback": bool(smart_lane),
         }
+        if smart_lane:
+            op_id = (smart_operation_id or "").strip()[:64] or None
+            reason = (smart_fallback_reason or "").strip()[:128] or "openai_terminal_failure"
+            smart_pipeline = {
+                "lane": "smart_public",
+                "primary_provider": TRY_ON_PROVIDER_OPENAI,
+                "fallback_triggered": True,
+                "fallback_reason": reason,
+                "fallback_provider": TRY_ON_PROVIDER_FASHN_MAX,
+                "final_provider": TRY_ON_PROVIDER_FASHN_MAX,
+                "path": "openai->fashn_max",
+                "generation_mode": mode,
+                "resolution": resolution,
+                "smart_operation_id": op_id,
+                "user_visible_charge_units": 1,
+            }
         expected_prompt_version = FASHN_MAX_PROMPT_VERSION
         consent_ver = FASHN_CONSENT_VERSION
     elif provider_name == TRY_ON_PROVIDER_FASHN:
@@ -506,13 +582,29 @@ def enqueue_personal_try_on(
                     detail=str(rdata.get("summary") or "Garment realism failed fidelity checks."),
                 )
             # #169 — FASHN requires explicit owner acceptance of the OpenAI product images.
+            # #178 — smart public Max fallback may auto-stamp accept after fidelity OK
+            # (no user-facing review dialog). Fidelity failures still refuse.
             if rdata.get("owner_accepted") is not True:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        "Accept the realistic garment product images before running FASHN Try On."
-                    ),
-                )
+                if smart_lane:
+                    updated = {
+                        **rdata,
+                        "owner_accepted": True,
+                        "owner_accepted_at": _utcnow().isoformat(),
+                        "requires_owner_acceptance": True,
+                        "accepted_via": "smart_fallback",
+                    }
+                    realism_job.result_data = updated
+                    flag_modified(realism_job, "result_data")
+                    db.add(realism_job)
+                    db.flush()
+                    rdata = updated
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            "Accept the realistic garment product images before running FASHN Try On."
+                        ),
+                    )
             r_input = realism_job.input_data if isinstance(realism_job.input_data, dict) else {}
             bound_fp = str(r_input.get("garment_fingerprint") or "")
             if bound_fp and bound_fp != garment_fp:
@@ -758,14 +850,35 @@ def enqueue_personal_try_on(
         input_data["garment_realism_job_id"] = str(garment_realism_job_id)
     if max_experiment is not None:
         input_data["fashn_max_experiment"] = max_experiment
-        input_data["experiment"] = True
-        input_data["looks_eligible"] = False
+        if smart_lane:
+            # #178 — smart public Max is a normal try-on delivery, not owner experiment.
+            input_data["experiment"] = False
+            input_data["looks_eligible"] = True
+            input_data["smart_fallback"] = True
+        else:
+            input_data["experiment"] = True
+            input_data["looks_eligible"] = False
+    if smart_pipeline is not None:
+        input_data["smart_pipeline"] = smart_pipeline
     if v16_experiment is not None:
         input_data["fashn_v16_experiment"] = v16_experiment
         if v16_experiment.get("owner_experiment"):
             # Owner comparison lane stays private (not auto My Looks).
             input_data["experiment"] = True
             input_data["looks_eligible"] = False
+    # OpenAI primary attempt metadata for diagnostics when FE shares a smart operation id.
+    if provider_name == TRY_ON_PROVIDER_OPENAI and (smart_operation_id or "").strip():
+        input_data["smart_pipeline"] = {
+            "lane": "smart_public",
+            "primary_provider": TRY_ON_PROVIDER_OPENAI,
+            "fallback_triggered": False,
+            "fallback_reason": None,
+            "fallback_provider": TRY_ON_PROVIDER_FASHN_MAX,
+            "final_provider": TRY_ON_PROVIDER_OPENAI,
+            "path": "openai",
+            "smart_operation_id": (smart_operation_id or "").strip()[:64],
+            "user_visible_charge_units": 1,
+        }
 
     job = AIJob(
         id=uuid.uuid4(),
@@ -1053,6 +1166,8 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         if isinstance(data.get("approved_garment_pieces"), list)
         else None,
     }
+    if isinstance(data.get("smart_pipeline"), dict):
+        result["smart_pipeline"] = data.get("smart_pipeline")
     if provider_name == TRY_ON_PROVIDER_OPENAI:
         # Soft structural review (#170/#171/#172). Server provenance marks the provider PNG as
         # a photoreal try-on photo — never authorize plate comparison from pixel heuristics.
@@ -1088,28 +1203,46 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         result["fashn_layout"] = meta.get("layout")
         result["credits_used"] = meta.get("credits_used")
     if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
-        # Experimental lane — never auto-promote into accepted My Looks.
-        result["experiment"] = True
-        result["looks_eligible"] = False
-        result["archive_status"] = "private"
+        smart_result = bool(data.get("smart_fallback")) or (
+            isinstance(data.get("smart_pipeline"), dict)
+            and data["smart_pipeline"].get("lane") == "smart_public"
+        )
         result["generation_mode"] = meta.get("generation_mode")
         result["resolution"] = meta.get("resolution")
         result["seed"] = meta.get("seed")
         result["prompt_hash"] = meta.get("prompt_hash")
         result["prompt_text"] = meta.get("prompt_text")
         result["model"] = meta.get("model") or "tryon-max"
-        result["summary"] = (
-            f"Try-On Max experiment ready "
-            f"({meta.get('generation_mode') or 'balanced'} · {meta.get('resolution') or '1k'}). "
-            "Private comparison only — not accepted into My Looks."
-        )
-        result["bullets"] = [
-            "Owner-only experimental lane — not a product default.",
-            "Reused the accepted realistic garment product image (no OpenAI regeneration).",
-            f"Mode {meta.get('generation_mode')} · resolution {meta.get('resolution')} · seed {meta.get('seed')}",
-            f"Prompt {prompt_version}",
-            f"Provider {meta.get('provider') or provider_name}",
-        ]
+        if smart_result:
+            # #178 — present as ordinary Try On Person; keep pipeline meta for diagnostics only.
+            result["experiment"] = False
+            result["looks_eligible"] = True
+            result["archive_status"] = "accepted"
+            result["summary"] = "Try On Person preview ready (concept preview — not a fit guarantee)."
+            result["bullets"] = [
+                "Original photo and sketch were not overwritten.",
+                "Face, pose and background preserved where the model allowed.",
+                f"Prompt {prompt_version}",
+            ]
+            if isinstance(data.get("smart_pipeline"), dict):
+                result["smart_pipeline"] = data.get("smart_pipeline")
+        else:
+            # Owner experiment lane — never auto-promote into accepted My Looks.
+            result["experiment"] = True
+            result["looks_eligible"] = False
+            result["archive_status"] = "private"
+            result["summary"] = (
+                f"Try-On Max experiment ready "
+                f"({meta.get('generation_mode') or 'balanced'} · {meta.get('resolution') or '1k'}). "
+                "Private comparison only — not accepted into My Looks."
+            )
+            result["bullets"] = [
+                "Owner-only experimental lane — not a product default.",
+                "Reused the accepted realistic garment product image (no OpenAI regeneration).",
+                f"Mode {meta.get('generation_mode')} · resolution {meta.get('resolution')} · seed {meta.get('seed')}",
+                f"Prompt {prompt_version}",
+                f"Provider {meta.get('provider') or provider_name}",
+            ]
         if isinstance(data.get("fashn_max_experiment"), dict):
             result["fashn_max_experiment"] = data.get("fashn_max_experiment")
         if isinstance(data.get("garment_realism_job_id"), str):
@@ -1169,6 +1302,8 @@ def try_on_preflight_public(*, user: User | None = None) -> dict[str, Any]:
         "fashn_max_live_http": max_live,
         "fashn_owner_experiment_allowed": bool(max_owner),
         "fashn_max_owner_allowed": bool(max_owner and max_ready and max_live),
+        # #178 — ordinary Try On Person may silently fall back to Max when OpenAI fails hard.
+        "smart_try_on_max_fallback_available": bool(max_ready and max_live),
         "fashn_max_prompt_version": FASHN_MAX_PROMPT_VERSION,
         "fashn_max_default_prompt": DEFAULT_MAX_PROMPT,
         "fashn_max_default_generation_mode": "balanced",

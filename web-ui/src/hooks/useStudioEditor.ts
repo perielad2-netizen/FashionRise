@@ -96,6 +96,12 @@ import {
 import { buildSharedGarmentSpec } from '@/services/ai/magicGarmentSpec'
 import { settleMagicJobWithImage } from '@/services/ai/magicPipelineHelpers'
 import {
+  SMART_TRY_ON_FAILURE,
+  SMART_TRY_ON_STATUS,
+  isOpenAiTryOnTerminalFailure,
+  newSmartOperationId,
+} from '@/services/ai/smartTryOn'
+import {
   allocateMagicRetryIdempotencyKey,
   patchMagicOperationJob,
   persistMagicJobId,
@@ -274,6 +280,8 @@ export function useStudioEditor() {
   const [magicTryOnNotice, setMagicTryOnNotice] = useState<string | null>(null)
   const [magicTryOnEstimateCents, setMagicTryOnEstimateCents] = useState<number | null>(null)
   const [magicFashnAvailable, setMagicFashnAvailable] = useState(false)
+  /** #178 — owner-only destination entry for manual FASHN experiment (not normal users). */
+  const [magicOwnerExperimentAvailable, setMagicOwnerExperimentAvailable] = useState(false)
   const [magicFashnEstimatePerCall, setMagicFashnEstimatePerCall] = useState<number | null>(null)
   const [magicFashnCombinedEstimateCents, setMagicFashnCombinedEstimateCents] = useState<
     number | null
@@ -1970,7 +1978,11 @@ export function useStudioEditor() {
           return
         }
 
+        // #178 — smart public Try On: OpenAI first, invisible Max Balanced 1k on hard failure.
+        const smartOpId = newSmartOperationId()
+        const maxFallbackReady = Boolean(preflight.smart_try_on_max_fallback_available)
         setMagicPhase('submitting')
+        setMagicStatusHint(SMART_TRY_ON_STATUS)
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
             ? `try_on:${crypto.randomUUID()}`
@@ -1992,24 +2004,164 @@ export function useStudioEditor() {
           consentVersion: preflight.consent_version,
           designHints,
           provider: 'openai',
+          smartOperationId: smartOpId,
           signal: controller.signal,
         })
         setMagicJobId(job.id)
         persistMagicJobId(user.id, job.id)
 
         setMagicPhase('polling')
+        setMagicStatusHint(SMART_TRY_ON_STATUS)
         const settled = await settleMagicJobWithImage(job.id, controller.signal)
         const look = settled.look
-        setMagicResult(look)
-        if (look.status === 'failed') {
-          setMagicPhase('failed')
-          setMagicError(look.summary)
+        if (!isOpenAiTryOnTerminalFailure(look)) {
+          setMagicResult(look)
+          if (look.status === 'failed') {
+            setMagicPhase('failed')
+            setMagicError(SMART_TRY_ON_FAILURE)
+            setMagicStatusHint(null)
+            return
+          }
+          if (settled.lookObjectUrl) {
+            magicLookUrlRef.current = settled.lookObjectUrl
+            setMagicLookUrl(settled.lookObjectUrl)
+          }
+          setMagicStatusHint(null)
+          setMagicPhase('ready')
           return
         }
-        if (settled.lookObjectUrl) {
-          magicLookUrlRef.current = settled.lookObjectUrl
-          setMagicLookUrl(settled.lookObjectUrl)
+
+        // OpenAI terminal failure → automatic Max fallback (no provider/cost/review UI).
+        if (!maxFallbackReady) {
+          setMagicResult(look)
+          setMagicPhase('failed')
+          setMagicError(SMART_TRY_ON_FAILURE)
+          setMagicStatusHint(null)
+          return
         }
+        if (
+          !preflight.fashn_enabled ||
+          !preflight.fashn_configured ||
+          !preflight.fashn_live_http ||
+          !preflight.fashn_consent_version
+        ) {
+          setMagicResult(look)
+          setMagicPhase('failed')
+          setMagicError(SMART_TRY_ON_FAILURE)
+          setMagicStatusHint(null)
+          return
+        }
+
+        let fallbackReason = 'openai_terminal_failure'
+        try {
+          const failedJob = await fetchAiJob(job.id, controller.signal)
+          if (typeof failedJob.result_data?.error_code === 'string') {
+            fallbackReason = String(failedJob.result_data.error_code)
+          }
+        } catch {
+          // Diagnostics only — continue Max fallback with generic reason.
+        }
+
+        setMagicStatusHint(SMART_TRY_ON_STATUS)
+        setMagicPhase('submitting')
+        const prep = await prepareFashnGarmentReference(garment.dataUrl, controller.signal)
+        if (controller.signal.aborted) return
+        if (prep.quality_ok === false || prep.openai_live_http === false) {
+          setMagicPhase('failed')
+          setMagicError(SMART_TRY_ON_FAILURE)
+          setMagicStatusHint(null)
+          return
+        }
+
+        const realismJob = await enqueueFashnGarmentRealism({
+          croquisId,
+          croquisVersion,
+          garmentImageBase64: garment.dataUrl,
+          platePieces: prep.pieces.map((p) => ({
+            category: p.category,
+            image_base64: p.image_base64,
+          })),
+          garmentFingerprint: prep.garment_fingerprint,
+          idempotencyKey: `try_on:garment_realism:smart:${smartOpId}`,
+          designId: designIdRef.current,
+          consentAcknowledged: true,
+          consentVersion: prep.consent_version,
+          signal: controller.signal,
+        })
+        setMagicPhase('polling')
+        setMagicStatusHint(SMART_TRY_ON_STATUS)
+        let realismSettled = realismJob
+        const realismStarted = Date.now()
+        while (realismSettled.status === 'queued' || realismSettled.status === 'running') {
+          if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError')
+          if (Date.now() - realismStarted > 240_000) {
+            throw new Error(SMART_TRY_ON_FAILURE)
+          }
+          await new Promise((r) => setTimeout(r, 1500))
+          realismSettled = await fetchAiJob(realismJob.id, controller.signal)
+        }
+        if (controller.signal.aborted) return
+        const realismData = (realismSettled.result_data || {}) as {
+          summary?: string
+          pieces?: FashnRealisticPiece[]
+          fidelity_ok?: boolean
+          block_fashn?: boolean
+        }
+        const pieces = Array.isArray(realismData.pieces) ? realismData.pieces : []
+        const fidelityBlocked =
+          realismData.block_fashn === true ||
+          realismData.fidelity_ok === false ||
+          pieces.some((p) => p.fidelity && p.fidelity.ok === false)
+        if (realismSettled.status !== 'completed' || pieces.length === 0 || fidelityBlocked) {
+          setMagicPhase('failed')
+          setMagicError(SMART_TRY_ON_FAILURE)
+          setMagicStatusHint(null)
+          return
+        }
+
+        // Server auto-stamps accept for smart_fallback Max enqueue; no review dialog.
+        const maxJob = await enqueuePersonalTryOn({
+          croquisId,
+          croquisVersion,
+          garmentImageBase64: garment.dataUrl,
+          idempotencyKey: `try_on:fashn_max:smart:${smartOpId}`,
+          designId: designIdRef.current,
+          sourceRevision: docAtStart.clientRevision,
+          contentFingerprint,
+          consentAcknowledged: true,
+          consentVersion: prep.consent_version,
+          provider: 'fashn_max',
+          approvedGarmentPieces: pieces.map((p) => ({
+            category: p.category,
+            image_base64: p.image_base64,
+          })),
+          garmentRealismJobId: realismJob.id,
+          fashnMaxGenerationMode: 'balanced',
+          fashnMaxResolution: '1k',
+          fashnMaxSeed: 42,
+          smartFallback: true,
+          smartOperationId: smartOpId,
+          smartFallbackReason: fallbackReason,
+          signal: controller.signal,
+        })
+        setMagicJobId(maxJob.id)
+        persistMagicJobId(user.id, maxJob.id)
+        setMagicPhase('polling')
+        setMagicStatusHint(SMART_TRY_ON_STATUS)
+        const maxSettled = await settleMagicJobWithImage(maxJob.id, controller.signal)
+        const maxLook = maxSettled.look
+        setMagicResult(maxLook)
+        if (maxLook.status === 'failed') {
+          setMagicPhase('failed')
+          setMagicError(SMART_TRY_ON_FAILURE)
+          setMagicStatusHint(null)
+          return
+        }
+        if (maxSettled.lookObjectUrl) {
+          magicLookUrlRef.current = maxSettled.lookObjectUrl
+          setMagicLookUrl(maxSettled.lookObjectUrl)
+        }
+        setMagicStatusHint(null)
         setMagicPhase('ready')
       } catch (err) {
         if (controller.signal.aborted) {
@@ -2017,16 +2169,12 @@ export function useStudioEditor() {
           setMagicError(
             'Try On Person wait cancelled. Your sketch and photo are unchanged — recover if the job already finished.',
           )
+          setMagicStatusHint(null)
           return
         }
-        const message =
-          err instanceof ApiError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : 'Try On Person could not complete.'
         setMagicPhase('failed')
-        setMagicError(message)
+        setMagicError(SMART_TRY_ON_FAILURE)
+        setMagicStatusHint(null)
         setMagicOpen(true)
       } finally {
         magicInFlightRef.current = false
@@ -2041,6 +2189,7 @@ export function useStudioEditor() {
     setMagicTryOnNotice(null)
     setMagicTryOnEstimateCents(null)
     setMagicFashnAvailable(false)
+    setMagicOwnerExperimentAvailable(false)
     setMagicFashnEstimatePerCall(null)
   }, [magicDestinationBusy])
 
@@ -2538,32 +2687,34 @@ export function useStudioEditor() {
     setMagicTryOnNotice(null)
     setMagicTryOnEstimateCents(null)
     setMagicFashnAvailable(false)
+    setMagicOwnerExperimentAvailable(false)
     setMagicFashnEstimatePerCall(null)
     setMagicFashnCombinedEstimateCents(null)
     void (async () => {
       try {
         const preflight = await fetchPersonalTryOnPreflight()
         tryOnPreflightRef.current = preflight
-        setMagicTryOnNotice(preflight.notice_text)
-        setMagicTryOnEstimateCents(preflight.estimate_cents)
+        // #178 — destination copy stays concept-only; no cost/provider text for normal users.
+        setMagicTryOnNotice(
+          'Try On Person shows your design on the original Create My Croquis photo — concept preview only, not a fit guarantee.',
+        )
+        setMagicTryOnEstimateCents(null)
+        const ownerExperiment = Boolean(
+          preflight.fashn_owner_experiment_allowed ?? preflight.fashn_max_owner_allowed,
+        )
         const fashnOk = Boolean(preflight.fashn_enabled && preflight.fashn_configured)
-        setMagicFashnAvailable(fashnOk)
-        setMagicFashnEstimatePerCall(
-          fashnOk ? (preflight.fashn_estimate_cents_per_call ?? 8) : null,
-        )
-        setMagicFashnCombinedEstimateCents(
-          fashnOk
-            ? (preflight.fashn_combined_estimate_cents_one_piece ??
-                (preflight.fashn_realism_estimate_cents_per_piece ?? 8) +
-                  (preflight.fashn_estimate_cents_per_call ?? 8))
-            : null,
-        )
+        // Manual FASHN entry is owner-experiment only; ordinary users use one-button Try On Person.
+        setMagicOwnerExperimentAvailable(ownerExperiment && fashnOk)
+        setMagicFashnAvailable(ownerExperiment && fashnOk)
+        setMagicFashnEstimatePerCall(null)
+        setMagicFashnCombinedEstimateCents(null)
       } catch {
         setMagicTryOnNotice(
-          'Try On Person uses your original Create My Croquis photo with this garment sketch for a private photorealistic preview. Concept preview only — not a fit guarantee.',
+          'Try On Person shows your design on the original Create My Croquis photo — concept preview only, not a fit guarantee.',
         )
         setMagicTryOnEstimateCents(null)
         setMagicFashnAvailable(false)
+        setMagicOwnerExperimentAvailable(false)
         setMagicFashnCombinedEstimateCents(null)
       } finally {
         setMagicDestinationBusy(false)
@@ -3656,6 +3807,7 @@ export function useStudioEditor() {
     magicTryOnNotice,
     magicTryOnEstimateCents,
     magicFashnAvailable,
+    magicOwnerExperimentAvailable,
     magicFashnEstimatePerCall,
     magicFashnCombinedEstimateCents,
     magicStatusHint,

@@ -236,4 +236,28 @@ describe('MagicLookPanel', () => {
     )
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('shows generic try-on spinner copy and strips provider/cost hints (#178)', () => {
+    render(
+      <MagicLookPanel
+        open
+        phase="polling"
+        resultMode="try_on"
+        result={null}
+        lookObjectUrl={null}
+        sketchObjectUrl={null}
+        statusHint="Running FASHN Max — 2 credits"
+        error={null}
+        canRecover={false}
+        onClose={() => undefined}
+        onCancel={() => undefined}
+        onDownload={() => undefined}
+        onRecover={() => undefined}
+        onBackToSketch={() => undefined}
+      />,
+    )
+    expect(screen.getByText('Generating your try-on preview...')).toBeTruthy()
+    expect(screen.queryByText(/FASHN/i)).toBeNull()
+    expect(screen.queryByText(/credit/i)).toBeNull()
+  })
 })

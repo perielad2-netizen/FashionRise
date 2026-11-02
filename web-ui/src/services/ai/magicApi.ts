@@ -167,6 +167,8 @@ export type PersonalTryOnPreflight = {
   fashn_owner_experiment_allowed?: boolean
   /** Max selectable when allowlisted AND Max configured + live. */
   fashn_max_owner_allowed?: boolean
+  /** #178 — ordinary Try On Person may silently fall back to Max Balanced 1k. */
+  smart_try_on_max_fallback_available?: boolean
   fashn_max_prompt_version?: string | null
   fashn_max_default_prompt?: string | null
   fashn_max_default_generation_mode?: string | null
@@ -314,6 +316,10 @@ export type PersonalTryOnInput = {
   fashnV16SegmentationFree?: boolean | null
   fashnV16Mode?: 'performance' | 'balanced' | 'quality' | null
   fashnV16Seed?: number | null
+  /** #178 — invisible OpenAI→Max public fallback (forces Balanced · 1k). */
+  smartFallback?: boolean
+  smartOperationId?: string | null
+  smartFallbackReason?: string | null
   signal?: AbortSignal
 }
 
@@ -409,6 +415,15 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
             ...(input.fashnV16Seed != null ? { fashn_v16_seed: input.fashnV16Seed } : {}),
           }
         : {}),
+      ...(input.smartFallback
+        ? {
+            smart_fallback: true,
+            smart_operation_id: input.smartOperationId ?? null,
+            smart_fallback_reason: input.smartFallbackReason ?? null,
+          }
+        : input.smartOperationId
+          ? { smart_operation_id: input.smartOperationId }
+          : {}),
     },
     signal: input.signal,
   })

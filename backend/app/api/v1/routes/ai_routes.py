@@ -268,6 +268,9 @@ def personal_try_on(
         fashn_v16_segmentation_free=body.fashn_v16_segmentation_free,
         fashn_v16_mode=body.fashn_v16_mode,
         fashn_v16_seed=body.fashn_v16_seed,
+        smart_fallback=bool(body.smart_fallback),
+        smart_operation_id=body.smart_operation_id,
+        smart_fallback_reason=body.smart_fallback_reason,
     )
     return AIJobRead.from_job(job)
 
