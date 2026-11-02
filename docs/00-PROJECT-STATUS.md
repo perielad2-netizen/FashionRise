@@ -3,22 +3,65 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#167 Fashion Magic fidelity reused for garment realism** **DEPLOYED** App **`e26b9a43`** · realism **v5** · FM coverage/color contracts · Studio croquis context · calibrated neckline gate · spinner costs removed · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#166/#168 P0 restore OpenAI Try On to v2** **DEPLOYED** App **`PLACEHOLDER_SHA`** · live prompt **`try-on-person-v2`** · FASHN v5 realism unchanged · **0** operator-paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear) **live-armed**.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits) + optional FASHN v1.6 (swimwear) **live-armed**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`e26b9a43`** — release `/var/www/fashionrise/releases/e26b9a43` · App pill **`e26b9a43`** · FASHN CTA **`FASHN Try On`** · confirmation still lists OpenAI + FASHN **¢** · spinner/loading hints **no ¢** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`6c6140ef`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v5`** (FM coverage/color + Studio croquis context; plate geometry authoritative; product-only photoreal) + calibrated neckline fidelity · FASHN binds pieces from realism job · Alembic **`015`**. |
+| Frontend (`web-ui`) | **`PLACEHOLDER_SHA`** — release `/var/www/fashionrise/releases/PLACEHOLDER_SHA` · App pill **`PLACEHOLDER_SHA`** · Try On Person (OpenAI) + **FASHN Try On** remain separate CTAs · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`e26b9a43`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** (restored) + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v5`** · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/e26b9a43` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
+| Nginx | `current` → `releases/PLACEHOLDER_SHA` |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
 
 
+
+## #166/#168 P0 Restore regular OpenAI Try On (v2) — DEPLOYED (2026-11-02)
+
+### Failed job (owner ~12:15 Asia/Jerusalem = 10:15 UTC)
+
+| Field | Value |
+|---|---|
+| Job | `461c9419-ae6d-4ac3-a1c1-570a5adcff9a` · `personal_try_on` · **failed** |
+| Provider | **`openai`** (not FASHN) · `prompt_version=try-on-person-v3` |
+| HTTP | OpenAI **did** receive request · `400` · `code=moderation_blocked` |
+| Rejection | `moderation_stage=input` · `categories=["sexual"]` · `request_id=req_707f74be1be74048897bdae9e15fc584` |
+| Reservation | `0d53b2db-…` · **`released`** · `provider_called=true` · `actual_cost_cents=null` |
+| Garment | Magenta V-neck top + coral/orange shorts + cap (ordinary opaque street clothes) |
+| Photo | Same `source_asset_id=687d4307-…` as last successful ordinary Try On |
+
+### Compare vs last successful ordinary OpenAI Try On
+
+| | Success `12010ebc…` | Failure `461c9419…` |
+|---|---|---|
+| When | 2026-11-01 23:49 UTC | 2026-11-02 10:15 UTC |
+| Provider / prompt | OpenAI · **`try-on-person-v2`** | OpenAI · **`try-on-person-v3`** |
+| Photo | Same croquis source asset | Same |
+| Outfit | Pink crop + dark shorts + cap | Magenta top + orange shorts + cap |
+| Outcome | **completed** | **PROVIDER_MODERATION_BLOCKED** |
+
+Fleet: **0/5** `try-on-person-v3` jobs succeeded — all `moderation_blocked` / `sexual` / `input`. V3 started failing at **00:14 UTC** (before App `e26b9a43` FASHN realism deploy at ~09:03 UTC).
+
+### Did latest FASHN work cause this?
+
+**No.** Routing stayed OpenAI (`provider=openai`). Failure mode is OpenAI input moderation under live prompt **v3** (#156 swimwear wording), not FASHN realism/prep. FASHN jobs in the same window completed normally.
+
+### Fix
+
+Restore live OpenAI Try On to **`try-on-person-v2`** (last known-good ordinary-outfit prompt). Keep V3 text archive-only. FASHN swimwear path / realism v5 / Magic / V5 croquis unchanged. No moderation bypass, no silent provider switch, no auto paid retry.
+
+### Owner next
+
+Hard-refresh App **`PLACEHOLDER_SHA`** → same magenta top / orange shorts / cap → Magic → **Try On Person** (OpenAI button, not FASHN). Expect a photoreal preview when the provider accepts. Swimwear remains on **FASHN Try On**.
+
+### Tests / deploy
+
+- BE personal try-on: **15 PASS** · FASHN realism suite: **17 PASS** · FE try-on/layout: **20 PASS** · **0** paid calls
+- Rollback: `/var/backups/fashionrise/p1-168-try-on-restore-v2-deploy-*/ROLLBACK.sh` → FE **`e26b9a43`** + prior BE `personal_try_on_provider.py`
 
 ## #167 Reuse Fashion Magic design fidelity for FASHN realism — DEPLOYED (2026-11-02)
 
