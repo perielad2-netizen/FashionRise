@@ -122,9 +122,7 @@ def _is_fashn_family(provider: str) -> bool:
     return provider in {TRY_ON_PROVIDER_FASHN, TRY_ON_PROVIDER_FASHN_MAX}
 
 
-# #179 — only confirmed *technical* OpenAI failures authorize invisible Max fallback.
-# Moderation/safety refusals must not be auto-rerouted solely to circumvent the provider.
-# Unknown outcomes must reconcile/recover before any new paid generation.
+# Technical OpenAI failures that authorize invisible Max fallback (#178/#179/#180).
 SMART_FALLBACK_ERROR_CODES = frozenset(
     {
         "PROVIDER_TIMEOUT",
@@ -134,13 +132,23 @@ SMART_FALLBACK_ERROR_CODES = frozenset(
     }
 )
 
-# Codes that are definitive terminal non-results for the user, but MUST NOT auto-Max.
+# Never auto-Max: unknown outcomes must reconcile first (#179/#180).
 SMART_FALLBACK_EXCLUDED_CODES = frozenset(
     {
-        "PROVIDER_MODERATION_BLOCKED",
         "PROVIDER_OUTCOME_UNKNOWN",
     }
 )
+
+
+def _openai_moderation_stage(result_data: dict[str, Any] | None) -> str:
+    """Return moderation_stage from result diagnostics (``input`` / ``output`` / ``""``)."""
+    data = result_data if isinstance(result_data, dict) else {}
+    pr = data.get("provider_rejection")
+    if isinstance(pr, dict):
+        stage = str(pr.get("moderation_stage") or "").strip().lower()
+        if stage:
+            return stage
+    return str(data.get("moderation_stage") or "").strip().lower()
 
 
 def is_openai_try_on_terminal_failure(
@@ -151,7 +159,7 @@ def is_openai_try_on_terminal_failure(
 ) -> bool:
     """True when OpenAI try-on ended without a usable delivered image.
 
-    #179 — this alone does **not** authorize Max. Use
+    This alone does **not** authorize Max. Use
     ``is_openai_try_on_eligible_for_max_fallback`` for paid fallback permission.
     """
     _ = error_message
@@ -168,7 +176,17 @@ def is_openai_try_on_eligible_for_max_fallback(
     result_data: dict[str, Any] | None = None,
     error_message: str | None = None,
 ) -> bool:
-    """True only for server-confirmed technical failures that may invoke Max (#179)."""
+    """True when Max may run as an independent smart fallback (#179/#180).
+
+    Allowed:
+    - Confirmed technical failures (timeout / failed / rejected).
+    - **Output-stage** moderation only (#180): uploads were accepted; Max uses a
+      separate prep→realism→Max path and never replays blocked OpenAI pixels.
+      This is not a bypass of an input safety refusal on the design/photo.
+    Never:
+    - Input-stage moderation (design/photo rejected as upload).
+    - Unknown / reconciliation-required outcomes.
+    """
     if not is_openai_try_on_terminal_failure(
         job_status=job_status,
         result_data=result_data,
@@ -177,14 +195,15 @@ def is_openai_try_on_eligible_for_max_fallback(
         return False
     data = result_data if isinstance(result_data, dict) else {}
     code = str(data.get("error_code") or "").strip().upper()
-    if code in SMART_FALLBACK_EXCLUDED_CODES:
-        return False
     if data.get("reconciliation_required") is True:
         return False
+    if code in SMART_FALLBACK_EXCLUDED_CODES:
+        return False
+    if code == "PROVIDER_MODERATION_BLOCKED":
+        return _openai_moderation_stage(data) == "output"
     if code in SMART_FALLBACK_ERROR_CODES:
         return True
-    # Failed without a structured code is not proof of an eligible technical failure.
-    # Prefer recover/reconcile over another paid generation.
+    # Failed without a structured code is not proof of an eligible failure.
     return False
 
 
@@ -309,7 +328,12 @@ def _authorize_smart_max_fallback(
         error_message=primary.error_message,
     ):
         code = str(p_result.get("error_code") or "").strip().upper()
-        if code in SMART_FALLBACK_EXCLUDED_CODES or p_result.get("reconciliation_required"):
+        stage = _openai_moderation_stage(p_result)
+        if (
+            code in SMART_FALLBACK_EXCLUDED_CODES
+            or p_result.get("reconciliation_required")
+            or (code == "PROVIDER_MODERATION_BLOCKED" and stage != "output")
+        ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
@@ -319,10 +343,10 @@ def _authorize_smart_max_fallback(
             )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Primary OpenAI try-on is not an eligible technical failure for Max fallback.",
+            detail="Primary OpenAI try-on is not an eligible failure for Max fallback.",
         )
 
-    # Reject duplicate paid Max fallback for the same smart operation.
+    # Prefer recovering an existing Max job for this operation (#180 — no duplicate paid).
     prior_max = db.scalars(
         select(AIJob)
         .where(
@@ -332,7 +356,7 @@ def _authorize_smart_max_fallback(
             AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op_id,
         )
         .order_by(AIJob.created_at.desc())
-        .limit(3)
+        .limit(5)
     ).all()
     for existing in prior_max:
         e_in = existing.input_data if isinstance(existing.input_data, dict) else {}
@@ -341,15 +365,25 @@ def _authorize_smart_max_fallback(
             and e_in["smart_pipeline"].get("lane") == "smart_public"
         ):
             continue
-        # Recover existing Max job rather than starting another paid prediction.
-        if existing.status in {"queued", "running", "completed"}:
+        e_res = existing.result_data if isinstance(existing.result_data, dict) else {}
+        if e_res.get("reconciliation_required") is True:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"Smart Max fallback already exists for this operation "
-                    f"(job {existing.id}). Recover that result instead of regenerating."
+                    "Previous Smart Max fallback needs reconciliation — "
+                    "no automatic paid retry for this operation."
                 ),
             )
+        # queued / running / completed / failed → recover the same logical job
+        # (failed returns for client honesty; canonical idempotency blocks re-bill).
+        return {
+            "primary_job_id": str(primary.id),
+            "smart_operation_id": op_id,
+            "server_fallback_reason": str(p_result.get("error_code") or "openai_technical_failure")[
+                :128
+            ],
+            "existing_max_job_id": str(existing.id),
+        }
 
     server_reason = str(p_result.get("error_code") or "openai_technical_failure").strip()[:128]
     return {
@@ -540,8 +574,18 @@ def enqueue_personal_try_on(
     if not key.startswith("try_on:"):
         # Namespace spend unique constraint away from croquis generate keys.
         key = f"try_on:{key}"
+    # #180 — smart Max uses a canonical idempotency key bound to smart_operation_id so
+    # concurrent requests with different client keys collapse to one paid reservation.
+    if smart_lane:
+        op_for_key = (smart_operation_id or "").strip()[:64]
+        if not op_for_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="smart_operation_id is required for smart Max fallback.",
+            )
+        key = f"try_on:fashn_max:smart:{op_for_key}"
     # Keep OpenAI / FASHN v1.6 / Max idempotency namespaces distinct.
-    if provider_name == TRY_ON_PROVIDER_FASHN_MAX and ":fashn_max:" not in key:
+    elif provider_name == TRY_ON_PROVIDER_FASHN_MAX and ":fashn_max:" not in key:
         key = key.replace("try_on:", "try_on:fashn_max:", 1)
     elif provider_name == TRY_ON_PROVIDER_FASHN and ":fashn:" not in key:
         key = key.replace("try_on:", "try_on:fashn:", 1)
@@ -740,7 +784,7 @@ def enqueue_personal_try_on(
     garment_fp = hashlib.sha256(garment_png).hexdigest()
 
     if smart_lane:
-        # #179 — authorize against the real primary OpenAI job before any Max spend.
+        # #179/#180 — authorize against the real primary OpenAI job before any Max spend.
         smart_auth = _authorize_smart_max_fallback(
             db,
             user,
@@ -758,6 +802,20 @@ def enqueue_personal_try_on(
                 "server_fallback_reason"
             ) or smart_pipeline.get("fallback_reason")
             smart_pipeline["primary_try_on_job_id"] = smart_auth.get("primary_job_id")
+        existing_max_id = smart_auth.get("existing_max_job_id")
+        if existing_max_id:
+            try:
+                existing_uuid = uuid.UUID(str(existing_max_id))
+            except (TypeError, ValueError):
+                existing_uuid = None
+            if existing_uuid is not None:
+                existing_max = db.get(AIJob, existing_uuid)
+                if (
+                    existing_max is not None
+                    and existing_max.user_id == user.id
+                    and existing_max.job_type == TRY_ON_JOB_TYPE
+                ):
+                    return existing_max
 
     fashn_prep_meta: dict[str, Any] | None = None
     approved_frozen: list[dict[str, str]] | None = None
@@ -1012,6 +1070,24 @@ def enqueue_personal_try_on(
     existing = _find_try_on_by_idempotency(db, user.id, key)
     if existing is not None:
         return existing
+    # #180 — under the spend lock, re-resolve any smart Max for this operation
+    # (covers races that used a pre-canonical client key before this revision).
+    if smart_lane:
+        op_locked = (smart_operation_id or "").strip()[:64]
+        if op_locked:
+            locked_max = db.scalars(
+                select(AIJob)
+                .where(
+                    AIJob.user_id == user.id,
+                    AIJob.job_type == TRY_ON_JOB_TYPE,
+                    AIJob.input_data["provider"].astext == TRY_ON_PROVIDER_FASHN_MAX,
+                    AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op_locked,
+                )
+                .order_by(AIJob.created_at.desc())
+                .limit(1)
+            ).first()
+            if locked_max is not None:
+                return locked_max
     existing_res = (
         db.query(PersonalCroquisSpendReservation)
         .filter(

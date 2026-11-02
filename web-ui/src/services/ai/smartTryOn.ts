@@ -1,5 +1,5 @@
 /**
- * #178/#179 — Smart invisible Try On helpers (OpenAI primary → Max Balanced 1k fallback).
+ * #178/#179/#180 — Smart invisible Try On helpers (OpenAI primary → Max Balanced 1k fallback).
  * Keep copy provider-agnostic for the normal user flow.
  */
 
@@ -12,9 +12,9 @@ export const SMART_TRY_ON_FAILURE =
   'We could not create a try-on preview for this design. Your sketch is unchanged — you can edit and try again.'
 
 export const SMART_TRY_ON_STOP_WAITING =
-  'Stopped waiting. Generation continues on the server — use Recover result when you return. This does not cancel or refund the provider job.'
+  'Stopped waiting. Any job already started on the server keeps running — use Recover result to resume. This does not refund or cancel provider charges.'
 
-/** Technical failures that may authorize Max fallback (#179). */
+/** Technical failures that may authorize Max fallback. */
 const ELIGIBLE_FALLBACK_ERROR_CODES = new Set([
   'PROVIDER_TIMEOUT',
   'PROVIDER_FAILED',
@@ -22,11 +22,18 @@ const ELIGIBLE_FALLBACK_ERROR_CODES = new Set([
   'PROVIDER_REJECTED',
 ])
 
-/** Terminal but must NOT auto-Max (moderation / unknown → recover first). */
-const EXCLUDED_FALLBACK_ERROR_CODES = new Set([
-  'PROVIDER_MODERATION_BLOCKED',
-  'PROVIDER_OUTCOME_UNKNOWN',
-])
+/** Terminal outcomes that must not auto-Max. */
+const EXCLUDED_FALLBACK_ERROR_CODES = new Set(['PROVIDER_OUTCOME_UNKNOWN'])
+
+function moderationStage(job?: AiJobRead | null): string {
+  const pr = job?.result_data?.provider_rejection
+  if (pr && typeof pr === 'object' && pr !== null && 'moderation_stage' in pr) {
+    const stage = (pr as { moderation_stage?: unknown }).moderation_stage
+    if (typeof stage === 'string') return stage.trim().toLowerCase()
+  }
+  const top = job?.result_data?.moderation_stage
+  return typeof top === 'string' ? top.trim().toLowerCase() : ''
+}
 
 /** True when OpenAI try-on ended without a usable delivered image. */
 export function isOpenAiTryOnTerminalFailure(
@@ -42,8 +49,8 @@ export function isOpenAiTryOnTerminalFailure(
 }
 
 /**
- * #179 — Max fallback only for confirmed technical failures.
- * Moderation refusals and unknown outcomes stay on recover/reconcile.
+ * #180 — Max fallback for technical failures and output-stage moderation only.
+ * Input moderation / unknown outcomes stay on recover/reconcile.
  */
 export function isOpenAiTryOnEligibleForMaxFallback(
   look: Pick<MagicLookResult, 'status'> | null | undefined,
@@ -56,8 +63,10 @@ export function isOpenAiTryOnEligibleForMaxFallback(
       : ''
   if (job?.result_data?.reconciliation_required === true) return false
   if (code && EXCLUDED_FALLBACK_ERROR_CODES.has(code)) return false
+  if (code === 'PROVIDER_MODERATION_BLOCKED') {
+    return moderationStage(job) === 'output'
+  }
   if (code && ELIGIBLE_FALLBACK_ERROR_CODES.has(code)) return true
-  // Failed without a structured technical code — do not invent another paid generation.
   return false
 }
 
@@ -66,4 +75,12 @@ export function newSmartOperationId(): string {
     return crypto.randomUUID()
   }
   return `smart-${Date.now()}`
+}
+
+export function isSmartTryOnOperationId(operationId: string | null | undefined): boolean {
+  return typeof operationId === 'string' && operationId.startsWith('smart:')
+}
+
+export function smartOperationIdFromRecord(operationId: string): string {
+  return operationId.startsWith('smart:') ? operationId.slice('smart:'.length) : operationId
 }

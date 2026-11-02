@@ -1,29 +1,42 @@
 .overlay {
-  position: absolute;
+  /* #180 — fixed + safe-area so Android Chrome/Samsung toolbars cannot clip actions */
+  position: fixed;
   inset: 0;
   z-index: 40;
   display: grid;
   place-items: center;
-  padding: 12px;
+  padding:
+    max(8px, env(safe-area-inset-top, 0px))
+    max(8px, env(safe-area-inset-right, 0px))
+    max(8px, env(safe-area-inset-bottom, 0px))
+    max(8px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
   background: rgba(8, 12, 22, 0.72);
   backdrop-filter: blur(6px);
+  overflow: hidden;
 }
 
 .panel {
   width: min(920px, 100%);
-  height: min(92dvh, 900px);
-  max-height: min(92dvh, 900px);
+  /* Prefer small viewport height so expanding mobile chrome cannot bury the footer */
+  max-height: min(
+    calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px),
+    calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px),
+    900px
+  );
+  height: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 14px 12px;
+  gap: 0;
+  padding: 14px 14px 0;
   border-radius: var(--fr-radius-lg, 18px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(165deg, #1a2438 0%, #10182a 100%);
   box-shadow: var(--fr-shadow, 0 18px 48px rgba(0, 0, 0, 0.45));
   color: #f4efe8;
   overflow: hidden;
-  min-height: 0;
+  box-sizing: border-box;
 }
 
 .header {
@@ -32,6 +45,7 @@
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
+  padding-bottom: 10px;
 }
 
 .titleBlock h2 {
@@ -61,6 +75,18 @@
 
 .close:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.panelBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .dualTabs {
@@ -169,7 +195,7 @@
 .stage {
   position: relative;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 140px;
   border-radius: 14px;
   overflow: hidden;
   background:
@@ -352,6 +378,14 @@
   flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
+  /* Sticky footer within the panel — always above mobile browser chrome */
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 8px;
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(16, 24, 42, 0.92) 0%, #10182a 35%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .actions button {
@@ -401,9 +435,17 @@
 
 @media (max-width: 820px) {
   .panel {
-    padding: 10px;
-    height: min(94dvh, 900px);
-    max-height: 94dvh;
+    padding: 10px 10px 0;
+    width: 100%;
+    max-height: min(
+      calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12px),
+      calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12px)
+    );
+    border-radius: 14px;
+  }
+
+  .stage {
+    min-height: 120px;
   }
 
   .details {
@@ -415,9 +457,24 @@
   }
 }
 
+@media (max-width: 430px) {
+  .titleBlock h2 {
+    font-size: 1.05rem;
+  }
+
+  .actions button {
+    font-size: 0.85rem;
+    min-height: 40px;
+  }
+}
+
 @media (max-height: 640px) {
   .titleBlock p {
     display: none;
+  }
+
+  .stage {
+    min-height: 96px;
   }
 
   .details {
@@ -426,5 +483,17 @@
 
   .actions button {
     min-height: 38px;
+  }
+}
+
+@media (max-height: 480px) {
+  .statusBox {
+    padding: 16px 12px;
+  }
+
+  .spinner {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 10px;
   }
 }
