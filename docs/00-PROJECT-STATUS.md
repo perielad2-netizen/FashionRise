@@ -61,7 +61,8 @@ Hard-refresh App **`d6caad30`** → same magenta top / orange shorts / cap → M
 ### Tests / deploy
 
 - BE personal try-on: **15 PASS** · FASHN realism suite: **17 PASS** · FE try-on/layout: **20 PASS** · **0** paid calls
-- Rollback: `/var/backups/fashionrise/p1-168-try-on-restore-v2-deploy-*/ROLLBACK.sh` → FE **`e26b9a43`** + prior BE `personal_try_on_provider.py`
+- Rollback: `/var/backups/fashionrise/p1-168-try-on-restore-v2-deploy-20261102T112822Z/ROLLBACK.sh` → FE **`e26b9a43`** + prior BE `personal_try_on_provider.py`
+- Deployed SHA: **`d6caad30f6ca72d67ecd40317c405785fbf06968`** (App **`d6caad30`**)
 
 ## #167 Reuse Fashion Magic design fidelity for FASHN realism — DEPLOYED (2026-11-02)
 
