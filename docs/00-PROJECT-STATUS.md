@@ -3,9 +3,9 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#156** FASHN Try On v1.6 **DEPLOYED** App **`9aeea3f3`** · OpenAI path preserved · `FASHN_TRY_ON_ENABLED=true` · **`FASHN_API_KEY` still missing** → FASHN UI gated · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#156** FASHN Try On v1.6 **LIVE-ARMED** App **`9aeea3f3`** · private `FASHN_API_KEY` installed · `fashn_configured=true` · OpenAI path preserved · **0** operator-paid calls · awaiting owner first in-app swimwear test.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear). FASHN UI appears only when server has key + live arming.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear) **live-armed**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
@@ -16,9 +16,9 @@
 | AI worker | `fashionrise-ai-worker` restarted with FASHN+OpenAI try-on · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | `current` → `releases/9aeea3f3` · + exact `POST /api/v1/ai/personal-try-on/fashn/prepare` |
-| AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **OFF until key** · croquis **v5** · try-on OpenAI **`try-on-person-v3`** · daily gen count **OFF** |
+| AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · croquis **v5** · try-on OpenAI **`try-on-person-v3`** · daily gen count **OFF** |
 
-## #156 P0 FASHN Try On v1.6 — IMPLEMENTED (awaiting private key + owner first paid test) (2026-11-02)
+## #156 P0 FASHN Try On v1.6 — LIVE-ARMED (awaiting owner first paid test) (2026-11-02)
 
 OpenAI prompt tweaks stopped. Ordinary two-piece swimwear still fails OpenAI input moderation under V3. **FASHN Virtual Try-On v1.6** is now an explicit second Try On Person option.
 
@@ -31,14 +31,14 @@ OpenAI prompt tweaks stopped. Ordinary two-piece swimwear still fails OpenAI inp
 | Spend | Shared croquis ceilings · idempotency `try_on:fashn:…` · reservation estimate = credits × `FASHN_TRY_ON_ESTIMATE_CENTS` (default 8¢) |
 | Env | `FASHN_API_KEY` (secret) · `FASHN_TRY_ON_ENABLED` · `FASHN_TRY_ON_LIVE_HTTP` · estimate/base URL/poll timeouts |
 | Tests | BE prep + try-on + nginx **17** PASS · FE API/layout **30** PASS · **0** paid calls |
-| Deploy | App **`9aeea3f3`** · backup `/var/backups/fashionrise/try-on-fashn-20261102T010309Z` · nginx prepare allowlist live · `FASHN_TRY_ON_ENABLED=true` · live **false** until key |
-| Provider readiness | `key_present=false` · `fashn_configured=false` · OpenAI try-on still live |
-| Owner first test | After key live-armed: hard-refresh App **`9aeea3f3`** → personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → inspect plate → confirm cost → expect realistic preview on original photo. |
+| Deploy | App **`9aeea3f3`** · backup `/var/backups/fashionrise/try-on-fashn-20261102T010309Z` · nginx prepare allowlist live · `FASHN_TRY_ON_ENABLED=true` · `FASHN_TRY_ON_LIVE_HTTP=true` |
+| Provider readiness | `key_present=true` · `fashn_configured=true` · `live_armed=true` · OpenAI try-on still live · **0** agent-paid FASHN calls |
+| Owner first test | Hard-refresh App **`9aeea3f3`** → personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → inspect prepared plate (~16¢ / 2 credits for two-piece) → confirm → expect realistic preview on original photo. |
 
-### Still required from owner (private)
-1. Enter **`FASHN_API_KEY`** into Cursor Secrets for this agent **or** on the VPS via `/opt/fashionrise/src/backend/scripts/install_fashn_api_key.sh` (never chat/GitHub/FE).
-2. Confirm API credits available (~1–2 credits for first swimwear test; two-piece = 2).
-3. Initiate the first paid FASHN run **in-app** after reviewing the plate cost.
+### Owner next (product acceptance)
+1. Credits confirmed by owner.
+2. Run the first paid FASHN swimwear test **in-app** after reviewing the plate cost (agent will not initiate paid calls).
+3. #156 stays OPEN until that visual result is accepted.
 
 ## #156 P0 ordinary swimwear — provider suitability (2026-11-02) — OPEN (FASHN path shipping)
 
