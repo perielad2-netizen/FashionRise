@@ -72,6 +72,7 @@ from app.services.fashn_garment_realism import (
     GARMENT_REALISM_PROVIDER_ID,
     OpenAIGarmentRealismAdapter,
     decode_data_url_png,
+    downscale_studio_context,
     estimate_garment_realism_cents,
 )
 from app.services.personal_try_on_provider import (
@@ -988,6 +989,13 @@ def enqueue_garment_realism(
     if garment_fingerprint and garment_fingerprint.strip() != garment_fp:
         # Soft check — allow if client fingerprint matches prep output; else recompute trust server-side.
         pass
+    # Bound Studio croquis for OpenAI second-image context (#167) — plate remains authoritative.
+    studio_context_png = downscale_studio_context(garment_png)
+    studio_context_b64 = (
+        "data:image/png;base64," + base64.b64encode(studio_context_png).decode("ascii")
+        if studio_context_png
+        else None
+    )
 
     frozen_plates: list[dict[str, str]] = []
     for item in plate_pieces:
@@ -1090,6 +1098,8 @@ def enqueue_garment_realism(
         "garment_fingerprint": garment_fp,
         "client_garment_fingerprint": (garment_fingerprint or "").strip() or None,
         "plate_pieces": frozen_plates,
+        "studio_context_base64": studio_context_b64,
+        "studio_context_sha256": hashlib.sha256(studio_context_png).hexdigest() if studio_context_png else None,
         "consent_id": str(consent.id),
         "consent_version": FASHN_CONSENT_VERSION,
         "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
@@ -1163,6 +1173,14 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
     if not isinstance(plates, list) or not plates:
         return _fail("Garment realism job is missing plate pieces.")
 
+    studio_context_png: bytes | None = None
+    raw_ctx = data.get("studio_context_base64")
+    if isinstance(raw_ctx, str) and raw_ctx.strip():
+        try:
+            studio_context_png = decode_data_url_png(raw_ctx)
+        except ValueError:
+            studio_context_png = None
+
     try:
         adapter = OpenAIGarmentRealismAdapter()
         if reservation is not None:
@@ -1170,6 +1188,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             db.flush()
         out_pieces: list[dict[str, Any]] = []
         metas: list[dict[str, Any]] = []
+        storage = LocalStorageBackend()
         for item in plates:
             if not isinstance(item, dict):
                 return _fail("Invalid plate piece in realism job.")
@@ -1180,7 +1199,11 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             gen_cat = recommend_fashn_category(layout="one_piece", piece_category=cat, features=feats)
             if cat in {"tops", "bottoms"}:
                 gen_cat = cat  # type: ignore[assignment]
-            product_png, meta = adapter.generate_piece(plate_png=plate_png, category=gen_cat)
+            product_png, meta = adapter.generate_piece(
+                plate_png=plate_png,
+                category=gen_cat,
+                studio_context_png=studio_context_png,
+            )
             # Reject near-identical plate passthrough (sketch look into FASHN).
             if hashlib.sha256(product_png).hexdigest() == hashlib.sha256(plate_png).hexdigest():
                 return _fail(
@@ -1194,6 +1217,9 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                 layout="two_piece" if cat in {"tops", "bottoms"} else "one_piece",
             )
             meta = {**meta, "fidelity": verdict.public_dict(), "category": gen_cat}
+            # Always persist product bytes (including fidelity failures) for private diagnosis (#167).
+            key = f"ai/{job.id.hex}_garment_{gen_cat}_{uuid.uuid4().hex[:8]}.png"
+            url = storage.save_file(key=key, data=io.BytesIO(product_png), content_type="image/png")
             if not verdict.ok:
                 # Paid OpenAI already ran — settle realism spend, but block FASHN.
                 if reservation is not None and reservation.status == RESERVATION_OPEN:
@@ -1212,13 +1238,15 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "provider": provider_id,
                     "prefer_local_product": False,
                     "pieces": [],
+                    "failed_product": {
+                        "category": gen_cat,
+                        "image_url": url,
+                        "sha256": hashlib.sha256(product_png).hexdigest(),
+                        "source_plate_sha256": str(item.get("sha256") or ""),
+                    },
                     "block_fashn": True,
                 }
                 return job.result_data
-            # Store private product PNG via local storage; also keep data URL for FE review.
-            key = f"ai/{job.id.hex}_garment_{gen_cat}_{uuid.uuid4().hex[:8]}.png"
-            storage = LocalStorageBackend()
-            url = storage.save_file(key=key, data=io.BytesIO(product_png), content_type="image/png")
             out_pieces.append(
                 {
                     "category": gen_cat,

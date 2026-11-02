@@ -1793,7 +1793,7 @@ export function useStudioEditor() {
           })
 
           setMagicStatusHint(
-            `Generating realistic garment (~${prep.realism_estimate_cents ?? 8}¢ OpenAI)…`,
+            'Generating realistic garment…',
           )
           setMagicPhase('polling')
           const realismJob = await enqueueFashnGarmentRealism({
@@ -1848,7 +1848,7 @@ export function useStudioEditor() {
           }
 
           setMagicStatusHint(
-            `Fidelity passed — running FASHN try-on (~${prep.estimate_cents}¢ · ${prep.fashn_calls} credit${prep.fashn_calls === 1 ? '' : 's'})…`,
+            `Fidelity passed — running FASHN try-on (${prep.fashn_calls} credit${prep.fashn_calls === 1 ? '' : 's'})…`,
           )
           const fashnJob = await enqueuePersonalTryOn({
             croquisId,

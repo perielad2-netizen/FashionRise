@@ -49,8 +49,8 @@ def test_filled_plates_never_prefer_local_product():
     assert "never sent to FASHN" in public["notes"]
 
 
-def test_realism_prompt_v4_demands_fabric_not_sketch():
-    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v4"
+def test_realism_prompt_v5_demands_fabric_not_sketch():
+    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v5"
     assert GARMENT_REALISM_PROVIDER_ID == "openai_garment_realism"
     text = garment_realism_prompt(category="tops", color_hint="#C4B5FD")
     assert "photorealistic commercial clothing product photograph" in text
@@ -58,6 +58,8 @@ def test_realism_prompt_v4_demands_fabric_not_sketch():
     assert "fabric" in text.lower()
     assert "#C4B5FD" in text
     assert "twist" in text.lower()
+    assert "COVERAGE FIDELITY" in text
+    assert "AUTHORITATIVE GEOMETRY" in text
 
 
 def test_two_piece_categories_still_tops_bottoms():

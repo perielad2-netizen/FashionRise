@@ -64,6 +64,11 @@ _COLOR_FIDELITY_CONTRACT = (
     "consistent with the applied fills."
 )
 
+# Public aliases for garment-realism reuse (#167). Coverage + color only —
+# never export _ILLUSTRATION_STYLE_CONTRACT (non-photoreal) into product realism.
+COVERAGE_PRESERVATION_CONTRACT = _COVERAGE_PRESERVATION_CONTRACT
+COLOR_FIDELITY_CONTRACT = _COLOR_FIDELITY_CONTRACT
+
 # Used only when a second textile swatch image is attached to images.edit.
 _FABRIC_SWATCH_EDIT_CONTRACT = (
     "TEXTILE REFERENCE: Image 1 is the garment sketch (silhouette, pose, coverage, painted "

@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#166 FASHN requires OpenAI realism** **DEPLOYED** App **`6c6140ef`** · no local plate skip · server-bound realism pieces · prompt v4 · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#167 Fashion Magic fidelity reused for garment realism** **DEPLOYED** App **`PLACEHOLDER_SHA`** · realism **v5** · FM coverage/color contracts · Studio croquis context · calibrated neckline gate · spinner costs removed · **0** operator-paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear) **live-armed**.
 
@@ -11,14 +11,48 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`6c6140ef`** — release `/var/www/fashionrise/releases/6c6140ef` · source `6c6140ef8da764dffc8027661bbba130a9a8bbab` · App pill **`6c6140ef`** · FASHN CTA **`FASHN Try On`** · confirmation lists **two paid stages** (OpenAI realism + FASHN) · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`c2d0ba41`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v4`** (OpenAI required; local plate passthrough disabled) + silhouette fidelity · FASHN binds pieces from realism job · Alembic **`015`**. |
+| Frontend (`web-ui`) | **`PLACEHOLDER_SHA`** — release `/var/www/fashionrise/releases/PLACEHOLDER_SHA` · App pill **`PLACEHOLDER_SHA`** · FASHN CTA **`FASHN Try On`** · confirmation still lists OpenAI + FASHN **¢** · spinner/loading hints **no ¢** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`6c6140ef`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v5`** (FM coverage/color + Studio croquis context; plate geometry authoritative; product-only photoreal) + calibrated neckline fidelity · FASHN binds pieces from realism job · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/6c6140ef` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
+| Nginx | `current` → `releases/PLACEHOLDER_SHA` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
 
 
+
+## #167 Reuse Fashion Magic design fidelity for FASHN realism — DEPLOYED (2026-11-02)
+
+### Private diagnosis (failed realism `5842e98b…`, App `6c6140ef`, prompt v4)
+
+| Check | Finding |
+|---|---|
+| Product PNG stored? | **No** — fidelity failed before save (`stored_files=[]`). Only width profiles + plates available. |
+| Source tops plate | Separated purple cups, deep open V (`width_profile` tip **9** / mid **160** → tip ratio **0.056**) |
+| OpenAI product profile | Tip **77** / mid **413** → tip ratio **≈0.186**, growth **≈3.31** |
+| Gate that fired | Relative-only `top_growth >= 2.5` (absolute fill-in **0.70** did **not** fire) |
+| Known #164 wrap (for scale) | Tip ratio **≈0.253**, growth **≈5.70** — clear redesign (asymmetric straps, lost gradient) |
+| Verdict | **Borderline / likely false reject** of soft-edge photoreal tip thickening on separated-cup deep-V plates. Cannot visually confirm redesign without product bytes. Relative-only gate was too aggressive. |
+
+### Fixes
+
+1. **Realism prompt v5** — import Fashion Magic **`COVERAGE_PRESERVATION_CONTRACT`** + **`COLOR_FIDELITY_CONTRACT`** (swim openings, deep necklines, bikini cuts, midriff). Add authoritative geometry + product-only contracts. **Do not** copy FM illustration-style (non-photoreal) instruction.
+2. **Studio croquis context** — downscaled full Studio capture attached as images.edit Image 2; plate (Image 1) remains silhouette/fill authority. Offline `local_design_identity_bits` mirrors FM structured coverage fields (no paid vision call).
+3. **Neckline gate calibration** — reject only absolute V fill-in (`tip ≥ 0.70`) or wrap-class thickening (`tip ≥ 0.22` **and** growth `≥ 4.5`). Soft 2–3× tip growth on deep-V plates can pass; #164 wrap still fails.
+4. **Persist failed products** — fidelity failures still save product PNG + `failed_product` URL for private diagnosis; FASHN remains blocked.
+5. **Spinner costs** — remove ¢ from realism/FASHN progress hints; keep ¢ disclosure in the confirmation dialog before paid actions.
+
+### Owner paid-test budget
+
+Still max **2–3** owner-paid FASHN swimwear tests. If still not clearly good after this correction, discontinue personal swimwear try-on.
+
+### Owner next
+
+Hard-refresh App **`PLACEHOLDER_SHA`** → purple bikini → Magic → **FASHN Try On**. Expect spinner “Generating realistic garment…” (no ¢) then FASHN credits hint without ¢. Confirmation dialog still shows stage costs. Final look must keep deep-V / separated cups / gradient while looking like photoreal fabric.
+
+### Tests / deploy
+
+- BE bikini/prep/realism/fidelity: **26 PASS** · FE layout CTA + try-on API: **13 PASS** · **0** paid calls in deploy window
+- Rollback: `/var/backups/fashionrise/p1-167-fm-realism-fidelity-deploy-*/ROLLBACK.sh` → FE **`6c6140ef`** + prior BE overlay
 
 ## #166 FASHN requires OpenAI realism (no sketch-plate input) — DEPLOYED (2026-11-02)
 

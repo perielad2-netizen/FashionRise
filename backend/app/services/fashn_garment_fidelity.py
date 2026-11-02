@@ -282,8 +282,12 @@ def assert_structural_fidelity(
             recommended_category=recommended,
         )
 
-    # #164 — deep-V / open neckline filled in (wrapped/twisted tops inflate the top band).
+    # #164/#167 — deep-V / open neckline filled in (wrapped/twisted tops inflate the top band).
     # width_profile samples at 15%, 35%, 50%, ... of garment height.
+    # Separated-cup deep-V plates often have tip widths of only ~7–10px, so soft photoreal
+    # fabric edges grow tip ratio 2–4× without filling the V. Owner #164 wrap redesign
+    # reached tip_ratio ≈0.25 with growth ≥5. Job 5842e98b (growth ≈3.3, tip ≈0.19) was a
+    # borderline relative-only reject with no stored product — require wrap-class evidence.
     src_w15, _src_w35, src_w50 = source.width_profile[0], source.width_profile[1], source.width_profile[2]
     prod_w15, _prod_w35, prod_w50 = (
         product.width_profile[0],
@@ -293,9 +297,10 @@ def assert_structural_fidelity(
     src_top_ratio = src_w15 / max(src_w50, 1)
     prod_top_ratio = prod_w15 / max(prod_w50, 1)
     top_growth = prod_top_ratio / max(src_top_ratio, 0.01)
-    # Absolute fill-in (wrap covering the V) OR relative deep-V collapse (owner #164).
+    # Absolute V fill-in, OR wrap-class tip thickening (known #164 restyle band).
     neckline_changed = src_top_ratio <= 0.55 and (
-        prod_top_ratio >= max(0.70, src_top_ratio * 1.75) or top_growth >= 2.5
+        prod_top_ratio >= 0.70
+        or (prod_top_ratio >= 0.22 and top_growth >= 4.5)
     )
     if neckline_changed:
         return FidelityVerdict(

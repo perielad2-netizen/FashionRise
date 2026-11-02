@@ -33,10 +33,13 @@ def test_prompt_forbids_person_and_preserves_design():
     assert "photorealistic commercial clothing product photograph" in text
     assert "No person" in text
     assert "swimsuit top" in text.lower() or "bikini" in text.lower()
-    assert GARMENT_REALISM_PROMPT_VERSION.startswith("fashn-garment-realism-v4")
+    assert GARMENT_REALISM_PROMPT_VERSION.startswith("fashn-garment-realism-v5")
     assert "twist" in text.lower()
     assert "sketch stroke" in text.lower() or "line art" in text.lower()
     assert "realistic" in text.lower() and "fabric" in text.lower()
+    assert "COVERAGE FIDELITY" in text
+    assert "COLOR FIDELITY" in text
+    assert "Avoid photorealism" not in text
     assert "Do not turn a swimsuit" in text or "must not become a mini dress" in garment_realism_prompt(
         category="one-pieces"
     )
@@ -77,6 +80,30 @@ def test_build_edit_kwargs_uses_single_plate_image(monkeypatch):
     assert isinstance(image, tuple) and len(image) == 3
     assert image[0] == "sketch.png"
     assert image[2] == "image/png"
+
+
+def test_build_edit_kwargs_attaches_studio_context_as_second_image(monkeypatch):
+    monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
+    monkeypatch.setenv("MY_CROQUIS_AI_SPEND_CEILING_USD", "5")
+    monkeypatch.setenv("FASHN_TRY_ON_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst")
+    from app.core.config import get_settings
+    from app.services.fashn_garment_realism import downscale_studio_context
+
+    get_settings.cache_clear()
+    adapter = OpenAIGarmentRealismAdapter()
+    ctx = downscale_studio_context(_plate_png())
+    kwargs = adapter.build_edit_kwargs(
+        plate_png=_plate_png(),
+        category="tops",
+        studio_context_png=ctx,
+    )
+    image = kwargs.get("image")
+    assert isinstance(image, list) and len(image) == 2
+    assert image[0][0] == "sketch.png"
+    assert image[1][0].startswith("textile.")
+    assert "Image 2" in kwargs["prompt"] or "STUDIO CONTEXT" in kwargs["prompt"]
+    assert "COVERAGE FIDELITY" in kwargs["prompt"]
 
 
 def test_generate_requires_live_http(monkeypatch):

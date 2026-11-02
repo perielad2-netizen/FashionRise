@@ -212,13 +212,19 @@ def test_fidelity_rejects_unrelated_clothing_conversion():
     }
 
 
-def test_realism_prompt_v4_forbids_twists_and_keeps_gradient():
-    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v4"
+def test_realism_prompt_v5_reuses_fm_coverage_not_illustration_style():
+    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v5"
     tops = garment_realism_prompt(category="tops", color_hint="#C4B5FD, #2E1065")
     assert "twists" in tops.lower() or "twist" in tops.lower()
     assert "deep-V" in tops or "neckline" in tops.lower()
     assert "#C4B5FD" in tops
     assert "fabric" in tops.lower()
+    assert "COVERAGE FIDELITY" in tops
+    assert "COLOR FIDELITY" in tops
+    assert "exposed midriff" in tops.lower() or "midriff" in tops.lower()
+    # Must stay photoreal product — never Fashion Magic illustration style.
+    assert "Avoid photorealism" not in tops
+    assert "non-photorealistic fashion illustration" not in tops.lower()
     bottoms = garment_realism_prompt(category="bottoms")
     assert "waistline" in bottoms.lower()
     assert "coverage" in bottoms.lower()
@@ -241,3 +247,67 @@ def test_owner_artifact_openai_restyle_still_fails_neckline_gate():
     )
     assert openai_verdict.ok is False
     assert openai_verdict.code == "FIDELITY_NECKLINE_CHANGED"
+
+
+def _soft_edge_product_from_plate(plate_png: bytes) -> bytes:
+    """Mild soft-edge productization that keeps the deep open V (5842e98b-class).
+
+    Tip growth ~2–3× from soft edges — must pass calibrated neckline gate (#167).
+    Known wrap redesign (#164) sits nearer tip ≥0.22 with growth ≥4.5.
+    """
+    from PIL import ImageFilter
+
+    im = Image.open(io.BytesIO(plate_png)).convert("RGBA")
+    rgb = im.convert("RGB")
+    w, h = rgb.size
+    mask = Image.new("L", (w, h), 0)
+    mp = mask.load()
+    px = rgb.load()
+    ap = im.split()[-1].load()
+    assert mp is not None and px is not None and ap is not None
+    for y in range(h):
+        for x in range(w):
+            r, g, b = px[x, y]
+            if ap[x, y] < 20:
+                continue
+            if r >= 230 and g >= 230 and b >= 230:
+                continue
+            if r < 40 and g < 40 and b < 40:
+                continue
+            mp[x, y] = 255
+    mask = mask.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(radius=1.5))
+    out = Image.new("RGB", (w, h), (250, 250, 250))
+    op = out.load()
+    mp = mask.load()
+    assert op is not None and mp is not None
+    for y in range(h):
+        for x in range(w):
+            m = mp[x, y]
+            if m < 40:
+                continue
+            r, g, b = px[x, y]
+            if r >= 230 and g >= 230 and b >= 230 or r < 40 and g < 40 and b < 40:
+                r, g, b = (160, 120, 210)
+            t = m / 255.0
+            op[x, y] = (
+                int(r * t + 250 * (1 - t)),
+                int(g * t + 250 * (1 - t)),
+                int(b * t + 250 * (1 - t)),
+            )
+    return _png(out)
+
+
+def test_soft_edge_deep_v_photoreal_passes_calibrated_neckline_gate():
+    plate_path = _ARTIFACTS / "01_plate_0_tops.png"
+    if plate_path.exists():
+        top = plate_path.read_bytes()
+    else:
+        top = prepare_garment_reference(_purple_bikini_sketch()).pieces[0].png_bytes
+    soft = _soft_edge_product_from_plate(top)
+    verdict = assert_structural_fidelity(
+        source_png=top,
+        product_png=soft,
+        layout="two_piece",
+    )
+    assert verdict.code != "FIDELITY_NECKLINE_CHANGED"
+    assert verdict.ok is True
