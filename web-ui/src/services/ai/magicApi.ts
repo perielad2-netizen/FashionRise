@@ -159,6 +159,20 @@ export type PersonalTryOnPreflight = {
   fashn_realism_estimate_cents_per_piece?: number | null
   fashn_combined_estimate_cents_one_piece?: number | null
   fashn_one_click?: boolean
+  /** Owner-only Try-On Max experiment (#173) — server-gated. */
+  fashn_max_enabled?: boolean
+  fashn_max_configured?: boolean
+  fashn_max_live_http?: boolean
+  fashn_max_owner_allowed?: boolean
+  fashn_max_prompt_version?: string | null
+  fashn_max_default_prompt?: string | null
+  fashn_max_default_generation_mode?: string | null
+  fashn_max_default_resolution?: string | null
+  fashn_max_soft_budget_credits?: number | null
+  fashn_max_credits_balanced_1k?: number | null
+  fashn_max_credits_quality_1k?: number | null
+  fashn_max_estimate_cents_balanced_1k?: number | null
+  fashn_max_estimate_cents_quality_1k?: number | null
 }
 
 export async function fetchPersonalTryOnPreflight(
@@ -283,10 +297,15 @@ export type PersonalTryOnInput = {
   /** Optional Studio-derived color/material/accessory hints (V2). */
   designHints?: string[] | null
   /** Explicit provider — never auto-switched after a refusal. */
-  provider?: 'openai' | 'fashn'
+  provider?: 'openai' | 'fashn' | 'fashn_max'
   /** Owner-accepted realistic product plates (required for FASHN). */
   approvedGarmentPieces?: Array<{ category: string; image_base64: string }> | null
   garmentRealismJobId?: string | null
+  /** Max experiment knobs (#173) — ignored unless provider=fashn_max. */
+  fashnMaxGenerationMode?: 'fast' | 'balanced' | 'quality' | null
+  fashnMaxResolution?: '1k' | '2k' | '4k' | null
+  fashnMaxPrompt?: string | null
+  fashnMaxSeed?: number | null
   signal?: AbortSignal
 }
 
@@ -300,7 +319,9 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
     .filter((h): h is string => typeof h === 'string' && h.trim().length > 0)
     .map((h) => h.trim().slice(0, 120))
     .slice(0, 8)
-  const provider = input.provider === 'fashn' ? 'fashn' : 'openai'
+  const provider =
+    input.provider === 'fashn_max' ? 'fashn_max' : input.provider === 'fashn' ? 'fashn' : 'openai'
+  const fashnFamily = provider === 'fashn' || provider === 'fashn_max'
   return apiRequest<AiJobRead>('/ai/personal-try-on', {
     method: 'POST',
     body: {
@@ -315,10 +336,18 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
       consent_version: input.consentVersion,
       provider,
       ...(designHints.length ? { design_hints: designHints } : {}),
-      ...(provider === 'fashn' && input.approvedGarmentPieces?.length
+      ...(fashnFamily && input.approvedGarmentPieces?.length
         ? {
             approved_garment_pieces: input.approvedGarmentPieces,
             garment_realism_job_id: input.garmentRealismJobId ?? null,
+          }
+        : {}),
+      ...(provider === 'fashn_max'
+        ? {
+            fashn_max_generation_mode: input.fashnMaxGenerationMode ?? 'balanced',
+            fashn_max_resolution: input.fashnMaxResolution ?? '1k',
+            fashn_max_prompt: input.fashnMaxPrompt ?? null,
+            fashn_max_seed: input.fashnMaxSeed ?? 42,
           }
         : {}),
     },

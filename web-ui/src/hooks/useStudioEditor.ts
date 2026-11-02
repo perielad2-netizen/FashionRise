@@ -286,6 +286,24 @@ export function useStudioEditor() {
   const [fashnRealismBusy, setFashnRealismBusy] = useState(false)
   const [fashnRealismError, setFashnRealismError] = useState<string | null>(null)
   const [fashnDetailsOpen, setFashnDetailsOpen] = useState(false)
+  /** #173 owner-only Try-On Max experiment controls (server-gated via preflight). */
+  const [fashnMaxOwnerAllowed, setFashnMaxOwnerAllowed] = useState(false)
+  const [fashnExperimentProvider, setFashnExperimentProvider] = useState<'fashn' | 'fashn_max'>(
+    'fashn',
+  )
+  const [fashnMaxMode, setFashnMaxMode] = useState<'balanced' | 'quality'>('balanced')
+  const [fashnMaxResolution, setFashnMaxResolution] = useState<'1k' | '2k'>('1k')
+  const [fashnMaxPrompt, setFashnMaxPrompt] = useState<string>('')
+  const [fashnMaxPromptOpen, setFashnMaxPromptOpen] = useState(false)
+  const [fashnMaxSoftBudgetCredits, setFashnMaxSoftBudgetCredits] = useState<number | null>(null)
+  const [fashnMaxCreditsBalanced, setFashnMaxCreditsBalanced] = useState<number | null>(null)
+  const [fashnMaxCreditsQuality, setFashnMaxCreditsQuality] = useState<number | null>(null)
+  const [fashnMaxEstimateBalancedCents, setFashnMaxEstimateBalancedCents] = useState<number | null>(
+    null,
+  )
+  const [fashnMaxEstimateQualityCents, setFashnMaxEstimateQualityCents] = useState<number | null>(
+    null,
+  )
   const tryOnPreflightRef = useRef<PersonalTryOnPreflight | null>(null)
   const [magicDualActive, setMagicDualActive] = useState(false)
   const [magicOperationId, setMagicOperationId] = useState<string | null>(null)
@@ -1761,6 +1779,17 @@ export function useStudioEditor() {
             )
             return
           }
+          setFashnMaxOwnerAllowed(Boolean(preflight.fashn_max_owner_allowed))
+          setFashnMaxSoftBudgetCredits(preflight.fashn_max_soft_budget_credits ?? null)
+          setFashnMaxCreditsBalanced(preflight.fashn_max_credits_balanced_1k ?? null)
+          setFashnMaxCreditsQuality(preflight.fashn_max_credits_quality_1k ?? null)
+          setFashnMaxEstimateBalancedCents(preflight.fashn_max_estimate_cents_balanced_1k ?? null)
+          setFashnMaxEstimateQualityCents(preflight.fashn_max_estimate_cents_quality_1k ?? null)
+          setFashnMaxPrompt(preflight.fashn_max_default_prompt || '')
+          setFashnExperimentProvider('fashn')
+          setFashnMaxMode('balanced')
+          setFashnMaxResolution('1k')
+          setFashnMaxPromptOpen(false)
           setFashnPrepOpen(false)
           setMagicPhase('submitting')
           setMagicStatusHint('Preparing your garment plate…')
@@ -2138,6 +2167,11 @@ export function useStudioEditor() {
       )
       return
     }
+    const useMax = fashnExperimentProvider === 'fashn_max'
+    if (useMax && !fashnMaxOwnerAllowed) {
+      setFashnRealismError('Try-On Max is owner-only and is not enabled for this account.')
+      return
+    }
 
     magicInFlightRef.current = true
     setFashnPrepBusy(true)
@@ -2147,6 +2181,11 @@ export function useStudioEditor() {
     setMagicResultMode('try_on')
     setMagicOpen(true)
     setMagicPhase('submitting')
+    setMagicStatusHint(
+      useMax
+        ? `Running Try-On Max (${fashnMaxMode} · ${fashnMaxResolution}) — reusing accepted garment…`
+        : 'Running FASHN v1.6 — reusing accepted garment…',
+    )
 
     magicAbortRef.current?.abort()
     const controller = new AbortController()
@@ -2168,13 +2207,14 @@ export function useStudioEditor() {
         return
       }
 
-      // Server-enforced acceptance stamp (no paid call).
+      // Server-enforced acceptance stamp (no paid call). Reused for Max — no OpenAI regen.
       await acceptFashnGarmentRealism(fashnRealismJobId, controller.signal)
 
+      const namespace = useMax ? 'fashn_max' : 'fashn'
       const idempotencyKey =
         typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? `try_on:fashn:${crypto.randomUUID()}`
-          : `try_on:fashn:${Date.now()}`
+          ? `try_on:${namespace}:${crypto.randomUUID()}`
+          : `try_on:${namespace}:${Date.now()}`
       const designHints = buildTryOnDesignHints({
         strokes: live.strokes,
         fills: live.fills ?? [],
@@ -2190,12 +2230,20 @@ export function useStudioEditor() {
         consentAcknowledged: true,
         consentVersion: fashnPrep.consent_version,
         designHints,
-        provider: 'fashn',
+        provider: useMax ? 'fashn_max' : 'fashn',
         approvedGarmentPieces: fashnRealisticPieces.map((p) => ({
           category: p.category,
           image_base64: p.image_base64,
         })),
         garmentRealismJobId: fashnRealismJobId,
+        ...(useMax
+          ? {
+              fashnMaxGenerationMode: fashnMaxMode,
+              fashnMaxResolution,
+              fashnMaxPrompt: fashnMaxPrompt || null,
+              fashnMaxSeed: 42,
+            }
+          : {}),
         signal: controller.signal,
       })
       setMagicJobId(job.id)
@@ -2248,6 +2296,11 @@ export function useStudioEditor() {
     fashnRealismBusy,
     fashnRealismJobId,
     fashnRealisticPieces,
+    fashnExperimentProvider,
+    fashnMaxOwnerAllowed,
+    fashnMaxMode,
+    fashnMaxResolution,
+    fashnMaxPrompt,
     user?.id,
   ])
 
@@ -3425,6 +3478,22 @@ export function useStudioEditor() {
     fashnRealismError,
     fashnDetailsOpen,
     toggleFashnDetails,
+    fashnMaxOwnerAllowed,
+    fashnExperimentProvider,
+    setFashnExperimentProvider,
+    fashnMaxMode,
+    setFashnMaxMode,
+    fashnMaxResolution,
+    setFashnMaxResolution,
+    fashnMaxPrompt,
+    setFashnMaxPrompt,
+    fashnMaxPromptOpen,
+    setFashnMaxPromptOpen,
+    fashnMaxSoftBudgetCredits,
+    fashnMaxCreditsBalanced,
+    fashnMaxCreditsQuality,
+    fashnMaxEstimateBalancedCents,
+    fashnMaxEstimateQualityCents,
     generateFashnRealisticGarment,
     cancelFashnPrep,
     confirmFashnTryOn,

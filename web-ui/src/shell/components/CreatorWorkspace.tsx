@@ -443,7 +443,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
                       editor.fashnPrep.openai_live_http === false,
                   },
                   {
-                    label: 'Accept & Try On',
+                    label:
+                      editor.fashnMaxOwnerAllowed &&
+                      editor.fashnExperimentProvider === 'fashn_max'
+                        ? `Accept & Try On Max (${editor.fashnMaxMode})`
+                        : 'Accept & Try On',
                     onClick: () => {
                       void editor.confirmFashnTryOn()
                     },
@@ -480,6 +484,29 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
             realismError={editor.fashnRealismError}
             detailsOpen={editor.fashnDetailsOpen}
             onToggleDetails={editor.toggleFashnDetails}
+            experiment={
+              editor.fashnMaxOwnerAllowed
+                ? {
+                    ownerAllowed: true,
+                    provider: editor.fashnExperimentProvider,
+                    onProviderChange: editor.setFashnExperimentProvider,
+                    mode: editor.fashnMaxMode,
+                    onModeChange: editor.setFashnMaxMode,
+                    resolution: editor.fashnMaxResolution,
+                    onResolutionChange: editor.setFashnMaxResolution,
+                    prompt: editor.fashnMaxPrompt,
+                    onPromptChange: editor.setFashnMaxPrompt,
+                    promptOpen: editor.fashnMaxPromptOpen,
+                    onTogglePrompt: () =>
+                      editor.setFashnMaxPromptOpen(!editor.fashnMaxPromptOpen),
+                    softBudgetCredits: editor.fashnMaxSoftBudgetCredits,
+                    creditsBalanced: editor.fashnMaxCreditsBalanced,
+                    creditsQuality: editor.fashnMaxCreditsQuality,
+                    estimateBalancedCents: editor.fashnMaxEstimateBalancedCents,
+                    estimateQualityCents: editor.fashnMaxEstimateQualityCents,
+                  }
+                : null
+            }
           />
         </ConfirmDialog>
       ) : null}

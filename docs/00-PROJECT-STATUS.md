@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**My Designs personal-croquis thumbnails** **DEPLOYED** App **`c0e2cb8d`** · prior #172 structure-review provenance kept · OpenAI Try On stays **`try-on-person-v2`**.)
+**Last updated:** 2026-11-02 (**#173 FASHN Try-On Max owner experiment** shipping · My Designs personal thumbnails **`c0e2cb8d`** · OpenAI Try On stays **`try-on-person-v2`**.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits + additive trouser hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
@@ -17,6 +17,27 @@
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → new release |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
+
+## #173 Owner-only FASHN Try-On Max experimental lane (2026-11-02)
+
+### Product decision
+Owner-authorized paid model evaluation. Soft budget ~**90** FASHN credits. Compare **v1.6** vs **Try-On Max** on the same accepted realistic garment + person photo. Do not auto-accept Max results into My Looks.
+
+### Implementation
+1. New adapter `fashn_try_on_max_provider.py` — documented Max schema only (`product_image`, `generation_mode`, `resolution`, `prompt`, `seed`, `num_images`, `return_base64`).
+2. Provider `fashn_max` reuses Accept + frozen `approved_garment_pieces` (no OpenAI garment regeneration).
+3. Server owner allowlist `FASHN_TRY_ON_MAX_OWNER_ALLOWLIST` (empty = nobody). FE gated by preflight `fashn_max_owner_allowed`.
+4. Defaults: Balanced · 1k · seed 42 · outputs 1 · fixed/editable experiment prompt.
+5. Results stamp `experiment=true`, `looks_eligible=false` — excluded from My Looks gallery.
+6. v1.6 adapter / OpenAI Try On / Fashion Magic / Accept nginx path unchanged.
+
+### Owner test
+1. Hard-refresh to new App SHA.
+2. Personal croquis → Magic → FASHN Try On → generate/accept realistic garment.
+3. Owner experiment panel: choose **FASHN v1.6** or **Try-On Max** (Balanced or Quality).
+4. Accept & Try On / Accept & Try On Max — compare privately. Soft credit estimates shown in confirmation copy.
+
+---
 
 ## My Designs personal croquis thumbnails — DEPLOYED (2026-11-02)
 

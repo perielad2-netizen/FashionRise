@@ -120,8 +120,7 @@ def style_suggest(
 def personal_try_on_preflight(request: Request, user: CurrentUser) -> PersonalTryOnPreflightRead:
     """Consent notice + budget envelope for Try On Person (no billable work)."""
     _ = request.url
-    _ = user
-    return PersonalTryOnPreflightRead(**try_on_service.try_on_preflight_public())
+    return PersonalTryOnPreflightRead(**try_on_service.try_on_preflight_public(user=user))
 
 
 @router.post(
@@ -223,6 +222,10 @@ def personal_try_on(
             else None
         ),
         garment_realism_job_id=body.garment_realism_job_id,
+        fashn_max_generation_mode=body.fashn_max_generation_mode,
+        fashn_max_resolution=body.fashn_max_resolution,
+        fashn_max_prompt=body.fashn_max_prompt,
+        fashn_max_seed=body.fashn_max_seed,
     )
     return AIJobRead.from_job(job)
 
