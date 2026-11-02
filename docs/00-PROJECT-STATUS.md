@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#167 Fashion Magic fidelity reused for garment realism** **DEPLOYED** App **`PLACEHOLDER_SHA`** · realism **v5** · FM coverage/color contracts · Studio croquis context · calibrated neckline gate · spinner costs removed · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#167 Fashion Magic fidelity reused for garment realism** **DEPLOYED** App **`e26b9a43`** · realism **v5** · FM coverage/color contracts · Studio croquis context · calibrated neckline gate · spinner costs removed · **0** operator-paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear) **live-armed**.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`PLACEHOLDER_SHA`** — release `/var/www/fashionrise/releases/PLACEHOLDER_SHA` · App pill **`PLACEHOLDER_SHA`** · FASHN CTA **`FASHN Try On`** · confirmation still lists OpenAI + FASHN **¢** · spinner/loading hints **no ¢** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`6c6140ef`** kept for rollback. |
+| Frontend (`web-ui`) | **`e26b9a43`** — release `/var/www/fashionrise/releases/e26b9a43` · App pill **`e26b9a43`** · FASHN CTA **`FASHN Try On`** · confirmation still lists OpenAI + FASHN **¢** · spinner/loading hints **no ¢** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`6c6140ef`** kept for rollback. |
 | Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v5`** (FM coverage/color + Studio croquis context; plate geometry authoritative; product-only photoreal) + calibrated neckline fidelity · FASHN binds pieces from realism job · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/PLACEHOLDER_SHA` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
+| Nginx | `current` → `releases/e26b9a43` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
 
 
@@ -47,7 +47,7 @@ Still max **2–3** owner-paid FASHN swimwear tests. If still not clearly good a
 
 ### Owner next
 
-Hard-refresh App **`PLACEHOLDER_SHA`** → purple bikini → Magic → **FASHN Try On**. Expect spinner “Generating realistic garment…” (no ¢) then FASHN credits hint without ¢. Confirmation dialog still shows stage costs. Final look must keep deep-V / separated cups / gradient while looking like photoreal fabric.
+Hard-refresh App **`e26b9a43`** → purple bikini → Magic → **FASHN Try On**. Expect spinner “Generating realistic garment…” (no ¢) then FASHN credits hint without ¢. Confirmation dialog still shows stage costs. Final look must keep deep-V / separated cups / gradient while looking like photoreal fabric.
 
 ### Tests / deploy
 
