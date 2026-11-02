@@ -181,4 +181,38 @@ describe('personal try-on API client', () => {
       }),
     )
   })
+
+  it('enqueues FASHN v1.6 with owner experiment knobs (#176)', async () => {
+    apiMock.mockResolvedValueOnce({ id: 'job-v16', job_type: 'personal_try_on', status: 'queued' })
+    await enqueuePersonalTryOn({
+      croquisId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      croquisVersion: 2,
+      garmentImageBase64: 'data:image/png;base64,AAAA',
+      idempotencyKey: 'try_on:fashn:key-v16',
+      sourceRevision: 7,
+      contentFingerprint: 'fp-1',
+      consentAcknowledged: true,
+      consentVersion: 'try-on-fashn-oneclick-v1',
+      provider: 'fashn',
+      approvedGarmentPieces: [{ category: 'one-pieces', image_base64: 'data:image/png;base64,PROD' }],
+      garmentRealismJobId: 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      fashnV16Category: 'auto',
+      fashnV16SegmentationFree: false,
+      fashnV16Mode: 'quality',
+      fashnV16Seed: 99,
+    })
+    expect(apiMock).toHaveBeenLastCalledWith(
+      '/ai/personal-try-on',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          provider: 'fashn',
+          garment_realism_job_id: 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          fashn_v16_category: 'auto',
+          fashn_v16_segmentation_free: false,
+          fashn_v16_mode: 'quality',
+          fashn_v16_seed: 99,
+        }),
+      }),
+    )
+  })
 })

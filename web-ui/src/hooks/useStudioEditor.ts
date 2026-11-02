@@ -79,11 +79,15 @@ import {
   fetchJobImageBlob,
   fetchMagicOperationJobs,
   fetchPersonalTryOnPreflight,
+  listAcceptedGarmentRealismJobs,
   prepareFashnGarmentReference,
+  setTryOnExperimentVerdict,
+  type AcceptedGarmentRealismJob,
   type FashnGarmentPrepareResult,
   type FashnRealisticPiece,
   mapMagicOperationJobsBySide,
   type PersonalTryOnPreflight,
+  type TryOnExperimentVerdict,
 } from '@/services/ai/magicApi'
 import {
   DualPolishUnavailableError,
@@ -310,6 +314,15 @@ export function useStudioEditor() {
   const [fashnMaxEstimateQualityCents, setFashnMaxEstimateQualityCents] = useState<number | null>(
     null,
   )
+  /** #176 owner v1.6 experiment knobs + accepted-garment reuse. */
+  const [fashnV16Category, setFashnV16Category] = useState<'one-pieces' | 'auto'>('one-pieces')
+  const [fashnV16SegmentationFree, setFashnV16SegmentationFree] = useState(true)
+  const [fashnV16Mode, setFashnV16Mode] = useState<'balanced' | 'quality'>('balanced')
+  const [fashnV16Seed, setFashnV16Seed] = useState(42)
+  const [fashnAcceptedOptions, setFashnAcceptedOptions] = useState<AcceptedGarmentRealismJob[]>([])
+  const [fashnSelectedAcceptedJobId, setFashnSelectedAcceptedJobId] = useState<string | null>(null)
+  const [fashnAcceptedLoadBusy, setFashnAcceptedLoadBusy] = useState(false)
+  const [experimentVerdictBusy, setExperimentVerdictBusy] = useState(false)
   const tryOnPreflightRef = useRef<PersonalTryOnPreflight | null>(null)
   const [magicDualActive, setMagicDualActive] = useState(false)
   const [magicOperationId, setMagicOperationId] = useState<string | null>(null)
@@ -1821,15 +1834,51 @@ export function useStudioEditor() {
             return
           }
 
+          const contentFingerprint = draftContentFingerprint(docAtStart)
+          setFashnPrep(prep)
+          setFashnPrepGarmentDataUrl(garment.dataUrl)
+          setFashnPrepCroquis({
+            croquisId,
+            croquisVersion,
+            sourceRevision: docAtStart.clientRevision,
+            contentFingerprint,
+          })
+          setFashnRealismError(null)
+          setFashnDetailsOpen(false)
+          setFashnSelectedAcceptedJobId(null)
+
+          // #176 — owner comparison lane: open review immediately so accepted garments
+          // can be reused without another OpenAI realism charge. Ordinary customers keep
+          // the #169 auto-realism → Accept path.
+          if (preflight.fashn_max_owner_allowed) {
+            setFashnRealisticPieces(null)
+            setFashnRealismJobId(null)
+            setFashnPrepOpen(true)
+            setMagicStatusHint(null)
+            setMagicPhase('idle')
+            setMagicOpen(false)
+            void listAcceptedGarmentRealismJobs(controller.signal)
+              .then((rows) => {
+                const fp = prep.garment_fingerprint
+                const matching = rows.filter(
+                  (r) =>
+                    (!fp || !r.garment_fingerprint || r.garment_fingerprint === fp) &&
+                    (!r.croquis_id || r.croquis_id === croquisId),
+                )
+                setFashnAcceptedOptions(matching.length ? matching : rows)
+              })
+              .catch(() => {
+                setFashnAcceptedOptions([])
+              })
+            return
+          }
+
           const pipelineId =
             typeof crypto !== 'undefined' && 'randomUUID' in crypto
               ? crypto.randomUUID()
               : String(Date.now())
-          const contentFingerprint = draftContentFingerprint(docAtStart)
 
-          setMagicStatusHint(
-            'Generating realistic garment…',
-          )
+          setMagicStatusHint('Generating realistic garment…')
           setMagicPhase('polling')
           const realismJob = await enqueueFashnGarmentRealism({
             croquisId,
@@ -1883,16 +1932,6 @@ export function useStudioEditor() {
             pieces.some((p) => p.fidelity && p.fidelity.ok === false)
 
           // #169 — stop for owner review. FASHN only after explicit Accept.
-          // Hard fidelity failures still open review so the owner can see the product,
-          // but Accept stays disabled (server also rejects override).
-          setFashnPrep(prep)
-          setFashnPrepGarmentDataUrl(garment.dataUrl)
-          setFashnPrepCroquis({
-            croquisId,
-            croquisVersion,
-            sourceRevision: docAtStart.clientRevision,
-            contentFingerprint,
-          })
           setFashnRealisticPieces(pieces)
           setFashnRealismJobId(realismJob.id)
           setFashnRealismError(
@@ -1901,6 +1940,7 @@ export function useStudioEditor() {
                   'Fidelity checks failed. Accept is disabled — regenerate or edit the sketch.'
               : null,
           )
+          setFashnAcceptedOptions([])
           setFashnPrepOpen(true)
           setMagicStatusHint(null)
           setMagicPhase('idle')
@@ -1982,6 +2022,102 @@ export function useStudioEditor() {
     setMagicFashnEstimatePerCall(null)
   }, [magicDestinationBusy])
 
+  const loadAcceptedFashnGarment = useCallback(
+    async (jobId: string) => {
+      if (!jobId || fashnAcceptedLoadBusy || fashnPrepBusy || fashnRealismBusy) return
+      setFashnAcceptedLoadBusy(true)
+      setFashnRealismError(null)
+      try {
+        const job = await fetchAiJob(jobId)
+        const data = (job.result_data || {}) as {
+          pieces?: FashnRealisticPiece[]
+          owner_accepted?: boolean
+          fidelity_ok?: boolean
+          block_fashn?: boolean
+          summary?: string
+        }
+        const inp = (job.input_data || {}) as {
+          garment_fingerprint?: string
+          croquis_id?: string
+          croquis_version?: number
+        }
+        const pieces = Array.isArray(data.pieces) ? data.pieces : []
+        if (job.status !== 'completed' || !data.owner_accepted || pieces.length === 0) {
+          setFashnRealismError(
+            'That accepted garment is incomplete or no longer reusable. Pick another or regenerate.',
+          )
+          return
+        }
+        if (data.fidelity_ok === false || data.block_fashn) {
+          setFashnRealismError(
+            data.summary || 'That accepted garment failed fidelity checks and cannot drive FASHN.',
+          )
+          return
+        }
+        if (
+          fashnPrep?.garment_fingerprint &&
+          inp.garment_fingerprint &&
+          inp.garment_fingerprint !== fashnPrep.garment_fingerprint
+        ) {
+          setFashnRealismError(
+            'That accepted garment belongs to a different Studio sketch fingerprint. Regenerate for this design.',
+          )
+          return
+        }
+        if (
+          fashnPrepCroquis?.croquisId &&
+          inp.croquis_id &&
+          inp.croquis_id !== fashnPrepCroquis.croquisId
+        ) {
+          setFashnRealismError(
+            'That accepted garment is bound to a different My Croquis photo. Switch croquis or regenerate.',
+          )
+          return
+        }
+        // Bind to stored product bytes only — no OpenAI regen.
+        setFashnRealisticPieces(pieces)
+        setFashnRealismJobId(job.id)
+        setFashnSelectedAcceptedJobId(job.id)
+        setFashnRealismError(null)
+      } catch (err) {
+        const message =
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : 'Could not load the accepted garment.'
+        setFashnRealismError(message)
+      } finally {
+        setFashnAcceptedLoadBusy(false)
+      }
+    },
+    [fashnAcceptedLoadBusy, fashnPrep, fashnPrepBusy, fashnPrepCroquis, fashnRealismBusy],
+  )
+
+  const setExperimentVerdict = useCallback(
+    async (verdict: TryOnExperimentVerdict) => {
+      if (!magicResult?.jobId || experimentVerdictBusy) return
+      if (!magicResult.experimentMeta) return
+      setExperimentVerdictBusy(true)
+      try {
+        const job = await setTryOnExperimentVerdict(magicResult.jobId, verdict)
+        const look = toMagicLookResult(job)
+        setMagicResult(look)
+      } catch (err) {
+        const message =
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : 'Could not save experiment verdict.'
+        setMagicError(message)
+      } finally {
+        setExperimentVerdictBusy(false)
+      }
+    },
+    [experimentVerdictBusy, magicResult],
+  )
+
   const cancelFashnPrep = useCallback(() => {
     if (fashnPrepBusy || fashnRealismBusy) return
     setFashnPrepOpen(false)
@@ -1992,6 +2128,8 @@ export function useStudioEditor() {
     setFashnRealismJobId(null)
     setFashnRealismError(null)
     setFashnDetailsOpen(false)
+    setFashnSelectedAcceptedJobId(null)
+    setFashnAcceptedLoadBusy(false)
   }, [fashnPrepBusy, fashnRealismBusy])
 
   // Editing the design or swapping croquis invalidates pending FASHN approval (#169).
@@ -2193,7 +2331,7 @@ export function useStudioEditor() {
     setMagicStatusHint(
       useMax
         ? `Running Try-On Max (${fashnMaxMode} · ${fashnMaxResolution}) — reusing accepted garment…`
-        : 'Running FASHN v1.6 — reusing accepted garment…',
+        : `Running FASHN v1.6 (${fashnV16Mode} · cat ${fashnV16Category} · seg ${fashnV16SegmentationFree ? 'free' : 'on'} · seed ${fashnV16Seed}) — reusing accepted garment…`,
     )
 
     magicAbortRef.current?.abort()
@@ -2252,7 +2390,14 @@ export function useStudioEditor() {
               fashnMaxPrompt: fashnMaxPrompt || null,
               fashnMaxSeed: 42,
             }
-          : {}),
+          : fashnMaxOwnerAllowed
+            ? {
+                fashnV16Category,
+                fashnV16SegmentationFree,
+                fashnV16Mode,
+                fashnV16Seed,
+              }
+            : {}),
         signal: controller.signal,
       })
       setMagicJobId(job.id)
@@ -2262,6 +2407,7 @@ export function useStudioEditor() {
       setFashnPrepCroquis(null)
       setFashnRealisticPieces(null)
       setFashnRealismJobId(null)
+      setFashnSelectedAcceptedJobId(null)
 
       setMagicPhase('polling')
       const settled = await settleMagicJobWithImage(job.id, controller.signal)
@@ -2310,6 +2456,10 @@ export function useStudioEditor() {
     fashnMaxMode,
     fashnMaxResolution,
     fashnMaxPrompt,
+    fashnV16Category,
+    fashnV16SegmentationFree,
+    fashnV16Mode,
+    fashnV16Seed,
     user?.id,
   ])
 
@@ -3503,6 +3653,21 @@ export function useStudioEditor() {
     fashnMaxCreditsQuality,
     fashnMaxEstimateBalancedCents,
     fashnMaxEstimateQualityCents,
+    fashnV16Category,
+    setFashnV16Category,
+    fashnV16SegmentationFree,
+    setFashnV16SegmentationFree,
+    fashnV16Mode,
+    setFashnV16Mode,
+    fashnV16Seed,
+    setFashnV16Seed,
+    fashnAcceptedOptions,
+    fashnSelectedAcceptedJobId,
+    setFashnSelectedAcceptedJobId,
+    fashnAcceptedLoadBusy,
+    loadAcceptedFashnGarment,
+    experimentVerdictBusy,
+    setExperimentVerdict,
     generateFashnRealisticGarment,
     cancelFashnPrep,
     confirmFashnTryOn,

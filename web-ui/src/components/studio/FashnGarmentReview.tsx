@@ -2,6 +2,13 @@ import { useMemo, useState } from 'react'
 import type { FashnGarmentPrepareResult, FashnRealisticPiece } from '@/services/ai/magicApi'
 import { confirmDialogStyles as styles } from './ConfirmDialog'
 
+export type AcceptedRealismOption = {
+  jobId: string
+  label: string
+  pieceCount: number
+  categories: string[]
+}
+
 export type FashnExperimentControls = {
   ownerAllowed: boolean
   provider: 'fashn' | 'fashn_max'
@@ -19,6 +26,20 @@ export type FashnExperimentControls = {
   creditsQuality: number | null
   estimateBalancedCents: number | null
   estimateQualityCents: number | null
+  /** #176 v1.6 owner knobs */
+  v16Category: 'one-pieces' | 'auto'
+  onV16CategoryChange: (category: 'one-pieces' | 'auto') => void
+  v16SegmentationFree: boolean
+  onV16SegmentationFreeChange: (value: boolean) => void
+  v16Mode: 'balanced' | 'quality'
+  onV16ModeChange: (mode: 'balanced' | 'quality') => void
+  v16Seed: number
+  onV16SeedChange: (seed: number) => void
+  acceptedOptions: AcceptedRealismOption[]
+  selectedAcceptedJobId: string | null
+  onSelectAcceptedJobId: (jobId: string | null) => void
+  onLoadAcceptedJob: (jobId: string) => void
+  acceptedLoadBusy: boolean
 }
 
 type Props = {
@@ -52,7 +73,8 @@ export function FashnGarmentReview({
 
   const sketchPieces = prep.pieces
   const hasRealistic = Boolean(realisticPieces && realisticPieces.length > 0)
-  const showMax = Boolean(experiment?.ownerAllowed && hasRealistic)
+  // #176 — show owner experiment panel as soon as allowlisted (Max was invisible before realism).
+  const showExperiment = Boolean(experiment?.ownerAllowed)
   const maxCredits =
     experiment?.mode === 'quality'
       ? (experiment.creditsQuality ?? 3)
@@ -96,7 +118,7 @@ export function FashnGarmentReview({
         </div>
         <div>
           <strong>2. FASHN try-on</strong> — about{' '}
-          {showMax && experiment?.provider === 'fashn_max'
+          {showExperiment && experiment?.provider === 'fashn_max'
             ? `${maxEstimate}¢ · ~${maxCredits * prep.fashn_calls} Max credit${
                 maxCredits * prep.fashn_calls === 1 ? '' : 's'
               }`
@@ -108,17 +130,17 @@ export function FashnGarmentReview({
         <div>
           Combined estimate about{' '}
           <strong>
-            {showMax && experiment?.provider === 'fashn_max'
+            {showExperiment && experiment?.provider === 'fashn_max'
               ? costSummary.realism + maxEstimate * prep.fashn_calls
               : costSummary.combined}
             ¢
           </strong>{' '}
-          if you run both stages. Regenerate Garment charges OpenAI again with a new key. Cancel
-          never starts FASHN.
+          if you run both stages. Reusing an accepted garment skips OpenAI. Cancel never starts
+          FASHN.
         </div>
       </div>
 
-      {showMax && experiment ? (
+      {showExperiment && experiment ? (
         <div
           data-testid="fashn-max-experiment"
           style={{
@@ -133,6 +155,40 @@ export function FashnGarmentReview({
             accepted garment. Soft budget ~{experiment.softBudgetCredits ?? 90} Max credits.
             Results stay private (not My Looks).
           </p>
+
+          {experiment.acceptedOptions.length > 0 ? (
+            <fieldset style={{ border: 0, padding: 0, margin: '0 0 10px' }} data-testid="fashn-reuse-accepted">
+              <legend className={styles.hint}>Reuse accepted garment (no OpenAI regen)</legend>
+              <select
+                aria-label="Accepted realistic garment"
+                value={experiment.selectedAcceptedJobId ?? ''}
+                onChange={(e) =>
+                  experiment.onSelectAcceptedJobId(e.target.value ? e.target.value : null)
+                }
+                style={{ width: '100%', marginBottom: 6 }}
+              >
+                <option value="">Current review / new generate</option>
+                {experiment.acceptedOptions.map((opt) => (
+                  <option key={opt.jobId} value={opt.jobId}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className={styles.detailsToggle}
+                disabled={!experiment.selectedAcceptedJobId || experiment.acceptedLoadBusy}
+                onClick={() => {
+                  if (experiment.selectedAcceptedJobId) {
+                    experiment.onLoadAcceptedJob(experiment.selectedAcceptedJobId)
+                  }
+                }}
+              >
+                {experiment.acceptedLoadBusy ? 'Loading accepted garment…' : 'Load selected garment'}
+              </button>
+            </fieldset>
+          ) : null}
+
           <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
             <legend className={styles.hint}>Provider</legend>
             <label style={{ display: 'block', marginBottom: 4 }}>
@@ -142,7 +198,7 @@ export function FashnGarmentReview({
                 checked={experiment.provider === 'fashn'}
                 onChange={() => experiment.onProviderChange('fashn')}
               />{' '}
-              FASHN v1.6 (current)
+              FASHN v1.6
             </label>
             <label style={{ display: 'block' }}>
               <input
@@ -154,6 +210,93 @@ export function FashnGarmentReview({
               FASHN Try-On Max
             </label>
           </fieldset>
+
+          {experiment.provider === 'fashn' ? (
+            <div data-testid="fashn-v16-controls">
+              <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
+                <legend className={styles.hint}>v1.6 category</legend>
+                <label style={{ display: 'inline-block', marginRight: 12 }}>
+                  <input
+                    type="radio"
+                    name="fashn-v16-cat"
+                    checked={experiment.v16Category === 'one-pieces'}
+                    onChange={() => experiment.onV16CategoryChange('one-pieces')}
+                  />{' '}
+                  one-pieces
+                </label>
+                <label style={{ display: 'inline-block' }}>
+                  <input
+                    type="radio"
+                    name="fashn-v16-cat"
+                    checked={experiment.v16Category === 'auto'}
+                    onChange={() => experiment.onV16CategoryChange('auto')}
+                  />{' '}
+                  auto
+                </label>
+              </fieldset>
+              <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
+                <legend className={styles.hint}>segmentation_free</legend>
+                <label style={{ display: 'inline-block', marginRight: 12 }}>
+                  <input
+                    type="radio"
+                    name="fashn-v16-seg"
+                    checked={experiment.v16SegmentationFree === true}
+                    onChange={() => experiment.onV16SegmentationFreeChange(true)}
+                  />{' '}
+                  true (default)
+                </label>
+                <label style={{ display: 'inline-block' }}>
+                  <input
+                    type="radio"
+                    name="fashn-v16-seg"
+                    checked={experiment.v16SegmentationFree === false}
+                    onChange={() => experiment.onV16SegmentationFreeChange(false)}
+                  />{' '}
+                  false
+                </label>
+              </fieldset>
+              <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
+                <legend className={styles.hint}>v1.6 mode</legend>
+                <label style={{ display: 'inline-block', marginRight: 12 }}>
+                  <input
+                    type="radio"
+                    name="fashn-v16-mode"
+                    checked={experiment.v16Mode === 'balanced'}
+                    onChange={() => experiment.onV16ModeChange('balanced')}
+                  />{' '}
+                  balanced (default)
+                </label>
+                <label style={{ display: 'inline-block' }}>
+                  <input
+                    type="radio"
+                    name="fashn-v16-mode"
+                    checked={experiment.v16Mode === 'quality'}
+                    onChange={() => experiment.onV16ModeChange('quality')}
+                  />{' '}
+                  quality
+                </label>
+              </fieldset>
+              <label className={styles.hint} style={{ display: 'block', marginBottom: 8 }}>
+                Seed (default 42)
+                <input
+                  type="number"
+                  min={0}
+                  max={4294967295}
+                  value={experiment.v16Seed}
+                  onChange={(e) => {
+                    const n = Number(e.target.value)
+                    experiment.onV16SeedChange(
+                      Number.isFinite(n) ? Math.max(0, Math.min(4294967295, Math.trunc(n))) : 42,
+                    )
+                  }}
+                  style={{ display: 'block', width: '100%', marginTop: 4 }}
+                  aria-label="FASHN v1.6 seed"
+                />
+              </label>
+              <p className={styles.hint}>Outputs: 1 (fixed for this experiment).</p>
+            </div>
+          ) : null}
+
           {experiment.provider === 'fashn_max' ? (
             <>
               <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
@@ -216,6 +359,12 @@ export function FashnGarmentReview({
                 />
               ) : null}
             </>
+          ) : null}
+
+          {!hasRealistic ? (
+            <p className={styles.hint} style={{ marginTop: 8 }}>
+              Generate or load an accepted realistic garment before Accept & Try On.
+            </p>
           ) : null}
         </div>
       ) : null}

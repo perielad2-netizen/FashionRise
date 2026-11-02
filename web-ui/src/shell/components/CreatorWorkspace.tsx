@@ -504,6 +504,28 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
                     creditsQuality: editor.fashnMaxCreditsQuality,
                     estimateBalancedCents: editor.fashnMaxEstimateBalancedCents,
                     estimateQualityCents: editor.fashnMaxEstimateQualityCents,
+                    v16Category: editor.fashnV16Category,
+                    onV16CategoryChange: editor.setFashnV16Category,
+                    v16SegmentationFree: editor.fashnV16SegmentationFree,
+                    onV16SegmentationFreeChange: editor.setFashnV16SegmentationFree,
+                    v16Mode: editor.fashnV16Mode,
+                    onV16ModeChange: editor.setFashnV16Mode,
+                    v16Seed: editor.fashnV16Seed,
+                    onV16SeedChange: editor.setFashnV16Seed,
+                    acceptedOptions: editor.fashnAcceptedOptions.map((row) => ({
+                      jobId: row.job_id,
+                      label: `${(row.accepted_at || 'accepted').slice(0, 19)} · ${
+                        row.piece_categories.join('+') || `${row.piece_count} pcs`
+                      } · ${(row.piece_shas[0] || '').slice(0, 8) || 'sha?'}`,
+                      pieceCount: row.piece_count,
+                      categories: row.piece_categories,
+                    })),
+                    selectedAcceptedJobId: editor.fashnSelectedAcceptedJobId,
+                    onSelectAcceptedJobId: editor.setFashnSelectedAcceptedJobId,
+                    onLoadAcceptedJob: (jobId) => {
+                      void editor.loadAcceptedFashnGarment(jobId)
+                    },
+                    acceptedLoadBusy: editor.fashnAcceptedLoadBusy,
                   }
                 : null
             }
@@ -522,6 +544,14 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         statusHint={editor.magicStatusHint}
         canRecover={editor.magicCanRecover}
         resultMode={editor.magicResultMode}
+        experimentVerdictBusy={editor.experimentVerdictBusy}
+        onExperimentVerdict={
+          editor.magicResult?.experimentMeta
+            ? (verdict) => {
+                void editor.setExperimentVerdict(verdict)
+              }
+            : undefined
+        }
         dual={
           editor.magicDualActive && editor.magicOperationId
             ? {

@@ -13,6 +13,21 @@ export type AiJobRead = {
   updated_at: string
 }
 
+export type TryOnExperimentMeta = {
+  experiment: boolean
+  verdict: 'accepted' | 'rejected' | 'unreviewed' | null
+  provider: string | null
+  promptVersion: string | null
+  costCents: number | null
+  predictionIds: string[] | null
+  garmentRealismJobId: string | null
+  approvedGarmentShas: string[] | null
+  croquisId: string | null
+  croquisVersion: number | null
+  v16Settings: Record<string, unknown> | null
+  fashnMaxExperiment: Record<string, unknown> | null
+}
+
 export type MagicLookResult = {
   jobId: string
   status: AiJobStatus
@@ -25,6 +40,8 @@ export type MagicLookResult = {
   structureReviewMessage?: string | null
   /** True when UI must warn and must not present as an accepted My Look. */
   structureRejected?: boolean
+  /** #176 — owner FASHN comparison provenance (private). */
+  experimentMeta?: TryOnExperimentMeta | null
 }
 
 export function extractImageUrl(resultData: Record<string, unknown> | null | undefined): string | null {
@@ -136,6 +153,54 @@ export function toMagicLookResult(job: AiJobRead): MagicLookResult {
       : job.status === 'completed' && dataStatus === 'completed_unverified' && !structureRejected
         ? 'completed'
         : job.status
+  const provider =
+    typeof data?.provider === 'string'
+      ? data.provider
+      : typeof job.input_data?.provider === 'string'
+        ? String(job.input_data.provider)
+        : null
+  const verdictRaw = typeof data?.experiment_verdict === 'string' ? data.experiment_verdict : null
+  const verdict =
+    verdictRaw === 'accepted' || verdictRaw === 'rejected' || verdictRaw === 'unreviewed'
+      ? verdictRaw
+      : null
+  const predictionIds = Array.isArray(data?.prediction_ids)
+    ? data.prediction_ids.filter((v): v is string => typeof v === 'string')
+    : null
+  const approvedShas = Array.isArray(data?.approved_garment_shas)
+    ? data.approved_garment_shas.filter((v): v is string => typeof v === 'string')
+    : null
+  const costRaw = data?.cost_cents
+  const costCents = typeof costRaw === 'number' && Number.isFinite(costRaw) ? costRaw : null
+  const experimentMeta: TryOnExperimentMeta | null =
+    data?.experiment === true ||
+    provider === 'fashn_tryon_v1_6' ||
+    provider === 'fashn_tryon_max' ||
+    job.input_data?.provider === 'fashn' ||
+    job.input_data?.provider === 'fashn_max'
+      ? {
+          experiment: data?.experiment === true || Boolean(job.input_data?.experiment),
+          verdict,
+          provider,
+          promptVersion: typeof data?.prompt_version === 'string' ? data.prompt_version : null,
+          costCents,
+          predictionIds,
+          garmentRealismJobId:
+            typeof data?.garment_realism_job_id === 'string' ? data.garment_realism_job_id : null,
+          approvedGarmentShas: approvedShas,
+          croquisId: typeof data?.croquis_id === 'string' ? data.croquis_id : null,
+          croquisVersion:
+            typeof data?.croquis_version === 'number' ? data.croquis_version : null,
+          v16Settings:
+            data?.v16_settings && typeof data.v16_settings === 'object'
+              ? (data.v16_settings as Record<string, unknown>)
+              : null,
+          fashnMaxExperiment:
+            data?.fashn_max_experiment && typeof data.fashn_max_experiment === 'object'
+              ? (data.fashn_max_experiment as Record<string, unknown>)
+              : null,
+        }
+      : null
   return {
     jobId: job.id,
     status,
@@ -146,5 +211,6 @@ export function toMagicLookResult(job: AiJobRead): MagicLookResult {
     structureReviewState,
     structureReviewMessage,
     structureRejected,
+    experimentMeta,
   }
 }

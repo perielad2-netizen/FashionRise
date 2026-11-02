@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import type { MagicLookResult } from '@/services/ai/aiJobTypes'
+import type { TryOnExperimentVerdict } from '@/services/ai/magicApi'
 import styles from './MagicLookPanel.module.css'
 
 export type MagicPhase = 'idle' | 'capturing' | 'submitting' | 'polling' | 'ready' | 'failed'
@@ -43,6 +44,9 @@ type Props = {
   /** Fashion Magic (illustration) vs Try On Person (photorealistic). */
   resultMode?: MagicResultMode
   dual?: MagicDualPanelState | null
+  /** #176 — owner FASHN comparison verdict (Accepted / Rejected / Unreviewed). */
+  onExperimentVerdict?: (verdict: TryOnExperimentVerdict) => void
+  experimentVerdictBusy?: boolean
   onClose: () => void
   onCancel: () => void
   onDownload: () => void
@@ -75,6 +79,8 @@ export function MagicLookPanel({
   canRecover,
   resultMode = 'fashion',
   dual,
+  onExperimentVerdict,
+  experimentVerdictBusy = false,
   onClose,
   onCancel,
   onDownload,
@@ -117,10 +123,13 @@ export function MagicLookPanel({
     (activeResult?.structureReviewMessage ||
       activeResult?.summary ||
       'This try-on does not match your sketch well enough to treat as a faithful result.')
+  // #176 — experiment comparison results stay private (never auto My Looks).
+  const experimentBlocksLooks = Boolean(activeResult?.experimentMeta?.experiment)
   const canViewInLooks =
     phase === 'ready' &&
     Boolean(onViewInMyLooks) &&
     !structureRejected &&
+    !experimentBlocksLooks &&
     (dualActive
       ? Boolean(dual?.front.lookObjectUrl || dual?.back.lookObjectUrl)
       : Boolean(lookObjectUrl))
@@ -380,6 +389,63 @@ export function MagicLookPanel({
                   </ul>
                 ) : null}
               </>
+            ) : null}
+          </div>
+        ) : null}
+
+        {tryOn && phase === 'ready' && activeResult?.experimentMeta ? (
+          <div className={styles.details} data-testid="try-on-experiment-meta">
+            <p className={styles.summary}>
+              Experiment · {activeResult.experimentMeta.provider || 'fashn'} · prompt{' '}
+              {activeResult.experimentMeta.promptVersion || '—'}
+              {activeResult.experimentMeta.costCents != null
+                ? ` · ${activeResult.experimentMeta.costCents}¢`
+                : ''}
+              {activeResult.experimentMeta.predictionIds?.length
+                ? ` · pred ${activeResult.experimentMeta.predictionIds[0].slice(0, 8)}`
+                : ''}
+            </p>
+            {activeResult.experimentMeta.approvedGarmentShas?.length ? (
+              <p className={styles.summary}>
+                Approved garment SHA {activeResult.experimentMeta.approvedGarmentShas[0].slice(0, 12)}
+                {activeResult.experimentMeta.croquisId
+                  ? ` · croquis ${activeResult.experimentMeta.croquisId.slice(0, 8)}@v${
+                      activeResult.experimentMeta.croquisVersion ?? '?'
+                    }`
+                  : ''}
+              </p>
+            ) : null}
+            {activeResult.experimentMeta.v16Settings ? (
+              <p className={styles.summary}>
+                v1.6 settings {JSON.stringify(activeResult.experimentMeta.v16Settings)}
+              </p>
+            ) : null}
+            {activeResult.experimentMeta.fashnMaxExperiment ? (
+              <p className={styles.summary}>
+                Max settings{' '}
+                {JSON.stringify({
+                  mode: activeResult.experimentMeta.fashnMaxExperiment.generation_mode,
+                  resolution: activeResult.experimentMeta.fashnMaxExperiment.resolution,
+                  seed: activeResult.experimentMeta.fashnMaxExperiment.seed,
+                })}
+              </p>
+            ) : null}
+            {onExperimentVerdict ? (
+              <div className={styles.actions} data-testid="try-on-experiment-verdict">
+                <span className={styles.summary}>
+                  Verdict: {activeResult.experimentMeta.verdict || 'unreviewed'}
+                </span>
+                {(['accepted', 'rejected', 'unreviewed'] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    disabled={experimentVerdictBusy || activeResult.experimentMeta?.verdict === v}
+                    onClick={() => onExperimentVerdict(v)}
+                  >
+                    {v === 'accepted' ? 'Accepted' : v === 'rejected' ? 'Rejected' : 'Unreviewed'}
+                  </button>
+                ))}
+              </div>
             ) : null}
           </div>
         ) : null}

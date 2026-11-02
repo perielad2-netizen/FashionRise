@@ -357,7 +357,9 @@ def test_openai_try_on_unaffected_by_fashn_accept_gate(client, monkeypatch, db_s
         def __init__(self):
             self.calls = 0
 
-        def generate(self, *, photo_png, garment_png, design_hints=None, prep=None):
+        def generate(
+            self, *, photo_png, garment_png, design_hints=None, prep=None, v16_experiment=None
+        ):
             self.calls += 1
             assert photo_png and garment_png
             out = _png_bytes((80, 120), (9, 9, 9, 255))
