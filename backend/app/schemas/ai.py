@@ -263,6 +263,13 @@ class MagicOperationJobsRead(BaseModel):
     jobs: list[AIJobRead]
 
 
+class ApprovedGarmentPiece(BaseModel):
+    category: Literal["tops", "bottoms", "one-pieces", "auto"]
+    image_base64: str = Field(min_length=32)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PersonalTryOnBody(BaseModel):
     """POST /ai/personal-try-on — photorealistic try-on on original croquis photo."""
 
@@ -279,6 +286,9 @@ class PersonalTryOnBody(BaseModel):
     design_hints: list[str] | None = Field(default=None, max_length=8)
     # Explicit provider choice — never auto-switched after a refusal.
     provider: Literal["openai", "fashn"] = "openai"
+    # Owner-accepted realistic product plates (required for FASHN after #161).
+    approved_garment_pieces: list[ApprovedGarmentPiece] | None = None
+    garment_realism_job_id: uuid.UUID | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -295,7 +305,12 @@ class PersonalTryOnFashnPrepareRead(BaseModel):
     layout: str
     fashn_calls: int
     estimate_cents: int
+    realism_calls: int = 1
+    realism_estimate_cents: int = 8
+    combined_estimate_cents: int = 16
     garment_fingerprint: str
+    quality_ok: bool = True
+    quality_notes: str = ""
     composite_preview_base64: str
     pieces: list[dict]
     notes: str
@@ -305,6 +320,23 @@ class PersonalTryOnFashnPrepareRead(BaseModel):
     provider: str = "fashn"
     configured: bool
     live_http: bool
+    openai_live_http: bool = False
+
+
+class PersonalGarmentRealismBody(BaseModel):
+    """POST /ai/personal-try-on/fashn/garment-realism — paid OpenAI product-image stage."""
+
+    croquis_id: uuid.UUID
+    croquis_version: int = Field(ge=1)
+    garment_image_base64: str = Field(min_length=32)
+    plate_pieces: list[ApprovedGarmentPiece] = Field(min_length=1, max_length=4)
+    garment_fingerprint: str = Field(min_length=8, max_length=128)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    design_id: uuid.UUID | None = None
+    consent_acknowledged: bool = False
+    consent_version: str = Field(min_length=1, max_length=64)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class PersonalTryOnPreflightRead(BaseModel):

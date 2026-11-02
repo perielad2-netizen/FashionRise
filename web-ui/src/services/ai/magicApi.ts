@@ -171,13 +171,20 @@ export type FashnGarmentPrepareResult = {
   layout: 'one_piece' | 'two_piece' | string
   fashn_calls: number
   estimate_cents: number
+  realism_calls?: number
+  realism_estimate_cents?: number
+  combined_estimate_cents?: number
   garment_fingerprint: string
+  quality_ok?: boolean
+  quality_notes?: string
   composite_preview_base64: string
   pieces: Array<{
     category: string
     image_base64: string
     bbox: number[]
     opaque_pixels: number
+    fill_ratio?: number
+    edge_ratio?: number
   }>
   notes: string
   consent_version: string
@@ -186,6 +193,14 @@ export type FashnGarmentPrepareResult = {
   provider: string
   configured: boolean
   live_http: boolean
+  openai_live_http?: boolean
+}
+
+export type FashnRealisticPiece = {
+  category: string
+  image_base64: string
+  image_url?: string
+  sha256?: string
 }
 
 /** POST /ai/personal-try-on/fashn/prepare — offline flat-lay preview (no paid call). */
@@ -197,6 +212,40 @@ export async function prepareFashnGarmentReference(
     method: 'POST',
     body: { garment_image_base64: garmentImageBase64 },
     signal,
+  })
+}
+
+export type EnqueueGarmentRealismInput = {
+  croquisId: string
+  croquisVersion: number
+  garmentImageBase64: string
+  platePieces: Array<{ category: string; image_base64: string }>
+  garmentFingerprint: string
+  idempotencyKey: string
+  designId?: string | null
+  consentAcknowledged: boolean
+  consentVersion: string
+  signal?: AbortSignal
+}
+
+/** POST /ai/personal-try-on/fashn/garment-realism — paid OpenAI product images. */
+export async function enqueueFashnGarmentRealism(
+  input: EnqueueGarmentRealismInput,
+): Promise<AiJobRead> {
+  return apiRequest<AiJobRead>('/ai/personal-try-on/fashn/garment-realism', {
+    method: 'POST',
+    body: {
+      croquis_id: input.croquisId,
+      croquis_version: input.croquisVersion,
+      garment_image_base64: input.garmentImageBase64,
+      plate_pieces: input.platePieces,
+      garment_fingerprint: input.garmentFingerprint,
+      idempotency_key: input.idempotencyKey,
+      design_id: input.designId ?? null,
+      consent_acknowledged: input.consentAcknowledged,
+      consent_version: input.consentVersion,
+    },
+    signal: input.signal,
   })
 }
 
@@ -214,6 +263,9 @@ export type PersonalTryOnInput = {
   designHints?: string[] | null
   /** Explicit provider — never auto-switched after a refusal. */
   provider?: 'openai' | 'fashn'
+  /** Owner-accepted realistic product plates (required for FASHN). */
+  approvedGarmentPieces?: Array<{ category: string; image_base64: string }> | null
+  garmentRealismJobId?: string | null
   signal?: AbortSignal
 }
 
@@ -242,6 +294,12 @@ export async function enqueuePersonalTryOn(input: PersonalTryOnInput): Promise<A
       consent_version: input.consentVersion,
       provider,
       ...(designHints.length ? { design_hints: designHints } : {}),
+      ...(provider === 'fashn' && input.approvedGarmentPieces?.length
+        ? {
+            approved_garment_pieces: input.approvedGarmentPieces,
+            garment_realism_job_id: input.garmentRealismJobId ?? null,
+          }
+        : {}),
     },
     signal: input.signal,
   })

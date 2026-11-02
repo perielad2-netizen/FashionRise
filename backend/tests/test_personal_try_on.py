@@ -682,6 +682,16 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
     assert pbody["composite_preview_base64"].startswith("data:image/png;base64,")
     assert pbody["fashn_calls"] >= 1
     assert pbody["estimate_cents"] == 8 * pbody["fashn_calls"]
+    assert "realism_estimate_cents" in pbody
+    assert "combined_estimate_cents" in pbody
+    assert pbody["quality_ok"] is True
+
+    # Without approved realistic pieces, FASHN enqueue must fail closed (#161).
+    body_missing = _try_on_body(croquis_id=croquis["id"], key="try_on:fashn:missing-approve")
+    body_missing["provider"] = "fashn"
+    body_missing["consent_version"] = FASHN_CONSENT_VERSION
+    missing = client.post(TRY_ON, headers=_auth(tokens), json=body_missing)
+    assert missing.status_code == 400, missing.text
 
     class MockFashn:
         def __init__(self):
@@ -691,6 +701,7 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
             self.calls += 1
             assert photo_png and garment_png
             assert prep is not None
+            assert getattr(prep, "quality_ok", True) is True
             out = _png_bytes((80, 120), (12, 34, 56, 255))
             return out, {
                 "actual_cost_cents": 8 * prep.fashn_calls,
@@ -706,6 +717,14 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
     body = _try_on_body(croquis_id=croquis["id"], key="try_on:fashn:mock-1")
     body["provider"] = "fashn"
     body["consent_version"] = FASHN_CONSENT_VERSION
+    # Owner-accepted realistic product plate(s) — required before FASHN.
+    body["approved_garment_pieces"] = [
+        {
+            "category": piece["category"],
+            "image_base64": piece["image_base64"],
+        }
+        for piece in pbody["pieces"]
+    ]
     r = client.post(TRY_ON, headers=_auth(tokens), json=body)
     assert r.status_code == 201, r.text
     job_id = r.json()["id"]

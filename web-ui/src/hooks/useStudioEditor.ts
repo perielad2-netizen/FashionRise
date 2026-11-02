@@ -71,13 +71,16 @@ import {
 import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
 import { ApiError } from '@/services/api/client'
 import {
+  enqueueFashnGarmentRealism,
   enqueuePersonalTryOn,
   enqueueSketchPolish,
+  fetchAiJob,
   fetchJobImageBlob,
   fetchMagicOperationJobs,
   fetchPersonalTryOnPreflight,
   prepareFashnGarmentReference,
   type FashnGarmentPrepareResult,
+  type FashnRealisticPiece,
   mapMagicOperationJobsBySide,
   type PersonalTryOnPreflight,
 } from '@/services/ai/magicApi'
@@ -271,6 +274,13 @@ export function useStudioEditor() {
     sourceRevision: number
     contentFingerprint: string
   } | null>(null)
+  const [fashnRealisticPieces, setFashnRealisticPieces] = useState<FashnRealisticPiece[] | null>(
+    null,
+  )
+  const [fashnRealismJobId, setFashnRealismJobId] = useState<string | null>(null)
+  const [fashnRealismBusy, setFashnRealismBusy] = useState(false)
+  const [fashnRealismError, setFashnRealismError] = useState<string | null>(null)
+  const [fashnDetailsOpen, setFashnDetailsOpen] = useState(false)
   const tryOnPreflightRef = useRef<PersonalTryOnPreflight | null>(null)
   const [magicDualActive, setMagicDualActive] = useState(false)
   const [magicOperationId, setMagicOperationId] = useState<string | null>(null)
@@ -1830,18 +1840,131 @@ export function useStudioEditor() {
   }, [magicDestinationBusy])
 
   const cancelFashnPrep = useCallback(() => {
-    if (fashnPrepBusy) return
+    if (fashnPrepBusy || fashnRealismBusy) return
     setFashnPrepOpen(false)
     setFashnPrep(null)
     setFashnPrepGarmentDataUrl(null)
     setFashnPrepCroquis(null)
-  }, [fashnPrepBusy])
+    setFashnRealisticPieces(null)
+    setFashnRealismJobId(null)
+    setFashnRealismError(null)
+    setFashnDetailsOpen(false)
+  }, [fashnPrepBusy, fashnRealismBusy])
+
+  const toggleFashnDetails = useCallback(() => {
+    setFashnDetailsOpen((open) => !open)
+  }, [])
+
+  const generateFashnRealisticGarment = useCallback(async () => {
+    if (!user?.id || !fashnPrep || !fashnPrepGarmentDataUrl || !fashnPrepCroquis) return
+    if (fashnPrepBusy || fashnRealismBusy || magicInFlightRef.current) return
+    if (fashnPrep.quality_ok === false) {
+      setFashnRealismError(
+        fashnPrep.quality_notes ||
+          'Sketch plates are not a recognizable filled garment. Fix the sketch before generating.',
+      )
+      return
+    }
+    if (fashnPrep.openai_live_http === false) {
+      setFashnRealismError('OpenAI live HTTP is not armed — cannot generate a realistic garment yet.')
+      return
+    }
+
+    setFashnRealismBusy(true)
+    setFashnRealismError(null)
+    magicAbortRef.current?.abort()
+    const controller = new AbortController()
+    magicAbortRef.current = controller
+
+    try {
+      const idempotencyKey =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? `try_on:garment_realism:${crypto.randomUUID()}`
+          : `try_on:garment_realism:${Date.now()}`
+      const job = await enqueueFashnGarmentRealism({
+        croquisId: fashnPrepCroquis.croquisId,
+        croquisVersion: fashnPrepCroquis.croquisVersion,
+        garmentImageBase64: fashnPrepGarmentDataUrl,
+        platePieces: fashnPrep.pieces.map((p) => ({
+          category: p.category,
+          image_base64: p.image_base64,
+        })),
+        garmentFingerprint: fashnPrep.garment_fingerprint,
+        idempotencyKey,
+        designId: designIdRef.current,
+        consentAcknowledged: true,
+        consentVersion: fashnPrep.consent_version,
+        signal: controller.signal,
+      })
+      setFashnRealismJobId(job.id)
+
+      // Poll until completed (reuse AI job poller; do not open Magic panel yet).
+      let settled = job
+      const started = Date.now()
+      while (settled.status === 'queued' || settled.status === 'running') {
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError')
+        if (Date.now() - started > 240_000) {
+          throw new Error('Realistic garment generation timed out. No automatic retry.')
+        }
+        await new Promise((r) => setTimeout(r, 1500))
+        settled = await fetchAiJob(job.id, controller.signal)
+      }
+      if (settled.status !== 'completed') {
+        const summary =
+          (settled.result_data as { summary?: string } | null)?.summary ||
+          settled.error_message ||
+          'Realistic garment generation failed.'
+        setFashnRealisticPieces(null)
+        setFashnRealismError(summary)
+        return
+      }
+      const pieces = (settled.result_data as { pieces?: FashnRealisticPiece[] } | null)?.pieces
+      if (!Array.isArray(pieces) || pieces.length === 0) {
+        setFashnRealismError('Realistic garment job completed without product images.')
+        setFashnRealisticPieces(null)
+        return
+      }
+      setFashnRealisticPieces(pieces)
+      setFashnRealismError(null)
+    } catch (err) {
+      if (controller.signal.aborted) {
+        setFashnRealismError('Realistic garment generation cancelled.')
+        return
+      }
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Realistic garment generation could not complete.'
+      setFashnRealismError(message)
+    } finally {
+      setFashnRealismBusy(false)
+    }
+  }, [
+    fashnPrep,
+    fashnPrepBusy,
+    fashnPrepCroquis,
+    fashnPrepGarmentDataUrl,
+    fashnRealismBusy,
+    user?.id,
+  ])
 
   const confirmFashnTryOn = useCallback(async () => {
     if (!user?.id || !fashnPrep || !fashnPrepGarmentDataUrl || !fashnPrepCroquis) return
-    if (magicInFlightRef.current || fashnPrepBusy) return
+    if (magicInFlightRef.current || fashnPrepBusy || fashnRealismBusy) return
     if (!fashnPrep.configured || !fashnPrep.live_http) {
       setMagicNotice('FASHN Try On is configured but not live-armed yet. Ask an operator to enable FASHN_TRY_ON_LIVE_HTTP.')
+      return
+    }
+    if (!fashnRealisticPieces?.length) {
+      setFashnRealismError('Generate and accept a realistic garment before running FASHN.')
+      return
+    }
+    if (fashnPrep.quality_ok === false) {
+      setFashnRealismError(
+        fashnPrep.quality_notes || 'Sketch plates are not acceptable for FASHN.',
+      )
       return
     }
 
@@ -1892,6 +2015,11 @@ export function useStudioEditor() {
         consentVersion: fashnPrep.consent_version,
         designHints,
         provider: 'fashn',
+        approvedGarmentPieces: fashnRealisticPieces.map((p) => ({
+          category: p.category,
+          image_base64: p.image_base64,
+        })),
+        garmentRealismJobId: fashnRealismJobId,
         signal: controller.signal,
       })
       setMagicJobId(job.id)
@@ -1899,6 +2027,8 @@ export function useStudioEditor() {
       setFashnPrep(null)
       setFashnPrepGarmentDataUrl(null)
       setFashnPrepCroquis(null)
+      setFashnRealisticPieces(null)
+      setFashnRealismJobId(null)
 
       setMagicPhase('polling')
       const settled = await settleMagicJobWithImage(job.id, controller.signal)
@@ -1934,7 +2064,16 @@ export function useStudioEditor() {
       setFashnPrepBusy(false)
       magicInFlightRef.current = false
     }
-  }, [fashnPrep, fashnPrepBusy, fashnPrepCroquis, fashnPrepGarmentDataUrl, user?.id])
+  }, [
+    fashnPrep,
+    fashnPrepBusy,
+    fashnPrepCroquis,
+    fashnPrepGarmentDataUrl,
+    fashnRealismBusy,
+    fashnRealismJobId,
+    fashnRealisticPieces,
+    user?.id,
+  ])
 
   const chooseFashionMagic = useCallback(() => {
     setMagicDestinationOpen(false)
@@ -3094,6 +3233,12 @@ export function useStudioEditor() {
     fashnPrepOpen,
     fashnPrepBusy,
     fashnPrep,
+    fashnRealisticPieces,
+    fashnRealismBusy,
+    fashnRealismError,
+    fashnDetailsOpen,
+    toggleFashnDetails,
+    generateFashnRealisticGarment,
     cancelFashnPrep,
     confirmFashnTryOn,
     cancelMagicDestination,

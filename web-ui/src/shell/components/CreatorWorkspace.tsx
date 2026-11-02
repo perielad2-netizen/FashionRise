@@ -12,6 +12,7 @@ import {
   zoomPercent,
 } from '@/lib/viewportTransform'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
+import { FashnGarmentReview } from '@/components/studio/FashnGarmentReview'
 import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { BrushControls } from '@/shell/components/BrushControls'
@@ -408,8 +409,13 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
 
       {editor.fashnPrepOpen && editor.fashnPrep ? (
         <ConfirmDialog
-          title="Review FASHN garment plate"
-          busy={editor.fashnPrepBusy}
+          title={
+            editor.fashnRealisticPieces?.length
+              ? 'Accept realistic garment'
+              : 'Review garment for FASHN'
+          }
+          busy={editor.fashnPrepBusy || editor.fashnRealismBusy}
+          scrollable
           onEscape={editor.cancelFashnPrep}
           actions={[
             {
@@ -417,35 +423,50 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               onClick: editor.cancelFashnPrep,
               variant: 'ghost',
             },
-            {
-              label: `Run FASHN (${editor.fashnPrep.estimate_cents}¢ · ${editor.fashnPrep.fashn_calls} credit${editor.fashnPrep.fashn_calls === 1 ? '' : 's'})`,
-              onClick: () => {
-                void editor.confirmFashnTryOn()
-              },
-              variant: 'primary',
-              disabled: !editor.fashnPrep.configured || !editor.fashnPrep.live_http,
-            },
+            ...(editor.fashnRealisticPieces?.length
+              ? [
+                  {
+                    label: `Regenerate garment (~${editor.fashnPrep.realism_estimate_cents ?? 8}¢)`,
+                    onClick: () => {
+                      void editor.generateFashnRealisticGarment()
+                    },
+                    variant: 'ghost' as const,
+                    disabled:
+                      editor.fashnPrep.quality_ok === false ||
+                      editor.fashnPrep.openai_live_http === false,
+                  },
+                  {
+                    label: `Accept & Run FASHN (~${editor.fashnPrep.estimate_cents}¢ · ${editor.fashnPrep.fashn_calls} credit${editor.fashnPrep.fashn_calls === 1 ? '' : 's'})`,
+                    onClick: () => {
+                      void editor.confirmFashnTryOn()
+                    },
+                    variant: 'primary' as const,
+                    disabled: !editor.fashnPrep.configured || !editor.fashnPrep.live_http,
+                  },
+                ]
+              : [
+                  {
+                    label: `Generate realistic garment (~${editor.fashnPrep.realism_estimate_cents ?? 8}¢)`,
+                    onClick: () => {
+                      void editor.generateFashnRealisticGarment()
+                    },
+                    variant: 'primary' as const,
+                    disabled:
+                      editor.fashnPrep.quality_ok === false ||
+                      editor.fashnPrep.openai_live_http === false ||
+                      !editor.fashnPrep.configured,
+                  },
+                ]),
           ]}
         >
-          <p>{editor.fashnPrep.notice_text}</p>
-          <p>
-            Layout: <strong>{editor.fashnPrep.layout}</strong>. {editor.fashnPrep.notes}
-          </p>
-          <p>
-            Estimated FashionRise reservation about {editor.fashnPrep.estimate_cents}¢ for this run
-            ({editor.fashnPrep.fashn_calls} FASHN credit
-            {editor.fashnPrep.fashn_calls === 1 ? '' : 's'}). No charge until you confirm.
-          </p>
-          {!editor.fashnPrep.live_http ? (
-            <p>FASHN is not live-armed yet (FASHN_TRY_ON_LIVE_HTTP). Confirm is disabled.</p>
-          ) : null}
-          <div style={{ marginTop: 12, textAlign: 'center' }}>
-            <img
-              src={editor.fashnPrep.composite_preview_base64}
-              alt="Prepared FASHN garment reference"
-              style={{ maxWidth: '100%', maxHeight: 360, background: '#fff' }}
-            />
-          </div>
+          <FashnGarmentReview
+            prep={editor.fashnPrep}
+            realisticPieces={editor.fashnRealisticPieces}
+            realismBusy={editor.fashnRealismBusy}
+            realismError={editor.fashnRealismError}
+            detailsOpen={editor.fashnDetailsOpen}
+            onToggleDetails={editor.toggleFashnDetails}
+          />
         </ConfirmDialog>
       ) : null}
 

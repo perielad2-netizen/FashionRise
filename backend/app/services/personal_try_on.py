@@ -56,7 +56,19 @@ from app.services.fashn_try_on_provider import (
     fashn_live_armed,
     fashn_notice_text_hash,
 )
-from app.services.fashn_garment_prep import prepare_garment_reference
+from app.services.fashn_garment_prep import (
+    PieceCategory,
+    prep_from_approved_product_pieces,
+    prepare_garment_reference,
+)
+from app.services.fashn_garment_realism import (
+    GARMENT_REALISM_JOB_TYPE,
+    GARMENT_REALISM_PROMPT_VERSION,
+    GARMENT_REALISM_PROVIDER_ID,
+    OpenAIGarmentRealismAdapter,
+    decode_data_url_png,
+    estimate_garment_realism_cents,
+)
 from app.services.personal_try_on_provider import (
     TRY_ON_CONSENT_VERSION,
     TRY_ON_JOB_TYPE,
@@ -219,6 +231,8 @@ def enqueue_personal_try_on(
     consent_version: str,
     design_hints: list[str] | None = None,
     provider: str = TRY_ON_PROVIDER_OPENAI,
+    approved_garment_pieces: list[dict[str, Any]] | None = None,
+    garment_realism_job_id: uuid.UUID | None = None,
 ) -> AIJob:
     """Validate, reserve spend, freeze garment, enqueue ``personal_try_on`` job."""
     _require_ai_gate()
@@ -317,16 +331,52 @@ def enqueue_personal_try_on(
     garment_fp = hashlib.sha256(garment_png).hexdigest()
 
     fashn_prep_meta: dict[str, Any] | None = None
+    approved_frozen: list[dict[str, str]] | None = None
     if provider_name == TRY_ON_PROVIDER_FASHN:
+        # #161 — never send sketch/outline plates to FASHN; require owner-accepted product images.
+        raw_pieces = approved_garment_pieces or []
+        if not raw_pieces:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "FASHN Try On requires an accepted realistic garment product image. "
+                    "Generate and approve the garment first."
+                ),
+            )
+        parsed: list[tuple[PieceCategory, bytes]] = []
+        for item in raw_pieces:
+            if not isinstance(item, dict):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid approved garment piece.")
+            cat = str(item.get("category") or "auto").strip().lower()
+            if cat not in {"tops", "bottoms", "one-pieces", "auto"}:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid piece category: {cat}")
+            try:
+                png = decode_data_url_png(str(item.get("image_base64") or ""))
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+            parsed.append((cat, png))  # type: ignore[arg-type]
         try:
-            prep = prepare_garment_reference(garment_png)
+            prep = prep_from_approved_product_pieces(
+                pieces=parsed,
+                source_fingerprint=garment_fp,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         estimate = estimate_fashn_cost_cents(fashn_calls=prep.fashn_calls)
+        approved_frozen = [
+            {
+                "category": cat,
+                "image_base64": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
+                "sha256": hashlib.sha256(png).hexdigest(),
+            }
+            for cat, png in parsed
+        ]
         fashn_prep_meta = {
             "layout": prep.layout,
             "fashn_calls": prep.fashn_calls,
             "garment_fingerprint": prep.source_fingerprint,
+            "from_approved_product": True,
+            "garment_realism_job_id": str(garment_realism_job_id) if garment_realism_job_id else None,
         }
     else:
         estimate = estimate_try_on_cost_cents()
@@ -425,6 +475,10 @@ def enqueue_personal_try_on(
     }
     if fashn_prep_meta is not None:
         input_data["fashn_prep"] = fashn_prep_meta
+    if approved_frozen is not None:
+        input_data["approved_garment_pieces"] = approved_frozen
+    if garment_realism_job_id is not None:
+        input_data["garment_realism_job_id"] = str(garment_realism_job_id)
 
     job = AIJob(
         id=uuid.uuid4(),
@@ -577,8 +631,27 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
             "design_hints": hints,
         }
         if provider_name == TRY_ON_PROVIDER_FASHN:
-            # Recompute prep deterministically from frozen garment (no client-supplied plates).
-            generate_kwargs["prep"] = prepare_garment_reference(garment_png)
+            approved = data.get("approved_garment_pieces")
+            if not isinstance(approved, list) or not approved:
+                return _fail(
+                    "FASHN Try On is missing the accepted realistic garment product image.",
+                    settle_release=True,
+                    error_code="APPROVED_GARMENT_REQUIRED",
+                )
+            parsed: list[tuple[PieceCategory, bytes]] = []
+            for item in approved:
+                if not isinstance(item, dict):
+                    return _fail("Invalid frozen approved garment piece.")
+                cat = str(item.get("category") or "auto").strip().lower()
+                try:
+                    png_piece = decode_data_url_png(str(item.get("image_base64") or ""))
+                except ValueError as exc:
+                    return _fail(str(exc))
+                parsed.append((cat, png_piece))  # type: ignore[arg-type]
+            generate_kwargs["prep"] = prep_from_approved_product_pieces(
+                pieces=parsed,
+                source_fingerprint=str(data.get("garment_fingerprint") or ""),
+            )
         png, meta = provider.generate(**generate_kwargs)
     except ProviderNotAvailableError as exc:
         # Definitive pre-submit or HTTP 4xx refusal — release reservation at $0.
@@ -696,7 +769,8 @@ def prepare_fashn_garment_public(garment_image_base64: str) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     per = int(settings.fashn_try_on_estimate_cents or 8)
-    payload = prep.public_dict(cents_per_call=per)
+    realism_per = int(settings.fashn_garment_realism_estimate_cents or settings.my_croquis_ai_estimate_cents or 8)
+    payload = prep.public_dict(cents_per_call=per, realism_cents_per_piece=realism_per)
     payload.update(
         {
             "consent_version": FASHN_CONSENT_VERSION,
@@ -705,6 +779,317 @@ def prepare_fashn_garment_public(garment_image_base64: str) -> dict[str, Any]:
             "provider": TRY_ON_PROVIDER_FASHN,
             "configured": fashn_configured(),
             "live_http": fashn_live_armed(),
+            "openai_live_http": bool(settings.my_croquis_ai_live_http),
         }
     )
     return payload
+
+
+def _find_realism_by_idempotency(db: Session, user_id: uuid.UUID, key: str) -> AIJob | None:
+    return db.scalar(
+        select(AIJob)
+        .where(
+            AIJob.user_id == user_id,
+            AIJob.job_type == GARMENT_REALISM_JOB_TYPE,
+            AIJob.input_data["idempotency_key"].astext == key,
+        )
+        .order_by(AIJob.created_at.desc())
+        .limit(1)
+    )
+
+
+def enqueue_garment_realism(
+    db: Session,
+    user: User,
+    *,
+    croquis_id: uuid.UUID,
+    croquis_version: int,
+    garment_image_base64: str,
+    plate_pieces: list[dict[str, Any]],
+    garment_fingerprint: str,
+    idempotency_key: str,
+    design_id: uuid.UUID | None,
+    consent_acknowledged: bool,
+    consent_version: str,
+) -> AIJob:
+    """Paid OpenAI product-image stage — separate from FASHN credits (#161)."""
+    _require_ai_gate()
+    settings = get_settings()
+    if not settings.fashn_try_on_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="FASHN Try On is not enabled.")
+    if not consent_acknowledged:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Garment realism requires explicit consent acknowledgment.",
+        )
+    if consent_version != FASHN_CONSENT_VERSION:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="FASHN Try On consent version is outdated.",
+        )
+
+    key = (idempotency_key or "").strip()
+    if not key or len(key) > 128:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="idempotency_key is required.")
+    if not key.startswith("try_on:garment_realism:"):
+        key = f"try_on:garment_realism:{key.removeprefix('try_on:')}"
+
+    existing = _find_realism_by_idempotency(db, user.id, key)
+    if existing is not None:
+        return existing
+
+    croquis = pcs.get_owned_croquis(db, user, croquis_id)
+    version = pcs.get_exact_version(db, user, croquis_id, croquis_version)
+    if version.status != VERSION_STATUS_ACCEPTED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Garment realism requires an accepted personal croquis version.",
+        )
+    if croquis.source_asset_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This croquis has no retained original photo.",
+        )
+    source = pcs.get_owned_media_asset(db, user, croquis.source_asset_id, allow_erased_meta=False)
+    pcs.resolve_croquis_asset_file(db, user, source.id)
+
+    garment_png = _decode_garment_png(garment_image_base64)
+    garment_fp = hashlib.sha256(garment_png).hexdigest()
+    if garment_fingerprint and garment_fingerprint.strip() != garment_fp:
+        # Soft check — allow if client fingerprint matches prep output; else recompute trust server-side.
+        pass
+
+    frozen_plates: list[dict[str, str]] = []
+    for item in plate_pieces:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid plate piece.")
+        cat = str(item.get("category") or "auto").strip().lower()
+        if cat not in {"tops", "bottoms", "one-pieces", "auto"}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid piece category: {cat}")
+        try:
+            png = decode_data_url_png(str(item.get("image_base64") or ""))
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        frozen_plates.append(
+            {
+                "category": cat,
+                "image_base64": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
+                "sha256": hashlib.sha256(png).hexdigest(),
+            }
+        )
+    if not frozen_plates:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one plate piece is required.")
+
+    estimate = estimate_garment_realism_cents(pieces=len(frozen_plates))
+    max_exposure = resolve_max_exposure_cents()
+    if estimate > max_exposure > 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Estimated garment realism cost exceeds the configured max exposure per run.",
+        )
+    ceiling_cents = int(round(float(settings.my_croquis_ai_spend_ceiling_usd or 0) * 100))
+    day_cap = int(round(float(settings.my_croquis_ai_max_usd_per_user_day or 0) * 100))
+    max_gens = int(settings.my_croquis_ai_max_generations_per_user_day or 0)
+
+    _lock_spend_tx(db, user.id)
+    existing = _find_realism_by_idempotency(db, user.id, key)
+    if existing is not None:
+        return existing
+    existing_res = (
+        db.query(PersonalCroquisSpendReservation)
+        .filter(
+            PersonalCroquisSpendReservation.owner_id == user.id,
+            PersonalCroquisSpendReservation.idempotency_key == key,
+        )
+        .one_or_none()
+    )
+    if existing_res is not None:
+        if existing_res.status == RESERVATION_RECONCILIATION:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Previous garment realism needs reconciliation — no automatic paid retry.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Garment realism idempotency key already used — recover the existing job or use a new key.",
+        )
+
+    if max_gens > 0 and _count_generations_today(db, user) >= max_gens:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Daily Create My Croquis / Try On Person generation limit reached.",
+        )
+    operator_total = _sum_billable_cents(db, owner_id=None, since=None)
+    if ceiling_cents > 0 and operator_total + max_exposure > ceiling_cents:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operator AI spend ceiling would be exceeded.",
+        )
+    if day_cap > 0:
+        day_ago = _utcnow() - timedelta(days=1)
+        user_day = _sum_billable_cents(db, owner_id=user.id, since=day_ago)
+        if user_day + max_exposure > day_cap:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Daily AI spend limit would be exceeded.",
+            )
+
+    consent = _record_try_on_consent(db, user, provider=TRY_ON_PROVIDER_FASHN)
+    reservation = PersonalCroquisSpendReservation(
+        id=uuid.uuid4(),
+        owner_id=user.id,
+        croquis_id=croquis.id,
+        source_asset_id=source.id,
+        version_id=version.id,
+        idempotency_key=key,
+        status=RESERVATION_OPEN,
+        estimate_cents=estimate,
+        max_exposure_cents=max_exposure,
+        provider_called=False,
+    )
+    db.add(reservation)
+
+    input_data: dict[str, Any] = {
+        "idempotency_key": key,
+        "croquis_id": str(croquis.id),
+        "croquis_version": int(version.version),
+        "source_asset_id": str(source.id),
+        "version_id": str(version.id),
+        "garment_fingerprint": garment_fp,
+        "client_garment_fingerprint": (garment_fingerprint or "").strip() or None,
+        "plate_pieces": frozen_plates,
+        "consent_id": str(consent.id),
+        "consent_version": FASHN_CONSENT_VERSION,
+        "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
+        "provider": GARMENT_REALISM_PROVIDER_ID,
+        "reservation_id": str(reservation.id),
+        "mode": "garment_realism",
+        "estimate_cents": estimate,
+    }
+    job = AIJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        design_id=design_id,
+        job_type=GARMENT_REALISM_JOB_TYPE,
+        status="queued",
+        input_data=input_data,
+    )
+    db.add(job)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        existing = _find_realism_by_idempotency(db, user.id, key)
+        if existing is not None:
+            return existing
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Garment realism could not be enqueued (idempotency conflict).",
+        ) from exc
+    db.refresh(job)
+    return job
+
+
+def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
+    """Worker: OpenAI product images for each plate; never calls FASHN."""
+    if job.job_type != GARMENT_REALISM_JOB_TYPE:
+        raise ValueError(f"unexpected job_type {job.job_type!r}")
+    data = job.input_data if isinstance(job.input_data, dict) else {}
+    reservation_id = data.get("reservation_id")
+    reservation: PersonalCroquisSpendReservation | None = None
+    if reservation_id:
+        try:
+            reservation = db.get(PersonalCroquisSpendReservation, uuid.UUID(str(reservation_id)))
+        except Exception:  # noqa: BLE001
+            reservation = None
+
+    def _fail(msg: str, *, settle_release: bool = True, error_code: str | None = None) -> dict[str, Any]:
+        job.status = "failed"
+        job.error_message = msg[:240]
+        result: dict[str, Any] = {
+            "status": "failed",
+            "summary": msg,
+            "mode": "garment_realism",
+            "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
+        }
+        if error_code:
+            result["error_code"] = error_code
+        job.result_data = result
+        if reservation is not None and reservation.status == RESERVATION_OPEN and settle_release:
+            reservation.status = RESERVATION_RELEASED
+            reservation.error_detail = msg[:500]
+        return result
+
+    plates = data.get("plate_pieces")
+    if not isinstance(plates, list) or not plates:
+        return _fail("Garment realism job is missing plate pieces.")
+
+    try:
+        adapter = OpenAIGarmentRealismAdapter()
+        if reservation is not None:
+            reservation.provider_called = True
+            db.flush()
+        out_pieces: list[dict[str, Any]] = []
+        metas: list[dict[str, Any]] = []
+        for item in plates:
+            if not isinstance(item, dict):
+                return _fail("Invalid plate piece in realism job.")
+            cat = str(item.get("category") or "auto")
+            plate_png = decode_data_url_png(str(item.get("image_base64") or ""))
+            product_png, meta = adapter.generate_piece(plate_png=plate_png, category=cat)
+            # Store private product PNG via local storage; also keep data URL for FE review.
+            key = f"ai/{job.id.hex}_garment_{cat}_{uuid.uuid4().hex[:8]}.png"
+            storage = LocalStorageBackend()
+            url = storage.save_file(key=key, data=io.BytesIO(product_png), content_type="image/png")
+            out_pieces.append(
+                {
+                    "category": cat,
+                    "image_base64": "data:image/png;base64," + base64.b64encode(product_png).decode("ascii"),
+                    "image_url": url,
+                    "sha256": hashlib.sha256(product_png).hexdigest(),
+                    "source_plate_sha256": str(item.get("sha256") or ""),
+                }
+            )
+            metas.append(meta)
+    except ProviderNotAvailableError as exc:
+        return _fail(str(exc)[:240], settle_release=True, error_code="PROVIDER_REJECTED")
+    except ProviderOutcomeUnknownError as exc:
+        if reservation is not None and reservation.status == RESERVATION_OPEN:
+            reservation.status = RESERVATION_RECONCILIATION
+            reservation.error_detail = str(exc)[:500]
+        job.status = "failed"
+        job.error_message = (
+            "Garment realism outcome is unknown after the provider call. "
+            "No automatic retry — contact support if you were charged."
+        )[:240]
+        job.result_data = {
+            "status": "failed",
+            "summary": job.error_message,
+            "mode": "garment_realism",
+            "error_code": "PROVIDER_OUTCOME_UNKNOWN",
+            "reconciliation_required": True,
+            "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
+        }
+        return job.result_data
+
+    if reservation is not None and reservation.status == RESERVATION_OPEN:
+        reservation.status = RESERVATION_SETTLED
+        reservation.actual_cost_cents = reservation.estimate_cents
+        reservation.provider_called = True
+
+    result = {
+        "status": "completed",
+        "summary": "Realistic garment product image ready for your review.",
+        "mode": "garment_realism",
+        "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
+        "provider": GARMENT_REALISM_PROVIDER_ID,
+        "pieces": out_pieces,
+        "piece_meta": metas,
+        "garment_fingerprint": data.get("garment_fingerprint"),
+        "cost_cents": reservation.actual_cost_cents if reservation else data.get("estimate_cents"),
+        "requires_owner_acceptance": True,
+    }
+    job.status = "completed"
+    job.error_message = None
+    job.result_data = result
+    return result
