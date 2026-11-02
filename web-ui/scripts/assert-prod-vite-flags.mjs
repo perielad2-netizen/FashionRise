@@ -105,21 +105,22 @@ export function effectiveEnvBool(name, env = process.env) {
  * Returns { frontBack, dualMagic, magicUi, registration } helper ids + values.
  */
 export function extractCompiledGates(bundleText) {
+  // Identifiers may include `_` (Rolldown/esbuild often emits `_S`, `_t`, …).
+  const ID = '[A-Za-z0-9$_]+'
   const bools = Object.fromEntries(
-    [...bundleText.matchAll(/function ([A-Za-z0-9$]+)\(\)\{return(!0|!1)\}/g)].map((m) => [
-      m[1],
-      m[2] === '!0',
-    ]),
+    [...bundleText.matchAll(new RegExp(`function (${ID})\\(\\)\\{return(!0|!1)\\}`, 'g'))].map(
+      (m) => [m[1], m[2] === '!0'],
+    ),
   )
 
-  const fbMatch = bundleText.match(/frontBackEnabled\?\?([A-Za-z0-9$]+)\(\)/)
+  const fbMatch = bundleText.match(new RegExp(`frontBackEnabled\\?\\?(${ID})\\(\\)`))
   if (!fbMatch) {
     throw new Error('compiled bundle missing frontBackEnabled??<helper>()')
   }
   const frontBackId = fbMatch[1]
 
   const dualMatch = bundleText.match(
-    new RegExp(`a=${frontBackId.replace(/\$/g, '\\$')}\\(\\),o=([A-Za-z0-9$]+)\\(\\)`),
+    new RegExp(`a=${frontBackId.replace(/\$/g, '\\$')}\\(\\),o=(${ID})\\(\\)`),
   )
   if (!dualMatch) {
     throw new Error('compiled bundle missing dualMagic helper next to frontBack in Studio hook')
@@ -130,9 +131,11 @@ export function extractCompiledGates(bundleText) {
   // 1) Legacy Studio hook: `,Ze=<helper>(),Qe=`
   // 2) Current: `useRef)(!1),<local>=<helper>(),…===`capturing`` next to magic phase busy check
   const magicMatch =
-    bundleText.match(/,Ze=([A-Za-z0-9$]+)\(\),Qe=/) ||
+    bundleText.match(new RegExp(`,Ze=(${ID})\\(\\),Qe=`)) ||
     bundleText.match(
-      /useRef\)\(!1\),([A-Za-z0-9$]+)=([A-Za-z0-9$]+)\(\),[A-Za-z0-9$]+=[A-Za-z0-9$]+===`capturing`/,
+      new RegExp(
+        `useRef\\)\\(!1\\),(${ID})=(${ID})\\(\\),${ID}=${ID}===\`capturing\``,
+      ),
     )
   if (!magicMatch) {
     throw new Error(
@@ -141,7 +144,7 @@ export function extractCompiledGates(bundleText) {
   }
   const magicId = magicMatch[2] || magicMatch[1]
 
-  const regMatch = bundleText.match(/path:`\/register`,element:([A-Za-z0-9$]+)\(\)\?/)
+  const regMatch = bundleText.match(new RegExp(`path:\`/register\`,element:(${ID})\\(\\)\\?`))
   if (!regMatch) {
     throw new Error('compiled bundle missing registration gate on /register route')
   }
