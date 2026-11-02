@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#174 open personal underlay + high-slit dress try-on** — shipping · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls.)
+**Last updated:** 2026-11-02 (**#174 open personal underlay + high-slit dress try-on** **DEPLOYED** App **`1cf0e2b3`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2.1** (ordinary outfits + trouser **or** high-slit-dress geometry hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
@@ -11,12 +11,37 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **#174 pending deploy** — open-from-My-Designs personal underlay reload · prior App **`751840fb`** (#173 Max UI) kept until switch. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. |
+| Frontend (`web-ui`) | **`1cf0e2b3`** — release `/var/www/fashionrise/releases/1cf0e2b3` · #174 personal underlay reload on open · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`751840fb`** kept for rollback. |
 | Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2.1`** + high-slit dress geometry hints · structure review **v3** · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → new release |
+| Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → **`1cf0e2b3`** |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
+
+## #174 Open personal underlay + high-slit dress Try On — DEPLOYED (2026-11-02)
+
+### Bugs
+1. **Open from My Designs** with a personal-croquis save showed ink without the croquis underlay when the Studio pin was already the same id/version (`applyDocument` cleared the object URL; the load effect did not re-run).
+2. **Regular OpenAI Try On** turned high-slit dresses into jumpsuit/pants. Image 2 is garment-only (no croquis pixels by design). Geometry mis-classified thigh-high slits as trousers and injected “jumpsuit — not a dress”; V2 also fought designed openings (“expose body beyond image 1”).
+
+### Fix
+1. FE: `personalUnderlayReloadToken` bumped in `applyDocument` and included in the personal underlay load effect deps.
+2. BE: detect `looks_like_high_slit_dress` (connected hip + later asymmetric dual lobes) → dress/slit hints instead of trousers/jumpsuit.
+3. Prompt **`try-on-person-v2.1`**: fashion slits/cutouts from image 2 are opaque garment styling; do not convert a slit dress into trousers/jumpsuit. No V3 swimwear wording.
+
+### Deployed
+
+| Field | Value |
+|---|---|
+| App / FE / BE tip | **`1cf0e2b3`** (`1cf0e2b3b8fcaf603448e56db66b6a0d28713965`) |
+| API / worker | `fashionrise-api` + `fashionrise-ai-worker` restarted · `/health` ok |
+| Alembic | **`015`** unchanged |
+| Rollback | `/var/backups/fashionrise/underlay-dress-174-*/ROLLBACK.sh` → FE **`751840fb`** + prior BE files |
+
+### Owner verify (STOP — no agent paid Try On)
+1. Hard-refresh until App **`1cf0e2b3`**.
+2. My Designs → Open **green leg open dress** (or any My Croquis save) → croquis underlay must appear; Models shows Active on Create My Croquis.
+3. Regular Try On on the high-slit green dress — expect dress + slit, not pants/jumpsuit (owner-paid only).
 
 ## #173 Owner-only FASHN Try-On Max experimental lane — DEPLOYED (2026-11-02)
 
