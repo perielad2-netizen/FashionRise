@@ -444,6 +444,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
                   },
                   {
                     label:
+                      editor.fashnOwnerExperimentAllowed &&
                       editor.fashnMaxOwnerAllowed &&
                       editor.fashnExperimentProvider === 'fashn_max'
                         ? `Accept & Try On Max (${editor.fashnMaxMode})`
@@ -485,9 +486,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
             detailsOpen={editor.fashnDetailsOpen}
             onToggleDetails={editor.toggleFashnDetails}
             experiment={
-              editor.fashnMaxOwnerAllowed
+              editor.fashnOwnerExperimentAllowed
                 ? {
                     ownerAllowed: true,
+                    maxSelectable: Boolean(editor.fashnMaxOwnerAllowed),
+                    maxUnavailableReason: editor.fashnMaxUnavailableReason,
                     provider: editor.fashnExperimentProvider,
                     onProviderChange: editor.setFashnExperimentProvider,
                     mode: editor.fashnMaxMode,

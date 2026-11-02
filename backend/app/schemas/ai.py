@@ -395,10 +395,13 @@ class PersonalTryOnPreflightRead(BaseModel):
     fashn_realism_estimate_cents_per_piece: int | None = None
     fashn_combined_estimate_cents_one_piece: int | None = None
     fashn_one_click: bool = False
-    # Owner-only Try-On Max experiment (#173) — server-gated; FE must not invent access.
+    # Owner-only Try-On Max experiment (#173/#177) — server-gated; FE must not invent access.
     fashn_max_enabled: bool = False
     fashn_max_configured: bool = False
     fashn_max_live_http: bool = False
+    # #177 — allowlist alone unlocks owner v1.6 experiment UI (independent of Max live).
+    fashn_owner_experiment_allowed: bool = False
+    # Max selectable only when allowlisted AND Max configured + live-armed.
     fashn_max_owner_allowed: bool = False
     fashn_max_prompt_version: str | None = None
     fashn_max_default_prompt: str | None = None

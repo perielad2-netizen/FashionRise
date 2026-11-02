@@ -1137,6 +1137,9 @@ def try_on_preflight_public(*, user: User | None = None) -> dict[str, Any]:
         or 8
     )
     max_ready = fashn_max_configured()
+    max_live = bool(fashn_max_live_armed())
+    # #177 — owner experiment authorization is allowlist-only (v1.6 knobs / reuse catalog).
+    # Max selection still requires configured + live-armed Max flags.
     max_owner = bool(user is not None and user_on_fashn_max_allowlist(user))
     bal_credits = fashn_max_credits_per_image(generation_mode="balanced", resolution="1k")
     qual_credits = fashn_max_credits_per_image(generation_mode="quality", resolution="1k")
@@ -1163,8 +1166,9 @@ def try_on_preflight_public(*, user: User | None = None) -> dict[str, Any]:
         "fashn_one_click": True,
         "fashn_max_enabled": bool(getattr(settings, "fashn_try_on_max_enabled", False)),
         "fashn_max_configured": max_ready,
-        "fashn_max_live_http": bool(fashn_max_live_armed()),
-        "fashn_max_owner_allowed": bool(max_ready and fashn_max_live_armed() and max_owner),
+        "fashn_max_live_http": max_live,
+        "fashn_owner_experiment_allowed": bool(max_owner),
+        "fashn_max_owner_allowed": bool(max_owner and max_ready and max_live),
         "fashn_max_prompt_version": FASHN_MAX_PROMPT_VERSION,
         "fashn_max_default_prompt": DEFAULT_MAX_PROMPT,
         "fashn_max_default_generation_mode": "balanced",

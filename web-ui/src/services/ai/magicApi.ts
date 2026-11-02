@@ -159,10 +159,13 @@ export type PersonalTryOnPreflight = {
   fashn_realism_estimate_cents_per_piece?: number | null
   fashn_combined_estimate_cents_one_piece?: number | null
   fashn_one_click?: boolean
-  /** Owner-only Try-On Max experiment (#173) — server-gated. */
+  /** Owner-only Try-On Max experiment (#173/#177) — server-gated. */
   fashn_max_enabled?: boolean
   fashn_max_configured?: boolean
   fashn_max_live_http?: boolean
+  /** #177 — allowlist alone; unlocks owner v1.6 experiment UI. */
+  fashn_owner_experiment_allowed?: boolean
+  /** Max selectable when allowlisted AND Max configured + live. */
   fashn_max_owner_allowed?: boolean
   fashn_max_prompt_version?: string | null
   fashn_max_default_prompt?: string | null

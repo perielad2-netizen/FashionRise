@@ -296,8 +296,10 @@ export function useStudioEditor() {
   const [fashnRealismBusy, setFashnRealismBusy] = useState(false)
   const [fashnRealismError, setFashnRealismError] = useState<string | null>(null)
   const [fashnDetailsOpen, setFashnDetailsOpen] = useState(false)
-  /** #173 owner-only Try-On Max experiment controls (server-gated via preflight). */
+  /** #173/#177 owner experiment — allowlist unlocks UI; Max needs live-armed separately. */
+  const [fashnOwnerExperimentAllowed, setFashnOwnerExperimentAllowed] = useState(false)
   const [fashnMaxOwnerAllowed, setFashnMaxOwnerAllowed] = useState(false)
+  const [fashnMaxUnavailableReason, setFashnMaxUnavailableReason] = useState<string | null>(null)
   const [fashnExperimentProvider, setFashnExperimentProvider] = useState<'fashn' | 'fashn_max'>(
     'fashn',
   )
@@ -377,6 +379,12 @@ export function useStudioEditor() {
 
   useEffect(() => {
     bindPersonalCroquisCacheToUser(user?.id ?? null)
+    // #177 — never reuse another account's Try On preflight / owner experiment gates.
+    tryOnPreflightRef.current = null
+    setFashnOwnerExperimentAllowed(false)
+    setFashnMaxOwnerAllowed(false)
+    setFashnMaxUnavailableReason(null)
+    setFashnExperimentProvider('fashn')
     return () => {
       clearPersonalCroquisCache()
       setPersonalObjectUrl(null)
@@ -1776,11 +1784,9 @@ export function useStudioEditor() {
         }
         if (controller.signal.aborted) return
 
-        let preflight = tryOnPreflightRef.current
-        if (!preflight) {
-          preflight = await fetchPersonalTryOnPreflight(controller.signal)
-          tryOnPreflightRef.current = preflight
-        }
+        // #177 — always refresh preflight for this run (do not keep stale owner/Max gates).
+        const preflight = await fetchPersonalTryOnPreflight(controller.signal)
+        tryOnPreflightRef.current = preflight
         if (!preflight.enabled) {
           setMagicPhase('failed')
           setMagicError('Try On Person is not available right now.')
@@ -1801,7 +1807,23 @@ export function useStudioEditor() {
             )
             return
           }
-          setFashnMaxOwnerAllowed(Boolean(preflight.fashn_max_owner_allowed))
+          const ownerExperiment = Boolean(
+            preflight.fashn_owner_experiment_allowed ?? preflight.fashn_max_owner_allowed,
+          )
+          const maxSelectable = Boolean(preflight.fashn_max_owner_allowed)
+          setFashnOwnerExperimentAllowed(ownerExperiment)
+          setFashnMaxOwnerAllowed(maxSelectable)
+          setFashnMaxUnavailableReason(
+            ownerExperiment && !maxSelectable
+              ? !preflight.fashn_max_enabled
+                ? 'Try-On Max is disabled on this server (FASHN_TRY_ON_MAX_ENABLED).'
+                : !preflight.fashn_max_configured
+                  ? 'Try-On Max is not fully configured yet.'
+                  : !preflight.fashn_max_live_http
+                    ? 'Try-On Max is configured but not live-armed (FASHN_TRY_ON_MAX_LIVE_HTTP).'
+                    : 'Try-On Max is not available for this session.'
+              : null,
+          )
           setFashnMaxSoftBudgetCredits(preflight.fashn_max_soft_budget_credits ?? null)
           setFashnMaxCreditsBalanced(preflight.fashn_max_credits_balanced_1k ?? null)
           setFashnMaxCreditsQuality(preflight.fashn_max_credits_quality_1k ?? null)
@@ -1847,10 +1869,10 @@ export function useStudioEditor() {
           setFashnDetailsOpen(false)
           setFashnSelectedAcceptedJobId(null)
 
-          // #176 — owner comparison lane: open review immediately so accepted garments
+          // #176/#177 — owner comparison lane: open review immediately so accepted garments
           // can be reused without another OpenAI realism charge. Ordinary customers keep
-          // the #169 auto-realism → Accept path.
-          if (preflight.fashn_max_owner_allowed) {
+          // the #169 auto-realism → Accept path. Gate on allowlist (not Max live).
+          if (ownerExperiment) {
             setFashnRealisticPieces(null)
             setFashnRealismJobId(null)
             setFashnPrepOpen(true)
@@ -2316,8 +2338,14 @@ export function useStudioEditor() {
     }
     const useMax = fashnExperimentProvider === 'fashn_max'
     if (useMax && !fashnMaxOwnerAllowed) {
-      setFashnRealismError('Try-On Max is owner-only and is not enabled for this account.')
+      setFashnRealismError(
+        fashnMaxUnavailableReason ||
+          'Try-On Max is not live-armed for this owner yet. Use FASHN v1.6, or ask an operator to enable Max live HTTP.',
+      )
       return
+    }
+    if (!useMax && fashnOwnerExperimentAllowed === false && fashnMaxOwnerAllowed === false) {
+      // Ordinary customers never send v1.6 experiment knobs; keep defaults server-side.
     }
 
     magicInFlightRef.current = true
@@ -2390,7 +2418,7 @@ export function useStudioEditor() {
               fashnMaxPrompt: fashnMaxPrompt || null,
               fashnMaxSeed: 42,
             }
-          : fashnMaxOwnerAllowed
+          : fashnOwnerExperimentAllowed
             ? {
                 fashnV16Category,
                 fashnV16SegmentationFree,
@@ -2452,7 +2480,9 @@ export function useStudioEditor() {
     fashnRealismJobId,
     fashnRealisticPieces,
     fashnExperimentProvider,
+    fashnOwnerExperimentAllowed,
     fashnMaxOwnerAllowed,
+    fashnMaxUnavailableReason,
     fashnMaxMode,
     fashnMaxResolution,
     fashnMaxPrompt,
@@ -3637,7 +3667,9 @@ export function useStudioEditor() {
     fashnRealismError,
     fashnDetailsOpen,
     toggleFashnDetails,
+    fashnOwnerExperimentAllowed,
     fashnMaxOwnerAllowed,
+    fashnMaxUnavailableReason,
     fashnExperimentProvider,
     setFashnExperimentProvider,
     fashnMaxMode,

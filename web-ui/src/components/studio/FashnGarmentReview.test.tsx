@@ -193,7 +193,43 @@ describe('FASHN Accept dialog actions (#169)', () => {
   })
 })
 
-describe('FASHN owner experiment panel (#176)', () => {
+const experimentBase = {
+  mode: 'balanced' as const,
+  onModeChange: () => undefined,
+  resolution: '1k' as const,
+  onResolutionChange: () => undefined,
+  prompt: '',
+  onPromptChange: () => undefined,
+  promptOpen: false,
+  onTogglePrompt: () => undefined,
+  softBudgetCredits: 90,
+  creditsBalanced: 2,
+  creditsQuality: 3,
+  estimateBalancedCents: 16,
+  estimateQualityCents: 24,
+  v16Category: 'one-pieces' as const,
+  onV16CategoryChange: () => undefined,
+  v16SegmentationFree: true,
+  onV16SegmentationFreeChange: () => undefined,
+  v16Mode: 'balanced' as const,
+  onV16ModeChange: () => undefined,
+  v16Seed: 42,
+  onV16SeedChange: () => undefined,
+  acceptedOptions: [
+    {
+      jobId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      label: 'accepted · one-pieces',
+      pieceCount: 1,
+      categories: ['one-pieces'],
+    },
+  ],
+  selectedAcceptedJobId: null as string | null,
+  onSelectAcceptedJobId: () => undefined,
+  onLoadAcceptedJob: () => undefined,
+  acceptedLoadBusy: false,
+}
+
+describe('FASHN owner experiment panel (#176/#177)', () => {
   it('shows Max + v1.6 controls for owner even before realistic pieces exist', () => {
     const onProviderChange = vi.fn()
     render(
@@ -207,37 +243,11 @@ describe('FASHN owner experiment panel (#176)', () => {
         detailsOpen={false}
         onToggleDetails={() => undefined}
         experiment={{
+          ...experimentBase,
           ownerAllowed: true,
+          maxSelectable: true,
           provider: 'fashn',
           onProviderChange,
-          mode: 'balanced',
-          onModeChange: () => undefined,
-          resolution: '1k',
-          onResolutionChange: () => undefined,
-          prompt: '',
-          onPromptChange: () => undefined,
-          promptOpen: false,
-          onTogglePrompt: () => undefined,
-          softBudgetCredits: 90,
-          creditsBalanced: 2,
-          creditsQuality: 3,
-          estimateBalancedCents: 16,
-          estimateQualityCents: 24,
-          v16Category: 'one-pieces',
-          onV16CategoryChange: () => undefined,
-          v16SegmentationFree: true,
-          onV16SegmentationFreeChange: () => undefined,
-          v16Mode: 'balanced',
-          onV16ModeChange: () => undefined,
-          v16Seed: 42,
-          onV16SeedChange: () => undefined,
-          acceptedOptions: [
-            { jobId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', label: 'accepted · one-pieces', pieceCount: 1, categories: ['one-pieces'] },
-          ],
-          selectedAcceptedJobId: null,
-          onSelectAcceptedJobId: () => undefined,
-          onLoadAcceptedJob: () => undefined,
-          acceptedLoadBusy: false,
         }}
       />,
     )
@@ -245,10 +255,91 @@ describe('FASHN owner experiment panel (#176)', () => {
     expect(screen.getByTestId('fashn-v16-controls')).toBeInTheDocument()
     expect(screen.getByTestId('fashn-reuse-accepted')).toBeInTheDocument()
     const maxRadio = screen
-      .getByText('FASHN Try-On Max')
+      .getByText(/FASHN Try-On Max/)
       .closest('label')!
       .querySelector('input') as HTMLInputElement
+    expect(maxRadio).not.toBeDisabled()
     fireEvent.click(maxRadio)
     expect(onProviderChange).toHaveBeenCalledWith('fashn_max')
+  })
+
+  it('hides the whole Owner experiment section for non-owners (#177)', () => {
+    render(
+      <FashnGarmentReview
+        prep={prep({ layout: 'one_piece', pieces: [
+          { category: 'one-pieces', image_base64: TINY, bbox: [0, 0, 10, 10], opaque_pixels: 40 },
+        ], fashn_calls: 1, estimate_cents: 8, realism_calls: 1, realism_estimate_cents: 8, combined_estimate_cents: 16 })}
+        realisticPieces={null}
+        realismBusy={false}
+        realismError={null}
+        detailsOpen={false}
+        onToggleDetails={() => undefined}
+        experiment={null}
+      />,
+    )
+    expect(screen.queryByTestId('fashn-max-experiment')).not.toBeInTheDocument()
+  })
+
+  it('keeps v1.6 controls when Max is not selectable and shows unavailable status (#177)', () => {
+    const onProviderChange = vi.fn()
+    render(
+      <FashnGarmentReview
+        prep={prep({ layout: 'one_piece', pieces: [
+          { category: 'one-pieces', image_base64: TINY, bbox: [0, 0, 10, 10], opaque_pixels: 40 },
+        ], fashn_calls: 1, estimate_cents: 8, realism_calls: 1, realism_estimate_cents: 8, combined_estimate_cents: 16 })}
+        realisticPieces={null}
+        realismBusy={false}
+        realismError={null}
+        detailsOpen={false}
+        onToggleDetails={() => undefined}
+        experiment={{
+          ...experimentBase,
+          ownerAllowed: true,
+          maxSelectable: false,
+          maxUnavailableReason:
+            'Try-On Max is configured but not live-armed (FASHN_TRY_ON_MAX_LIVE_HTTP).',
+          provider: 'fashn',
+          onProviderChange,
+        }}
+      />,
+    )
+    expect(screen.getByTestId('fashn-max-experiment')).toBeInTheDocument()
+    expect(screen.getByTestId('fashn-v16-controls')).toBeInTheDocument()
+    expect(screen.getByTestId('fashn-max-unavailable')).toHaveTextContent(/not live-armed/)
+    const maxRadio = screen
+      .getByText(/FASHN Try-On Max/)
+      .closest('label')!
+      .querySelector('input') as HTMLInputElement
+    expect(maxRadio).toBeDisabled()
+    fireEvent.click(maxRadio)
+    expect(onProviderChange).not.toHaveBeenCalled()
+  })
+
+  it('shows Max Balanced/Quality + prompt when Max is selected (#177)', () => {
+    render(
+      <FashnGarmentReview
+        prep={prep({ layout: 'one_piece', pieces: [
+          { category: 'one-pieces', image_base64: TINY, bbox: [0, 0, 10, 10], opaque_pixels: 40 },
+        ], fashn_calls: 1, estimate_cents: 8, realism_calls: 1, realism_estimate_cents: 8, combined_estimate_cents: 16 })}
+        realisticPieces={null}
+        realismBusy={false}
+        realismError={null}
+        detailsOpen={false}
+        onToggleDetails={() => undefined}
+        experiment={{
+          ...experimentBase,
+          ownerAllowed: true,
+          maxSelectable: true,
+          provider: 'fashn_max',
+          onProviderChange: () => undefined,
+          prompt: 'preserve garment fidelity',
+          promptOpen: true,
+        }}
+      />,
+    )
+    expect(screen.getByTestId('fashn-max-controls')).toBeInTheDocument()
+    expect(screen.getByText(/Balanced \(default/)).toBeInTheDocument()
+    expect(screen.getByText(/Quality \(/)).toBeInTheDocument()
+    expect(screen.getByTestId('fashn-max-prompt')).toHaveValue('preserve garment fidelity')
   })
 })
