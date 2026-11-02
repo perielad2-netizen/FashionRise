@@ -207,16 +207,23 @@ def test_accept_endpoint_stamps_owner_accepted(client, monkeypatch, db_session):
     _accept_personal_croquis(client, tokens, monkeypatch, db_session, croquis["id"], "g-accept169")
     owner = db_session.query(User).filter(User.email == "accept169@example.com").one()
     job = _seed_realism_job(db_session, owner_id=owner.id, owner_accepted=False)
+    job_id = job.id
 
     r = client.post(
         f"{TRY_ON}/fashn/garment-realism/{job.id}/accept",
         headers=_auth(tokens),
     )
     assert r.status_code == 200, r.text
-    db_session.refresh(job)
+    # Expire so we re-read what commit persisted (not just the in-memory Accept object).
+    db_session.expire_all()
+    job = db_session.get(type(job), job_id)
+    assert job is not None
     assert job.result_data.get("owner_accepted") is True
     assert job.result_data.get("requires_owner_acceptance") is True
     assert "owner_accepted_at" in job.result_data
+    # Response body must also reflect the stamp (prior bug: 200 with memory-only True).
+    body = r.json().get("result_data") or {}
+    assert body.get("owner_accepted") is True
 
     # Idempotent re-accept.
     r2 = client.post(

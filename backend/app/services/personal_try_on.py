@@ -20,6 +20,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import get_settings
 from app.models.ai_job import AIJob
@@ -1429,7 +1430,12 @@ def accept_garment_realism_job(db: Session, user: User, job_id: uuid.UUID) -> AI
         "owner_accepted_at": _utcnow().isoformat(),
         "requires_owner_acceptance": True,
     }
+    # JSONB assignment must be marked + committed: get_db() does not auto-commit,
+    # and a bare flush was rolled back on session close (#172 hotfix). Accept then
+    # returned 200 from the in-memory object while FASHN enqueue still saw false.
     job.result_data = updated
+    flag_modified(job, "result_data")
     db.add(job)
-    db.flush()
+    db.commit()
+    db.refresh(job)
     return job
