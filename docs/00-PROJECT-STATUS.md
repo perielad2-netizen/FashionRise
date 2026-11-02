@@ -3,20 +3,54 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#176 Try-On quality opt** **LIVE** · App **`45221226`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-02 (**#177 Owner experiment activation** **LIVE** · App **`55118842`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2.1** (ordinary outfits + trouser **or** high-slit-dress geometry hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Owner-only v1.6 / Max comparison controls + accepted-garment reuse (#176). Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2.1** (ordinary outfits + trouser **or** high-slit-dress geometry hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Owner-only v1.6 / Max comparison controls + accepted-garment reuse (#176/#177). Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`45221226`** — release `/var/www/fashionrise/releases/45221226` · owner experiment panel (v1.6 + Max) when allowlisted; accepted-garment reuse; experiment verdicts. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`1cf0e2b3`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | tip **`45221226`** · OpenAI **`try-on-person-v2.1`** · FASHN v1.6 experiment knobs · accepted realism catalog · experiment verdict · output-moderation copy · Alembic **`015`**. |
+| Frontend (`web-ui`) | **`55118842`** — release `/var/www/fashionrise/releases/55118842` · owner experiment panel when allowlisted (independent of Max live); Max selectable only when configured+live; accepted-garment reuse; experiment verdicts. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`45221226`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | tip **`55118842`** · OpenAI **`try-on-person-v2.1`** · `fashn_owner_experiment_allowed` (allowlist) vs `fashn_max_owner_allowed` (allowlist∧Max ready∧live) · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
-| Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #176) |
-| Nginx | + `GET .../garment-realism/accepted` · + `POST .../{uuid}/experiment-verdict` · Accept regex retained · `current` → **`45221226`** |
+| Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #177) |
+| Nginx | unchanged routes from #176 · `current` → **`55118842`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## #177 Owner experiment activation fix — LIVE (2026-11-02)
+
+### Symptom
+Product Owner on App **`45221226`** saw only the normal FASHN v1.6 Accept flow — no **Owner experiment** section.
+
+### Root cause (no secrets)
+1. **Allowlist mismatch:** `FASHN_TRY_ON_MAX_OWNER_ALLOWLIST` matched a different older account, not the active try-on Product Owner (verified by email fingerprint only).
+2. **Coupled gate:** FE showed the whole experiment panel only when `fashn_max_owner_allowed` was true, and that flag required allowlist **and** Max configured **and** Max live. Max flags were already `true` in prod — the allowlist miss was decisive; the coupled gate would still hide v1.6 experiment knobs if Max live were ever off.
+
+### Fix
+| Change | Detail |
+|---|---|
+| Preflight | `fashn_owner_experiment_allowed` = allowlist only; `fashn_max_owner_allowed` = allowlist ∧ Max configured ∧ Max live |
+| FE | Panel when `owner_experiment_allowed`; Max radio selectable only when `max_owner_allowed`; otherwise explicit unavailable status |
+| Cache | Clear Try On preflight / owner gates on account change; always refresh preflight on FASHN start |
+| Prod allowlist | Appended active Product Owner email + username + uuid facets (idempotent; no PII logged) |
+| Max flags | Unchanged — already `FASHN_TRY_ON_MAX_ENABLED=true` · `FASHN_TRY_ON_MAX_LIVE_HTTP=true` |
+
+### Deployed
+| Field | Value |
+|---|---|
+| App / FE / BE tip | **`55118842`** (`55118842a66f7601583b24a76be2dc057e3b7a38`) |
+| API / worker | restarted · `/health` ok · preflight returns owner/Max gates |
+| Alembic | **`015`** unchanged |
+| #175 spend env | verified preserved |
+| Max env | enabled + live unchanged; allowlist entry count increased |
+| Rollback | `/var/backups/fashionrise/owner-experiment-177-*/ROLLBACK.sh` → FE **`45221226`** + prior BE files + prior allowlist |
+| Agent paid calls | **0** |
+
+### Owner verify (STOP — no agent paid generation)
+1. Hard-refresh until App **`55118842`**.
+2. Magic → FASHN Try On → **Owner experiment** visible with Reuse accepted / FASHN v1.6 / FASHN Try-On Max / Balanced·Quality / Max prompt.
+3. First Max Balanced 1K: load accepted garment → select **FASHN Try-On Max** → **Balanced** · **1k** → Accept & Try On Max → mark verdict. Ordinary accounts must not see the section.
 
 ## #176 Try-On quality optimization + OpenAI refusal diagnosis — LIVE (2026-11-02)
 

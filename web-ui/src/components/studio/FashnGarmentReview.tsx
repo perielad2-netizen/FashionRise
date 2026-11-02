@@ -11,6 +11,9 @@ export type AcceptedRealismOption = {
 
 export type FashnExperimentControls = {
   ownerAllowed: boolean
+  /** #177 — Max selectable only when configured + live for this owner. */
+  maxSelectable: boolean
+  maxUnavailableReason?: string | null
   provider: 'fashn' | 'fashn_max'
   onProviderChange: (provider: 'fashn' | 'fashn_max') => void
   mode: 'balanced' | 'quality'
@@ -200,15 +203,25 @@ export function FashnGarmentReview({
               />{' '}
               FASHN v1.6
             </label>
-            <label style={{ display: 'block' }}>
+            <label style={{ display: 'block', opacity: experiment.maxSelectable ? 1 : 0.7 }}>
               <input
                 type="radio"
                 name="fashn-exp-provider"
                 checked={experiment.provider === 'fashn_max'}
-                onChange={() => experiment.onProviderChange('fashn_max')}
+                disabled={!experiment.maxSelectable}
+                onChange={() => {
+                  if (experiment.maxSelectable) experiment.onProviderChange('fashn_max')
+                }}
               />{' '}
               FASHN Try-On Max
+              {!experiment.maxSelectable ? ' (unavailable)' : ''}
             </label>
+            {!experiment.maxSelectable ? (
+              <p className={styles.hint} data-testid="fashn-max-unavailable" style={{ marginTop: 4 }}>
+                {experiment.maxUnavailableReason ||
+                  'Try-On Max is not live-armed on this server yet. v1.6 experiment controls stay available.'}
+              </p>
+            ) : null}
           </fieldset>
 
           {experiment.provider === 'fashn' ? (
@@ -298,7 +311,7 @@ export function FashnGarmentReview({
           ) : null}
 
           {experiment.provider === 'fashn_max' ? (
-            <>
+            <div data-testid="fashn-max-controls">
               <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
                 <legend className={styles.hint}>Max mode</legend>
                 <label style={{ display: 'inline-block', marginRight: 12 }}>
@@ -358,7 +371,7 @@ export function FashnGarmentReview({
                   aria-label="Try-On Max prompt"
                 />
               ) : null}
-            </>
+            </div>
           ) : null}
 
           {!hasRealistic ? (
