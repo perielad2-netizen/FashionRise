@@ -89,9 +89,15 @@ describe('personal try-on API client', () => {
       layout: 'two_piece',
       fashn_calls: 2,
       estimate_cents: 16,
+      realism_estimate_cents: 16,
+      combined_estimate_cents: 32,
+      quality_ok: true,
       garment_fingerprint: 'abc',
       composite_preview_base64: 'data:image/png;base64,AAAA',
-      pieces: [],
+      pieces: [
+        { category: 'tops', image_base64: 'data:image/png;base64,TOP', bbox: [0, 0, 1, 1], opaque_pixels: 10 },
+        { category: 'bottoms', image_base64: 'data:image/png;base64,BOT', bbox: [0, 0, 1, 1], opaque_pixels: 10 },
+      ],
       notes: 'two',
       consent_version: 'try-on-fashn-preview-v1',
       notice_text: 'fashn notice',
@@ -99,6 +105,7 @@ describe('personal try-on API client', () => {
       provider: 'fashn',
       configured: true,
       live_http: true,
+      openai_live_http: true,
     })
     const prep = await prepareFashnGarmentReference('data:image/png;base64,AAAA')
     expect(apiMock).toHaveBeenCalledWith('/ai/personal-try-on/fashn/prepare', {
@@ -107,6 +114,7 @@ describe('personal try-on API client', () => {
       signal: undefined,
     })
     expect(prep.layout).toBe('two_piece')
+    expect(prep.combined_estimate_cents).toBe(32)
 
     apiMock.mockResolvedValueOnce({ id: 'job-fashn', job_type: 'personal_try_on', status: 'queued' })
     await enqueuePersonalTryOn({
@@ -119,6 +127,11 @@ describe('personal try-on API client', () => {
       consentAcknowledged: true,
       consentVersion: 'try-on-fashn-preview-v1',
       provider: 'fashn',
+      approvedGarmentPieces: [
+        { category: 'tops', image_base64: 'data:image/png;base64,TOPR' },
+        { category: 'bottoms', image_base64: 'data:image/png;base64,BOTR' },
+      ],
+      garmentRealismJobId: 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee',
     })
     expect(apiMock).toHaveBeenLastCalledWith(
       '/ai/personal-try-on',
@@ -126,6 +139,7 @@ describe('personal try-on API client', () => {
         body: expect.objectContaining({
           provider: 'fashn',
           consent_version: 'try-on-fashn-preview-v1',
+          approved_garment_pieces: expect.any(Array),
         }),
       }),
     )

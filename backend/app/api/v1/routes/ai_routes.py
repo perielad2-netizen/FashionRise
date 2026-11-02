@@ -11,6 +11,7 @@ from app.schemas.ai import (
     AIJobCreate,
     AIJobRead,
     MagicOperationJobsRead,
+    PersonalGarmentRealismBody,
     PersonalTryOnBody,
     PersonalTryOnFashnPrepareBody,
     PersonalTryOnFashnPrepareRead,
@@ -142,6 +143,36 @@ def personal_try_on_fashn_prepare(
 
 
 @router.post(
+    "/personal-try-on/fashn/garment-realism",
+    response_model=AIJobRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("20/minute")
+def personal_try_on_garment_realism(
+    request: Request,
+    user: CurrentUser,
+    body: PersonalGarmentRealismBody,
+    db: Session = Depends(get_db),
+) -> AIJobRead:
+    """Enqueue OpenAI realistic garment product images (owner review before FASHN)."""
+    _ = request.url
+    job = try_on_service.enqueue_garment_realism(
+        db,
+        user,
+        croquis_id=body.croquis_id,
+        croquis_version=body.croquis_version,
+        garment_image_base64=body.garment_image_base64,
+        plate_pieces=[p.model_dump() for p in body.plate_pieces],
+        garment_fingerprint=body.garment_fingerprint,
+        idempotency_key=body.idempotency_key,
+        design_id=body.design_id,
+        consent_acknowledged=body.consent_acknowledged,
+        consent_version=body.consent_version,
+    )
+    return AIJobRead.from_job(job)
+
+
+@router.post(
     "/personal-try-on",
     response_model=AIJobRead,
     status_code=status.HTTP_201_CREATED,
@@ -169,6 +200,12 @@ def personal_try_on(
         consent_version=body.consent_version,
         design_hints=body.design_hints,
         provider=body.provider,
+        approved_garment_pieces=(
+            [p.model_dump() for p in body.approved_garment_pieces]
+            if body.approved_garment_pieces
+            else None
+        ),
+        garment_realism_job_id=body.garment_realism_job_id,
     )
     return AIJobRead.from_job(job)
 

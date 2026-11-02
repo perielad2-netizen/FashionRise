@@ -15,21 +15,41 @@ type Props = {
   /** When provided, Escape triggers it. Omit for decisions that must be made explicitly. */
   onEscape?: () => void
   busy?: boolean
+  /**
+   * Viewport-bounded dialog with scrollable body and sticky action footer.
+   * Required for tall FASHN garment review on mobile (#161).
+   */
+  scrollable?: boolean
 }
 
-export function ConfirmDialog({ title, children, actions, onEscape, busy = false }: Props) {
+export function ConfirmDialog({
+  title,
+  children,
+  actions,
+  onEscape,
+  busy = false,
+  scrollable = false,
+}: Props) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
+  const actionsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null
     const node = dialogRef.current
-    const primary = node?.querySelector<HTMLButtonElement>('button[data-variant="primary"]:not(:disabled)')
-    ;(primary ?? node)?.focus()
+    const primary = node?.querySelector<HTMLButtonElement>(
+      'button[data-variant="primary"]:not(:disabled)',
+    )
+    // Focus primary without forcing a scroll that hides content on short viewports —
+    // scroll the sticky footer into view instead when scrollable.
+    ;(primary ?? node)?.focus({ preventScroll: scrollable })
+    if (scrollable && typeof actionsRef.current?.scrollIntoView === 'function') {
+      actionsRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }
     return () => {
       if (previous && document.contains(previous)) previous.focus()
     }
-  }, [])
+  }, [scrollable])
 
   useEffect(() => {
     if (!onEscape) return
@@ -47,18 +67,19 @@ export function ConfirmDialog({ title, children, actions, onEscape, busy = false
     <div className={styles.scrim} role="presentation">
       <div
         ref={dialogRef}
-        className={styles.dialog}
+        className={scrollable ? `${styles.dialog} ${styles.dialogScrollable}` : styles.dialog}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-busy={busy || undefined}
         tabIndex={-1}
+        data-scrollable={scrollable || undefined}
       >
         <h2 id={titleId} className={styles.title}>
           {title}
         </h2>
         <div className={styles.body}>{children}</div>
-        <div className={styles.actions}>
+        <div ref={actionsRef} className={styles.actions} data-testid="confirm-dialog-actions">
           {actions.map((action) => (
             <button
               key={action.label}
@@ -82,3 +103,5 @@ export function ConfirmDialog({ title, children, actions, onEscape, busy = false
     </div>
   )
 }
+
+export { styles as confirmDialogStyles }

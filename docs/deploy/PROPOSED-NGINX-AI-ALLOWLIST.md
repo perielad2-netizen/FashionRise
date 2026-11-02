@@ -109,6 +109,20 @@ location = /api/v1/ai/personal-try-on/fashn/prepare {
     add_header Cache-Control "no-store" always;
 }
 
+location = /api/v1/ai/personal-try-on/fashn/garment-realism {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 180s;
+    client_max_body_size 16m;
+    add_header Cache-Control "no-store" always;
+}
+
 # Job status + authenticated image (GET only). Must be regex so it beats
 # the plain prefix deny below (do not mark the deny with ^~).
 location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {

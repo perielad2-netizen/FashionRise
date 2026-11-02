@@ -131,6 +131,8 @@ class Settings(BaseSettings):
     fashn_try_on_live_http: bool = False
     # Soft estimate per FASHN credit (~$0.075 on-demand ≈ 8¢). Two-piece = 2×.
     fashn_try_on_estimate_cents: int = 8
+    # Soft estimate per OpenAI garment-realism images.edit (one call per plate).
+    fashn_garment_realism_estimate_cents: int = 8
     fashn_api_base_url: str = "https://api.fashn.ai"
     fashn_poll_interval_seconds: float = 2.0
     fashn_poll_timeout_seconds: float = 120.0
