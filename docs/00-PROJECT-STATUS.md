@@ -54,9 +54,19 @@
 
 Hard-refresh new App SHA → same green jumpsuit → **Try On Person (OpenAI)** once. Expect trouser hints in job + no silent flare presented as faithful if soft review fails. For FASHN: jumpsuit should **block at prep** with an explicit message (use OpenAI path). Swimwear two-piece Accept should work after nginx fix.
 
+### Deployed
+
+| Field | Value |
+|---|---|
+| App / FE / BE / worker SHA | **`dcee9eac31ea6891177911896036542b321d4581`** (App **`dcee9eac`**) |
+| Alembic | **`015`** (unchanged) |
+| Nginx | Accept regex allowlisted (quoted) · health/ready **200** |
+| Provider calls this window | **0** |
+| Backup / rollback | `/var/backups/fashionrise/p0-170-jumpsuit-deploy-20261102T134040Z/ROLLBACK.sh` → FE **`6ef5c109`** |
+
 ### Rollback
 
-See deploy backup `ROLLBACK.sh` under `/var/backups/fashionrise/p0-170-*-deploy-*/` → FE **`6ef5c109`** + prior BE overlays + prior nginx.
+`/var/backups/fashionrise/p0-170-jumpsuit-deploy-20261102T134040Z/ROLLBACK.sh` → FE **`6ef5c109`** + prior BE overlays + prior nginx.
 
 ## #169 Restore manual garment approval before FASHN — DEPLOYED (2026-11-02)
 

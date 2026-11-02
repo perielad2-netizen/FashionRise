@@ -48,7 +48,7 @@ location = /api/v1/ai/personal-try-on/fashn/garment-realism {
     proxy_pass http://127.0.0.1:8010;
 }
 
-location ~ ^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$ {
+location ~ "^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$" {
     limit_except POST { deny all; }
     proxy_pass http://127.0.0.1:8010;
 }
@@ -118,19 +118,21 @@ def _assert_snippet_precedence(text: str) -> None:
     if "location = /api/v1/ai/personal-try-on/fashn/garment-realism" not in text:
         raise SystemExit("FAIL: missing exact personal-try-on fashn garment-realism allowlist")
     if not re.search(
-        r"location\s+~\s+\^/api/v1/ai/personal-try-on/fashn/garment-realism/"
-        r"\[0-9a-fA-F-\]\{36\}/accept\$",
+        r'location\s+~\s+"?\^/api/v1/ai/personal-try-on/fashn/garment-realism/'
+        r'\[0-9a-fA-F-\]\{36\}/accept\$"?',
         text,
     ):
         raise SystemExit("FAIL: missing regex garment-realism accept allowlist (#170)")
-    accept_at = text.find("location ~ ^/api/v1/ai/personal-try-on/fashn/garment-realism/")
-    regex_at = text.find("location ~ ^/api/v1/ai/jobs/")
+    accept_at = text.find("/api/v1/ai/personal-try-on/fashn/garment-realism/")
+    # Prefer the accept location line (quoted or bare).
+    accept_line = text.find("garment-realism/[0-9a-fA-F-]{36}/accept")
+    regex_at = text.find("/api/v1/ai/jobs/[0-9a-fA-F-]{36}")
     prefix_at = text.find("location /api/v1/ai/ {")
-    if accept_at < 0 or prefix_at < 0 or accept_at > prefix_at:
+    if accept_line < 0 or prefix_at < 0 or accept_line > prefix_at:
         raise SystemExit("FAIL: regex accept rule must be declared before plain prefix deny")
     if regex_at < 0 or prefix_at < 0 or regex_at > prefix_at:
         raise SystemExit("FAIL: regex jobs rule must be declared before plain prefix deny")
-
+    _ = accept_at  # kept for readability in diffs
 
 def _classify(method: str, path: str) -> str:
     """Model intended allowlist outcome for the candidate snippet."""

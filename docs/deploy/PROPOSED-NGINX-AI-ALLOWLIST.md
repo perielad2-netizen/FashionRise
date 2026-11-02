@@ -128,7 +128,7 @@ location = /api/v1/ai/personal-try-on/fashn/garment-realism {
 # #169 / #170 — owner Accept before FASHN (POST only; UUID path). Exact
 # garment-realism enqueue above does NOT match /accept — without this regex
 # the plain prefix deny returns bare 403 and FE shows "Something went wrong."
-location ~ ^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$ {
+location ~ "^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$" {
     limit_except POST { deny all; }
     proxy_pass http://127.0.0.1:8010;
     proxy_http_version 1.1;
