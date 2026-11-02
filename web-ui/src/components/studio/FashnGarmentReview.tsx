@@ -31,6 +31,23 @@ export function FashnGarmentReview({
 
   const sketchPieces = prep.pieces
   const hasRealistic = Boolean(realisticPieces && realisticPieces.length > 0)
+  const fidelityFailures = useMemo(
+    () => (realisticPieces ?? []).filter((p) => p.fidelity && p.fidelity.ok === false),
+    [realisticPieces],
+  )
+  const softWarnings = useMemo(
+    () =>
+      (realisticPieces ?? []).filter(
+        (p) =>
+          p.fidelity &&
+          p.fidelity.ok !== false &&
+          typeof p.fidelity.message === 'string' &&
+          p.fidelity.message.trim().length > 0 &&
+          p.fidelity.code &&
+          p.fidelity.code !== 'FIDELITY_OK',
+      ),
+    [realisticPieces],
+  )
 
   const costSummary = useMemo(() => {
     const realism = prep.realism_estimate_cents ?? 0
@@ -45,14 +62,15 @@ export function FashnGarmentReview({
         <div>
           <strong>1. Realistic garment (OpenAI)</strong> — about {costSummary.realism}¢
           {prep.realism_calls && prep.realism_calls > 1 ? ` · ${prep.realism_calls} images` : ''}
+          {hasRealistic ? ' · already generated for this review' : ''}
         </div>
         <div>
           <strong>2. FASHN try-on</strong> — about {costSummary.fashn}¢ · {prep.fashn_calls} credit
-          {prep.fashn_calls === 1 ? '' : 's'}
+          {prep.fashn_calls === 1 ? '' : 's'} · charged only after Accept & Try On
         </div>
         <div>
           Combined estimate about <strong>{costSummary.combined}¢</strong> if you run both stages.
-          Nothing is charged until you confirm each paid step.
+          Regenerate Garment charges OpenAI again with a new key. Cancel never starts FASHN.
         </div>
       </div>
 
@@ -66,7 +84,7 @@ export function FashnGarmentReview({
       <p className={styles.hint} style={{ marginBottom: 8 }}>
         Layout: <strong>{prep.layout === 'two_piece' ? 'two-piece' : 'one-piece'}</strong>.{' '}
         {hasRealistic
-          ? 'Compare your sketch with the realistic product image, then accept before FASHN.'
+          ? 'Compare your sketch with the realistic product image, then Accept before FASHN.'
           : 'Review the sketch plates, then generate a realistic product garment.'}
       </p>
 
@@ -80,15 +98,34 @@ export function FashnGarmentReview({
       ) : null}
 
       {realismError ? (
-        <p className={styles.error} role="alert">
+        <p className={styles.error} role="alert" data-testid="fashn-realism-error">
           {realismError}
         </p>
       ) : null}
-      {realismBusy ? <p className={styles.hint}>Generating realistic garment…</p> : null}
+      {fidelityFailures.length > 0 ? (
+        <p className={styles.error} role="alert" data-testid="fashn-fidelity-hard-fail">
+          {fidelityFailures[0].fidelity?.message ||
+            'Fidelity checks failed. Accept is disabled — regenerate or edit the sketch.'}
+        </p>
+      ) : null}
+      {softWarnings.length > 0 && fidelityFailures.length === 0 ? (
+        <p className={styles.hint} role="status" data-testid="fashn-fidelity-warning">
+          Fidelity note: {softWarnings[0].fidelity?.message}
+        </p>
+      ) : null}
+      {realismBusy ? (
+        <p className={styles.hint} data-testid="fashn-realism-busy">
+          Generating realistic garment…
+        </p>
+      ) : null}
 
       <section aria-label="Your design">
         <p className={styles.pieceLabel}>Step 1 — Your design</p>
-        <div className={styles.pieceGrid}>
+        <div
+          className={styles.pieceGrid}
+          data-testid="fashn-sketch-pieces"
+          data-layout={prep.layout}
+        >
           {sketchPieces.map((piece, index) => {
             const label = pieceLabel(piece.category, index, sketchPieces.length)
             return (
@@ -116,12 +153,20 @@ export function FashnGarmentReview({
       {hasRealistic ? (
         <section aria-label="Realistic garment" style={{ marginTop: 12 }}>
           <p className={styles.pieceLabel}>Step 2 — Realistic garment</p>
-          <div className={styles.pieceGrid}>
+          <div
+            className={styles.pieceGrid}
+            data-testid="fashn-realistic-pieces"
+            data-layout={prep.layout}
+          >
             {(realisticPieces ?? []).map((piece, index) => {
               const label = pieceLabel(piece.category, index, realisticPieces!.length)
+              const failed = piece.fidelity && piece.fidelity.ok === false
               return (
                 <div key={`real-${piece.category}-${index}`} className={styles.pieceCard}>
-                  <p className={styles.pieceLabel}>{label}</p>
+                  <p className={styles.pieceLabel}>
+                    {label}
+                    {failed ? ' · fidelity failed' : ''}
+                  </p>
                   <button
                     type="button"
                     style={{ padding: 0, border: 0, background: 'none', display: 'block', width: '100%' }}
@@ -158,6 +203,7 @@ export function FashnGarmentReview({
           role="dialog"
           aria-modal="true"
           aria-label={lightbox.label}
+          data-testid="fashn-piece-lightbox"
           onClick={() => setLightbox(null)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') setLightbox(null)

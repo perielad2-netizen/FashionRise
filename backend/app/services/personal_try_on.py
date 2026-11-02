@@ -381,6 +381,24 @@ def enqueue_personal_try_on(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=str(rdata.get("summary") or "Garment realism failed fidelity checks."),
                 )
+            # #169 — FASHN requires explicit owner acceptance of the OpenAI product images.
+            if rdata.get("owner_accepted") is not True:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Accept the realistic garment product images before running FASHN Try On."
+                    ),
+                )
+            r_input = realism_job.input_data if isinstance(realism_job.input_data, dict) else {}
+            bound_fp = str(r_input.get("garment_fingerprint") or "")
+            if bound_fp and bound_fp != garment_fp:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "The Studio garment changed after realistic garment generation. "
+                        "Regenerate and accept the product images again before FASHN."
+                    ),
+                )
             r_pieces = rdata.get("pieces")
             if not isinstance(r_pieces, list) or not r_pieces:
                 raise HTTPException(
@@ -1222,14 +1240,27 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             url = storage.save_file(key=key, data=io.BytesIO(product_png), content_type="image/png")
             if not verdict.ok:
                 # Paid OpenAI already ran — settle realism spend, but block FASHN.
+                # Keep status completed so the owner can review the product image (#169);
+                # Accept and FASHN enqueue both refuse fidelity_ok=false / block_fashn.
                 if reservation is not None and reservation.status == RESERVATION_OPEN:
                     reservation.status = RESERVATION_SETTLED
                     reservation.actual_cost_cents = reservation.estimate_cents
                     reservation.provider_called = True
-                job.status = "failed"
-                job.error_message = verdict.message[:240]
+                failed_piece = {
+                    "category": gen_cat,
+                    "image_base64": "data:image/png;base64,"
+                    + base64.b64encode(product_png).decode("ascii"),
+                    "image_url": url,
+                    "sha256": hashlib.sha256(product_png).hexdigest(),
+                    "source_plate_sha256": str(item.get("sha256") or ""),
+                    "fidelity": verdict.public_dict(),
+                }
+                # Preserve any earlier OK pieces so two-piece review can show both sides.
+                review_pieces = [*out_pieces, failed_piece]
+                job.status = "completed"
+                job.error_message = None
                 job.result_data = {
-                    "status": "failed",
+                    "status": "completed",
                     "summary": verdict.message,
                     "mode": "garment_realism",
                     "error_code": verdict.code,
@@ -1237,13 +1268,18 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "prompt_version": prompt_version,
                     "provider": provider_id,
                     "prefer_local_product": False,
-                    "pieces": [],
+                    "pieces": review_pieces,
                     "failed_product": {
                         "category": gen_cat,
                         "image_url": url,
                         "sha256": hashlib.sha256(product_png).hexdigest(),
                         "source_plate_sha256": str(item.get("sha256") or ""),
                     },
+                    "garment_fingerprint": data.get("garment_fingerprint"),
+                    "cost_cents": reservation.actual_cost_cents if reservation else data.get("estimate_cents"),
+                    "requires_owner_acceptance": True,
+                    "owner_accepted": False,
+                    "fidelity_ok": False,
                     "block_fashn": True,
                 }
                 return job.result_data
@@ -1296,8 +1332,9 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
         "piece_meta": metas,
         "garment_fingerprint": data.get("garment_fingerprint"),
         "cost_cents": reservation.actual_cost_cents if reservation else data.get("estimate_cents"),
-        # One-click pipeline auto-continues to FASHN when fidelity_ok; manual accept retained for recovery.
-        "requires_owner_acceptance": False,
+        # #169 — owner must Accept product images before any FASHN credit is spent.
+        "requires_owner_acceptance": True,
+        "owner_accepted": False,
         "fidelity_ok": True,
         "block_fashn": False,
     }
@@ -1305,3 +1342,47 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
     job.error_message = None
     job.result_data = result
     return result
+
+
+def accept_garment_realism_job(db: Session, user: User, job_id: uuid.UUID) -> AIJob:
+    """Stamp owner acceptance on a completed, fidelity-OK realism job (#169).
+
+    Does not call OpenAI or FASHN. Rejects hard fidelity failures — Accept cannot override.
+    """
+    job = db.get(AIJob, job_id)
+    if job is None or job.user_id != user.id or job.job_type != GARMENT_REALISM_JOB_TYPE:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Garment realism job not found.")
+    if job.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only a completed realistic garment job can be accepted.",
+        )
+    data = job.result_data if isinstance(job.result_data, dict) else {}
+    if data.get("fidelity_ok") is False or data.get("block_fashn"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Fidelity checks failed — Accept cannot override. Regenerate or edit the sketch.",
+        )
+    pieces = data.get("pieces")
+    if not isinstance(pieces, list) or not pieces:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Realistic garment job has no product images to accept.",
+        )
+    if str(data.get("provider") or "") != GARMENT_REALISM_PROVIDER_ID:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only OpenAI realistic product images can be accepted for FASHN.",
+        )
+    if data.get("owner_accepted") is True:
+        return job
+    updated = {
+        **data,
+        "owner_accepted": True,
+        "owner_accepted_at": _utcnow().isoformat(),
+        "requires_owner_acceptance": True,
+    }
+    job.result_data = updated
+    db.add(job)
+    db.flush()
+    return job

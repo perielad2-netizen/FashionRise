@@ -790,6 +790,8 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
             "prefer_local_product": False,
             "fidelity_ok": True,
             "block_fashn": False,
+            "requires_owner_acceptance": True,
+            "owner_accepted": True,
             "pieces": product_pieces,
             "summary": "Realistic garment product image ready (fidelity checks passed).",
         },
