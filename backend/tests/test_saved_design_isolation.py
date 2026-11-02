@@ -52,6 +52,22 @@ def _saved_payload(save_request_id: str, *, title: str = "Evening gown", nested_
     }
 
 
+def test_saved_design_snapshot_accepts_personal_croquis_pins(client, db_session):
+    """#172 hotfix — Save as design from My Croquis Studio must not reject pin keys."""
+    tokens = _register(client, db_session, "v3a_pins@example.com", "v3a_pins")
+    headers = _auth(tokens["access_token"])
+    payload = _saved_payload("req-personal-pins", title="testSwimwear")
+    payload["design_data"]["snapshot"]["model"] = "personal"
+    payload["design_data"]["snapshot"]["personalCroquisId"] = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    payload["design_data"]["snapshot"]["personalCroquisVersion"] = 1
+    payload["metadata"]["model"] = "personal"
+    r = client.post("/api/v1/designs", headers=headers, json=payload)
+    assert r.status_code == 201, r.text
+    snap = r.json()["design_data"]["snapshot"]
+    assert snap["personalCroquisId"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    assert snap["personalCroquisVersion"] == 1
+
+
 def test_saved_designs_never_reconcile_with_the_working_draft(client, db_session):
     tokens = _register(client, db_session, "v3a_owner@example.com", "v3a_owner")
     headers = _auth(tokens["access_token"])
