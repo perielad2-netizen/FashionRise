@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#164 bikini design fidelity + clean FASHN CTA** **DEPLOYED** App **`c2d0ba41`** · local filled-plate productize · neckline fidelity · button = `FASHN Try On` · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#166 FASHN requires OpenAI realism** **DEPLOYED** App **`6c6140ef`** · no local plate skip · server-bound realism pieces · prompt v4 · **0** operator-paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear) **live-armed**.
 
@@ -11,14 +11,41 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`c2d0ba41`** — release `/var/www/fashionrise/releases/c2d0ba41` · source `c2d0ba4117bd7369834fec52aee5f5819f556840` · App pill **`c2d0ba41`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, FASHN CTA **`FASHN Try On`** (cost only in confirmation copy), API `/api/v1`. Prior FE **`a3ca2221`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v3`** / local **`local_filled_plate_v1`** + silhouette fidelity **`fashn-silhouette-fidelity-v1`** (+ neckline) · one-piece → **`one-pieces`** · Alembic **`015`**. |
-| AI worker | `fashionrise-ai-worker` restarted with local-product + FASHN/OpenAI try-on · croquis **v5** unchanged |
+| Frontend (`web-ui`) | **`6c6140ef`** — release `/var/www/fashionrise/releases/6c6140ef` · source `6c6140ef8da764dffc8027661bbba130a9a8bbab` · App pill **`6c6140ef`** · FASHN CTA **`FASHN Try On`** · confirmation lists **two paid stages** (OpenAI realism + FASHN) · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`c2d0ba41`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v4`** (OpenAI required; local plate passthrough disabled) + silhouette fidelity · FASHN binds pieces from realism job · Alembic **`015`**. |
+| AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/c2d0ba41` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
-| AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · filled plates skip OpenAI realism (**$0**) · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
+| Nginx | `current` → `releases/6c6140ef` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
+| AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
 
 
+
+## #166 FASHN requires OpenAI realism (no sketch-plate input) — DEPLOYED (2026-11-02)
+
+### Root cause (owner App `c2d0ba41`, realism `9b837e89` → try-on `6f4c8c36`)
+
+| Check | Finding |
+|---|---|
+| Realism stage ran? | Job completed, but provider was **`local_filled_plate_v1`** (`prefer_local_product=true`, **$0**) — **OpenAI images.edit did not run** |
+| Realistic asset produced? | No — RGB re-encode of Studio plates (identical pixels/silhouette; hard outlines retained) |
+| What FASHN received? | Approved piece SHAs **`e7da6229…` / `2d9e28d8…` = exact prep plates**, not OpenAI products. Linked via `garment_realism_job_id=9b837e89…` |
+| Tops/bottoms | Two sequential FASHN credits; both used sketch-like plates |
+
+**Why worse than prior:** #164 skipped OpenAI to protect cut/gradient, but FASHN then tried to dress the person from illustrated plates → flat/outlined garment look.
+
+### Fixes
+
+1. **Disable local plate skip** — `prefer_local_product` always false; realism always paid OpenAI **v4** (fabric, no sketch strokes).
+2. **Server-bound FASHN inputs** — require `garment_realism_job_id`; load pieces from that job; reject non-`openai_garment_realism` / local / plate-SHA passthrough.
+3. **CTA/costs** — button stays `FASHN Try On`; confirmation lists OpenAI + FASHN stages separately.
+
+### Owner paid-test budget
+
+Max **2–3** more owner-paid FASHN swimwear tests from this point. If still not clearly good, stop personal swimwear try-on and keep OpenAI croquis/mannequin only.
+
+### Owner next
+
+Hard-refresh App **`6c6140ef`** → purple bikini → Magic → **FASHN Try On** once. Expect status “Generating realistic garment (~N¢ OpenAI)…” then FASHN. Final look must be photoreal fabric (not sketch outlines) while keeping cut/coverage/gradient.
 
 ## #164 P1 FASHN bikini design fidelity + clean CTA — DEPLOYED (2026-11-02)
 
