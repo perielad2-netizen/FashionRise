@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#173 FASHN Try-On Max owner experiment** shipping · My Designs personal thumbnails **`c0e2cb8d`** · OpenAI Try On stays **`try-on-person-v2`**.)
+**Last updated:** 2026-11-02 (**#173 FASHN Try-On Max owner experiment** **DEPLOYED** App **`751840fb`** · OpenAI Try On stays **`try-on-person-v2`** · **0** paid calls during implementation.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits + additive trouser hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
@@ -11,14 +11,14 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`c0e2cb8d`** — release `/var/www/fashionrise/releases/c0e2cb8d` · My Designs personal underlay thumbnails · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`071ea03d`** kept for rollback. |
+| Frontend (`web-ui`) | **`751840fb`** — release `/var/www/fashionrise/releases/751840fb` · #173 Try-On Max owner experiment UI · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`c0e2cb8d`** kept for rollback. |
 | Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + structure review **v3** (server provenance `openai_try_on_photo`) · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → new release |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
 
-## #173 Owner-only FASHN Try-On Max experimental lane (2026-11-02)
+## #173 Owner-only FASHN Try-On Max experimental lane — DEPLOYED (2026-11-02)
 
 ### Product decision
 Owner-authorized paid model evaluation. Soft budget ~**90** FASHN credits. Compare **v1.6** vs **Try-On Max** on the same accepted realistic garment + person photo. Do not auto-accept Max results into My Looks.
@@ -31,11 +31,24 @@ Owner-authorized paid model evaluation. Soft budget ~**90** FASHN credits. Compa
 5. Results stamp `experiment=true`, `looks_eligible=false` — excluded from My Looks gallery.
 6. v1.6 adapter / OpenAI Try On / Fashion Magic / Accept nginx path unchanged.
 
+### Deployed
+
+| Field | Value |
+|---|---|
+| App / FE / BE tip | **`751840fb`** (`751840fbeb887ca9ac3ab4b274469f1aaba38c58`) |
+| API / worker | `fashionrise-api` + `fashionrise-ai-worker` restarted · `/health` ok |
+| Alembic | **`015`** unchanged |
+| Max flags | `FASHN_TRY_ON_MAX_ENABLED=true` · `LIVE_HTTP=true` · owner allowlist armed |
+| Soft budget | 90 credits · spend ceiling raised to **$15** for evaluation (was $5) |
+| Provider calls during impl | **0** |
+| Rollback | `/var/backups/fashionrise/fashn-tryon-max-exp-173-*/ROLLBACK.sh` → FE **`c0e2cb8d`** + prior BE/env |
+
 ### Owner test
-1. Hard-refresh to new App SHA.
-2. Personal croquis → Magic → FASHN Try On → generate/accept realistic garment.
-3. Owner experiment panel: choose **FASHN v1.6** or **Try-On Max** (Balanced or Quality).
-4. Accept & Try On / Accept & Try On Max — compare privately. Soft credit estimates shown in confirmation copy.
+1. Hard-refresh until App **`751840fb`**.
+2. Personal croquis → Magic → FASHN Try On → generate/accept realistic garment (reuse existing Accept if still open).
+3. Owner experiment panel appears: choose **FASHN v1.6** or **Try-On Max** (Balanced default or Quality; 1k default).
+4. Tap **Accept & Try On** / **Accept & Try On Max (balanced|quality)**. Soft credit estimate is in the confirmation copy.
+5. Results are private comparison only — not My Looks.
 
 ---
 
