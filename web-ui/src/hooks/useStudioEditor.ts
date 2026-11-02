@@ -98,6 +98,8 @@ import { settleMagicJobWithImage } from '@/services/ai/magicPipelineHelpers'
 import {
   SMART_TRY_ON_FAILURE,
   SMART_TRY_ON_STATUS,
+  SMART_TRY_ON_STOP_WAITING,
+  isOpenAiTryOnEligibleForMaxFallback,
   isOpenAiTryOnTerminalFailure,
   newSmartOperationId,
 } from '@/services/ai/smartTryOn'
@@ -1978,7 +1980,7 @@ export function useStudioEditor() {
           return
         }
 
-        // #178 — smart public Try On: OpenAI first, invisible Max Balanced 1k on hard failure.
+        // #178/#179 — smart public Try On: OpenAI first; Max only on eligible technical failure.
         const smartOpId = newSmartOperationId()
         const maxFallbackReady = Boolean(preflight.smart_try_on_max_fallback_available)
         setMagicPhase('submitting')
@@ -2009,6 +2011,15 @@ export function useStudioEditor() {
         })
         setMagicJobId(job.id)
         persistMagicJobId(user.id, job.id)
+        // Persist smart chain so Stop waiting / refresh can recover without re-pay.
+        persistMagicOperation(user.id, {
+          operationId: `smart:${smartOpId}`,
+          frontJobId: job.id,
+          designId: designIdRef.current,
+          sourceRevision: docAtStart.clientRevision,
+          contentFingerprint,
+          updatedAt: new Date().toISOString(),
+        })
 
         setMagicPhase('polling')
         setMagicStatusHint(SMART_TRY_ON_STATUS)
@@ -2031,7 +2042,26 @@ export function useStudioEditor() {
           return
         }
 
-        // OpenAI terminal failure → automatic Max fallback (no provider/cost/review UI).
+        // Fetch primary failure details once — eligibility is server-authoritative on Max enqueue.
+        let failedJob: Awaited<ReturnType<typeof fetchAiJob>> | null = null
+        let fallbackReason = 'openai_technical_failure'
+        try {
+          failedJob = await fetchAiJob(job.id, controller.signal)
+          if (typeof failedJob.result_data?.error_code === 'string') {
+            fallbackReason = String(failedJob.result_data.error_code)
+          }
+        } catch {
+          failedJob = null
+        }
+
+        // #179 — moderation / unknown outcomes do not auto-Max.
+        if (!isOpenAiTryOnEligibleForMaxFallback(look, failedJob)) {
+          setMagicResult(look)
+          setMagicPhase('failed')
+          setMagicError(SMART_TRY_ON_FAILURE)
+          setMagicStatusHint(null)
+          return
+        }
         if (!maxFallbackReady) {
           setMagicResult(look)
           setMagicPhase('failed')
@@ -2050,16 +2080,6 @@ export function useStudioEditor() {
           setMagicError(SMART_TRY_ON_FAILURE)
           setMagicStatusHint(null)
           return
-        }
-
-        let fallbackReason = 'openai_terminal_failure'
-        try {
-          const failedJob = await fetchAiJob(job.id, controller.signal)
-          if (typeof failedJob.result_data?.error_code === 'string') {
-            fallbackReason = String(failedJob.result_data.error_code)
-          }
-        } catch {
-          // Diagnostics only — continue Max fallback with generic reason.
         }
 
         setMagicStatusHint(SMART_TRY_ON_STATUS)
@@ -2087,6 +2107,15 @@ export function useStudioEditor() {
           consentAcknowledged: true,
           consentVersion: prep.consent_version,
           signal: controller.signal,
+        })
+        persistMagicOperation(user.id, {
+          operationId: `smart:${smartOpId}`,
+          frontJobId: job.id,
+          backJobId: realismJob.id,
+          designId: designIdRef.current,
+          sourceRevision: docAtStart.clientRevision,
+          contentFingerprint,
+          updatedAt: new Date().toISOString(),
         })
         setMagicPhase('polling')
         setMagicStatusHint(SMART_TRY_ON_STATUS)
@@ -2142,10 +2171,20 @@ export function useStudioEditor() {
           smartFallback: true,
           smartOperationId: smartOpId,
           smartFallbackReason: fallbackReason,
+          primaryTryOnJobId: job.id,
           signal: controller.signal,
         })
         setMagicJobId(maxJob.id)
         persistMagicJobId(user.id, maxJob.id)
+        persistMagicOperation(user.id, {
+          operationId: `smart:${smartOpId}`,
+          frontJobId: job.id,
+          backJobId: maxJob.id,
+          designId: designIdRef.current,
+          sourceRevision: docAtStart.clientRevision,
+          contentFingerprint,
+          updatedAt: new Date().toISOString(),
+        })
         setMagicPhase('polling')
         setMagicStatusHint(SMART_TRY_ON_STATUS)
         const maxSettled = await settleMagicJobWithImage(maxJob.id, controller.signal)
@@ -2166,9 +2205,7 @@ export function useStudioEditor() {
       } catch (err) {
         if (controller.signal.aborted) {
           setMagicPhase('failed')
-          setMagicError(
-            'Try On Person wait cancelled. Your sketch and photo are unchanged — recover if the job already finished.',
-          )
+          setMagicError(SMART_TRY_ON_STOP_WAITING)
           setMagicStatusHint(null)
           return
         }
@@ -2828,8 +2865,50 @@ export function useStudioEditor() {
   }, [magicJobId, user?.id])
 
   const cancelMagicWait = useCallback(() => {
+    // #179 — Stop waiting: abort local polling only. Provider jobs keep running.
     magicAbortRef.current?.abort()
   }, [])
+
+  /**
+   * #179 — Verify the try-on job is My Looks–eligible before navigating.
+   * Looks are derived from completed jobs (no separate POST). Do not navigate on miss.
+   */
+  const saveTryOnInMyLooks = useCallback(async (): Promise<string | null> => {
+    const lookId =
+      magicDualActive && magicOperationId
+        ? magicOperationId
+        : magicResult?.jobId ?? null
+    if (!lookId) {
+      setMagicError('Nothing to save yet — wait for a completed preview.')
+      return null
+    }
+    if (magicResult?.experimentMeta?.experiment) {
+      setMagicError('Owner experiment results stay private and are not saved to My Looks.')
+      return null
+    }
+    if (magicResult?.structureRejected) {
+      setMagicError('This preview was flagged as unfaithful and cannot be saved to My Looks.')
+      return null
+    }
+    try {
+      const { getLook } = await import('@/services/looksApi')
+      const record = await getLook(lookId)
+      if (!record?.id) {
+        setMagicError('Could not confirm this look in My Looks. Try Recover result, then save again.')
+        return null
+      }
+      return record.id
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not save this look. Your preview is still here — try again.'
+      setMagicError(message)
+      return null
+    }
+  }, [magicDualActive, magicOperationId, magicResult])
 
   const downloadMagicLook = useCallback(() => {
     if (magicDualActive) {
@@ -3866,6 +3945,7 @@ export function useStudioEditor() {
     ),
     closeMagicPanel,
     cancelMagicWait,
+    saveTryOnInMyLooks,
     recoverLastMagic,
     downloadMagicLook,
     downloadMagicSide,

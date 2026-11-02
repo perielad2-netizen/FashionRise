@@ -278,12 +278,17 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
 
 def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
     """Additive V2 hints for clear trouser OR high-slit dress geometry. Empty when ambiguous."""
-    if geometry.looks_like_high_slit_dress:
+    if geometry.looks_like_high_slit_dress and not geometry.looks_like_trousers:
         return [
             "garment type: dress or gown with a high fashion slit — not trousers or a jumpsuit",
-            "preserve the designed leg opening/slit from image 2; do not close it into pant legs",
+            "Preserve this as a dress with an intentional leg opening/slit. Maintain the "
+            "original skirt panels, silhouette, hemline, opening and fabric coverage. "
+            "Do not reinterpret the garment as separate trousers or a jumpsuit.",
+            "preserve the designed leg opening/slit from the Studio/plate geometry; "
+            "do not close it into pant legs",
             "keep one continuous skirt/dress panel beside the slit; do not invent a second pant leg",
-            "match the slit height and which side opens from image 2",
+            "match the slit height and which side opens from the source design",
+            "a white gap in an isolated plate is negative space / slit — not two trouser legs",
         ]
     if not geometry.looks_like_trousers:
         return []
@@ -309,6 +314,55 @@ def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
         hints.append("preserve original leg width and length — do not flare or merge legs")
     hints.append("do not connect the legs into a continuous skirt panel")
     return hints
+
+
+def garment_structure_contradiction(
+    *,
+    source_png: bytes,
+    product_png: bytes,
+) -> dict[str, Any] | None:
+    """Detect dress↔trousers category flips between Studio/source and realistic product (#179).
+
+    Returns a contradiction dict when geometry is confident on both sides and they disagree.
+    Ambiguous geometry returns None (do not silently certify fidelity).
+    """
+    if not source_png or not product_png:
+        return None
+    try:
+        src = analyze_lower_garment_geometry(source_png)
+        prod = analyze_lower_garment_geometry(product_png)
+    except Exception:
+        return None
+
+    # Source: confident open-leg dress → product must not become trousers/jumpsuit.
+    if src.looks_like_high_slit_dress and not src.looks_like_trousers:
+        if prod.looks_like_trousers or prod.looks_like_jumpsuit:
+            return {
+                "code": "STRUCTURE_CATEGORY_CONTRADICTION",
+                "reason": "source_high_slit_dress_product_trousers",
+                "message": (
+                    "Realistic product reinterpreted an open-leg dress as trousers/jumpsuit. "
+                    "FASHN Try-On was not started."
+                ),
+                "source": src.public_dict(),
+                "product": prod.public_dict(),
+            }
+        return None
+
+    # Source: confident separate trouser legs → product must not become a slit dress.
+    if src.looks_like_trousers and not src.looks_like_high_slit_dress:
+        if prod.looks_like_high_slit_dress and not prod.looks_like_trousers:
+            return {
+                "code": "STRUCTURE_CATEGORY_CONTRADICTION",
+                "reason": "source_trousers_product_slit_dress",
+                "message": (
+                    "Realistic product reinterpreted trousers as a dress/slit. "
+                    "FASHN Try-On was not started."
+                ),
+                "source": src.public_dict(),
+                "product": prod.public_dict(),
+            }
+    return None
 
 
 def classify_structure_image_role(png: bytes) -> str:

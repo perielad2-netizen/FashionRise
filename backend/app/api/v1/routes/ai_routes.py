@@ -271,6 +271,7 @@ def personal_try_on(
         smart_fallback=bool(body.smart_fallback),
         smart_operation_id=body.smart_operation_id,
         smart_fallback_reason=body.smart_fallback_reason,
+        primary_try_on_job_id=body.primary_try_on_job_id,
     )
     return AIJobRead.from_job(job)
 

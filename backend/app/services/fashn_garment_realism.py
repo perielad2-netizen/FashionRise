@@ -271,6 +271,22 @@ class OpenAIGarmentRealismAdapter:
         size = (settings.openai_image_size or "1024x1536").strip()
         quality = settings.openai_image_quality
         design_bits = local_design_identity_bits(category=category, plate_png=plate_png)
+        # #179 — carry croquis/studio garment geometry (dress slit vs trousers) into
+        # realism design_bits. Prefer full Studio context when present; never invent.
+        try:
+            from app.services.garment_leg_geometry import (
+                analyze_lower_garment_geometry,
+                openai_trouser_design_hints,
+            )
+
+            geo_src = studio_context_png if studio_context_png else plate_png
+            geo_bits = openai_trouser_design_hints(analyze_lower_garment_geometry(geo_src))
+            for bit in geo_bits:
+                if bit not in design_bits:
+                    design_bits.append(bit)
+        except Exception:
+            # Geometry is advisory — never block realism for analyzer errors.
+            pass
         context = studio_context_png if studio_context_png else None
         try:
             kwargs = build_image_edit_kwargs(

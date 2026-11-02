@@ -395,7 +395,9 @@ export function MagicLookPanel({
           </div>
         ) : null}
 
-        {tryOn && phase === 'ready' && activeResult?.experimentMeta ? (
+        {tryOn &&
+        phase === 'ready' &&
+        activeResult?.experimentMeta?.experiment === true ? (
           <div className={styles.details} data-testid="try-on-experiment-meta">
             <p className={styles.summary}>
               Experiment · {activeResult.experimentMeta.provider || 'fashn'} · prompt{' '}
@@ -454,8 +456,8 @@ export function MagicLookPanel({
 
         <div className={styles.actions}>
           {busy ? (
-            <button type="button" onClick={onCancel}>
-              Cancel wait
+            <button type="button" onClick={onCancel} title="Generation continues. You can return to your result later.">
+              Stop waiting
             </button>
           ) : null}
           {phase === 'ready' && dualActive && dual ? (

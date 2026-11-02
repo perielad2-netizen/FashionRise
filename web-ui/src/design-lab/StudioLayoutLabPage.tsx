@@ -208,6 +208,7 @@ function useLayoutLabEditor(): StudioEditor {
       magicCanRecover: false,
       closeMagicPanel: noop,
       cancelMagicWait: noop,
+      saveTryOnInMyLooks: async () => null,
       recoverLastMagic: noop,
       downloadMagicLook: noop,
       backToSketchFromMagic: noop,
