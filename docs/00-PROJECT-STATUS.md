@@ -3,20 +3,50 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#177 Owner experiment activation** **LIVE** · App **`55118842`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-02 (**#178 Smart Try On OpenAI→Max** **LIVE** · App **`74623a58`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2.1** (ordinary outfits + trouser **or** high-slit-dress geometry hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Owner-only v1.6 / Max comparison controls + accepted-garment reuse (#176/#177). Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on terminal failure, invisible FASHN Try-On Max (Balanced · 1k) fallback (#178). Owner-only v1.6 / Max experiment tools preserved (#176/#177). Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`55118842`** — release `/var/www/fashionrise/releases/55118842` · owner experiment panel when allowlisted (independent of Max live); Max selectable only when configured+live; accepted-garment reuse; experiment verdicts. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`45221226`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | tip **`55118842`** · OpenAI **`try-on-person-v2.1`** · `fashn_owner_experiment_allowed` (allowlist) vs `fashn_max_owner_allowed` (allowlist∧Max ready∧live) · Alembic **`015`**. |
+| Frontend (`web-ui`) | **`74623a58`** — release `/var/www/fashionrise/releases/74623a58` · one-button Try On Person (OpenAI→Max smart fallback); owner experiment entry allowlist-only; no cost/provider copy in normal modal. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`55118842`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | tip **`74623a58`** · OpenAI **`try-on-person-v2.1`** · `smart_fallback` Max Balanced/1k · `smart_try_on_max_fallback_available` · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
-| Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #177) |
-| Nginx | unchanged routes from #176 · `current` → **`55118842`** |
+| Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #178) |
+| Nginx | unchanged routes · `current` → **`74623a58`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## #178 Smart Try On (OpenAI → Max Balanced 1k) — LIVE (2026-11-02)
+
+### Design
+1. User clicks **Try On Person** (one button).
+2. OpenAI regular try-on runs first (existing path).
+3. On terminal OpenAI failure (moderation / provider / timeout / failed), automatically:
+   prepare plates → OpenAI realism → fidelity gate → auto-accept → **FASHN Try-On Max Balanced 1k**.
+4. User sees only generic spinner **"Generating your try-on preview..."** then result or clean failure.
+5. Owner experiment (manual v1.6 / Max / Accept / reuse) remains allowlist-gated and separate.
+
+### Orchestration
+Staged through existing async jobs in one FE modal lifecycle (not a single synchronous HTTP call). Shared `smart_operation_id` + `smart_pipeline` metadata for diagnostics. `user_visible_charge_units=1` — failed OpenAI reservations release on definite refusal; Max is the delivered try-on when fallback wins.
+
+### Deployed
+| Field | Value |
+|---|---|
+| App / FE / BE tip | **`74623a58`** (`74623a58e458078c0576c880d4d6d513849ed3bf`) |
+| API / worker | restarted · `/health` ok |
+| Alembic | **`015`** unchanged |
+| #175 spend env | verified preserved |
+| Max env | enabled + live unchanged |
+| Rollback | `/var/backups/fashionrise/smart-tryon-178-*/ROLLBACK.sh` → FE **`55118842`** |
+| Agent paid calls | **0** |
+
+### Owner verify (STOP — owner may run paid paths; agent made none)
+1. Hard-refresh until App **`74623a58`**.
+2. Normal OpenAI success: filled ordinary garment → Try On Person → result without Max.
+3. Fallback: design that OpenAI refuses → same button → spinner only → Max result (or clean failure if both fail). No Accept dialog / no provider names.
+4. Owner experiment still available via **Owner FASHN experiment** when allowlisted.
 
 ## #177 Owner experiment activation fix — LIVE (2026-11-02)
 
