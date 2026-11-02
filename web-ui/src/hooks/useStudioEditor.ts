@@ -70,6 +70,7 @@ import {
 } from '@/lib/savedDesign'
 import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
 import { ApiError } from '@/services/api/client'
+import { getLook } from '@/services/looksApi'
 import {
   acceptFashnGarmentRealism,
   enqueueFashnGarmentRealism,
@@ -2891,7 +2892,6 @@ export function useStudioEditor() {
       return null
     }
     try {
-      const { getLook } = await import('@/services/looksApi')
       const record = await getLook(lookId)
       if (!record?.id) {
         setMagicError('Could not confirm this look in My Looks. Try Recover result, then save again.')
