@@ -11,7 +11,7 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`32518435`** — release `/var/www/fashionrise/releases/32518435` · trouser hints prioritized in 8-hint budget · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`e176f464`** kept for rollback. |
+| Frontend (`web-ui`) | **`071ea03d`** — release `/var/www/fashionrise/releases/071ea03d` · trouser hints prioritized in 8-hint budget · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`e176f464`** kept for rollback. |
 | Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + structure review **v3** (server provenance `openai_try_on_photo`) · FASHN prep completeness + jumpsuit fail-closed · realism **v5** + Accept · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
@@ -37,7 +37,7 @@
 
 | Field | Value |
 |---|---|
-| App / FE / BE / worker SHA | **`325184353e129feb828bf346f8d2af406a40b575`** (App **`32518435`**) |
+| App / FE / BE / worker SHA | **`071ea03d5c1f2e05d7d2ac6a713fb293fc9662a0`** (App **`071ea03d`**) |
 | Alembic | **`015`** (unchanged) |
 | Nginx Accept | Unchanged allowlist |
 | Provider calls | **0** |
@@ -49,7 +49,7 @@ Automated fidelity still cannot certify OpenAI try-on photographs without garmen
 
 ### Owner next
 
-**STOP before paid owner tests.** After hard-refresh to App **`32518435`**, owner may later re-test ordinary OpenAI Try On and green jumpsuit — expect normal `completed` preview (never false `completed_unverified` from white-bg photo pixels).
+**STOP before paid owner tests.** After hard-refresh to App **`071ea03d`**, owner may later re-test ordinary OpenAI Try On and green jumpsuit — expect normal `completed` preview (never false `completed_unverified` from white-bg photo pixels).
 
 ## #171 P0 Post-generation fidelity review correction — DEPLOYED (2026-11-02)
 
