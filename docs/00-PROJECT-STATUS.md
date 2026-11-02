@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#161** FASHN garment review + realistic garment generation **DEPLOYED** App **`7015ca3f`** · mobile sticky footer · OpenAI product image before FASHN · dual-stage costs · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**P1 FASHN fidelity + one-click + mobile CTA** **DEPLOYED** App **`a3ca2221`** · swimsuit≠dress category fix · structural fidelity gate · one-click pipeline · **0** operator-paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear) **live-armed**.
 
@@ -11,13 +11,55 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`7015ca3f`** — release `/var/www/fashionrise/releases/7015ca3f` · source `7015ca3f51676afb42f666bb6af2a49828b94702` · App pill **`7015ca3f`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, croquis notices **baked + SHA-asserted**, FASHN garment review (mobile sticky footer + realism approval) **ON**, API `/api/v1`. Prior FE **`f102cbc4`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + garment prep quality gate + **`personal_garment_realism`** (`fashn-garment-realism-v1`) · FASHN requires owner-approved product plates · `reference_model_id=personal` (#159); Alembic **`015`**. |
+| Frontend (`web-ui`) | **`a3ca2221`** — release `/var/www/fashionrise/releases/a3ca2221` · source `a3ca22212dcdc715b6dddb8c96631811d83bf36d` · App pill **`a3ca2221`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, FASHN **one-click** + mobile CTA safe-area, API `/api/v1`. Prior FE **`7015ca3f`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v2`** + silhouette fidelity **`fashn-silhouette-fidelity-v1`** · one-piece → FASHN category **`one-pieces`** (never `auto`) · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted with garment-realism + FASHN/OpenAI try-on · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/7015ca3f` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
+| Nginx | `current` → `releases/a3ca2221` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
 
+
+
+## P1 FASHN fidelity + one-click UX + mobile CTA — DEPLOYED (2026-11-02)
+
+### Root cause (owner paid test jobs `fb55f220` → `0df11dea`)
+
+| Stage | Artifact | Silhouette |
+|---|---|---|
+| Source sketch | immutable Studio capture | High-cut asymmetric one-piece swimsuit, blue→magenta gradient |
+| Garment prep plate | offline flat-lay | **Preserved** swimsuit (category was wrongly `auto`) |
+| OpenAI realism `fashn-garment-realism-v1` | product PNG | **Preserved** swimsuit |
+| FASHN v1.6 with `category=auto` | final person image | **Changed** into asymmetric mini-dress / skirt hem |
+
+**Actual transformation responsible:** FASHN Virtual Try-On with `category=auto`, not the realism stage. Realism was structurally faithful; FASHN reinterpreted high-cut leg openings as a handkerchief skirt.
+
+### Fixes shipped (App `a3ca2221`)
+
+1. **Category:** one-piece swimwear → FASHN `one-pieces` (never `auto`).
+2. **Realism prompt v2:** explicit ban on dress/skirt conversion; preserve high-cut openings.
+3. **Structural fidelity gate** before FASHN credits — fail closed on swimsuit→dress (does **not** claim perfect image fidelity; only silhouette class checks).
+4. **One-click UX:** Magic → FASHN Try On (~combined ¢) runs prep → realism → fidelity → FASHN with progress hints; intermediate Accept dialogs removed from normal path.
+5. **Mobile CTA:** ConfirmDialog uses `dvh` + `visualViewport` chrome inset so the pink primary stays tappable above browser toolbars.
+
+### Costs shown
+
+- Combined one-piece estimate ≈ **16¢** (realism 8¢ + FASHN 8¢); two-piece doubles both stages.
+- No automatic paid regenerations / retries.
+
+### Tests / deploy
+
+- BE fidelity/prep/realism/try-on: **27 PASS** · FE dialog/layout/API: **18 PASS** · **0** paid calls in deploy window
+- Rollback: `/var/backups/fashionrise/p1-fashn-fidelity-oneclick-deploy-20261102T054908Z/ROLLBACK.sh` → `7015ca3f`
+
+### Remaining limitations
+
+- Fidelity gate is geometric (not a generative guarantee). A technically valid image can still look imperfect while passing silhouette class checks.
+- FASHN may still reinterpret unusual silhouettes; owner visual review in My Looks remains required.
+- OpenAI Try On Person path unchanged.
+
+### Owner next
+
+Hard-refresh App **`a3ca2221`** → personal croquis → draw high-cut one-piece → Magic → **FASHN Try On (~16¢)** once → expect progress through realism/fidelity/FASHN → My Looks swimsuit (not a dress). Verify pink CTA fully tappable on Samsung Internet / Android Chrome.
 
 ## #161 P0 FASHN mobile review + realistic garment before try-on — DEPLOYED (2026-11-02)
 

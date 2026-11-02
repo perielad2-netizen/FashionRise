@@ -42,14 +42,39 @@ export function ConfirmDialog({
     )
     // Focus primary without forcing a scroll that hides content on short viewports —
     // scroll the sticky footer into view instead when scrollable.
-    ;(primary ?? node)?.focus({ preventScroll: scrollable })
-    if (scrollable && typeof actionsRef.current?.scrollIntoView === 'function') {
+    ;(primary ?? node)?.focus({ preventScroll: true })
+    if (typeof actionsRef.current?.scrollIntoView === 'function') {
       actionsRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     }
     return () => {
       if (previous && document.contains(previous)) previous.focus()
     }
   }, [scrollable])
+
+  // Keep actions above Android/Samsung/Chrome bottom toolbars via visualViewport.
+  useEffect(() => {
+    const root = dialogRef.current?.parentElement
+    if (!root) return
+    const vv = window.visualViewport
+    const sync = () => {
+      const layoutH = window.innerHeight || 0
+      const visibleH = vv?.height ?? layoutH
+      const offsetTop = vv?.offsetTop ?? 0
+      // Chrome/Samsung UI that overlaps the layout viewport.
+      const chromeBottom = Math.max(0, Math.round(layoutH - visibleH - offsetTop))
+      root.style.setProperty('--fr-browser-chrome-bottom', `${chromeBottom}px`)
+    }
+    sync()
+    vv?.addEventListener('resize', sync)
+    vv?.addEventListener('scroll', sync)
+    window.addEventListener('resize', sync)
+    return () => {
+      vv?.removeEventListener('resize', sync)
+      vv?.removeEventListener('scroll', sync)
+      window.removeEventListener('resize', sync)
+      root.style.removeProperty('--fr-browser-chrome-bottom')
+    }
+  }, [])
 
   useEffect(() => {
     if (!onEscape) return

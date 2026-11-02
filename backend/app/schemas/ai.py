@@ -357,3 +357,6 @@ class PersonalTryOnPreflightRead(BaseModel):
     fashn_notice_hash: str | None = None
     fashn_estimate_cents_per_call: int | None = None
     fashn_prompt_version: str | None = None
+    fashn_realism_estimate_cents_per_piece: int | None = None
+    fashn_combined_estimate_cents_one_piece: int | None = None
+    fashn_one_click: bool = False

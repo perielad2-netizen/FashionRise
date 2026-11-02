@@ -56,6 +56,11 @@ from app.services.fashn_try_on_provider import (
     fashn_live_armed,
     fashn_notice_text_hash,
 )
+from app.services.fashn_garment_fidelity import (
+    assert_structural_fidelity,
+    compute_silhouette_features,
+    recommend_fashn_category,
+)
 from app.services.fashn_garment_prep import (
     PieceCategory,
     prep_from_approved_product_pieces,
@@ -343,8 +348,20 @@ def enqueue_personal_try_on(
                     "Generate and approve the garment first."
                 ),
             )
+        # Offline prep of the immutable sketch → plate(s) for fidelity + category.
+        try:
+            sketch_prep = prepare_garment_reference(garment_png)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        if sketch_prep.quality_ok is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=sketch_prep.quality_notes or "Garment sketch plates failed quality checks.",
+            )
+
         parsed: list[tuple[PieceCategory, bytes]] = []
-        for item in raw_pieces:
+        fidelity_reports: list[dict[str, Any]] = []
+        for idx, item in enumerate(raw_pieces):
             if not isinstance(item, dict):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid approved garment piece.")
             cat = str(item.get("category") or "auto").strip().lower()
@@ -354,7 +371,32 @@ def enqueue_personal_try_on(
                 png = decode_data_url_png(str(item.get("image_base64") or ""))
             except ValueError as exc:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-            parsed.append((cat, png))  # type: ignore[arg-type]
+            plate_png = (
+                sketch_prep.pieces[idx].png_bytes
+                if idx < len(sketch_prep.pieces)
+                else sketch_prep.pieces[0].png_bytes
+            )
+            verdict = assert_structural_fidelity(
+                source_png=plate_png,
+                product_png=png,
+                layout=sketch_prep.layout,
+            )
+            fidelity_reports.append(verdict.public_dict())
+            if not verdict.ok:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=verdict.message,
+                )
+            # Remap auto → one-pieces (etc.) from source silhouette; never send auto for swimsuits.
+            mapped = recommend_fashn_category(
+                layout=sketch_prep.layout,
+                piece_category=cat if cat != "auto" else verdict.recommended_category,
+                features=verdict.source,
+            )
+            if sketch_prep.layout == "two_piece":
+                # Preserve tops/bottoms ordering from prep when possible.
+                mapped = sketch_prep.pieces[idx].category if idx < len(sketch_prep.pieces) else mapped
+            parsed.append((mapped, png))  # type: ignore[arg-type]
         try:
             prep = prep_from_approved_product_pieces(
                 pieces=parsed,
@@ -377,6 +419,8 @@ def enqueue_personal_try_on(
             "garment_fingerprint": prep.source_fingerprint,
             "from_approved_product": True,
             "garment_realism_job_id": str(garment_realism_job_id) if garment_realism_job_id else None,
+            "fidelity": fidelity_reports,
+            "categories": [cat for cat, _png in parsed],
         }
     else:
         estimate = estimate_try_on_cost_cents()
@@ -734,6 +778,12 @@ def try_on_preflight_public() -> dict[str, Any]:
     """Safe public preflight for FE (no image bytes / no secret values)."""
     settings = get_settings()
     fashn_ready = fashn_configured()
+    fashn_per = int(settings.fashn_try_on_estimate_cents or 8)
+    realism_per = int(
+        getattr(settings, "fashn_garment_realism_estimate_cents", None)
+        or settings.my_croquis_ai_estimate_cents
+        or 8
+    )
     return {
         "enabled": bool(settings.my_croquis_ai_enabled and settings.my_croquis_ai_spend_ceiling_usd > 0),
         "live_http": bool(settings.my_croquis_ai_live_http),
@@ -749,8 +799,12 @@ def try_on_preflight_public() -> dict[str, Any]:
         "fashn_consent_version": FASHN_CONSENT_VERSION,
         "fashn_notice_text": FASHN_NOTICE_TEXT,
         "fashn_notice_hash": fashn_notice_text_hash(),
-        "fashn_estimate_cents_per_call": int(settings.fashn_try_on_estimate_cents or 8),
+        "fashn_estimate_cents_per_call": fashn_per,
         "fashn_prompt_version": FASHN_PROMPT_VERSION,
+        # Soft one-click combined estimate (1 piece / 1 credit). Two-piece doubles both stages.
+        "fashn_realism_estimate_cents_per_piece": realism_per,
+        "fashn_combined_estimate_cents_one_piece": realism_per + fashn_per,
+        "fashn_one_click": True,
     }
 
 
@@ -1036,18 +1090,50 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                 return _fail("Invalid plate piece in realism job.")
             cat = str(item.get("category") or "auto")
             plate_png = decode_data_url_png(str(item.get("image_base64") or ""))
-            product_png, meta = adapter.generate_piece(plate_png=plate_png, category=cat)
+            # Prefer explicit one-pieces over auto for one-piece plates.
+            feats = compute_silhouette_features(plate_png)
+            gen_cat = recommend_fashn_category(layout="one_piece", piece_category=cat, features=feats)
+            if cat in {"tops", "bottoms"}:
+                gen_cat = cat  # type: ignore[assignment]
+            product_png, meta = adapter.generate_piece(plate_png=plate_png, category=gen_cat)
+            verdict = assert_structural_fidelity(
+                source_png=plate_png,
+                product_png=product_png,
+                layout="two_piece" if cat in {"tops", "bottoms"} else "one_piece",
+            )
+            meta = {**meta, "fidelity": verdict.public_dict(), "category": gen_cat}
+            if not verdict.ok:
+                # OpenAI already ran — settle realism spend, but block FASHN with a clear code.
+                if reservation is not None and reservation.status == RESERVATION_OPEN:
+                    reservation.status = RESERVATION_SETTLED
+                    reservation.actual_cost_cents = reservation.estimate_cents
+                    reservation.provider_called = True
+                job.status = "failed"
+                job.error_message = verdict.message[:240]
+                job.result_data = {
+                    "status": "failed",
+                    "summary": verdict.message,
+                    "mode": "garment_realism",
+                    "error_code": verdict.code,
+                    "fidelity": verdict.public_dict(),
+                    "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
+                    "provider": GARMENT_REALISM_PROVIDER_ID,
+                    "pieces": [],
+                    "block_fashn": True,
+                }
+                return job.result_data
             # Store private product PNG via local storage; also keep data URL for FE review.
-            key = f"ai/{job.id.hex}_garment_{cat}_{uuid.uuid4().hex[:8]}.png"
+            key = f"ai/{job.id.hex}_garment_{gen_cat}_{uuid.uuid4().hex[:8]}.png"
             storage = LocalStorageBackend()
             url = storage.save_file(key=key, data=io.BytesIO(product_png), content_type="image/png")
             out_pieces.append(
                 {
-                    "category": cat,
+                    "category": gen_cat,
                     "image_base64": "data:image/png;base64," + base64.b64encode(product_png).decode("ascii"),
                     "image_url": url,
                     "sha256": hashlib.sha256(product_png).hexdigest(),
                     "source_plate_sha256": str(item.get("sha256") or ""),
+                    "fidelity": verdict.public_dict(),
                 }
             )
             metas.append(meta)
@@ -1079,7 +1165,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
 
     result = {
         "status": "completed",
-        "summary": "Realistic garment product image ready for your review.",
+        "summary": "Realistic garment product image ready (fidelity checks passed).",
         "mode": "garment_realism",
         "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
         "provider": GARMENT_REALISM_PROVIDER_ID,
@@ -1087,7 +1173,10 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
         "piece_meta": metas,
         "garment_fingerprint": data.get("garment_fingerprint"),
         "cost_cents": reservation.actual_cost_cents if reservation else data.get("estimate_cents"),
-        "requires_owner_acceptance": True,
+        # One-click pipeline auto-continues to FASHN when fidelity_ok; manual accept retained for recovery.
+        "requires_owner_acceptance": False,
+        "fidelity_ok": True,
+        "block_fashn": False,
     }
     job.status = "completed"
     job.error_message = None

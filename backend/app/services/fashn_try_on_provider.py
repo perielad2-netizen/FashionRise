@@ -28,19 +28,20 @@ logger = logging.getLogger(__name__)
 
 FASHN_PROVIDER_ID = "fashn_tryon_v1_6"
 FASHN_MODEL_NAME = "tryon-v1.6"
-FASHN_CONSENT_VERSION = "try-on-fashn-preview-v1"
+FASHN_CONSENT_VERSION = "try-on-fashn-oneclick-v1"
 FASHN_PROMPT_VERSION = "fashn-tryon-v1.6"
 
 FASHN_NOTICE_TEXT = (
-    "FASHN Try On first turns your garment sketch into a realistic clothing product "
-    "image with OpenAI (separate paid step you must accept). After you approve that "
-    "garment, FashionRise sends your original Create My Croquis photo plus the approved "
-    "product image to FASHN AI (Virtual Try-On v1.6) for a private photorealistic preview. "
-    "Ordinary swimwear is supported with moderation kept on (permissive). Two-piece designs "
-    "use two FASHN credits (top then bottom). This is a concept preview — not a fit or "
-    "measurement guarantee. Your original photo and sketch stay private and are not "
-    "overwritten. Outline-only plates are never sent to FASHN. Refused attempts are not "
-    "charged by FashionRise; providers only bill successful outputs."
+    "FASHN Try On is a one-click, bounded two-provider preview: FashionRise prepares your "
+    "sketch, generates a realistic garment product image with OpenAI, runs automatic "
+    "silhouette fidelity checks, then — only if those checks pass — sends your original "
+    "Create My Croquis photo plus that product image to FASHN AI (Virtual Try-On v1.6). "
+    "One-piece swimwear is sent as category one-pieces (not auto) so high-cut silhouettes "
+    "are not reinterpreted as dresses. Ordinary swimwear uses moderation_level=permissive. "
+    "Two-piece designs use two FASHN credits (top then bottom). Combined cost is shown "
+    "before you tap. No automatic paid regenerations. This is a concept preview — not a "
+    "fit guarantee. Your original photo and sketch stay private and are not overwritten. "
+    "If fidelity checks fail, FASHN is not started and FASHN credits are not used."
 )
 
 

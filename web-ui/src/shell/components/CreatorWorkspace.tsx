@@ -12,7 +12,6 @@ import {
   zoomPercent,
 } from '@/lib/viewportTransform'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
-import { FashnGarmentReview } from '@/components/studio/FashnGarmentReview'
 import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { BrushControls } from '@/shell/components/BrushControls'
@@ -355,6 +354,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         <ConfirmDialog
           title="Magic"
           busy={editor.magicDestinationBusy}
+          scrollable
           onEscape={editor.cancelMagicDestination}
           actions={[
             {
@@ -375,7 +375,10 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
             ...(editor.magicFashnAvailable
               ? [
                   {
-                    label: 'FASHN Try On',
+                    label:
+                      editor.magicFashnCombinedEstimateCents != null
+                        ? `FASHN Try On (~${editor.magicFashnCombinedEstimateCents}¢)`
+                        : 'FASHN Try On',
                     onClick: editor.chooseFashnTryOn,
                     variant: 'primary' as const,
                   },
@@ -396,77 +399,16 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           ) : null}
           {editor.magicFashnAvailable ? (
             <p>
-              FASHN Try On is a separate swimwear-capable provider. You will review a prepared
-              garment plate and cost before any paid credit is used
-              {editor.magicFashnEstimatePerCall != null
-                ? ` (~${editor.magicFashnEstimatePerCall}¢ per FASHN credit; two-piece = 2 credits)`
-                : ''}
-              . Providers are never switched automatically after a refusal.
+              FASHN Try On is one click: FashionRise prepares your sketch, generates a realistic
+              garment (OpenAI), checks silhouette fidelity, then runs FASHN Virtual Try-On v1.6.
+              Combined estimate about{' '}
+              {editor.magicFashnCombinedEstimateCents != null
+                ? `${editor.magicFashnCombinedEstimateCents}¢`
+                : '16¢'}{' '}
+              for a one-piece (two-piece doubles both stages). No automatic paid regenerations.
+              If fidelity fails, FASHN is not started.
             </p>
           ) : null}
-        </ConfirmDialog>
-      ) : null}
-
-      {editor.fashnPrepOpen && editor.fashnPrep ? (
-        <ConfirmDialog
-          title={
-            editor.fashnRealisticPieces?.length
-              ? 'Accept realistic garment'
-              : 'Review garment for FASHN'
-          }
-          busy={editor.fashnPrepBusy || editor.fashnRealismBusy}
-          scrollable
-          onEscape={editor.cancelFashnPrep}
-          actions={[
-            {
-              label: 'Cancel',
-              onClick: editor.cancelFashnPrep,
-              variant: 'ghost',
-            },
-            ...(editor.fashnRealisticPieces?.length
-              ? [
-                  {
-                    label: `Regenerate garment (~${editor.fashnPrep.realism_estimate_cents ?? 8}¢)`,
-                    onClick: () => {
-                      void editor.generateFashnRealisticGarment()
-                    },
-                    variant: 'ghost' as const,
-                    disabled:
-                      editor.fashnPrep.quality_ok === false ||
-                      editor.fashnPrep.openai_live_http === false,
-                  },
-                  {
-                    label: `Accept & Run FASHN (~${editor.fashnPrep.estimate_cents}¢ · ${editor.fashnPrep.fashn_calls} credit${editor.fashnPrep.fashn_calls === 1 ? '' : 's'})`,
-                    onClick: () => {
-                      void editor.confirmFashnTryOn()
-                    },
-                    variant: 'primary' as const,
-                    disabled: !editor.fashnPrep.configured || !editor.fashnPrep.live_http,
-                  },
-                ]
-              : [
-                  {
-                    label: `Generate realistic garment (~${editor.fashnPrep.realism_estimate_cents ?? 8}¢)`,
-                    onClick: () => {
-                      void editor.generateFashnRealisticGarment()
-                    },
-                    variant: 'primary' as const,
-                    disabled:
-                      editor.fashnPrep.quality_ok === false ||
-                      editor.fashnPrep.openai_live_http === false ||
-                      !editor.fashnPrep.configured,
-                  },
-                ]),
-          ]}
-        >
-          <FashnGarmentReview
-            prep={editor.fashnPrep}
-            realisticPieces={editor.fashnRealisticPieces}
-            realismBusy={editor.fashnRealismBusy}
-            realismError={editor.fashnRealismError}
-            detailsOpen={editor.fashnDetailsOpen}
-            onToggleDetails={editor.toggleFashnDetails}
-          />
         </ConfirmDialog>
       ) : null}
 
@@ -478,6 +420,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         sketchObjectUrl={editor.magicSketchUrl}
         originalPhotoUrl={editor.magicOriginalPhotoUrl}
         error={editor.magicError}
+        statusHint={editor.magicStatusHint}
         canRecover={editor.magicCanRecover}
         resultMode={editor.magicResultMode}
         dual={

@@ -264,6 +264,10 @@ export function useStudioEditor() {
   const [magicTryOnEstimateCents, setMagicTryOnEstimateCents] = useState<number | null>(null)
   const [magicFashnAvailable, setMagicFashnAvailable] = useState(false)
   const [magicFashnEstimatePerCall, setMagicFashnEstimatePerCall] = useState<number | null>(null)
+  const [magicFashnCombinedEstimateCents, setMagicFashnCombinedEstimateCents] = useState<
+    number | null
+  >(null)
+  const [magicStatusHint, setMagicStatusHint] = useState<string | null>(null)
   const [fashnPrepOpen, setFashnPrepOpen] = useState(false)
   const [fashnPrepBusy, setFashnPrepBusy] = useState(false)
   const [fashnPrep, setFashnPrep] = useState<FashnGarmentPrepareResult | null>(null)
@@ -1278,6 +1282,7 @@ export function useStudioEditor() {
     setMagicOpen(false)
     setMagicPhase('idle')
     setMagicError(null)
+    setMagicStatusHint(null)
   }, [])
 
   const applySettledMagicJob = useCallback(
@@ -1741,36 +1746,145 @@ export function useStudioEditor() {
           return
         }
 
-        // FASHN: show offline prepared garment plate before any paid call.
+        // FASHN one-click: prep → realism → fidelity → FASHN (no intermediate accept dialogs).
         if (provider === 'fashn') {
           if (!preflight.fashn_enabled || !preflight.fashn_configured) {
             setMagicPhase('failed')
             setMagicError('FASHN Try On is not configured on this server yet.')
             return
           }
+          if (!preflight.fashn_live_http) {
+            setMagicPhase('failed')
+            setMagicError(
+              'FASHN Try On is configured but not live-armed yet. Ask an operator to enable FASHN_TRY_ON_LIVE_HTTP.',
+            )
+            return
+          }
+          setFashnPrepOpen(false)
           setMagicPhase('submitting')
+          setMagicStatusHint('Preparing your garment plate…')
           const prep = await prepareFashnGarmentReference(garment.dataUrl, controller.signal)
           if (controller.signal.aborted) return
-          setFashnPrep(prep)
-          setFashnPrepGarmentDataUrl(garment.dataUrl)
-          setFashnPrepCroquis({
+          if (prep.quality_ok === false) {
+            setMagicPhase('failed')
+            setMagicError(
+              prep.quality_notes ||
+                'Prepared plates do not look like a filled garment. Adjust fills, then retry.',
+            )
+            setMagicStatusHint(null)
+            return
+          }
+          if (prep.openai_live_http === false) {
+            setMagicPhase('failed')
+            setMagicError('Realistic garment generation is not live-armed on this server yet.')
+            setMagicStatusHint(null)
+            return
+          }
+
+          const pipelineId =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : String(Date.now())
+          const contentFingerprint = draftContentFingerprint(docAtStart)
+          const designHints = buildTryOnDesignHints({
+            strokes: frontBag.strokes,
+            fills: frontBag.fills,
+          })
+
+          setMagicStatusHint(
+            `Generating realistic garment (~${prep.realism_estimate_cents ?? 8}¢)…`,
+          )
+          setMagicPhase('polling')
+          const realismJob = await enqueueFashnGarmentRealism({
             croquisId,
             croquisVersion,
-            sourceRevision: docAtStart.clientRevision,
-            contentFingerprint: draftContentFingerprint(docAtStart),
+            garmentImageBase64: garment.dataUrl,
+            platePieces: prep.pieces.map((p) => ({
+              category: p.category,
+              image_base64: p.image_base64,
+            })),
+            garmentFingerprint: prep.garment_fingerprint,
+            idempotencyKey: `try_on:garment_realism:${pipelineId}`,
+            designId: designIdRef.current,
+            consentAcknowledged: true,
+            consentVersion: prep.consent_version,
+            signal: controller.signal,
           })
-          setFashnRealisticPieces(null)
-          setFashnRealismJobId(null)
-          setFashnRealismError(
-            prep.quality_ok === false
-              ? prep.quality_notes ||
-                  'Prepared plates do not look like a filled garment. Adjust fills, then retry.'
-              : null,
+          setFashnRealismJobId(realismJob.id)
+          let realismSettled = realismJob
+          const realismStarted = Date.now()
+          while (realismSettled.status === 'queued' || realismSettled.status === 'running') {
+            if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError')
+            if (Date.now() - realismStarted > 240_000) {
+              throw new Error('Realistic garment generation timed out. No automatic retry.')
+            }
+            await new Promise((r) => setTimeout(r, 1500))
+            realismSettled = await fetchAiJob(realismJob.id, controller.signal)
+          }
+          if (controller.signal.aborted) return
+          const realismData = (realismSettled.result_data || {}) as {
+            summary?: string
+            pieces?: FashnRealisticPiece[]
+            fidelity_ok?: boolean
+            block_fashn?: boolean
+            error_code?: string
+          }
+          const pieces = Array.isArray(realismData.pieces) ? realismData.pieces : []
+          if (
+            realismSettled.status !== 'completed' ||
+            realismData.block_fashn ||
+            realismData.fidelity_ok === false ||
+            pieces.length === 0
+          ) {
+            setMagicPhase('failed')
+            setMagicError(
+              realismData.summary ||
+                realismSettled.error_message ||
+                'Realistic garment failed fidelity checks. FASHN was not started.',
+            )
+            setMagicStatusHint(null)
+            return
+          }
+
+          setMagicStatusHint(
+            `Fidelity passed — running FASHN try-on (~${prep.estimate_cents}¢ · ${prep.fashn_calls} credit${prep.fashn_calls === 1 ? '' : 's'})…`,
           )
-          setFashnDetailsOpen(false)
-          setMagicOpen(false)
-          setFashnPrepOpen(true)
-          magicInFlightRef.current = false
+          const fashnJob = await enqueuePersonalTryOn({
+            croquisId,
+            croquisVersion,
+            garmentImageBase64: garment.dataUrl,
+            idempotencyKey: `try_on:fashn:${pipelineId}`,
+            designId: designIdRef.current,
+            sourceRevision: docAtStart.clientRevision,
+            contentFingerprint,
+            consentAcknowledged: true,
+            consentVersion: prep.consent_version,
+            designHints,
+            provider: 'fashn',
+            approvedGarmentPieces: pieces.map((p) => ({
+              category: p.category,
+              image_base64: p.image_base64,
+            })),
+            garmentRealismJobId: realismJob.id,
+            signal: controller.signal,
+          })
+          setMagicJobId(fashnJob.id)
+          persistMagicJobId(user.id, fashnJob.id)
+          const settled = await settleMagicJobWithImage(fashnJob.id, controller.signal)
+          if (controller.signal.aborted) return
+          const look = settled.look
+          setMagicResult(look)
+          setMagicStatusHint(null)
+          if (look.status === 'failed') {
+            setMagicPhase('failed')
+            setMagicError(look.summary)
+            return
+          }
+          if (settled.lookObjectUrl) {
+            magicLookUrlRef.current = settled.lookObjectUrl
+            setMagicLookUrl(settled.lookObjectUrl)
+          }
+          setMagicPhase('ready')
           return
         }
 
@@ -2130,6 +2244,7 @@ export function useStudioEditor() {
     setMagicTryOnEstimateCents(null)
     setMagicFashnAvailable(false)
     setMagicFashnEstimatePerCall(null)
+    setMagicFashnCombinedEstimateCents(null)
     void (async () => {
       try {
         const preflight = await fetchPersonalTryOnPreflight()
@@ -2141,12 +2256,20 @@ export function useStudioEditor() {
         setMagicFashnEstimatePerCall(
           fashnOk ? (preflight.fashn_estimate_cents_per_call ?? 8) : null,
         )
+        setMagicFashnCombinedEstimateCents(
+          fashnOk
+            ? (preflight.fashn_combined_estimate_cents_one_piece ??
+                (preflight.fashn_realism_estimate_cents_per_piece ?? 8) +
+                  (preflight.fashn_estimate_cents_per_call ?? 8))
+            : null,
+        )
       } catch {
         setMagicTryOnNotice(
           'Try On Person uses your original Create My Croquis photo with this garment sketch for a private photorealistic preview. Concept preview only — not a fit guarantee.',
         )
         setMagicTryOnEstimateCents(null)
         setMagicFashnAvailable(false)
+        setMagicFashnCombinedEstimateCents(null)
       } finally {
         setMagicDestinationBusy(false)
       }
@@ -3239,6 +3362,8 @@ export function useStudioEditor() {
     magicTryOnEstimateCents,
     magicFashnAvailable,
     magicFashnEstimatePerCall,
+    magicFashnCombinedEstimateCents,
+    magicStatusHint,
     fashnPrepOpen,
     fashnPrepBusy,
     fashnPrep,
