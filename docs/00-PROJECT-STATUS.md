@@ -41,7 +41,7 @@
 | Alembic | **`015`** (unchanged) |
 | Nginx Accept | Unchanged allowlist |
 | Provider calls | **0** |
-| Rollback | `/var/backups/fashionrise/p0-172-structure-harden-deploy-*/ROLLBACK.sh` → FE **`e176f464`** |
+| Rollback | `/var/backups/fashionrise/p0-172-structure-harden-deploy-20261102T141257Z/ROLLBACK.sh` → FE **`e176f464`** |
 
 ### Remaining limitation
 
