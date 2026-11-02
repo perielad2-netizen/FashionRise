@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#158+#159** P0 dual-fix **DEPLOYED** App **`f102cbc4`** on FASHN branch · Create My Croquis notices restored · Fashion Magic accepts `personal` · FASHN still live-armed · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#161** FASHN garment review + realistic garment generation **DEPLOYED** App **`7015ca3f`** · mobile sticky footer · OpenAI product image before FASHN · dual-stage costs · **0** operator-paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI v3 + optional FASHN v1.6 (swimwear) **live-armed**.
 
@@ -11,12 +11,37 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`f102cbc4`** — release `/var/www/fashionrise/releases/f102cbc4` · source `f102cbc46eee40598c26b7ccd1fea419f81723e4` · App pill **`f102cbc4`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, croquis notices **baked + SHA-asserted**, API `/api/v1`. Prior FE **`9aeea3f3`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN adapter **`tryon-v1.6`** + garment prep · **`reference_model_id=personal`** allowed for Fashion Magic (#159); Alembic **`015`**. |
-| AI worker | `fashionrise-ai-worker` restarted with FASHN+OpenAI try-on · croquis **v5** unchanged |
+| Frontend (`web-ui`) | **`7015ca3f`** — release `/var/www/fashionrise/releases/7015ca3f` · source `7015ca3f51676afb42f666bb6af2a49828b94702` · App pill **`7015ca3f`** · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, croquis notices **baked + SHA-asserted**, FASHN garment review (mobile sticky footer + realism approval) **ON**, API `/api/v1`. Prior FE **`f102cbc4`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v3`** + FASHN **`tryon-v1.6`** + garment prep quality gate + **`personal_garment_realism`** (`fashn-garment-realism-v1`) · FASHN requires owner-approved product plates · `reference_model_id=personal` (#159); Alembic **`015`**. |
+| AI worker | `fashionrise-ai-worker` restarted with garment-realism + FASHN/OpenAI try-on · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/f102cbc4` · + exact `POST /api/v1/ai/personal-try-on/fashn/prepare` |
-| AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · croquis **v5** · try-on OpenAI **`try-on-person-v3`** · daily gen count **OFF** |
+| Nginx | `current` → `releases/7015ca3f` · exact `POST …/fashn/prepare` + `POST …/fashn/garment-realism` |
+| AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
+
+
+## #161 P0 FASHN mobile review + realistic garment before try-on — DEPLOYED (2026-11-02)
+
+Ships on top of #156/#158/#159 without overwriting V5 croquis, Fashion Magic, OpenAI Try On, or FASHN live-arm.
+
+| Problem | Fix |
+|---|---|
+| Mobile garment-review dialog scrolled past Cancel / Confirm | `ConfirmDialog` viewport-bounded (`dvh` + safe-area), scrollable body, sticky footer; top/bottom previews with enlarge |
+| Flat-lay sketch plates (often outline-only) went straight to FASHN | Prep fill retention + quality gate; paid OpenAI **`fashn-garment-realism-v1`** product image; owner Accept / Regenerate / Cancel; FASHN enqueue requires `approved_garment_pieces` |
+
+| Item | Detail |
+|---|---|
+| App SHA | **`7015ca3f`** (`7015ca3f51676afb42f666bb6af2a49828b94702`) |
+| Pipeline | Sketch → offline prep (free) → **Generate realistic garment** (OpenAI images.edit, paid) → owner review → **Accept & Run FASHN** (v1.6, paid) → My Looks |
+| Costs shown | Realism **8¢ × pieces** · FASHN **8¢ × credits** · combined estimate before each paid step · no auto-retry / no silent accept |
+| Nginx | Exact allowlist `POST /api/v1/ai/personal-try-on/fashn/garment-realism` |
+| Tests | BE prep/realism/try-on/nginx **23 PASS** · FE ConfirmDialog viewport + try-on API + layout **14 PASS** · prod `ASSERT_PROD_CROQUIS_NOTICES=pass` · live OpenAPI route + **0** paid jobs in deploy window |
+| Backup / rollback | `/var/backups/fashionrise/p0-161-garment-realism-deploy-20261102T014302Z/ROLLBACK.sh` → prior FE **`f102cbc4`** + prior BE/nginx |
+| Preserved | V5 croquis · original photo binding · Magic · OpenAI Try On · FASHN key/`LIVE_HTTP` · single-checkbox consent · My Croquis / Designs / Looks · privacy/spend caps |
+
+### Owner verification (first paid test is owner-initiated)
+1. Hard-refresh App **`7015ca3f`** on phone (320–393 wide): Magic → **FASHN Try On** → footer Cancel / Generate always reachable; scroll sketches + enlarge top/bottom.
+2. Draw filled opaque swimsuit (not outline-only). Prep must pass quality; then **Generate realistic garment** (~8¢/piece). Compare Step 1 sketch vs Step 2 product image; Regenerate or Cancel without FASHN spend.
+3. Only after **Accept & Run FASHN** (~8¢/credit; two-piece = 2) expect photorealistic person wearing the approved garment in My Looks.
 
 ## #158+#159 P0 Create My Croquis notices + personal Fashion Magic — DEPLOYED (2026-11-02)
 
@@ -56,7 +81,7 @@ OpenAI prompt tweaks stopped. Ordinary two-piece swimwear still fails OpenAI inp
 | Tests | BE prep + try-on + nginx **17** PASS · FE API/layout **30** PASS · **0** paid calls |
 | Deploy | App **`9aeea3f3`** · backup `/var/backups/fashionrise/try-on-fashn-20261102T010309Z` · nginx prepare allowlist live · `FASHN_TRY_ON_ENABLED=true` · `FASHN_TRY_ON_LIVE_HTTP=true` |
 | Provider readiness | `key_present=true` · `fashn_configured=true` · `live_armed=true` · OpenAI try-on still live · **0** agent-paid FASHN calls |
-| Owner first test | Hard-refresh App **`f102cbc4`** → personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → inspect prepared plate (~16¢ / 2 credits for two-piece) → confirm → expect realistic preview on original photo. |
+| Owner first test | Hard-refresh App **`7015ca3f`** → personal croquis → draw opaque two-piece swimsuit → Magic → **FASHN Try On** → offline prep → **Generate realistic garment** (~16¢ for 2 pieces) → accept → FASHN (~16¢ / 2 credits) → My Looks. |
 
 ### Owner next (product acceptance)
 1. Credits confirmed by owner.
