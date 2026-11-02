@@ -252,32 +252,130 @@ def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
     return hints
 
 
+def classify_structure_image_role(png: bytes) -> str:
+    """Classify PNG as isolated garment plate vs full photographic scene (#171).
+
+    Returns ``isolated_garment``, ``full_scene``, or ``unknown``.
+    Full try-on person photographs must not be measured as garment masks.
+    """
+    rgba = _load_rgba(png)
+    w, h = rgba.size
+    pix = rgba.load()
+    assert pix is not None
+    total = max(w * h, 1)
+    transparent = 0
+    near_white = 0
+    other = 0
+    skinish = 0
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = pix[x, y]
+            if a < _ALPHA_THRESHOLD:
+                transparent += 1
+                continue
+            if r >= _NEAR_WHITE and g >= _NEAR_WHITE and b >= _NEAR_WHITE:
+                near_white += 1
+                continue
+            if r >= 200 and g >= 200 and b >= 200 and abs(r - g) < 14 and abs(g - b) < 14:
+                near_white += 1
+                continue
+            other += 1
+            # Rough skin-tone band (not a classifier — only a full-scene hint).
+            if 60 <= r <= 245 and 40 <= g <= 210 and 30 <= b <= 190 and r >= g >= b - 10 and (r - b) >= 15:
+                skinish += 1
+    transparent_frac = transparent / total
+    near_white_frac = near_white / total
+    other_frac = other / total
+    skin_frac = skinish / max(other, 1)
+
+    # Studio transparent garment captures (no person photo alpha).
+    if transparent_frac >= 0.22 and other_frac <= 0.70:
+        return "isolated_garment"
+    # Photoreal try-on photographs often have studio near-white backgrounds + skin.
+    # Detect these BEFORE flat-lay plate heuristics so skin/body is never a garment mask.
+    if transparent_frac < 0.08 and skin_frac >= 0.08 and other_frac >= 0.12:
+        return "full_scene"
+    if transparent_frac < 0.08 and other_frac >= 0.40 and (skin_frac >= 0.04 or other_frac >= 0.55):
+        return "full_scene"
+    if transparent_frac < 0.05 and near_white_frac < 0.25 and other_frac >= 0.50:
+        return "full_scene"
+    # Flat-lay / white-plate products with substantial empty background and no skin.
+    if (
+        near_white_frac >= 0.30
+        and other_frac <= 0.55
+        and transparent_frac < 0.08
+        and skin_frac < 0.05
+    ):
+        return "isolated_garment"
+    return "unknown"
+
+
 def soft_try_on_structure_review(
     *,
     source_png: bytes,
     result_png: bytes,
 ) -> dict[str, Any]:
-    """Soft post-generation check for major lower-garment type mismatch.
+    """Soft post-generation check for major lower-garment type mismatch (#170/#171).
 
-    Never claims pixel-perfect fidelity. When confidence is low, returns unverified.
-    Confirmed structural failures are flagged so UI must not present them as faithful.
+    Only compares like-for-like **isolated garment** plates. Full photoreal person
+    images are never treated as garment masks. Non-trouser sources skip the check
+    without downgrading ordinary Try On results.
+
+    States:
+    - ``not_applicable`` — trousers check does not apply (ordinary outfits).
+    - ``inconclusive`` — cannot compare (e.g. person photo vs garment plate).
+    - ``failed`` — confirmed mismatch between two isolated garment images.
+    - ``passed_soft`` — soft consistency only (not a fidelity certificate).
     """
     src = analyze_lower_garment_geometry(source_png)
-    out = analyze_lower_garment_geometry(result_png)
-    base = {
-        "version": "try-on-structure-review-v1",
+    src_role = classify_structure_image_role(source_png)
+    out_role = classify_structure_image_role(result_png)
+    base: dict[str, Any] = {
+        "version": "try-on-structure-review-v2",
         "source": src.public_dict(),
-        "result": out.public_dict(),
+        "source_role": src_role,
+        "result_role": out_role,
+        "result": None,
     }
     if not src.looks_like_trousers:
         return {
             **base,
-            "state": "unverified",
-            "code": "STRUCTURE_UNVERIFIED_SOURCE",
-            "message": "Source silhouette is not a clear trouser/jumpsuit case — result left unverified.",
+            "state": "not_applicable",
+            "code": "STRUCTURE_CHECK_NOT_APPLICABLE",
+            "message": (
+                "Trousers/jumpsuit structure check does not apply to this sketch. "
+                "Ordinary Try On preview is unchanged (concept preview — not a fit guarantee)."
+            ),
             "faithful": None,
         }
-    # Source has clear trousers; result lost dual lobes or collapsed into a continuous lower panel.
+    # Result is a full person photograph (or unknown scene) — not a garment plate.
+    if out_role != "isolated_garment":
+        return {
+            **base,
+            "state": "inconclusive",
+            "code": "STRUCTURE_INCOMPARABLE_RESULT",
+            "message": (
+                "Automated garment-mask comparison cannot be applied to a full try-on "
+                "photograph (skin, body, hair, and background are not the designed garment). "
+                "No automated pass/fail is claimed."
+            ),
+            "faithful": None,
+        }
+    if src_role != "isolated_garment":
+        return {
+            **base,
+            "state": "inconclusive",
+            "code": "STRUCTURE_INCOMPARABLE_SOURCE",
+            "message": (
+                "Source image is not an isolated garment plate — structure check inconclusive."
+            ),
+            "faithful": None,
+        }
+
+    out = analyze_lower_garment_geometry(result_png)
+    base["result"] = out.public_dict()
+
+    # Source has clear trousers; isolated result lost dual lobes / continuous panel.
     if out.two_lobe_sample_ratio < 0.25 and out.avg_gap_frac < 0.04:
         return {
             **base,
@@ -289,7 +387,6 @@ def soft_try_on_structure_review(
             ),
             "faithful": False,
         }
-    # Dramatic widening of narrow legs.
     if (
         src.looks_like_narrow_legs
         and out.looks_like_wide_legs
@@ -315,8 +412,11 @@ def soft_try_on_structure_review(
         }
     return {
         **base,
-        "state": "unverified",
-        "code": "STRUCTURE_UNVERIFIED_RESULT",
-        "message": "Could not confidently verify lower-garment fidelity — treat as unverified.",
+        "state": "inconclusive",
+        "code": "STRUCTURE_INCONCLUSIVE_COMPARE",
+        "message": (
+            "Could not confidently verify lower-garment fidelity from plate geometry alone. "
+            "No automated pass/fail is claimed."
+        ),
         "faithful": None,
     }

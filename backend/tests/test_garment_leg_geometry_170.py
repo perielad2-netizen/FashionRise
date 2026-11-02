@@ -205,12 +205,13 @@ def test_soft_review_flags_merged_legs():
     assert "STRUCTURE_LEGS_MERGED_OR_LOST" == review["code"]
 
 
-def test_soft_review_unverified_for_ambiguous_source():
+def test_soft_review_not_applicable_for_ambiguous_source():
+    """#171 — non-trouser sources skip the check without downgrading ordinary Try On."""
     review = soft_try_on_structure_review(
         source_png=_ambiguous_lower_png(),
         result_png=_ambiguous_lower_png(),
     )
-    assert review["state"] == "unverified"
+    assert review["state"] == "not_applicable"
     assert review["faithful"] is None
 
 

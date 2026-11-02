@@ -19,6 +19,12 @@ export type MagicLookResult = {
   summary: string
   bullets: string[]
   hasImage: boolean
+  /** #171 — verified structure failure (not ordinary inconclusive/not_applicable). */
+  fidelityOk?: boolean | null
+  structureReviewState?: string | null
+  structureReviewMessage?: string | null
+  /** True when UI must warn and must not present as an accepted My Look. */
+  structureRejected?: boolean
 }
 
 export function extractImageUrl(resultData: Record<string, unknown> | null | undefined): string | null {
@@ -106,20 +112,39 @@ export function extractPolishBullets(job: AiJobRead): string[] {
 }
 
 export function toMagicLookResult(job: AiJobRead): MagicLookResult {
-  // #170 — soft structure review may mark result_data.status completed_unverified
-  // while the job row stays completed (provider settled). Surface the review state.
-  const dataStatus =
-    typeof job.result_data?.status === 'string' ? String(job.result_data.status) : null
-  const fidelityOk = job.result_data?.fidelity_ok
-  let status: AiJobStatus = job.status
-  if (job.status === 'completed' && (dataStatus === 'completed_unverified' || fidelityOk === false)) {
-    status = 'completed_unverified'
-  }
+  // #170/#171 — only verified structure failures become completed_unverified in the UI.
+  // not_applicable / inconclusive keep ordinary completed presentation.
+  const data = job.result_data
+  const dataStatus = typeof data?.status === 'string' ? String(data.status) : null
+  const fidelityOkRaw = data?.fidelity_ok
+  const fidelityOk =
+    fidelityOkRaw === false ? false : fidelityOkRaw === true ? true : null
+  const review =
+    data?.structure_review && typeof data.structure_review === 'object'
+      ? (data.structure_review as Record<string, unknown>)
+      : null
+  const structureReviewState =
+    typeof review?.state === 'string' ? String(review.state) : null
+  const structureReviewMessage =
+    typeof review?.message === 'string' ? String(review.message) : null
+  // Only verified failures downgrade presentation. Historical #170 "unverified" ordinary
+  // outfits (completed_unverified without fidelity_ok=false) stay ordinary completed.
+  const structureRejected = fidelityOk === false || structureReviewState === 'failed'
+  const status: AiJobStatus =
+    job.status === 'completed' && structureRejected
+      ? 'completed_unverified'
+      : job.status === 'completed' && dataStatus === 'completed_unverified' && !structureRejected
+        ? 'completed'
+        : job.status
   return {
     jobId: job.id,
     status,
     summary: extractMagicSummary(job),
     bullets: extractPolishBullets(job),
     hasImage: Boolean(extractImageUrl(job.result_data)),
+    fidelityOk,
+    structureReviewState,
+    structureReviewMessage,
+    structureRejected,
   }
 }

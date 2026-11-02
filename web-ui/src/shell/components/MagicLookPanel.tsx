@@ -111,9 +111,16 @@ export function MagicLookPanel({
     Boolean(activeLookUrl) &&
     Boolean(originalPhotoUrl)
   const hasDetails = Boolean(activeResult?.summary || activeResult?.bullets?.length)
+  const structureRejected = Boolean(activeResult?.structureRejected)
+  const fidelityBanner =
+    structureRejected &&
+    (activeResult?.structureReviewMessage ||
+      activeResult?.summary ||
+      'This try-on does not match your sketch well enough to treat as a faithful result.')
   const canViewInLooks =
     phase === 'ready' &&
     Boolean(onViewInMyLooks) &&
+    !structureRejected &&
     (dualActive
       ? Boolean(dual?.front.lookObjectUrl || dual?.back.lookObjectUrl)
       : Boolean(lookObjectUrl))
@@ -174,7 +181,9 @@ export function MagicLookPanel({
                   ? dualActive
                     ? 'Both sides stay in Studio. These looks are private results for you.'
                     : tryOn
-                      ? 'Concept preview only — not a fit guarantee. Your photo and sketch stay private and unchanged.'
+                      ? structureRejected
+                        ? 'Private review only — this preview is not accepted as a faithful try-on or My Look.'
+                        : 'Concept preview only — not a fit guarantee. Your photo and sketch stay private and unchanged.'
                       : 'Your original sketch stays in Studio. This look is a private result for you.'
                   : tryOn
                     ? 'FashionRise Try On Person'
@@ -207,6 +216,13 @@ export function MagicLookPanel({
                 </button>
               )
             })}
+          </div>
+        ) : null}
+
+        {fidelityBanner && phase === 'ready' ? (
+          <div className={styles.fidelityBanner} role="status">
+            <strong>Not a faithful try-on</strong>
+            <p>{fidelityBanner}</p>
           </div>
         ) : null}
 
@@ -279,7 +295,13 @@ export function MagicLookPanel({
             <img
               className={styles.image}
               src={activeLookUrl}
-              alt={tryOn ? 'Try On Person preview' : 'Magic fashion look'}
+              alt={
+                structureRejected
+                  ? 'Try On Person preview — structural mismatch flagged'
+                  : tryOn
+                    ? 'Try On Person preview'
+                    : 'Magic fashion look'
+              }
             />
           ) : null}
 
