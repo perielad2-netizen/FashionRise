@@ -71,6 +71,7 @@ import {
 import { fetchSavedDesign, saveDesignSnapshot } from '@/services/savedDesignsApi'
 import { ApiError } from '@/services/api/client'
 import {
+  acceptFashnGarmentRealism,
   enqueueFashnGarmentRealism,
   enqueuePersonalTryOn,
   enqueueSketchPolish,
@@ -1787,10 +1788,6 @@ export function useStudioEditor() {
               ? crypto.randomUUID()
               : String(Date.now())
           const contentFingerprint = draftContentFingerprint(docAtStart)
-          const designHints = buildTryOnDesignHints({
-            strokes: frontBag.strokes,
-            fills: frontBag.fills,
-          })
 
           setMagicStatusHint(
             'Generating realistic garment…',
@@ -1831,61 +1828,45 @@ export function useStudioEditor() {
             error_code?: string
           }
           const pieces = Array.isArray(realismData.pieces) ? realismData.pieces : []
-          if (
-            realismSettled.status !== 'completed' ||
-            realismData.block_fashn ||
-            realismData.fidelity_ok === false ||
-            pieces.length === 0
-          ) {
+          if (realismSettled.status !== 'completed' || pieces.length === 0) {
             setMagicPhase('failed')
             setMagicError(
               realismData.summary ||
                 realismSettled.error_message ||
-                'Realistic garment failed fidelity checks. FASHN was not started.',
+                'Realistic garment generation failed. FASHN was not started.',
             )
             setMagicStatusHint(null)
             return
           }
 
-          setMagicStatusHint(
-            `Fidelity passed — running FASHN try-on (${prep.fashn_calls} credit${prep.fashn_calls === 1 ? '' : 's'})…`,
-          )
-          const fashnJob = await enqueuePersonalTryOn({
+          const fidelityBlocked =
+            realismData.block_fashn === true ||
+            realismData.fidelity_ok === false ||
+            pieces.some((p) => p.fidelity && p.fidelity.ok === false)
+
+          // #169 — stop for owner review. FASHN only after explicit Accept.
+          // Hard fidelity failures still open review so the owner can see the product,
+          // but Accept stays disabled (server also rejects override).
+          setFashnPrep(prep)
+          setFashnPrepGarmentDataUrl(garment.dataUrl)
+          setFashnPrepCroquis({
             croquisId,
             croquisVersion,
-            garmentImageBase64: garment.dataUrl,
-            idempotencyKey: `try_on:fashn:${pipelineId}`,
-            designId: designIdRef.current,
             sourceRevision: docAtStart.clientRevision,
             contentFingerprint,
-            consentAcknowledged: true,
-            consentVersion: prep.consent_version,
-            designHints,
-            provider: 'fashn',
-            approvedGarmentPieces: pieces.map((p) => ({
-              category: p.category,
-              image_base64: p.image_base64,
-            })),
-            garmentRealismJobId: realismJob.id,
-            signal: controller.signal,
           })
-          setMagicJobId(fashnJob.id)
-          persistMagicJobId(user.id, fashnJob.id)
-          const settled = await settleMagicJobWithImage(fashnJob.id, controller.signal)
-          if (controller.signal.aborted) return
-          const look = settled.look
-          setMagicResult(look)
+          setFashnRealisticPieces(pieces)
+          setFashnRealismJobId(realismJob.id)
+          setFashnRealismError(
+            fidelityBlocked
+              ? realismData.summary ||
+                  'Fidelity checks failed. Accept is disabled — regenerate or edit the sketch.'
+              : null,
+          )
+          setFashnPrepOpen(true)
           setMagicStatusHint(null)
-          if (look.status === 'failed') {
-            setMagicPhase('failed')
-            setMagicError(look.summary)
-            return
-          }
-          if (settled.lookObjectUrl) {
-            magicLookUrlRef.current = settled.lookObjectUrl
-            setMagicLookUrl(settled.lookObjectUrl)
-          }
-          setMagicPhase('ready')
+          setMagicPhase('idle')
+          setMagicOpen(false)
           return
         }
 
@@ -1975,6 +1956,45 @@ export function useStudioEditor() {
     setFashnDetailsOpen(false)
   }, [fashnPrepBusy, fashnRealismBusy])
 
+  // Editing the design or swapping croquis invalidates pending FASHN approval (#169).
+  useEffect(() => {
+    if (!fashnPrepOpen || !fashnPrepCroquis) return
+    if (fashnPrepBusy || fashnRealismBusy) return
+    const live = authoritativeDocRef.current
+    const liveFp = draftContentFingerprint(live)
+    const croquisChanged =
+      live.model !== 'personal' ||
+      live.personalCroquisId !== fashnPrepCroquis.croquisId ||
+      live.personalCroquisVersion !== fashnPrepCroquis.croquisVersion
+    const designChanged = liveFp !== fashnPrepCroquis.contentFingerprint
+    if (!croquisChanged && !designChanged) return
+    setFashnPrepOpen(false)
+    setFashnPrep(null)
+    setFashnPrepGarmentDataUrl(null)
+    setFashnPrepCroquis(null)
+    setFashnRealisticPieces(null)
+    setFashnRealismJobId(null)
+    setFashnRealismError(null)
+    setFashnDetailsOpen(false)
+    setMagicNotice(
+      croquisChanged
+        ? 'Personal croquis changed — FASHN garment approval was cleared. Start FASHN Try On again.'
+        : 'Studio design changed — FASHN garment approval was cleared. Start FASHN Try On again.',
+    )
+  }, [
+    fashnPrepOpen,
+    fashnPrepCroquis,
+    fashnPrepBusy,
+    fashnRealismBusy,
+    frontStrokes,
+    frontFills,
+    backStrokes,
+    backFills,
+    personalCroquisId,
+    personalCroquisVersion,
+    model,
+  ])
+
   const toggleFashnDetails = useCallback(() => {
     setFashnDetailsOpen((open) => !open)
   }, [])
@@ -1994,6 +2014,9 @@ export function useStudioEditor() {
       return
     }
 
+    // Regenerate replaces pending approval — never reuse stale product images.
+    setFashnRealisticPieces(null)
+    setFashnRealismJobId(null)
     setFashnRealismBusy(true)
     setFashnRealismError(null)
     magicAbortRef.current?.abort()
@@ -2001,6 +2024,14 @@ export function useStudioEditor() {
     magicAbortRef.current = controller
 
     try {
+      const live = authoritativeDocRef.current
+      const liveFp = draftContentFingerprint(live)
+      if (liveFp !== fashnPrepCroquis.contentFingerprint) {
+        setFashnRealismError(
+          'The Studio design changed. Cancel and start FASHN Try On again from Magic.',
+        )
+        return
+      }
       const idempotencyKey =
         typeof crypto !== 'undefined' && 'randomUUID' in crypto
           ? `try_on:garment_realism:${crypto.randomUUID()}`
@@ -2022,7 +2053,6 @@ export function useStudioEditor() {
       })
       setFashnRealismJobId(job.id)
 
-      // Poll until completed (reuse AI job poller; do not open Magic panel yet).
       let settled = job
       const started = Date.now()
       while (settled.status === 'queued' || settled.status === 'running') {
@@ -2033,23 +2063,33 @@ export function useStudioEditor() {
         await new Promise((r) => setTimeout(r, 1500))
         settled = await fetchAiJob(job.id, controller.signal)
       }
-      if (settled.status !== 'completed') {
-        const summary =
-          (settled.result_data as { summary?: string } | null)?.summary ||
-          settled.error_message ||
-          'Realistic garment generation failed.'
+      const realismData = (settled.result_data || {}) as {
+        summary?: string
+        pieces?: FashnRealisticPiece[]
+        fidelity_ok?: boolean
+        block_fashn?: boolean
+      }
+      const pieces = Array.isArray(realismData.pieces) ? realismData.pieces : []
+      if (settled.status !== 'completed' || pieces.length === 0) {
         setFashnRealisticPieces(null)
-        setFashnRealismError(summary)
+        setFashnRealismError(
+          realismData.summary ||
+            settled.error_message ||
+            'Realistic garment generation failed. FASHN stays blocked.',
+        )
         return
       }
-      const pieces = (settled.result_data as { pieces?: FashnRealisticPiece[] } | null)?.pieces
-      if (!Array.isArray(pieces) || pieces.length === 0) {
-        setFashnRealismError('Realistic garment job completed without product images.')
-        setFashnRealisticPieces(null)
-        return
-      }
+      const fidelityBlocked =
+        realismData.block_fashn === true ||
+        realismData.fidelity_ok === false ||
+        pieces.some((p) => p.fidelity && p.fidelity.ok === false)
       setFashnRealisticPieces(pieces)
-      setFashnRealismError(null)
+      setFashnRealismError(
+        fidelityBlocked
+          ? realismData.summary ||
+              'Fidelity checks failed. Accept is disabled — regenerate or edit the sketch.'
+          : null,
+      )
     } catch (err) {
       if (controller.signal.aborted) {
         setFashnRealismError('Realistic garment generation cancelled.')
@@ -2081,13 +2121,20 @@ export function useStudioEditor() {
       setMagicNotice('FASHN Try On is configured but not live-armed yet. Ask an operator to enable FASHN_TRY_ON_LIVE_HTTP.')
       return
     }
-    if (!fashnRealisticPieces?.length) {
+    if (!fashnRealisticPieces?.length || !fashnRealismJobId) {
       setFashnRealismError('Generate and accept a realistic garment before running FASHN.')
       return
     }
     if (fashnPrep.quality_ok === false) {
       setFashnRealismError(
         fashnPrep.quality_notes || 'Sketch plates are not acceptable for FASHN.',
+      )
+      return
+    }
+    // Hard fidelity failures cannot be manually overridden.
+    if (fashnRealisticPieces.some((p) => p.fidelity && p.fidelity.ok === false)) {
+      setFashnRealismError(
+        'Fidelity checks failed on a product piece. Regenerate or edit the sketch — Accept cannot override.',
       )
       return
     }
@@ -2107,17 +2154,22 @@ export function useStudioEditor() {
 
     try {
       const live = authoritativeDocRef.current
+      const liveFp = draftContentFingerprint(live)
       if (
         live.model !== 'personal' ||
         live.personalCroquisId !== fashnPrepCroquis.croquisId ||
-        live.personalCroquisVersion !== fashnPrepCroquis.croquisVersion
+        live.personalCroquisVersion !== fashnPrepCroquis.croquisVersion ||
+        liveFp !== fashnPrepCroquis.contentFingerprint
       ) {
         setMagicPhase('failed')
         setMagicError(
-          'The personal croquis changed before FASHN Try On was confirmed. Your sketch is unchanged.',
+          'The personal croquis or design changed before FASHN Try On was confirmed. Your sketch is unchanged.',
         )
         return
       }
+
+      // Server-enforced acceptance stamp (no paid call).
+      await acceptFashnGarmentRealism(fashnRealismJobId, controller.signal)
 
       const idempotencyKey =
         typeof crypto !== 'undefined' && 'randomUUID' in crypto

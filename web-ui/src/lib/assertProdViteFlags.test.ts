@@ -52,6 +52,22 @@ describe('assert-prod-vite-flags compiled extraction', () => {
     expect(gates.registration.value).toBe(false)
   })
 
+  it('accepts underscore-prefixed minified helper ids (e.g. _S)', () => {
+    const bundle = [
+      'function Es(){return!0}',
+      'function _S(){return!0}',
+      'function dS(){return!0}',
+      'function Ii(){return!1}',
+      'let n=t?.frontBackEnabled??Es();',
+      'a=Es(),o=_S(),s=1',
+      ',Ze=dS(),Qe=busy',
+      'path:`/register`,element:Ii()?(0,V.jsx)(Mo,{}):(0,V.jsx)(zt,{to:`/login`})',
+    ].join('')
+    const gates = extractCompiledGates(bundle)
+    expect(gates.dualMagic.id).toBe('_S')
+    expect(assertCompiledGatesMatchAllowlist(gates)).toEqual([])
+  })
+
   it('fails when only Front/Back is compiled off', () => {
     const gates = extractCompiledGates(synthBundle({ frontBack: false }))
     const failures = assertCompiledGatesMatchAllowlist(gates)

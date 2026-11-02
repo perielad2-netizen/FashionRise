@@ -205,6 +205,12 @@ export type FashnRealisticPiece = {
   image_base64: string
   image_url?: string
   sha256?: string
+  source_plate_sha256?: string
+  fidelity?: {
+    ok?: boolean
+    code?: string
+    message?: string
+  }
 }
 
 /** POST /ai/personal-try-on/fashn/prepare — offline flat-lay preview (no paid call). */
@@ -250,6 +256,17 @@ export async function enqueueFashnGarmentRealism(
       consent_version: input.consentVersion,
     },
     signal: input.signal,
+  })
+}
+
+/** POST /ai/personal-try-on/fashn/garment-realism/{id}/accept — owner Accept before FASHN. */
+export async function acceptFashnGarmentRealism(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<AiJobRead> {
+  return apiRequest<AiJobRead>(`/ai/personal-try-on/fashn/garment-realism/${jobId}/accept`, {
+    method: 'POST',
+    signal,
   })
 }
 

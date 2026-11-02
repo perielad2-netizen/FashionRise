@@ -12,6 +12,7 @@ import {
   zoomPercent,
 } from '@/lib/viewportTransform'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
+import { FashnGarmentReview } from '@/components/studio/FashnGarmentReview'
 import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { BrushControls } from '@/shell/components/BrushControls'
@@ -396,20 +397,90 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           ) : null}
           {editor.magicFashnAvailable ? (
             <p>
-              FASHN Try On is one click with two paid stages: (1) OpenAI realistic garment product
+              FASHN Try On has two paid stages. First, OpenAI builds a realistic garment product
               image (~
               {editor.magicFashnCombinedEstimateCents != null
                 ? Math.max(8, Math.round((editor.magicFashnCombinedEstimateCents || 16) / 2))
                 : 8}
-              ¢ per piece), then (2) FASHN Virtual Try-On v1.6 (~8¢ per credit) only if silhouette
-              fidelity passes. Combined estimate about{' '}
+              ¢ per piece). You review that product against your Studio sketch, then Accept before
+              FASHN Virtual Try-On v1.6 (~8¢ per credit) runs. Combined estimate about{' '}
               {editor.magicFashnCombinedEstimateCents != null
                 ? `${editor.magicFashnCombinedEstimateCents}¢`
                 : '16¢'}{' '}
               for a one-piece (two-piece doubles both stages). Sketch plates are never sent to
-              FASHN. No automatic paid regenerations.
+              FASHN. Canceling the review never starts FASHN. No automatic paid regenerations.
             </p>
           ) : null}
+        </ConfirmDialog>
+      ) : null}
+
+      {editor.fashnPrepOpen && editor.fashnPrep ? (
+        <ConfirmDialog
+          title={
+            editor.fashnRealisticPieces?.length
+              ? 'Accept realistic garment'
+              : 'Review garment for FASHN'
+          }
+          busy={editor.fashnPrepBusy || editor.fashnRealismBusy}
+          scrollable
+          onEscape={editor.cancelFashnPrep}
+          actions={[
+            {
+              label: 'Cancel',
+              onClick: editor.cancelFashnPrep,
+              variant: 'ghost',
+            },
+            ...(editor.fashnRealisticPieces?.length
+              ? [
+                  {
+                    label: 'Regenerate Garment',
+                    onClick: () => {
+                      void editor.generateFashnRealisticGarment()
+                    },
+                    variant: 'ghost' as const,
+                    disabled:
+                      editor.fashnPrep.quality_ok === false ||
+                      editor.fashnPrep.openai_live_http === false,
+                  },
+                  {
+                    label: 'Accept & Try On',
+                    onClick: () => {
+                      void editor.confirmFashnTryOn()
+                    },
+                    variant: 'primary' as const,
+                    disabled:
+                      !editor.fashnPrep.configured ||
+                      !editor.fashnPrep.live_http ||
+                      Boolean(
+                        editor.fashnRealisticPieces?.some(
+                          (p) => p.fidelity && p.fidelity.ok === false,
+                        ),
+                      ),
+                  },
+                ]
+              : [
+                  {
+                    label: 'Generate realistic garment',
+                    onClick: () => {
+                      void editor.generateFashnRealisticGarment()
+                    },
+                    variant: 'primary' as const,
+                    disabled:
+                      editor.fashnPrep.quality_ok === false ||
+                      editor.fashnPrep.openai_live_http === false ||
+                      !editor.fashnPrep.configured,
+                  },
+                ]),
+          ]}
+        >
+          <FashnGarmentReview
+            prep={editor.fashnPrep}
+            realisticPieces={editor.fashnRealisticPieces}
+            realismBusy={editor.fashnRealismBusy}
+            realismError={editor.fashnRealismError}
+            detailsOpen={editor.fashnDetailsOpen}
+            onToggleDetails={editor.toggleFashnDetails}
+          />
         </ConfirmDialog>
       ) : null}
 

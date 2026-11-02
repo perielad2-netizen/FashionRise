@@ -173,6 +173,23 @@ def personal_try_on_garment_realism(
 
 
 @router.post(
+    "/personal-try-on/fashn/garment-realism/{job_id}/accept",
+    response_model=AIJobRead,
+)
+@limiter.limit("30/minute")
+def personal_try_on_garment_realism_accept(
+    request: Request,
+    job_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> AIJobRead:
+    """Owner accepts OpenAI product images — required before FASHN credits (#169)."""
+    _ = request.url
+    job = try_on_service.accept_garment_realism_job(db, user, job_id)
+    return AIJobRead.from_job(job)
+
+
+@router.post(
     "/personal-try-on",
     response_model=AIJobRead,
     status_code=status.HTTP_201_CREATED,

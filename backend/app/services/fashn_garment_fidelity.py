@@ -288,8 +288,8 @@ def assert_structural_fidelity(
     # fabric edges grow tip ratio 2–4× without filling the V. Owner #164 wrap redesign
     # reached tip_ratio ≈0.25 with growth ≥5. Job 5842e98b (growth ≈3.3, tip ≈0.19) was a
     # borderline relative-only reject with no stored product — require wrap-class evidence.
-    src_w15, _src_w35, src_w50 = source.width_profile[0], source.width_profile[1], source.width_profile[2]
-    prod_w15, _prod_w35, prod_w50 = (
+    src_w15, src_w35, src_w50 = source.width_profile[0], source.width_profile[1], source.width_profile[2]
+    prod_w15, prod_w35, prod_w50 = (
         product.width_profile[0],
         product.width_profile[1],
         product.width_profile[2],
@@ -314,6 +314,37 @@ def assert_structural_fidelity(
             product=product,
             recommended_category=recommended,
         )
+
+    # #169 — skimpy triangle bottoms thickened into substantial coverage (owner brown/yellow-dot).
+    # width_profile indices: 15%, 35%, 50%, 65%, 75%, 85%, 95%.
+    # Catch both relative lower/mid fill-in AND absolute fabric growth (OpenAI often scales
+    # the whole piece while adding coverage — ratio-only gates miss that).
+    if layout == "two_piece" and len(source.width_profile) >= 7 and len(product.width_profile) >= 7:
+        src_lower = (source.width_profile[4] + source.width_profile[5] + source.width_profile[6]) / 3.0
+        prod_lower = (
+            product.width_profile[4] + product.width_profile[5] + product.width_profile[6]
+        ) / 3.0
+        src_mid = float(max(src_w50, 1))
+        prod_mid = float(max(prod_w50, 1))
+        src_lower_ratio = src_lower / src_mid
+        prod_lower_ratio = prod_lower / prod_mid
+        abs_lower_growth = prod_lower / max(src_lower, 1.0)
+        opaque_growth = product.opaque_pixels / max(source.opaque_pixels, 1)
+        skimpy_source = src_lower_ratio <= 0.45
+        ratio_expanded = prod_lower_ratio >= max(0.55, src_lower_ratio * 1.7)
+        absolute_expanded = abs_lower_growth >= 2.8 and opaque_growth >= 2.5
+        if skimpy_source and (ratio_expanded or absolute_expanded):
+            return FidelityVerdict(
+                ok=False,
+                code="FIDELITY_COVERAGE_EXPANDED",
+                message=(
+                    "Fidelity check failed: the sketch bottom has skimpy / high-cut coverage, "
+                    "but the generated product added substantial fabric. FASHN was not started."
+                ),
+                source=source,
+                product=product,
+                recommended_category=recommended,
+            )
 
     color_corr = _color_correlation(source_png, product_png)
     if color_corr is not None and color_corr < 0.35:

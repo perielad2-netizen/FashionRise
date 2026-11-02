@@ -3,22 +3,58 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#166/#168 P0 restore OpenAI Try On to v2** **DEPLOYED** App **`d6caad30`** · live prompt **`try-on-person-v2`** · FASHN v5 realism unchanged · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**#169 manual Accept before FASHN** **DEPLOYED** App **`6ef5c109`** · OpenAI Try On stays **`try-on-person-v2`** · FASHN realism **v5** + owner review gate · **0** operator-paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits) + optional FASHN v1.6 (swimwear) **live-armed**.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits) + optional FASHN v1.6 (swimwear) **live-armed** with **manual Accept** of OpenAI product images before FASHN credits.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`d6caad30`** — release `/var/www/fashionrise/releases/d6caad30` · App pill **`d6caad30`** · Try On Person (OpenAI) + **FASHN Try On** remain separate CTAs · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`e26b9a43`** kept for rollback. |
-| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** (restored) + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v5`** · Alembic **`015`**. |
+| Frontend (`web-ui`) | **`6ef5c109`** — release `/var/www/fashionrise/releases/6ef5c109` · App pill **`6ef5c109`** · FASHN path stops at Accept review · Try On Person (OpenAI) unchanged · FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**, **MY_CROQUIS_UI ON**, API `/api/v1`. Prior FE **`d6caad30`** kept for rollback. |
+| Backend (FastAPI + PostgreSQL) | OpenAI try-on **`try-on-person-v2`** + FASHN **`tryon-v1.6`** + realism **`fashn-garment-realism-v5`** + **`owner_accepted`** gate + accept route · Alembic **`015`**. |
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | `current` → `releases/d6caad30` |
+| Nginx | `current` → `releases/6ef5c109` |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
 
 
+
+## #169 Restore manual garment approval before FASHN — DEPLOYED (2026-11-02)
+
+### Private diagnosis (stored artifacts only — **0** paid calls)
+
+| Test | Jobs | Confirmed stage of redesign | Unknown |
+|---|---|---|---|
+| Brown/yellow-dot two-piece | try-on `eac2ad77…` · realism `d71f6619…` (v5) | **OpenAI realism** thickened bottoms vs Studio/prep plates (`FIDELITY_COVERAGE_EXPANDED` would now block). FASHN final further restyled (square neck / wider straps / thicker bottoms). | Exact strap geometry deltas in FASHN output not quantified beyond visual compare. |
+| Deep-V narrow-strap one-piece | try-on `6c6bb772…` · realism `fe71c680…` (v5) | OpenAI product remained swimsuit-like. **FASHN** introduced midi skirt / extra fabric. | Which FASHN category/internal heuristic invented the skirt (category was already `one-pieces`, not `auto`). |
+
+Prep plates matched Studio silhouette for both. FE-sent approved piece SHAs previously differed from product SHAs; server now binds FASHN garment bytes from the realism job after Accept.
+
+### Behavior change
+
+1. Magic → FASHN Try On → consent → prep → OpenAI realism → **owner review dialog** (sketch vs product; two-piece shows Top/Bottom).
+2. Actions: **Accept & Try On**, **Regenerate Garment**, **Cancel** (no ¢ on buttons; costs in dialog body).
+3. Only Accept stamps `owner_accepted` then enqueues FASHN. Cancel/close never starts FASHN.
+4. Hard fidelity failures still show product when available; Accept stays disabled (server also rejects override).
+5. Design/croquis edits invalidate pending approval. Regenerate uses a new idempotency key.
+6. Ordinary OpenAI Try On V2 path unchanged and independent.
+
+### Fidelity
+
+- Added **`FIDELITY_COVERAGE_EXPANDED`** for skimpy triangle bottoms that grow absolute lower-band / opaque coverage (owner two-piece bottoms).
+- Does **not** claim FASHN will preserve every detail after Accept — only that FASHN never runs on unapproved / fidelity-failed products.
+
+### Tests / deploy
+
+- BE `#169` + FASHN/try-on suite: **45 PASS** · FE review/dialog/layout + vite flags: **24+ PASS** · prod build gates **pass** · **0** operator-paid OpenAI/FASHN calls in implement/deploy window
+- Accept route live: `POST /api/v1/ai/personal-try-on/fashn/garment-realism/{job_id}/accept`
+- Rollback: `/var/backups/fashionrise/p1-169-manual-approve-deploy-20261102T124937Z/ROLLBACK.sh` → FE **`d6caad30`** + prior BE overlay files
+- Deployed SHA: **`6ef5c109bd31634c2a76fb217d1636d4adf90141`** (App **`6ef5c109`**) · Alembic **`015`**
+
+### Owner next
+
+Hard-refresh App **`6ef5c109`** → Magics → **FASHN Try On**. After realism, compare sketch vs product. Reject/Regenerate if bottoms thicken or straps/neckline change. Accept only when product matches. Then judge FASHN final separately — Accept does not guarantee FASHN fidelity.
 
 ## #166/#168 P0 Restore regular OpenAI Try On (v2) — DEPLOYED (2026-11-02)
 
