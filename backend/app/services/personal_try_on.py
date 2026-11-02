@@ -867,9 +867,9 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         hints = _normalize_design_hints(
             data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
         )
-        # #170/#172 — additive trouser/jumpsuit hints from frozen garment geometry (OpenAI V2 only).
-        # Geometry hints take priority in the 8-hint budget so they cannot be crowded out.
-        # Does not rewrite TRY_ON_PROMPT_VERSION; skips FASHN and ambiguous silhouettes.
+        # #170/#172/#174 — additive trouser/jumpsuit OR high-slit-dress hints from frozen
+        # garment geometry (OpenAI V2.1 only). Geometry hints take priority in the 8-hint
+        # budget so they cannot be crowded out. Skips FASHN and ambiguous silhouettes.
         if provider_name == TRY_ON_PROVIDER_OPENAI:
             geo_hints = openai_trouser_design_hints(analyze_lower_garment_geometry(garment_png))
             if geo_hints:

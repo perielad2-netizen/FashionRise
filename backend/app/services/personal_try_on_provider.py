@@ -29,10 +29,11 @@ from app.services.personal_croquis_provider import (
 logger = logging.getLogger(__name__)
 
 TRY_ON_JOB_TYPE = "personal_try_on"
-# V1/V3 kept for historical jobs. Live OpenAI enqueue uses V2 (#168).
+# V1/V3 kept for historical jobs. Live OpenAI enqueue uses V2.1 (#174).
 # V3 (swimwear skin-coverage wording) caused 100% OpenAI input moderation_blocked
 # category=sexual on ordinary outfits (job 461c9419…). Swimwear try-on is FASHN.
-TRY_ON_PROMPT_VERSION = "try-on-person-v2"
+# V2.1 keeps V2 print/identity rules; clarifies fashion slits must not become trousers.
+TRY_ON_PROMPT_VERSION = "try-on-person-v2.1"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.
@@ -61,6 +62,8 @@ TRY_ON_PROMPT_V1 = (
 )
 
 # V2 — garment print/accessory fidelity (#154). Photo identity rules unchanged from V1.
+# V2.1 (#174) — same base; fashion slits/openings from image 2 are design, not undressing;
+# do not convert a slit dress into trousers/jumpsuit. Avoids V3 swimwear/coverage wording.
 TRY_ON_PROMPT_V2 = (
     "Create a photorealistic photograph of the person from image 1 wearing the garment "
     "design shown in image 2. "
@@ -78,7 +81,9 @@ TRY_ON_PROMPT_V2 = (
     "region. Hats/caps may cover hair while keeping identity recognizable. "
     "Adapt garments naturally to pose and folds as an approximate drape only. "
     "Do not invent extra garments, logos, text, or accessories absent from image 2. "
-    "Do not undress the person or expose body beyond what image 1 already shows. "
+    "Do not undress the person or create nudity. Fashion necklines, hems, cutouts, and "
+    "slits drawn in image 2 are opaque garment styling — keep that cut; do not convert a "
+    "dress or skirt with a slit into trousers or a jumpsuit. "
     "Do not copy mannequin outlines into the photo. "
     "Output a single realistic photograph."
 )
