@@ -108,6 +108,8 @@ export function StudioPage() {
               },
               saveStatus: editor.saveStatus,
               saveStatusLabel: editor.saveStatusLabel,
+              personalCroquisId: editor.personalCroquisId,
+              personalCroquisVersion: editor.personalCroquisVersion,
             }}
             libraryVersion={editor.libraryVersion}
             onOpen={(id) => void editor.requestOpenDesign(id)}

@@ -107,6 +107,7 @@ vi.mock('@/lib/designPreview', async (importOriginal) => {
     }
     release() {}
     dispose() {}
+    setOwnerId() {}
   }
   return { ...actual, PreviewRenderer: FakeRenderer }
 })

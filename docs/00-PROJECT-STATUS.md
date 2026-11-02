@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#172 P0 structure-review provenance hardening** **DEPLOYED** — see section below · OpenAI Try On stays **`try-on-person-v2`** · **0** operator-paid calls.)
+**Last updated:** 2026-11-02 (**My Designs personal-croquis thumbnails** fix in progress · prior #172 structure-review provenance **DEPLOYED** · OpenAI Try On stays **`try-on-person-v2`**.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: OpenAI **v2** (ordinary outfits + additive trouser hints) + optional FASHN v1.6 (swimwear / two-piece) **live-armed** with **manual Accept** before FASHN. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated; plate-vs-plate only for trusted isolated plates.
 
@@ -17,6 +17,25 @@
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | Accept regex allowlist for `.../garment-realism/{uuid}/accept` · `current` → new release |
 | AI spend | Croquis + Try On share **`$5`** ceiling · OpenAI LIVE_HTTP **ON** · FASHN live **ON** · realism ≈ **8¢/piece** · FASHN ≈ **8¢/credit** · croquis **v5** · daily gen count **OFF** |
+
+## My Designs personal croquis thumbnails — FIX (2026-11-02)
+
+### Defect
+My Designs cards for `model=personal` (and the Studio working-draft card) rendered garment ink only — no My Croquis underlay. Stock Female/Male library croquis still composited correctly.
+
+### Root cause
+`previewReferenceUrl` / `renderPreviewBlob` only resolved static `canvasSrcForModel` assets. `personal` returns `null` there; authenticated underlay fetch was Studio-only. Working-draft props also omitted `personalCroquisId` / `personalCroquisVersion`.
+
+### Correction
+1. `resolvePreviewReferenceUrl` loads the exact pinned personal version asset via `getPersonalCroquisVersion` + owner-bound cache (same path as Studio).
+2. `PreviewRenderer` carries `ownerId` into thumbnail renders.
+3. My Designs working-draft card passes personal pins through the preview key/snapshot.
+4. Fail-soft: missing pin / erased asset → ink-only thumbnail (no throw).
+
+### Tests
+Vitest `designPreview` + `StudioPage.designs` — personal underlay resolve + ownerId plumbing.
+
+---
 
 ## #172 P0 Final structure-review hardening — DEPLOYED (2026-11-02)
 
