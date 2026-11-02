@@ -146,4 +146,39 @@ describe('personal try-on API client', () => {
       }),
     )
   })
+
+  it('enqueues Try-On Max with documented experiment knobs and approved garment reuse', async () => {
+    apiMock.mockResolvedValueOnce({ id: 'job-max', job_type: 'personal_try_on', status: 'queued' })
+    await enqueuePersonalTryOn({
+      croquisId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      croquisVersion: 2,
+      garmentImageBase64: 'data:image/png;base64,AAAA',
+      idempotencyKey: 'try_on:fashn_max:key-1',
+      sourceRevision: 7,
+      contentFingerprint: 'fp-1',
+      consentAcknowledged: true,
+      consentVersion: 'try-on-fashn-oneclick-v1',
+      provider: 'fashn_max',
+      approvedGarmentPieces: [{ category: 'one-pieces', image_base64: 'data:image/png;base64,PROD' }],
+      garmentRealismJobId: 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      fashnMaxGenerationMode: 'balanced',
+      fashnMaxResolution: '1k',
+      fashnMaxPrompt: 'Preserve the deep V and high slit.',
+      fashnMaxSeed: 42,
+    })
+    expect(apiMock).toHaveBeenLastCalledWith(
+      '/ai/personal-try-on',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          provider: 'fashn_max',
+          approved_garment_pieces: expect.any(Array),
+          garment_realism_job_id: 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          fashn_max_generation_mode: 'balanced',
+          fashn_max_resolution: '1k',
+          fashn_max_prompt: 'Preserve the deep V and high slit.',
+          fashn_max_seed: 42,
+        }),
+      }),
+    )
+  })
 })

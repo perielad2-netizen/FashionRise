@@ -136,6 +136,13 @@ class Settings(BaseSettings):
     fashn_api_base_url: str = "https://api.fashn.ai"
     fashn_poll_interval_seconds: float = 2.0
     fashn_poll_timeout_seconds: float = 120.0
+    # Owner-only FASHN Try-On Max experimental lane (#173). Fail closed:
+    # enabled + live_http + non-empty owner allowlist required. Empty allowlist = nobody.
+    fashn_try_on_max_enabled: bool = False
+    fashn_try_on_max_live_http: bool = False
+    fashn_try_on_max_owner_allowlist: str = ""
+    # Soft UI budget target (credits). Does not hard-block; spend ceilings still apply.
+    fashn_try_on_max_soft_budget_credits: int = 90
 
     # OpenAI (optional — sketch pipeline jobs use vision + JSON when OPENAI_API_KEY is set)
     # Default chat model is gpt-6-luna (official replacement for deprecated gpt-4o-mini).

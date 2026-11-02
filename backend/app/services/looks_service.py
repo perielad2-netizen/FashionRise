@@ -88,11 +88,28 @@ def _structural_fidelity_rejected(job: AIJob) -> bool:
     return isinstance(review, dict) and str(review.get("state") or "") == "failed"
 
 
+def _experiment_lane_excluded(job: AIJob) -> bool:
+    """#173 — Max experiment results never auto-enter accepted My Looks."""
+    result = job.result_data if isinstance(job.result_data, dict) else {}
+    if result.get("experiment") is True:
+        return True
+    if result.get("looks_eligible") is False:
+        return True
+    archive = str(result.get("archive_status") or "").strip().lower()
+    if archive in {"rejected", "private", "accepted_comparison"}:
+        # Comparison archive / reject / private stay out of accepted gallery.
+        return True
+    provider = str(result.get("provider") or "").strip().lower()
+    return provider in {"fashn_tryon_max", "fashn_max", "tryon-max"}
+
+
 def _image_available(job: AIJob, storage: LocalStorageBackend) -> bool:
     if job.status != "completed":
         return False
     # Keep rejected try-ons privately reviewable via job image, but not gallery-accepted.
     if _structural_fidelity_rejected(job):
+        return False
+    if _experiment_lane_excluded(job):
         return False
     url = extract_result_image_url(job.result_data if isinstance(job.result_data, dict) else None)
     if not url:

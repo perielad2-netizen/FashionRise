@@ -355,6 +355,10 @@ def get_try_on_provider(provider: str | None = None) -> Any:
     if _try_on_provider_override is not None:
         return _try_on_provider_override
     name = (provider or "openai").strip().lower()
+    if name in {"fashn_max", "fashn_tryon_max", "tryon-max"}:
+        from app.services.fashn_try_on_max_provider import FashnTryOnMaxAdapter
+
+        return FashnTryOnMaxAdapter()
     if name in {"fashn", "fashn_tryon_v1_6", "tryon-v1.6"}:
         from app.services.fashn_try_on_provider import FashnTryOnV16Adapter
 

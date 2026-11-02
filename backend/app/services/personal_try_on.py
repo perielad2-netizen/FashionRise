@@ -55,6 +55,21 @@ from app.services.fashn_garment_realism import (
     downscale_studio_context,
     estimate_garment_realism_cents,
 )
+from app.services.fashn_try_on_max_provider import (
+    DEFAULT_MAX_PROMPT,
+    FASHN_MAX_PROMPT_VERSION,
+    FASHN_MAX_PROVIDER_ID,
+    estimate_fashn_max_cost_cents,
+    fashn_max_configured,
+    fashn_max_credits_per_image,
+    fashn_max_live_armed,
+    fashn_max_prompt_hash,
+    normalize_max_generation_mode,
+    normalize_max_prompt,
+    normalize_max_resolution,
+    normalize_max_seed,
+    user_on_fashn_max_allowlist,
+)
 from app.services.fashn_try_on_provider import (
     FASHN_CONSENT_VERSION,
     FASHN_NOTICE_TEXT,
@@ -96,7 +111,13 @@ from app.services.personal_try_on_provider import (
 
 TRY_ON_PROVIDER_OPENAI = "openai"
 TRY_ON_PROVIDER_FASHN = "fashn"
+TRY_ON_PROVIDER_FASHN_MAX = "fashn_max"
 from app.storage.local import LocalStorageBackend
+
+
+def _is_fashn_family(provider: str) -> bool:
+    """v1.6 and Max both require accepted realistic product plates."""
+    return provider in {TRY_ON_PROVIDER_FASHN, TRY_ON_PROVIDER_FASHN_MAX}
 
 _DATA_URL_RE = re.compile(r"^data:(image/(?:png|jpeg|jpg|webp));base64,(.+)$", re.DOTALL | re.IGNORECASE)
 _BILLABLE = (RESERVATION_OPEN, RESERVATION_SETTLED, RESERVATION_RECONCILIATION)
@@ -160,6 +181,13 @@ def _decode_garment_png(data_url: str) -> bytes:
 
 def _normalize_provider(raw: str | None, *, strict: bool = True) -> str:
     name = (raw or TRY_ON_PROVIDER_OPENAI).strip().lower()
+    if name in {
+        TRY_ON_PROVIDER_FASHN_MAX,
+        "fashn_tryon_max",
+        "tryon-max",
+        FASHN_MAX_PROVIDER_ID,
+    }:
+        return TRY_ON_PROVIDER_FASHN_MAX
     if name in {TRY_ON_PROVIDER_FASHN, "fashn_tryon_v1_6", "tryon-v1.6", FASHN_PROVIDER_ID}:
         return TRY_ON_PROVIDER_FASHN
     if name in {TRY_ON_PROVIDER_OPENAI, "openai_images_edit"}:
@@ -168,7 +196,7 @@ def _normalize_provider(raw: str | None, *, strict: bool = True) -> str:
         return TRY_ON_PROVIDER_OPENAI
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Try On Person provider must be openai or fashn.",
+        detail="Try On Person provider must be openai, fashn, or fashn_max.",
     )
 
 
@@ -182,7 +210,7 @@ def _record_try_on_consent(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Adults-only beta attestation is required before Try On Person.",
         )
-    if provider == TRY_ON_PROVIDER_FASHN:
+    if provider in {TRY_ON_PROVIDER_FASHN, TRY_ON_PROVIDER_FASHN_MAX}:
         version = FASHN_CONSENT_VERSION
         text_hash = fashn_notice_text_hash()
     else:
@@ -246,6 +274,10 @@ def enqueue_personal_try_on(
     provider: str = TRY_ON_PROVIDER_OPENAI,
     approved_garment_pieces: list[dict[str, Any]] | None = None,
     garment_realism_job_id: uuid.UUID | None = None,
+    fashn_max_generation_mode: str | None = None,
+    fashn_max_resolution: str | None = None,
+    fashn_max_prompt: str | None = None,
+    fashn_max_seed: int | None = None,
 ) -> AIJob:
     """Validate, reserve spend, freeze garment, enqueue ``personal_try_on`` job."""
     _require_ai_gate()
@@ -259,8 +291,10 @@ def enqueue_personal_try_on(
     if not key.startswith("try_on:"):
         # Namespace spend unique constraint away from croquis generate keys.
         key = f"try_on:{key}"
-    # Keep OpenAI and FASHN idempotency namespaces distinct to block cross-provider replays.
-    if provider_name == TRY_ON_PROVIDER_FASHN and ":fashn:" not in key:
+    # Keep OpenAI / FASHN v1.6 / Max idempotency namespaces distinct.
+    if provider_name == TRY_ON_PROVIDER_FASHN_MAX and ":fashn_max:" not in key:
+        key = key.replace("try_on:", "try_on:fashn_max:", 1)
+    elif provider_name == TRY_ON_PROVIDER_FASHN and ":fashn:" not in key:
         key = key.replace("try_on:", "try_on:fashn:", 1)
 
     if not consent_acknowledged:
@@ -268,7 +302,46 @@ def enqueue_personal_try_on(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Try On Person requires explicit consent acknowledgment.",
         )
-    if provider_name == TRY_ON_PROVIDER_FASHN:
+    max_experiment: dict[str, Any] | None = None
+    if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
+        if not fashn_max_configured():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="FASHN Try-On Max experiment is not configured on this server.",
+            )
+        if not user_on_fashn_max_allowlist(user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="FASHN Try-On Max is an owner-only experimental lane.",
+            )
+        if consent_version != FASHN_CONSENT_VERSION:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="FASHN Try On consent version is outdated.",
+            )
+        if fashn_notice_text_hash() != hashlib.sha256(FASHN_NOTICE_TEXT.encode("utf-8")).hexdigest():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="FASHN notice hash mismatch."
+            )
+        mode = normalize_max_generation_mode(fashn_max_generation_mode)
+        resolution = normalize_max_resolution(fashn_max_resolution)
+        prompt_text = normalize_max_prompt(fashn_max_prompt)
+        seed_value = normalize_max_seed(fashn_max_seed)
+        max_experiment = {
+            "generation_mode": mode,
+            "resolution": resolution,
+            "prompt": prompt_text,
+            "prompt_hash": fashn_max_prompt_hash(prompt_text),
+            "seed": seed_value,
+            "num_images": 1,
+            "prompt_version": FASHN_MAX_PROMPT_VERSION,
+            "soft_budget_credits": int(
+                getattr(settings, "fashn_try_on_max_soft_budget_credits", 90) or 90
+            ),
+        }
+        expected_prompt_version = FASHN_MAX_PROMPT_VERSION
+        consent_ver = FASHN_CONSENT_VERSION
+    elif provider_name == TRY_ON_PROVIDER_FASHN:
         if not fashn_configured():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -345,8 +418,8 @@ def enqueue_personal_try_on(
 
     fashn_prep_meta: dict[str, Any] | None = None
     approved_frozen: list[dict[str, str]] | None = None
-    if provider_name == TRY_ON_PROVIDER_FASHN:
-        # #161/#166 — never send sketch plates to FASHN. Require server-bound OpenAI realism pieces.
+    if _is_fashn_family(provider_name):
+        # #161/#166/#173 — never send sketch plates to FASHN. Require server-bound OpenAI realism pieces.
         if garment_realism_job_id is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -504,7 +577,20 @@ def enqueue_personal_try_on(
             )
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-        estimate = estimate_fashn_cost_cents(fashn_calls=prep.fashn_calls)
+        if provider_name == TRY_ON_PROVIDER_FASHN_MAX and max_experiment is not None:
+            estimate = estimate_fashn_max_cost_cents(
+                generation_mode=max_experiment["generation_mode"],
+                resolution=max_experiment["resolution"],
+                fashn_calls=prep.fashn_calls,
+                num_images=int(max_experiment.get("num_images") or 1),
+            )
+            max_experiment["fashn_calls"] = prep.fashn_calls
+            max_experiment["credits_estimate"] = fashn_max_credits_per_image(
+                generation_mode=max_experiment["generation_mode"],
+                resolution=max_experiment["resolution"],
+            ) * prep.fashn_calls
+        else:
+            estimate = estimate_fashn_cost_cents(fashn_calls=prep.fashn_calls)
         approved_frozen = [
             {
                 "category": cat,
@@ -523,6 +609,7 @@ def enqueue_personal_try_on(
             "fidelity": fidelity_reports,
             "categories": [cat for cat, _png in parsed],
             "approved_shas": [p["sha256"] for p in approved_frozen],
+            "provider_lane": provider_name,
         }
     else:
         estimate = estimate_try_on_cost_cents()
@@ -625,6 +712,10 @@ def enqueue_personal_try_on(
         input_data["approved_garment_pieces"] = approved_frozen
     if garment_realism_job_id is not None:
         input_data["garment_realism_job_id"] = str(garment_realism_job_id)
+    if max_experiment is not None:
+        input_data["fashn_max_experiment"] = max_experiment
+        input_data["experiment"] = True
+        input_data["looks_eligible"] = False
 
     job = AIJob(
         id=uuid.uuid4(),
@@ -761,10 +852,13 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
     provider_name = _normalize_provider(
         str(data.get("provider") or TRY_ON_PROVIDER_OPENAI), strict=False
     )
-    prompt_version = str(
-        data.get("prompt_version")
-        or (FASHN_PROMPT_VERSION if provider_name == TRY_ON_PROVIDER_FASHN else TRY_ON_PROMPT_VERSION)
-    )
+    if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
+        default_prompt_version = FASHN_MAX_PROMPT_VERSION
+    elif provider_name == TRY_ON_PROVIDER_FASHN:
+        default_prompt_version = FASHN_PROMPT_VERSION
+    else:
+        default_prompt_version = TRY_ON_PROMPT_VERSION
+    prompt_version = str(data.get("prompt_version") or default_prompt_version)
     try:
         provider = get_try_on_provider(provider_name)
         if reservation is not None:
@@ -787,7 +881,7 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
             "garment_png": garment_png,
             "design_hints": hints,
         }
-        if provider_name == TRY_ON_PROVIDER_FASHN:
+        if _is_fashn_family(provider_name):
             approved = data.get("approved_garment_pieces")
             if not isinstance(approved, list) or not approved:
                 return _fail(
@@ -809,6 +903,17 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
                 pieces=parsed,
                 source_fingerprint=str(data.get("garment_fingerprint") or ""),
             )
+            if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
+                exp = data.get("fashn_max_experiment")
+                if not isinstance(exp, dict):
+                    exp = {}
+                generate_kwargs["generation_mode"] = normalize_max_generation_mode(
+                    exp.get("generation_mode")
+                )
+                generate_kwargs["resolution"] = normalize_max_resolution(exp.get("resolution"))
+                generate_kwargs["prompt"] = normalize_max_prompt(exp.get("prompt"))
+                generate_kwargs["seed"] = normalize_max_seed(exp.get("seed"))
+                generate_kwargs["num_images"] = max(1, min(4, int(exp.get("num_images") or 1)))
         png, meta = provider.generate(**generate_kwargs)
     except ProviderNotAvailableError as exc:
         # Definitive pre-submit or HTTP 4xx refusal — release reservation at $0.
@@ -907,17 +1012,51 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
             if state == "inconclusive":
                 # Non-alarming diagnostic only; ordinary concept-preview copy stays primary.
                 result["structure_review_note"] = str(review.get("message") or "")
-    if provider_name == TRY_ON_PROVIDER_FASHN:
+    if _is_fashn_family(provider_name):
         result["fashn_prediction_ids"] = meta.get("prediction_ids")
         result["fashn_calls"] = meta.get("fashn_calls")
         result["fashn_layout"] = meta.get("layout")
+        result["credits_used"] = meta.get("credits_used")
+    if provider_name == TRY_ON_PROVIDER_FASHN_MAX:
+        # Experimental lane — never auto-promote into accepted My Looks.
+        result["experiment"] = True
+        result["looks_eligible"] = False
+        result["archive_status"] = "private"
+        result["generation_mode"] = meta.get("generation_mode")
+        result["resolution"] = meta.get("resolution")
+        result["seed"] = meta.get("seed")
+        result["prompt_hash"] = meta.get("prompt_hash")
+        result["prompt_text"] = meta.get("prompt_text")
+        result["model"] = meta.get("model") or "tryon-max"
+        result["summary"] = (
+            f"Try-On Max experiment ready "
+            f"({meta.get('generation_mode') or 'balanced'} · {meta.get('resolution') or '1k'}). "
+            "Private comparison only — not accepted into My Looks."
+        )
+        result["bullets"] = [
+            "Owner-only experimental lane — not a product default.",
+            "Reused the accepted realistic garment product image (no OpenAI regeneration).",
+            f"Mode {meta.get('generation_mode')} · resolution {meta.get('resolution')} · seed {meta.get('seed')}",
+            f"Prompt {prompt_version}",
+            f"Provider {meta.get('provider') or provider_name}",
+        ]
+        if isinstance(data.get("fashn_max_experiment"), dict):
+            result["fashn_max_experiment"] = data.get("fashn_max_experiment")
+        if isinstance(data.get("garment_realism_job_id"), str):
+            result["garment_realism_job_id"] = data.get("garment_realism_job_id")
+        if isinstance(data.get("approved_garment_pieces"), list):
+            result["approved_garment_shas"] = [
+                str(p.get("sha256") or "")
+                for p in data["approved_garment_pieces"]
+                if isinstance(p, dict)
+            ]
     job.status = "completed"
     job.error_message = None
     job.result_data = result
     return result
 
 
-def try_on_preflight_public() -> dict[str, Any]:
+def try_on_preflight_public(*, user: User | None = None) -> dict[str, Any]:
     """Safe public preflight for FE (no image bytes / no secret values)."""
     settings = get_settings()
     fashn_ready = fashn_configured()
@@ -927,6 +1066,10 @@ def try_on_preflight_public() -> dict[str, Any]:
         or settings.my_croquis_ai_estimate_cents
         or 8
     )
+    max_ready = fashn_max_configured()
+    max_owner = bool(user is not None and user_on_fashn_max_allowlist(user))
+    bal_credits = fashn_max_credits_per_image(generation_mode="balanced", resolution="1k")
+    qual_credits = fashn_max_credits_per_image(generation_mode="quality", resolution="1k")
     return {
         "enabled": bool(settings.my_croquis_ai_enabled and settings.my_croquis_ai_spend_ceiling_usd > 0),
         "live_http": bool(settings.my_croquis_ai_live_http),
@@ -948,6 +1091,25 @@ def try_on_preflight_public() -> dict[str, Any]:
         "fashn_realism_estimate_cents_per_piece": realism_per,
         "fashn_combined_estimate_cents_one_piece": realism_per + fashn_per,
         "fashn_one_click": True,
+        "fashn_max_enabled": bool(getattr(settings, "fashn_try_on_max_enabled", False)),
+        "fashn_max_configured": max_ready,
+        "fashn_max_live_http": bool(fashn_max_live_armed()),
+        "fashn_max_owner_allowed": bool(max_ready and fashn_max_live_armed() and max_owner),
+        "fashn_max_prompt_version": FASHN_MAX_PROMPT_VERSION,
+        "fashn_max_default_prompt": DEFAULT_MAX_PROMPT,
+        "fashn_max_default_generation_mode": "balanced",
+        "fashn_max_default_resolution": "1k",
+        "fashn_max_soft_budget_credits": int(
+            getattr(settings, "fashn_try_on_max_soft_budget_credits", 90) or 90
+        ),
+        "fashn_max_credits_balanced_1k": bal_credits,
+        "fashn_max_credits_quality_1k": qual_credits,
+        "fashn_max_estimate_cents_balanced_1k": estimate_fashn_max_cost_cents(
+            generation_mode="balanced", resolution="1k", fashn_calls=1
+        ),
+        "fashn_max_estimate_cents_quality_1k": estimate_fashn_max_cost_cents(
+            generation_mode="quality", resolution="1k", fashn_calls=1
+        ),
     }
 
 

@@ -285,10 +285,16 @@ class PersonalTryOnBody(BaseModel):
     # Optional Studio-derived color/material/accessory hints (never invent beyond image 2).
     design_hints: list[str] | None = Field(default=None, max_length=8)
     # Explicit provider choice — never auto-switched after a refusal.
-    provider: Literal["openai", "fashn"] = "openai"
+    # fashn_max = owner-only Try-On Max experiment (#173).
+    provider: Literal["openai", "fashn", "fashn_max"] = "openai"
     # Owner-accepted realistic product plates (required for FASHN after #161).
     approved_garment_pieces: list[ApprovedGarmentPiece] | None = None
     garment_realism_job_id: uuid.UUID | None = None
+    # Max experiment knobs (ignored unless provider=fashn_max).
+    fashn_max_generation_mode: Literal["fast", "balanced", "quality"] | None = None
+    fashn_max_resolution: Literal["1k", "2k", "4k"] | None = None
+    fashn_max_prompt: str | None = Field(default=None, max_length=1000)
+    fashn_max_seed: int | None = Field(default=None, ge=0, le=4_294_967_295)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -360,3 +366,17 @@ class PersonalTryOnPreflightRead(BaseModel):
     fashn_realism_estimate_cents_per_piece: int | None = None
     fashn_combined_estimate_cents_one_piece: int | None = None
     fashn_one_click: bool = False
+    # Owner-only Try-On Max experiment (#173) — server-gated; FE must not invent access.
+    fashn_max_enabled: bool = False
+    fashn_max_configured: bool = False
+    fashn_max_live_http: bool = False
+    fashn_max_owner_allowed: bool = False
+    fashn_max_prompt_version: str | None = None
+    fashn_max_default_prompt: str | None = None
+    fashn_max_default_generation_mode: str | None = None
+    fashn_max_default_resolution: str | None = None
+    fashn_max_soft_budget_credits: int | None = None
+    fashn_max_credits_balanced_1k: int | None = None
+    fashn_max_credits_quality_1k: int | None = None
+    fashn_max_estimate_cents_balanced_1k: int | None = None
+    fashn_max_estimate_cents_quality_1k: int | None = None
