@@ -29,7 +29,8 @@ def test_one_piece_flat_lay_preserves_color():
     assert prep.layout == "one_piece"
     assert prep.fashn_calls == 1
     assert len(prep.pieces) == 1
-    assert prep.pieces[0].category == "auto"
+    # One-piece plates map to FASHN category one-pieces (never auto — swimsuit→dress incident).
+    assert prep.pieces[0].category == "one-pieces"
     plate = Image.open(io.BytesIO(prep.pieces[0].png_bytes)).convert("RGB")
     # White background plate with red garment present
     assert plate.size == (768, 1024)

@@ -94,6 +94,8 @@ function mockEditor(overrides: Partial<StudioEditor> = {}): StudioEditor {
     magicTryOnEstimateCents: null,
     magicFashnAvailable: false,
     magicFashnEstimatePerCall: null,
+    magicFashnCombinedEstimateCents: null,
+    magicStatusHint: null,
     fashnPrepOpen: false,
     fashnPrepBusy: false,
     fashnPrep: null,

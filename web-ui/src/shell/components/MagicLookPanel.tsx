@@ -37,6 +37,8 @@ type Props = {
   /** Original croquis photo for Try On Person before/after compare. */
   originalPhotoUrl?: string | null
   error: string | null
+  /** Optional one-click pipeline status (e.g. FASHN realism → fidelity → try-on). */
+  statusHint?: string | null
   canRecover: boolean
   /** Fashion Magic (illustration) vs Try On Person (photorealistic). */
   resultMode?: MagicResultMode
@@ -66,6 +68,7 @@ export function MagicLookPanel({
   sketchObjectUrl,
   originalPhotoUrl = null,
   error,
+  statusHint = null,
   canRecover,
   resultMode = 'fashion',
   dual,
@@ -209,19 +212,21 @@ export function MagicLookPanel({
             <div className={styles.statusBox}>
               <div className={styles.spinner} aria-hidden />
               <strong>
-                {phase === 'capturing'
-                  ? tryOn
-                    ? 'Capturing garment artwork…'
-                    : 'Capturing sketch…'
-                  : phase === 'submitting'
+                {statusHint
+                  ? statusHint
+                  : phase === 'capturing'
                     ? tryOn
-                      ? 'Starting Try On Person…'
-                      : 'Starting Magic…'
-                    : dualActive
-                      ? 'Creating your looks…'
-                      : tryOn
-                        ? 'Creating your try-on preview…'
-                        : 'Creating your look…'}
+                      ? 'Capturing garment artwork…'
+                      : 'Capturing sketch…'
+                    : phase === 'submitting'
+                      ? tryOn
+                        ? 'Starting Try On Person…'
+                        : 'Starting Magic…'
+                      : dualActive
+                        ? 'Creating your looks…'
+                        : tryOn
+                          ? 'Creating your try-on preview…'
+                          : 'Creating your look…'}
               </strong>
               <span>You can leave this open — we recover the same job if the network blips.</span>
             </div>

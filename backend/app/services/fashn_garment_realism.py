@@ -25,17 +25,20 @@ from app.services.personal_croquis_provider import (
 logger = logging.getLogger(__name__)
 
 GARMENT_REALISM_JOB_TYPE = "personal_garment_realism"
-GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v1"
+GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v2"
 GARMENT_REALISM_PROVIDER_ID = "openai_garment_realism"
 
 GARMENT_REALISM_PROMPT = (
     "Transform this fashion designer's garment sketch into a photorealistic commercial "
     "clothing product photograph. Preserve the exact garment design, silhouette, coverage, "
-    "cut, selected colors and visible patterns. Create realistic textile material, fabric "
-    "construction, stitching and natural garment structure. Show the clothing item alone as "
-    "a clean professional flat-lay or ghost-mannequin-free product image against a neutral "
-    "background. No person, body, mannequin, model, face or unrelated accessories. This is a "
-    "legitimate opaque fashion garment intended for clothing design and virtual try-on."
+    "cut, selected colors, gradient placement and visible patterns. Create realistic textile "
+    "material, fabric construction, stitching and natural garment structure. Show the clothing "
+    "item alone as a clean professional flat-lay or ghost-mannequin-free product image against "
+    "a neutral background. No person, body, mannequin, model, face or unrelated accessories. "
+    "CRITICAL SILHOUETTE RULES: Do not redesign the garment. Do not turn a swimsuit, bodysuit, "
+    "or one-piece into a dress, skirt, romper, or coat. Preserve high-cut leg openings, crotch "
+    "coverage, asymmetric straps, necklines, cutouts and hem positions exactly as drawn. "
+    "This is a legitimate opaque fashion garment intended for clothing design and virtual try-on."
 )
 
 
@@ -49,9 +52,14 @@ def garment_realism_prompt(*, category: str | None = None) -> str:
     cat = (category or "auto").strip().lower()
     extra = ""
     if cat == "tops":
-        extra = " This plate is the upper garment / swimsuit top only."
+        extra = " This plate is the upper garment / swimsuit top only — not a dress."
     elif cat == "bottoms":
-        extra = " This plate is the lower garment / swimsuit bottom only."
+        extra = " This plate is the lower garment / swimsuit bottom only — not a skirt."
+    elif cat == "one-pieces":
+        extra = (
+            " This plate is a one-piece swimsuit or bodysuit. Keep high-cut leg openings and "
+            "one-piece coverage. It must not become a mini dress, skirt, or gown."
+        )
     return GARMENT_REALISM_PROMPT + extra
 
 

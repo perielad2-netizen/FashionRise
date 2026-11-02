@@ -25,6 +25,11 @@ from typing import Any, Literal
 
 from PIL import Image, ImageFilter
 
+from app.services.fashn_garment_fidelity import (
+    compute_silhouette_features,
+    recommend_fashn_category,
+)
+
 PieceCategory = Literal["tops", "bottoms", "one-pieces", "auto"]
 PieceLayout = Literal["one_piece", "two_piece"]
 
@@ -99,10 +104,14 @@ class GarmentPrepResult:
             ],
             "notes": (
                 "Two-piece swimwear uses sequential FASHN calls (tops then bottoms) — "
-                "v1.6 applies one category per garment_image. Generate a realistic product "
-                "image first; FASHN runs only after you accept it."
+                "v1.6 applies one category per garment_image. One click runs realism + "
+                "fidelity checks, then FASHN only if the silhouette stays faithful."
                 if self.layout == "two_piece"
-                else "Single garment plate → one FASHN call after you accept the realistic product image."
+                else (
+                    "Single garment plate uses FASHN category one-pieces when the silhouette "
+                    "is swimsuit-like (never auto for one-piece swimwear). One click runs "
+                    "realism + fidelity, then FASHN."
+                )
             ),
         }
 
@@ -420,7 +429,12 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
             merged |= cells
         if not merged:
             merged = {(x, y) for y, row in enumerate(raw_mask) for x, v in enumerate(row) if v}
-        pieces = [_piece_from_cells(src, merged, "auto")]
+        # Owner incident: category=auto let FASHN turn a high-cut swimsuit into a dress.
+        # Classify silhouette and prefer explicit one-pieces for swimsuit-like one-piece art.
+        probe = _piece_from_cells(src, merged, "auto")
+        feats = compute_silhouette_features(probe.png_bytes)
+        cat = recommend_fashn_category(layout="one_piece", features=feats)
+        pieces = [_piece_from_cells(src, merged, cat)]
         fashn_calls = 1
 
     quality_ok, quality_notes = _quality_gate(pieces)

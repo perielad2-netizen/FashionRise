@@ -232,8 +232,13 @@ def test_preflight_and_gate(client, monkeypatch, db_session):
     assert "notice_text" in body and body["notice_text"]
     assert body["fashn_enabled"] is False
     assert body["fashn_configured"] is False
-    assert body["fashn_consent_version"] == "try-on-fashn-preview-v1"
+    assert body["fashn_consent_version"] == "try-on-fashn-oneclick-v1"
     assert "FASHN" in (body.get("fashn_notice_text") or "")
+    assert body.get("fashn_one_click") is True
+    assert body.get("fashn_combined_estimate_cents_one_piece") == (
+        body.get("fashn_realism_estimate_cents_per_piece")
+        + body.get("fashn_estimate_cents_per_call")
+    )
 
 
 def test_enqueue_refused_when_ai_gate_off(client, monkeypatch, db_session):
@@ -702,6 +707,8 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
             assert photo_png and garment_png
             assert prep is not None
             assert getattr(prep, "quality_ok", True) is True
+            # One-piece swimwear must not be sent as category=auto.
+            assert all(p.category != "auto" for p in prep.pieces)
             out = _png_bytes((80, 120), (12, 34, 56, 255))
             return out, {
                 "actual_cost_cents": 8 * prep.fashn_calls,

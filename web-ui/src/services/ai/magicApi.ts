@@ -156,6 +156,9 @@ export type PersonalTryOnPreflight = {
   fashn_notice_hash?: string | null
   fashn_estimate_cents_per_call?: number | null
   fashn_prompt_version?: string | null
+  fashn_realism_estimate_cents_per_piece?: number | null
+  fashn_combined_estimate_cents_one_piece?: number | null
+  fashn_one_click?: boolean
 }
 
 export async function fetchPersonalTryOnPreflight(
