@@ -29,8 +29,10 @@ from app.services.personal_croquis_provider import (
 logger = logging.getLogger(__name__)
 
 TRY_ON_JOB_TYPE = "personal_try_on"
-# V1 kept for historical jobs; live enqueue uses V2.
-TRY_ON_PROMPT_VERSION = "try-on-person-v3"
+# V1/V3 kept for historical jobs. Live OpenAI enqueue uses V2 (#168).
+# V3 (swimwear skin-coverage wording) caused 100% OpenAI input moderation_blocked
+# category=sexual on ordinary outfits (job 461c9419…). Swimwear try-on is FASHN.
+TRY_ON_PROMPT_VERSION = "try-on-person-v2"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.
@@ -124,8 +126,12 @@ TRY_ON_USER_PROVIDER_REJECT_MESSAGE = (
 
 
 def build_try_on_prompt(design_hints: list[str] | None = None) -> str:
-    """Active try-on prompt (V3) plus optional Studio-derived design hints."""
-    prompt = TRY_ON_PROMPT_V3
+    """Active OpenAI try-on prompt (V2) plus optional Studio-derived design hints.
+
+    V3 remains in-module for audit only — do not activate for live OpenAI Try On.
+    Swimwear / coverage-sensitive try-on uses the separate FASHN provider path.
+    """
+    prompt = TRY_ON_PROMPT_V2
     cleaned: list[str] = []
     for raw in design_hints or []:
         if not isinstance(raw, str):
