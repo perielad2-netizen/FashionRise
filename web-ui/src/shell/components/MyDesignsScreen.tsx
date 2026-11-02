@@ -22,6 +22,9 @@ type WorkingDraft = {
   brush: SavedDesignSnapshot['brush']
   saveStatus: SaveStatus
   saveStatusLabel: string
+  /** Exact My Croquis pins when the working draft uses model=personal. */
+  personalCroquisId?: string | null
+  personalCroquisVersion?: number | null
 }
 
 type Props = {
@@ -152,7 +155,7 @@ export function MyDesignsScreen({
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [visible, setVisible] = useState(PREVIEW_PAGE_SIZE)
   const [reloadToken, setReloadToken] = useState(0)
-  const [renderer] = useState(() => new PreviewRenderer())
+  const [renderer] = useState(() => new PreviewRenderer({ ownerId }))
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const workingKeyRef = useRef<string | null>(null)
@@ -160,6 +163,10 @@ export function MyDesignsScreen({
   const deleteTriggerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => () => renderer.dispose(), [renderer])
+
+  useEffect(() => {
+    renderer.setOwnerId(ownerId)
+  }, [renderer, ownerId])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -192,11 +199,20 @@ export function MyDesignsScreen({
       model: working.model,
       brush: working.brush,
       dimmed: working.dimmed,
+      personalCroquisId: working.personalCroquisId ?? null,
+      personalCroquisVersion: working.personalCroquisVersion ?? null,
     }),
-    [working.strokes, working.model, working.brush, working.dimmed],
+    [
+      working.strokes,
+      working.model,
+      working.brush,
+      working.dimmed,
+      working.personalCroquisId,
+      working.personalCroquisVersion,
+    ],
   )
   const lastStroke = working.strokes[working.strokes.length - 1]
-  const workingKey = `working:${working.strokes.length}:${lastStroke?.id ?? ''}:${working.model}:${working.dimmed}`
+  const workingKey = `working:${working.strokes.length}:${lastStroke?.id ?? ''}:${working.model}:${working.dimmed}:${working.personalCroquisId ?? ''}:${working.personalCroquisVersion ?? ''}`
   useEffect(() => {
     if (!renderer) return
     const previous = workingKeyRef.current
