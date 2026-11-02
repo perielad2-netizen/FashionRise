@@ -3,6 +3,10 @@
  * Studio gates (Front/Back, Magic UI, Dual Magic) or accidentally enable
  * Registration UI.
  *
+ * Issue #158 — also fail builds that omit Create My Croquis consent notices.
+ * Vite only replaces **static** `import.meta.env.VITE_*` access; dynamic
+ * `import.meta.env[name]` ships empty and blocked the wizard in production.
+ *
  * IMPORTANT: Vite may load `web-ui/.env.production` into `import.meta.env`
  * without exporting those keys into Node `process.env`. Env checks alone are
  * therefore insufficient. This script:
@@ -11,10 +15,15 @@
  *      gitignored `.env.production` being visible to this assert).
  *   2) Parses the compiled `dist/assets/index-*.js` and fail-closed proves
  *      all four gate helpers constant-folded to the expected booleans.
- *   3) Writes `BUILD_ENV.txt` + `COMPILED_GATES.json` (booleans only).
+ *   3) Requires the three approved notice texts in Node env, verifies SHA256
+ *      against the known production hashes (matching backend `.env`), and
+ *      proves each notice string is embedded in the compiled bundle.
+ *   4) Writes `BUILD_ENV.txt` + `COMPILED_GATES.json` + `COMPILED_NOTICES.json`
+ *      (hashes/lengths/versions only — never notice bodies).
  *
- * Does not print secrets.
+ * Does not print secrets / notice bodies.
  */
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,6 +44,49 @@ export const EXPECTED_PROD_VITE_FLAGS = Object.freeze({
   VITE_STUDIO_FRONT_BACK_ENABLED: true,
   VITE_STUDIO_DUAL_MAGIC_ENABLED: true,
 })
+
+/** Create My Croquis notice env keys (must be static `import.meta.env` access). */
+export const CROQUIS_NOTICE_ENV_KEYS = Object.freeze([
+  'VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT',
+  'VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT',
+  'VITE_MY_CROQUIS_AI_NOTICE_TEXT',
+])
+
+/**
+ * Approved production notice SHA256 digests (UTF-8) for adults-beta / storage /
+ * ai-provider versions `2026-11-01`. Must match backend `MY_CROQUIS_*_NOTICE_TEXT`.
+ * Override via `EXPECTED_MY_CROQUIS_*_NOTICE_SHA256` only when intentionally
+ * rotating approved legal copy together with the backend.
+ */
+export const EXPECTED_PROD_NOTICE_SHA256 = Object.freeze({
+  VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT:
+    '882c9ed42b5f8b75d5b4e414732329ddd7daa0dfb537491bdded0428b6e41df9',
+  VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT:
+    '27882295bca4c06b61ea0cb729127345f006cb01b1b3c32ca5e986bc0838a589',
+  VITE_MY_CROQUIS_AI_NOTICE_TEXT:
+    'c3226ed38db0b86f3ab18377340c37ded733b0603bddae7c597a7b2aeea39cb8',
+})
+
+/** FE notice version constants — must stay aligned with backend attestation versions. */
+export const EXPECTED_PROD_NOTICE_VERSIONS = Object.freeze({
+  adults: 'adults-beta-2026-11-01',
+  storage: 'storage-2026-11-01',
+  ai: 'ai-provider-2026-11-01',
+})
+
+export function sha256Hex(text) {
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex')
+}
+
+export function sanitizeNoticeText(raw) {
+  const text = (raw ?? '').trim()
+  if (!text) return ''
+  const lower = text.toLowerCase()
+  if (lower.includes('draft') || lower.includes('placeholder') || lower.includes('todo')) {
+    return ''
+  }
+  return text
+}
 
 export function parseBool(raw) {
   const v = (raw ?? '').trim().toLowerCase()
@@ -177,6 +229,56 @@ export function assertNodeEnvAllowlist(env = process.env, expected = EXPECTED_PR
   return failures
 }
 
+/**
+ * Fail-closed Create My Croquis notices (#158).
+ * Returns { failures, notices } where notices maps env key → { text, sha256, length }.
+ */
+export function assertCroquisNoticeEnv(
+  env = process.env,
+  expectedSha = EXPECTED_PROD_NOTICE_SHA256,
+) {
+  const failures = []
+  const notices = {}
+  for (const name of CROQUIS_NOTICE_ENV_KEYS) {
+    const sanitized = sanitizeNoticeText(env[name])
+    if (!sanitized) {
+      failures.push(
+        `${name} missing or rejected (empty/draft/placeholder). ` +
+          'Export approved notice text for production builds (#158).',
+      )
+      continue
+    }
+    const digest = sha256Hex(sanitized)
+    const overrideKey = `EXPECTED_${name.replace(/^VITE_/, '')}_SHA256`
+    const want = (env[overrideKey] || expectedSha[name] || '').trim().toLowerCase()
+    if (want && digest !== want) {
+      failures.push(
+        `${name} SHA256 ${digest} does not match expected ${want} ` +
+          '(frontend must match effective backend MY_CROQUIS_*_NOTICE_TEXT).',
+      )
+    }
+    notices[name] = { sha256: digest, length: sanitized.length, text: sanitized }
+  }
+  return { failures, notices }
+}
+
+/** Prove Vite inlined each notice into the compiled Studio bundle. */
+export function assertCompiledNoticesPresent(bundleText, notices) {
+  const failures = []
+  for (const [name, info] of Object.entries(notices)) {
+    if (!info?.text) {
+      failures.push(`${name} has no sanitized text to search for in bundle`)
+      continue
+    }
+    if (!bundleText.includes(info.text)) {
+      failures.push(
+        `compiled bundle missing ${name} body (Vite did not inline static import.meta.env — #158 regression)`,
+      )
+    }
+  }
+  return failures
+}
+
 function fail(msg) {
   console.error(`assert-prod-vite-flags: ${msg}`)
   process.exit(1)
@@ -185,6 +287,9 @@ function fail(msg) {
 function main() {
   const envFailures = assertNodeEnvAllowlist()
   if (envFailures.length) fail(envFailures[0])
+
+  const { failures: noticeEnvFailures, notices } = assertCroquisNoticeEnv()
+  if (noticeEnvFailures.length) fail(noticeEnvFailures[0])
 
   if (!fs.existsSync(assets)) fail('dist/assets missing — run after vite build')
   const indexJs = fs.readdirSync(assets).find((n) => n.startsWith('index-') && n.endsWith('.js'))
@@ -204,6 +309,9 @@ function main() {
   const apiFailures = assertCompiledApiBase(text)
   if (apiFailures.length) fail(apiFailures.join('; '))
 
+  const noticeBundleFailures = assertCompiledNoticesPresent(text, notices)
+  if (noticeBundleFailures.length) fail(noticeBundleFailures.join('; '))
+
   const apiBase = (process.env.VITE_API_BASE_URL ?? '').trim()
   const buildSha = (process.env.VITE_BUILD_SHA ?? '').trim()
   if (!buildSha) {
@@ -222,8 +330,15 @@ function main() {
     `VITE_STUDIO_FRONT_BACK_ENABLED=${effectiveEnvBool('VITE_STUDIO_FRONT_BACK_ENABLED')}`,
     `VITE_STUDIO_DUAL_MAGIC_ENABLED=${effectiveEnvBool('VITE_STUDIO_DUAL_MAGIC_ENABLED')}`,
     `VITE_BUILD_SHA=${buildSha}`,
+    `CROQUIS_ADULTS_NOTICE_VERSION=${EXPECTED_PROD_NOTICE_VERSIONS.adults}`,
+    `CROQUIS_STORAGE_NOTICE_VERSION=${EXPECTED_PROD_NOTICE_VERSIONS.storage}`,
+    `CROQUIS_AI_NOTICE_VERSION=${EXPECTED_PROD_NOTICE_VERSIONS.ai}`,
+    `CROQUIS_ADULTS_NOTICE_SHA256=${notices.VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT.sha256}`,
+    `CROQUIS_STORAGE_NOTICE_SHA256=${notices.VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT.sha256}`,
+    `CROQUIS_AI_NOTICE_SHA256=${notices.VITE_MY_CROQUIS_AI_NOTICE_TEXT.sha256}`,
     `BUILT_AT_UTC=${new Date().toISOString()}`,
     `ASSERT_PROD_VITE_FLAGS=pass`,
+    `ASSERT_PROD_CROQUIS_NOTICES=pass`,
   ]
   fs.writeFileSync(path.join(dist, 'BUILD_ENV.txt'), `${buildEnvLines.join('\n')}\n`)
 
@@ -244,10 +359,24 @@ function main() {
   }
   fs.writeFileSync(path.join(dist, 'COMPILED_GATES.json'), `${JSON.stringify(compiledManifest, null, 2)}\n`)
 
+  const noticeManifest = {
+    versions: EXPECTED_PROD_NOTICE_VERSIONS,
+    notices: Object.fromEntries(
+      Object.entries(notices).map(([name, info]) => [
+        name,
+        { sha256: info.sha256, length: info.length, embedded: true },
+      ]),
+    ),
+    source: indexJs,
+    buildSha,
+  }
+  fs.writeFileSync(path.join(dist, 'COMPILED_NOTICES.json'), `${JSON.stringify(noticeManifest, null, 2)}\n`)
+
   console.log(
     'assert-prod-vite-flags: ok ' +
       `(compiled frontBack=${gates.frontBack.value} magic=${gates.magicUi.value} ` +
-      `dual=${gates.dualMagic.value} registration=${gates.registration.value}; api=/api/v1; sha=${buildSha.slice(0, 8)})`,
+      `dual=${gates.dualMagic.value} registration=${gates.registration.value}; api=/api/v1; ` +
+      `notices=pass; sha=${buildSha.slice(0, 8)})`,
   )
 }
 

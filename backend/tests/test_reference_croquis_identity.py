@@ -14,6 +14,7 @@ from app.models.ai_job import AIJob
 from app.services import sketch_openai
 from app.services.reference_croquis import (
     ALLOWED_REFERENCE_MODEL_IDS,
+    PERSONAL_IDS,
     SELECTABLE_FEMALE_IDS,
     SELECTABLE_MALE_IDS,
     edit_reference_instructions,
@@ -71,6 +72,48 @@ def test_utility_ids_do_not_invent_gender(model_id: str):
     assert "do not invent" in edit.lower()
 
 
+def test_personal_id_accepted_without_gender_family():
+    """#159 — doc.model=personal must validate for ordinary Fashion Magic."""
+    assert "personal" in PERSONAL_IDS
+    ref = parse_reference_model_id("personal")
+    assert ref is not None
+    assert ref.model_id == "personal"
+    assert ref.kind == "personal"
+    assert ref.family is None
+    vision = vision_reference_instructions(ref)
+    edit = edit_reference_instructions(ref)
+    assert "personal" in vision.lower()
+    assert "female-straight" in vision.lower()  # explicitly forbidden replacement
+    assert "do not" in vision.lower() and "generic library croquis" in vision.lower()
+    assert "personal" in edit.lower()
+    assert "female-straight" in edit.lower()
+    assert "do not invent a male or female" in edit.lower()
+    # Must not map personal onto a built-in mannequin family.
+    assert "female fashion-croquis family" not in vision.lower()
+    assert "male fashion-croquis family" not in vision.lower()
+
+
+def test_edit_prompt_personal_preserves_figure_not_mannequin():
+    job = _job(reference_model_id="personal", notes="polish personal croquis")
+    prompt = sketch_openai._build_image_prompt(
+        {
+            "summary": "drawn garment on personal figure",
+            "image_prompt": "preserve the personal croquis proportions",
+            "design_identity": {
+                "garment_category": "dress",
+                "main_colors": "navy",
+                "pose": "standing",
+            },
+        },
+        "drawn garment on personal figure",
+        job=job,
+    )
+    assert "personal" in prompt.lower()
+    assert "SELECTED STUDIO REFERENCE" in prompt
+    assert "female-straight" in prompt.lower() or "built-in mannequin" in prompt.lower()
+    assert "do not invent a male or female" in prompt.lower() or "do NOT invent" in prompt
+
+
 def test_missing_metadata_is_backward_compatible():
     assert parse_reference_model_id(None) is None
     assert parse_reference_model_id("") is None
@@ -90,13 +133,15 @@ def test_invalid_reference_model_id_fails_closed():
         parse_reference_model_id(123)
 
 
-def test_allowlist_covers_ten_builtins_plus_legacy_and_utility():
+def test_allowlist_covers_ten_builtins_plus_legacy_utility_and_personal():
     assert len(SELECTABLE_FEMALE_IDS) == 6
     assert len(SELECTABLE_MALE_IDS) == 4
     assert "female" in ALLOWED_REFERENCE_MODEL_IDS
     assert "male" in ALLOWED_REFERENCE_MODEL_IDS
     assert "custom" in ALLOWED_REFERENCE_MODEL_IDS
     assert "blank" in ALLOWED_REFERENCE_MODEL_IDS
+    assert "personal" in ALLOWED_REFERENCE_MODEL_IDS
+    assert PERSONAL_IDS == frozenset({"personal"})
 
 
 def test_user_text_includes_selected_male_reference():
@@ -333,6 +378,70 @@ def test_api_rejects_invalid_reference_model_id(client, db_session):
         headers=_auth(tokens),
         json=_polish_payload(reference_model_id="male-invented"),
     )
+    assert created.status_code == 422, created.text
+
+
+def test_api_accepts_personal_reference_model_id_single_side(client, db_session):
+    """#159 — single-side Fashion Magic with personal croquis must enqueue."""
+    tokens = register_with_invite(client, db_session, "ref_personal@example.com", "ref_personal")
+    created = client.post(
+        "/api/v1/ai/sketch/polish",
+        headers=_auth(tokens),
+        json=_polish_payload(reference_model_id="personal"),
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["input_data"].get("reference_model_id") == "personal"
+    row = db_session.get(AIJob, UUID(body["id"]))
+    assert row is not None
+    assert row.input_data.get("reference_model_id") == "personal"
+
+
+def test_api_accepts_personal_reference_model_id_dual_side(client, db_session):
+    """#159 — dual Front/Back polish must accept personal without mapping to a mannequin."""
+    tokens = register_with_invite(client, db_session, "ref_pers_dual@example.com", "ref_pers_dual")
+    op = str(uuid4())
+    body = {
+        "magic_operation_id": op,
+        "source_revision": 1,
+        "front": {
+            "image_base64": f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+            "idempotency_key": f"front-personal-{uuid4().hex[:8]}",
+        },
+        "back": {
+            "image_base64": f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+            "idempotency_key": f"back-personal-{uuid4().hex[:8]}",
+        },
+        "shared_garment_spec": {"silhouette": "shift dress", "main_colors": ["black"]},
+        "reference_model_id": "personal",
+        "notes": "personal dual magic",
+    }
+    created = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert created.status_code == 201, created.text
+    data = created.json()
+    assert data["front_job"]["input_data"].get("reference_model_id") == "personal"
+    assert data["back_job"]["input_data"].get("reference_model_id") == "personal"
+    assert data["front_job"]["input_data"].get("studio_side") == "front"
+    assert data["back_job"]["input_data"].get("studio_side") == "back"
+
+
+def test_api_dual_still_rejects_invalid_reference_model_id(client, db_session):
+    tokens = register_with_invite(client, db_session, "ref_dual_bad@example.com", "ref_dual_bad")
+    body = {
+        "magic_operation_id": str(uuid4()),
+        "source_revision": 1,
+        "front": {
+            "image_base64": f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+            "idempotency_key": f"front-bad-{uuid4().hex[:8]}",
+        },
+        "back": {
+            "image_base64": f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+            "idempotency_key": f"back-bad-{uuid4().hex[:8]}",
+        },
+        "shared_garment_spec": {"silhouette": "coat"},
+        "reference_model_id": "male-invented",
+    }
+    created = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
     assert created.status_code == 422, created.text
 
 

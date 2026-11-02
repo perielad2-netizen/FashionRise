@@ -26,7 +26,10 @@ class SketchPolishInputData(BaseModel):
     local_path_placeholder: str | None = None
     reference_model_id: str | None = Field(
         default=None,
-        description="Built-in or legacy croquis id; validated at enqueue (P1 #59).",
+        description=(
+            "Built-in, legacy, utility (custom/blank), or personal croquis id; "
+            "validated at enqueue (P1 #59 / #159)."
+        ),
     )
     studio_side: Literal["front", "back"] | None = Field(
         default=None,

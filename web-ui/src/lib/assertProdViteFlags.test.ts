@@ -6,9 +6,13 @@ import { describe, expect, it } from 'vitest'
 import {
   assertCompiledApiBase,
   assertCompiledGatesMatchAllowlist,
+  assertCompiledNoticesPresent,
+  assertCroquisNoticeEnv,
   assertNodeEnvAllowlist,
   extractCompiledGates,
+  EXPECTED_PROD_NOTICE_SHA256,
   EXPECTED_PROD_VITE_FLAGS,
+  sha256Hex,
 } from '../../scripts/assert-prod-vite-flags.mjs'
 
 function synthBundle({
@@ -129,5 +133,64 @@ describe('assert-prod-vite-flags compiled API base', () => {
   it('fails when localhost API base is embedded', () => {
     const failures = assertCompiledApiBase('fetch("http://localhost:8001/api/v1") `/api/v1`')
     expect(failures.some((f) => f.includes('localhost'))).toBe(true)
+  })
+})
+
+describe('assert-prod-vite-flags croquis notices (#158)', () => {
+  const adults = 'Approved adults notice body for production assert coverage.'
+  const storage = 'Approved storage notice body for production assert coverage.'
+  const ai = 'Approved AI notice body for production assert coverage.'
+  const goodNotices = {
+    VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT: adults,
+    VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT: storage,
+    VITE_MY_CROQUIS_AI_NOTICE_TEXT: ai,
+    EXPECTED_MY_CROQUIS_ADULTS_NOTICE_TEXT_SHA256: sha256Hex(adults),
+    EXPECTED_MY_CROQUIS_STORAGE_NOTICE_TEXT_SHA256: sha256Hex(storage),
+    EXPECTED_MY_CROQUIS_AI_NOTICE_TEXT_SHA256: sha256Hex(ai),
+  }
+
+  it('accepts approved notices matching expected SHA256 overrides', () => {
+    const { failures, notices } = assertCroquisNoticeEnv(goodNotices)
+    expect(failures).toEqual([])
+    expect(notices.VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT.sha256).toBe(sha256Hex(adults))
+  })
+
+  it('fails when any notice is empty (dynamic import.meta.env regression)', () => {
+    const { failures } = assertCroquisNoticeEnv({
+      ...goodNotices,
+      VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT: '',
+    })
+    expect(failures.some((f) => f.includes('VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT'))).toBe(true)
+  })
+
+  it('fails when notice text is a draft/placeholder', () => {
+    const { failures } = assertCroquisNoticeEnv({
+      ...goodNotices,
+      VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT: 'DRAFT placeholder — not legal',
+    })
+    expect(failures.some((f) => f.includes('VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT'))).toBe(true)
+  })
+
+  it('fails when SHA256 does not match expected production digest', () => {
+    const { failures } = assertCroquisNoticeEnv({
+      VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT: adults,
+      VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT: storage,
+      VITE_MY_CROQUIS_AI_NOTICE_TEXT: ai,
+      // force default expected digests (prod) which will not match synthetic text
+    })
+    expect(failures.length).toBeGreaterThan(0)
+    expect(failures[0]).toContain('SHA256')
+    expect(EXPECTED_PROD_NOTICE_SHA256.VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT).toMatch(/^[a-f0-9]{64}$/)
+  })
+
+  it('proves notices are embedded in the compiled bundle', () => {
+    const { notices } = assertCroquisNoticeEnv(goodNotices)
+    const bundle = `prelude${adults}mid${storage}end${ai}`
+    expect(assertCompiledNoticesPresent(bundle, notices)).toEqual([])
+    expect(
+      assertCompiledNoticesPresent(`prelude${adults}mid${storage}`, notices).some((f) =>
+        f.includes('VITE_MY_CROQUIS_AI_NOTICE_TEXT'),
+      ),
+    ).toBe(true)
   })
 })
