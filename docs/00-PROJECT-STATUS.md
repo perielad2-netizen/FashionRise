@@ -40,6 +40,7 @@
 | App / FE / BE / worker SHA | **`071ea03d5c1f2e05d7d2ac6a713fb293fc9662a0`** (App **`071ea03d`**) |
 | Alembic | **`015`** (unchanged) |
 | Nginx Accept | Unchanged allowlist |
+| Nginx FE root | **Fixed 2026-11-02 15:02 UTC** — live TLS `root` was still hardcoded to **`28bc5e8d`** (localhost API). Now **`/var/www/fashionrise/current` → `071ea03d`**. Backup `/var/backups/fashionrise/p0-172-nginx-root-fix-20261102T150208Z/` |
 | Provider calls | **0** |
 | Rollback | `/var/backups/fashionrise/p0-172-structure-harden-deploy-20261102T141257Z/ROLLBACK.sh` → FE **`e176f464`** |
 
