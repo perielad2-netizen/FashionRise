@@ -310,31 +310,56 @@ def classify_structure_image_role(png: bytes) -> str:
     return "unknown"
 
 
+# Trusted server-side provenance for structure review (#172).
+# Pixel heuristics must never authorize plate comparison for photoreal try-on photos.
+RESULT_KIND_OPENAI_TRY_ON_PHOTO = "openai_try_on_photo"
+RESULT_KIND_ISOLATED_GARMENT_PLATE = "isolated_garment_plate"
+SOURCE_KIND_ISOLATED_GARMENT_PLATE = "isolated_garment_plate"
+
+
 def soft_try_on_structure_review(
     *,
     source_png: bytes,
     result_png: bytes,
+    result_kind: str | None = None,
+    source_kind: str | None = None,
 ) -> dict[str, Any]:
-    """Soft post-generation check for major lower-garment type mismatch (#170/#171).
+    """Soft post-generation check for major lower-garment type mismatch (#170/#171/#172).
 
-    Only compares like-for-like **isolated garment** plates. Full photoreal person
-    images are never treated as garment masks. Non-trouser sources skip the check
-    without downgrading ordinary Try On results.
+    OpenAI Try On completion must pass ``result_kind=openai_try_on_photo``. That
+    provenance alone establishes the output is a photoreal try-on photograph —
+    never authorize garment-mask comparison from white background / skin / opacity
+    heuristics on those outputs.
+
+    Plate↔plate comparison runs only when both sides are explicitly trusted as
+    isolated garment plates (``result_kind`` / ``source_kind`` =
+    ``isolated_garment_plate``), or when callers omit provenance and both images
+    classify as isolated plates (offline plate-fixture tests only).
 
     States:
     - ``not_applicable`` — trousers check does not apply (ordinary outfits).
-    - ``inconclusive`` — cannot compare (e.g. person photo vs garment plate).
-    - ``failed`` — confirmed mismatch between two isolated garment images.
+    - ``inconclusive`` — cannot compare (e.g. person photo; no garment isolation).
+    - ``failed`` — confirmed mismatch between two trusted isolated garment images.
     - ``passed_soft`` — soft consistency only (not a fidelity certificate).
     """
     src = analyze_lower_garment_geometry(source_png)
+    kind = (result_kind or "").strip().lower() or None
+    src_kind = (source_kind or "").strip().lower() or None
+
+    # Diagnostic roles only — never the sole gate for OpenAI photo outputs (#172).
     src_role = classify_structure_image_role(source_png)
-    out_role = classify_structure_image_role(result_png)
+    out_role = (
+        "full_scene"
+        if kind == RESULT_KIND_OPENAI_TRY_ON_PHOTO
+        else classify_structure_image_role(result_png)
+    )
     base: dict[str, Any] = {
-        "version": "try-on-structure-review-v2",
+        "version": "try-on-structure-review-v3",
         "source": src.public_dict(),
         "source_role": src_role,
         "result_role": out_role,
+        "result_kind": kind,
+        "source_kind": src_kind,
         "result": None,
     }
     if not src.looks_like_trousers:
@@ -348,8 +373,29 @@ def soft_try_on_structure_review(
             ),
             "faithful": None,
         }
-    # Result is a full person photograph (or unknown scene) — not a garment plate.
-    if out_role != "isolated_garment":
+
+    # Trusted OpenAI full-photo provenance: never plate-compare result pixels.
+    if kind == RESULT_KIND_OPENAI_TRY_ON_PHOTO:
+        return {
+            **base,
+            "state": "inconclusive",
+            "code": "STRUCTURE_INCOMPARABLE_RESULT",
+            "message": (
+                "Automated garment-mask comparison cannot be applied to an OpenAI try-on "
+                "photograph until garment-region isolation exists. "
+                "No automated pass/fail is claimed."
+            ),
+            "faithful": None,
+        }
+
+    # Explicit trusted isolated plates — or legacy plate fixtures without provenance.
+    result_trusted_plate = kind == RESULT_KIND_ISOLATED_GARMENT_PLATE or (
+        kind is None and out_role == "isolated_garment"
+    )
+    source_trusted_plate = src_kind == SOURCE_KIND_ISOLATED_GARMENT_PLATE or (
+        src_kind is None and src_role == "isolated_garment"
+    )
+    if not result_trusted_plate:
         return {
             **base,
             "state": "inconclusive",
@@ -361,7 +407,7 @@ def soft_try_on_structure_review(
             ),
             "faithful": None,
         }
-    if src_role != "isolated_garment":
+    if not source_trusted_plate:
         return {
             **base,
             "state": "inconclusive",
@@ -420,3 +466,34 @@ def soft_try_on_structure_review(
         ),
         "faithful": None,
     }
+
+
+def merge_openai_design_hints(
+    studio_hints: list[str],
+    geometry_hints: list[str],
+    *,
+    max_hints: int = 8,
+) -> list[str]:
+    """Merge Studio + trouser geometry hints with geometry priority (#172).
+
+    Trouser/jumpsuit geometry hints must not silently disappear when the
+    eight-hint budget is already filled by lower-priority color/print hints.
+    """
+    geo: list[str] = []
+    for item in geometry_hints:
+        text = " ".join(str(item).split())[:120]
+        if text and text not in geo:
+            geo.append(text)
+    studio: list[str] = []
+    for item in studio_hints:
+        text = " ".join(str(item).split())[:120]
+        if not text or text in geo or text in studio:
+            continue
+        studio.append(text)
+    # Geometry first, then fill remaining slots with Studio evidence.
+    merged = list(geo)
+    for text in studio:
+        if len(merged) >= max_hints:
+            break
+        merged.append(text)
+    return merged[:max_hints]

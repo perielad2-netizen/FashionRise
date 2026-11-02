@@ -159,27 +159,54 @@ export function buildTryOnDesignHints(args: {
   fills?: FillOp[]
 }): string[] {
   const fills = args.fills ?? []
-  const hints: string[] = []
+  // #172 — geometry hints occupy the budget first so color/print hints cannot crowd them out.
+  const priority: string[] = []
+  const secondary: string[] = []
   const colors = new Set<string>()
+
+  // #170 — additive trouser geometry hints only when Studio fills show two clear legs.
+  const legs = detectTrouserLegFills(fills)
+  if (legs.looksLikeTrousers) {
+    if (legs.looksLikeJumpsuit) {
+      pushUnique(
+        priority,
+        'garment type: one-piece jumpsuit with trousers — not a dress, skirt, or swimsuit',
+      )
+    } else {
+      pushUnique(priority, 'garment type: trousers / pant legs — not a dress or skirt')
+    }
+    pushUnique(priority, 'keep both leg openings separate; preserve each hem position from image 2')
+    if (legs.looksLikeNarrow) {
+      pushUnique(priority, 'preserve narrow leg width — do not flare, widen, or lengthen the legs')
+    } else if (legs.looksLikeWide) {
+      pushUnique(
+        priority,
+        'preserve the existing wide/flared leg width — do not narrow or merge the legs',
+      )
+    } else {
+      pushUnique(priority, 'preserve original leg width and length — do not flare or merge legs')
+    }
+    pushUnique(priority, 'do not connect the legs into a continuous skirt panel')
+  }
 
   for (const fill of fills) {
     const style = fill.style
     if (style.kind === 'solid') {
       colors.add(style.color.toUpperCase())
-      pushUnique(hints, `solid fill color ${style.color.toUpperCase()}`)
+      pushUnique(secondary, `solid fill color ${style.color.toUpperCase()}`)
     } else if (style.kind === 'gradient') {
       for (const c of style.colors) colors.add(c.toUpperCase())
       pushUnique(
-        hints,
+        secondary,
         `gradient fill ${style.colors[0].toUpperCase()} to ${style.colors[1].toUpperCase()}`,
       )
     } else if (style.kind === 'fabric') {
       const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
       const label = preset?.label ?? style.fabricId
-      pushUnique(hints, `${label} repeating fabric fill — keep exact Studio print geometry`)
+      pushUnique(secondary, `${label} repeating fabric fill — keep exact Studio print geometry`)
     } else if (style.kind === 'uploaded-fabric') {
       pushUnique(
-        hints,
+        secondary,
         'uploaded fabric repeating fill — preserve the exact print topology from the artwork pixels',
       )
     }
@@ -194,50 +221,30 @@ export function buildTryOnDesignHints(args: {
 
   if (colors.size > 0) {
     pushUnique(
-      hints,
+      secondary,
       `exact designer colors: ${[...colors].slice(0, 6).join(', ')}`,
     )
   }
 
   if (hasUpperAccessoryInk(args.strokes)) {
     pushUnique(
-      hints,
+      secondary,
       'upper-plane ink present — include any drawn hat/cap accessory from image 2',
     )
   }
 
   if (args.strokes.some((s) => s.tool === 'draw') || fills.length > 0) {
     pushUnique(
-      hints,
+      secondary,
       'preserve print topology from image 2 pixels (checkerboard ≠ stripes)',
     )
   }
 
-  // #170 — additive trouser geometry hints only when Studio fills show two clear legs.
-  const legs = detectTrouserLegFills(fills)
-  if (legs.looksLikeTrousers) {
-    if (legs.looksLikeJumpsuit) {
-      pushUnique(
-        hints,
-        'garment type: one-piece jumpsuit with trousers — not a dress, skirt, or swimsuit',
-      )
-    } else {
-      pushUnique(hints, 'garment type: trousers / pant legs — not a dress or skirt')
-    }
-    pushUnique(hints, 'keep both leg openings separate; preserve each hem position from image 2')
-    if (legs.looksLikeNarrow) {
-      pushUnique(hints, 'preserve narrow leg width — do not flare, widen, or lengthen the legs')
-    } else if (legs.looksLikeWide) {
-      pushUnique(
-        hints,
-        'preserve the existing wide/flared leg width — do not narrow or merge the legs',
-      )
-    } else {
-      pushUnique(hints, 'preserve original leg width and length — do not flare or merge legs')
-    }
-    pushUnique(hints, 'do not connect the legs into a continuous skirt panel')
+  const hints = [...priority]
+  for (const h of secondary) {
+    if (hints.length >= MAX_HINTS) break
+    pushUnique(hints, h)
   }
-
   return hints.slice(0, MAX_HINTS)
 }
 
