@@ -18,12 +18,15 @@ def test_verify_nginx_ai_allowlist_script_passes():
     assert "matrix_ok POST /api/v1/ai/personal-try-on" in proc.stdout
     assert "matrix_ok GET /api/v1/ai/personal-try-on/preflight" in proc.stdout
     assert "matrix_ok POST /api/v1/ai/personal-try-on/fashn/prepare" in proc.stdout
+    assert "matrix_ok POST /api/v1/ai/personal-try-on/fashn/garment-realism/" in proc.stdout
+    assert "/accept -> allow_regex_fashn_garment_realism_accept" in proc.stdout
     # Proposed activation snippet must not use ^~ catch-all for /api/v1/ai/.
     doc = (Path(__file__).resolve().parents[2] / "docs/deploy/PROPOSED-NGINX-AI-ALLOWLIST.md").read_text()
     activation = doc.split("## Smallest FashionRise-only change")[1].split("## Pre-activation")[0]
     assert "location ^~ /api/v1/ai/" not in activation
     assert "location /api/v1/ai/ { return 403; }" in activation
     assert "location ~ ^/api/v1/ai/jobs/" in activation
+    assert "garment-realism/[0-9a-fA-F-]{36}/accept" in activation
     assert "location = /api/v1/ai/personal-try-on" in activation
     assert "location = /api/v1/ai/personal-try-on/preflight" in activation
     assert "location = /api/v1/ai/personal-try-on/fashn/prepare" in activation

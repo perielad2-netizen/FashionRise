@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select, text
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,6 @@ from app.core.config import get_settings
 from app.models.ai_job import AIJob
 from app.models.personal_croquis import VERSION_STATUS_ACCEPTED
 from app.models.personal_croquis_spend import (
-    CROQUIS_SPEND_GLOBAL_LOCK_KEY,
     RESERVATION_OPEN,
     RESERVATION_RECONCILIATION,
     RESERVATION_RELEASED,
@@ -36,26 +35,6 @@ from app.models.private_media_asset import KIND_CROQUIS_SOURCE
 from app.models.user import User
 from app.models.user_consent_event import PURPOSE_TRY_ON_PERSON, UserConsentEvent
 from app.services import personal_croquis_service as pcs
-from app.services.personal_croquis_generate import (
-    _count_generations_today,
-    _lock_spend_tx,
-    _sum_billable_cents,
-    resolve_max_exposure_cents,
-)
-from app.services.personal_croquis_provider import (
-    ProviderNotAvailableError,
-    ProviderOutcomeUnknownError,
-)
-from app.services.fashn_try_on_provider import (
-    FASHN_CONSENT_VERSION,
-    FASHN_NOTICE_TEXT,
-    FASHN_PROMPT_VERSION,
-    FASHN_PROVIDER_ID,
-    estimate_fashn_cost_cents,
-    fashn_configured,
-    fashn_live_armed,
-    fashn_notice_text_hash,
-)
 from app.services.fashn_garment_fidelity import (
     assert_structural_fidelity,
     compute_silhouette_features,
@@ -74,6 +53,31 @@ from app.services.fashn_garment_realism import (
     decode_data_url_png,
     downscale_studio_context,
     estimate_garment_realism_cents,
+)
+from app.services.fashn_try_on_provider import (
+    FASHN_CONSENT_VERSION,
+    FASHN_NOTICE_TEXT,
+    FASHN_PROMPT_VERSION,
+    FASHN_PROVIDER_ID,
+    estimate_fashn_cost_cents,
+    fashn_configured,
+    fashn_live_armed,
+    fashn_notice_text_hash,
+)
+from app.services.garment_leg_geometry import (
+    analyze_lower_garment_geometry,
+    openai_trouser_design_hints,
+    soft_try_on_structure_review,
+)
+from app.services.personal_croquis_generate import (
+    _count_generations_today,
+    _lock_spend_tx,
+    _sum_billable_cents,
+    resolve_max_exposure_cents,
+)
+from app.services.personal_croquis_provider import (
+    ProviderNotAvailableError,
+    ProviderOutcomeUnknownError,
 )
 from app.services.personal_try_on_provider import (
     TRY_ON_CONSENT_VERSION,
@@ -120,7 +124,7 @@ def _decode_garment_png(data_url: str) -> bytes:
         )
     try:
         blob = base64.b64decode(m.group(2), validate=True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Garment artwork base64 is invalid."
         ) from exc
@@ -145,7 +149,7 @@ def _decode_garment_png(data_url: str) -> bytes:
             return out.getvalue()
     except HTTPException:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Garment artwork could not be decoded."
         ) from exc
@@ -651,7 +655,9 @@ def _try_on_user_failure_payload(exc: BaseException) -> tuple[str, dict[str, Any
     detail = str(exc)
     error_code = str(meta.get("error_code") or "")
     if not error_code:
-        from app.services.personal_croquis_provider import provider_rejection_code_from_text
+        from app.services.personal_croquis_provider import (
+            provider_rejection_code_from_text,
+        )
 
         code = provider_rejection_code_from_text(detail)
         error_code = (
@@ -764,6 +770,18 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         hints = _normalize_design_hints(
             data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
         )
+        # #170 — additive trouser/jumpsuit hints from frozen garment geometry (OpenAI V2 only).
+        # Does not rewrite TRY_ON_PROMPT_VERSION; skips FASHN and ambiguous silhouettes.
+        if provider_name == TRY_ON_PROVIDER_OPENAI:
+            geo_hints = openai_trouser_design_hints(analyze_lower_garment_geometry(garment_png))
+            if geo_hints:
+                merged = list(hints)
+                for h in geo_hints:
+                    if len(merged) >= 8:
+                        break
+                    if h not in merged:
+                        merged.append(h)
+                hints = _normalize_design_hints(merged)
         generate_kwargs: dict[str, Any] = {
             "photo_png": photo_png,
             "garment_png": garment_png,
@@ -858,7 +876,31 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         "content_fingerprint": data.get("content_fingerprint"),
         "source_revision": data.get("source_revision"),
         "cost_cents": reservation.actual_cost_cents if reservation else actual,
+        "design_hints": hints if provider_name == TRY_ON_PROVIDER_OPENAI else None,
     }
+    if provider_name == TRY_ON_PROVIDER_OPENAI:
+        # Soft structural review — never treat a provider PNG as automatically faithful.
+        review = soft_try_on_structure_review(source_png=garment_png, result_png=png)
+        result["structure_review"] = review
+        if review.get("state") == "failed":
+            result["status"] = "completed_unverified"
+            result["fidelity_ok"] = False
+            result["summary"] = str(review.get("message") or result["summary"])
+            result["bullets"] = [
+                "Provider returned an image, but FashionRise flagged a major silhouette mismatch.",
+                "This is not a faithful try-on of your sketch — do not treat it as production-ready.",
+                "Provider charges may still apply; FashionRise customer credit is a separate owner decision.",
+                f"Prompt {prompt_version}",
+            ]
+        elif review.get("state") == "unverified":
+            result["status"] = "completed_unverified"
+            result["fidelity_ok"] = None
+            result["summary"] = (
+                "Try On Person preview ready — silhouette fidelity unverified "
+                "(concept preview, not a fit guarantee)."
+            )
+        else:
+            result["fidelity_ok"] = None  # soft pass ≠ certified faithful
     if provider_name == TRY_ON_PROVIDER_FASHN:
         result["fashn_prediction_ids"] = meta.get("prediction_ids")
         result["fashn_calls"] = meta.get("fashn_calls")

@@ -48,6 +48,11 @@ location = /api/v1/ai/personal-try-on/fashn/garment-realism {
     proxy_pass http://127.0.0.1:8010;
 }
 
+location ~ ^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$ {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
 location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {
     limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
@@ -68,6 +73,16 @@ MATRIX = [
     ("GET", "/api/v1/ai/personal-try-on/fashn/prepare", "deny_method_fashn_prepare"),
     ("POST", "/api/v1/ai/personal-try-on/fashn/garment-realism", "allow_exact_fashn_garment_realism"),
     ("GET", "/api/v1/ai/personal-try-on/fashn/garment-realism", "deny_method_fashn_garment_realism"),
+    (
+        "POST",
+        "/api/v1/ai/personal-try-on/fashn/garment-realism/11111111-1111-1111-1111-111111111111/accept",
+        "allow_regex_fashn_garment_realism_accept",
+    ),
+    (
+        "GET",
+        "/api/v1/ai/personal-try-on/fashn/garment-realism/11111111-1111-1111-1111-111111111111/accept",
+        "deny_method_fashn_garment_realism_accept",
+    ),
     ("GET", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111", "allow_regex_job"),
     ("GET", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111/image", "allow_regex_image"),
     ("POST", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111", "deny_method_job"),
@@ -77,6 +92,9 @@ MATRIX = [
 ]
 
 _JOB_RE = re.compile(r"^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$")
+_ACCEPT_RE = re.compile(
+    r"^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$"
+)
 
 
 def _assert_snippet_precedence(text: str) -> None:
@@ -99,8 +117,17 @@ def _assert_snippet_precedence(text: str) -> None:
         raise SystemExit("FAIL: missing exact personal-try-on fashn prepare allowlist")
     if "location = /api/v1/ai/personal-try-on/fashn/garment-realism" not in text:
         raise SystemExit("FAIL: missing exact personal-try-on fashn garment-realism allowlist")
+    if not re.search(
+        r"location\s+~\s+\^/api/v1/ai/personal-try-on/fashn/garment-realism/"
+        r"\[0-9a-fA-F-\]\{36\}/accept\$",
+        text,
+    ):
+        raise SystemExit("FAIL: missing regex garment-realism accept allowlist (#170)")
+    accept_at = text.find("location ~ ^/api/v1/ai/personal-try-on/fashn/garment-realism/")
     regex_at = text.find("location ~ ^/api/v1/ai/jobs/")
     prefix_at = text.find("location /api/v1/ai/ {")
+    if accept_at < 0 or prefix_at < 0 or accept_at > prefix_at:
+        raise SystemExit("FAIL: regex accept rule must be declared before plain prefix deny")
     if regex_at < 0 or prefix_at < 0 or regex_at > prefix_at:
         raise SystemExit("FAIL: regex jobs rule must be declared before plain prefix deny")
 
@@ -131,6 +158,12 @@ def _classify(method: str, path: str) -> str:
             if method == "POST"
             else "deny_method_fashn_garment_realism"
         )
+    if _ACCEPT_RE.fullmatch(path):
+        return (
+            "allow_regex_fashn_garment_realism_accept"
+            if method == "POST"
+            else "deny_method_fashn_garment_realism_accept"
+        )
     job = _JOB_RE.fullmatch(path)
     if job:
         if method != "GET":
@@ -141,7 +174,6 @@ def _classify(method: str, path: str) -> str:
     if path.startswith("/api/v1/ai/"):
         return "deny_prefix_sibling"
     raise SystemExit(f"FAIL: unmapped matrix path {method} {path}")
-
 
 def main() -> int:
     _assert_snippet_precedence(SNIPPET)

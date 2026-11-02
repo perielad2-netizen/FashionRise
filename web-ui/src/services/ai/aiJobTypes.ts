@@ -106,9 +106,18 @@ export function extractPolishBullets(job: AiJobRead): string[] {
 }
 
 export function toMagicLookResult(job: AiJobRead): MagicLookResult {
+  // #170 — soft structure review may mark result_data.status completed_unverified
+  // while the job row stays completed (provider settled). Surface the review state.
+  const dataStatus =
+    typeof job.result_data?.status === 'string' ? String(job.result_data.status) : null
+  const fidelityOk = job.result_data?.fidelity_ok
+  let status: AiJobStatus = job.status
+  if (job.status === 'completed' && (dataStatus === 'completed_unverified' || fidelityOk === false)) {
+    status = 'completed_unverified'
+  }
   return {
     jobId: job.id,
-    status: job.status,
+    status,
     summary: extractMagicSummary(job),
     bullets: extractPolishBullets(job),
     hasImage: Boolean(extractImageUrl(job.result_data)),

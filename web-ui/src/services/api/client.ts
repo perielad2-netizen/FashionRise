@@ -86,6 +86,13 @@ function extractErrorMessage(parsed: unknown, status: number): string {
 
 function friendlyStatus(status: number): string {
   if (status === 401) return 'Invalid email or password.'
+  if (status === 403) {
+    // #170 — bare nginx 403 on Accept (and other AI routes) had no JSON detail.
+    return (
+      'This action was blocked by the FashionRise edge allowlist (HTTP 403). ' +
+      'Your sketch is unchanged and no FASHN try-on was started. Please retry after an operator updates routing, or contact support.'
+    )
+  }
   if (status === 409) return 'Draft was updated elsewhere. Resolve the conflict before saving again.'
   if (status === 422) return 'Please check your email and password.'
   if (status >= 500) return 'FashionRise is temporarily unavailable. Try again shortly.'
