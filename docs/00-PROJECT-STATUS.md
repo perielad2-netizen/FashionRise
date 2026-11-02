@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#156 Try On swimwear / moderation UX DEPLOYED** · App **`e728a06c`** · try-on **`try-on-person-v3`** · Alembic **`015`** unchanged · **0** operator-paid OpenAI · #154/#148/#151 preserved.)
+**Last updated:** 2026-11-02 (**CONFIG** daily AI gen quota **OFF** · `MY_CROQUIS_AI_MAX_GENERATIONS_PER_USER_DAY=0` · App **`e728a06c`** · money caps unchanged · **0** operator-paid OpenAI this change.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person V3 live (opaque fashion/swimwear coverage). My Croquis library is first-class nav.
 
@@ -16,7 +16,23 @@
 | AI worker | `fashionrise-ai-worker` restarted with V3 try-on provider · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | `current` → `releases/e728a06c` · personal-croquis + AI polish + personal-try-on allowlist unchanged |
-| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v3`** |
+| AI spend | Croquis + Try On share **`$5`** ceiling · LIVE_HTTP **ON** · croquis prompt **v5** · try-on **`try-on-person-v3`** · **daily generation count OFF** (`MAX_GENERATIONS_PER_USER_DAY=0`) |
+
+## CONFIG — daily AI generation quota disabled (2026-11-02)
+
+Owner: **“Do not limit my ai tests.”** Prod was blocking after five Create My Croquis / Try On Person attempts with “Daily … generation limit reached.” That is an application count gate, not OpenAI moderation.
+
+| Item | Detail |
+|---|---|
+| Change | Persistent `MY_CROQUIS_AI_MAX_GENERATIONS_PER_USER_DAY=0` in `/opt/fashionrise/src/backend/.env` |
+| Effect | Count gate in `personal_croquis_generate` + `personal_try_on` is **skipped** when `max_gens > 0` is false — both flows |
+| Restart | `fashionrise-api` + `fashionrise-ai-worker` · health/ready **ok** |
+| Effective | `get_settings().my_croquis_ai_max_generations_per_user_day == 0` |
+| Unchanged | App **`e728a06c`** · try-on **v3** · moderation handling · no auto-retry · Alembic **015** · historical reservations untouched |
+| Money caps still on | Ceiling **`$5.00`** · per-user-day **`$5.00`** · per-run **`$1.00`** · max exposure **100¢** |
+| Current spend (snapshot) | Settled actual **21¢** all-time / 24h · open/recon **0** · billable reservations last 24h **5** (count no longer blocks) · released 24h **5** |
+| Backup / rollback | `/var/backups/fashionrise/ai-gen-quota-disable-20261102T001027Z/ROLLBACK.sh` |
+| Owner next | Resume AI tests immediately; if a **money** cap blocks later, raise the cash budget intentionally — do not treat count as infinite spend. |
 
 ## #156 Try On Person swimwear moderation + clean mobile errors — DEPLOYED (2026-11-02)
 
