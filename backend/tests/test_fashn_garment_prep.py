@@ -53,13 +53,14 @@ def test_two_piece_detects_vertical_separation():
     assert prep.fashn_calls == 2
     assert [p.category for p in prep.pieces] == ["tops", "bottoms"]
     assert prep.quality_ok is True
-    # Dense filled plates prefer local productize (#164) — OpenAI realism estimate is $0.
-    assert prep.prefer_local_product() is True
+    # #166 — OpenAI realism is always required before FASHN (no local plate skip).
+    assert prep.prefer_local_product() is False
     public = prep.public_dict(cents_per_call=8, realism_cents_per_piece=8)
     assert public["estimate_cents"] == 16
-    assert public["prefer_local_product"] is True
-    assert public["realism_estimate_cents"] == 0
-    assert public["combined_estimate_cents"] == 16
+    assert public["prefer_local_product"] is False
+    assert public["realism_estimate_cents"] == 16
+    assert public["combined_estimate_cents"] == 32
+    assert "never sent to FASHN" in public["notes"]
     assert public["composite_preview_base64"].startswith("data:image/png;base64,")
     assert len(public["pieces"]) == 2
 

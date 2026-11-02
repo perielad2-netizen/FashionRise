@@ -124,19 +124,20 @@ def _unrelated_dress_product() -> bytes:
     return _png(img)
 
 
-def test_two_piece_bikini_prefers_local_product_and_keeps_categories():
+def test_two_piece_bikini_requires_openai_realism_and_keeps_categories():
     prep = prepare_garment_reference(_purple_bikini_sketch())
     assert prep.layout == "two_piece"
     assert [p.category for p in prep.pieces] == ["tops", "bottoms"]
     assert prep.quality_ok is True
-    assert prep.prefer_local_product() is True
+    # #166 — local plate skip disabled; OpenAI realism is required before FASHN.
+    assert prep.prefer_local_product() is False
     public = prep.public_dict(cents_per_call=8, realism_cents_per_piece=8)
-    assert public["prefer_local_product"] is True
-    assert public["realism_estimate_cents"] == 0
-    assert public["realism_calls"] == 0
+    assert public["prefer_local_product"] is False
+    assert public["realism_estimate_cents"] == 16
+    assert public["realism_calls"] == 2
     assert public["estimate_cents"] == 16
-    assert public["combined_estimate_cents"] == 16
-    assert "OpenAI redesign is skipped" in public["notes"]
+    assert public["combined_estimate_cents"] == 32
+    assert "never sent to FASHN" in public["notes"]
 
 
 def test_bikini_top_neckline_preserved_by_local_productize():
@@ -211,19 +212,20 @@ def test_fidelity_rejects_unrelated_clothing_conversion():
     }
 
 
-def test_realism_prompt_v3_forbids_twists_and_keeps_gradient():
-    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v3"
+def test_realism_prompt_v4_forbids_twists_and_keeps_gradient():
+    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v4"
     tops = garment_realism_prompt(category="tops", color_hint="#C4B5FD, #2E1065")
     assert "twists" in tops.lower() or "twist" in tops.lower()
     assert "deep-V" in tops or "neckline" in tops.lower()
     assert "#C4B5FD" in tops
+    assert "fabric" in tops.lower()
     bottoms = garment_realism_prompt(category="bottoms")
     assert "waistline" in bottoms.lower()
     assert "coverage" in bottoms.lower()
 
 
-def test_owner_artifact_local_product_beats_openai_restyle():
-    """When owner #164 artifacts are present: plates prefer local; OpenAI product fails fidelity."""
+def test_owner_artifact_openai_restyle_still_fails_neckline_gate():
+    """When owner #164 artifacts are present: twisted OpenAI product fails neckline fidelity."""
     sketch = _ARTIFACTS / "00_source_sketch.png"
     plate_top = _ARTIFACTS / "01_plate_0_tops.png"
     openai_top = _ARTIFACTS / "02_approved_0_tops.png"
@@ -231,15 +233,7 @@ def test_owner_artifact_local_product_beats_openai_restyle():
         return
     prep = prepare_garment_reference(sketch.read_bytes())
     assert prep.layout == "two_piece"
-    assert prep.prefer_local_product() is True
-    local, meta = productize_filled_plate(plate_top.read_bytes())
-    assert meta["local_product"] is True
-    local_ok = assert_structural_fidelity(
-        source_png=plate_top.read_bytes(),
-        product_png=local,
-        layout="two_piece",
-    )
-    assert local_ok.ok is True
+    assert prep.prefer_local_product() is False
     openai_verdict = assert_structural_fidelity(
         source_png=plate_top.read_bytes(),
         product_png=openai_top.read_bytes(),

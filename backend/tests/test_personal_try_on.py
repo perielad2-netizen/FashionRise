@@ -691,12 +691,24 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
     assert "combined_estimate_cents" in pbody
     assert pbody["quality_ok"] is True
 
-    # Without approved realistic pieces, FASHN enqueue must fail closed (#161).
+    # Without realism job id, FASHN enqueue must fail closed (#166).
     body_missing = _try_on_body(croquis_id=croquis["id"], key="try_on:fashn:missing-approve")
     body_missing["provider"] = "fashn"
     body_missing["consent_version"] = FASHN_CONSENT_VERSION
     missing = client.post(TRY_ON, headers=_auth(tokens), json=body_missing)
     assert missing.status_code == 400, missing.text
+    assert "realism" in missing.json()["detail"].lower()
+
+    # Sketch plates as approved pieces (no realism job) must also fail closed.
+    body_plates = _try_on_body(croquis_id=croquis["id"], key="try_on:fashn:plates-only")
+    body_plates["provider"] = "fashn"
+    body_plates["consent_version"] = FASHN_CONSENT_VERSION
+    body_plates["approved_garment_pieces"] = [
+        {"category": piece["category"], "image_base64": piece["image_base64"]}
+        for piece in pbody["pieces"]
+    ]
+    plates_only = client.post(TRY_ON, headers=_auth(tokens), json=body_plates)
+    assert plates_only.status_code == 400, plates_only.text
 
     class MockFashn:
         def __init__(self):
@@ -719,18 +731,58 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
                 "prediction_ids": ["pred-mock-1"],
             }
 
+    # Seed a completed OpenAI realism job with product pieces that differ from sketch plates.
+    from app.models.user import User
+    from app.services.fashn_garment_realism import (
+        GARMENT_REALISM_JOB_TYPE,
+        GARMENT_REALISM_PROVIDER_ID,
+        GARMENT_REALISM_PROMPT_VERSION,
+    )
+
+    owner = db_session.query(User).filter(User.email == "to-fashn@example.com").one()
+    product_pieces = []
+    for piece in pbody["pieces"]:
+        # Slightly different solid product plate (not the sketch bytes).
+        prod = _png_bytes((96, 128), (40, 120, 210, 255))
+        product_pieces.append(
+            {
+                "category": piece["category"],
+                "image_base64": "data:image/png;base64," + base64.b64encode(prod).decode("ascii"),
+                "sha256": __import__("hashlib").sha256(prod).hexdigest(),
+                "source_plate_sha256": "plate-sha-placeholder",
+            }
+        )
+    realism_job = AIJob(
+        id=uuid.uuid4(),
+        user_id=owner.id,
+        design_id=None,
+        job_type=GARMENT_REALISM_JOB_TYPE,
+        status="completed",
+        input_data={"mode": "garment_realism"},
+        result_data={
+            "status": "completed",
+            "mode": "garment_realism",
+            "provider": GARMENT_REALISM_PROVIDER_ID,
+            "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
+            "prefer_local_product": False,
+            "fidelity_ok": True,
+            "block_fashn": False,
+            "pieces": product_pieces,
+            "summary": "Realistic garment product image ready (fidelity checks passed).",
+        },
+    )
+    db_session.add(realism_job)
+    db_session.commit()
+
     mock = MockFashn()
     set_try_on_provider_override(mock)
     body = _try_on_body(croquis_id=croquis["id"], key="try_on:fashn:mock-1")
     body["provider"] = "fashn"
     body["consent_version"] = FASHN_CONSENT_VERSION
-    # Owner-accepted realistic product plate(s) — required before FASHN.
+    body["garment_realism_job_id"] = str(realism_job.id)
+    # Client may still send pieces; server binds from realism job.
     body["approved_garment_pieces"] = [
-        {
-            "category": piece["category"],
-            "image_base64": piece["image_base64"],
-        }
-        for piece in pbody["pieces"]
+        {"category": p["category"], "image_base64": p["image_base64"]} for p in product_pieces
     ]
     r = client.post(TRY_ON, headers=_auth(tokens), json=body)
     assert r.status_code == 201, r.text
@@ -741,7 +793,12 @@ def test_fashn_prepare_offline_and_enqueue_mocked(client, monkeypatch, db_sessio
     assert job is not None
     assert job.status == "completed"
     assert job.input_data.get("provider") == "fashn"
+    assert job.input_data.get("garment_realism_job_id") == str(realism_job.id)
     assert job.result_data.get("provider") == "fashn_tryon_v1_6"
+    # Prove FASHN used realism product SHAs, not sketch plates.
+    approved = job.input_data.get("approved_garment_pieces") or []
+    assert approved
+    assert approved[0]["sha256"] == product_pieces[0]["sha256"]
     res = (
         db_session.query(PersonalCroquisSpendReservation)
         .filter(PersonalCroquisSpendReservation.idempotency_key == "try_on:fashn:mock-1")

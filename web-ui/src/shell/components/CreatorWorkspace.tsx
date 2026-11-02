@@ -396,15 +396,18 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           ) : null}
           {editor.magicFashnAvailable ? (
             <p>
-              FASHN Try On is one click: FashionRise prepares your sketch, productizes filled
-              plates locally when possible (or OpenAI when a redesign is needed), checks silhouette
-              fidelity, then runs FASHN Virtual Try-On v1.6. Combined OpenAI + FASHN estimate about{' '}
+              FASHN Try On is one click with two paid stages: (1) OpenAI realistic garment product
+              image (~
+              {editor.magicFashnCombinedEstimateCents != null
+                ? Math.max(8, Math.round((editor.magicFashnCombinedEstimateCents || 16) / 2))
+                : 8}
+              ¢ per piece), then (2) FASHN Virtual Try-On v1.6 (~8¢ per credit) only if silhouette
+              fidelity passes. Combined estimate about{' '}
               {editor.magicFashnCombinedEstimateCents != null
                 ? `${editor.magicFashnCombinedEstimateCents}¢`
                 : '16¢'}{' '}
-              for a one-piece when OpenAI realism runs (filled two-piece plates often skip OpenAI
-              and charge FASHN only). No automatic paid regenerations. If fidelity fails, FASHN is
-              not started.
+              for a one-piece (two-piece doubles both stages). Sketch plates are never sent to
+              FASHN. No automatic paid regenerations.
             </p>
           ) : null}
         </ConfirmDialog>

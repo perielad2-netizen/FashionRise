@@ -25,17 +25,20 @@ from app.services.personal_croquis_provider import (
 logger = logging.getLogger(__name__)
 
 GARMENT_REALISM_JOB_TYPE = "personal_garment_realism"
-GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v3"
+GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v4"
 GARMENT_REALISM_PROVIDER_ID = "openai_garment_realism"
 LOCAL_PRODUCT_PROVIDER_ID = "local_filled_plate_v1"
 
 GARMENT_REALISM_PROMPT = (
     "Transform this fashion designer's garment sketch into a photorealistic commercial "
-    "clothing product photograph. Preserve the exact garment design, silhouette, coverage, "
-    "cut, selected colors, gradient placement and visible patterns. Create realistic textile "
-    "material, fabric construction, stitching and natural garment structure. Show the clothing "
-    "item alone as a clean professional flat-lay or ghost-mannequin-free product image against "
-    "a neutral background. No person, body, mannequin, model, face or unrelated accessories. "
+    "clothing product photograph of the real garment. Preserve the exact garment design, "
+    "silhouette, coverage, cut, selected colors, gradient placement and visible patterns. "
+    "Render smooth realistic swimwear fabric with soft cloth edges, natural folds, subtle "
+    "seams and textile sheen — not a drawing. Remove sketch stroke outlines, paper/canvas "
+    "texture, flat vector fills and illustrated line art. Create realistic textile material "
+    "and garment construction. Show the clothing item alone as a clean professional flat-lay "
+    "or ghost-mannequin-free product image against a neutral studio background. No person, "
+    "body, mannequin, model, face or unrelated accessories. "
     "CRITICAL: Do not redesign. Do not invent straps, twists, knots, wraps, ties, ruffles, "
     "or asymmetry that are not drawn. Do not change neckline depth, cup shape, waistline height, "
     "or coverage. Do not turn a swimsuit into a dress or skirt. Keep gradient direction and "

@@ -33,8 +33,10 @@ def test_prompt_forbids_person_and_preserves_design():
     assert "photorealistic commercial clothing product photograph" in text
     assert "No person" in text
     assert "swimsuit top" in text.lower() or "bikini" in text.lower()
-    assert GARMENT_REALISM_PROMPT_VERSION.startswith("fashn-garment-realism-v3")
+    assert GARMENT_REALISM_PROMPT_VERSION.startswith("fashn-garment-realism-v4")
     assert "twist" in text.lower()
+    assert "sketch stroke" in text.lower() or "line art" in text.lower()
+    assert "realistic" in text.lower() and "fabric" in text.lower()
     assert "Do not turn a swimsuit" in text or "must not become a mini dress" in garment_realism_prompt(
         category="one-pieces"
     )

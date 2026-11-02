@@ -75,17 +75,17 @@ class GarmentPrepResult:
         return max(1, int(cents_per_call)) * int(self.fashn_calls)
 
     def prefer_local_product(self) -> bool:
-        """Filled opaque plates: skip OpenAI redesign (owner bikini restyle incident #164)."""
-        if not self.quality_ok or not self.pieces:
-            return False
-        return all(p.fill_ratio >= 0.50 and p.edge_ratio <= 0.45 for p in self.pieces)
+        """Always False — local plate re-encode is not a FASHN garment (#164 follow-up).
+
+        Owner App ``c2d0ba41`` run ``9b837e89``→``6f4c8c36``: skipping OpenAI realism left
+        sketch-like plates (hard outlines, flat fill) as FASHN inputs. Photoreal try-on
+        requires a paid OpenAI product image before FASHN.
+        """
+        return False
 
     def public_dict(self, *, cents_per_call: int, realism_cents_per_piece: int = 8) -> dict[str, Any]:
-        local = self.prefer_local_product()
-        realism_calls = 0 if local else len(self.pieces)
-        realism_estimate = (
-            0 if local else max(1, int(realism_cents_per_piece)) * max(1, realism_calls)
-        )
+        realism_calls = len(self.pieces)
+        realism_estimate = max(1, int(realism_cents_per_piece)) * max(1, realism_calls)
         fashn_estimate = self.estimate_cents(cents_per_call)
         return {
             "layout": self.layout,
@@ -94,7 +94,7 @@ class GarmentPrepResult:
             "realism_calls": realism_calls,
             "realism_estimate_cents": realism_estimate,
             "combined_estimate_cents": realism_estimate + fashn_estimate,
-            "prefer_local_product": local,
+            "prefer_local_product": False,
             "garment_fingerprint": self.source_fingerprint,
             "quality_ok": self.quality_ok,
             "quality_notes": self.quality_notes,
@@ -113,20 +113,12 @@ class GarmentPrepResult:
                 for p in self.pieces
             ],
             "notes": (
-                (
-                    "Filled two-piece plates keep exact Studio colors/cut — OpenAI redesign is "
-                    "skipped to avoid restyling. Sequential FASHN calls (tops then bottoms)."
-                    if local
-                    else "Two-piece swimwear: OpenAI product images then sequential FASHN "
-                    "(tops then bottoms) only if fidelity passes."
-                )
+                "Two-piece swimwear: paid OpenAI realistic product images, then sequential "
+                "FASHN calls (tops then bottoms) only if fidelity passes. Sketch plates are "
+                "never sent to FASHN."
                 if self.layout == "two_piece"
-                else (
-                    "Filled one-piece plate keeps exact Studio design — OpenAI redesign skipped."
-                    if local
-                    else "One-piece uses FASHN category one-pieces; OpenAI product image then "
-                    "FASHN only if fidelity passes."
-                )
+                else "One-piece uses FASHN category one-pieces after paid OpenAI product "
+                "image + fidelity. Sketch plates are never sent to FASHN."
             ),
         }
 

@@ -89,9 +89,9 @@ describe('personal try-on API client', () => {
       layout: 'two_piece',
       fashn_calls: 2,
       estimate_cents: 16,
-      realism_estimate_cents: 0,
-      combined_estimate_cents: 16,
-      prefer_local_product: true,
+      realism_estimate_cents: 16,
+      combined_estimate_cents: 32,
+      prefer_local_product: false,
       quality_ok: true,
       garment_fingerprint: 'abc',
       composite_preview_base64: 'data:image/png;base64,AAAA',
@@ -115,8 +115,8 @@ describe('personal try-on API client', () => {
       signal: undefined,
     })
     expect(prep.layout).toBe('two_piece')
-    expect(prep.prefer_local_product).toBe(true)
-    expect(prep.combined_estimate_cents).toBe(16)
+    expect(prep.prefer_local_product).toBe(false)
+    expect(prep.combined_estimate_cents).toBe(32)
 
     apiMock.mockResolvedValueOnce({ id: 'job-fashn', job_type: 'personal_try_on', status: 'queued' })
     await enqueuePersonalTryOn({

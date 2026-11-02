@@ -332,8 +332,10 @@ describe('CreatorWorkspace tablet layout controls (WEB-V4I)', () => {
     const fashnBtn = within(dialog).getByRole('button', { name: 'FASHN Try On' })
     expect(fashnBtn).toBeTruthy()
     expect(within(dialog).queryByRole('button', { name: /FASHN Try On \(~/ })).toBeNull()
-    expect(within(dialog).getByText(/Combined OpenAI \+ FASHN estimate about/i)).toBeTruthy()
+    expect(within(dialog).getByText(/two paid stages/i)).toBeTruthy()
+    expect(within(dialog).getByText(/Combined estimate about/i)).toBeTruthy()
     expect(within(dialog).getByText(/16¢/)).toBeTruthy()
+    expect(within(dialog).getByText(/Sketch plates are never sent to FASHN/i)).toBeTruthy()
   })
 
   it('gives model-switch confirmation precedence for focus and Escape over Models gallery', () => {

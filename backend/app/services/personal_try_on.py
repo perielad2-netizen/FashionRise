@@ -70,11 +70,9 @@ from app.services.fashn_garment_realism import (
     GARMENT_REALISM_JOB_TYPE,
     GARMENT_REALISM_PROMPT_VERSION,
     GARMENT_REALISM_PROVIDER_ID,
-    LOCAL_PRODUCT_PROVIDER_ID,
     OpenAIGarmentRealismAdapter,
     decode_data_url_png,
     estimate_garment_realism_cents,
-    productize_filled_plate,
 )
 from app.services.personal_try_on_provider import (
     TRY_ON_CONSENT_VERSION,
@@ -340,8 +338,71 @@ def enqueue_personal_try_on(
     fashn_prep_meta: dict[str, Any] | None = None
     approved_frozen: list[dict[str, str]] | None = None
     if provider_name == TRY_ON_PROVIDER_FASHN:
-        # #161 — never send sketch/outline plates to FASHN; require owner-accepted product images.
-        raw_pieces = approved_garment_pieces or []
+        # #161/#166 — never send sketch plates to FASHN. Require server-bound OpenAI realism pieces.
+        if garment_realism_job_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "FASHN Try On requires a completed garment realism job id. "
+                    "Generate the realistic garment first."
+                ),
+            )
+        raw_pieces: list[Any] = []
+        realism_binding: dict[str, Any] | None = None
+        if garment_realism_job_id is not None:
+            realism_job = db.get(AIJob, garment_realism_job_id)
+            if (
+                realism_job is None
+                or realism_job.user_id != user.id
+                or realism_job.job_type != GARMENT_REALISM_JOB_TYPE
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Garment realism job not found for this FASHN Try On.",
+                )
+            if realism_job.status != "completed":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Garment realism must complete successfully before FASHN Try On.",
+                )
+            rdata = realism_job.result_data if isinstance(realism_job.result_data, dict) else {}
+            r_provider = str(rdata.get("provider") or "")
+            if r_provider != GARMENT_REALISM_PROVIDER_ID or bool(rdata.get("prefer_local_product")):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "FASHN Try On requires an OpenAI realistic garment product image. "
+                        "Sketch plates / local plate passthrough cannot be used."
+                    ),
+                )
+            if rdata.get("fidelity_ok") is False or rdata.get("block_fashn"):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(rdata.get("summary") or "Garment realism failed fidelity checks."),
+                )
+            r_pieces = rdata.get("pieces")
+            if not isinstance(r_pieces, list) or not r_pieces:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Garment realism job has no product pieces for FASHN.",
+                )
+            # Authoritative binding: ignore client-supplied images when realism job is present.
+            raw_pieces = r_pieces
+            realism_binding = {
+                "garment_realism_job_id": str(garment_realism_job_id),
+                "provider": r_provider,
+                "prompt_version": rdata.get("prompt_version"),
+                "piece_shas": [
+                    str(p.get("sha256") or "")
+                    for p in r_pieces
+                    if isinstance(p, dict)
+                ],
+                "source_plate_shas": [
+                    str(p.get("source_plate_sha256") or "")
+                    for p in r_pieces
+                    if isinstance(p, dict)
+                ],
+            }
         if not raw_pieces:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -378,6 +439,17 @@ def enqueue_personal_try_on(
                 if idx < len(sketch_prep.pieces)
                 else sketch_prep.pieces[0].png_bytes
             )
+            product_sha = hashlib.sha256(png).hexdigest()
+            plate_sha = hashlib.sha256(plate_png).hexdigest()
+            source_plate_sha = str(item.get("source_plate_sha256") or "")
+            if product_sha == plate_sha or (source_plate_sha and product_sha == source_plate_sha):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "FASHN Try On refused a sketch-like garment plate. "
+                        "A realistic OpenAI product image is required."
+                    ),
+                )
             verdict = assert_structural_fidelity(
                 source_png=plate_png,
                 product_png=png,
@@ -421,8 +493,10 @@ def enqueue_personal_try_on(
             "garment_fingerprint": prep.source_fingerprint,
             "from_approved_product": True,
             "garment_realism_job_id": str(garment_realism_job_id) if garment_realism_job_id else None,
+            "realism_binding": realism_binding,
             "fidelity": fidelity_reports,
             "categories": [cat for cat, _png in parsed],
+            "approved_shas": [p["sha256"] for p in approved_frozen],
         }
     else:
         estimate = estimate_try_on_cost_cents()
@@ -936,11 +1010,10 @@ def enqueue_garment_realism(
     if not frozen_plates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one plate piece is required.")
 
-    # #164 — dense filled Studio plates: local productize (no OpenAI redesign / $0 realism).
-    prep_gate = prepare_garment_reference(garment_png)
-    prefer_local = prep_gate.prefer_local_product()
-    estimate = 0 if prefer_local else estimate_garment_realism_cents(pieces=len(frozen_plates))
-    max_exposure = 0 if prefer_local else resolve_max_exposure_cents()
+    # Always paid OpenAI realism before FASHN — never local plate re-encode (#164/#166).
+    prefer_local = False
+    estimate = estimate_garment_realism_cents(pieces=len(frozen_plates))
+    max_exposure = resolve_max_exposure_cents()
     if estimate > max_exposure > 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -978,21 +1051,20 @@ def enqueue_garment_realism(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Daily Create My Croquis / Try On Person generation limit reached.",
         )
-    if not prefer_local:
-        operator_total = _sum_billable_cents(db, owner_id=None, since=None)
-        if ceiling_cents > 0 and operator_total + max_exposure > ceiling_cents:
+    operator_total = _sum_billable_cents(db, owner_id=None, since=None)
+    if ceiling_cents > 0 and operator_total + max_exposure > ceiling_cents:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operator AI spend ceiling would be exceeded.",
+        )
+    if day_cap > 0:
+        day_ago = _utcnow() - timedelta(days=1)
+        user_day = _sum_billable_cents(db, owner_id=user.id, since=day_ago)
+        if user_day + max_exposure > day_cap:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Operator AI spend ceiling would be exceeded.",
+                detail="Daily AI spend limit would be exceeded.",
             )
-        if day_cap > 0:
-            day_ago = _utcnow() - timedelta(days=1)
-            user_day = _sum_billable_cents(db, owner_id=user.id, since=day_ago)
-            if user_day + max_exposure > day_cap:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Daily AI spend limit would be exceeded.",
-                )
 
     consent = _record_try_on_consent(db, user, provider=TRY_ON_PROVIDER_FASHN)
     reservation = PersonalCroquisSpendReservation(
@@ -1020,10 +1092,8 @@ def enqueue_garment_realism(
         "plate_pieces": frozen_plates,
         "consent_id": str(consent.id),
         "consent_version": FASHN_CONSENT_VERSION,
-        "prompt_version": (
-            LOCAL_PRODUCT_PROVIDER_ID if prefer_local else GARMENT_REALISM_PROMPT_VERSION
-        ),
-        "provider": LOCAL_PRODUCT_PROVIDER_ID if prefer_local else GARMENT_REALISM_PROVIDER_ID,
+        "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
+        "provider": GARMENT_REALISM_PROVIDER_ID,
         "prefer_local_product": prefer_local,
         "reservation_id": str(reservation.id),
         "mode": "garment_realism",
@@ -1054,17 +1124,14 @@ def enqueue_garment_realism(
 
 
 def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
-    """Worker: local productize or OpenAI product images for each plate; never calls FASHN."""
+    """Worker: OpenAI product images for each plate; never calls FASHN; never local plate passthrough."""
     if job.job_type != GARMENT_REALISM_JOB_TYPE:
         raise ValueError(f"unexpected job_type {job.job_type!r}")
     data = job.input_data if isinstance(job.input_data, dict) else {}
-    prefer_local = bool(data.get("prefer_local_product"))
-    provider_id = (
-        LOCAL_PRODUCT_PROVIDER_ID if prefer_local else GARMENT_REALISM_PROVIDER_ID
-    )
-    prompt_version = (
-        LOCAL_PRODUCT_PROVIDER_ID if prefer_local else GARMENT_REALISM_PROMPT_VERSION
-    )
+    # Hard-disable local plate passthrough even if an old queued job still has the flag.
+    prefer_local = False
+    provider_id = GARMENT_REALISM_PROVIDER_ID
+    prompt_version = GARMENT_REALISM_PROMPT_VERSION
     reservation_id = data.get("reservation_id")
     reservation: PersonalCroquisSpendReservation | None = None
     if reservation_id:
@@ -1097,8 +1164,8 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
         return _fail("Garment realism job is missing plate pieces.")
 
     try:
-        adapter = None if prefer_local else OpenAIGarmentRealismAdapter()
-        if reservation is not None and not prefer_local:
+        adapter = OpenAIGarmentRealismAdapter()
+        if reservation is not None:
             reservation.provider_called = True
             db.flush()
         out_pieces: list[dict[str, Any]] = []
@@ -1113,11 +1180,14 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             gen_cat = recommend_fashn_category(layout="one_piece", piece_category=cat, features=feats)
             if cat in {"tops", "bottoms"}:
                 gen_cat = cat  # type: ignore[assignment]
-            if prefer_local:
-                product_png, meta = productize_filled_plate(plate_png)
-            else:
-                assert adapter is not None
-                product_png, meta = adapter.generate_piece(plate_png=plate_png, category=gen_cat)
+            product_png, meta = adapter.generate_piece(plate_png=plate_png, category=gen_cat)
+            # Reject near-identical plate passthrough (sketch look into FASHN).
+            if hashlib.sha256(product_png).hexdigest() == hashlib.sha256(plate_png).hexdigest():
+                return _fail(
+                    "Realistic garment generation returned the sketch plate unchanged. FASHN was not started.",
+                    settle_release=False,
+                    error_code="FIDELITY_SKETCH_PASSTHROUGH",
+                )
             verdict = assert_structural_fidelity(
                 source_png=plate_png,
                 product_png=product_png,
@@ -1126,16 +1196,10 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             meta = {**meta, "fidelity": verdict.public_dict(), "category": gen_cat}
             if not verdict.ok:
                 # Paid OpenAI already ran — settle realism spend, but block FASHN.
-                # Local productize never bills OpenAI; release the $0 reservation.
                 if reservation is not None and reservation.status == RESERVATION_OPEN:
-                    if prefer_local:
-                        reservation.status = RESERVATION_RELEASED
-                        reservation.actual_cost_cents = 0
-                        reservation.provider_called = False
-                    else:
-                        reservation.status = RESERVATION_SETTLED
-                        reservation.actual_cost_cents = reservation.estimate_cents
-                        reservation.provider_called = True
+                    reservation.status = RESERVATION_SETTLED
+                    reservation.actual_cost_cents = reservation.estimate_cents
+                    reservation.provider_called = True
                 job.status = "failed"
                 job.error_message = verdict.message[:240]
                 job.result_data = {
@@ -1146,7 +1210,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "fidelity": verdict.public_dict(),
                     "prompt_version": prompt_version,
                     "provider": provider_id,
-                    "prefer_local_product": prefer_local,
+                    "prefer_local_product": False,
                     "pieces": [],
                     "block_fashn": True,
                 }
@@ -1190,21 +1254,16 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
 
     if reservation is not None and reservation.status == RESERVATION_OPEN:
         reservation.status = RESERVATION_SETTLED
-        reservation.actual_cost_cents = 0 if prefer_local else reservation.estimate_cents
-        reservation.provider_called = not prefer_local
+        reservation.actual_cost_cents = reservation.estimate_cents
+        reservation.provider_called = True
 
-    summary = (
-        "Filled garment plates productized locally (exact Studio cut/colors; fidelity OK)."
-        if prefer_local
-        else "Realistic garment product image ready (fidelity checks passed)."
-    )
     result = {
         "status": "completed",
-        "summary": summary,
+        "summary": "Realistic garment product image ready (fidelity checks passed).",
         "mode": "garment_realism",
         "prompt_version": prompt_version,
         "provider": provider_id,
-        "prefer_local_product": prefer_local,
+        "prefer_local_product": False,
         "pieces": out_pieces,
         "piece_meta": metas,
         "garment_fingerprint": data.get("garment_fingerprint"),
