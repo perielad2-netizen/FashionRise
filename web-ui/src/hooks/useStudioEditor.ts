@@ -1993,8 +1993,8 @@ export function useStudioEditor() {
         const maxFallbackReady = Boolean(preflight.smart_try_on_max_fallback_available)
         setMagicPhase('submitting')
         setMagicStatusHint(SMART_TRY_ON_STATUS)
-        // #180 — adults-beta attestation expires after 24h; refresh on explicit Try On click
-        // so overnight retests do not fail in ~2s with a generic "could not create" modal.
+        // Adults-beta is account-level for the current notice version (not time-bound).
+        // Refresh only when preflight says no valid attestation yet (missing / notice changed).
         if (preflight.adults_attestation_valid !== true) {
           try {
             await ensureAdultsAttestationForTryOn(controller.signal)

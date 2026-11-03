@@ -1,6 +1,6 @@
 /**
- * #180 — Try On Person requires a fresh adults-beta attestation (24h window).
- * Refresh from the approved notice when the user affirmatively starts Try On.
+ * Try On Person requires a valid adults-beta attestation for the current notice version.
+ * Not time-bound once recorded; refresh only when missing or the notice version/hash changed.
  */
 import { attestAdults } from '@/services/personalCroquisApi'
 import {
@@ -10,7 +10,7 @@ import {
 } from '@/lib/personalCroquisNotices'
 
 export const ADULTS_ATTESTATION_REQUIRED =
-  'Adults-only confirmation expired. Confirm the adults-only notice again, then retry Try On Person.'
+  'Adults-only confirmation is required for personal Try On. Confirm the adults-only notice, then retry.'
 
 export async function ensureAdultsAttestationForTryOn(signal?: AbortSignal): Promise<void> {
   const notice = approvedCroquisNoticeText('adults')
