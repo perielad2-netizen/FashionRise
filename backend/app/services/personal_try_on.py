@@ -840,6 +840,9 @@ def enqueue_personal_try_on(
             )
         raw_pieces: list[Any] = []
         realism_binding: dict[str, Any] | None = None
+        # #180 — silhouette-locked open-leg plates intentionally match prep SHA;
+        # set before the realism block so the Max piece loop can see it.
+        structure_preserving = False
         if garment_realism_job_id is not None:
             realism_job = db.get(AIJob, garment_realism_job_id)
             if (
@@ -1011,7 +1014,13 @@ def enqueue_personal_try_on(
             product_sha = hashlib.sha256(png).hexdigest()
             plate_sha = hashlib.sha256(plate_png).hexdigest()
             source_plate_sha = str(item.get("source_plate_sha256") or "")
-            if product_sha == plate_sha or (source_plate_sha and product_sha == source_plate_sha):
+            # #180 — silhouette lock / contradiction recovery productizes the filled
+            # Studio plate locally. That product often shares a SHA with sketch_prep
+            # (same RGB flatten) and must still be allowed through to Max.
+            if not structure_preserving and (
+                product_sha == plate_sha
+                or (source_plate_sha and product_sha == source_plate_sha)
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
@@ -1025,7 +1034,7 @@ def enqueue_personal_try_on(
                 layout=sketch_prep.layout,
             )
             fidelity_reports.append(verdict.public_dict())
-            if not verdict.ok:
+            if not verdict.ok and not structure_preserving:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=verdict.message,
@@ -2196,7 +2205,8 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "image_base64": "data:image/png;base64," + base64.b64encode(product_png).decode("ascii"),
                     "image_url": url,
                     "sha256": hashlib.sha256(product_png).hexdigest(),
-                    "source_plate_sha256": str(item.get("sha256") or ""),
+                    # Prefer hash of the plate bytes we productized — not a client-supplied field.
+                    "source_plate_sha256": hashlib.sha256(plate_png).hexdigest(),
                     "fidelity": verdict.public_dict(),
                 }
             )

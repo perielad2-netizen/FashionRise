@@ -581,3 +581,17 @@ def test_smart_max_canonical_idempotency_key_bound_to_operation():
     assert f"try_on:fashn_max:smart:{op}" == f"try_on:fashn_max:smart:{op}"
     assert "try_on:client-a" != f"try_on:fashn_max:smart:{op}"
     assert "try_on:client-b-different" != f"try_on:fashn_max:smart:{op}"
+
+
+def test_structure_preserving_skips_sketch_like_sha_gate():
+    """#180 — locked local product may share SHA with sketch_prep; Max must not 422."""
+    import inspect
+
+    from app.services import personal_try_on as pts
+
+    src = inspect.getsource(pts.enqueue_personal_try_on)
+    assert "if not structure_preserving and (" in src
+    assert "refused a sketch-like garment plate" in src
+    assert "structure_preserving = False" in src
+    # Fidelity soft-pass for the same lock path (texture ≠ silhouette contract).
+    assert "if not verdict.ok and not structure_preserving:" in src

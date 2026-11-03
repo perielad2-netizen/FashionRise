@@ -535,6 +535,13 @@ class OpenAIGarmentRealismAdapter:
 
 
 def decode_data_url_png(raw: str) -> bytes:
+    """Decode a data-URL / bare base64 image and return stable PNG bytes.
+
+    PNG payloads are returned as-is after PIL validation. Re-encoding every
+    image as RGBA used to undo ``productize_filled_plate`` (RGB round-trip
+    restored the source plate SHA), so Max enqueue treated silhouette-locked
+    local products as sketch-like and 422'd (#180).
+    """
     text = (raw or "").strip()
     if "," in text and text.lower().startswith("data:"):
         text = text.split(",", 1)[1]
@@ -544,9 +551,12 @@ def decode_data_url_png(raw: str) -> bytes:
         raise ValueError("Invalid garment image encoding") from exc
     if not data:
         raise ValueError("Empty garment image")
-    # Prove it's a PNG/JPEG the pipeline can open.
     with Image.open(io.BytesIO(data)) as im:
         im.load()
+        fmt = (im.format or "").upper()
+        # Preserve original PNG bytes so productize SHA / source_plate SHA stay stable.
+        if fmt == "PNG" or data[:8] == b"\x89PNG\r\n\x1a\n":
+            return data
         buf = io.BytesIO()
         im.convert("RGBA").save(buf, format="PNG")
         return buf.getvalue()

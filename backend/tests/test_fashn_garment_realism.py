@@ -111,6 +111,32 @@ def test_productize_filled_plate_preserves_colors():
     assert any(c[1][0] > 180 and c[1][1] < 80 for c in colors)
 
 
+def test_decode_data_url_preserves_productize_png_sha():
+    """#180 — RGBA re-encode must not undo productize (Max sketch-like 422)."""
+    import base64
+    import hashlib
+    from pathlib import Path
+
+    from app.services.fashn_garment_realism import decode_data_url_png
+
+    fixture = (
+        Path(__file__).resolve().parent / "fixtures" / "owner_openleg_plate_ada57815.png"
+    )
+    if not fixture.is_file():
+        plate = _transparent_garment_png()
+    else:
+        plate = fixture.read_bytes()
+    product, meta = productize_filled_plate(plate)
+    assert meta["product_sha256"] == hashlib.sha256(product).hexdigest()
+    assert meta["product_sha256"] != meta["source_plate_sha256"]
+
+    data_url = "data:image/png;base64," + base64.b64encode(product).decode("ascii")
+    decoded = decode_data_url_png(data_url)
+    assert hashlib.sha256(decoded).hexdigest() == meta["product_sha256"]
+    # Must not round-trip back to the source plate SHA (the owner 422 failure mode).
+    assert hashlib.sha256(decoded).hexdigest() != meta["source_plate_sha256"]
+
+
 def test_estimate_scales_with_pieces(monkeypatch):
     monkeypatch.setenv("FASHN_GARMENT_REALISM_ESTIMATE_CENTS", "8")
     from app.core.config import get_settings
