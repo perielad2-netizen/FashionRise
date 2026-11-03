@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import logging
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -51,6 +52,7 @@ from app.services.fashn_garment_realism import (
     GARMENT_REALISM_PROMPT_VERSION,
     GARMENT_REALISM_PROVIDER_ID,
     OpenAIGarmentRealismAdapter,
+    compose_studio_on_figure,
     decode_data_url_png,
     downscale_studio_context,
     estimate_garment_realism_cents,
@@ -94,6 +96,7 @@ from app.services.personal_croquis_generate import (
     _sum_billable_cents,
     resolve_max_exposure_cents,
 )
+
 from app.services.personal_croquis_provider import (
     ProviderNotAvailableError,
     ProviderOutcomeUnknownError,
@@ -110,11 +113,13 @@ from app.services.personal_try_on_provider import (
     get_try_on_provider,
     try_on_notice_text_hash,
 )
+from app.storage.local import LocalStorageBackend
+
+logger = logging.getLogger(__name__)
 
 TRY_ON_PROVIDER_OPENAI = "openai"
 TRY_ON_PROVIDER_FASHN = "fashn"
 TRY_ON_PROVIDER_FASHN_MAX = "fashn_max"
-from app.storage.local import LocalStorageBackend
 
 
 def _is_fashn_family(provider: str) -> bool:
@@ -862,8 +867,8 @@ def enqueue_personal_try_on(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=str(rdata.get("summary") or "Garment realism failed fidelity checks."),
                 )
-            # #179 — semantic dress↔trousers contradiction blocks smart Max auto-accept.
-            # Prefer Studio croquis context (full figure) over isolated product alone.
+            # #179/#180 — dress↔trousers contradiction vs Studio garment capture
+            # (isolated artwork — never the on-figure composite).
             r_pieces_probe = rdata.get("pieces") if isinstance(rdata.get("pieces"), list) else []
             for piece in r_pieces_probe:
                 if not isinstance(piece, dict):
@@ -1758,8 +1763,31 @@ def enqueue_garment_realism(
     if garment_fingerprint and garment_fingerprint.strip() != garment_fp:
         # Soft check — allow if client fingerprint matches prep output; else recompute trust server-side.
         pass
-    # Bound Studio croquis for OpenAI second-image context (#167) — plate remains authoritative.
-    studio_context_png = downscale_studio_context(garment_png)
+    # #180 — croquis-conditioned Studio layer: accepted figure under garment so OpenAI
+    # can see exposed legs through slits. Figure is removed in the product OUTPUT.
+    croquis_conditioned = False
+    studio_context_png: bytes | None = None
+    if version.generated_asset_id is not None:
+        try:
+            croquis_path = pcs.resolve_croquis_asset_file(db, user, version.generated_asset_id)
+            croquis_bytes = croquis_path.read_bytes()
+            studio_context_png = compose_studio_on_figure(
+                croquis_png=croquis_bytes,
+                garment_png=garment_png,
+            )
+            croquis_conditioned = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "garment_realism croquis composite failed croquis=%s version=%s: %s",
+                croquis.id,
+                version.version,
+                type(exc).__name__,
+            )
+            studio_context_png = None
+    if studio_context_png is None:
+        # Weak fallback (#167): garment-only downscale — no figure type cue.
+        studio_context_png = downscale_studio_context(garment_png)
+        croquis_conditioned = False
     studio_context_b64 = (
         "data:image/png;base64," + base64.b64encode(studio_context_png).decode("ascii")
         if studio_context_png
@@ -1869,6 +1897,7 @@ def enqueue_garment_realism(
         "plate_pieces": frozen_plates,
         "studio_context_base64": studio_context_b64,
         "studio_context_sha256": hashlib.sha256(studio_context_png).hexdigest() if studio_context_png else None,
+        "croquis_conditioned": bool(croquis_conditioned),
         "consent_id": str(consent.id),
         "consent_version": FASHN_CONSENT_VERSION,
         "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
@@ -1949,6 +1978,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             studio_context_png = decode_data_url_png(raw_ctx)
         except ValueError:
             studio_context_png = None
+    croquis_conditioned = bool(data.get("croquis_conditioned")) and bool(studio_context_png)
 
     try:
         adapter = OpenAIGarmentRealismAdapter()
@@ -1972,6 +2002,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                 plate_png=plate_png,
                 category=gen_cat,
                 studio_context_png=studio_context_png,
+                croquis_conditioned=croquis_conditioned,
             )
             # Reject near-identical plate passthrough (sketch look into FASHN).
             if hashlib.sha256(product_png).hexdigest() == hashlib.sha256(plate_png).hexdigest():
@@ -1985,9 +2016,10 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                 product_png=product_png,
                 layout="two_piece" if cat in {"tops", "bottoms"} else "one_piece",
             )
-            # #179 — dress↔trousers semantic contradiction (studio context preferred).
+            # #179/#180 — dress↔trousers contradiction uses the isolated plate only.
+            # On-figure composites include croquis legs and would false-trigger trousers.
             structure_contra = garment_structure_contradiction(
-                source_png=studio_context_png or plate_png,
+                source_png=plate_png,
                 product_png=product_png,
             )
             meta = {**meta, "fidelity": verdict.public_dict(), "category": gen_cat}
@@ -2129,6 +2161,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
         "prompt_version": prompt_version,
         "provider": provider_id,
         "prefer_local_product": False,
+        "croquis_conditioned": croquis_conditioned,
         "pieces": out_pieces,
         "piece_meta": metas,
         "garment_fingerprint": data.get("garment_fingerprint"),

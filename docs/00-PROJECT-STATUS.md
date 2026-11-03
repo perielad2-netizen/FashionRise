@@ -58,6 +58,9 @@ Historical smart Max `ce83af19…` / `941b3a08…`: `get_look` OK · `image_avai
 | Agent paid calls | **0** |
 | Prod pytest | `test_smart_tryon_harden_179` + `test_smart_tryon_openai_max_178` → **29 passed** |
 
+### Hotfix — croquis-conditioned garment realism (2026-11-03)
+OpenAI garment realism was inventing pants from open-leg dress plates because Studio context was only a downscale of the isolated garment (no figure). **Fix:** compose accepted personal croquis under the garment capture → Image 1 on-figure layer; Image 2 isolated plate for colors; prompt **v6** requires removing the croquis/figure from the product OUTPUT. Geometry/contradiction still use the isolated plate (figure legs must not false-trigger trousers).
+
 ### Hotfix — modal fit + open-leg dress→pants (2026-11-03) — LIVE App `995337ca`
 Owner App `125a6a01` result: (1) Try On preview **CSS-cropped** head/hem in the modal — stage did not bound height so `object-fit:contain` could not shrink. Fixed: stage `max-height: min(64dvh, 640px)` + image `width/height 100%` contain. (2) Green open-leg dress still rendered as **pants via Max** because geometry never set `looks_like_high_slit_dress` (hints empty → realism/Max invented trouser legs). Fixed: open-leg detection no longer requires the trousers classifier first; owner fixture `b1bcbc86` asserts dress/slit hints + contradiction guard.
 **Deployed:** FE/BE **`995337ca`** · backup `/var/backups/fashionrise/p0-180-modal-openleg-deploy-20261103T061902Z/ROLLBACK.sh` → FE **`ca11c33f`** · `/health` 200 · runtime fixture high_slit=True trousers=False · **0** agent paid calls.

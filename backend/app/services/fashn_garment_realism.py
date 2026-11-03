@@ -1,4 +1,4 @@
-"""OpenAI images.edit → photorealistic garment product image for FASHN (#161/#167).
+"""OpenAI images.edit → photorealistic garment product image for FASHN (#161/#167/#180).
 
 Transforms FashionRise flat-lay sketch plates into e-commerce product photographs
 **without** inventing a person/mannequin. Owner must review and accept before any
@@ -6,6 +6,11 @@ FASHN credit is spent. Separate spend reservation from the FASHN try-on job.
 
 #167 reuses Fashion Magic coverage + color fidelity contracts and optional Studio
 croquis context. Does **not** copy Fashion Magic's non-photoreal illustration style.
+
+#180 croquis-conditioned realism: composite the accepted personal croquis under the
+garment sketch so OpenAI can see exposed legs through slits (dress vs trousers).
+Image 1 = on-figure Studio layer; Image 2 = isolated plate (colors). OUTPUT removes
+the croquis/figure — clothing alone for FASHN.
 """
 
 from __future__ import annotations
@@ -32,7 +37,7 @@ from app.services.sketch_openai import (
 logger = logging.getLogger(__name__)
 
 GARMENT_REALISM_JOB_TYPE = "personal_garment_realism"
-GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v5"
+GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v6"
 GARMENT_REALISM_PROVIDER_ID = "openai_garment_realism"
 LOCAL_PRODUCT_PROVIDER_ID = "local_filled_plate_v1"
 
@@ -52,6 +57,20 @@ _STUDIO_CONTEXT_CONTRACT = (
     "swimwear openings). Use it only to understand coverage openings and construction — "
     "the isolated plate in Image 1 remains the output silhouette and fill authority. "
     "Still output the clothing item alone."
+)
+
+# #180 — croquis underlay is a removable reference layer for outfit type.
+_CROQUIS_CONDITIONED_CONTRACT = (
+    "CROQUIS-CONDITIONED READING: Image 1 is the Studio croquis figure WITH the garment "
+    "sketch layered on top (figure underlay + garment artwork). Use Image 1 to read "
+    "garment TYPE and openings: if the figure's legs or skin show through a center or "
+    "side gap, that gap is a fashion slit on a dress/skirt/gown — NOT separate trouser "
+    "legs, pants, or a jumpsuit. Do not invent a crotch seam or two pant legs. "
+    "Image 2 is the isolated transparent garment plate — authoritative for colors, "
+    "prints, gradients, and panel fills. "
+    "OUTPUT: remove the croquis figure, body, face, hands, paper, and underlay entirely. "
+    "Emit only the clothing product on a neutral studio background, preserving the dress "
+    "or skirt as one continuous garment with the slit kept as open negative space."
 )
 
 _PRODUCT_ONLY_CONTRACT = (
@@ -76,6 +95,20 @@ GARMENT_REALISM_PROMPT = (
     "are not drawn. Do not change neckline depth, cup shape, waistline height, or coverage. "
     "Do not turn a swimsuit into a dress or skirt. Keep gradient direction and color "
     "placement identical to the plate."
+)
+
+GARMENT_REALISM_PROMPT_CROQUIS_CONDITIONED = (
+    "Transform this Studio fashion design into a photorealistic commercial clothing "
+    "product photograph of the real garment. "
+    f"{_CROQUIS_CONDITIONED_CONTRACT} "
+    f"{COVERAGE_PRESERVATION_CONTRACT} "
+    f"{COLOR_FIDELITY_CONTRACT} "
+    f"{_PRODUCT_ONLY_CONTRACT} "
+    "Preserve the exact garment design, silhouette, coverage, cut, selected colors, gradient "
+    "placement and visible patterns from the plate. "
+    "CRITICAL: Do not invent straps, twists, knots, wraps, ties, or asymmetry that are not "
+    "drawn. Do not convert an open-leg / high-slit dress into trousers or a jumpsuit. "
+    "Keep slit openings as fashion cutaways where the figure's legs were visible."
 )
 
 
@@ -103,6 +136,53 @@ def productize_filled_plate(plate_png: bytes) -> tuple[bytes, dict[str, Any]]:
         "local_product": True,
     }
     return product, meta
+
+
+def _fit_contain(
+    src_w: int, src_h: int, box_w: int, box_h: int
+) -> tuple[int, int, int, int]:
+    """Return (x, y, w, h) placing src inside box with contain + center (Studio export)."""
+    if src_w <= 0 or src_h <= 0 or box_w <= 0 or box_h <= 0:
+        return 0, 0, max(1, box_w), max(1, box_h)
+    scale = min(box_w / float(src_w), box_h / float(src_h))
+    w = max(1, int(round(src_w * scale)))
+    h = max(1, int(round(src_h * scale)))
+    x = (box_w - w) // 2
+    y = (box_h - h) // 2
+    return x, y, w, h
+
+
+def compose_studio_on_figure(
+    *,
+    croquis_png: bytes,
+    garment_png: bytes,
+    max_edge: int = 1536,
+) -> bytes:
+    """Layer accepted personal croquis under the transparent garment capture.
+
+    Matches Studio export alignment: croquis fit-contained on the design plane,
+    garment artwork composited on top. OpenAI sees exposed legs through slits;
+    the figure is a removable reference layer (output still clothing-only).
+    """
+    if not croquis_png or not garment_png:
+        raise ValueError("croquis_png and garment_png are required")
+    with Image.open(io.BytesIO(garment_png)) as g_im:
+        g_im.load()
+        garment = g_im.convert("RGBA")
+    with Image.open(io.BytesIO(croquis_png)) as c_im:
+        c_im.load()
+        croquis = c_im.convert("RGBA")
+
+    width, height = garment.size
+    # Soft paper so the figure reads clearly (not a transparent void).
+    canvas = Image.new("RGBA", (width, height), (245, 240, 230, 255))
+    x, y, w, h = _fit_contain(croquis.width, croquis.height, width, height)
+    fitted = croquis.resize((w, h), Image.Resampling.LANCZOS)
+    canvas.paste(fitted, (x, y), fitted)
+    canvas.alpha_composite(garment)
+    out = io.BytesIO()
+    canvas.save(out, format="PNG", optimize=True)
+    return downscale_studio_context(out.getvalue(), max_edge=max_edge)
 
 
 def estimate_garment_realism_cents(*, pieces: int = 1) -> int:
@@ -205,10 +285,30 @@ def garment_realism_prompt(
     color_hint: str | None = None,
     design_bits: list[str] | None = None,
     has_studio_context: bool = False,
+    croquis_conditioned: bool = False,
 ) -> str:
     cat = (category or "auto").strip().lower()
     extra = ""
-    if cat == "tops":
+    if croquis_conditioned:
+        # Outfit type comes from on-figure Image 1 — avoid swimwear one-piece wording
+        # that fights open-leg dresses.
+        if cat == "tops":
+            extra = (
+                " Image 2 is a top / upper plate — preserve neckline and cup geometry; "
+                "do not invent straps or wraps."
+            )
+        elif cat == "bottoms":
+            extra = (
+                " Image 2 is a bottoms plate — preserve waistline and coverage; "
+                "do not invent side ties."
+            )
+        elif cat == "one-pieces":
+            extra = (
+                " Image 2 may be a one-piece plate OR an open-leg dress drawn as one fill. "
+                "If Image 1 shows figure legs through a center opening, keep a dress/skirt "
+                "with slit — do not emit trousers, a jumpsuit, or a closed swimsuit crotch."
+            )
+    elif cat == "tops":
         extra = (
             " This plate is a bikini / swimsuit top only. Keep the exact deep-V or drawn "
             "neckline and cup geometry, including intentionally separate cups. Do not invent "
@@ -228,6 +328,11 @@ def garment_realism_prompt(
         extra += " Preserve these design attributes: " + "; ".join(design_bits) + "."
     if color_hint:
         extra += f" Preserve these sketch colors exactly: {color_hint}."
+    if croquis_conditioned:
+        extra += (
+            " Remember: remove the croquis figure from the output; clothing item alone."
+        )
+        return GARMENT_REALISM_PROMPT_CROQUIS_CONDITIONED + extra
     if has_studio_context:
         extra += (
             " Image 2 is the complete Studio croquis for coverage context only; "
@@ -256,6 +361,7 @@ class OpenAIGarmentRealismAdapter:
         plate_png: bytes,
         category: str | None = None,
         studio_context_png: bytes | None = None,
+        croquis_conditioned: bool = False,
     ) -> dict[str, Any]:
         from app.services.sketch_openai import (
             SketchCompletionError,
@@ -271,40 +377,68 @@ class OpenAIGarmentRealismAdapter:
         size = (settings.openai_image_size or "1024x1536").strip()
         quality = settings.openai_image_quality
         design_bits = local_design_identity_bits(category=category, plate_png=plate_png)
-        # #179 — carry croquis/studio garment geometry (dress slit vs trousers) into
-        # realism design_bits. Prefer full Studio context when present; never invent.
+        # #179/#180 — dress/slit vs trousers hints from the isolated plate (never the
+        # on-figure composite: figure legs would false-trigger trousers).
         try:
             from app.services.garment_leg_geometry import (
                 analyze_lower_garment_geometry,
                 openai_trouser_design_hints,
             )
 
-            geo_src = studio_context_png if studio_context_png else plate_png
-            geo_bits = openai_trouser_design_hints(analyze_lower_garment_geometry(geo_src))
+            geo_bits = openai_trouser_design_hints(analyze_lower_garment_geometry(plate_png))
             for bit in geo_bits:
                 if bit not in design_bits:
                     design_bits.append(bit)
         except Exception:
             # Geometry is advisory — never block realism for analyzer errors.
             pass
-        context = studio_context_png if studio_context_png else None
-        try:
-            kwargs = build_image_edit_kwargs(
-                model=model,
-                prompt=garment_realism_prompt(
-                    category=category,
-                    color_hint=dominant_color_hint(plate_png) or None,
-                    design_bits=design_bits,
-                    has_studio_context=bool(context),
-                ),
-                sketch=(plate_png, "image/png"),
-                size=size,
-                quality=quality,
-                # Reuse second-image slot: Studio croquis context (not a textile swatch).
-                fabric_swatch=(context, "image/png") if context else None,
-            )
-        except SketchCompletionError as exc:
-            raise ProviderNotAvailableError(str(exc)) from exc
+        if croquis_conditioned and studio_context_png:
+            if (
+                "garment type: dress or gown with a high fashion slit — not trousers or a jumpsuit"
+                not in design_bits
+            ):
+                design_bits.append(
+                    "Studio on-figure layer: exposed legs through openings mean dress/slit, "
+                    "not trousers — remove the croquis figure from the product output"
+                )
+            try:
+                kwargs = build_image_edit_kwargs(
+                    model=model,
+                    prompt=garment_realism_prompt(
+                        category=category,
+                        color_hint=dominant_color_hint(plate_png) or None,
+                        design_bits=design_bits,
+                        has_studio_context=True,
+                        croquis_conditioned=True,
+                    ),
+                    # Image 1 = croquis+garment (outfit type); Image 2 = plate (colors).
+                    sketch=(studio_context_png, "image/png"),
+                    size=size,
+                    quality=quality,
+                    fabric_swatch=(plate_png, "image/png"),
+                )
+            except SketchCompletionError as exc:
+                raise ProviderNotAvailableError(str(exc)) from exc
+        else:
+            context = studio_context_png if studio_context_png else None
+            try:
+                kwargs = build_image_edit_kwargs(
+                    model=model,
+                    prompt=garment_realism_prompt(
+                        category=category,
+                        color_hint=dominant_color_hint(plate_png) or None,
+                        design_bits=design_bits,
+                        has_studio_context=bool(context),
+                        croquis_conditioned=False,
+                    ),
+                    sketch=(plate_png, "image/png"),
+                    size=size,
+                    quality=quality,
+                    # Reuse second-image slot: Studio croquis context (not a textile swatch).
+                    fabric_swatch=(context, "image/png") if context else None,
+                )
+            except SketchCompletionError as exc:
+                raise ProviderNotAvailableError(str(exc)) from exc
         kwargs["n"] = 1
         kwargs["output_format"] = "png"
         kwargs.pop("background", None)
@@ -319,6 +453,7 @@ class OpenAIGarmentRealismAdapter:
         plate_png: bytes,
         category: str | None = None,
         studio_context_png: bytes | None = None,
+        croquis_conditioned: bool = False,
     ) -> tuple[bytes, dict[str, Any]]:
         settings = get_settings()
         if not settings.my_croquis_ai_live_http:
@@ -332,6 +467,7 @@ class OpenAIGarmentRealismAdapter:
             plate_png=plate_png,
             category=category,
             studio_context_png=studio_context_png,
+            croquis_conditioned=croquis_conditioned,
         )
         from openai import OpenAI
 
@@ -369,6 +505,7 @@ class OpenAIGarmentRealismAdapter:
             "source_plate_sha256": hashlib.sha256(plate_png).hexdigest(),
             "product_sha256": hashlib.sha256(product).hexdigest(),
             "studio_context": bool(studio_context_png),
+            "croquis_conditioned": bool(croquis_conditioned and studio_context_png),
             "design_bits": local_design_identity_bits(category=category, plate_png=plate_png),
         }
         return product, meta

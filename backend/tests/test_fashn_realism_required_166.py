@@ -50,7 +50,7 @@ def test_filled_plates_never_prefer_local_product():
 
 
 def test_realism_prompt_v5_demands_fabric_not_sketch():
-    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v5"
+    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v6"
     assert GARMENT_REALISM_PROVIDER_ID == "openai_garment_realism"
     text = garment_realism_prompt(category="tops", color_hint="#C4B5FD")
     assert "photorealistic commercial clothing product photograph" in text
