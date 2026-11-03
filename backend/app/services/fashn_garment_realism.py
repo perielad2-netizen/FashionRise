@@ -40,6 +40,9 @@ GARMENT_REALISM_JOB_TYPE = "personal_garment_realism"
 GARMENT_REALISM_PROMPT_VERSION = "fashn-garment-realism-v6"
 GARMENT_REALISM_PROVIDER_ID = "openai_garment_realism"
 LOCAL_PRODUCT_PROVIDER_ID = "local_filled_plate_v1"
+# #180 — silhouette lock for open-leg / high-slit dresses: never let generative
+# realism invent trousers. Local plate productization preserves Studio geometry.
+STRUCTURE_PRESERVING_LOCAL_REASON = "source_high_slit_dress_lock_silhouette"
 
 # Plate geometry is authoritative — textile realism only; no wrap/twist redesign.
 _AUTHORITATIVE_GEOMETRY_CONTRACT = (
@@ -122,8 +125,11 @@ def productize_filled_plate(plate_png: bytes) -> tuple[bytes, dict[str, Any]]:
         raise ValueError("Empty plate for local productization")
     with Image.open(io.BytesIO(plate_png)) as im:
         im.load()
-        rgb = im.convert("RGB")
-        # Soften only near edges slightly without shifting hues of filled regions.
+        rgba = im.convert("RGBA")
+        # Opaque studio product plate (FASHN prefers non-transparent refs) while
+        # keeping the exact alpha silhouette — critical for open-leg / slit dresses.
+        rgb = Image.new("RGB", rgba.size, (245, 245, 245))
+        rgb.paste(rgba, mask=rgba.split()[-1])
         out = io.BytesIO()
         rgb.save(out, format="PNG", optimize=True)
         product = out.getvalue()
@@ -136,6 +142,23 @@ def productize_filled_plate(plate_png: bytes) -> tuple[bytes, dict[str, Any]]:
         "local_product": True,
     }
     return product, meta
+
+
+def should_lock_silhouette_to_plate(plate_png: bytes) -> bool:
+    """True when Studio geometry is a confident open-leg / high-slit dress.
+
+    Generative realism has repeatedly reinvented these as trousers/jumpsuits (#180).
+    Locking to the filled plate preserves the designer's silhouette for FASHN.
+    """
+    if not plate_png:
+        return False
+    try:
+        from app.services.garment_leg_geometry import analyze_lower_garment_geometry
+
+        geo = analyze_lower_garment_geometry(plate_png)
+    except Exception:
+        return False
+    return bool(geo.looks_like_high_slit_dress and not geo.looks_like_trousers)
 
 
 def _fit_contain(

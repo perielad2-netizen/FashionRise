@@ -51,11 +51,15 @@ from app.services.fashn_garment_realism import (
     GARMENT_REALISM_JOB_TYPE,
     GARMENT_REALISM_PROMPT_VERSION,
     GARMENT_REALISM_PROVIDER_ID,
+    LOCAL_PRODUCT_PROVIDER_ID,
+    STRUCTURE_PRESERVING_LOCAL_REASON,
     OpenAIGarmentRealismAdapter,
     compose_studio_on_figure,
     decode_data_url_png,
     downscale_studio_context,
     estimate_garment_realism_cents,
+    productize_filled_plate,
+    should_lock_silhouette_to_plate,
 )
 from app.services.fashn_try_on_max_provider import (
     DEFAULT_MAX_PROMPT,
@@ -854,7 +858,29 @@ def enqueue_personal_try_on(
                 )
             rdata = realism_job.result_data if isinstance(realism_job.result_data, dict) else {}
             r_provider = str(rdata.get("provider") or "")
-            if r_provider != GARMENT_REALISM_PROVIDER_ID or bool(rdata.get("prefer_local_product")):
+            # #180 — structure-preserving local plate is allowed only for locked
+            # open-leg / high-slit dresses (prevents generative dress→pants flips).
+            structure_preserving = bool(rdata.get("structure_preserving_local")) and (
+                r_provider == LOCAL_PRODUCT_PROVIDER_ID
+                or str(rdata.get("structure_reason") or "") == STRUCTURE_PRESERVING_LOCAL_REASON
+            )
+            if bool(rdata.get("prefer_local_product")) and not structure_preserving:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "FASHN Try On requires an OpenAI realistic garment product image. "
+                        "Sketch plates / local plate passthrough cannot be used."
+                    ),
+                )
+            if r_provider not in {GARMENT_REALISM_PROVIDER_ID, LOCAL_PRODUCT_PROVIDER_ID}:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "FASHN Try On requires an OpenAI realistic garment product image. "
+                        "Sketch plates / local plate passthrough cannot be used."
+                    ),
+                )
+            if r_provider == LOCAL_PRODUCT_PROVIDER_ID and not structure_preserving:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
@@ -1358,10 +1384,10 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         hints = _normalize_design_hints(
             data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
         )
-        # #170/#172/#174 — additive trouser/jumpsuit OR high-slit-dress hints from frozen
-        # garment geometry (OpenAI V2.1 only). Geometry hints take priority in the 8-hint
-        # budget so they cannot be crowded out. Skips FASHN and ambiguous silhouettes.
-        if provider_name == TRY_ON_PROVIDER_OPENAI:
+        # #170/#172/#174/#180 — additive trouser/jumpsuit OR high-slit-dress hints from
+        # frozen garment geometry. Apply for OpenAI and FASHN Max so Max cannot invent
+        # pant legs when Studio geometry is an open-leg dress.
+        if provider_name in {TRY_ON_PROVIDER_OPENAI, TRY_ON_PROVIDER_FASHN_MAX}:
             geo_hints = openai_trouser_design_hints(analyze_lower_garment_geometry(garment_png))
             if geo_hints:
                 hints = _normalize_design_hints(
@@ -1981,13 +2007,12 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
     croquis_conditioned = bool(data.get("croquis_conditioned")) and bool(studio_context_png)
 
     try:
-        adapter = OpenAIGarmentRealismAdapter()
-        if reservation is not None:
-            reservation.provider_called = True
-            db.flush()
+        adapter: OpenAIGarmentRealismAdapter | None = None
         out_pieces: list[dict[str, Any]] = []
         metas: list[dict[str, Any]] = []
         storage = LocalStorageBackend()
+        any_generative_call = False
+        any_structure_preserving = False
         for item in plates:
             if not isinstance(item, dict):
                 return _fail("Invalid plate piece in realism job.")
@@ -1998,37 +2023,86 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             gen_cat = recommend_fashn_category(layout="one_piece", piece_category=cat, features=feats)
             if cat in {"tops", "bottoms"}:
                 gen_cat = cat  # type: ignore[assignment]
-            product_png, meta = adapter.generate_piece(
-                plate_png=plate_png,
-                category=gen_cat,
-                studio_context_png=studio_context_png,
-                croquis_conditioned=croquis_conditioned,
-            )
-            # Reject near-identical plate passthrough (sketch look into FASHN).
-            if hashlib.sha256(product_png).hexdigest() == hashlib.sha256(plate_png).hexdigest():
-                return _fail(
-                    "Realistic garment generation returned the sketch plate unchanged. FASHN was not started.",
-                    settle_release=False,
-                    error_code="FIDELITY_SKETCH_PASSTHROUGH",
+
+            # #180 — open-leg / high-slit dresses: lock silhouette to the Studio plate.
+            # Generative realism repeatedly reinvented these as trousers/jumpsuits.
+            lock_silhouette = should_lock_silhouette_to_plate(plate_png)
+            structure_contra: dict[str, Any] | None = None
+            used_structure_preserving = False
+            if lock_silhouette:
+                product_png, meta = productize_filled_plate(plate_png)
+                used_structure_preserving = True
+                any_structure_preserving = True
+                meta = {
+                    **meta,
+                    "structure_preserving_local": True,
+                    "structure_reason": STRUCTURE_PRESERVING_LOCAL_REASON,
+                    "skip_generative_realism": True,
+                    "category": gen_cat,
+                }
+                provider_id = LOCAL_PRODUCT_PROVIDER_ID
+            else:
+                if adapter is None:
+                    adapter = OpenAIGarmentRealismAdapter()
+                    if reservation is not None:
+                        reservation.provider_called = True
+                        db.flush()
+                any_generative_call = True
+                product_png, meta = adapter.generate_piece(
+                    plate_png=plate_png,
+                    category=gen_cat,
+                    studio_context_png=studio_context_png,
+                    croquis_conditioned=croquis_conditioned,
                 )
+                # Reject near-identical plate passthrough (sketch look into FASHN).
+                if hashlib.sha256(product_png).hexdigest() == hashlib.sha256(plate_png).hexdigest():
+                    return _fail(
+                        "Realistic garment generation returned the sketch plate unchanged. FASHN was not started.",
+                        settle_release=False,
+                        error_code="FIDELITY_SKETCH_PASSTHROUGH",
+                    )
+                # #179/#180 — dress↔trousers contradiction uses the isolated plate only.
+                structure_contra = garment_structure_contradiction(
+                    source_png=plate_png,
+                    product_png=product_png,
+                )
+                if structure_contra is not None:
+                    # Recover with silhouette-locked plate instead of delivering a
+                    # totally redesigned garment (owner: total change unacceptable).
+                    recovered_png, recovered_meta = productize_filled_plate(plate_png)
+                    product_png = recovered_png
+                    used_structure_preserving = True
+                    any_structure_preserving = True
+                    provider_id = LOCAL_PRODUCT_PROVIDER_ID
+                    meta = {
+                        **recovered_meta,
+                        "structure_preserving_local": True,
+                        "structure_reason": STRUCTURE_PRESERVING_LOCAL_REASON,
+                        "recovered_from_contradiction": structure_contra,
+                        "generative_rejected": True,
+                        "category": gen_cat,
+                    }
+                    structure_contra = None
+
             verdict = assert_structural_fidelity(
                 source_png=plate_png,
                 product_png=product_png,
                 layout="two_piece" if cat in {"tops", "bottoms"} else "one_piece",
             )
-            # #179/#180 — dress↔trousers contradiction uses the isolated plate only.
-            # On-figure composites include croquis legs and would false-trigger trousers.
-            structure_contra = garment_structure_contradiction(
-                source_png=plate_png,
-                product_png=product_png,
-            )
-            meta = {**meta, "fidelity": verdict.public_dict(), "category": gen_cat}
-            if structure_contra is not None:
-                meta["structure_contradiction"] = structure_contra
+            # For locked/recovered local plates, silhouette fidelity is the contract —
+            # do not fail closed on soft sketch-vs-product texture differences.
+            verdict_ok = True if used_structure_preserving else bool(verdict.ok)
+            meta = {
+                **meta,
+                "fidelity": verdict.public_dict(),
+                "category": gen_cat,
+                "structure_preserving_local": used_structure_preserving
+                or bool(meta.get("structure_preserving_local")),
+            }
             # Always persist product bytes (including fidelity failures) for private diagnosis (#167).
             key = f"ai/{job.id.hex}_garment_{gen_cat}_{uuid.uuid4().hex[:8]}.png"
             url = storage.save_file(key=key, data=io.BytesIO(product_png), content_type="image/png")
-            if structure_contra is not None:
+            if not used_structure_preserving and structure_contra is not None:
                 if reservation is not None and reservation.status == RESERVATION_OPEN:
                     reservation.status = RESERVATION_SETTLED
                     reservation.actual_cost_cents = reservation.estimate_cents
@@ -2071,7 +2145,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "block_fashn": True,
                 }
                 return job.result_data
-            if not verdict.ok:
+            if not verdict_ok:
                 # Paid OpenAI already ran — settle realism spend, but block FASHN.
                 # Keep status completed so the owner can review the product image (#169);
                 # Accept and FASHN enqueue both refuse fidelity_ok=false / block_fashn.
@@ -2150,22 +2224,47 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
         return job.result_data
 
     if reservation is not None and reservation.status == RESERVATION_OPEN:
-        reservation.status = RESERVATION_SETTLED
-        reservation.actual_cost_cents = reservation.estimate_cents
-        reservation.provider_called = True
+        if any_generative_call:
+            reservation.status = RESERVATION_SETTLED
+            reservation.actual_cost_cents = reservation.estimate_cents
+            reservation.provider_called = True
+        else:
+            # Silhouette-locked local plate — no OpenAI call; release the reservation.
+            reservation.status = RESERVATION_RELEASED
+            reservation.actual_cost_cents = 0
+            reservation.provider_called = False
+            reservation.error_detail = STRUCTURE_PRESERVING_LOCAL_REASON[:500]
+
+    summary = "Realistic garment product image ready (fidelity checks passed)."
+    if any_structure_preserving and not any_generative_call:
+        summary = (
+            "Garment silhouette locked to your Studio sketch (open-leg / high-slit dress). "
+            "Generative redesign skipped so the design is not turned into trousers."
+        )
+    elif any_structure_preserving:
+        summary = (
+            "Garment product recovered to your Studio silhouette after generative redesign "
+            "changed the garment type. FASHN will use the locked plate."
+        )
 
     result = {
         "status": "completed",
-        "summary": "Realistic garment product image ready (fidelity checks passed).",
+        "summary": summary,
         "mode": "garment_realism",
         "prompt_version": prompt_version,
         "provider": provider_id,
         "prefer_local_product": False,
+        "structure_preserving_local": bool(any_structure_preserving),
+        "structure_reason": STRUCTURE_PRESERVING_LOCAL_REASON if any_structure_preserving else None,
         "croquis_conditioned": croquis_conditioned,
         "pieces": out_pieces,
         "piece_meta": metas,
         "garment_fingerprint": data.get("garment_fingerprint"),
-        "cost_cents": reservation.actual_cost_cents if reservation else data.get("estimate_cents"),
+        "cost_cents": (
+            (reservation.actual_cost_cents if reservation else 0)
+            if any_generative_call
+            else 0
+        ),
         # #169 — owner must Accept product images before any FASHN credit is spent.
         "requires_owner_acceptance": True,
         "owner_accepted": False,
@@ -2203,7 +2302,12 @@ def accept_garment_realism_job(db: Session, user: User, job_id: uuid.UUID) -> AI
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Realistic garment job has no product images to accept.",
         )
-    if str(data.get("provider") or "") != GARMENT_REALISM_PROVIDER_ID:
+    r_provider = str(data.get("provider") or "")
+    structure_preserving = bool(data.get("structure_preserving_local")) and (
+        r_provider == LOCAL_PRODUCT_PROVIDER_ID
+        or str(data.get("structure_reason") or "") == STRUCTURE_PRESERVING_LOCAL_REASON
+    )
+    if r_provider != GARMENT_REALISM_PROVIDER_ID and not structure_preserving:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Only OpenAI realistic product images can be accepted for FASHN.",
@@ -2255,7 +2359,12 @@ def list_accepted_garment_realism_jobs(
             continue
         if data.get("fidelity_ok") is False or data.get("block_fashn"):
             continue
-        if str(data.get("provider") or "") != GARMENT_REALISM_PROVIDER_ID:
+        r_provider = str(data.get("provider") or "")
+        structure_preserving = bool(data.get("structure_preserving_local")) and (
+            r_provider == LOCAL_PRODUCT_PROVIDER_ID
+            or str(data.get("structure_reason") or "") == STRUCTURE_PRESERVING_LOCAL_REASON
+        )
+        if r_provider != GARMENT_REALISM_PROVIDER_ID and not structure_preserving:
             continue
         pieces = data.get("pieces") if isinstance(data.get("pieces"), list) else []
         if not pieces:

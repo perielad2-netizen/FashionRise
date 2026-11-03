@@ -266,6 +266,18 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
             # (connected/asymmetric opening near the hem — not two pant columns).
             high_slit_dress = True
 
+        # #180 — photoreal jumpsuits: connected crotch (hip_dual low) but nearly
+        # continuous dual columns (ratio≈1) with a tight symmetric gap. Do not leave
+        # these labeled as high_slit_dress or dress→pants contradictions never fire.
+        if (
+            high_slit_dress
+            and ratio >= 0.95
+            and avg_gap < 0.12
+            and not asymmetric
+        ):
+            high_slit_dress = False
+            trousers = True
+
     jumpsuit = trousers and mid_connected and coverage >= 0.45 and y0 < int(0.45 * h)
     narrow = trousers and avg_w > 0 and avg_w <= 0.32
     wide = trousers and avg_w >= 0.33

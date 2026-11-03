@@ -58,6 +58,9 @@ Historical smart Max `ce83af19…` / `941b3a08…`: `get_look` OK · `image_avai
 | Agent paid calls | **0** |
 | Prod pytest | `test_smart_tryon_harden_179` + `test_smart_tryon_openai_max_178` → **29 passed** |
 
+### Hotfix — silhouette lock for open-leg dresses (2026-11-03)
+Owner App `241ce14d` croquis-conditioned realism still reinvented the dress as a jumpsuit; fidelity passed because the product was mis-labeled high-slit. **Fix:** (1) detect photoreal jumpsuits with sustained dual columns; (2) when Studio geometry is a high-slit/open-leg dress, **skip generative realism** and lock the product plate to the Studio silhouette (`structure_preserving_local`); (3) if generative still runs and contradicts, recover to the locked plate instead of shipping pants. Total garment-type redesign is fail-closed.
+
 ### Hotfix — croquis-conditioned garment realism (2026-11-03)
 OpenAI garment realism was inventing pants from open-leg dress plates because Studio context was only a downscale of the isolated garment (no figure). **Fix:** compose accepted personal croquis under the garment capture → Image 1 on-figure layer; Image 2 isolated plate for colors; prompt **v6** requires removing the croquis/figure from the product OUTPUT. Geometry/contradiction still use the isolated plate (figure legs must not false-trigger trousers).
 

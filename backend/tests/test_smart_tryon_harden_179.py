@@ -225,6 +225,33 @@ def test_owner_open_leg_dress_not_silent_trousers():
     assert contra["code"] == "STRUCTURE_CATEGORY_CONTRADICTION"
 
 
+def test_owner_ada57815_openleg_locks_and_blocks_jumpsuit_product():
+    """#180 — owner retest: plate is high-slit dress; generative jumpsuit product must contradict.
+
+    Live App 241ce14d job dbb8856d locked croquis-conditioned realism but still shipped
+    pants because the jumpsuit product was mis-labeled high_slit_dress (connected hips).
+    """
+    from pathlib import Path
+
+    from app.services.fashn_garment_realism import should_lock_silhouette_to_plate
+
+    root = Path(__file__).resolve().parent / "fixtures"
+    plate = (root / "owner_openleg_plate_ada57815.png").read_bytes()
+    product = (root / "owner_openleg_product_pants_ada57815.png").read_bytes()
+    plate_geo = analyze_lower_garment_geometry(plate)
+    assert plate_geo.looks_like_high_slit_dress is True
+    assert plate_geo.looks_like_trousers is False
+    assert should_lock_silhouette_to_plate(plate) is True
+
+    prod_geo = analyze_lower_garment_geometry(product)
+    assert prod_geo.looks_like_trousers is True or prod_geo.looks_like_jumpsuit is True
+    assert prod_geo.looks_like_high_slit_dress is False
+
+    contra = garment_structure_contradiction(source_png=plate, product_png=product)
+    assert contra is not None
+    assert contra["code"] == "STRUCTURE_CATEGORY_CONTRADICTION"
+
+
 def test_forged_smart_fallback_rejected_without_primary(monkeypatch):
     from app.services import personal_try_on as pts
     from app.services.fashn_try_on_provider import FASHN_CONSENT_VERSION
