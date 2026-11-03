@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-03 (**#180 silhouette lock** **LIVE** · App **`7169194f`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-03 (**#180 Max lock enqueue** **LIVE** · App **`22bbf719`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`7169194f`** — release `/var/www/fashionrise/releases/995337ca` · #180 modal stage contain + open-leg geometry. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`ca11c33f`** (durable adults) kept for rollback.
-| Backend (FastAPI + PostgreSQL) | tip **`7169194f`** · open-leg dress detector (no trousers-first gate) · OpenAI **`try-on-person-v2.1`** · output-mod Max · durable adults · Alembic **`015`**.
+| Frontend (`web-ui`) | **`7169194f`** FE release kept (`/var/www/fashionrise/releases/995337ca`) · BE tip **`22bbf719`**. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`22bbf719`** · silhouette-lock Max enqueue · open-leg dress detector · OpenAI **`try-on-person-v2.1`** · output-mod Max · durable adults · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #180) |
-| Nginx | unchanged routes · `current` → **`7169194f`** |
+| Nginx | unchanged routes · FE `current` → **`7169194f`** / **`995337ca`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## #180 P0 Mobile Regression, Smart Failures & Recovery — LIVE (2026-11-02)
@@ -58,6 +58,9 @@ Historical smart Max `ce83af19…` / `941b3a08…`: `get_look` OK · `image_avai
 | Agent paid calls | **0** |
 | Prod pytest | `test_smart_tryon_harden_179` + `test_smart_tryon_openai_max_178` → **29 passed** |
 
+### Hotfix — silhouette lock Max enqueue (2026-11-03) — LIVE App `22bbf719`
+Owner App `7169194f` retest (same green open-leg sketch): OpenAI output-mod → realism **locked** (`d0b6510c`, `structure_preserving_local`) → **POST /personal-try-on 422** “sketch-like garment plate” → “Did not finish”. Root cause: `decode_data_url_png` RGBA-re-encoded productize RGB back to the source-plate SHA, and sketch_prep shares the productize SHA. **Fix:** preserve original PNG bytes on decode; skip sketch-like SHA / soft fidelity when `structure_preserving_local`. BE-only deploy **`22bbf719`**.
+
 ### Hotfix — silhouette lock for open-leg dresses (2026-11-03)
 Owner App `241ce14d` croquis-conditioned realism still reinvented the dress as a jumpsuit; fidelity passed because the product was mis-labeled high-slit. **Fix:** (1) detect photoreal jumpsuits with sustained dual columns; (2) when Studio geometry is a high-slit/open-leg dress, **skip generative realism** and lock the product plate to the Studio silhouette (`structure_preserving_local`); (3) if generative still runs and contradicts, recover to the locked plate instead of shipping pants. Total garment-type redesign is fail-closed.
 
@@ -73,9 +76,9 @@ Owner morning retest on App `513e2813` failed in ~2s: **400** `Adults-only beta 
 **Product change:** adults-only confirmation is now **account-level for the current notice version** (`MY_CROQUIS_ADULTS_ATTESTATION_MAX_AGE_SECONDS=0`). No daily re-check after the checkbox. Re-attest only if the notice version/text changes. Preflight still reports `adults_attestation_valid`; Smart Try-On refreshes only when missing.
 
 ### Owner verify (STOP — owner paid visual tests only)
-1. Hard-refresh until App **`7169194f`** (tab title / Settings).
+1. Hard-refresh until App tip **`22bbf719`** is live (Settings / health). FE build may still show **`7169194f`**.
 2. Desktop + Samsung: Try On Person modal shows **full person** (head + hem) with footer actions visible — no CSS crop.
-3. Same green open-leg dress sketch → expect dress/slit guidance (not pants). OpenAI may still refuse output; Max should follow high-slit hints.
+3. Same green open-leg dress sketch → OpenAI may output-mod; realism should **lock silhouette**; Max must **enqueue** (no “Did not finish” / sketch-like 422) and keep the open-leg dress (not pants).
 4. Green swimwear → automatic Max on output-moderation when OpenAI refuses.
 5. Ordinary closed dress OpenAI success → **no** Max.
 6. Existing My Looks smart Max entries still list after reload.
