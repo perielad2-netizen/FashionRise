@@ -213,7 +213,7 @@ def test_fidelity_rejects_unrelated_clothing_conversion():
 
 
 def test_realism_prompt_v5_reuses_fm_coverage_not_illustration_style():
-    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v5"
+    assert GARMENT_REALISM_PROMPT_VERSION == "fashn-garment-realism-v6"
     tops = garment_realism_prompt(category="tops", color_hint="#C4B5FD, #2E1065")
     assert "twists" in tops.lower() or "twist" in tops.lower()
     assert "deep-V" in tops or "neckline" in tops.lower()

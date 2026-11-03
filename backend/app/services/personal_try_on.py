@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import logging
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -50,10 +51,15 @@ from app.services.fashn_garment_realism import (
     GARMENT_REALISM_JOB_TYPE,
     GARMENT_REALISM_PROMPT_VERSION,
     GARMENT_REALISM_PROVIDER_ID,
+    LOCAL_PRODUCT_PROVIDER_ID,
+    STRUCTURE_PRESERVING_LOCAL_REASON,
     OpenAIGarmentRealismAdapter,
+    compose_studio_on_figure,
     decode_data_url_png,
     downscale_studio_context,
     estimate_garment_realism_cents,
+    productize_filled_plate,
+    should_lock_silhouette_to_plate,
 )
 from app.services.fashn_try_on_max_provider import (
     DEFAULT_MAX_PROMPT,
@@ -94,6 +100,7 @@ from app.services.personal_croquis_generate import (
     _sum_billable_cents,
     resolve_max_exposure_cents,
 )
+
 from app.services.personal_croquis_provider import (
     ProviderNotAvailableError,
     ProviderOutcomeUnknownError,
@@ -110,11 +117,13 @@ from app.services.personal_try_on_provider import (
     get_try_on_provider,
     try_on_notice_text_hash,
 )
+from app.storage.local import LocalStorageBackend
+
+logger = logging.getLogger(__name__)
 
 TRY_ON_PROVIDER_OPENAI = "openai"
 TRY_ON_PROVIDER_FASHN = "fashn"
 TRY_ON_PROVIDER_FASHN_MAX = "fashn_max"
-from app.storage.local import LocalStorageBackend
 
 
 def _is_fashn_family(provider: str) -> bool:
@@ -122,9 +131,7 @@ def _is_fashn_family(provider: str) -> bool:
     return provider in {TRY_ON_PROVIDER_FASHN, TRY_ON_PROVIDER_FASHN_MAX}
 
 
-# #179 — only confirmed *technical* OpenAI failures authorize invisible Max fallback.
-# Moderation/safety refusals must not be auto-rerouted solely to circumvent the provider.
-# Unknown outcomes must reconcile/recover before any new paid generation.
+# Technical OpenAI failures that authorize invisible Max fallback (#178/#179/#180).
 SMART_FALLBACK_ERROR_CODES = frozenset(
     {
         "PROVIDER_TIMEOUT",
@@ -134,13 +141,23 @@ SMART_FALLBACK_ERROR_CODES = frozenset(
     }
 )
 
-# Codes that are definitive terminal non-results for the user, but MUST NOT auto-Max.
+# Never auto-Max: unknown outcomes must reconcile first (#179/#180).
 SMART_FALLBACK_EXCLUDED_CODES = frozenset(
     {
-        "PROVIDER_MODERATION_BLOCKED",
         "PROVIDER_OUTCOME_UNKNOWN",
     }
 )
+
+
+def _openai_moderation_stage(result_data: dict[str, Any] | None) -> str:
+    """Return moderation_stage from result diagnostics (``input`` / ``output`` / ``""``)."""
+    data = result_data if isinstance(result_data, dict) else {}
+    pr = data.get("provider_rejection")
+    if isinstance(pr, dict):
+        stage = str(pr.get("moderation_stage") or "").strip().lower()
+        if stage:
+            return stage
+    return str(data.get("moderation_stage") or "").strip().lower()
 
 
 def is_openai_try_on_terminal_failure(
@@ -151,7 +168,7 @@ def is_openai_try_on_terminal_failure(
 ) -> bool:
     """True when OpenAI try-on ended without a usable delivered image.
 
-    #179 — this alone does **not** authorize Max. Use
+    This alone does **not** authorize Max. Use
     ``is_openai_try_on_eligible_for_max_fallback`` for paid fallback permission.
     """
     _ = error_message
@@ -168,7 +185,17 @@ def is_openai_try_on_eligible_for_max_fallback(
     result_data: dict[str, Any] | None = None,
     error_message: str | None = None,
 ) -> bool:
-    """True only for server-confirmed technical failures that may invoke Max (#179)."""
+    """True when Max may run as an independent smart fallback (#179/#180).
+
+    Allowed:
+    - Confirmed technical failures (timeout / failed / rejected).
+    - **Output-stage** moderation only (#180): uploads were accepted; Max uses a
+      separate prep→realism→Max path and never replays blocked OpenAI pixels.
+      This is not a bypass of an input safety refusal on the design/photo.
+    Never:
+    - Input-stage moderation (design/photo rejected as upload).
+    - Unknown / reconciliation-required outcomes.
+    """
     if not is_openai_try_on_terminal_failure(
         job_status=job_status,
         result_data=result_data,
@@ -177,14 +204,15 @@ def is_openai_try_on_eligible_for_max_fallback(
         return False
     data = result_data if isinstance(result_data, dict) else {}
     code = str(data.get("error_code") or "").strip().upper()
-    if code in SMART_FALLBACK_EXCLUDED_CODES:
-        return False
     if data.get("reconciliation_required") is True:
         return False
+    if code in SMART_FALLBACK_EXCLUDED_CODES:
+        return False
+    if code == "PROVIDER_MODERATION_BLOCKED":
+        return _openai_moderation_stage(data) == "output"
     if code in SMART_FALLBACK_ERROR_CODES:
         return True
-    # Failed without a structured code is not proof of an eligible technical failure.
-    # Prefer recover/reconcile over another paid generation.
+    # Failed without a structured code is not proof of an eligible failure.
     return False
 
 
@@ -309,7 +337,12 @@ def _authorize_smart_max_fallback(
         error_message=primary.error_message,
     ):
         code = str(p_result.get("error_code") or "").strip().upper()
-        if code in SMART_FALLBACK_EXCLUDED_CODES or p_result.get("reconciliation_required"):
+        stage = _openai_moderation_stage(p_result)
+        if (
+            code in SMART_FALLBACK_EXCLUDED_CODES
+            or p_result.get("reconciliation_required")
+            or (code == "PROVIDER_MODERATION_BLOCKED" and stage != "output")
+        ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
@@ -319,10 +352,10 @@ def _authorize_smart_max_fallback(
             )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Primary OpenAI try-on is not an eligible technical failure for Max fallback.",
+            detail="Primary OpenAI try-on is not an eligible failure for Max fallback.",
         )
 
-    # Reject duplicate paid Max fallback for the same smart operation.
+    # Prefer recovering an existing Max job for this operation (#180 — no duplicate paid).
     prior_max = db.scalars(
         select(AIJob)
         .where(
@@ -332,7 +365,7 @@ def _authorize_smart_max_fallback(
             AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op_id,
         )
         .order_by(AIJob.created_at.desc())
-        .limit(3)
+        .limit(5)
     ).all()
     for existing in prior_max:
         e_in = existing.input_data if isinstance(existing.input_data, dict) else {}
@@ -341,15 +374,25 @@ def _authorize_smart_max_fallback(
             and e_in["smart_pipeline"].get("lane") == "smart_public"
         ):
             continue
-        # Recover existing Max job rather than starting another paid prediction.
-        if existing.status in {"queued", "running", "completed"}:
+        e_res = existing.result_data if isinstance(existing.result_data, dict) else {}
+        if e_res.get("reconciliation_required") is True:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"Smart Max fallback already exists for this operation "
-                    f"(job {existing.id}). Recover that result instead of regenerating."
+                    "Previous Smart Max fallback needs reconciliation — "
+                    "no automatic paid retry for this operation."
                 ),
             )
+        # queued / running / completed / failed → recover the same logical job
+        # (failed returns for client honesty; canonical idempotency blocks re-bill).
+        return {
+            "primary_job_id": str(primary.id),
+            "smart_operation_id": op_id,
+            "server_fallback_reason": str(p_result.get("error_code") or "openai_technical_failure")[
+                :128
+            ],
+            "existing_max_job_id": str(existing.id),
+        }
 
     server_reason = str(p_result.get("error_code") or "openai_technical_failure").strip()[:128]
     return {
@@ -540,8 +583,18 @@ def enqueue_personal_try_on(
     if not key.startswith("try_on:"):
         # Namespace spend unique constraint away from croquis generate keys.
         key = f"try_on:{key}"
+    # #180 — smart Max uses a canonical idempotency key bound to smart_operation_id so
+    # concurrent requests with different client keys collapse to one paid reservation.
+    if smart_lane:
+        op_for_key = (smart_operation_id or "").strip()[:64]
+        if not op_for_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="smart_operation_id is required for smart Max fallback.",
+            )
+        key = f"try_on:fashn_max:smart:{op_for_key}"
     # Keep OpenAI / FASHN v1.6 / Max idempotency namespaces distinct.
-    if provider_name == TRY_ON_PROVIDER_FASHN_MAX and ":fashn_max:" not in key:
+    elif provider_name == TRY_ON_PROVIDER_FASHN_MAX and ":fashn_max:" not in key:
         key = key.replace("try_on:", "try_on:fashn_max:", 1)
     elif provider_name == TRY_ON_PROVIDER_FASHN and ":fashn:" not in key:
         key = key.replace("try_on:", "try_on:fashn:", 1)
@@ -740,7 +793,7 @@ def enqueue_personal_try_on(
     garment_fp = hashlib.sha256(garment_png).hexdigest()
 
     if smart_lane:
-        # #179 — authorize against the real primary OpenAI job before any Max spend.
+        # #179/#180 — authorize against the real primary OpenAI job before any Max spend.
         smart_auth = _authorize_smart_max_fallback(
             db,
             user,
@@ -758,6 +811,20 @@ def enqueue_personal_try_on(
                 "server_fallback_reason"
             ) or smart_pipeline.get("fallback_reason")
             smart_pipeline["primary_try_on_job_id"] = smart_auth.get("primary_job_id")
+        existing_max_id = smart_auth.get("existing_max_job_id")
+        if existing_max_id:
+            try:
+                existing_uuid = uuid.UUID(str(existing_max_id))
+            except (TypeError, ValueError):
+                existing_uuid = None
+            if existing_uuid is not None:
+                existing_max = db.get(AIJob, existing_uuid)
+                if (
+                    existing_max is not None
+                    and existing_max.user_id == user.id
+                    and existing_max.job_type == TRY_ON_JOB_TYPE
+                ):
+                    return existing_max
 
     fashn_prep_meta: dict[str, Any] | None = None
     approved_frozen: list[dict[str, str]] | None = None
@@ -773,6 +840,9 @@ def enqueue_personal_try_on(
             )
         raw_pieces: list[Any] = []
         realism_binding: dict[str, Any] | None = None
+        # #180 — silhouette-locked open-leg plates intentionally match prep SHA;
+        # set before the realism block so the Max piece loop can see it.
+        structure_preserving = False
         if garment_realism_job_id is not None:
             realism_job = db.get(AIJob, garment_realism_job_id)
             if (
@@ -791,7 +861,29 @@ def enqueue_personal_try_on(
                 )
             rdata = realism_job.result_data if isinstance(realism_job.result_data, dict) else {}
             r_provider = str(rdata.get("provider") or "")
-            if r_provider != GARMENT_REALISM_PROVIDER_ID or bool(rdata.get("prefer_local_product")):
+            # #180 — structure-preserving local plate is allowed only for locked
+            # open-leg / high-slit dresses (prevents generative dress→pants flips).
+            structure_preserving = bool(rdata.get("structure_preserving_local")) and (
+                r_provider == LOCAL_PRODUCT_PROVIDER_ID
+                or str(rdata.get("structure_reason") or "") == STRUCTURE_PRESERVING_LOCAL_REASON
+            )
+            if bool(rdata.get("prefer_local_product")) and not structure_preserving:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "FASHN Try On requires an OpenAI realistic garment product image. "
+                        "Sketch plates / local plate passthrough cannot be used."
+                    ),
+                )
+            if r_provider not in {GARMENT_REALISM_PROVIDER_ID, LOCAL_PRODUCT_PROVIDER_ID}:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "FASHN Try On requires an OpenAI realistic garment product image. "
+                        "Sketch plates / local plate passthrough cannot be used."
+                    ),
+                )
+            if r_provider == LOCAL_PRODUCT_PROVIDER_ID and not structure_preserving:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
@@ -804,8 +896,8 @@ def enqueue_personal_try_on(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=str(rdata.get("summary") or "Garment realism failed fidelity checks."),
                 )
-            # #179 — semantic dress↔trousers contradiction blocks smart Max auto-accept.
-            # Prefer Studio croquis context (full figure) over isolated product alone.
+            # #179/#180 — dress↔trousers contradiction vs Studio garment capture
+            # (isolated artwork — never the on-figure composite).
             r_pieces_probe = rdata.get("pieces") if isinstance(rdata.get("pieces"), list) else []
             for piece in r_pieces_probe:
                 if not isinstance(piece, dict):
@@ -922,7 +1014,13 @@ def enqueue_personal_try_on(
             product_sha = hashlib.sha256(png).hexdigest()
             plate_sha = hashlib.sha256(plate_png).hexdigest()
             source_plate_sha = str(item.get("source_plate_sha256") or "")
-            if product_sha == plate_sha or (source_plate_sha and product_sha == source_plate_sha):
+            # #180 — silhouette lock / contradiction recovery productizes the filled
+            # Studio plate locally. That product often shares a SHA with sketch_prep
+            # (same RGB flatten) and must still be allowed through to Max.
+            if not structure_preserving and (
+                product_sha == plate_sha
+                or (source_plate_sha and product_sha == source_plate_sha)
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
@@ -936,7 +1034,7 @@ def enqueue_personal_try_on(
                 layout=sketch_prep.layout,
             )
             fidelity_reports.append(verdict.public_dict())
-            if not verdict.ok:
+            if not verdict.ok and not structure_preserving:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=verdict.message,
@@ -1012,6 +1110,24 @@ def enqueue_personal_try_on(
     existing = _find_try_on_by_idempotency(db, user.id, key)
     if existing is not None:
         return existing
+    # #180 — under the spend lock, re-resolve any smart Max for this operation
+    # (covers races that used a pre-canonical client key before this revision).
+    if smart_lane:
+        op_locked = (smart_operation_id or "").strip()[:64]
+        if op_locked:
+            locked_max = db.scalars(
+                select(AIJob)
+                .where(
+                    AIJob.user_id == user.id,
+                    AIJob.job_type == TRY_ON_JOB_TYPE,
+                    AIJob.input_data["provider"].astext == TRY_ON_PROVIDER_FASHN_MAX,
+                    AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op_locked,
+                )
+                .order_by(AIJob.created_at.desc())
+                .limit(1)
+            ).first()
+            if locked_max is not None:
+                return locked_max
     existing_res = (
         db.query(PersonalCroquisSpendReservation)
         .filter(
@@ -1277,10 +1393,10 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         hints = _normalize_design_hints(
             data.get("design_hints") if isinstance(data.get("design_hints"), list) else None
         )
-        # #170/#172/#174 — additive trouser/jumpsuit OR high-slit-dress hints from frozen
-        # garment geometry (OpenAI V2.1 only). Geometry hints take priority in the 8-hint
-        # budget so they cannot be crowded out. Skips FASHN and ambiguous silhouettes.
-        if provider_name == TRY_ON_PROVIDER_OPENAI:
+        # #170/#172/#174/#180 — additive trouser/jumpsuit OR high-slit-dress hints from
+        # frozen garment geometry. Apply for OpenAI and FASHN Max so Max cannot invent
+        # pant legs when Studio geometry is an open-leg dress.
+        if provider_name in {TRY_ON_PROVIDER_OPENAI, TRY_ON_PROVIDER_FASHN_MAX}:
             geo_hints = openai_trouser_design_hints(analyze_lower_garment_geometry(garment_png))
             if geo_hints:
                 hints = _normalize_design_hints(
@@ -1521,6 +1637,16 @@ def try_on_preflight_public(*, user: User | None = None) -> dict[str, Any]:
     max_owner = bool(user is not None and user_on_fashn_max_allowlist(user))
     bal_credits = fashn_max_credits_per_image(generation_mode="balanced", resolution="1k")
     qual_credits = fashn_max_credits_per_image(generation_mode="quality", resolution="1k")
+    adults_ok = False
+    if user is not None:
+        # Short-lived lookup so FE can refresh the 24h adults-beta gate before enqueue (#180).
+        from app.db.session import SessionLocal
+
+        _db = SessionLocal()
+        try:
+            adults_ok = pcs._latest_adults_attestation(_db, user) is not None
+        finally:
+            _db.close()
     return {
         "enabled": bool(settings.my_croquis_ai_enabled and settings.my_croquis_ai_spend_ceiling_usd > 0),
         "live_http": bool(settings.my_croquis_ai_live_http),
@@ -1530,6 +1656,7 @@ def try_on_preflight_public(*, user: User | None = None) -> dict[str, Any]:
         "prompt_version": TRY_ON_PROMPT_VERSION,
         "estimate_cents": estimate_try_on_cost_cents(),
         "max_exposure_cents": int(settings.my_croquis_ai_max_exposure_cents or 0),
+        "adults_attestation_valid": bool(adults_ok),
         "fashn_enabled": bool(settings.fashn_try_on_enabled),
         "fashn_configured": fashn_ready,
         "fashn_live_http": bool(settings.fashn_try_on_live_http) and fashn_ready,
@@ -1671,8 +1798,31 @@ def enqueue_garment_realism(
     if garment_fingerprint and garment_fingerprint.strip() != garment_fp:
         # Soft check — allow if client fingerprint matches prep output; else recompute trust server-side.
         pass
-    # Bound Studio croquis for OpenAI second-image context (#167) — plate remains authoritative.
-    studio_context_png = downscale_studio_context(garment_png)
+    # #180 — croquis-conditioned Studio layer: accepted figure under garment so OpenAI
+    # can see exposed legs through slits. Figure is removed in the product OUTPUT.
+    croquis_conditioned = False
+    studio_context_png: bytes | None = None
+    if version.generated_asset_id is not None:
+        try:
+            croquis_path = pcs.resolve_croquis_asset_file(db, user, version.generated_asset_id)
+            croquis_bytes = croquis_path.read_bytes()
+            studio_context_png = compose_studio_on_figure(
+                croquis_png=croquis_bytes,
+                garment_png=garment_png,
+            )
+            croquis_conditioned = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "garment_realism croquis composite failed croquis=%s version=%s: %s",
+                croquis.id,
+                version.version,
+                type(exc).__name__,
+            )
+            studio_context_png = None
+    if studio_context_png is None:
+        # Weak fallback (#167): garment-only downscale — no figure type cue.
+        studio_context_png = downscale_studio_context(garment_png)
+        croquis_conditioned = False
     studio_context_b64 = (
         "data:image/png;base64," + base64.b64encode(studio_context_png).decode("ascii")
         if studio_context_png
@@ -1782,6 +1932,7 @@ def enqueue_garment_realism(
         "plate_pieces": frozen_plates,
         "studio_context_base64": studio_context_b64,
         "studio_context_sha256": hashlib.sha256(studio_context_png).hexdigest() if studio_context_png else None,
+        "croquis_conditioned": bool(croquis_conditioned),
         "consent_id": str(consent.id),
         "consent_version": FASHN_CONSENT_VERSION,
         "prompt_version": GARMENT_REALISM_PROMPT_VERSION,
@@ -1862,15 +2013,15 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             studio_context_png = decode_data_url_png(raw_ctx)
         except ValueError:
             studio_context_png = None
+    croquis_conditioned = bool(data.get("croquis_conditioned")) and bool(studio_context_png)
 
     try:
-        adapter = OpenAIGarmentRealismAdapter()
-        if reservation is not None:
-            reservation.provider_called = True
-            db.flush()
+        adapter: OpenAIGarmentRealismAdapter | None = None
         out_pieces: list[dict[str, Any]] = []
         metas: list[dict[str, Any]] = []
         storage = LocalStorageBackend()
+        any_generative_call = False
+        any_structure_preserving = False
         for item in plates:
             if not isinstance(item, dict):
                 return _fail("Invalid plate piece in realism job.")
@@ -1881,35 +2032,86 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
             gen_cat = recommend_fashn_category(layout="one_piece", piece_category=cat, features=feats)
             if cat in {"tops", "bottoms"}:
                 gen_cat = cat  # type: ignore[assignment]
-            product_png, meta = adapter.generate_piece(
-                plate_png=plate_png,
-                category=gen_cat,
-                studio_context_png=studio_context_png,
-            )
-            # Reject near-identical plate passthrough (sketch look into FASHN).
-            if hashlib.sha256(product_png).hexdigest() == hashlib.sha256(plate_png).hexdigest():
-                return _fail(
-                    "Realistic garment generation returned the sketch plate unchanged. FASHN was not started.",
-                    settle_release=False,
-                    error_code="FIDELITY_SKETCH_PASSTHROUGH",
+
+            # #180 — open-leg / high-slit dresses: lock silhouette to the Studio plate.
+            # Generative realism repeatedly reinvented these as trousers/jumpsuits.
+            lock_silhouette = should_lock_silhouette_to_plate(plate_png)
+            structure_contra: dict[str, Any] | None = None
+            used_structure_preserving = False
+            if lock_silhouette:
+                product_png, meta = productize_filled_plate(plate_png)
+                used_structure_preserving = True
+                any_structure_preserving = True
+                meta = {
+                    **meta,
+                    "structure_preserving_local": True,
+                    "structure_reason": STRUCTURE_PRESERVING_LOCAL_REASON,
+                    "skip_generative_realism": True,
+                    "category": gen_cat,
+                }
+                provider_id = LOCAL_PRODUCT_PROVIDER_ID
+            else:
+                if adapter is None:
+                    adapter = OpenAIGarmentRealismAdapter()
+                    if reservation is not None:
+                        reservation.provider_called = True
+                        db.flush()
+                any_generative_call = True
+                product_png, meta = adapter.generate_piece(
+                    plate_png=plate_png,
+                    category=gen_cat,
+                    studio_context_png=studio_context_png,
+                    croquis_conditioned=croquis_conditioned,
                 )
+                # Reject near-identical plate passthrough (sketch look into FASHN).
+                if hashlib.sha256(product_png).hexdigest() == hashlib.sha256(plate_png).hexdigest():
+                    return _fail(
+                        "Realistic garment generation returned the sketch plate unchanged. FASHN was not started.",
+                        settle_release=False,
+                        error_code="FIDELITY_SKETCH_PASSTHROUGH",
+                    )
+                # #179/#180 — dress↔trousers contradiction uses the isolated plate only.
+                structure_contra = garment_structure_contradiction(
+                    source_png=plate_png,
+                    product_png=product_png,
+                )
+                if structure_contra is not None:
+                    # Recover with silhouette-locked plate instead of delivering a
+                    # totally redesigned garment (owner: total change unacceptable).
+                    recovered_png, recovered_meta = productize_filled_plate(plate_png)
+                    product_png = recovered_png
+                    used_structure_preserving = True
+                    any_structure_preserving = True
+                    provider_id = LOCAL_PRODUCT_PROVIDER_ID
+                    meta = {
+                        **recovered_meta,
+                        "structure_preserving_local": True,
+                        "structure_reason": STRUCTURE_PRESERVING_LOCAL_REASON,
+                        "recovered_from_contradiction": structure_contra,
+                        "generative_rejected": True,
+                        "category": gen_cat,
+                    }
+                    structure_contra = None
+
             verdict = assert_structural_fidelity(
                 source_png=plate_png,
                 product_png=product_png,
                 layout="two_piece" if cat in {"tops", "bottoms"} else "one_piece",
             )
-            # #179 — dress↔trousers semantic contradiction (studio context preferred).
-            structure_contra = garment_structure_contradiction(
-                source_png=studio_context_png or plate_png,
-                product_png=product_png,
-            )
-            meta = {**meta, "fidelity": verdict.public_dict(), "category": gen_cat}
-            if structure_contra is not None:
-                meta["structure_contradiction"] = structure_contra
+            # For locked/recovered local plates, silhouette fidelity is the contract —
+            # do not fail closed on soft sketch-vs-product texture differences.
+            verdict_ok = True if used_structure_preserving else bool(verdict.ok)
+            meta = {
+                **meta,
+                "fidelity": verdict.public_dict(),
+                "category": gen_cat,
+                "structure_preserving_local": used_structure_preserving
+                or bool(meta.get("structure_preserving_local")),
+            }
             # Always persist product bytes (including fidelity failures) for private diagnosis (#167).
             key = f"ai/{job.id.hex}_garment_{gen_cat}_{uuid.uuid4().hex[:8]}.png"
             url = storage.save_file(key=key, data=io.BytesIO(product_png), content_type="image/png")
-            if structure_contra is not None:
+            if not used_structure_preserving and structure_contra is not None:
                 if reservation is not None and reservation.status == RESERVATION_OPEN:
                     reservation.status = RESERVATION_SETTLED
                     reservation.actual_cost_cents = reservation.estimate_cents
@@ -1952,7 +2154,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "block_fashn": True,
                 }
                 return job.result_data
-            if not verdict.ok:
+            if not verdict_ok:
                 # Paid OpenAI already ran — settle realism spend, but block FASHN.
                 # Keep status completed so the owner can review the product image (#169);
                 # Accept and FASHN enqueue both refuse fidelity_ok=false / block_fashn.
@@ -2003,7 +2205,8 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "image_base64": "data:image/png;base64," + base64.b64encode(product_png).decode("ascii"),
                     "image_url": url,
                     "sha256": hashlib.sha256(product_png).hexdigest(),
-                    "source_plate_sha256": str(item.get("sha256") or ""),
+                    # Prefer hash of the plate bytes we productized — not a client-supplied field.
+                    "source_plate_sha256": hashlib.sha256(plate_png).hexdigest(),
                     "fidelity": verdict.public_dict(),
                 }
             )
@@ -2031,21 +2234,47 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
         return job.result_data
 
     if reservation is not None and reservation.status == RESERVATION_OPEN:
-        reservation.status = RESERVATION_SETTLED
-        reservation.actual_cost_cents = reservation.estimate_cents
-        reservation.provider_called = True
+        if any_generative_call:
+            reservation.status = RESERVATION_SETTLED
+            reservation.actual_cost_cents = reservation.estimate_cents
+            reservation.provider_called = True
+        else:
+            # Silhouette-locked local plate — no OpenAI call; release the reservation.
+            reservation.status = RESERVATION_RELEASED
+            reservation.actual_cost_cents = 0
+            reservation.provider_called = False
+            reservation.error_detail = STRUCTURE_PRESERVING_LOCAL_REASON[:500]
+
+    summary = "Realistic garment product image ready (fidelity checks passed)."
+    if any_structure_preserving and not any_generative_call:
+        summary = (
+            "Garment silhouette locked to your Studio sketch (open-leg / high-slit dress). "
+            "Generative redesign skipped so the design is not turned into trousers."
+        )
+    elif any_structure_preserving:
+        summary = (
+            "Garment product recovered to your Studio silhouette after generative redesign "
+            "changed the garment type. FASHN will use the locked plate."
+        )
 
     result = {
         "status": "completed",
-        "summary": "Realistic garment product image ready (fidelity checks passed).",
+        "summary": summary,
         "mode": "garment_realism",
         "prompt_version": prompt_version,
         "provider": provider_id,
         "prefer_local_product": False,
+        "structure_preserving_local": bool(any_structure_preserving),
+        "structure_reason": STRUCTURE_PRESERVING_LOCAL_REASON if any_structure_preserving else None,
+        "croquis_conditioned": croquis_conditioned,
         "pieces": out_pieces,
         "piece_meta": metas,
         "garment_fingerprint": data.get("garment_fingerprint"),
-        "cost_cents": reservation.actual_cost_cents if reservation else data.get("estimate_cents"),
+        "cost_cents": (
+            (reservation.actual_cost_cents if reservation else 0)
+            if any_generative_call
+            else 0
+        ),
         # #169 — owner must Accept product images before any FASHN credit is spent.
         "requires_owner_acceptance": True,
         "owner_accepted": False,
@@ -2083,7 +2312,12 @@ def accept_garment_realism_job(db: Session, user: User, job_id: uuid.UUID) -> AI
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Realistic garment job has no product images to accept.",
         )
-    if str(data.get("provider") or "") != GARMENT_REALISM_PROVIDER_ID:
+    r_provider = str(data.get("provider") or "")
+    structure_preserving = bool(data.get("structure_preserving_local")) and (
+        r_provider == LOCAL_PRODUCT_PROVIDER_ID
+        or str(data.get("structure_reason") or "") == STRUCTURE_PRESERVING_LOCAL_REASON
+    )
+    if r_provider != GARMENT_REALISM_PROVIDER_ID and not structure_preserving:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Only OpenAI realistic product images can be accepted for FASHN.",
@@ -2135,7 +2369,12 @@ def list_accepted_garment_realism_jobs(
             continue
         if data.get("fidelity_ok") is False or data.get("block_fashn"):
             continue
-        if str(data.get("provider") or "") != GARMENT_REALISM_PROVIDER_ID:
+        r_provider = str(data.get("provider") or "")
+        structure_preserving = bool(data.get("structure_preserving_local")) and (
+            r_provider == LOCAL_PRODUCT_PROVIDER_ID
+            or str(data.get("structure_reason") or "") == STRUCTURE_PRESERVING_LOCAL_REASON
+        )
+        if r_provider != GARMENT_REALISM_PROVIDER_ID and not structure_preserving:
             continue
         pieces = data.get("pieces") if isinstance(data.get("pieces"), list) else []
         if not pieces:

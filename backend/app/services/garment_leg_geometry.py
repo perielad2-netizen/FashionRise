@@ -207,14 +207,17 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
         if early_n and (early / early_n) < 0.35:
             trousers = False
 
-    # High-slit dress / gown: connected hip/waist panel (one run) that later opens into
-    # an asymmetric dual-lobe gap. True trousers/jumpsuits already show two legs at the hip.
-    # Without this, a thigh-high slit is mis-hinted as "jumpsuit — not a dress" (#174).
+    # High-slit / open-leg dress: connected hip/waist panel that opens lower into a gap.
+    # True trousers already show two legs at the hip (high hip_dual_ratio).
+    # Important (#180 owner open-leg): do NOT require trousers=True first — many open-leg
+    # dresses never meet the trousers bar (low two_lobe ratio) but still need dress hints
+    # so Max/realism do not invent pant legs.
     high_slit_dress = False
-    if trousers and mid_connected and coverage >= 0.45:
+    hip_dual_ratio = 1.0
+    asymmetric = False
+    if mid_connected and (trousers or ratio >= 0.15):
         hip_dual = 0
         hip_n = 0
-        hip_widths: list[tuple[float, float]] = []
         for t in (0.32, 0.38, 0.44, 0.50):
             hip_y = y0 + int(t * bh)
             if hip_y > y1:
@@ -225,13 +228,8 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
             hip_n += 1
             if len(runs) == 2 and (runs[1][0] - runs[0][1]) >= max(2, int(0.04 * bw)):
                 hip_dual += 1
-                hip_widths.append(
-                    ((runs[0][1] - runs[0][0]) / bw, (runs[1][1] - runs[1][0]) / bw)
-                )
         hip_dual_ratio = hip_dual / max(hip_n, 1)
-        asymmetric = False
         if width_fracs:
-            # Compare mean left vs right lobe width across lower dual-lobe samples.
             left_ws: list[float] = []
             right_ws: list[float] = []
             for y in range(sample_y0, sample_y1 + 1, max(1, bh // 40)):
@@ -246,14 +244,39 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
                 rw = sum(right_ws) / len(right_ws)
                 lo, hi = (lw, rw) if lw <= rw else (rw, lw)
                 asymmetric = lo > 0 and (hi / lo) >= 1.55
-        # Connected hip (few dual lobes) + later dual lobes ⇒ fashion slit, not pant crotch.
-        if hip_dual_ratio < 0.40:
+        if trousers and coverage >= 0.45:
+            # Connected hip + later dual lobes ⇒ fashion slit, not pant crotch.
+            if hip_dual_ratio < 0.40:
+                high_slit_dress = True
+                trousers = False
+            elif asymmetric and hip_dual_ratio < 0.75:
+                high_slit_dress = True
+                trousers = False
+        elif (
+            not trousers
+            and ratio >= 0.18
+            and avg_gap >= 0.035
+            and len(width_fracs) >= 2
+            and (
+                hip_dual_ratio < 0.45
+                or (asymmetric and hip_dual_ratio < 0.75)
+            )
+        ):
+            # Open-leg dress that never tripped the trousers classifier
+            # (connected/asymmetric opening near the hem — not two pant columns).
             high_slit_dress = True
-            trousers = False
-        elif asymmetric and hip_dual_ratio < 0.75:
-            # Strong lobe asymmetry with mostly-connected hip ⇒ hanging slit panel.
-            high_slit_dress = True
-            trousers = False
+
+        # #180 — photoreal jumpsuits: connected crotch (hip_dual low) but nearly
+        # continuous dual columns (ratio≈1) with a tight symmetric gap. Do not leave
+        # these labeled as high_slit_dress or dress→pants contradictions never fire.
+        if (
+            high_slit_dress
+            and ratio >= 0.95
+            and avg_gap < 0.12
+            and not asymmetric
+        ):
+            high_slit_dress = False
+            trousers = True
 
     jumpsuit = trousers and mid_connected and coverage >= 0.45 and y0 < int(0.45 * h)
     narrow = trousers and avg_w > 0 and avg_w <= 0.32

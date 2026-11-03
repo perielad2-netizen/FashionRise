@@ -3,20 +3,86 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#179 Smart Try-On harden** **LIVE** · App **`c3658dad`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-03 (**#180 Max lock enqueue** **LIVE** · App **`22bbf719`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure only, invisible FASHN Try-On Max (Balanced · 1k) (#179 harden of #178). Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`c3658dad`** — release `/var/www/fashionrise/releases/c3658dad` · #179 Smart Try-On harden (structure/My Looks/UX/Max auth). FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`74623a58`** kept for rollback.
-| Backend (FastAPI + PostgreSQL) | tip **`c3658dad`** · OpenAI **`try-on-person-v2.1`** · server-auth smart Max · structure contradiction guard · Alembic **`015`**.
+| Frontend (`web-ui`) | **`7169194f`** FE release kept (`/var/www/fashionrise/releases/995337ca`) · BE tip **`22bbf719`**. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`22bbf719`** · silhouette-lock Max enqueue · open-leg dress detector · OpenAI **`try-on-person-v2.1`** · output-mod Max · durable adults · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
-| Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #178) |
-| Nginx | unchanged routes · `current` → **`c3658dad`**
+| Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #180) |
+| Nginx | unchanged routes · FE `current` → **`7169194f`** / **`995337ca`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## #180 P0 Mobile Regression, Smart Failures & Recovery — LIVE (2026-11-02)
+
+### Owner mobile evidence (Israel evening ≈ 19:44–19:47 UTC)
+1. **Modal footer clipped** under Android Chrome / Samsung Internet bottom toolbar (`MagicLookPanel`).
+2. **Green open-leg** Smart Try-On → spinner → truthful failure (no image).
+3. **Green swimwear** Smart Try-On → same failure (no image). Save in My Looks untestable on new runs.
+
+### Production job diagnosis (read-only; App `c3658dad`)
+| Case | Primary job | Error | Stage | Prep / realism / Max | Structure guard | Spend |
+|---|---|---|---|---|---|---|
+| Open-leg (gfp `ada57815fdf2`) | `88701ff0…` (+ retry `0c0cbf86…`) | `PROVIDER_MODERATION_BLOCKED` / sexual | **output** | **none** | did not block | released · est. 40¢ · actual null · provider_called |
+| Swimwear (gfp `017c981d1ecf`) | `97e372c3…` | same | **output** | **none** | did not block | same |
+
+**Root cause:** #179 deliberately excluded **all** `PROVIDER_MODERATION_BLOCKED` from Max. Both owner failures were **OpenAI output-stage** moderation on the generated try-on pixels — not structure-guard false positives, not input moderation, not Max provider errors. Max never ran; **0** FASHN Max API calls for these ops.
+
+**Product decision (#180):** Allow Max only when moderation stage is **`output`** (uploads accepted; Max uses independent prep→realism→Max and never replays blocked OpenAI pixels). **Input** moderation and `PROVIDER_OUTCOME_UNKNOWN` remain excluded.
+
+### Fixes
+| Area | Change |
+|---|---|
+| Mobile modal | `position:fixed` overlay · `svh`/`dvh` + safe-area · scrollable `panelBody` · sticky/flex footer always above chrome |
+| Max eligibility | Output-moderation → Max; input-moderation / unknown → terminal |
+| Smart recovery | `smart:` ops use Smart stage recovery (not dual Front/Back); Stop waiting copy truthful |
+| Max idempotency | Canonical key `try_on:fashn_max:smart:{op}`; recover existing Max under spend lock; reconciliation-required blocks re-pay |
+| Fidelity tests | Deterministic high-slit + swimsuit non–false-positive assertions (no conditional skips) |
+
+### My Looks (no new paid calls)
+Historical smart Max `ce83af19…` / `941b3a08…`: `get_look` OK · `image_available` · listed in My Looks · `experiment_excluded=false` · normal result (no experiment controls).
+
+### Deployed
+| Field | Value |
+|---|---|
+| App / FE / BE tip | **`513e2813`** (`513e28133d4271a21897adf8a8704fcf198aa87b`) |
+| API / worker | restarted · `/health` ok · Alembic **`015`** |
+| #175 spend env | verified unchanged |
+| Max env | enabled + live unchanged |
+| Rollback | `/var/backups/fashionrise/smart-tryon-180-20261102T201046Z/ROLLBACK.sh` → FE **`c3658dad`** |
+| Agent paid calls | **0** |
+| Prod pytest | `test_smart_tryon_harden_179` + `test_smart_tryon_openai_max_178` → **29 passed** |
+
+### Hotfix — silhouette lock Max enqueue (2026-11-03) — LIVE App `22bbf719`
+Owner App `7169194f` retest (same green open-leg sketch): OpenAI output-mod → realism **locked** (`d0b6510c`, `structure_preserving_local`) → **POST /personal-try-on 422** “sketch-like garment plate” → “Did not finish”. Root cause: `decode_data_url_png` RGBA-re-encoded productize RGB back to the source-plate SHA, and sketch_prep shares the productize SHA. **Fix:** preserve original PNG bytes on decode; skip sketch-like SHA / soft fidelity when `structure_preserving_local`. BE-only deploy **`22bbf719`**.
+
+### Hotfix — silhouette lock for open-leg dresses (2026-11-03)
+Owner App `241ce14d` croquis-conditioned realism still reinvented the dress as a jumpsuit; fidelity passed because the product was mis-labeled high-slit. **Fix:** (1) detect photoreal jumpsuits with sustained dual columns; (2) when Studio geometry is a high-slit/open-leg dress, **skip generative realism** and lock the product plate to the Studio silhouette (`structure_preserving_local`); (3) if generative still runs and contradicts, recover to the locked plate instead of shipping pants. Total garment-type redesign is fail-closed.
+
+### Hotfix — croquis-conditioned garment realism (2026-11-03)
+OpenAI garment realism was inventing pants from open-leg dress plates because Studio context was only a downscale of the isolated garment (no figure). **Fix:** compose accepted personal croquis under the garment capture → Image 1 on-figure layer; Image 2 isolated plate for colors; prompt **v6** requires removing the croquis/figure from the product OUTPUT. Geometry/contradiction still use the isolated plate (figure legs must not false-trigger trousers).
+
+### Hotfix — modal fit + open-leg dress→pants (2026-11-03) — LIVE App `995337ca`
+Owner App `125a6a01` result: (1) Try On preview **CSS-cropped** head/hem in the modal — stage did not bound height so `object-fit:contain` could not shrink. Fixed: stage `max-height: min(64dvh, 640px)` + image `width/height 100%` contain. (2) Green open-leg dress still rendered as **pants via Max** because geometry never set `looks_like_high_slit_dress` (hints empty → realism/Max invented trouser legs). Fixed: open-leg detection no longer requires the trousers classifier first; owner fixture `b1bcbc86` asserts dress/slit hints + contradiction guard.
+**Deployed:** FE/BE **`995337ca`** · backup `/var/backups/fashionrise/p0-180-modal-openleg-deploy-20261103T061902Z/ROLLBACK.sh` → FE **`ca11c33f`** · `/health` 200 · runtime fixture high_slit=True trousers=False · **0** agent paid calls.
+
+### Hotfix — adults attestation (2026-11-03)
+Owner morning retest on App `513e2813` failed in ~2s: **400** `Adults-only beta attestation…` (no AI job). Cause was the old **24h** `adults_beta` max-age, not Smart Try-On/Max.
+**Product change:** adults-only confirmation is now **account-level for the current notice version** (`MY_CROQUIS_ADULTS_ATTESTATION_MAX_AGE_SECONDS=0`). No daily re-check after the checkbox. Re-attest only if the notice version/text changes. Preflight still reports `adults_attestation_valid`; Smart Try-On refreshes only when missing.
+
+### Owner verify (STOP — owner paid visual tests only)
+1. Hard-refresh until App tip **`22bbf719`** is live (Settings / health). FE build may still show **`7169194f`**.
+2. Desktop + Samsung: Try On Person modal shows **full person** (head + hem) with footer actions visible — no CSS crop.
+3. Same green open-leg dress sketch → OpenAI may output-mod; realism should **lock silhouette**; Max must **enqueue** (no “Did not finish” / sketch-like 422) and keep the open-leg dress (not pants).
+4. Green swimwear → automatic Max on output-moderation when OpenAI refuses.
+5. Ordinary closed dress OpenAI success → **no** Max.
+6. Existing My Looks smart Max entries still list after reload.
+7. Mid-run **Stop waiting** → Recover resumes the durable stage without a second paid start.
 
 ## #179 Unified Smart Try-On hardening — LIVE (2026-11-02)
 

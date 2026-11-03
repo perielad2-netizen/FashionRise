@@ -1,4 +1,4 @@
-"""#179 — Smart Try-On hardening: auth, moderation exclusion, looks eligibility, structure."""
+"""#179/#180 — Smart Try-On harden: auth, output-mod Max, looks, structure, Max idempotency."""
 
 from __future__ import annotations
 
@@ -60,10 +60,9 @@ def _trousers_png() -> bytes:
     return _png(draw)
 
 
-def test_moderation_and_unknown_excluded_from_auto_max():
-    assert "PROVIDER_MODERATION_BLOCKED" in SMART_FALLBACK_EXCLUDED_CODES
+def test_moderation_output_eligible_input_and_unknown_excluded():
+    """#180 — output moderation may Max; input moderation / unknown must not."""
     assert "PROVIDER_OUTCOME_UNKNOWN" in SMART_FALLBACK_EXCLUDED_CODES
-    assert "PROVIDER_MODERATION_BLOCKED" not in SMART_FALLBACK_ERROR_CODES
     assert "PROVIDER_TIMEOUT" in SMART_FALLBACK_ERROR_CODES
 
     assert (
@@ -76,7 +75,20 @@ def test_moderation_and_unknown_excluded_from_auto_max():
     assert (
         is_openai_try_on_eligible_for_max_fallback(
             job_status="failed",
-            result_data={"error_code": "PROVIDER_MODERATION_BLOCKED"},
+            result_data={
+                "error_code": "PROVIDER_MODERATION_BLOCKED",
+                "provider_rejection": {"moderation_stage": "output"},
+            },
+        )
+        is True
+    )
+    assert (
+        is_openai_try_on_eligible_for_max_fallback(
+            job_status="failed",
+            result_data={
+                "error_code": "PROVIDER_MODERATION_BLOCKED",
+                "provider_rejection": {"moderation_stage": "input"},
+            },
         )
         is False
     )
@@ -148,25 +160,96 @@ def test_high_slit_hints_and_contradiction_guard():
     dress = _high_slit_dress_png()
     trousers = _trousers_png()
     geo = analyze_lower_garment_geometry(dress)
-    # Fixture may be borderline; when classified as high-slit, hints must be dress-preserving.
+    assert geo.looks_like_high_slit_dress is True
+    assert geo.looks_like_trousers is False
     hints = openai_trouser_design_hints(geo)
-    if geo.looks_like_high_slit_dress and not geo.looks_like_trousers:
-        assert any("dress" in h.lower() for h in hints)
-        assert any("slit" in h.lower() or "opening" in h.lower() for h in hints)
-        assert not any("trousers / pant legs" == h for h in hints)
+    assert hints
+    assert any("dress" in h.lower() for h in hints)
+    assert any("slit" in h.lower() or "opening" in h.lower() for h in hints)
+    assert not any(h.strip().lower().startswith("garment type: trousers") for h in hints)
 
-    # Confident dress source + trousers product → contradiction.
-    dress_geo = analyze_lower_garment_geometry(dress)
     trouser_geo = analyze_lower_garment_geometry(trousers)
-    if dress_geo.looks_like_high_slit_dress and trouser_geo.looks_like_trousers:
-        contra = garment_structure_contradiction(source_png=dress, product_png=trousers)
-        assert contra is not None
-        assert contra["code"] == "STRUCTURE_CATEGORY_CONTRADICTION"
-        assert "trousers" in contra["reason"]
+    assert trouser_geo.looks_like_trousers is True
+    contra = garment_structure_contradiction(source_png=dress, product_png=trousers)
+    assert contra is not None
+    assert contra["code"] == "STRUCTURE_CATEGORY_CONTRADICTION"
+    assert "trousers" in contra["reason"]
 
     # Matching trousers must not invent a dress contradiction.
     same = garment_structure_contradiction(source_png=trousers, product_png=trousers)
     assert same is None
+
+
+def test_swimsuit_not_false_positive_contradiction():
+    """#180 — high-cut swimwear must not trip dress↔trousers guard."""
+    from PIL import ImageDraw as ID
+
+    def _swimsuit():
+        img = Image.new("RGBA", (220, 420), (255, 255, 255, 0))
+        d = ID.Draw(img)
+        c = (20, 120, 160, 255)
+        d.polygon([(110, 50), (150, 50), (180, 220), (160, 300), (60, 300), (40, 220)], fill=c)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    swim = _swimsuit()
+    geo = analyze_lower_garment_geometry(swim)
+    assert geo.looks_like_trousers is False
+    assert geo.looks_like_high_slit_dress is False
+    assert openai_trouser_design_hints(geo) == []
+    assert garment_structure_contradiction(source_png=swim, product_png=swim) is None
+
+
+def test_owner_open_leg_dress_not_silent_trousers():
+    """#180 — real owner open-leg green dress (gfp b1bcbc86) must get dress/slit hints."""
+    from pathlib import Path
+
+    fixture = (
+        Path(__file__).resolve().parent / "fixtures" / "open_leg_dress_owner_b1bcbc86.png"
+    )
+    assert fixture.is_file(), f"missing fixture {fixture}"
+    dress = fixture.read_bytes()
+    geo = analyze_lower_garment_geometry(dress)
+    assert geo.looks_like_trousers is False
+    assert geo.looks_like_jumpsuit is False
+    assert geo.looks_like_high_slit_dress is True
+    hints = openai_trouser_design_hints(geo)
+    assert hints
+    assert any("dress" in h.lower() for h in hints)
+    assert any("slit" in h.lower() or "opening" in h.lower() for h in hints)
+    # Product trousers must be blocked as a contradiction against this source.
+    trousers = _trousers_png()
+    contra = garment_structure_contradiction(source_png=dress, product_png=trousers)
+    assert contra is not None
+    assert contra["code"] == "STRUCTURE_CATEGORY_CONTRADICTION"
+
+
+def test_owner_ada57815_openleg_locks_and_blocks_jumpsuit_product():
+    """#180 — owner retest: plate is high-slit dress; generative jumpsuit product must contradict.
+
+    Live App 241ce14d job dbb8856d locked croquis-conditioned realism but still shipped
+    pants because the jumpsuit product was mis-labeled high_slit_dress (connected hips).
+    """
+    from pathlib import Path
+
+    from app.services.fashn_garment_realism import should_lock_silhouette_to_plate
+
+    root = Path(__file__).resolve().parent / "fixtures"
+    plate = (root / "owner_openleg_plate_ada57815.png").read_bytes()
+    product = (root / "owner_openleg_product_pants_ada57815.png").read_bytes()
+    plate_geo = analyze_lower_garment_geometry(plate)
+    assert plate_geo.looks_like_high_slit_dress is True
+    assert plate_geo.looks_like_trousers is False
+    assert should_lock_silhouette_to_plate(plate) is True
+
+    prod_geo = analyze_lower_garment_geometry(product)
+    assert prod_geo.looks_like_trousers is True or prod_geo.looks_like_jumpsuit is True
+    assert prod_geo.looks_like_high_slit_dress is False
+
+    contra = garment_structure_contradiction(source_png=plate, product_png=product)
+    assert contra is not None
+    assert contra["code"] == "STRUCTURE_CATEGORY_CONTRADICTION"
 
 
 def test_forged_smart_fallback_rejected_without_primary(monkeypatch):
@@ -210,7 +293,7 @@ def test_forged_smart_fallback_rejected_without_primary(monkeypatch):
     _clear()
 
 
-def test_authorize_rejects_moderation_primary(monkeypatch):
+def test_authorize_rejects_input_moderation_allows_output(monkeypatch):
     from app.services import personal_try_on as pts
 
     monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
@@ -223,35 +306,43 @@ def test_authorize_rejects_moderation_primary(monkeypatch):
 
     user = SimpleNamespace(id=uuid.uuid4(), email="c@example.com", username="c")
     croquis_id = uuid.uuid4()
-    primary = SimpleNamespace(
-        id=uuid.uuid4(),
-        user_id=user.id,
-        job_type="personal_try_on",
-        status="failed",
-        error_message="blocked",
-        input_data={
-            "provider": TRY_ON_PROVIDER_OPENAI,
-            "croquis_id": str(croquis_id),
-            "croquis_version": 1,
-            "garment_fingerprint": "a" * 64,
-            "content_fingerprint": "b" * 32,
-            "source_revision": 1,
-            "smart_pipeline": {
-                "lane": "smart_public",
-                "smart_operation_id": "op-1",
-            },
-        },
-        result_data={"error_code": "PROVIDER_MODERATION_BLOCKED"},
-    )
-    db = MagicMock()
-    db.get.return_value = primary
 
+    def _primary(stage: str):
+        return SimpleNamespace(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            job_type="personal_try_on",
+            status="failed",
+            error_message="blocked",
+            input_data={
+                "provider": TRY_ON_PROVIDER_OPENAI,
+                "croquis_id": str(croquis_id),
+                "croquis_version": 1,
+                "garment_fingerprint": "a" * 64,
+                "content_fingerprint": "b" * 32,
+                "source_revision": 1,
+                "smart_pipeline": {
+                    "lane": "smart_public",
+                    "smart_operation_id": "op-1",
+                },
+            },
+            result_data={
+                "error_code": "PROVIDER_MODERATION_BLOCKED",
+                "provider_rejection": {"moderation_stage": stage, "categories": ["sexual"]},
+            },
+        )
+
+    db = MagicMock()
+    db.scalars.return_value.all.return_value = []
+
+    input_primary = _primary("input")
+    db.get.return_value = input_primary
     with pytest.raises(HTTPException) as ei:
         pts._authorize_smart_max_fallback(
             db,
             user,
             smart_operation_id="op-1",
-            primary_try_on_job_id=primary.id,
+            primary_try_on_job_id=input_primary.id,
             croquis_id=croquis_id,
             croquis_version=1,
             garment_fingerprint="a" * 64,
@@ -260,6 +351,23 @@ def test_authorize_rejects_moderation_primary(monkeypatch):
             client_reason="PROVIDER_MODERATION_BLOCKED",
         )
     assert ei.value.status_code == 422
+
+    output_primary = _primary("output")
+    db.get.return_value = output_primary
+    out = pts._authorize_smart_max_fallback(
+        db,
+        user,
+        smart_operation_id="op-1",
+        primary_try_on_job_id=output_primary.id,
+        croquis_id=croquis_id,
+        croquis_version=1,
+        garment_fingerprint="a" * 64,
+        content_fingerprint="b" * 32,
+        source_revision=1,
+        client_reason="PROVIDER_MODERATION_BLOCKED",
+    )
+    assert out["primary_job_id"] == str(output_primary.id)
+    assert out["server_fallback_reason"] == "PROVIDER_MODERATION_BLOCKED"
     _clear()
 
 
@@ -377,3 +485,113 @@ def test_smart_pipeline_metadata_still_one_charge_unit():
     assert meta["user_visible_charge_units"] == 1
     # Metadata is not a billing implementation — document the commercial contract gap.
     assert meta["user_visible_charge_units"] != "implemented_debit"
+
+
+def test_authorize_recovers_existing_max_instead_of_duplicate(monkeypatch):
+    """#180 — queued/running/completed/failed Max for same op recovers, never re-pays."""
+    from app.services import personal_try_on as pts
+
+    monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
+    monkeypatch.setenv("FASHN_TRY_ON_MAX_ENABLED", "true")
+    monkeypatch.setenv("FASHN_TRY_ON_MAX_LIVE_HTTP", "true")
+    monkeypatch.setenv("FASHN_TRY_ON_ENABLED", "true")
+    monkeypatch.setenv("FASHN_API_KEY", "test-key")
+    _clear()
+
+    user = SimpleNamespace(id=uuid.uuid4(), email="c@example.com", username="c")
+    croquis_id = uuid.uuid4()
+    primary = SimpleNamespace(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        job_type="personal_try_on",
+        status="failed",
+        error_message="timeout",
+        input_data={
+            "provider": TRY_ON_PROVIDER_OPENAI,
+            "croquis_id": str(croquis_id),
+            "croquis_version": 1,
+            "garment_fingerprint": "e" * 64,
+            "content_fingerprint": "f" * 32,
+            "source_revision": 1,
+            "smart_pipeline": {"lane": "smart_public", "smart_operation_id": "op-dup"},
+        },
+        result_data={"error_code": "PROVIDER_TIMEOUT"},
+    )
+    existing_max = SimpleNamespace(
+        id=uuid.uuid4(),
+        status="running",
+        input_data={
+            "provider": TRY_ON_PROVIDER_FASHN_MAX,
+            "smart_fallback": True,
+            "smart_pipeline": {"lane": "smart_public", "smart_operation_id": "op-dup"},
+        },
+        result_data={},
+    )
+    db = MagicMock()
+    db.get.return_value = primary
+    db.scalars.return_value.all.return_value = [existing_max]
+
+    out = pts._authorize_smart_max_fallback(
+        db,
+        user,
+        smart_operation_id="op-dup",
+        primary_try_on_job_id=primary.id,
+        croquis_id=croquis_id,
+        croquis_version=1,
+        garment_fingerprint="e" * 64,
+        content_fingerprint="f" * 32,
+        source_revision=1,
+        client_reason="PROVIDER_TIMEOUT",
+    )
+    assert out["existing_max_job_id"] == str(existing_max.id)
+    assert "server_fallback_reason" in out
+
+    # Reconciliation-required Max must not authorize another paid attempt.
+    existing_max.result_data = {"reconciliation_required": True}
+    with pytest.raises(HTTPException) as ei:
+        pts._authorize_smart_max_fallback(
+            db,
+            user,
+            smart_operation_id="op-dup",
+            primary_try_on_job_id=primary.id,
+            croquis_id=croquis_id,
+            croquis_version=1,
+            garment_fingerprint="e" * 64,
+            content_fingerprint="f" * 32,
+            source_revision=1,
+            client_reason="PROVIDER_TIMEOUT",
+        )
+    assert ei.value.status_code == 409
+    _clear()
+
+
+def test_smart_max_canonical_idempotency_key_bound_to_operation():
+    """#180 — smart Max spend key is always try_on:fashn_max:smart:{op}, not client key."""
+    import inspect
+
+    from app.services import personal_try_on as pts
+
+    src = inspect.getsource(pts.enqueue_personal_try_on)
+    assert 'key = f"try_on:fashn_max:smart:{op_for_key}"' in src
+    assert "smart_operation_id is required for smart Max fallback" in src
+    # Spend-lock re-check recovers any prior Max for the same operation.
+    assert 'AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op_locked' in src
+    # Different client keys for the same op therefore share one reservation namespace.
+    op = "op-canon-abc"
+    assert f"try_on:fashn_max:smart:{op}" == f"try_on:fashn_max:smart:{op}"
+    assert "try_on:client-a" != f"try_on:fashn_max:smart:{op}"
+    assert "try_on:client-b-different" != f"try_on:fashn_max:smart:{op}"
+
+
+def test_structure_preserving_skips_sketch_like_sha_gate():
+    """#180 — locked local product may share SHA with sketch_prep; Max must not 422."""
+    import inspect
+
+    from app.services import personal_try_on as pts
+
+    src = inspect.getsource(pts.enqueue_personal_try_on)
+    assert "if not structure_preserving and (" in src
+    assert "refused a sketch-like garment plate" in src
+    assert "structure_preserving = False" in src
+    # Fidelity soft-pass for the same lock path (texture ≠ silhouette contract).
+    assert "if not verdict.ok and not structure_preserving:" in src

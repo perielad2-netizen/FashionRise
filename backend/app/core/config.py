@@ -81,7 +81,9 @@ class Settings(BaseSettings):
     my_croquis_ai_notice_text: str = ""
     # Consent / attestation validity windows (seconds).
     my_croquis_storage_consent_max_age_seconds: int = 3600
-    my_croquis_adults_attestation_max_age_seconds: int = 86400
+    # Adults-only account attestation: 0 = durable for this notice version (no daily re-check).
+    # Bump my_croquis_adults_attestation_version / notice text when the legal copy changes.
+    my_croquis_adults_attestation_max_age_seconds: int = 0
     # Upload bounds (source photos). Separate from fabric limits.
     max_croquis_upload_size_mb: int = 10
     max_croquis_dimension_px: int = 4096
