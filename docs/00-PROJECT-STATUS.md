@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-03 (**#180 modal fit + open-leg geometry** **LIVE** · App **`995337ca`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-03 (**#180 croquis-conditioned realism** **LIVE** · App **`241ce14d`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`995337ca`** — release `/var/www/fashionrise/releases/995337ca` · #180 modal stage contain + open-leg geometry. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`ca11c33f`** (durable adults) kept for rollback.
-| Backend (FastAPI + PostgreSQL) | tip **`995337ca`** · open-leg dress detector (no trousers-first gate) · OpenAI **`try-on-person-v2.1`** · output-mod Max · durable adults · Alembic **`015`**.
+| Frontend (`web-ui`) | **`241ce14d`** — release `/var/www/fashionrise/releases/995337ca` · #180 modal stage contain + open-leg geometry. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`ca11c33f`** (durable adults) kept for rollback.
+| Backend (FastAPI + PostgreSQL) | tip **`241ce14d`** · open-leg dress detector (no trousers-first gate) · OpenAI **`try-on-person-v2.1`** · output-mod Max · durable adults · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #180) |
-| Nginx | unchanged routes · `current` → **`995337ca`** |
+| Nginx | unchanged routes · `current` → **`241ce14d`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## #180 P0 Mobile Regression, Smart Failures & Recovery — LIVE (2026-11-02)
@@ -70,7 +70,7 @@ Owner morning retest on App `513e2813` failed in ~2s: **400** `Adults-only beta 
 **Product change:** adults-only confirmation is now **account-level for the current notice version** (`MY_CROQUIS_ADULTS_ATTESTATION_MAX_AGE_SECONDS=0`). No daily re-check after the checkbox. Re-attest only if the notice version/text changes. Preflight still reports `adults_attestation_valid`; Smart Try-On refreshes only when missing.
 
 ### Owner verify (STOP — owner paid visual tests only)
-1. Hard-refresh until App **`995337ca`** (tab title / Settings).
+1. Hard-refresh until App **`241ce14d`** (tab title / Settings).
 2. Desktop + Samsung: Try On Person modal shows **full person** (head + hem) with footer actions visible — no CSS crop.
 3. Same green open-leg dress sketch → expect dress/slit guidance (not pants). OpenAI may still refuse output; Max should follow high-slit hints.
 4. Green swimwear → automatic Max on output-moderation when OpenAI refuses.
