@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-02 (**#180 mobile + Smart recovery** **LIVE** · App **`513e2813`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-03 (**#180 modal fit + open-leg geometry** **LIVE** · App **`995337ca`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`513e2813`** — release `/var/www/fashionrise/releases/513e2813` · #180 mobile modal + Smart recovery. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`c3658dad`** kept for rollback.
-| Backend (FastAPI + PostgreSQL) | tip **`513e2813`** · OpenAI **`try-on-person-v2.1`** · output-mod Max eligibility · canonical smart Max idempotency · Alembic **`015`**.
+| Frontend (`web-ui`) | **`995337ca`** — release `/var/www/fashionrise/releases/995337ca` · #180 modal stage contain + open-leg geometry. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. Prior FE **`ca11c33f`** (durable adults) kept for rollback.
+| Backend (FastAPI + PostgreSQL) | tip **`995337ca`** · open-leg dress detector (no trousers-first gate) · OpenAI **`try-on-person-v2.1`** · output-mod Max · durable adults · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #180) |
-| Nginx | unchanged routes · `current` → **`513e2813`** |
+| Nginx | unchanged routes · `current` → **`995337ca`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## #180 P0 Mobile Regression, Smart Failures & Recovery — LIVE (2026-11-02)
@@ -58,20 +58,22 @@ Historical smart Max `ce83af19…` / `941b3a08…`: `get_look` OK · `image_avai
 | Agent paid calls | **0** |
 | Prod pytest | `test_smart_tryon_harden_179` + `test_smart_tryon_openai_max_178` → **29 passed** |
 
-### Hotfix — modal fit + open-leg dress→pants (2026-11-03)
-Owner App `125a6a01` result: (1) Try On preview **CSS-cropped** head/hem in the modal — stage did not bound height so `object-fit:contain` could not shrink. Fixed: stage `max-height` + image `width/height 100%` contain. (2) Green open-leg dress still rendered as **pants via Max** because geometry never set `looks_like_high_slit_dress` (hints empty → realism/Max invented trouser legs). Fixed: open-leg detection no longer requires the trousers classifier first; owner fixture `b1bcbc86` now asserts dress/slit hints + contradiction guard.
+### Hotfix — modal fit + open-leg dress→pants (2026-11-03) — LIVE App `995337ca`
+Owner App `125a6a01` result: (1) Try On preview **CSS-cropped** head/hem in the modal — stage did not bound height so `object-fit:contain` could not shrink. Fixed: stage `max-height: min(64dvh, 640px)` + image `width/height 100%` contain. (2) Green open-leg dress still rendered as **pants via Max** because geometry never set `looks_like_high_slit_dress` (hints empty → realism/Max invented trouser legs). Fixed: open-leg detection no longer requires the trousers classifier first; owner fixture `b1bcbc86` asserts dress/slit hints + contradiction guard.
+**Deployed:** FE/BE **`995337ca`** · backup `/var/backups/fashionrise/p0-180-modal-openleg-deploy-20261103T061902Z/ROLLBACK.sh` → FE **`ca11c33f`** · `/health` 200 · runtime fixture high_slit=True trousers=False · **0** agent paid calls.
 
 ### Hotfix — adults attestation (2026-11-03)
 Owner morning retest on App `513e2813` failed in ~2s: **400** `Adults-only beta attestation…` (no AI job). Cause was the old **24h** `adults_beta` max-age, not Smart Try-On/Max.
 **Product change:** adults-only confirmation is now **account-level for the current notice version** (`MY_CROQUIS_ADULTS_ATTESTATION_MAX_AGE_SECONDS=0`). No daily re-check after the checkbox. Re-attest only if the notice version/text changes. Preflight still reports `adults_attestation_valid`; Smart Try-On refreshes only when missing.
 
 ### Owner verify (STOP — owner paid visual tests only)
-1. Hard-refresh until App **`513e2813`**.
-2. Samsung Android: open Try On Person modal → footer actions fully visible (toolbar expand/collapse + rotate).
-3. Green open-leg + green swimwear → expect OpenAI may still refuse output, then **automatic Max** for output-moderation (spinner stays generic; no provider names).
-4. Ordinary closed dress OpenAI success → **no** Max.
-5. Existing My Looks smart Max entries still list after reload.
-6. Mid-run **Stop waiting** → Recover resumes the durable stage without a second paid start.
+1. Hard-refresh until App **`995337ca`** (tab title / Settings).
+2. Desktop + Samsung: Try On Person modal shows **full person** (head + hem) with footer actions visible — no CSS crop.
+3. Same green open-leg dress sketch → expect dress/slit guidance (not pants). OpenAI may still refuse output; Max should follow high-slit hints.
+4. Green swimwear → automatic Max on output-moderation when OpenAI refuses.
+5. Ordinary closed dress OpenAI success → **no** Max.
+6. Existing My Looks smart Max entries still list after reload.
+7. Mid-run **Stop waiting** → Recover resumes the durable stage without a second paid start.
 
 ## #179 Unified Smart Try-On hardening — LIVE (2026-11-02)
 
