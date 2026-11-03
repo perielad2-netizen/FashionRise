@@ -42,6 +42,16 @@ describe('MagicLookPanel mobile viewport contract (#180)', () => {
     expect(actions).toContain('env(safe-area-inset-bottom, 0px)')
   })
 
+  it('fits the look image inside the stage with contain (no head/hem CSS crop)', () => {
+    const stage = rule(css, '.stage')
+    expect(stage).toContain('max-height: min(64dvh, 640px)')
+    expect(stage).toContain('overflow: hidden')
+    expect(css).toMatch(/\.image,\s*\n\.sketchPreview \{[^}]*width: 100%/s)
+    expect(css).toMatch(/\.image,\s*\n\.sketchPreview \{[^}]*height: 100%/s)
+    expect(css).toMatch(/\.image,\s*\n\.sketchPreview \{[^}]*object-fit: contain/s)
+    expect(css).not.toMatch(/\.image,\s*\n\.sketchPreview \{[^}]*object-fit: cover/s)
+  })
+
   it('compacts at representative phone widths (320–430) without horizontal overflow', () => {
     expect(css).toContain('@media (max-width: 820px)')
     expect(css).toContain('@media (max-width: 430px)')

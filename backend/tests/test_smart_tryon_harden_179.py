@@ -201,6 +201,30 @@ def test_swimsuit_not_false_positive_contradiction():
     assert garment_structure_contradiction(source_png=swim, product_png=swim) is None
 
 
+def test_owner_open_leg_dress_not_silent_trousers():
+    """#180 — real owner open-leg green dress (gfp b1bcbc86) must get dress/slit hints."""
+    from pathlib import Path
+
+    fixture = (
+        Path(__file__).resolve().parent / "fixtures" / "open_leg_dress_owner_b1bcbc86.png"
+    )
+    assert fixture.is_file(), f"missing fixture {fixture}"
+    dress = fixture.read_bytes()
+    geo = analyze_lower_garment_geometry(dress)
+    assert geo.looks_like_trousers is False
+    assert geo.looks_like_jumpsuit is False
+    assert geo.looks_like_high_slit_dress is True
+    hints = openai_trouser_design_hints(geo)
+    assert hints
+    assert any("dress" in h.lower() for h in hints)
+    assert any("slit" in h.lower() or "opening" in h.lower() for h in hints)
+    # Product trousers must be blocked as a contradiction against this source.
+    trousers = _trousers_png()
+    contra = garment_structure_contradiction(source_png=dress, product_png=trousers)
+    assert contra is not None
+    assert contra["code"] == "STRUCTURE_CATEGORY_CONTRADICTION"
+
+
 def test_forged_smart_fallback_rejected_without_primary(monkeypatch):
     from app.services import personal_try_on as pts
     from app.services.fashn_try_on_provider import FASHN_CONSENT_VERSION
