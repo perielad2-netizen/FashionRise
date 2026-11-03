@@ -58,6 +58,12 @@ Historical smart Max `ce83af19…` / `941b3a08…`: `get_look` OK · `image_avai
 | Agent paid calls | **0** |
 | Prod pytest | `test_smart_tryon_harden_179` + `test_smart_tryon_openai_max_178` → **29 passed** |
 
+### Hotfix — adults attestation expiry (2026-11-03 ~07:14 Israel)
+Owner retest on App `513e2813` failed in ~2s with the generic Try On failure modal. **No AI job was created.**
+Nginx: `POST /api/v1/ai/personal-try-on` → **400**. Reproduce: `Adults-only beta attestation is required before Try On Person.`
+Latest `adults_beta` event was **2026-11-02 01:30 UTC**; max age **86400s** → expired **2026-11-03 01:30 UTC**. Evening #179/#180 successes were still inside the window; morning retest was not.
+**Not an OpenAI/Max/#180 routing regression.** Fix: preflight exposes `adults_attestation_valid`; Smart Try-On refreshes adults attestation from the approved notice before enqueue when expired; attestation errors are no longer masked as generic generation failure.
+
 ### Owner verify (STOP — owner paid visual tests only)
 1. Hard-refresh until App **`513e2813`**.
 2. Samsung Android: open Try On Person modal → footer actions fully visible (toolbar expand/collapse + rotate).

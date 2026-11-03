@@ -106,6 +106,11 @@ import {
   newSmartOperationId,
 } from '@/services/ai/smartTryOn'
 import {
+  ADULTS_ATTESTATION_REQUIRED,
+  ensureAdultsAttestationForTryOn,
+  isAdultsAttestationError,
+} from '@/services/ai/ensureAdultsAttestation'
+import {
   allocateMagicRetryIdempotencyKey,
   patchMagicOperationJob,
   persistMagicJobId,
@@ -1988,6 +1993,22 @@ export function useStudioEditor() {
         const maxFallbackReady = Boolean(preflight.smart_try_on_max_fallback_available)
         setMagicPhase('submitting')
         setMagicStatusHint(SMART_TRY_ON_STATUS)
+        // #180 — adults-beta attestation expires after 24h; refresh on explicit Try On click
+        // so overnight retests do not fail in ~2s with a generic "could not create" modal.
+        if (preflight.adults_attestation_valid !== true) {
+          try {
+            await ensureAdultsAttestationForTryOn(controller.signal)
+          } catch (attestErr) {
+            setMagicPhase('failed')
+            setMagicError(
+              attestErr instanceof ApiError && isAdultsAttestationError(attestErr.message)
+                ? attestErr.message
+                : ADULTS_ATTESTATION_REQUIRED,
+            )
+            setMagicStatusHint(null)
+            return
+          }
+        }
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
             ? `try_on:${crypto.randomUUID()}`
@@ -2285,7 +2306,12 @@ export function useStudioEditor() {
           return
         }
         setMagicPhase('failed')
-        setMagicError(SMART_TRY_ON_FAILURE)
+        const apiMsg = err instanceof ApiError ? err.message : ''
+        if (isAdultsAttestationError(apiMsg)) {
+          setMagicError(apiMsg || ADULTS_ATTESTATION_REQUIRED)
+        } else {
+          setMagicError(SMART_TRY_ON_FAILURE)
+        }
         setMagicStatusHint(null)
         setMagicOpen(true)
       } finally {

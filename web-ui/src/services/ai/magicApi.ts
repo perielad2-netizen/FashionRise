@@ -169,6 +169,8 @@ export type PersonalTryOnPreflight = {
   fashn_max_owner_allowed?: boolean
   /** #178 — ordinary Try On Person may silently fall back to Max Balanced 1k. */
   smart_try_on_max_fallback_available?: boolean
+  /** #180 — false when adults-beta attestation is missing or past the 24h window. */
+  adults_attestation_valid?: boolean
   fashn_max_prompt_version?: string | null
   fashn_max_default_prompt?: string | null
   fashn_max_default_generation_mode?: string | null

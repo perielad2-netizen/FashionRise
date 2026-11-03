@@ -1597,6 +1597,16 @@ def try_on_preflight_public(*, user: User | None = None) -> dict[str, Any]:
     max_owner = bool(user is not None and user_on_fashn_max_allowlist(user))
     bal_credits = fashn_max_credits_per_image(generation_mode="balanced", resolution="1k")
     qual_credits = fashn_max_credits_per_image(generation_mode="quality", resolution="1k")
+    adults_ok = False
+    if user is not None:
+        # Short-lived lookup so FE can refresh the 24h adults-beta gate before enqueue (#180).
+        from app.db.session import SessionLocal
+
+        _db = SessionLocal()
+        try:
+            adults_ok = pcs._latest_adults_attestation(_db, user) is not None
+        finally:
+            _db.close()
     return {
         "enabled": bool(settings.my_croquis_ai_enabled and settings.my_croquis_ai_spend_ceiling_usd > 0),
         "live_http": bool(settings.my_croquis_ai_live_http),
@@ -1606,6 +1616,7 @@ def try_on_preflight_public(*, user: User | None = None) -> dict[str, Any]:
         "prompt_version": TRY_ON_PROMPT_VERSION,
         "estimate_cents": estimate_try_on_cost_cents(),
         "max_exposure_cents": int(settings.my_croquis_ai_max_exposure_cents or 0),
+        "adults_attestation_valid": bool(adults_ok),
         "fashn_enabled": bool(settings.fashn_try_on_enabled),
         "fashn_configured": fashn_ready,
         "fashn_live_http": bool(settings.fashn_try_on_live_http) and fashn_ready,
