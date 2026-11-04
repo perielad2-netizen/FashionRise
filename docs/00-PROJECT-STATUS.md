@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-04 (**pale bridal try-on visibility** **LIVE** · BE/FE **`11cefc2b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-04 (**Magic pale bridal parity** **LIVE** · BE/FE **`d2270d96`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
@@ -11,8 +11,8 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`11cefc2b`** — release `/var/www/fashionrise/releases/11cefc2b` · pale bridal hints + matte path. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`11cefc2b`** · OpenAI **`try-on-person-v2.2`** matte visibility · pale/V/sleeve hints · Alembic **`015`**.
+| Frontend (`web-ui`) | **`d2270d96`** — release `/var/www/fashionrise/releases/d2270d96` · Magic+TryOn pale bridal parity. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`d2270d96`** · Magic pale paper-lift + Try On v2.2 matte · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | photos `client_max_body_size` **25m** · FE `current` → **`968a7838`** |

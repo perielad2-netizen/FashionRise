@@ -128,6 +128,61 @@ describe('magicGarmentSpec palette priority', () => {
     expect(main_colors).toEqual(['#222222'])
   })
 
+  it('skips outline-ink solid fills and adds pale bridal notes (#183)', () => {
+    let doc = createEmptyDraftDocument()
+    doc = bumpDraftDocument(doc, {
+      brush: { sizeId: 'thin', sizePx: 1.75, opacity: 1, color: '#111111' },
+      strokes: [
+        {
+          id: 's1',
+          tool: 'draw',
+          points: [1, 2, 0.5, 3, 4, 0.5],
+          color: '#111111',
+          size: 1.75,
+          opacity: 1,
+        },
+      ],
+      fills: [
+        {
+          id: 'outline-noise',
+          contour: [10, 10, 30, 10, 30, 30, 10, 30],
+          style: { kind: 'solid', color: '#111111' },
+          seedX: 20,
+          seedY: 20,
+        },
+        {
+          id: 'gown',
+          contour: [200, 80, 360, 80, 400, 200, 380, 900, 180, 900, 160, 200, 280, 260],
+          style: { kind: 'gradient', gradientId: 'custom', colors: ['#F8F4F0', '#D4AF9B'], angle: 90 },
+          seedX: 300,
+          seedY: 500,
+        },
+        {
+          id: 'leftSleeve',
+          contour: [40, 120, 160, 120, 160, 320, 40, 320],
+          style: { kind: 'solid', color: '#F8F4F0' },
+          seedX: 100,
+          seedY: 200,
+        },
+        {
+          id: 'rightSleeve',
+          contour: [600, 120, 720, 120, 720, 320, 600, 320],
+          style: { kind: 'solid', color: '#F8F4F0' },
+          seedX: 660,
+          seedY: 200,
+        },
+      ],
+    })
+    const { main_colors } = paletteFromDoc(doc)
+    expect(main_colors).not.toContain('#111111')
+    expect(main_colors.some((c) => c === '#F8F4F0' || c === '#D4AF9B')).toBe(true)
+    const spec = buildSharedGarmentSpec(doc)
+    expect(spec.notes || '').toMatch(/pale|cream|ivory/i)
+    expect(spec.notes || '').toMatch(/plunging|cleavage|open/i)
+    expect(spec.notes || '').toMatch(/both.*sleeve/i)
+    expect(spec.details || '').toMatch(/pale_bridal_fidelity=1/)
+  })
+
   it('uses gradient fill stops in main_colors ahead of outline ink', () => {
     let doc = createEmptyDraftDocument()
     doc = bumpDraftDocument(doc, {
