@@ -416,6 +416,8 @@ class PersonalTryOnPreflightRead(BaseModel):
     fashn_max_owner_allowed: bool = False
     # #178 — normal Try On Person may auto-fall back to Max when OpenAI fails hard.
     smart_try_on_max_fallback_available: bool = False
+    # #180 follow-up — adults-beta attestation is time-bounded (24h); FE refreshes before enqueue.
+    adults_attestation_valid: bool = False
     fashn_max_prompt_version: str | None = None
     fashn_max_default_prompt: str | None = None
     fashn_max_default_generation_mode: str | None = None

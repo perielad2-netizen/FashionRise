@@ -101,9 +101,16 @@ import {
   SMART_TRY_ON_STATUS,
   SMART_TRY_ON_STOP_WAITING,
   isOpenAiTryOnEligibleForMaxFallback,
+  smartTryOnTerminalFailureMessage,
   isOpenAiTryOnTerminalFailure,
+  isSmartTryOnOperationId,
   newSmartOperationId,
 } from '@/services/ai/smartTryOn'
+import {
+  ADULTS_ATTESTATION_REQUIRED,
+  ensureAdultsAttestationForTryOn,
+  isAdultsAttestationError,
+} from '@/services/ai/ensureAdultsAttestation'
 import {
   allocateMagicRetryIdempotencyKey,
   patchMagicOperationJob,
@@ -111,6 +118,7 @@ import {
   persistMagicOperation,
   readMagicJobId,
   readMagicOperation,
+  resolveSmartTryOnRecoverJobId,
 } from '@/services/ai/magicJobStore'
 import { resolveDualMagicJobIds } from '@/services/ai/magicOperationRecovery'
 import type { StudioPaperSide } from '@/lib/studioSideArtwork'
@@ -1986,6 +1994,22 @@ export function useStudioEditor() {
         const maxFallbackReady = Boolean(preflight.smart_try_on_max_fallback_available)
         setMagicPhase('submitting')
         setMagicStatusHint(SMART_TRY_ON_STATUS)
+        // Adults-beta is account-level for the current notice version (not time-bound).
+        // Refresh only when preflight says no valid attestation yet (missing / notice changed).
+        if (preflight.adults_attestation_valid !== true) {
+          try {
+            await ensureAdultsAttestationForTryOn(controller.signal)
+          } catch (attestErr) {
+            setMagicPhase('failed')
+            setMagicError(
+              attestErr instanceof ApiError && isAdultsAttestationError(attestErr.message)
+                ? attestErr.message
+                : ADULTS_ATTESTATION_REQUIRED,
+            )
+            setMagicStatusHint(null)
+            return
+          }
+        }
         const idempotencyKey =
           typeof crypto !== 'undefined' && 'randomUUID' in crypto
             ? `try_on:${crypto.randomUUID()}`
@@ -2015,7 +2039,10 @@ export function useStudioEditor() {
         // Persist smart chain so Stop waiting / refresh can recover without re-pay.
         persistMagicOperation(user.id, {
           operationId: `smart:${smartOpId}`,
+          kind: 'smart_try_on',
+          smartStage: 'openai',
           frontJobId: job.id,
+          openaiJobId: job.id,
           designId: designIdRef.current,
           sourceRevision: docAtStart.clientRevision,
           contentFingerprint,
@@ -2029,6 +2056,17 @@ export function useStudioEditor() {
         if (!isOpenAiTryOnTerminalFailure(look)) {
           setMagicResult(look)
           if (look.status === 'failed') {
+            persistMagicOperation(user.id, {
+              operationId: `smart:${smartOpId}`,
+              kind: 'smart_try_on',
+              smartStage: 'failed',
+              frontJobId: job.id,
+              openaiJobId: job.id,
+              designId: designIdRef.current,
+              sourceRevision: docAtStart.clientRevision,
+              contentFingerprint,
+              updatedAt: new Date().toISOString(),
+            })
             setMagicPhase('failed')
             setMagicError(SMART_TRY_ON_FAILURE)
             setMagicStatusHint(null)
@@ -2038,6 +2076,17 @@ export function useStudioEditor() {
             magicLookUrlRef.current = settled.lookObjectUrl
             setMagicLookUrl(settled.lookObjectUrl)
           }
+          persistMagicOperation(user.id, {
+            operationId: `smart:${smartOpId}`,
+            kind: 'smart_try_on',
+            smartStage: 'completed',
+            frontJobId: job.id,
+            openaiJobId: job.id,
+            designId: designIdRef.current,
+            sourceRevision: docAtStart.clientRevision,
+            contentFingerprint,
+            updatedAt: new Date().toISOString(),
+          })
           setMagicStatusHint(null)
           setMagicPhase('ready')
           return
@@ -2055,11 +2104,22 @@ export function useStudioEditor() {
           failedJob = null
         }
 
-        // #179 — moderation / unknown outcomes do not auto-Max.
+        // #180 — input moderation / unknown stay terminal; output moderation may Max.
         if (!isOpenAiTryOnEligibleForMaxFallback(look, failedJob)) {
+          persistMagicOperation(user.id, {
+            operationId: `smart:${smartOpId}`,
+            kind: 'smart_try_on',
+            smartStage: 'failed',
+            frontJobId: job.id,
+            openaiJobId: job.id,
+            designId: designIdRef.current,
+            sourceRevision: docAtStart.clientRevision,
+            contentFingerprint,
+            updatedAt: new Date().toISOString(),
+          })
           setMagicResult(look)
           setMagicPhase('failed')
-          setMagicError(SMART_TRY_ON_FAILURE)
+          setMagicError(smartTryOnTerminalFailureMessage(failedJob))
           setMagicStatusHint(null)
           return
         }
@@ -2111,8 +2171,11 @@ export function useStudioEditor() {
         })
         persistMagicOperation(user.id, {
           operationId: `smart:${smartOpId}`,
+          kind: 'smart_try_on',
+          smartStage: 'realism',
           frontJobId: job.id,
-          backJobId: realismJob.id,
+          openaiJobId: job.id,
+          realismJobId: realismJob.id,
           designId: designIdRef.current,
           sourceRevision: docAtStart.clientRevision,
           contentFingerprint,
@@ -2179,8 +2242,13 @@ export function useStudioEditor() {
         persistMagicJobId(user.id, maxJob.id)
         persistMagicOperation(user.id, {
           operationId: `smart:${smartOpId}`,
+          kind: 'smart_try_on',
+          smartStage: 'max',
           frontJobId: job.id,
+          openaiJobId: job.id,
+          realismJobId: realismJob.id,
           backJobId: maxJob.id,
+          maxJobId: maxJob.id,
           designId: designIdRef.current,
           sourceRevision: docAtStart.clientRevision,
           contentFingerprint,
@@ -2192,6 +2260,20 @@ export function useStudioEditor() {
         const maxLook = maxSettled.look
         setMagicResult(maxLook)
         if (maxLook.status === 'failed') {
+          persistMagicOperation(user.id, {
+            operationId: `smart:${smartOpId}`,
+            kind: 'smart_try_on',
+            smartStage: 'failed',
+            frontJobId: job.id,
+            openaiJobId: job.id,
+            realismJobId: realismJob.id,
+            backJobId: maxJob.id,
+            maxJobId: maxJob.id,
+            designId: designIdRef.current,
+            sourceRevision: docAtStart.clientRevision,
+            contentFingerprint,
+            updatedAt: new Date().toISOString(),
+          })
           setMagicPhase('failed')
           setMagicError(SMART_TRY_ON_FAILURE)
           setMagicStatusHint(null)
@@ -2201,6 +2283,20 @@ export function useStudioEditor() {
           magicLookUrlRef.current = maxSettled.lookObjectUrl
           setMagicLookUrl(maxSettled.lookObjectUrl)
         }
+        persistMagicOperation(user.id, {
+          operationId: `smart:${smartOpId}`,
+          kind: 'smart_try_on',
+          smartStage: 'completed',
+          frontJobId: job.id,
+          openaiJobId: job.id,
+          realismJobId: realismJob.id,
+          backJobId: maxJob.id,
+          maxJobId: maxJob.id,
+          designId: designIdRef.current,
+          sourceRevision: docAtStart.clientRevision,
+          contentFingerprint,
+          updatedAt: new Date().toISOString(),
+        })
         setMagicStatusHint(null)
         setMagicPhase('ready')
       } catch (err) {
@@ -2211,7 +2307,12 @@ export function useStudioEditor() {
           return
         }
         setMagicPhase('failed')
-        setMagicError(SMART_TRY_ON_FAILURE)
+        const apiMsg = err instanceof ApiError ? err.message : ''
+        if (isAdultsAttestationError(apiMsg)) {
+          setMagicError(apiMsg || ADULTS_ATTESTATION_REQUIRED)
+        } else {
+          setMagicError(SMART_TRY_ON_FAILURE)
+        }
         setMagicStatusHint(null)
         setMagicOpen(true)
       } finally {
@@ -2827,9 +2928,27 @@ export function useStudioEditor() {
     magicAbortRef.current?.abort()
     const controller = new AbortController()
     magicAbortRef.current = controller
-    if (storedOp) setMagicOperationId(storedOp.operationId)
+    if (storedOp && !isSmartTryOnOperationId(storedOp.operationId)) {
+      setMagicOperationId(storedOp.operationId)
+    }
 
     const run = (async () => {
+      // #180 — Smart Try-On ops must NOT go through dual Front/Back recovery.
+      if (storedOp && isSmartTryOnOperationId(storedOp.operationId)) {
+        setMagicResultMode('try_on')
+        setMagicDualActive(false)
+        const recoverId =
+          resolveSmartTryOnRecoverJobId(storedOp) || legacyJobId || null
+        if (!recoverId) {
+          throw new Error(
+            'Smart Try-On is still starting. Wait briefly and recover again — no new generation was started.',
+          )
+        }
+        setMagicJobId(recoverId)
+        persistMagicJobId(user.id, recoverId)
+        await applySettledMagicJob(recoverId, controller.signal)
+        return
+      }
       if (storedOp?.operationId) {
         const dual = await resolveDualMagicJobIds(user.id, controller.signal)
         if (dual) {

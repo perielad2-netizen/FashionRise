@@ -229,22 +229,30 @@ def record_adults_attestation(
 
 
 def _latest_adults_attestation(db: Session, user: User) -> UserConsentEvent | None:
+    """Return the latest valid adults-beta attestation for this account.
+
+    Once checked for the current notice version + hash, it stays valid.
+    ``my_croquis_adults_attestation_max_age_seconds <= 0`` means no time expiry
+    (owner product decision: account-level confirmation, not a daily re-prompt).
+    """
     settings = get_settings()
     try:
         expected_hash = _hash_text(_approved_notice_text(purpose=PURPOSE_ADULTS_BETA))
     except HTTPException:
         return None
-    cutoff = _utcnow() - timedelta(seconds=settings.my_croquis_adults_attestation_max_age_seconds)
+    filters = [
+        UserConsentEvent.owner_id == user.id,
+        UserConsentEvent.purpose == PURPOSE_ADULTS_BETA,
+        UserConsentEvent.adults_attested.is_(True),
+        UserConsentEvent.consent_version == settings.my_croquis_adults_attestation_version,
+        UserConsentEvent.text_hash == expected_hash,
+    ]
+    max_age = int(settings.my_croquis_adults_attestation_max_age_seconds or 0)
+    if max_age > 0:
+        filters.append(UserConsentEvent.created_at >= _utcnow() - timedelta(seconds=max_age))
     return (
         db.query(UserConsentEvent)
-        .filter(
-            UserConsentEvent.owner_id == user.id,
-            UserConsentEvent.purpose == PURPOSE_ADULTS_BETA,
-            UserConsentEvent.adults_attested.is_(True),
-            UserConsentEvent.consent_version == settings.my_croquis_adults_attestation_version,
-            UserConsentEvent.text_hash == expected_hash,
-            UserConsentEvent.created_at >= cutoff,
-        )
+        .filter(*filters)
         .order_by(UserConsentEvent.created_at.desc())
         .first()
     )

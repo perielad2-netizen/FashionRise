@@ -215,13 +215,19 @@ export async function uploadPersonalCroquisPhoto(
     }
   }
   if (!response.ok) {
-    const detail =
+    const detailFromJson =
       typeof parsed === 'object' &&
       parsed !== null &&
       'detail' in parsed &&
       typeof (parsed as { detail: unknown }).detail === 'string'
         ? (parsed as { detail: string }).detail
-        : 'Personal croquis upload failed'
+        : null
+    // Nginx/Cloudflare 413 is often bare HTML — not FastAPI JSON — so surface a clear ask.
+    const detail =
+      detailFromJson ??
+      (response.status === 413
+        ? 'That photo is too large to upload. Try a smaller photo, or wait while FashionRise compresses it and try again.'
+        : 'Personal croquis upload failed')
     throw new ApiError(detail, response.status, parsed)
   }
   return parsed as PersonalCroquisRead

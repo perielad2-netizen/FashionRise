@@ -3,6 +3,14 @@ import type { SharedGarmentSpec } from '@/services/ai/magicGarmentSpec'
 const keyFor = (userId: string) => `fr.magic.lastJob.${userId}`
 const opKeyFor = (userId: string) => `fr.magic.lastOperation.${userId}`
 
+export type SmartTryOnStage =
+  | 'openai'
+  | 'realism'
+  | 'max'
+  | 'completed'
+  | 'failed'
+  | 'unknown'
+
 export type MagicOperationRecord = {
   operationId: string
   frontJobId?: string
@@ -17,6 +25,12 @@ export type MagicOperationRecord = {
   referenceModelId?: string
   sharedGarmentSpec?: SharedGarmentSpec
   updatedAt: string
+  /** #180 — Smart Try-On chain (operationId starts with `smart:`). */
+  kind?: 'dual_magic' | 'smart_try_on'
+  smartStage?: SmartTryOnStage
+  openaiJobId?: string
+  realismJobId?: string
+  maxJobId?: string
 }
 
 export function persistMagicJobId(userId: string, jobId: string): void {
@@ -107,4 +121,19 @@ export function allocateMagicRetryIdempotencyKey(
   }
   persistMagicOperation(userId, next)
   return key
+}
+
+/** Prefer the latest durable Smart Try-On job id for recovery (Max > realism > OpenAI). */
+export function resolveSmartTryOnRecoverJobId(
+  record: MagicOperationRecord | null | undefined,
+): string | null {
+  if (!record) return null
+  return (
+    record.maxJobId ||
+    record.backJobId ||
+    record.realismJobId ||
+    record.openaiJobId ||
+    record.frontJobId ||
+    null
+  )
 }

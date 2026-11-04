@@ -204,6 +204,7 @@ export function MagicLookPanel({
           </button>
         </div>
 
+        <div className={styles.panelBody}>
         {dualActive && dual ? (
           <div className={styles.dualTabs} role="tablist" aria-label="Magic results by side">
             {(['front', 'back'] as const).map((side) => {
@@ -453,10 +454,15 @@ export function MagicLookPanel({
             ) : null}
           </div>
         ) : null}
+        </div>
 
         <div className={styles.actions}>
           {busy ? (
-            <button type="button" onClick={onCancel} title="Generation continues. You can return to your result later.">
+            <button
+              type="button"
+              onClick={onCancel}
+              title="Stops local waiting only. Jobs already started keep running — use Recover result later."
+            >
               Stop waiting
             </button>
           ) : null}

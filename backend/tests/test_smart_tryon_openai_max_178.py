@@ -77,22 +77,32 @@ def test_terminal_failure_classifier_hard_codes(code):
 
 
 @pytest.mark.parametrize(
-    "code,eligible",
+    "code,eligible,extra",
     [
-        ("PROVIDER_TIMEOUT", True),
-        ("PROVIDER_FAILED", True),
-        ("GENERATION_FAILED", True),
-        ("PROVIDER_REJECTED", True),
-        ("PROVIDER_MODERATION_BLOCKED", False),
-        ("PROVIDER_OUTCOME_UNKNOWN", False),
+        ("PROVIDER_TIMEOUT", True, {}),
+        ("PROVIDER_FAILED", True, {}),
+        ("GENERATION_FAILED", True, {}),
+        ("PROVIDER_REJECTED", True, {}),
+        (
+            "PROVIDER_MODERATION_BLOCKED",
+            True,
+            {"provider_rejection": {"moderation_stage": "output"}},
+        ),
+        (
+            "PROVIDER_MODERATION_BLOCKED",
+            True,
+            {"provider_rejection": {"moderation_stage": "input", "categories": ["sexual"]}},
+        ),
+        ("PROVIDER_OUTCOME_UNKNOWN", False, {}),
     ],
 )
-def test_max_fallback_eligibility_excludes_moderation_and_unknown(code, eligible):
-    """#179 — Max auto-fallback is technical failures only."""
+def test_max_fallback_eligibility_excludes_moderation_and_unknown(code, eligible, extra):
+    """#180/#181 — technical + moderation (input/output) may Max; unknown may not."""
+    data = {"error_code": code, "summary": "x", **extra}
     assert (
         is_openai_try_on_eligible_for_max_fallback(
             job_status="failed",
-            result_data={"error_code": code, "summary": "x"},
+            result_data=data,
         )
         is eligible
     )

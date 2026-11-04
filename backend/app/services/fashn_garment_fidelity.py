@@ -200,11 +200,20 @@ def assert_structural_fidelity(
     source_png: bytes,
     product_png: bytes,
     layout: str = "one_piece",
+    category: str | None = None,
 ) -> FidelityVerdict:
-    """Fail closed when realism product abandons source silhouette class."""
+    """Fail closed when realism product abandons source silhouette class.
+
+    ``category`` (tops/bottoms/one-pieces) scopes gates that only apply to one
+    piece class — e.g. neckline must not run on bikini bottoms (waist tip looks
+    like an open neckline and false-blocked Max for owner swimwear #181).
+    """
     source = compute_silhouette_features(source_png)
     product = compute_silhouette_features(product_png)
-    recommended = recommend_fashn_category(layout=layout, features=source)
+    recommended = recommend_fashn_category(
+        layout=layout, piece_category=category, features=source
+    )
+    piece_cat = (category or "").strip().lower()
 
     if source.opaque_pixels < 64:
         return FidelityVerdict(
@@ -288,6 +297,7 @@ def assert_structural_fidelity(
     # fabric edges grow tip ratio 2–4× without filling the V. Owner #164 wrap redesign
     # reached tip_ratio ≈0.25 with growth ≥5. Job 5842e98b (growth ≈3.3, tip ≈0.19) was a
     # borderline relative-only reject with no stored product — require wrap-class evidence.
+    # Never apply to bottoms — a narrow waist tip vs hips is normal bikini geometry (#181).
     src_w15, src_w35, src_w50 = source.width_profile[0], source.width_profile[1], source.width_profile[2]
     prod_w15, prod_w35, prod_w50 = (
         product.width_profile[0],
@@ -298,9 +308,13 @@ def assert_structural_fidelity(
     prod_top_ratio = prod_w15 / max(prod_w50, 1)
     top_growth = prod_top_ratio / max(src_top_ratio, 0.01)
     # Absolute V fill-in, OR wrap-class tip thickening (known #164 restyle band).
-    neckline_changed = src_top_ratio <= 0.55 and (
-        prod_top_ratio >= 0.70
-        or (prod_top_ratio >= 0.22 and top_growth >= 4.5)
+    neckline_changed = (
+        piece_cat != "bottoms"
+        and src_top_ratio <= 0.55
+        and (
+            prod_top_ratio >= 0.70
+            or (prod_top_ratio >= 0.22 and top_growth >= 4.5)
+        )
     )
     if neckline_changed:
         return FidelityVerdict(
