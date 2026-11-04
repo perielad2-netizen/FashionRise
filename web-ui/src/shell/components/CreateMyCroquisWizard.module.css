@@ -155,6 +155,19 @@
   font-size: 0.9rem;
 }
 
+.errorInline {
+  margin: 0;
+  color: #8a1f1f;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.busyHint {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
 @media (max-width: 640px) {
   .dialog {
     width: 100%;

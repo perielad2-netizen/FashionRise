@@ -32,6 +32,7 @@ import {
   croquisNoticesAuthorized,
   sha256Hex,
 } from '@/lib/personalCroquisNotices'
+import { prepareCroquisUpload } from '@/lib/prepareCroquisUpload'
 import styles from './CreateMyCroquisWizard.module.css'
 
 export type CreateMyCroquisWizardProps = {
@@ -69,6 +70,7 @@ export function CreateMyCroquisWizard({
   const [agreed, setAgreed] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [busyLabel, setBusyLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [library, setLibrary] = useState<PersonalCroquisRead[]>([])
   const [aiConsentId, setAiConsentId] = useState<string | null>(null)
@@ -120,8 +122,12 @@ export function CreateMyCroquisWizard({
       return
     }
     setBusy(true)
+    setBusyLabel('Preparing photo…')
     setError(null)
     try {
+      // Phone JPEGs often exceed nginx 12m / backend 10 MB → silent 413 without this.
+      const uploadFile = await prepareCroquisUpload(localFile)
+      setBusyLabel('Uploading…')
       // Distinct auditable backend records from one UI agreement. Order matters:
       // adults → storage → upload (bytes) → AI consent bound to croquis → generate.
       await attestAdults({
@@ -135,7 +141,7 @@ export function CreateMyCroquisWizard({
         notice_version: croquisNoticeVersion('storage'),
         notice_text_hash: await sha256Hex(storageNotice),
       })
-      const created = await uploadPersonalCroquisPhoto(localFile, storageEvent.id)
+      const created = await uploadPersonalCroquisPhoto(uploadFile, storageEvent.id)
       setCroquisId(created.id)
       const ver = acceptedVersionNumber(created)
       if (ver) {
@@ -143,6 +149,7 @@ export function CreateMyCroquisWizard({
         handleClose()
         return
       }
+      setBusyLabel('Starting generate…')
       const aiEvent = await acknowledgeAiConsent({
         acknowledged: true,
         adults_attested: true,
@@ -156,6 +163,7 @@ export function CreateMyCroquisWizard({
       setError(err instanceof ApiError ? err.message : 'Upload & Generate could not start.')
     } finally {
       setBusy(false)
+      setBusyLabel(null)
     }
   }, [adultsNotice, agreed, aiNotice, handleClose, localFile, onPinAccepted, storageNotice])
 
@@ -384,8 +392,16 @@ export function CreateMyCroquisWizard({
 
             <p className={styles.hint}>
               Upload &amp; Generate sends your photo to the AI provider and may incur usage cost
-              under your account limits. Preview stays on this device until you agree.
+              under your account limits. Preview stays on this device until you agree. Large phone
+              photos are compressed on this device before upload.
             </p>
+
+            {error ? (
+              <p className={styles.errorInline} role="alert">
+                {error}
+              </p>
+            ) : null}
+            {busy && busyLabel ? <p className={styles.busyHint}>{busyLabel}</p> : null}
 
             <div className={styles.actions}>
               <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
@@ -397,7 +413,7 @@ export function CreateMyCroquisWizard({
                 disabled={!localFile || !agreed || busy || !aiNotice}
                 onClick={() => void runUploadAndGenerate()}
               >
-                Upload &amp; Generate
+                {busy ? busyLabel || 'Working…' : 'Upload & Generate'}
               </button>
             </div>
           </div>
@@ -488,7 +504,7 @@ export function CreateMyCroquisWizard({
           </div>
         ) : null}
 
-        {error ? (
+        {error && step !== 'compose' ? (
           <p className={styles.error} role="alert">
             {error}
           </p>

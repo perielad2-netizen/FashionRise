@@ -200,6 +200,23 @@ describe('CreateMyCroquisWizard offline harness', () => {
     expect(generatePersonalCroquisVersion).not.toHaveBeenCalled()
   })
 
+  it('surfaces bare 413 upload failures above Upload & Generate', async () => {
+    const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
+    const { ApiError } = await import('@/services/api/client')
+    uploadPersonalCroquisPhoto.mockRejectedValue(
+      new ApiError(
+        'That photo is too large to upload. Try a smaller photo, or wait while FashionRise compresses it and try again.',
+        413,
+        null,
+      ),
+    )
+    render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
+    await selectPhotoAndAgree()
+    fireEvent.click(screen.getByRole('button', { name: /Upload & Generate/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/too large to upload/i)
+    expect(generatePersonalCroquisVersion).not.toHaveBeenCalled()
+  })
+
   it('one checkbox records distinct consents then accepts generated preview', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
     const onPin = vi.fn()
