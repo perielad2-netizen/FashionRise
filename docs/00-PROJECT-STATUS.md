@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-04 (**Magic pale bridal parity** **LIVE** · BE/FE **`d2270d96`** · **0** agent paid calls.)
+**Last updated:** 2026-11-04 (**smart Max soft-pass + footwear** pending · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
