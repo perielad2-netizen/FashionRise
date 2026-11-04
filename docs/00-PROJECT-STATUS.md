@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-04 (**Try-On input-mod copy** **LIVE** · FE **`77b6837e`** · BE tip **`22bbf719`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-04 (**sexual/input → Max** **LIVE** · FE/BE **`968a7838`** · **0** agent paid calls · #175 spend unlock preserved.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`77b6837e`** — release `/var/www/fashionrise/releases/77b6837e` · croquis upload compress + input-mod Try-On copy. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`22bbf719`** · silhouette-lock Max enqueue · open-leg dress detector · OpenAI **`try-on-person-v2.1`** · output-mod Max · durable adults · Alembic **`015`**.
+| Frontend (`web-ui`) | **`968a7838`** — release `/var/www/fashionrise/releases/968a7838` · sexual/input → Max + croquis upload compress. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`968a7838`** · sexual/input moderation → Max · silhouette-lock Max enqueue · OpenAI **`try-on-person-v2.1`** · durable adults · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`77b6837e`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`968a7838`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## #180 P0 Mobile Regression, Smart Failures & Recovery — LIVE (2026-11-02)
@@ -57,6 +57,9 @@ Historical smart Max `ce83af19…` / `941b3a08…`: `get_look` OK · `image_avai
 | Rollback | `/var/backups/fashionrise/smart-tryon-180-20261102T201046Z/ROLLBACK.sh` → FE **`c3658dad`** |
 | Agent paid calls | **0** |
 | Prod pytest | `test_smart_tryon_harden_179` + `test_smart_tryon_openai_max_178` → **29 passed** |
+
+### Hotfix — sexual/input moderation → garment→Max (2026-11-04) — LIVE `968a7838`
+Owner: basic purple swimwear on new croquis was OpenAI **input** `sexual` — not our classifier inventing “sexual”. Product rule restored: moderation fail (input or output) → independent garment realism → Max. Prior #180 “output-only” gate left these on “did not finish”.
 
 ### Hotfix — Try On input safety messaging (2026-11-04) — LIVE FE `77b6837e`
 Owner Smart Try-On on the new beach croquis failed twice (`dfac6af6`, `fe4adeb5`) with OpenAI **input**-stage `sexual` moderation. Max correctly stayed off (#180). UI had been showing generic “did not finish”. Now shows explicit safety-check guidance (try another croquis photo / simplify sketch).
