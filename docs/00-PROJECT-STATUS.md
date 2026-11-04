@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-03 (**#180 Max lock enqueue** **LIVE** · App **`22bbf719`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
+**Last updated:** 2026-11-04 (**Create My Croquis upload 413** **LIVE** · FE **`dd234423`** · BE tip **`22bbf719`** · OpenAI prompt **`try-on-person-v2.1`** · **0** agent paid calls · #175 spend unlock preserved.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`7169194f`** FE release kept (`/var/www/fashionrise/releases/995337ca`) · BE tip **`22bbf719`**. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`dd234423`** — release `/var/www/fashionrise/releases/dd234423` · croquis upload compress + visible 413. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`22bbf719`** · silhouette-lock Max enqueue · open-leg dress detector · OpenAI **`try-on-person-v2.1`** · output-mod Max · durable adults · Alembic **`015`**.
-| AI worker | `fashionrise-ai-worker` restarted · croquis **v5** unchanged |
-| Database | `fashionrise_beta` — Alembic **`015`** (unchanged; no migration for #180) |
-| Nginx | unchanged routes · FE `current` → **`7169194f`** / **`995337ca`** |
+| AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
+| Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`dd234423`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## #180 P0 Mobile Regression, Smart Failures & Recovery — LIVE (2026-11-02)
@@ -57,6 +57,10 @@ Historical smart Max `ce83af19…` / `941b3a08…`: `get_look` OK · `image_avai
 | Rollback | `/var/backups/fashionrise/smart-tryon-180-20261102T201046Z/ROLLBACK.sh` → FE **`c3658dad`** |
 | Agent paid calls | **0** |
 | Prod pytest | `test_smart_tryon_harden_179` + `test_smart_tryon_openai_max_178` → **29 passed** |
+
+### Hotfix — Create My Croquis silent Upload & Generate (2026-11-04) — LIVE FE `dd234423`
+Owner mobile (Samsung, ~21:28 Israel): Upload & Generate disabled briefly then re-enabled with **no new croquis** and no visible error. Nginx access log: **`POST /api/v1/personal-croquis/photos` → 413** (phone JPEG >12m). Edge HTML 413 never became a FastAPI JSON detail, so the wizard showed nothing useful above the fold.
+**Fix:** on-device compress/downscale under 8 MB before upload; Preparing/Uploading label on the primary button; clear 413 alert above the actions; nginx photos body limit **12m→25m**. Backup `/var/backups/fashionrise/croquis-upload-413-20261104T193657Z/ROLLBACK.sh`.
 
 ### Hotfix — silhouette lock Max enqueue (2026-11-03) — LIVE App `22bbf719`
 Owner App `7169194f` retest (same green open-leg sketch): OpenAI output-mod → realism **locked** (`d0b6510c`, `structure_preserving_local`) → **POST /personal-try-on 422** “sketch-like garment plate” → “Did not finish”. Root cause: `decode_data_url_png` RGBA-re-encoded productize RGB back to the source-plate SHA, and sketch_prep shares the productize SHA. **Fix:** preserve original PNG bytes on decode; skip sketch-like SHA / soft fidelity when `structure_preserving_local`. BE-only deploy **`22bbf719`**.
