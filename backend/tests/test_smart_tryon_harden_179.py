@@ -60,8 +60,8 @@ def _trousers_png() -> bytes:
     return _png(draw)
 
 
-def test_moderation_output_eligible_input_and_unknown_excluded():
-    """#180 — output moderation may Max; input moderation / unknown must not."""
+def test_moderation_input_and_output_eligible_unknown_excluded():
+    """#180/#181 — moderation (input or output, incl. sexual) may Max; unknown must not."""
     assert "PROVIDER_OUTCOME_UNKNOWN" in SMART_FALLBACK_EXCLUDED_CODES
     assert "PROVIDER_TIMEOUT" in SMART_FALLBACK_ERROR_CODES
 
@@ -87,10 +87,10 @@ def test_moderation_output_eligible_input_and_unknown_excluded():
             job_status="failed",
             result_data={
                 "error_code": "PROVIDER_MODERATION_BLOCKED",
-                "provider_rejection": {"moderation_stage": "input"},
+                "provider_rejection": {"moderation_stage": "input", "categories": ["sexual"]},
             },
         )
-        is False
+        is True
     )
     assert (
         is_openai_try_on_eligible_for_max_fallback(
@@ -293,7 +293,7 @@ def test_forged_smart_fallback_rejected_without_primary(monkeypatch):
     _clear()
 
 
-def test_authorize_rejects_input_moderation_allows_output(monkeypatch):
+def test_authorize_allows_input_and_output_moderation(monkeypatch):
     from app.services import personal_try_on as pts
 
     monkeypatch.setenv("MY_CROQUIS_AI_ENABLED", "true")
@@ -337,20 +337,19 @@ def test_authorize_rejects_input_moderation_allows_output(monkeypatch):
 
     input_primary = _primary("input")
     db.get.return_value = input_primary
-    with pytest.raises(HTTPException) as ei:
-        pts._authorize_smart_max_fallback(
-            db,
-            user,
-            smart_operation_id="op-1",
-            primary_try_on_job_id=input_primary.id,
-            croquis_id=croquis_id,
-            croquis_version=1,
-            garment_fingerprint="a" * 64,
-            content_fingerprint="b" * 32,
-            source_revision=1,
-            client_reason="PROVIDER_MODERATION_BLOCKED",
-        )
-    assert ei.value.status_code == 422
+    inbound = pts._authorize_smart_max_fallback(
+        db,
+        user,
+        smart_operation_id="op-1",
+        primary_try_on_job_id=input_primary.id,
+        croquis_id=croquis_id,
+        croquis_version=1,
+        garment_fingerprint="a" * 64,
+        content_fingerprint="b" * 32,
+        source_revision=1,
+        client_reason="PROVIDER_MODERATION_BLOCKED",
+    )
+    assert inbound["primary_job_id"] == str(input_primary.id)
 
     output_primary = _primary("output")
     db.get.return_value = output_primary

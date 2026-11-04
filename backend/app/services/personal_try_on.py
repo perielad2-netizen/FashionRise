@@ -208,8 +208,12 @@ def is_openai_try_on_eligible_for_max_fallback(
         return False
     if code in SMART_FALLBACK_EXCLUDED_CODES:
         return False
+    # Owner product rule: sexual / moderation fails (input or output) → garment
+    # realism → Max. Max never replays the blocked OpenAI request; it uses an
+    # independent prep plate. OpenAI routinely input-flags basic swimwear as
+    # sexual — staying terminal left owners on "did not finish" with no Max.
     if code == "PROVIDER_MODERATION_BLOCKED":
-        return _openai_moderation_stage(data) == "output"
+        return True
     if code in SMART_FALLBACK_ERROR_CODES:
         return True
     # Failed without a structured code is not proof of an eligible failure.
@@ -337,12 +341,7 @@ def _authorize_smart_max_fallback(
         error_message=primary.error_message,
     ):
         code = str(p_result.get("error_code") or "").strip().upper()
-        stage = _openai_moderation_stage(p_result)
-        if (
-            code in SMART_FALLBACK_EXCLUDED_CODES
-            or p_result.get("reconciliation_required")
-            or (code == "PROVIDER_MODERATION_BLOCKED" and stage != "output")
-        ):
+        if code in SMART_FALLBACK_EXCLUDED_CODES or p_result.get("reconciliation_required"):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(

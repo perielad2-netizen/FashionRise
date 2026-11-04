@@ -90,14 +90,14 @@ def test_terminal_failure_classifier_hard_codes(code):
         ),
         (
             "PROVIDER_MODERATION_BLOCKED",
-            False,
-            {"provider_rejection": {"moderation_stage": "input"}},
+            True,
+            {"provider_rejection": {"moderation_stage": "input", "categories": ["sexual"]}},
         ),
         ("PROVIDER_OUTCOME_UNKNOWN", False, {}),
     ],
 )
 def test_max_fallback_eligibility_excludes_moderation_and_unknown(code, eligible, extra):
-    """#180 — technical + output moderation may Max; input/unknown may not."""
+    """#180/#181 — technical + moderation (input/output) may Max; unknown may not."""
     data = {"error_code": code, "summary": "x", **extra}
     assert (
         is_openai_try_on_eligible_for_max_fallback(

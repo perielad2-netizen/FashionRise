@@ -24,7 +24,7 @@ describe('smartTryOn (#178/#179/#180)', () => {
     ).toBe(false)
   })
 
-  it('allows Max only for output-stage moderation, not input (#180)', () => {
+  it('allows Max for input and output sexual moderation (#181)', () => {
     const failed = {
       status: 'failed' as const,
       summary: 'blocked',
@@ -56,7 +56,8 @@ describe('smartTryOn (#178/#179/#180)', () => {
     }
     expect(isOpenAiTryOnTerminalFailure(failed, outputMod)).toBe(true)
     expect(isOpenAiTryOnEligibleForMaxFallback(failed, outputMod)).toBe(true)
-    expect(isOpenAiTryOnEligibleForMaxFallback(failed, inputMod)).toBe(false)
+    expect(isOpenAiTryOnEligibleForMaxFallback(failed, inputMod)).toBe(true)
+    // Terminal copy only if Max path could not start.
     expect(smartTryOnTerminalFailureMessage(inputMod)).toBe(SMART_TRY_ON_INPUT_MODERATION)
     expect(smartTryOnTerminalFailureMessage(inputMod).toLowerCase()).toMatch(/safety checks/)
 

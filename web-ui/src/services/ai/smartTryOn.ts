@@ -53,8 +53,9 @@ export function isOpenAiTryOnTerminalFailure(
 }
 
 /**
- * #180 — Max fallback for technical failures and output-stage moderation only.
- * Input moderation / unknown outcomes stay on recover/reconcile.
+ * #180/#181 — Max fallback for technical failures and moderation blocks
+ * (input or output, including sexual). Unknown outcomes stay terminal.
+ * Max uses independent garment prep — it does not replay blocked OpenAI pixels.
  */
 export function isOpenAiTryOnEligibleForMaxFallback(
   look: Pick<MagicLookResult, 'status'> | null | undefined,
@@ -67,25 +68,22 @@ export function isOpenAiTryOnEligibleForMaxFallback(
       : ''
   if (job?.result_data?.reconciliation_required === true) return false
   if (code && EXCLUDED_FALLBACK_ERROR_CODES.has(code)) return false
-  if (code === 'PROVIDER_MODERATION_BLOCKED') {
-    return moderationStage(job) === 'output'
-  }
+  if (code === 'PROVIDER_MODERATION_BLOCKED') return true
   if (code && ELIGIBLE_FALLBACK_ERROR_CODES.has(code)) return true
   return false
 }
 
-/** Owner-facing copy when Smart Try-On stops without Max (prefer input-mod clarity). */
+/** Owner-facing copy when Smart Try-On stops without Max. */
 export function smartTryOnTerminalFailureMessage(job?: AiJobRead | null): string {
   const code =
     typeof job?.result_data?.error_code === 'string'
       ? String(job.result_data.error_code).trim().toUpperCase()
       : ''
-  if (code === 'PROVIDER_MODERATION_BLOCKED' && moderationStage(job) === 'input') {
-    return SMART_TRY_ON_INPUT_MODERATION
-  }
-  if (code === 'PROVIDER_MODERATION_BLOCKED' && moderationStage(job) === 'output') {
-    // Eligible path normally continues to Max; if Max was unavailable, keep generic.
-    return SMART_TRY_ON_FAILURE
+  // Moderation is normally Max-eligible; this copy is only if Max could not start.
+  if (code === 'PROVIDER_MODERATION_BLOCKED') {
+    return moderationStage(job) === 'input'
+      ? SMART_TRY_ON_INPUT_MODERATION
+      : SMART_TRY_ON_FAILURE
   }
   const summary =
     typeof job?.result_data?.summary === 'string' ? job.result_data.summary.trim() : ''
