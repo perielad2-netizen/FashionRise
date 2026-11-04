@@ -11,6 +11,10 @@ export const SMART_TRY_ON_STATUS = 'Generating your try-on preview...'
 export const SMART_TRY_ON_FAILURE =
   'We could not create a try-on preview for this design. Your sketch is unchanged — you can edit and try again.'
 
+/** Input-stage safety block — Max must not run; be explicit so Recover is not a dead end. */
+export const SMART_TRY_ON_INPUT_MODERATION =
+  'The photo or sketch was blocked by image safety checks before a try-on could start. Try a different personal croquis photo, or simplify the sketch, then try again. Your sketch is unchanged.'
+
 export const SMART_TRY_ON_STOP_WAITING =
   'Stopped waiting. Any job already started on the server keeps running — use Recover result to resume. This does not refund or cancel provider charges.'
 
@@ -68,6 +72,25 @@ export function isOpenAiTryOnEligibleForMaxFallback(
   }
   if (code && ELIGIBLE_FALLBACK_ERROR_CODES.has(code)) return true
   return false
+}
+
+/** Owner-facing copy when Smart Try-On stops without Max (prefer input-mod clarity). */
+export function smartTryOnTerminalFailureMessage(job?: AiJobRead | null): string {
+  const code =
+    typeof job?.result_data?.error_code === 'string'
+      ? String(job.result_data.error_code).trim().toUpperCase()
+      : ''
+  if (code === 'PROVIDER_MODERATION_BLOCKED' && moderationStage(job) === 'input') {
+    return SMART_TRY_ON_INPUT_MODERATION
+  }
+  if (code === 'PROVIDER_MODERATION_BLOCKED' && moderationStage(job) === 'output') {
+    // Eligible path normally continues to Max; if Max was unavailable, keep generic.
+    return SMART_TRY_ON_FAILURE
+  }
+  const summary =
+    typeof job?.result_data?.summary === 'string' ? job.result_data.summary.trim() : ''
+  if (summary && summary.length < 280) return summary
+  return SMART_TRY_ON_FAILURE
 }
 
 export function newSmartOperationId(): string {

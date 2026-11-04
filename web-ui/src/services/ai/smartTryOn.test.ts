@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   SMART_TRY_ON_FAILURE,
+  SMART_TRY_ON_INPUT_MODERATION,
   SMART_TRY_ON_STATUS,
   SMART_TRY_ON_STOP_WAITING,
   isOpenAiTryOnEligibleForMaxFallback,
   isOpenAiTryOnTerminalFailure,
   isSmartTryOnOperationId,
+  smartTryOnTerminalFailureMessage,
 } from './smartTryOn'
 import { resolveSmartTryOnRecoverJobId } from './magicJobStore'
 
@@ -55,6 +57,8 @@ describe('smartTryOn (#178/#179/#180)', () => {
     expect(isOpenAiTryOnTerminalFailure(failed, outputMod)).toBe(true)
     expect(isOpenAiTryOnEligibleForMaxFallback(failed, outputMod)).toBe(true)
     expect(isOpenAiTryOnEligibleForMaxFallback(failed, inputMod)).toBe(false)
+    expect(smartTryOnTerminalFailureMessage(inputMod)).toBe(SMART_TRY_ON_INPUT_MODERATION)
+    expect(smartTryOnTerminalFailureMessage(inputMod).toLowerCase()).toMatch(/safety checks/)
 
     const timeoutJob = {
       ...outputMod,

@@ -101,6 +101,7 @@ import {
   SMART_TRY_ON_STATUS,
   SMART_TRY_ON_STOP_WAITING,
   isOpenAiTryOnEligibleForMaxFallback,
+  smartTryOnTerminalFailureMessage,
   isOpenAiTryOnTerminalFailure,
   isSmartTryOnOperationId,
   newSmartOperationId,
@@ -2118,7 +2119,7 @@ export function useStudioEditor() {
           })
           setMagicResult(look)
           setMagicPhase('failed')
-          setMagicError(SMART_TRY_ON_FAILURE)
+          setMagicError(smartTryOnTerminalFailureMessage(failedJob))
           setMagicStatusHint(null)
           return
         }
