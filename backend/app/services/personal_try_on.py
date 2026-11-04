@@ -2129,9 +2129,23 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "category": gen_cat,
                 }
                 verdict_ok = True
+            fid_public = verdict.public_dict()
+            # #184 — structure-locked / recovered plates must not leave piece.fidelity.ok=false
+            # or Smart Try-On FE refuses Max even when fidelity_ok=true / block_fashn=false.
+            if used_structure_preserving:
+                fid_public = {
+                    **fid_public,
+                    "ok": True,
+                    "code": "FIDELITY_OK_STRUCTURE_LOCK",
+                    "message": (
+                        "Silhouette locked to Studio plate — piece fidelity soft-passed for Max."
+                    ),
+                    "diagnostic_code": verdict.code,
+                    "diagnostic_message": verdict.message,
+                }
             meta = {
                 **meta,
-                "fidelity": verdict.public_dict(),
+                "fidelity": fid_public,
                 "category": gen_cat,
                 "structure_preserving_local": used_structure_preserving
                 or bool(meta.get("structure_preserving_local")),
@@ -2235,7 +2249,7 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                     "sha256": hashlib.sha256(product_png).hexdigest(),
                     # Prefer hash of the plate bytes we productized — not a client-supplied field.
                     "source_plate_sha256": hashlib.sha256(plate_png).hexdigest(),
-                    "fidelity": verdict.public_dict(),
+                    "fidelity": fid_public,
                 }
             )
             metas.append(meta)

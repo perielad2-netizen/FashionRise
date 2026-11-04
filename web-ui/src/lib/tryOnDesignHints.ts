@@ -175,6 +175,39 @@ export function detectBilateralSleevesFromFills(
 }
 
 /**
+ * Dark footwear ink near the feet / hem (#184).
+ * Heuristic: dark stroke or fill whose bounds sit in the lower ~22% of the plane.
+ */
+export function detectFootwearInk(
+  strokes: Stroke[],
+  fills: FillOp[],
+  designHeight = 1024,
+): boolean {
+  const footBand = designHeight * 0.78
+  for (const stroke of strokes) {
+    if (stroke.tool !== 'draw') continue
+    if (!isOutlineInk(stroke.color || '')) continue
+    const b = strokeBounds(stroke)
+    if (!b) continue
+    if (b.minY >= footBand && b.maxY > footBand) return true
+  }
+  for (const fill of fills) {
+    const style = fill.style
+    const hex =
+      style.kind === 'solid'
+        ? style.color
+        : style.kind === 'gradient'
+          ? style.colors[0]
+          : ''
+    if (!hex || !isOutlineInk(hex)) continue
+    const b = fillBounds(fill)
+    if (!b) continue
+    if (b.minY >= footBand && b.maxY > footBand) return true
+  }
+  return false
+}
+
+/**
  * Deterministic Studio geometry: two separate lower fills that look like trouser legs.
  * Avoids dresses/skirts (single wide lower fill) and swimsuits (high hem).
  */
@@ -281,6 +314,14 @@ export function buildTryOnDesignHints(args: {
     pushUnique(
       priority,
       'sleeves: both arms have sleeves in the artwork — keep both; do not invent one-shoulder or drop a sleeve',
+    )
+  }
+
+  // #184 — dark footwear ink near the hem/feet must replace photo shoes/boots.
+  if (detectFootwearInk(args.strokes, fills)) {
+    pushUnique(
+      priority,
+      'footwear: drawn shoes/boots in image 2 — replace the photo shoes; do not keep original boots',
     )
   }
 

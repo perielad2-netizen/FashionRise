@@ -2199,12 +2199,17 @@ export function useStudioEditor() {
           pieces?: FashnRealisticPiece[]
           fidelity_ok?: boolean
           block_fashn?: boolean
+          structure_preserving_local?: boolean
         }
         const pieces = Array.isArray(realismData.pieces) ? realismData.pieces : []
+        // #184 — trust job-level fidelity_ok / block_fashn. Structure-locked recoveries
+        // may still carry diagnostic piece.fidelity.ok=false; that must not stop Max.
         const fidelityBlocked =
           realismData.block_fashn === true ||
           realismData.fidelity_ok === false ||
-          pieces.some((p) => p.fidelity && p.fidelity.ok === false)
+          (realismData.fidelity_ok !== true &&
+            realismData.structure_preserving_local !== true &&
+            pieces.some((p) => p.fidelity && p.fidelity.ok === false))
         if (realismSettled.status !== 'completed' || pieces.length === 0 || fidelityBlocked) {
           setMagicPhase('failed')
           setMagicError(SMART_TRY_ON_FAILURE)

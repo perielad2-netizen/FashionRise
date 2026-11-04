@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTryOnDesignHints,
   detectBilateralSleevesFromFills,
+  detectFootwearInk,
   detectOpenNecklineFromFills,
   detectTrouserLegFills,
 } from '@/lib/tryOnDesignHints'
@@ -113,6 +114,19 @@ describe('buildTryOnDesignHints', () => {
       },
     ]
     expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
+  })
+
+  it('detects dark footwear ink near the feet (#184)', () => {
+    const strokes: Stroke[] = [
+      stroke({
+        id: 'shoe',
+        color: '#111111',
+        points: [300, 900, 0.5, 340, 940, 0.5, 360, 980, 0.5],
+      }),
+    ]
+    expect(detectFootwearInk(strokes, [])).toBe(true)
+    const hints = buildTryOnDesignHints({ strokes, fills: [] })
+    expect(hints.some((h) => /footwear|shoes|boots/i.test(h))).toBe(true)
   })
 
   it('promotes pale bridal fills and skips outline ink as solid fill (#182)', () => {
