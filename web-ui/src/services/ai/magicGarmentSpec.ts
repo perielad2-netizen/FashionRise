@@ -6,6 +6,10 @@ import {
 } from '@/lib/draftDocument'
 import { FABRIC_PRESETS, type FillOp } from '@/lib/fills'
 import { sampleColorFromStyle } from '@/lib/paintFills'
+import {
+  detectBilateralSleevesFromFills,
+  detectOpenNecklineFromFills,
+} from '@/lib/tryOnDesignHints'
 
 type SideBag = { strokes: StudioDraftDocument['strokes']; fills: FillOp[] }
 
@@ -22,12 +26,37 @@ export type SharedGarmentSpec = {
   garment_category?: string
 }
 
+function parseHex(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([0-9A-Fa-f]{6})$/.exec(hex.trim())
+  if (!m) return null
+  const n = Number.parseInt(m[1]!, 16)
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+}
+
+/** Near-black outline ink is linework — never a bridal fill (#182/#183). */
+function isOutlineInk(hex: string): boolean {
+  const c = parseHex(hex)
+  if (!c) return false
+  return (c.r + c.g + c.b) / 3 <= 40
+}
+
+function isPaleFabric(hex: string): boolean {
+  const c = parseHex(hex)
+  if (!c) return false
+  return (c.r + c.g + c.b) / 3 >= 185
+}
+
 function fillMaterialColors(fill: FillOp): string[] {
   const style = fill.style
   // Applied solid/gradient pigment and built-in fabric presets.
   // Uploaded fabric has no client hex — never invent one.
-  if (style.kind === 'solid') return [style.color]
-  if (style.kind === 'gradient') return [...style.colors]
+  // Skip outline-ink solids so #111111 does not become "main" bridal fabric.
+  if (style.kind === 'solid') {
+    return isOutlineInk(style.color) ? [] : [style.color]
+  }
+  if (style.kind === 'gradient') {
+    return style.colors.filter((c) => !isOutlineInk(c))
+  }
   if (style.kind === 'fabric') return [sampleColorFromStyle(style)]
   return []
 }
@@ -117,6 +146,32 @@ const MAGIC_ENHANCEMENT_NOTES =
   'ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; ' +
   'normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble); no traced/cartoon look.'
 
+/** #183 — pale bridal / open neckline / both sleeves (same contract as Try On). */
+function paleBridalNotes(front: SideBag, back: SideBag, mainColors: string[]): string[] {
+  const notes: string[] = []
+  const fills = [...front.fills, ...back.fills]
+  const pale = mainColors.some((c) => isPaleFabric(c))
+  if (pale) {
+    notes.push(
+      'intentional pale/cream/ivory/peach fabric — opaque garment, not empty paper or croquis body',
+    )
+  }
+  if (detectOpenNecklineFromFills(fills) || detectOpenNecklineFromFills(front.fills)) {
+    notes.push(
+      'neckline: deep open / plunging V as drawn — keep cleavage opening; do not fill or raise to a high neck',
+    )
+  }
+  if (
+    detectBilateralSleevesFromFills(fills) ||
+    detectBilateralSleevesFromFills(front.fills)
+  ) {
+    notes.push(
+      'sleeves: both arms have sleeves as drawn — keep both; do not invent one-shoulder or drop a sleeve',
+    )
+  }
+  return notes
+}
+
 /** Bounded garment context for dual Magic — no invented garment details. */
 export function buildSharedGarmentSpec(
   doc: StudioDraftDocument,
@@ -128,6 +183,7 @@ export function buildSharedGarmentSpec(
   const { colors, main_colors } = paletteFromDoc(doc)
   const materials = materialsFromDoc(doc)
   const fingerprint = draftContentFingerprint(doc)
+  const bridal = paleBridalNotes(front, back, main_colors)
   const details = [
     `model=${doc.model}`,
     `front_strokes=${front.strokes.length}`,
@@ -138,11 +194,13 @@ export function buildSharedGarmentSpec(
     'sketch_role=strong_guidance_not_pixel_trace',
     'color_authority=applied_fills_only',
     'sketch_cleanup=normalize_imperfections',
+    ...(bridal.length ? ['pale_bridal_fidelity=1'] : []),
     `fingerprint=${fingerprint.slice(0, 64)}`,
   ].join('; ')
   // Keep designer notes when provided; always append enhancement intent for Front+Back.
   const notesParts = [
     ...(trimmedNotes ? [trimmedNotes] : []),
+    ...bridal,
     MAGIC_ENHANCEMENT_NOTES,
   ]
   return {

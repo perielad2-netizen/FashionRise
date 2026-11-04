@@ -90,3 +90,39 @@ def test_try_on_prompt_v2_2_bridal_rules():
     assert "both sleeves" in prompt.lower()
     assert "swimwear" not in prompt.lower()
     assert "lingerie" not in prompt.lower()
+
+
+def test_magic_sketch_visibility_lifts_pale_off_white_paper():
+    from app.services.garment_upper_geometry import (
+        MAGIC_PAPER_RGB,
+        prepare_magic_sketch_visibility,
+    )
+
+    # White paper + cream dress panel.
+    im = Image.new("RGBA", (120, 160), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(im)
+    draw.rectangle([30, 20, 90, 140], fill=(248, 244, 240, 255))
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    out, meta = prepare_magic_sketch_visibility(buf.getvalue())
+    assert meta["paper_adjusted"] is True
+    assert meta["pale_pixels_deepened"] > 0
+    with Image.open(io.BytesIO(out)) as rgb:
+        assert rgb.mode == "RGB"
+        assert rgb.getpixel((5, 5)) == MAGIC_PAPER_RGB
+        cream = rgb.getpixel((60, 80))
+        assert sum(cream) / 3 < 248  # deepened vs source cream
+        assert sum(cream) / 3 > 170  # still pale bridal, not charcoal
+
+
+def test_magic_coverage_contract_mentions_pale_neckline_sleeves():
+    from app.services import sketch_openai
+
+    prompt = sketch_openai._build_image_prompt(
+        {"summary": "cream gown", "image_prompt": "long dress"},
+        "cream gown",
+    )
+    assert "plunging" in prompt.lower()
+    assert "drop a sleeve" in prompt.lower()
+    assert "pale cream" in prompt.lower()
+    assert "darkened" in prompt.lower() or "paper" in prompt.lower()

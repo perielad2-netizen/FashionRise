@@ -50,9 +50,12 @@ _COVERAGE_PRESERVATION_CONTRACT = (
     "Never invent an extra bodysuit, white lining, modesty insert, or coverage panel. "
     "Preserve intentionally drawn white or pale fabric only when garment material is "
     "actually present in the sketch. Do not reinterpret bare skin or croquis body tone "
-    "as opaque fabric. When coverage fields are missing, null, unknown, or contradictory, "
-    "rely on the uploaded sketch only — do not invent bare-skin regions or extra fabric "
-    "panels, or make the design more revealing or more covered."
+    "as opaque fabric. Keep plunging/open necklines and sleeve count as drawn — do not "
+    "fill cleavage, raise a high neck, or drop a sleeve. Pale cream/ivory/peach/white "
+    "fabric is opaque garment, not empty paper. When coverage fields are missing, null, "
+    "unknown, or contradictory, rely on the uploaded sketch only — do not invent "
+    "bare-skin regions or extra fabric panels, or make the design more revealing or more "
+    "covered."
 )
 
 # Applied-fill color authority — outlines must not become fabric; never invent accents.
@@ -887,6 +890,8 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         "change applied colors, alter the silhouette, add unnecessary accessories, invent white "
         "linings/bodysuits/modesty panels, or make every design look like the same generic "
         "fashion outfit. "
+        "If sketch paper was darkened for pale-fabric readability, that tint is NOT clothing; "
+        "keep intentional pale cream colors; still output on a clean light background. "
         f"{_ILLUSTRATION_STYLE_CONTRACT}"
     )
     # Reserve space for a separating space + design evidence block when budget allows.
@@ -1439,6 +1444,34 @@ def _generate_and_store_look_image(client: OpenAI, job: AIJob, structured: Any, 
                     "error_type": "NoSketchImage",
                 }
             ),
+        )
+
+    # #183 — pale bridal fills vanish on near-white Studio paper; lift contrast for
+    # Magic edit only (croquis underlay kept). Try On uses a separate charcoal matte.
+    from app.services.garment_upper_geometry import (
+        analyze_upper_garment_geometry,
+        magic_upper_design_hints,
+        prepare_magic_sketch_visibility,
+    )
+
+    sketch_bytes, sketch_mime = sketch
+    vis_bytes, vis_meta = prepare_magic_sketch_visibility(sketch_bytes)
+    sketch = (vis_bytes, sketch_mime)
+    upper_hints = magic_upper_design_hints(analyze_upper_garment_geometry(sketch_bytes))
+    if upper_hints and isinstance(structured, dict):
+        # Fold into free-text evidence without inventing garment facts beyond geometry.
+        prior = str(structured.get("image_prompt") or "").strip()
+        extra = "; ".join(upper_hints)
+        structured = {
+            **structured,
+            "image_prompt": f"{prior} {extra}".strip() if prior else extra,
+        }
+    if vis_meta.get("paper_adjusted") or vis_meta.get("pale_pixels_deepened"):
+        logger.info(
+            "OpenAI job %s: magic pale visibility paper=%s deepened=%s",
+            job.id,
+            vis_meta.get("paper_adjusted"),
+            vis_meta.get("pale_pixels_deepened"),
         )
 
     prompt = _build_image_prompt(structured, summary, job=job)
