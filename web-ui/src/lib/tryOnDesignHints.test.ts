@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildTryOnDesignHints, detectTrouserLegFills } from '@/lib/tryOnDesignHints'
+import {
+  buildTryOnDesignHints,
+  detectBilateralSleevesFromFills,
+  detectOpenNecklineFromFills,
+  detectTrouserLegFills,
+} from '@/lib/tryOnDesignHints'
 import type { FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
 
@@ -108,6 +113,53 @@ describe('buildTryOnDesignHints', () => {
       },
     ]
     expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
+  })
+
+  it('promotes pale bridal fills and skips outline ink as solid fill (#182)', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'outline-noise',
+        contour: [10, 10, 30, 10, 30, 30, 10, 30],
+        seedX: 20,
+        seedY: 20,
+        style: { kind: 'solid', color: '#111111' },
+      },
+      {
+        id: 'gown',
+        // Deep V: shoulders high at y=80, center contour dips to y=260.
+        contour: [200, 80, 360, 80, 400, 200, 380, 900, 180, 900, 160, 200, 280, 260],
+        seedX: 300,
+        seedY: 500,
+        style: { kind: 'gradient', colors: ['#F8F4F0', '#D4AF9B'] },
+      },
+      {
+        id: 'leftSleeve',
+        contour: [40, 120, 160, 120, 160, 320, 40, 320],
+        seedX: 100,
+        seedY: 200,
+        style: { kind: 'solid', color: '#F8F4F0' },
+      },
+      {
+        id: 'rightSleeve',
+        contour: [600, 120, 720, 120, 720, 320, 600, 320],
+        seedX: 660,
+        seedY: 200,
+        style: { kind: 'solid', color: '#F8F4F0' },
+      },
+    ]
+    expect(detectOpenNecklineFromFills(fills)).toBe(true)
+    expect(detectBilateralSleevesFromFills(fills)).toBe(true)
+    const hints = buildTryOnDesignHints({
+      strokes: [stroke({ points: [100, 40, 0.5, 140, 60, 0.5], color: '#111111' })],
+      fills,
+    })
+    expect(hints.some((h) => /plunging|cleavage|open/i.test(h))).toBe(true)
+    expect(hints.some((h) => /both.*sleeve/i.test(h))).toBe(true)
+    expect(hints.some((h) => /pale|cream|ivory/i.test(h))).toBe(true)
+    expect(hints.some((h) => h.includes('solid fill color #111111'))).toBe(false)
+    const colorHint = hints.find((h) => h.startsWith('exact designer colors:'))
+    expect(colorHint).toBeTruthy()
+    expect(colorHint).not.toMatch(/#111111/)
   })
 
   it('keeps trouser geometry hints inside the 8-hint budget (#172)', () => {
