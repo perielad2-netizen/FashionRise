@@ -1031,6 +1031,7 @@ def enqueue_personal_try_on(
                 source_png=plate_png,
                 product_png=png,
                 layout=sketch_prep.layout,
+                category=cat if cat != "auto" else None,
             )
             fidelity_reports.append(verdict.public_dict())
             if not verdict.ok and not structure_preserving:
@@ -2096,10 +2097,31 @@ def complete_garment_realism_job(db: Session, job: AIJob) -> dict[str, Any]:
                 source_png=plate_png,
                 product_png=product_png,
                 layout="two_piece" if cat in {"tops", "bottoms"} else "one_piece",
+                category=gen_cat,
             )
             # For locked/recovered local plates, silhouette fidelity is the contract —
             # do not fail closed on soft sketch-vs-product texture differences.
             verdict_ok = True if used_structure_preserving else bool(verdict.ok)
+            # #181 — generative fidelity fail: recover to local plate so Max can still run
+            # (owner: sexual/moderation → garment → Max must not die on neckline false positives).
+            if (
+                not verdict_ok
+                and not used_structure_preserving
+                and structure_contra is None
+            ):
+                recovered_png, recovered_meta = productize_filled_plate(plate_png)
+                product_png = recovered_png
+                used_structure_preserving = True
+                any_structure_preserving = True
+                provider_id = LOCAL_PRODUCT_PROVIDER_ID
+                meta = {
+                    **recovered_meta,
+                    "structure_preserving_local": True,
+                    "structure_reason": "recovered_from_fidelity_failure",
+                    "generative_rejected_fidelity": verdict.public_dict(),
+                    "category": gen_cat,
+                }
+                verdict_ok = True
             meta = {
                 **meta,
                 "fidelity": verdict.public_dict(),

@@ -169,8 +169,43 @@ def test_bikini_bottom_coverage_preserved_by_local_productize():
         source_png=bottom.png_bytes,
         product_png=product,
         layout="two_piece",
+        category="bottoms",
     )
     assert verdict.ok is True
+
+
+def test_neckline_gate_skips_bottoms_category():
+    """#181 — waist tip on bikini bottoms must not trip FIDELITY_NECKLINE_CHANGED."""
+    prep = prepare_garment_reference(_purple_bikini_sketch())
+    bottom = prep.pieces[1].png_bytes
+    # Synthetic "product" that thickens the top of the bottoms plate (waist fill-in).
+    from PIL import Image, ImageDraw
+
+    im = Image.open(io.BytesIO(bottom)).convert("RGBA")
+    w, h = im.size
+    draw = ImageDraw.Draw(im)
+    # Fill upper band so tip/mid ratio looks like a "closed neckline".
+    draw.rectangle([0, 0, w, max(8, h // 5)], fill=(180, 120, 220, 255))
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    thick_waist = buf.getvalue()
+
+    as_top = assert_structural_fidelity(
+        source_png=bottom,
+        product_png=thick_waist,
+        layout="two_piece",
+        category="tops",
+    )
+    as_bottom = assert_structural_fidelity(
+        source_png=bottom,
+        product_png=thick_waist,
+        layout="two_piece",
+        category="bottoms",
+    )
+    # Same geometry: tops may still reject neckline; bottoms must not use that gate.
+    if as_top.code == "FIDELITY_NECKLINE_CHANGED":
+        assert as_bottom.code != "FIDELITY_NECKLINE_CHANGED"
+    assert as_bottom.code != "FIDELITY_NECKLINE_CHANGED"
 
 
 def test_fidelity_rejects_twisted_asymmetric_top_restyle():
