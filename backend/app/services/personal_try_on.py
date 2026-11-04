@@ -94,6 +94,10 @@ from app.services.garment_leg_geometry import (
     openai_trouser_design_hints,
     soft_try_on_structure_review,
 )
+from app.services.garment_upper_geometry import (
+    analyze_upper_garment_geometry,
+    openai_upper_design_hints,
+)
 from app.services.personal_croquis_generate import (
     _count_generations_today,
     _lock_spend_tx,
@@ -1396,11 +1400,14 @@ def complete_try_on_job(db: Session, job: AIJob) -> dict[str, Any]:
         # #170/#172/#174/#180 — additive trouser/jumpsuit OR high-slit-dress hints from
         # frozen garment geometry. Apply for OpenAI and FASHN Max so Max cannot invent
         # pant legs when Studio geometry is an open-leg dress.
+        # #182 — pale bridal / open neckline / bilateral sleeve hints (OpenAI + Max).
         if provider_name in {TRY_ON_PROVIDER_OPENAI, TRY_ON_PROVIDER_FASHN_MAX}:
             geo_hints = openai_trouser_design_hints(analyze_lower_garment_geometry(garment_png))
-            if geo_hints:
+            upper_hints = openai_upper_design_hints(analyze_upper_garment_geometry(garment_png))
+            combined_geo = [*geo_hints, *upper_hints]
+            if combined_geo:
                 hints = _normalize_design_hints(
-                    merge_openai_design_hints(hints, geo_hints, max_hints=8)
+                    merge_openai_design_hints(hints, combined_geo, max_hints=8)
                 )
         generate_kwargs: dict[str, Any] = {
             "photo_png": photo_png,

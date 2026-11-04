@@ -93,6 +93,87 @@ function fillBounds(fill: FillOp): InkBounds | null {
   return { minX, maxX, minY, maxY }
 }
 
+function parseHexColor(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([0-9A-Fa-f]{6})$/.exec(hex.trim())
+  if (!m) return null
+  const n = Number.parseInt(m[1]!, 16)
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+}
+
+/** Near-black outline ink — never promote as a garment fill color (#182). */
+function isOutlineInk(hex: string): boolean {
+  const c = parseHexColor(hex)
+  if (!c) return false
+  return (c.r + c.g + c.b) / 3 <= 40
+}
+
+/** Pale cream/ivory/peach fills that vanish on white flatten (#182 bridal). */
+function isPaleFabric(hex: string): boolean {
+  const c = parseHexColor(hex)
+  if (!c) return false
+  return (c.r + c.g + c.b) / 3 >= 185
+}
+
+/**
+ * Detect a deep open / plunging neckline from fill contours (top-center notch).
+ * Heuristic only — OpenAI still must read image 2 pixels.
+ */
+export function detectOpenNecklineFromFills(
+  fills: FillOp[],
+  designHeight = 1024,
+  designWidth = 768,
+): boolean {
+  const upper = fills
+    .map((f) => ({ fill: f, b: fillBounds(f) }))
+    .filter((x): x is { fill: FillOp; b: InkBounds } => Boolean(x.b))
+    .filter(({ b }) => b.minY < designHeight * 0.45 && b.maxY > designHeight * 0.12)
+  if (upper.length === 0) return false
+  // Contour has a deep dent near top-center: minY of points near center is much
+  // lower than minY at left/right shoulders of the same fill.
+  for (const { fill, b } of upper) {
+    const c = fill.contour
+    if (!c || c.length < 8) continue
+    const midX = (b.minX + b.maxX) / 2
+    const halfW = Math.max((b.maxX - b.minX) / 2, 1)
+    let shoulderMinY = Infinity
+    let centerMinY = Infinity
+    for (let i = 0; i + 1 < c.length; i += 2) {
+      const x = c[i]!
+      const y = c[i + 1]!
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+      const dx = Math.abs(x - midX) / halfW
+      if (dx <= 0.22) centerMinY = Math.min(centerMinY, y)
+      else if (dx >= 0.45 && dx <= 1.05) shoulderMinY = Math.min(shoulderMinY, y)
+    }
+    if (!Number.isFinite(centerMinY) || !Number.isFinite(shoulderMinY)) continue
+    const plunge = centerMinY - shoulderMinY
+    if (plunge >= designHeight * 0.04 && plunge >= (b.maxY - b.minY) * 0.08) {
+      // Reject tiny top fills; require some width so sleeves/hats don't trip this.
+      if (b.maxX - b.minX >= designWidth * 0.18) return true
+    }
+  }
+  return false
+}
+
+/** Two sleeve masses in the upper outer thirds of the design plane (#182). */
+export function detectBilateralSleevesFromFills(
+  fills: FillOp[],
+  designHeight = 1024,
+  designWidth = 768,
+): boolean {
+  let left = false
+  let right = false
+  for (const fill of fills) {
+    const b = fillBounds(fill)
+    if (!b) continue
+    const cy = (b.minY + b.maxY) / 2
+    if (cy > designHeight * 0.55 || cy < designHeight * 0.08) continue
+    if (b.minX <= designWidth * 0.22) left = true
+    if (b.maxX >= designWidth * 0.78) right = true
+  }
+  return left && right
+}
+
 /**
  * Deterministic Studio geometry: two separate lower fills that look like trouser legs.
  * Avoids dresses/skirts (single wide lower fill) and swimsuits (high hem).
@@ -189,13 +270,37 @@ export function buildTryOnDesignHints(args: {
     pushUnique(priority, 'do not connect the legs into a continuous skirt panel')
   }
 
+  // #182 — open neckline + both sleeves before color noise (bridal / pale dresses).
+  if (detectOpenNecklineFromFills(fills)) {
+    pushUnique(
+      priority,
+      'neckline: deep open / plunging V as drawn — keep cleavage opening; do not fill or raise to a high neck',
+    )
+  }
+  if (detectBilateralSleevesFromFills(fills)) {
+    pushUnique(
+      priority,
+      'sleeves: both arms have sleeves in the artwork — keep both; do not invent one-shoulder or drop a sleeve',
+    )
+  }
+
+  let paleFillSeen = false
   for (const fill of fills) {
     const style = fill.style
     if (style.kind === 'solid') {
-      colors.add(style.color.toUpperCase())
-      pushUnique(secondary, `solid fill color ${style.color.toUpperCase()}`)
+      const hex = style.color.toUpperCase()
+      // Outline-ink solids are sketch scaffolding, not bridal fabric (#182).
+      if (isOutlineInk(hex)) continue
+      colors.add(hex)
+      if (isPaleFabric(hex)) paleFillSeen = true
+      pushUnique(secondary, `solid fill color ${hex}`)
     } else if (style.kind === 'gradient') {
-      for (const c of style.colors) colors.add(c.toUpperCase())
+      for (const c of style.colors) {
+        const hex = c.toUpperCase()
+        if (isOutlineInk(hex)) continue
+        colors.add(hex)
+        if (isPaleFabric(hex)) paleFillSeen = true
+      }
       pushUnique(
         secondary,
         `gradient fill ${style.colors[0].toUpperCase()} to ${style.colors[1].toUpperCase()}`,
@@ -212,10 +317,20 @@ export function buildTryOnDesignHints(args: {
     }
   }
 
+  if (paleFillSeen) {
+    pushUnique(
+      priority,
+      'intentional pale/cream/ivory/peach fabric — keep that light color opaque; it is not empty paper',
+    )
+  }
+
+  // Stroke ink only if not already a fill color and not near-black outline.
   for (const stroke of args.strokes) {
     if (stroke.tool !== 'draw') continue
     if (typeof stroke.color === 'string' && stroke.color) {
-      colors.add(stroke.color.toUpperCase())
+      const hex = stroke.color.toUpperCase()
+      if (isOutlineInk(hex)) continue
+      colors.add(hex)
     }
   }
 
