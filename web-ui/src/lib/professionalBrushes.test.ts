@@ -4,6 +4,7 @@ import {
   CHARCOAL_RENDERER_CURRENT,
   CHARCOAL_RENDERER_V1,
   CHARCOAL_RENDERER_V2,
+  CHARCOAL_RENDERER_V3,
   defaultSizeForBrushKind,
   defaultsForBrushKind,
   eraseAffectsLayer,
@@ -87,7 +88,7 @@ describe('professionalBrushes', () => {
     expect(next.blendMode).toBe('multiply')
     expect(next.textureSeed).toBe('seed-me')
     expect(next.charcoalRenderer).toBe(CHARCOAL_RENDERER_CURRENT)
-    expect(next.charcoalRenderer).toBe(CHARCOAL_RENDERER_V2)
+    expect(next.charcoalRenderer).toBe(CHARCOAL_RENDERER_V3)
   })
 
   it('charcoal defaults favor wide soft fabric shading; ink stays fine', () => {
@@ -111,6 +112,11 @@ describe('professionalBrushes', () => {
         sampleStroke({ brushKind: 'charcoal', charcoalRenderer: CHARCOAL_RENDERER_V2 }),
       ),
     ).toBe(CHARCOAL_RENDERER_V2)
+    expect(
+      __test.resolveCharcoalRenderer(
+        sampleStroke({ brushKind: 'charcoal', charcoalRenderer: CHARCOAL_RENDERER_V3 }),
+      ),
+    ).toBe(CHARCOAL_RENDERER_V3)
   })
 
   it('round-trips professional fields from raw JSON', () => {

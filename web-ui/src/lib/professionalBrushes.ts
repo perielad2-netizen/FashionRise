@@ -34,7 +34,12 @@ export const DEFAULT_TEXTURE_INTENSITY = 0.7
 export const CHARCOAL_RENDERER_V1 = 1
 /** Continuous soft ribbon — Charcoal Shading V2. */
 export const CHARCOAL_RENDERER_V2 = 2
-export const CHARCOAL_RENDERER_CURRENT = CHARCOAL_RENDERER_V2
+/**
+ * Pencil-tip charcoal — hard tip/core with soft vanish away from the tip
+ * (radial + along-stroke lift). New charcoal strokes use this.
+ */
+export const CHARCOAL_RENDERER_V3 = 3
+export const CHARCOAL_RENDERER_CURRENT = CHARCOAL_RENDERER_V3
 
 /** Per-kind default sizes (design-space px). Ink stays fine; charcoal/airbrush shade wider. */
 export const BRUSH_KIND_DEFAULT_SIZE_PX: Record<BrushKind, number> = {
@@ -82,10 +87,11 @@ export function defaultsForBrushKind(kind: BrushKind): Partial<BrushEngineState>
       brushKind: 'charcoal',
       logicalLayer: 'shade',
       blendMode: 'multiply',
-      flow: 0.42,
-      softness: 0.82,
+      // Slightly stronger tip presence; softness drives the soft vanish.
+      flow: 0.48,
+      softness: 0.86,
       // Understated graphite grain — tonal blending first.
-      textureIntensity: 0.14,
+      textureIntensity: 0.1,
       garmentMask: true,
     }
   }
@@ -336,26 +342,37 @@ export function traceRibbonPath(
   ctx.lineTo(last.x, last.y)
 }
 
+type CharcoalRibbonOpts = {
+  intensity: number
+  flow: number
+  softness: number
+  /** Narrow hard graphite core (pencil tip feel). */
+  hardCore: boolean
+  /** Fade from stroke tip → tail like lifting a pencil. */
+  tipVanish: boolean
+}
+
 /**
- * Charcoal V2 — continuous feathered shadow ribbon.
- *
- * Builds a grayscale mask by stroking the FULL path in concentric widths
- * (outer→inner). Density along the stroke is independent of pointer sample
- * rate / speed because each concentric pass paints the path once — not per
- * input point. Colorize once, then composite with the stroke blend mode.
+ * Shared continuous charcoal ribbon. Density is independent of pointer sample rate
+ * (full-path concentric passes). V2 = soft ribbon; V3 = hard tip + soft vanish.
  */
-function paintCharcoalV2(ctx: Ctx2d, stroke: Stroke): void {
-  const intensity = clamp01(stroke.textureIntensity ?? 0.14, 0.14)
-  const flow = clamp01(stroke.flow ?? 0.42, 0.42)
-  const softness = clamp01(stroke.softness ?? 0.82, 0.82)
+function paintCharcoalRibbon(ctx: Ctx2d, stroke: Stroke, opts: CharcoalRibbonOpts): void {
   const pts = pointsAsTriples(stroke.points)
   if (pts.length === 0) return
 
   const press = averagePressure(pts)
+  const tipPress = pts[0]?.p ?? press
   const blend = resolveBlendMode(stroke)
-  // Texture adds a hair more feather (graphite on paper), never speckles.
-  const baseW = Math.max(1.2, stroke.size * (0.5 + press * 0.5))
-  const feather = baseW * (0.55 + softness * 1.35 + intensity * 0.25)
+  const softness = opts.softness
+  const intensity = opts.intensity
+  // Tip pressure firms the graphite core; average pressure still scales body width.
+  const coreBoost = opts.hardCore ? 0.55 + tipPress * 0.45 : 0.5 + press * 0.5
+  const baseW = Math.max(1.1, stroke.size * (opts.hardCore ? 0.38 + tipPress * 0.28 : coreBoost))
+  const feather = baseW * (
+    opts.hardCore
+      ? 0.9 + softness * 1.75 + intensity * 0.2
+      : 0.55 + softness * 1.35 + intensity * 0.25
+  )
   const pad = Math.ceil(feather + baseW + 4)
 
   let minX = pts[0]!.x
@@ -387,13 +404,22 @@ function paintCharcoalV2(ctx: Ctx2d, stroke: Stroke): void {
 
   if (pts.length === 1) {
     const p = pts[0]!
-    const steps = Math.max(5, Math.round(4 + softness * 8))
+    const steps = Math.max(6, Math.round(5 + softness * 10))
     for (let i = steps; i >= 0; i -= 1) {
       const t = i / steps
-      const r = baseW * (0.35 + (1 - t) * 0.65) + feather * t
-      const a = Math.pow(1 - t * 0.95, 1.7)
+      // Hard bright core, long soft vanish outward (pencil tip on paper).
+      const r = opts.hardCore
+        ? baseW * (0.22 + (1 - t) * 0.45) + feather * t
+        : baseW * (0.35 + (1 - t) * 0.65) + feather * t
+      const a = opts.hardCore
+        ? Math.pow(1 - t, 2.35)
+        : Math.pow(1 - t * 0.95, 1.7)
       const g = mctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, Math.max(0.5, r))
-      g.addColorStop(0, `rgba(255,255,255,${a})`)
+      g.addColorStop(0, `rgba(255,255,255,${Math.min(1, a * (opts.hardCore ? 1.15 : 1))})`)
+      if (opts.hardCore) {
+        g.addColorStop(0.18, `rgba(255,255,255,${Math.min(1, a * 0.85)})`)
+        g.addColorStop(0.55, `rgba(255,255,255,${a * 0.28})`)
+      }
       g.addColorStop(1, 'rgba(255,255,255,0)')
       mctx.globalAlpha = 1
       mctx.fillStyle = g
@@ -402,16 +428,52 @@ function paintCharcoalV2(ctx: Ctx2d, stroke: Stroke): void {
       mctx.fill()
     }
   } else {
-    // Concentric full-path strokes: radial falloff without along-path overdraw.
-    const steps = Math.max(6, Math.round(5 + softness * 10))
+    const steps = Math.max(7, Math.round(6 + softness * 11))
     for (let i = steps; i >= 0; i -= 1) {
-      const t = i / steps // 1 = outer feather, 0 = dark core
-      const width = baseW * (0.42 + (1 - t) * 0.58) + feather * t
-      const a = Math.pow(1 - t * 0.93, 1.55)
-      mctx.globalAlpha = a
-      mctx.lineWidth = Math.max(0.8, width)
+      const t = i / steps // 1 = outer feather, 0 = hard tip/core
+      const width = opts.hardCore
+        ? baseW * (0.28 + (1 - t) * 0.42) + feather * t
+        : baseW * (0.42 + (1 - t) * 0.58) + feather * t
+      // Harder core curve: stays dense near center, vanishes faster toward edge.
+      const a = opts.hardCore
+        ? Math.pow(1 - t, 2.15) * (0.55 + tipPress * 0.45)
+        : Math.pow(1 - t * 0.93, 1.55)
+      mctx.globalAlpha = Math.min(1, a)
+      mctx.lineWidth = Math.max(0.75, width)
       traceRibbonPath(mctx, pts)
       mctx.stroke()
+    }
+  }
+
+  // Pencil lift: tip stays present, mark vanishes toward the stroke end.
+  if (opts.tipVanish && pts.length > 1) {
+    const tip = pts[0]!
+    const tail = pts[pts.length - 1]!
+    const dx = tip.x - tail.x
+    const dy = tip.y - tail.y
+    if (dx * dx + dy * dy > 4) {
+      const fade = document.createElement('canvas')
+      fade.width = mw
+      fade.height = mh
+      const fctx = fade.getContext('2d')
+      if (fctx) {
+        fctx.translate(-ox, -oy)
+        const g = fctx.createLinearGradient(tip.x, tip.y, tail.x, tail.y)
+        // Tip (start) hard → mid soft → end nearly gone.
+        g.addColorStop(0, 'rgba(255,255,255,1)')
+        g.addColorStop(0.28, 'rgba(255,255,255,0.92)')
+        g.addColorStop(0.62, 'rgba(255,255,255,0.42)')
+        g.addColorStop(1, 'rgba(255,255,255,0.04)')
+        fctx.fillStyle = g
+        // Expand slightly so feathered sides are covered.
+        fctx.fillRect(ox - 2, oy - 2, mw + 4, mh + 4)
+        mctx.setTransform(1, 0, 0, 1, 0, 0)
+        mctx.globalCompositeOperation = 'destination-in'
+        mctx.globalAlpha = 1
+        mctx.drawImage(fade, 0, 0)
+        mctx.globalCompositeOperation = 'source-over'
+        mctx.translate(-ox, -oy)
+      }
     }
   }
 
@@ -428,26 +490,59 @@ function paintCharcoalV2(ctx: Ctx2d, stroke: Stroke): void {
   ctx.save()
   ctx.globalCompositeOperation = blend
   // One final alpha — independent of how many pointer samples were recorded.
-  ctx.globalAlpha = clamp01(stroke.opacity * flow * (0.62 + press * 0.38), 0.55)
+  const body = opts.hardCore ? 0.7 + tipPress * 0.35 : 0.62 + press * 0.38
+  ctx.globalAlpha = clamp01(stroke.opacity * opts.flow * body, 0.55)
   ctx.drawImage(tint, ox, oy)
   ctx.restore()
+}
+
+/** Charcoal V2 — continuous soft ribbon (saved strokes with renderer 2). */
+function paintCharcoalV2(ctx: Ctx2d, stroke: Stroke): void {
+  paintCharcoalRibbon(ctx, stroke, {
+    intensity: clamp01(stroke.textureIntensity ?? 0.14, 0.14),
+    flow: clamp01(stroke.flow ?? 0.42, 0.42),
+    softness: clamp01(stroke.softness ?? 0.82, 0.82),
+    hardCore: false,
+    tipVanish: false,
+  })
+}
+
+/**
+ * Charcoal V3 — pencil-tip fashion shading.
+ * Hard tip/core, soft radial vanish, and tip→tail lift so vertical folds
+ * feel like graphite: firm where the tip starts, fading away along the stroke.
+ */
+function paintCharcoalV3(ctx: Ctx2d, stroke: Stroke): void {
+  paintCharcoalRibbon(ctx, stroke, {
+    intensity: clamp01(stroke.textureIntensity ?? 0.1, 0.1),
+    flow: clamp01(stroke.flow ?? 0.48, 0.48),
+    softness: clamp01(stroke.softness ?? 0.86, 0.86),
+    hardCore: true,
+    tipVanish: true,
+  })
 }
 
 function resolveCharcoalRenderer(stroke: Stroke): number {
   const v = stroke.charcoalRenderer
   if (v === CHARCOAL_RENDERER_V1) return CHARCOAL_RENDERER_V1
   if (v === CHARCOAL_RENDERER_V2) return CHARCOAL_RENDERER_V2
+  if (v === CHARCOAL_RENDERER_V3) return CHARCOAL_RENDERER_V3
   // Absent on legacy charcoal → keep stamp look for saved artwork.
   if (stroke.brushKind === 'charcoal' && v == null) return CHARCOAL_RENDERER_V1
   return CHARCOAL_RENDERER_CURRENT
 }
 
 function paintCharcoal(ctx: Ctx2d, stroke: Stroke): void {
-  if (resolveCharcoalRenderer(stroke) === CHARCOAL_RENDERER_V1) {
+  const renderer = resolveCharcoalRenderer(stroke)
+  if (renderer === CHARCOAL_RENDERER_V1) {
     paintCharcoalV1(ctx, stroke)
     return
   }
-  paintCharcoalV2(ctx, stroke)
+  if (renderer === CHARCOAL_RENDERER_V2) {
+    paintCharcoalV2(ctx, stroke)
+    return
+  }
+  paintCharcoalV3(ctx, stroke)
 }
 
 function paintAirbrush(ctx: Ctx2d, stroke: Stroke): void {
@@ -792,6 +887,7 @@ export const __test = {
   hashSeed,
   paintCharcoalV1,
   paintCharcoalV2,
+  paintCharcoalV3,
   resolveCharcoalRenderer,
   averagePressure,
 }

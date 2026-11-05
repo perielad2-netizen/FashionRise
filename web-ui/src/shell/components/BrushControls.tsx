@@ -59,22 +59,42 @@ function BrushPreview({ kind }: { kind: BrushKind }) {
         />
       ) : null}
       {kind === 'charcoal' ? (
-        <path
-          d={path}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={10}
-          strokeLinecap="round"
-          opacity={0.32}
-        />
+        <>
+          {/* Soft vanish toward the stroke end (pencil lift). */}
+          <path
+            d={path}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={12}
+            strokeLinecap="round"
+            opacity={0.14}
+          />
+          <path
+            d={path}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={7}
+            strokeLinecap="round"
+            opacity={0.28}
+          />
+          {/* Hard tip / graphite core. */}
+          <path
+            d="M10 22 C 28 14, 42 13, 58 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={3.2}
+            strokeLinecap="round"
+            opacity={0.82}
+          />
+        </>
       ) : null}
       <path
         d={path}
         fill="none"
         stroke="currentColor"
-        strokeWidth={kind === 'tapered' ? 3.5 : kind === 'charcoal' ? 5 : 8}
+        strokeWidth={kind === 'tapered' ? 3.5 : kind === 'charcoal' ? 0 : 8}
         strokeLinecap="round"
-        opacity={kind === 'airbrush' ? 0.55 : kind === 'charcoal' ? 0.72 : 0.9}
+        opacity={kind === 'airbrush' ? 0.55 : kind === 'charcoal' ? 0 : 0.9}
       />
     </svg>
   )
