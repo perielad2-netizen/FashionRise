@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`3f196e9a`** — release `/var/www/fashionrise/releases/3f196e9a` · Charcoal Shading V2 continuous ribbon. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`0739fbd2`** — release `/var/www/fashionrise/releases/0739fbd2` · Charcoal V2 + draft fingerprint hotfix. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`3f196e9a`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`0739fbd2`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## Charcoal Shading V2 — LIVE FE (2026-11-05)
@@ -42,15 +42,15 @@ Stamp-based `paintCharcoal` used `stampCenters()` + overlapping radial gradients
 ### Safety
 | Field | Value |
 |---|---|
-| FE release | `/var/www/fashionrise/releases/3f196e9a` |
-| Prior FE | **`69ab52b4`** (soft-stamp interim) ← **`f8bc3b82`** ← **`ac3e219c`** |
-| Rollback | `/var/backups/fashionrise/charcoal-v2-*/ROLLBACK.sh` → **`69ab52b4`** |
+| FE release | `/var/www/fashionrise/releases/0739fbd2` |
+| Prior FE | **`3f196e9a`** (Charcoal V2) ← **`69ab52b4`** ← **`f8bc3b82`** |
+| Rollback | `/var/backups/fashionrise/charcoal-draft-fp-*/ROLLBACK.sh` → **`3f196e9a`** |
 | BE / Alembic / spend | unchanged |
 | Agent paid AI calls | **0** |
-| Tests | charcoal V2 visual + professionalBrushes + export suites pass; `tsc` clean; prod vite flags pass |
+| Tests | draft fingerprint charcoal regression + conflict/persistence suites pass; `tsc` clean |
 
 ### Owner acceptance (manual)
-Hard-refresh until App SHA **`3f196e9a`**. Open a filled dress → select **Charcoal** (default ~18px) → shade waist / vertical fold / drape on **Shadows**. Expect smooth fabric darkening (no spray dots). Switch back to **Ink** → fine line restored. Airbrush should feel unchanged. Save/reopen/export/Magic unchanged.
+Hard-refresh until App SHA **`0739fbd2`**. Open a filled dress → select **Charcoal** → draw folds. Expect **no** Draft recovery conflict after save. Save status should settle to cloud-saved. Shade quality as Charcoal V2.
 
 ## Professional Sketch Engine V1 — LIVE FE (2026-11-05)
 
