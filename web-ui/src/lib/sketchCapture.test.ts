@@ -270,7 +270,11 @@ describe('captureGarmentArtworkForTryOn', () => {
     )
   })
 
-  it('still blocks Try On when ink strokes leave the legacy frame', async () => {
+  it('clips oversized ink into the legacy frame instead of blocking Try On', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
     await expect(
       captureGarmentArtworkForTryOn({
         strokes: [
@@ -287,11 +291,13 @@ describe('captureGarmentArtworkForTryOn', () => {
         ],
         fills: [],
       }),
-    ).rejects.toThrow(/extends beyond the standard try-on frame/i)
-    expect(exportMock).not.toHaveBeenCalled()
+    ).resolves.toMatchObject({ referenceIncluded: false })
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ frame: 'legacy', garmentOnly: true }),
+    )
   })
 
-  it('allows shoe fill a few px past legacy frame (under-ink soft pad)', async () => {
+  it('allows shoe fills well past legacy frame (clip, do not reject)', async () => {
     exportMock.mockResolvedValue({
       blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
       referenceIncluded: false,
@@ -309,7 +315,8 @@ describe('captureGarmentArtworkForTryOn', () => {
           },
           {
             id: 'shoe',
-            contour: [300, 980, 360, 980, 360, 1026, 300, 1026],
+            // Owner incident: shoes past soft-pad still blocked on 448192c0.
+            contour: [300, 980, 360, 980, 360, 1100, 300, 1100],
             style: { kind: 'solid', color: '#111111' },
             seedX: 330,
             seedY: 1000,

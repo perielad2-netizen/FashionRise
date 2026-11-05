@@ -110,14 +110,21 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
 /**
  * #170 — compare captured garment PNG opaque span to live Studio ink.
  * Blocks paid try-on when legs / hems disappear during capture.
+ *
+ * Live ink is clamped to the legacy 768×1024 plane because Try On capture always
+ * uses `frame: 'legacy'` (clips shoe/hem fringe past the croquis feet). Comparing
+ * against unclamped live Y would false-fail "lost lower parts" for on-figure shoes.
  */
 export async function assertGarmentCaptureCompleteness(
   blob: Blob,
   options: { strokes: Stroke[]; fills?: FillOp[] },
 ): Promise<void> {
-  const live = liveArtworkYSpan({ strokes: options.strokes, fills: options.fills ?? [] })
-  if (!live) return
-  const liveSpan = Math.max(1, live.maxY - live.minY)
+  const liveRaw = liveArtworkYSpan({ strokes: options.strokes, fills: options.fills ?? [] })
+  if (!liveRaw) return
+  const liveMinY = Math.max(0, liveRaw.minY)
+  const liveMaxY = Math.min(DESIGN_HEIGHT, liveRaw.maxY)
+  if (liveMaxY <= liveMinY) return
+  const liveSpan = Math.max(1, liveMaxY - liveMinY)
   // jsdom / older browsers may lack createImageBitmap — skip rather than false-fail.
   if (typeof createImageBitmap !== 'function') return
   const bitmap = await createImageBitmap(blob)
@@ -151,7 +158,7 @@ export async function assertGarmentCaptureCompleteness(
     const scaleY = height / DESIGN_HEIGHT
     const captureSpanDesign = (maxY - minY) / Math.max(scaleY, 1e-6)
     const retention = captureSpanDesign / liveSpan
-    const liveHemFrac = live.maxY / DESIGN_HEIGHT
+    const liveHemFrac = liveMaxY / DESIGN_HEIGHT
     const captureHemFrac = maxY / height
     if (retention < 0.82 || (liveHemFrac - captureHemFrac) > 0.12) {
       throw new Error(
@@ -168,6 +175,11 @@ export async function assertGarmentCaptureCompleteness(
  * Transparent garment-only PNG for Try On Person — strokes + fills + fabrics,
  * no paper background and no croquis/mannequin underlay. Preserves spatial
  * alignment with the Studio design plane.
+ *
+ * Does **not** hard-reject artwork that leaves the legacy croquis box. Shoe fills
+ * near the feet routinely sit past y=1024 after fill-under-ink (owner blocked on
+ * 448192c0 soft-pad). Capture always uses `frame: 'legacy'` so fringe clips;
+ * completeness still blocks if on-frame garment content is truncated.
  */
 export async function captureGarmentArtworkForTryOn(options: {
   strokes: Stroke[]
@@ -177,20 +189,6 @@ export async function captureGarmentArtworkForTryOn(options: {
   const hasArtwork = options.strokes.length > 0 || fills.length > 0
   if (!hasArtwork) {
     throw new Error('Draw a garment before using Try On Person.')
-  }
-  // Same gate as Magic: ink/fills only. Shade-layer eraser tips outside 768×1024
-  // were blocking all Try On after Sketch Engine V1 (generic SMART_TRY_ON_FAILURE).
-  // Soft pad so shoe/hem fills that tuck a few px under outline ink still start.
-  if (
-    artworkExceedsLegacyBounds(
-      strokesForLegacyFrameGate(options.strokes),
-      fills,
-      LEGACY_FRAME_SOFT_PAD_PX,
-    )
-  ) {
-    throw new Error(
-      'This sketch extends beyond the standard try-on frame. Pull oversized strokes inside the croquis area — Try On Person was not started.',
-    )
   }
   try {
     const width = DESIGN_WIDTH * TRY_ON_GARMENT_CAPTURE_SCALE
@@ -202,8 +200,8 @@ export async function captureGarmentArtworkForTryOn(options: {
       garmentOnly: true,
       width,
       height,
-      // Same as Magic: after the ink/fills legacy gate, never let shade-layer
-      // eraser overshoot select the extended-paper frame (letterboxes hems).
+      // Always legacy: clip shoe/hem fringe. Never flip to paper frame (letterboxes
+      // and failed completeness). Shade overshoot is irrelevant under forced legacy.
       frame: 'legacy',
       onReferenceError: 'skip',
       onFabricError: 'throw',
