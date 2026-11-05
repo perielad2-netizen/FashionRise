@@ -210,7 +210,11 @@ def _color_treatment_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
 
 
 def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
-    """Generation/PDF-relevant fields only — no volatile illustration/AI bookkeeping."""
+    """Historical V1/V2 piece snapshot — frozen shape (no color_treatment / fabric_pattern).
+
+    Must remain bit-compatible with approved main ``1cab0a7b`` so recalculated
+    historical fingerprints match completed-run stamps.
+    """
     mats = _as_dict(piece.get("materials"))
     shell = _as_dict(mats.get("shell"))
     lining = _as_dict(mats.get("lining"))
@@ -224,9 +228,6 @@ def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
     closures = _as_dict(piece.get("closures"))
     fit = _as_dict(piece.get("fit"))
     visible = _as_dict(piece.get("visible_details"))
-    pattern_raw = piece.get("fabric_pattern")
-    if pattern_raw is None:
-        pattern_raw = shell.get("pattern") or mats.get("pattern")
     return _stable_jsonable(
         {
             "id": piece_id(piece),
@@ -234,8 +235,6 @@ def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
             "role": str(piece.get("role") or ""),
             "label": str(piece.get("label") or ""),
             "color_hint": str(piece.get("color_hint") or ""),
-            "color_treatment": _color_treatment_input_snapshot(piece),
-            "fabric_pattern": str(pattern_raw or ""),
             "category_user_confirmed": bool(piece.get("category_user_confirmed")),
             "detection_source": str(piece.get("detection_source") or ""),
             "materials": {
@@ -252,6 +251,23 @@ def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
                 for k in sorted(visible.keys(), key=lambda x: str(x))
                 if not str(k).endswith("_provenance") and visible.get(k) not in (None, "")
             },
+        }
+    )
+
+
+def _piece_input_snapshot_v3(piece: dict[str, Any]) -> dict[str, Any]:
+    """V3 piece snapshot — historical fields plus color_treatment / fabric_pattern."""
+    base = _piece_input_snapshot(piece)
+    mats = _as_dict(piece.get("materials"))
+    shell = _as_dict(mats.get("shell"))
+    pattern_raw = piece.get("fabric_pattern")
+    if pattern_raw is None:
+        pattern_raw = shell.get("pattern") or mats.get("pattern")
+    return _stable_jsonable(
+        {
+            **base,
+            "color_treatment": _color_treatment_input_snapshot(piece),
+            "fabric_pattern": str(pattern_raw or ""),
         }
     )
 
@@ -316,6 +332,7 @@ def _fingerprint_payload_v2(
     *,
     draft: Any | None,
 ) -> dict[str, Any]:
+    """Frozen v2 payload — historical piece snapshot only (no color_treatment)."""
     refs = _draft_source_refs(draft)
     quantity = spec_d.get("quantity")
     return {
@@ -343,6 +360,24 @@ def _fingerprint_payload_v2(
     }
 
 
+def _fingerprint_payload_v3(
+    spec_d: dict[str, Any],
+    pieces: list[dict[str, Any]],
+    *,
+    draft: Any | None,
+) -> dict[str, Any]:
+    """V3 payload — v2 shared fields + color_treatment / fabric_pattern on pieces."""
+    base = _fingerprint_payload_v2(spec_d, pieces, draft=draft)
+    return {
+        **base,
+        "v": 3,
+        "pieces": [
+            _piece_input_snapshot_v3(p)
+            for p in sorted(pieces, key=lambda x: piece_id(x))
+        ],
+    }
+
+
 def professional_input_fingerprint(
     spec: dict[str, Any] | None,
     pieces: list[dict[str, Any]],
@@ -355,8 +390,10 @@ def professional_input_fingerprint(
     ver = int(version)
     if ver <= 1:
         payload = _fingerprint_payload_v1(spec_d, pieces)
-    else:
+    elif ver == 2:
         payload = _fingerprint_payload_v2(spec_d, pieces, draft=draft)
+    else:
+        payload = _fingerprint_payload_v3(spec_d, pieces, draft=draft)
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 

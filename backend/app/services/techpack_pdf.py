@@ -30,6 +30,7 @@ from reportlab.platypus import (
 
 from app.services.techpack_compatibility import (
     collect_compatibility_warnings,
+    filter_bom_rows,
     filter_construction_steps,
     filter_pattern_inventory,
     material_contradiction,
@@ -216,6 +217,11 @@ def _fmt_value(cell: Any) -> str:
 def _fmt_source(cell: Any) -> str:
     if not isinstance(cell, dict):
         return "Empty"
+    review = str(cell.get("review_status") or cell.get("review_state") or "").lower()
+    if review in {"proposed_unverified", "unverified"}:
+        return "UNVERIFIED"
+    if review == "adjusted_for_garment":
+        return "Adjusted"
     source = str(cell.get("source") or "empty").lower()
     return {
         "designer": "Designer",
@@ -225,6 +231,7 @@ def _fmt_source(cell: Any) -> str:
         "empty": "Empty",
         "calculated": "Calculated",
         "unknown": "Unknown",
+        "unverified": "UNVERIFIED",
     }.get(source, source.title() if source else "Empty")
 
 
@@ -925,10 +932,10 @@ def _piece_sections(
         for key, cell in finished.items()
         if isinstance(cell, dict)
     ]
+    analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
     if finished_rows:
         story.append(_measurement_table(finished_rows, styles))
         sleeve_cell = finished.get("sleeve_length")
-        analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
         if (
             isinstance(sleeve_cell, dict)
             and isinstance(sleeve_cell.get("value"), (int, float))
@@ -950,7 +957,12 @@ def _piece_sections(
     if not bom:
         bom = default_bom(cat, color_hint=color)
     # Flag outfit-level color-list fabric names; never invent fiber composition.
-    bom = normalize_bom_rows(bom, piece=piece)
+    # Apply the same closure confirmation rules as persisted specifications.
+    bom = filter_bom_rows(
+        normalize_bom_rows(bom, piece=piece),
+        analysis=analysis,
+        piece=piece,
+    )
     bom_data = [
         [
             Paragraph("<b>Item</b>", styles["small"]),
@@ -965,8 +977,11 @@ def _piece_sections(
             continue
         item_txt = str(row.get("item") or row.get("name") or "—")
         notes_txt = str(row.get("notes") or "—")
-        if str(row.get("review_status") or "") == "needs_review":
+        review_txt = str(row.get("review_status") or row.get("review_state") or "")
+        if review_txt == "needs_review":
             item_txt = f"{item_txt} · NEEDS REVIEW"
+        elif review_txt in {"proposed_unverified", "unverified"}:
+            item_txt = f"{item_txt} · UNVERIFIED"
             if row.get("original_item"):
                 notes_txt = (
                     f"Was: {str(row.get('original_item'))[:90]}. {notes_txt}"
@@ -1128,7 +1143,8 @@ def _piece_sections(
     steps = piece.get("construction_steps") if isinstance(piece.get("construction_steps"), list) else []
     if not steps:
         steps = default_construction_steps(cat)
-    steps = filter_construction_steps(list(steps), analysis=analysis)
+    # Pass authoritative piece context so confirmed closures survive missing analysis.
+    steps = filter_construction_steps(list(steps), analysis=analysis, piece=piece)
     for idx, row in enumerate(steps[:40], start=1):
         if isinstance(row, dict):
             step = row.get("step", idx)
