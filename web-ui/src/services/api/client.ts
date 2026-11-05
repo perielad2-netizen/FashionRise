@@ -80,6 +80,14 @@ function extractErrorMessage(parsed: unknown, status: number): string {
       const message = (detail as { message: unknown }).message
       if (typeof message === 'string' && message.trim()) return message
     }
+    // FastAPI validation errors: [{ loc, msg, type }, ...]
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0]
+      if (typeof first === 'object' && first !== null && 'msg' in first) {
+        const msg = (first as { msg: unknown }).msg
+        if (typeof msg === 'string' && msg.trim()) return msg
+      }
+    }
   }
   return friendlyStatus(status)
 }
@@ -94,7 +102,8 @@ function friendlyStatus(status: number): string {
     )
   }
   if (status === 409) return 'Draft was updated elsewhere. Resolve the conflict before saving again.'
-  if (status === 422) return 'Please check your email and password.'
+  // Auth forms historically used 422 for bad credentials; elsewhere it means invalid input.
+  if (status === 422) return 'Please check your input and try again.'
   if (status >= 500) return 'FashionRise is temporarily unavailable. Try again shortly.'
   return 'Something went wrong. Please try again.'
 }

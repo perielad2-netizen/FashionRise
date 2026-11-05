@@ -106,7 +106,7 @@ export async function createAiFabric(
   try {
     return await apiRequest<FabricAsset>('/fabrics/ai-generate', {
       method: 'POST',
-      body: JSON.stringify(body),
+      body,
       signal,
     })
   } catch (err) {
