@@ -1524,10 +1524,30 @@ def _build_story(
     spec: dict[str, Any],
     styles: dict[str, ParagraphStyle],
 ) -> list[Any]:
-    if isinstance(spec, dict) and (
+    layout = ""
+    if isinstance(spec, dict):
+        layout = str(spec.get("pdf_layout") or "").strip().lower()
+    # Default V4 designer-perfect layout for V2+ specs (industry page order).
+    # Escape hatch: spec.pdf_layout = "v2" | "v1" for legacy packs.
+    is_v2 = isinstance(spec, dict) and (
         str(spec.get("schema_version") or "").startswith("2")
         or isinstance((spec.get("outfit") or {}).get("pieces"), list)
-    ):
+    )
+    if is_v2 and layout not in {"v2", "v1", "legacy"}:
+        from app.services.techpack_designer_pdf import build_story_v4_designer
+
+        return build_story_v4_designer(
+            title=title,
+            style_code=style_code,
+            revision=revision,
+            status_label=status_label,
+            look_id=look_id,
+            front_image=front_image,
+            back_image=back_image,
+            spec=spec,
+            styles=styles,
+        )
+    if is_v2:
         return _build_story_v2(
             title=title,
             style_code=style_code,
@@ -1627,7 +1647,9 @@ def build_techpack_pdf(
         )
         canvas.setFillColor(MUTED)
         canvas.setFont("Helvetica", 8)
-        canvas.drawString(MARGIN, 10 * mm, "FashionRise Create Real Design V3.1")
+        canvas.drawString(
+            MARGIN, 10 * mm, "FashionRise Create Real Design V3.1 / V4 Designer"
+        )
         canvas.drawRightString(
             PAGE_W - MARGIN,
             10 * mm,

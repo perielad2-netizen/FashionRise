@@ -169,7 +169,12 @@ def filter_construction_steps(
     for step in steps:
         text = ""
         if isinstance(step, dict):
-            text = str(step.get("instruction") or step.get("text") or "")
+            text = str(
+                step.get("instruction")
+                or step.get("operation")
+                or step.get("text")
+                or ""
+            )
         else:
             text = str(step)
         lower = text.lower()
@@ -181,6 +186,9 @@ def filter_construction_steps(
                         "instruction": (
                             "Finish armholes for sleeveless design (do not set sleeves — "
                             f"AI sleeves: {analysis.get('sleeves') if analysis else 'sleeveless'})."
+                        ),
+                        "operation": (
+                            "Finish armholes for sleeveless design (do not set sleeves)"
                         ),
                         "review_status": "adjusted_for_garment",
                         "source": step.get("source") or "validated",
