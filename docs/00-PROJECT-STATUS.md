@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Try On one-piece coverage V2.4** pending pin · prior FE **`b8c599b2`** · BE tip pending · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Try On one-piece coverage V2.4** **LIVE** FE/BE · **`0ec4d653`** · prompt **`try-on-person-v2.4`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`b8c599b2`** — release `/var/www/fashionrise/releases/b8c599b2` · Try On legacy-frame force (shade eraser overshoot no longer letterboxes hems) + prior Flip hide. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
+| Frontend (`web-ui`) | **`0ec4d653`** — release `/var/www/fashionrise/releases/0ec4d653` · Try On one-piece coverage hints + prior legacy-frame/Flip fixes. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`0ec4d653`** · Try On **`v2.4`** one-piece coverage + Max fidelity soft-pass · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`b8c599b2`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`0ec4d653`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## Try On shade-erase paper-frame hem — LIVE FE (2026-11-05)
