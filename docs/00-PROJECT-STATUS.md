@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**AI Create Fabric** **LIVE** FE/BE · **`e377b7f1`** · Alembic **`016`** · prior erase-shoes **`3ee39a54`**.)
+**Last updated:** 2026-11-06 (**Techpack V4 Designer PDF** **LIVE** BE **`116bc59f`** · FE unchanged **`e377b7f1`**.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -12,11 +12,15 @@
 | Layer | Revision |
 |---|---|
 | Frontend (`web-ui`) | **`e377b7f1`** — release `/var/www/fashionrise/releases/e377b7f1` · AI Create Fabric. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`e377b7f1`** · AI Create Fabric · Try On **`v2.7`** · Alembic **`016`**.
-| AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
+| Backend (FastAPI + PostgreSQL) | tip **`116bc59f`** · Techpack V4 Designer PDF · Try On **`v2.7`** · Alembic **`016`**.
+| AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged · restarted with V4 PDF modules |
 | Database | `fashionrise_beta` — Alembic **`016`** (AI fabric prompt columns) |
 | Nginx | photos `client_max_body_size` **25m** · FE `current` → **`e377b7f1`** · `POST /api/v1/fabrics/ai-generate` allowlisted |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## Techpack V4 Designer PDF — LIVE BE (2026-11-06)
+
+Create Real Design PDF rewritten to industry atelier order (GarmentSpec-style): cover → overview → flats+callouts → POM (how-to + tol + grade cols) → BOM → construction (ISO stitch) → pattern inventory → colorways → labels/packing → revision/readiness. Formal/evening/bridal get dress BOM, callout legend, flat-measure how-tos, and sample QC checklist. Escape hatch: `spec.pdf_layout = "v2"|"v1"`. Footer: `Create Real Design V3.1 / V4 Designer`. BE **`116bc59f`**. Rollback `/var/backups/fashionrise/techpack-designer-v4-116bc59f-20261105T223511Z/ROLLBACK.sh`. **Owner:** regenerate PDF (PDF-only update is enough for layout; re-run AI Professional for stronger formal flats).
 
 ## AI Create Fabric — LIVE FE/BE (2026-11-05)
 

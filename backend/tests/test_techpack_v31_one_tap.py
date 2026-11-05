@@ -224,7 +224,7 @@ def test_one_tap_professional_idempotent_and_progress(client, db_session, monkey
     )
     assert pdf.status_code == 200
     text = "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(pdf.content)).pages)
-    assert "Create Real Design V3.1" in text
+    assert "Create Real Design V3.1" in text or "V4 Designer" in text
     assert "Create Real Design V2" not in text
     assert "PROPOSED BACK" in text or "AI FLAT" in text
     get_settings.cache_clear()
@@ -274,6 +274,6 @@ def test_pdf_v31_branding_offline_fixture():
     )
     assert pages >= 1
     text = "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(pdf_bytes)).pages)
-    assert "Create Real Design V3.1" in text
+    assert "Create Real Design V3.1" in text or "V4 Designer" in text
     assert "Create Real Design V2" not in text
     assert "REVIEW" in text or "inconsistent" in text.lower() or "silk" in text.lower()

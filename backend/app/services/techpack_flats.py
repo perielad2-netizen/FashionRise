@@ -149,11 +149,9 @@ def pattern_inventory_for_category(category: str) -> list[dict[str, Any]]:
             {**common, "id": "TR-FLY", "name": "Fly / closure facing (if applicable)", "fabric": "shell", "cut_qty": 1},
         ]
     if cat == "dress":
-        return [
-            {**common, "id": "DR-F", "name": "Front", "fabric": "shell", "cut_qty": 1},
-            {**common, "id": "DR-B", "name": "Back", "fabric": "shell", "cut_qty": 1},
-            {**common, "id": "DR-SL", "name": "Sleeve (if sleeved)", "fabric": "shell", "cut_qty": 2},
-        ]
+        from app.services.techpack_designer_spec import formal_dress_pattern_inventory
+
+        return formal_dress_pattern_inventory()
     if cat == "skirt":
         return [
             {**common, "id": "SK-F", "name": "Front", "fabric": "shell", "cut_qty": 1},
@@ -192,13 +190,9 @@ def default_construction_steps(category: str) -> list[dict[str, Any]]:
             "QC: rise balance, waistband seat, closure function.",
         ]
     elif cat == "dress":
-        steps = [
-            "Join bust/waist darts or princess seams as designed.",
-            "Close shoulders and side seams; finish edges.",
-            "Set sleeves or finish armholes; attach neck finish.",
-            "Install closure; hem; press.",
-            "QC: length, neckline sit, closure alignment.",
-        ]
+        from app.services.techpack_designer_spec import FORMAL_DRESS_CONSTRUCTION
+
+        return list(FORMAL_DRESS_CONSTRUCTION)
     elif cat == "skirt":
         steps = [
             "Join panels; insert zipper or other closure.",
@@ -222,6 +216,10 @@ def default_bom(category: str, *, color_hint: str = "") -> list[dict[str, Any]]:
         {"item": "Care / brand label", "qty": "1", "unit": "set", "source": "estimate", "notes": ""},
     ]
     cat = (category or "").lower()
+    if cat == "dress":
+        from app.services.techpack_designer_spec import formal_dress_bom
+
+        return formal_dress_bom(color_hint=color_hint)
     if cat in ("shirt", "jacket"):
         rows.insert(1, {"item": "Buttons or zipper", "qty": "TBD", "unit": "pcs", "source": "estimate", "notes": "Confirm closure choice"})
         rows.insert(1, {"item": "Interfacing", "qty": "estimate TBD", "unit": "m", "source": "estimate", "notes": "Collar/placket as needed"})

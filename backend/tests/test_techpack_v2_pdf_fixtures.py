@@ -52,7 +52,7 @@ def test_dress_fixture_relevant_poms_and_flats():
         assert "dress" in text.lower() or "DRESS" in text
         assert "Chest / bust" in text or "chest" in text.lower()
         assert "NOT TO SCALE" in text
-        assert "Pattern piece development" in text
+        assert "Pattern piece" in text
         assert "Bill of materials" in text
 
 
@@ -71,9 +71,14 @@ def test_two_piece_shirt_trousers_separate_sections():
         # Trousers sheet should mention inseam; shirt sheet shoulder.
         assert "Inseam" in text
         assert "Shoulder" in text
-        assert "CUTTING LAYOUT" in text.upper() or "Cutting layout" in text
+        assert (
+            "Pattern piece" in text
+            or "CUTTING LAYOUT" in text.upper()
+            or "Cutting layout" in text
+        )
         # Must not claim Magic images are cut patterns on cutting pages.
         assert "same Magic job" not in text
+
 
 
 def test_trousers_only_excludes_bust_sleeve_fields():

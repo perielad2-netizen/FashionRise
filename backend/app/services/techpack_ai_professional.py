@@ -264,6 +264,17 @@ class OpenAIProfessionalProvider:
             unverified = (
                 " Label clearly as PROPOSED BACK — UNVERIFIED. Do not claim this is a photographed back."
             )
+        cat = str(piece.get("category") or "garment").lower()
+        formal = cat in {"dress", "gown", "evening", "bridal", "wedding", "formal"}
+        formal_bits = ""
+        if formal:
+            formal_bits = (
+                " Formal / evening / bridal rules: preserve exact neckline depth and shape, "
+                "waist seam or empire/princess lines if present, hem length (mini/midi/floor), "
+                "sleeve vs sleeveless truth, sparkle/metallic/sequin as surface indication "
+                "(not photoreal glitter blobs), and any slit or train. "
+                "Draw as an engineering flat a patternmaker can trust — not a fashion illustration. "
+            )
         return (
             "Create a professional fashion TECHNICAL FLAT illustration of THIS exact garment from the "
             f"reference photo. View: {view.replace('_', ' ')}.{unverified} "
@@ -276,26 +287,36 @@ class OpenAIProfessionalProvider:
             f"features={features}. "
             f"Category hint: {piece.get('category')}. "
             "Do NOT draw a generic A-line dress if the source is fitted/bodycon with long sleeves or a deep V. "
-            "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack."
+            f"{formal_bits}"
+            "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack "
+            "sent to an atelier or factory."
         )
 
     @staticmethod
     def _detail_prompt(analysis: dict[str, Any], *, piece: dict[str, Any]) -> str:
         cat = str(piece.get("category") or "garment")
         label = str(piece.get("label") or cat)
+        formal = cat.lower() in {"dress", "gown", "evening", "bridal", "wedding", "formal"}
+        focus = (
+            "For dresses/gowns prioritize: neckline finish, bust dart/princess seam, "
+            "invisible zip (CB or SS), lining join, hem type (baby/blind/deep), straps/halter, "
+            "slit, waist seam, and any beading/sequin zones as callout regions."
+            if formal
+            else "Show close-up construction callouts that belong to THIS category "
+            "(neckline/sleeve/cuff/hem/zipper for tops; waistband/pockets/hem/fly for bottoms)."
+        )
         return (
             "Create a professional fashion technical DETAIL callout sheet for ONE garment only: "
             f"category={cat}, label={label}. "
             "Do NOT include construction details from any other garment in the outfit "
             "(e.g. never put hoodie zippers/hood/drawcord on a shorts detail sheet, and never put "
             "waistband/inseam/leg-opening callouts on a top detail sheet). "
-            "White background. Show close-up construction callouts that belong to THIS category "
-            "(neckline/sleeve/cuff/hem/zipper for tops; waistband/pockets/hem/fly for bottoms). "
+            f"White background. {focus} "
             f"Neckline={analysis.get('neckline')}; sleeves={analysis.get('sleeves')}; "
             f"pattern={analysis.get('fabric_pattern')} {analysis.get('stripe_direction')}; "
             f"silhouette={analysis.get('silhouette')}. "
             "If a detail is not visible on this garment, omit it rather than inventing another garment's parts. "
-            "No model body. Label callouts briefly. Not a photo — a technical illustration. "
+            "No model body. Number callouts 1…n with a short legend. Not a photo — a technical illustration. "
             "If you cannot produce category-correct details, leave callouts blank rather than borrowing "
             "from a different garment — failures require designer review, not silent approval."
         )
