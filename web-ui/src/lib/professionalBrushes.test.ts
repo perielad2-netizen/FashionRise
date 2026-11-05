@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyBrushEngineToStroke,
+  CHARCOAL_RENDERER_CURRENT,
+  CHARCOAL_RENDERER_V1,
+  CHARCOAL_RENDERER_V2,
+  defaultSizeForBrushKind,
+  defaultsForBrushKind,
   eraseAffectsLayer,
   erasePunchesFills,
   hashSeed,
@@ -10,6 +15,7 @@ import {
   resolveLogicalLayer,
   stampCenters,
   DEFAULT_BRUSH_ENGINE,
+  __test,
 } from '@/lib/professionalBrushes'
 import type { Stroke } from '@/lib/strokes'
 
@@ -80,6 +86,31 @@ describe('professionalBrushes', () => {
     expect(next.logicalLayer).toBe('shade')
     expect(next.blendMode).toBe('multiply')
     expect(next.textureSeed).toBe('seed-me')
+    expect(next.charcoalRenderer).toBe(CHARCOAL_RENDERER_CURRENT)
+    expect(next.charcoalRenderer).toBe(CHARCOAL_RENDERER_V2)
+  })
+
+  it('charcoal defaults favor wide soft fabric shading; ink stays fine', () => {
+    expect(defaultSizeForBrushKind('tapered')).toBeLessThan(3)
+    expect(defaultSizeForBrushKind('charcoal')).toBeGreaterThanOrEqual(14)
+    expect(defaultSizeForBrushKind('airbrush')).toBeGreaterThanOrEqual(18)
+    const charcoal = defaultsForBrushKind('charcoal')
+    expect(charcoal.logicalLayer).toBe('shade')
+    expect(charcoal.blendMode).toBe('multiply')
+    expect((charcoal.softness ?? 0) >= 0.75).toBe(true)
+    expect((charcoal.textureIntensity ?? 1) <= 0.25).toBe(true)
+    expect(charcoal.garmentMask).toBe(true)
+  })
+
+  it('resolves absent charcoalRenderer as V1 for saved artwork compatibility', () => {
+    expect(
+      __test.resolveCharcoalRenderer(sampleStroke({ brushKind: 'charcoal' })),
+    ).toBe(CHARCOAL_RENDERER_V1)
+    expect(
+      __test.resolveCharcoalRenderer(
+        sampleStroke({ brushKind: 'charcoal', charcoalRenderer: CHARCOAL_RENDERER_V2 }),
+      ),
+    ).toBe(CHARCOAL_RENDERER_V2)
   })
 
   it('round-trips professional fields from raw JSON', () => {

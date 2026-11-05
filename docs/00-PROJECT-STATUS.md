@@ -3,27 +3,55 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Professional Sketch Engine V1** **LIVE** FE · **`f8bc3b82`** · BE still **`900bda6b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Charcoal Shading V2** **LIVE** FE · **`PENDING_SHA`** · BE still **`900bda6b`** · **0** agent paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing now includes Professional Sketch Engine V1 (tapered ink / charcoal / airbrush + ink·shade·highlight layers). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`f8bc3b82`** — release `/var/www/fashionrise/releases/f8bc3b82` · Sketch Engine V1 + mobile Ink/Charcoal/Airbrush chips. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`PENDING_SHA`** — release `/var/www/fashionrise/releases/PENDING_SHA` · Charcoal Shading V2 continuous ribbon. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`f8bc3b82`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`PENDING_SHA`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## Charcoal Shading V2 — LIVE FE (2026-11-05)
+
+### Root cause (V1 charcoal)
+Stamp-based `paintCharcoal` used `stampCenters()` + overlapping radial gradients. Slow pointer motion stacked more dabs → darker blobs; edges looked like spray/smoke instead of fashion graphite.
+
+### Fix
+| Area | Change |
+|---|---|
+| Renderer | **Charcoal V2** — concentric full-path feathered ribbon mask → colorize once (`destination-in`) → single composite alpha. Density independent of sample rate. |
+| Versioning | Stroke field `charcoalRenderer`: absent/`1` = legacy stamp (saved art), new charcoal = `2`. |
+| Defaults | Charcoal size **18px**, flow **0.42**, softness **0.82**, texture **0.14**, multiply + Shadows + garment clip. Ink stays ~1.75px. Per-kind size memory. |
+| Garment mask | Soft clip to fill alpha when enabled + fills exist; freehand otherwise. Does not alter fills. |
+| Airbrush / Ink | **Unchanged** rendering. |
+| Visual fixtures | Offline `@napi-rs/canvas` PNGs under `/opt/cursor/artifacts/charcoal-v2/` |
+
+### Safety
+| Field | Value |
+|---|---|
+| FE release | `/var/www/fashionrise/releases/PENDING_SHA` |
+| Prior FE | **`69ab52b4`** (soft-stamp interim) ← **`f8bc3b82`** ← **`ac3e219c`** |
+| Rollback | `/var/backups/fashionrise/charcoal-v2-*/ROLLBACK.sh` → **`69ab52b4`** |
+| BE / Alembic / spend | unchanged |
+| Agent paid AI calls | **0** |
+| Tests | charcoal V2 visual + professionalBrushes + export suites pass; `tsc` clean; prod vite flags pass |
+
+### Owner acceptance (manual)
+Hard-refresh until App SHA **`PENDING_SHA`**. Open a filled dress → select **Charcoal** (default ~18px) → shade waist / vertical fold / drape on **Shadows**. Expect smooth fabric darkening (no spray dots). Switch back to **Ink** → fine line restored. Airbrush should feel unchanged. Save/reopen/export/Magic unchanged.
 
 ## Professional Sketch Engine V1 — LIVE FE (2026-11-05)
 
 ### Delivered
 | Area | Change |
 |---|---|
-| Brushes | **A** tapered ink (perfect-freehand) · **B** deterministic charcoal · **C** soft airbrush |
+| Brushes | **A** tapered ink (perfect-freehand) · **B** charcoal (now V2 ribbon) · **C** soft airbrush |
 | Layers | Logical **ink / shade / highlight**; shade·highlight erase does **not** punch base fills or croquis |
 | Export / Magic | `paintInkStrokes` / `compositeFillAndInkLayers` composite the same shade→ink→highlight stack |
 | Persistence | Optional stroke + brush-engine fields; legacy drafts open unchanged |
@@ -32,12 +60,12 @@
 ### Safety
 | Field | Value |
 |---|---|
-| FE release | `/var/www/fashionrise/releases/f8bc3b82` (discoverability fix on top of `ac3e219c`) |
+| FE release | superseded by Charcoal V2 above |
 | Prior FE | **`ac3e219c`** ← **`900bda6b`** |
 | Rollback | `/var/backups/fashionrise/sketch-engine-v1-*/ROLLBACK.sh` |
 | BE / Alembic / spend | unchanged |
 | Agent paid AI calls | **0** |
-| Tests | `professionalBrushes` + export/draft/flood suite **85 passed**; `tsc --noEmit` clean |
+| Tests | `professionalBrushes` + export/draft/flood suite; `tsc --noEmit` clean |
 
 ### Owner acceptance (manual)
 Outline with Ink → base fill → Airbrush shadows (Multiply) on Shadows layer → Charcoal folds → Highlights → erase Shadows only → undo/redo → save/reopen → Front/Back → Magic capture → mouse/stylus/tablet.

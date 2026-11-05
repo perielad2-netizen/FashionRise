@@ -4,6 +4,8 @@
  */
 
 import { strokeToSvgPath } from '@/lib/freehand'
+import type { FillOp } from '@/lib/fills'
+import { paintFillOps } from '@/lib/paintFills'
 import type { Stroke } from '@/lib/strokes'
 
 export type BrushKind = 'tapered' | 'charcoal' | 'airbrush'
@@ -28,6 +30,19 @@ export const DEFAULT_FLOW = 0.45
 export const DEFAULT_SOFTNESS = 0.65
 export const DEFAULT_TEXTURE_INTENSITY = 0.7
 
+/** Charcoal stamp renderer (PR #185 early). Kept for saved-stroke compatibility. */
+export const CHARCOAL_RENDERER_V1 = 1
+/** Continuous soft ribbon — Charcoal Shading V2. */
+export const CHARCOAL_RENDERER_V2 = 2
+export const CHARCOAL_RENDERER_CURRENT = CHARCOAL_RENDERER_V2
+
+/** Per-kind default sizes (design-space px). Ink stays fine; charcoal/airbrush shade wider. */
+export const BRUSH_KIND_DEFAULT_SIZE_PX: Record<BrushKind, number> = {
+  tapered: 1.75,
+  charcoal: 18,
+  airbrush: 22,
+}
+
 export type BrushEngineState = {
   brushKind: BrushKind
   logicalLayer: LogicalLayer
@@ -49,7 +64,7 @@ export const DEFAULT_BRUSH_ENGINE: BrushEngineState = {
   garmentMask: false,
 }
 
-/** Suggested defaults when switching brush kind. */
+/** Suggested engine defaults when switching brush kind (size handled separately). */
 export function defaultsForBrushKind(kind: BrushKind): Partial<BrushEngineState> {
   if (kind === 'tapered') {
     return {
@@ -59,6 +74,7 @@ export function defaultsForBrushKind(kind: BrushKind): Partial<BrushEngineState>
       flow: 1,
       softness: 0.2,
       textureIntensity: 0,
+      garmentMask: false,
     }
   }
   if (kind === 'charcoal') {
@@ -66,10 +82,11 @@ export function defaultsForBrushKind(kind: BrushKind): Partial<BrushEngineState>
       brushKind: 'charcoal',
       logicalLayer: 'shade',
       blendMode: 'multiply',
-      flow: 0.38,
-      softness: 0.78,
-      // Fine paper grain only — not spray scatter.
-      textureIntensity: 0.32,
+      flow: 0.42,
+      softness: 0.82,
+      // Understated graphite grain — tonal blending first.
+      textureIntensity: 0.14,
+      garmentMask: true,
     }
   }
   return {
@@ -79,7 +96,12 @@ export function defaultsForBrushKind(kind: BrushKind): Partial<BrushEngineState>
     flow: 0.35,
     softness: 0.75,
     textureIntensity: 0,
+    garmentMask: true,
   }
+}
+
+export function defaultSizeForBrushKind(kind: BrushKind): number {
+  return BRUSH_KIND_DEFAULT_SIZE_PX[kind] ?? BRUSH_KIND_DEFAULT_SIZE_PX.tapered
 }
 
 export function clamp01(n: number, fallback = 0): number {
@@ -233,18 +255,13 @@ function paintTapered(ctx: Ctx2d, stroke: Stroke, sealTips?: boolean): void {
   ctx.restore()
 }
 
-/**
- * Charcoal = soft fashion-illustration shading (blending-stump feel),
- * not spray/smoke. Continuous soft radial build-up + optional fine grain
- * constrained inside each dab. Deterministic via textureSeed.
- */
-function paintCharcoal(ctx: Ctx2d, stroke: Stroke): void {
+/** Legacy stamp charcoal (renderer 1) — preserved for already-saved strokes. */
+function paintCharcoalV1(ctx: Ctx2d, stroke: Stroke): void {
   const intensity = clamp01(stroke.textureIntensity ?? 0.32, 0.32)
   const flow = clamp01(stroke.flow ?? 0.38, 0.38)
   const softness = clamp01(stroke.softness ?? 0.78, 0.78)
   const seedStr = String(stroke.textureSeed ?? stroke.id)
   const rnd = mulberry32(hashSeed(seedStr))
-  // Tight spacing so dabs melt into a smooth shadow ribbon.
   const spacing = Math.max(0.85, stroke.size * (0.12 + (1 - softness) * 0.1))
   const stamps = stampCenters(stroke.points, spacing)
   const blend = resolveBlendMode(stroke)
@@ -252,11 +269,9 @@ function paintCharcoal(ctx: Ctx2d, stroke: Stroke): void {
 
   ctx.save()
   ctx.globalCompositeOperation = blend
-
   for (const s of stamps) {
     const press = 0.42 + s.p * 0.58
     const r = radius * (0.78 + press * 0.3)
-    // Low per-dab alpha → overlaps blend into soft volume, not blotches.
     const alpha = Math.min(
       1,
       stroke.opacity * flow * (0.1 + press * 0.18) * (0.7 + softness * 0.35),
@@ -271,8 +286,6 @@ function paintCharcoal(ctx: Ctx2d, stroke: Stroke): void {
     ctx.beginPath()
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
     ctx.fill()
-
-    // Subtle paper grain only — tiny dots, center-biased, never wide scatter.
     if (intensity > 0.04) {
       const grains = Math.floor(3 + intensity * 8 + r * 0.22)
       for (let i = 0; i < grains; i += 1) {
@@ -290,6 +303,151 @@ function paintCharcoal(ctx: Ctx2d, stroke: Stroke): void {
     }
   }
   ctx.restore()
+}
+
+function averagePressure(pts: Array<{ x: number; y: number; p: number }>): number {
+  if (pts.length === 0) return 0.5
+  let sum = 0
+  for (const p of pts) sum += p.p
+  return sum / pts.length
+}
+
+/** Smooth polyline path for a continuous ribbon (quadratic midpoints). */
+export function traceRibbonPath(
+  ctx: Pick<Ctx2d, 'beginPath' | 'moveTo' | 'lineTo' | 'quadraticCurveTo'>,
+  pts: Array<{ x: number; y: number; p: number }>,
+): void {
+  if (pts.length === 0) return
+  ctx.beginPath()
+  ctx.moveTo(pts[0]!.x, pts[0]!.y)
+  if (pts.length === 1) return
+  if (pts.length === 2) {
+    ctx.lineTo(pts[1]!.x, pts[1]!.y)
+    return
+  }
+  for (let i = 1; i < pts.length - 1; i += 1) {
+    const cur = pts[i]!
+    const next = pts[i + 1]!
+    const mx = (cur.x + next.x) / 2
+    const my = (cur.y + next.y) / 2
+    ctx.quadraticCurveTo(cur.x, cur.y, mx, my)
+  }
+  const last = pts[pts.length - 1]!
+  ctx.lineTo(last.x, last.y)
+}
+
+/**
+ * Charcoal V2 — continuous feathered shadow ribbon.
+ *
+ * Builds a grayscale mask by stroking the FULL path in concentric widths
+ * (outer→inner). Density along the stroke is independent of pointer sample
+ * rate / speed because each concentric pass paints the path once — not per
+ * input point. Colorize once, then composite with the stroke blend mode.
+ */
+function paintCharcoalV2(ctx: Ctx2d, stroke: Stroke): void {
+  const intensity = clamp01(stroke.textureIntensity ?? 0.14, 0.14)
+  const flow = clamp01(stroke.flow ?? 0.42, 0.42)
+  const softness = clamp01(stroke.softness ?? 0.82, 0.82)
+  const pts = pointsAsTriples(stroke.points)
+  if (pts.length === 0) return
+
+  const press = averagePressure(pts)
+  const blend = resolveBlendMode(stroke)
+  // Texture adds a hair more feather (graphite on paper), never speckles.
+  const baseW = Math.max(1.2, stroke.size * (0.5 + press * 0.5))
+  const feather = baseW * (0.55 + softness * 1.35 + intensity * 0.25)
+  const pad = Math.ceil(feather + baseW + 4)
+
+  let minX = pts[0]!.x
+  let minY = pts[0]!.y
+  let maxX = minX
+  let maxY = minY
+  for (const p of pts) {
+    minX = Math.min(minX, p.x)
+    minY = Math.min(minY, p.y)
+    maxX = Math.max(maxX, p.x)
+    maxY = Math.max(maxY, p.y)
+  }
+  const ox = minX - pad
+  const oy = minY - pad
+  const mw = Math.max(1, Math.ceil(maxX - minX + pad * 2))
+  const mh = Math.max(1, Math.ceil(maxY - minY + pad * 2))
+
+  const mask = document.createElement('canvas')
+  mask.width = mw
+  mask.height = mh
+  const mctx = mask.getContext('2d')
+  if (!mctx) return
+
+  mctx.translate(-ox, -oy)
+  mctx.strokeStyle = '#ffffff'
+  mctx.fillStyle = '#ffffff'
+  mctx.lineCap = 'round'
+  mctx.lineJoin = 'round'
+
+  if (pts.length === 1) {
+    const p = pts[0]!
+    const steps = Math.max(5, Math.round(4 + softness * 8))
+    for (let i = steps; i >= 0; i -= 1) {
+      const t = i / steps
+      const r = baseW * (0.35 + (1 - t) * 0.65) + feather * t
+      const a = Math.pow(1 - t * 0.95, 1.7)
+      const g = mctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, Math.max(0.5, r))
+      g.addColorStop(0, `rgba(255,255,255,${a})`)
+      g.addColorStop(1, 'rgba(255,255,255,0)')
+      mctx.globalAlpha = 1
+      mctx.fillStyle = g
+      mctx.beginPath()
+      mctx.arc(p.x, p.y, Math.max(0.5, r), 0, Math.PI * 2)
+      mctx.fill()
+    }
+  } else {
+    // Concentric full-path strokes: radial falloff without along-path overdraw.
+    const steps = Math.max(6, Math.round(5 + softness * 10))
+    for (let i = steps; i >= 0; i -= 1) {
+      const t = i / steps // 1 = outer feather, 0 = dark core
+      const width = baseW * (0.42 + (1 - t) * 0.58) + feather * t
+      const a = Math.pow(1 - t * 0.93, 1.55)
+      mctx.globalAlpha = a
+      mctx.lineWidth = Math.max(0.8, width)
+      traceRibbonPath(mctx, pts)
+      mctx.stroke()
+    }
+  }
+
+  const tint = document.createElement('canvas')
+  tint.width = mw
+  tint.height = mh
+  const tctx = tint.getContext('2d')
+  if (!tctx) return
+  tctx.fillStyle = stroke.color
+  tctx.fillRect(0, 0, mw, mh)
+  tctx.globalCompositeOperation = 'destination-in'
+  tctx.drawImage(mask, 0, 0)
+
+  ctx.save()
+  ctx.globalCompositeOperation = blend
+  // One final alpha — independent of how many pointer samples were recorded.
+  ctx.globalAlpha = clamp01(stroke.opacity * flow * (0.62 + press * 0.38), 0.55)
+  ctx.drawImage(tint, ox, oy)
+  ctx.restore()
+}
+
+function resolveCharcoalRenderer(stroke: Stroke): number {
+  const v = stroke.charcoalRenderer
+  if (v === CHARCOAL_RENDERER_V1) return CHARCOAL_RENDERER_V1
+  if (v === CHARCOAL_RENDERER_V2) return CHARCOAL_RENDERER_V2
+  // Absent on legacy charcoal → keep stamp look for saved artwork.
+  if (stroke.brushKind === 'charcoal' && v == null) return CHARCOAL_RENDERER_V1
+  return CHARCOAL_RENDERER_CURRENT
+}
+
+function paintCharcoal(ctx: Ctx2d, stroke: Stroke): void {
+  if (resolveCharcoalRenderer(stroke) === CHARCOAL_RENDERER_V1) {
+    paintCharcoalV1(ctx, stroke)
+    return
+  }
+  paintCharcoalV2(ctx, stroke)
 }
 
 function paintAirbrush(ctx: Ctx2d, stroke: Stroke): void {
@@ -344,6 +502,50 @@ export function paintEraseOnContext(ctx: Ctx2d, stroke: Stroke): void {
   ctx.restore()
 }
 
+export type ProfessionalPaintOptions = {
+  sealTips?: boolean
+  /** Same design-space transform as `ctx`; used when stroke.garmentMask is true. */
+  garmentAlpha?: HTMLCanvasElement | null
+}
+
+function paintDrawWithOptionalGarmentClip(
+  ctx: Ctx2d,
+  stroke: Stroke,
+  garmentAlpha: HTMLCanvasElement | null | undefined,
+  paint: (target: Ctx2d) => void,
+): void {
+  if (!stroke.garmentMask || !garmentAlpha) {
+    paint(ctx)
+    return
+  }
+  const w = ctx.canvas.width
+  const h = ctx.canvas.height
+  if (w <= 0 || h <= 0) {
+    paint(ctx)
+    return
+  }
+  const tmp = document.createElement('canvas')
+  tmp.width = w
+  tmp.height = h
+  const t = tmp.getContext('2d')
+  if (!t) {
+    paint(ctx)
+    return
+  }
+  // Mirror the layer's design→output transform so stroke points land correctly,
+  // then clip with garment alpha already rasterized in output space.
+  const xform = ctx.getTransform()
+  t.setTransform(xform)
+  paint(t)
+  t.setTransform(1, 0, 0, 1, 0, 0)
+  t.globalCompositeOperation = 'destination-in'
+  t.drawImage(garmentAlpha, 0, 0)
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.drawImage(tmp, 0, 0)
+  ctx.restore()
+}
+
 /**
  * Paint one draw stroke with the professional brush engine.
  * Erase strokes should use paintEraseOnContext on the target layer.
@@ -351,16 +553,17 @@ export function paintEraseOnContext(ctx: Ctx2d, stroke: Stroke): void {
 export function paintProfessionalDrawStroke(
   ctx: Ctx2d,
   stroke: Stroke,
-  options?: { sealTips?: boolean },
+  options?: ProfessionalPaintOptions,
 ): void {
   if (stroke.tool !== 'draw') return
   const kind = resolveBrushKind(stroke)
+  const garmentAlpha = options?.garmentAlpha
   if (kind === 'charcoal') {
-    paintCharcoal(ctx, stroke)
+    paintDrawWithOptionalGarmentClip(ctx, stroke, garmentAlpha, (c) => paintCharcoal(c, stroke))
     return
   }
   if (kind === 'airbrush') {
-    paintAirbrush(ctx, stroke)
+    paintDrawWithOptionalGarmentClip(ctx, stroke, garmentAlpha, (c) => paintAirbrush(c, stroke))
     return
   }
   paintTapered(ctx, stroke, options?.sealTips === true)
@@ -436,6 +639,8 @@ export function paintLogicalArtworkLayers(
     scaleY?: number
     offsetX?: number
     offsetY?: number
+    /** When provided, charcoal/airbrush strokes with garmentMask clip to fill alpha. */
+    fills?: FillOp[]
   },
 ): LogicalLayerCanvases {
   const make = (): { canvas: HTMLCanvasElement; ctx: Ctx2d } | null => {
@@ -464,6 +669,21 @@ export function paintLogicalArtworkLayers(
   }
   const sealTips = options?.sealTips === true
 
+  let garmentAlpha: HTMLCanvasElement | null = null
+  const fills = options?.fills
+  const needsMask = Boolean(
+    fills &&
+      fills.length > 0 &&
+      strokes.some((s) => s.tool === 'draw' && s.garmentMask === true),
+  )
+  if (needsMask && fills) {
+    const g = make()
+    if (g) {
+      paintFillOps(g.ctx, fills)
+      garmentAlpha = g.canvas
+    }
+  }
+
   const layerCtx = (layer: LogicalLayer): Ctx2d => {
     if (layer === 'shade') return shade.ctx
     if (layer === 'highlight') return highlight.ctx
@@ -480,7 +700,7 @@ export function paintLogicalArtworkLayers(
     if (stroke.tool !== 'draw') continue
     if (sealTips && resolveBrushKind(stroke) !== 'tapered') continue
     const layer = resolveLogicalLayer(stroke)
-    paintProfessionalDrawStroke(layerCtx(layer), stroke, { sealTips })
+    paintProfessionalDrawStroke(layerCtx(layer), stroke, { sealTips, garmentAlpha })
   }
 
   return { shade: shade.canvas, ink: ink.canvas, highlight: highlight.canvas }
@@ -508,6 +728,7 @@ export function applyBrushEngineToStroke(
       brushKind: 'tapered',
       logicalLayer: engine.logicalLayer,
       blendMode: 'source-over',
+      garmentMask: false,
     }
   }
   return {
@@ -519,6 +740,10 @@ export function applyBrushEngineToStroke(
     softness: engine.softness,
     textureIntensity: engine.textureIntensity,
     textureSeed: stroke.textureSeed ?? stroke.id,
+    garmentMask: engine.garmentMask === true,
+    // New charcoal strokes always use continuous ribbon V2.
+    charcoalRenderer:
+      engine.brushKind === 'charcoal' ? CHARCOAL_RENDERER_CURRENT : stroke.charcoalRenderer,
   }
 }
 
@@ -551,8 +776,22 @@ export function pickProfessionalFields(raw: Record<string, unknown>): Partial<St
   if (typeof raw.textureSeed === 'string' || typeof raw.textureSeed === 'number') {
     out.textureSeed = raw.textureSeed
   }
+  if (typeof raw.charcoalRenderer === 'number' && Number.isFinite(raw.charcoalRenderer)) {
+    out.charcoalRenderer = Math.floor(raw.charcoalRenderer)
+  }
+  if (typeof raw.garmentMask === 'boolean') {
+    out.garmentMask = raw.garmentMask
+  }
   return out
 }
 
 /** Avoid unused helper lint if resample kept for tests. */
-export const __test = { resamplePolyline, mulberry32, hashSeed }
+export const __test = {
+  resamplePolyline,
+  mulberry32,
+  hashSeed,
+  paintCharcoalV1,
+  paintCharcoalV2,
+  resolveCharcoalRenderer,
+  averagePressure,
+}

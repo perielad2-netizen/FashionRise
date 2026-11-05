@@ -132,6 +132,7 @@ import {
 import { StrokeHistory } from '@/lib/history'
 import {
   DEFAULT_BRUSH_ENGINE,
+  defaultSizeForBrushKind,
   defaultsForBrushKind,
   type BrushEngineState,
   type BrushKind,
@@ -261,6 +262,12 @@ export function useStudioEditor() {
   const [brushSizePx, setBrushSizePxState] = useState(BRUSH_SIZE_DEFAULT_PX)
   const [opacity, setOpacity] = useState(1)
   const [brushEngine, setBrushEngine] = useState<BrushEngineState>(DEFAULT_BRUSH_ENGINE)
+  /** Independent size memory per brush kind so Ink stays fine after Charcoal. */
+  const [, setSizeByKind] = useState<Record<BrushKind, number>>({
+    tapered: defaultSizeForBrushKind('tapered'),
+    charcoal: defaultSizeForBrushKind('charcoal'),
+    airbrush: defaultSizeForBrushKind('airbrush'),
+  })
   const [color, setColor] = useState<string>(INK_SWATCHES[0]!.color)
   const [fillStyle, setFillStyle] = useState<FillStyle>(() => solidStyle(INK_SWATCHES[0]!.color))
   const [model, setModelState] = useState<ModelChoice>(DEFAULT_MODEL)
@@ -3261,16 +3268,33 @@ export function useStudioEditor() {
   }, [flushCloudSave, logout, navigate, saveStatus])
 
   const setBrushSizePx = useCallback((px: number) => {
-    setBrushSizePxState(snapBrushSizePx(px))
-  }, [])
+    const next = snapBrushSizePx(px)
+    setBrushSizePxState(next)
+    setSizeByKind((prev) => ({
+      ...prev,
+      [brushEngine.brushKind]: next,
+    }))
+  }, [brushEngine.brushKind])
 
   const setSizeId = useCallback((id: BrushSizeId) => {
-    setBrushSizePxState(BRUSH_SIZES[id])
-  }, [])
+    const next = BRUSH_SIZES[id]
+    setBrushSizePxState(next)
+    setSizeByKind((prev) => ({
+      ...prev,
+      [brushEngine.brushKind]: next,
+    }))
+  }, [brushEngine.brushKind])
 
   const nudgeBrushSizePx = useCallback((deltaSteps: number) => {
-    setBrushSizePxState((prev) => snapBrushSizePx(prev + deltaSteps * 0.25))
-  }, [])
+    setBrushSizePxState((prev) => {
+      const next = snapBrushSizePx(prev + deltaSteps * 0.25)
+      setSizeByKind((sizes) => ({
+        ...sizes,
+        [brushEngine.brushKind]: next,
+      }))
+      return next
+    })
+  }, [brushEngine.brushKind])
 
   const setBrushOpacity = useCallback((value: number) => {
     const clamped = Math.min(1, Math.max(0.05, value))
@@ -3279,6 +3303,15 @@ export function useStudioEditor() {
 
   const setBrushKind = useCallback((kind: BrushKind) => {
     setBrushEngine((prev) => ({ ...prev, ...defaultsForBrushKind(kind) }))
+    setSizeByKind((prev) => {
+      const remembered = prev[kind]
+      const nextSize =
+        typeof remembered === 'number' && Number.isFinite(remembered)
+          ? snapBrushSizePx(remembered)
+          : snapBrushSizePx(defaultSizeForBrushKind(kind))
+      setBrushSizePxState(nextSize)
+      return { ...prev, [kind]: nextSize }
+    })
   }, [])
 
   const patchBrushEngine = useCallback((patch: Partial<BrushEngineState>) => {

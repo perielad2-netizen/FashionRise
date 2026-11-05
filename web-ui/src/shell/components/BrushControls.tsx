@@ -42,20 +42,30 @@ function BrushPreview({ kind }: { kind: BrushKind }) {
       return 'M8 22 C 40 8, 70 8, 112 22'
     }
     if (kind === 'charcoal') {
-      return 'M8 22 C 36 10, 58 30, 80 14 C 92 8, 104 18, 112 22'
+      return 'M10 22 C 40 12, 70 12, 110 22'
     }
     return 'M8 22 C 40 14, 70 14, 112 22'
   }, [kind])
   return (
     <svg className={styles.preview} viewBox="0 0 120 36" aria-hidden="true">
-      {kind === 'airbrush' ? (
+      {kind === 'airbrush' || kind === 'charcoal' ? (
         <path
           d={path}
           fill="none"
           stroke="currentColor"
-          strokeWidth={14}
+          strokeWidth={kind === 'charcoal' ? 16 : 14}
           strokeLinecap="round"
-          opacity={0.22}
+          opacity={kind === 'charcoal' ? 0.18 : 0.22}
+        />
+      ) : null}
+      {kind === 'charcoal' ? (
+        <path
+          d={path}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={10}
+          strokeLinecap="round"
+          opacity={0.32}
         />
       ) : null}
       <path
@@ -64,8 +74,7 @@ function BrushPreview({ kind }: { kind: BrushKind }) {
         stroke="currentColor"
         strokeWidth={kind === 'tapered' ? 3.5 : kind === 'charcoal' ? 5 : 8}
         strokeLinecap="round"
-        strokeDasharray={kind === 'charcoal' ? '2 3' : undefined}
-        opacity={kind === 'airbrush' ? 0.55 : 0.9}
+        opacity={kind === 'airbrush' ? 0.55 : kind === 'charcoal' ? 0.72 : 0.9}
       />
     </svg>
   )

@@ -212,6 +212,7 @@ export function compositeFillAndInkLayers(target: Canvas2DLike, options: Artwork
       originY: oy,
       offsetX,
       offsetY,
+      fills,
     })
     compositeLogicalLayers(inkCtx, layers, width, height)
   } catch {

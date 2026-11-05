@@ -34,6 +34,13 @@ export type Stroke = {
   textureIntensity?: number
   /** Deterministic charcoal seed; prefer stroke id when absent. */
   textureSeed?: string | number
+  /**
+   * Charcoal renderer generation. Absent / 1 = legacy stamp; 2 = continuous ribbon.
+   * Keeps older charcoal strokes visually stable when the engine improves.
+   */
+  charcoalRenderer?: number
+  /** When true, shade/highlight strokes soft-clip to garment fill alpha if available. */
+  garmentMask?: boolean
 }
 
 export type BrushSizeId = 'thin' | 'medium' | 'thick' | 'bold'

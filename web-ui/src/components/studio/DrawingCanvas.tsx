@@ -7,6 +7,7 @@ import { floodFillRegion } from '@/lib/floodFill'
 import type { FillOp, FillStyle } from '@/lib/fills'
 import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { paintFillsWithErasers } from '@/lib/exportCanvas'
+import { paintFillOps } from '@/lib/paintFills'
 import {
   applyBrushEngineToStroke,
   compositeLogicalLayers,
@@ -111,7 +112,7 @@ function renderFillsImage(fills: FillOp[], strokes: Stroke[]): HTMLImageElement 
 }
 
 /** Rasterize professional ink stack (shade → ink → highlight) to match Magic export. */
-function renderInkArtworkImage(strokes: Stroke[]): HTMLImageElement | null {
+function renderInkArtworkImage(strokes: Stroke[], fills: FillOp[]): HTMLImageElement | null {
   if (strokes.length === 0) return null
   const canvas = document.createElement('canvas')
   canvas.width = PAPER_WIDTH
@@ -122,6 +123,7 @@ function renderInkArtworkImage(strokes: Stroke[]): HTMLImageElement | null {
     const layers = paintLogicalArtworkLayers(PAPER_WIDTH, PAPER_HEIGHT, strokes, {
       originX: PAPER_ORIGIN_X,
       originY: PAPER_ORIGIN_Y,
+      fills,
     })
     compositeLogicalLayers(ctx, layers, PAPER_WIDTH, PAPER_HEIGHT)
   } catch {
@@ -132,7 +134,23 @@ function renderInkArtworkImage(strokes: Stroke[]): HTMLImageElement | null {
   return img
 }
 
-function renderDraftBrushImage(stroke: Stroke): HTMLImageElement | null {
+/** Rasterize fill alpha in paper pixel space for soft-brush garment clipping. */
+function buildGarmentAlpha(fills: FillOp[]): HTMLCanvasElement | null {
+  if (fills.length === 0) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.translate(-PAPER_ORIGIN_X, -PAPER_ORIGIN_Y)
+  paintFillOps(ctx, fills)
+  return canvas
+}
+
+function renderDraftBrushImage(
+  stroke: Stroke,
+  garmentAlpha: HTMLCanvasElement | null,
+): HTMLImageElement | null {
   if (stroke.tool !== 'draw') return null
   const kind = resolveBrushKind(stroke)
   if (kind === 'tapered') return null
@@ -142,7 +160,9 @@ function renderDraftBrushImage(stroke: Stroke): HTMLImageElement | null {
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
   ctx.translate(-PAPER_ORIGIN_X, -PAPER_ORIGIN_Y)
-  paintProfessionalDrawStroke(ctx, stroke)
+  paintProfessionalDrawStroke(ctx, stroke, {
+    garmentAlpha: stroke.garmentMask ? garmentAlpha : null,
+  })
   const img = new window.Image()
   img.src = canvas.toDataURL('image/png')
   return img
@@ -340,7 +360,7 @@ export function DrawingCanvas({
       setInkArtworkImage(null)
       return
     }
-    const img = renderInkArtworkImage(strokes)
+    const img = renderInkArtworkImage(strokes, fills)
     if (!img) {
       setInkArtworkImage(null)
       return
@@ -351,7 +371,12 @@ export function DrawingCanvas({
     return () => {
       cancelled = true
     }
-  }, [strokes])
+  }, [strokes, fills])
+
+  const garmentAlphaForDraft = useMemo(() => {
+    if (!draft?.garmentMask) return null
+    return buildGarmentAlpha(fills)
+  }, [draft?.garmentMask, fills])
 
   useEffect(() => {
     let cancelled = false
@@ -359,7 +384,7 @@ export function DrawingCanvas({
       setDraftBrushImage(null)
       return
     }
-    const img = renderDraftBrushImage(draft)
+    const img = renderDraftBrushImage(draft, garmentAlphaForDraft)
     if (!img) {
       setDraftBrushImage(null)
       return
@@ -370,7 +395,7 @@ export function DrawingCanvas({
     return () => {
       cancelled = true
     }
-  }, [draft])
+  }, [draft, garmentAlphaForDraft])
 
   const fitScale = size.w / DESIGN_WIDTH
   const contentScale = immersive && viewport ? viewport.scale : fitScale
