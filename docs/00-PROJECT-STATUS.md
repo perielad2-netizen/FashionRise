@@ -14,9 +14,15 @@
 | Frontend (`web-ui`) | **`e377b7f1`** — release `/var/www/fashionrise/releases/e377b7f1` · AI Create Fabric. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`e377b7f1`** · AI Create Fabric · Try On **`v2.7`** · Alembic **`016`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
-| Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`e377b7f1`** |
+| Database | `fashionrise_beta` — Alembic **`016`** (AI fabric prompt columns) |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`e377b7f1`** · `POST /api/v1/fabrics/ai-generate` allowlisted |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## AI Create Fabric — LIVE FE/BE (2026-11-05)
+
+Studio Fabrics → **Create with AI**: fabric-only prompt + optional palette color → seamless tile in My Fabrics; `prompt_short` feeds Magic/Try On. Unrelated prompts rejected; missing color returns a clear message. App/BE **`e377b7f1`** · Alembic **`016`**. Rollback `/var/backups/fashionrise/ai-fabric-create-20261105T220154Z`.
+
+**Nginx:** `POST /api/v1/fabrics/ai-generate` allowlisted (was 403 under fabrics catch-all). Rollback `/var/backups/fashionrise/ai-fabric-nginx-20261105T220551Z`.
 
 ## Try On erase-shoes apparel span — LIVE FE (2026-11-05)
 
