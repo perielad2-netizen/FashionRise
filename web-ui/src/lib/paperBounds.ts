@@ -195,12 +195,19 @@ export function paperExportFrame(): ExportFrame {
 /**
  * Export / capture frame: legacy 768×1024 when artwork stays inside the croquis
  * plane (pixel-identical reopen/export); full extended paper otherwise.
+ *
+ * Shade/highlight strokes are ignored for the bounds check — Sketch Engine eraser
+ * tips often overshoot by a few px (or scribble the full page while cleaning
+ * shade). Counting them flipped Try On / Magic into the extended-paper frame,
+ * letterboxed the garment, and failed completeness ("lost lower parts").
  */
 export function resolveExportFrame(
   strokes: Stroke[],
   fills: FillBoundsSource[] = [],
 ): ExportFrame {
-  if (!artworkExceedsLegacyBounds(strokes, fills)) return legacyExportFrame()
+  if (!artworkExceedsLegacyBounds(strokesForLegacyFrameGate(strokes), fills)) {
+    return legacyExportFrame()
+  }
   return paperExportFrame()
 }
 

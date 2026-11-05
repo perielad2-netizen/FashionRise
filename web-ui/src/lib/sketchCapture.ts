@@ -64,6 +64,10 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
   try {
     const { blob, referenceIncluded } = await exportSketchPng({
       ...options,
+      // Gate above already verified ink/fills fit 768×1024. Force legacy so
+      // shade/highlight eraser overshoot cannot flip export to paper frame and
+      // letterbox/crop the Magic input.
+      frame: 'legacy',
       onReferenceError: expectsReference ? 'throw' : 'skip',
       onFabricError: 'throw',
     })
@@ -184,6 +188,9 @@ export async function captureGarmentArtworkForTryOn(options: {
       garmentOnly: true,
       width,
       height,
+      // Same as Magic: after the ink/fills legacy gate, never let shade-layer
+      // eraser overshoot select the extended-paper frame (letterboxes hems).
+      frame: 'legacy',
       onReferenceError: 'skip',
       onFabricError: 'throw',
     })

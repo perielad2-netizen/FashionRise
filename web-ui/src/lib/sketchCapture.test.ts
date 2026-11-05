@@ -48,6 +48,7 @@ describe('captureSketchForMagic', () => {
     expect(exportMock).toHaveBeenCalledWith(
       expect.objectContaining({
         fills: expect.arrayContaining([expect.objectContaining({ id: 'f1' })]),
+        frame: 'legacy',
         onReferenceError: 'skip',
         onFabricError: 'throw',
       }),
@@ -191,6 +192,7 @@ describe('captureGarmentArtworkForTryOn', () => {
         garmentOnly: true,
         width: DESIGN_WIDTH * TRY_ON_GARMENT_CAPTURE_SCALE,
         height: DESIGN_HEIGHT * TRY_ON_GARMENT_CAPTURE_SCALE,
+        frame: 'legacy',
         onReferenceError: 'skip',
         onFabricError: 'throw',
       }),
@@ -263,7 +265,9 @@ describe('captureGarmentArtworkForTryOn', () => {
         ],
       }),
     ).resolves.toMatchObject({ referenceIncluded: false })
-    expect(exportMock).toHaveBeenCalled()
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ frame: 'legacy', garmentOnly: true }),
+    )
   })
 
   it('still blocks Try On when ink strokes leave the legacy frame', async () => {

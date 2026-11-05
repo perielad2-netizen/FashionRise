@@ -340,5 +340,7 @@ describe("strokesForLegacyFrameGate", () => {
     expect(gated).toEqual([ink])
     expect(artworkExceedsLegacyBounds([ink, shadeErase])).toBe(true)
     expect(artworkExceedsLegacyBounds(gated)).toBe(false)
+    // Export frame must stay legacy — paper letterboxing cropped Try On hems.
+    expect(resolveExportFrame([ink, shadeErase]).mode).toBe("legacy")
   })
 })
