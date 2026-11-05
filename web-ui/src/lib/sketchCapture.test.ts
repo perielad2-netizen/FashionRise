@@ -222,4 +222,68 @@ describe('captureGarmentArtworkForTryOn', () => {
       }),
     ).rejects.toThrow(/croquis underlay/i)
   })
+
+  it('does not block Try On when only shade-layer erasers overshoot the legacy frame', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
+    // Prod incident 2026-11-05: shade erase tips at y≈-13 / y≈1098 blocked all Try On.
+    const ink = {
+      id: 'ink1',
+      tool: 'draw' as const,
+      color: '#111111',
+      size: 4,
+      opacity: 1,
+      brushKind: 'tapered' as const,
+      logicalLayer: 'ink' as const,
+      points: [100, 100, 0.5, 120, 140, 0.5],
+    }
+    const shadeEraseOutside = {
+      id: 'shade-erase-out',
+      tool: 'erase' as const,
+      color: '#000000',
+      size: 8,
+      opacity: 1,
+      brushKind: 'tapered' as const,
+      logicalLayer: 'shade' as const,
+      points: [449, -3, 0.5, 459, -13, 0.5, 310, 1076, 0.5],
+    }
+    await expect(
+      captureGarmentArtworkForTryOn({
+        strokes: [ink, shadeEraseOutside],
+        fills: [
+          {
+            id: 'f1',
+            contour: [80, 80, 200, 80, 200, 400, 80, 400],
+            style: { kind: 'solid', color: '#B91C1C' },
+            seedX: 120,
+            seedY: 200,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ referenceIncluded: false })
+    expect(exportMock).toHaveBeenCalled()
+  })
+
+  it('still blocks Try On when ink strokes leave the legacy frame', async () => {
+    await expect(
+      captureGarmentArtworkForTryOn({
+        strokes: [
+          {
+            id: 'ink-out',
+            tool: 'draw',
+            color: '#111111',
+            size: 4,
+            opacity: 1,
+            brushKind: 'tapered',
+            logicalLayer: 'ink',
+            points: [100, 100, 0.5, 900, 500, 0.5],
+          },
+        ],
+        fills: [],
+      }),
+    ).rejects.toThrow(/extends beyond the standard try-on frame/i)
+    expect(exportMock).not.toHaveBeenCalled()
+  })
 })

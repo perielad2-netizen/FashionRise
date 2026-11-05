@@ -2351,6 +2351,10 @@ export function useStudioEditor() {
         const apiMsg = err instanceof ApiError ? err.message : ''
         if (isAdultsAttestationError(apiMsg)) {
           setMagicError(apiMsg || ADULTS_ATTESTATION_REQUIRED)
+        } else if (!(err instanceof ApiError) && err instanceof Error && err.message.trim()) {
+          // Capture / client gates (bounds, empty garment, fabric load) are already
+          // written for humans — do not bury them under generic SMART_TRY_ON_FAILURE.
+          setMagicError(err.message)
         } else {
           setMagicError(SMART_TRY_ON_FAILURE)
         }

@@ -118,6 +118,15 @@ export function clampPointToPaper(x: number, y: number): PaperPoint {
   }
 }
 
+/**
+ * Strokes that define garment placement inside the legacy croquis frame.
+ * Shade/highlight Sketch Engine layers are decorative (and often overshoot by a
+ * few px at eraser tips) — they must not block Magic / Try On Person capture.
+ */
+export function strokesForLegacyFrameGate(strokes: Stroke[]): Stroke[] {
+  return strokes.filter((s) => s.logicalLayer !== 'shade' && s.logicalLayer !== 'highlight')
+}
+
 /** True when any stroke sample or fill contour vertex leaves the legacy croquis box. */
 export function artworkExceedsLegacyBounds(
   strokes: Stroke[],

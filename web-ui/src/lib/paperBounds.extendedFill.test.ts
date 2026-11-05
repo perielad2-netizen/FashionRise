@@ -19,6 +19,7 @@ import {
   PAPER_ORIGIN_Y,
   PAPER_WIDTH,
   artworkExceedsLegacyBounds,
+  strokesForLegacyFrameGate,
   resolveExportFrame,
 } from '@/lib/paperBounds'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, createStrokeId, type Stroke } from '@/lib/strokes'
@@ -312,5 +313,32 @@ describe('Issue #127 extended paper bounds', () => {
     const ix = Math.round(384 - PAPER_ORIGIN_X)
     const iy = Math.round(480 - PAPER_ORIGIN_Y)
     expect(ctx.getImageData(ix, iy, 1, 1).data[3]!).toBeGreaterThan(10)
+  })
+})
+
+describe("strokesForLegacyFrameGate", () => {
+  it("drops shade/highlight strokes so incidental eraser overshoot does not trip the gate", () => {
+    const ink = {
+      id: "ink",
+      tool: "draw" as const,
+      color: "#111",
+      size: 4,
+      opacity: 1,
+      logicalLayer: "ink" as const,
+      points: [10, 10, 0.5, 20, 20, 0.5],
+    }
+    const shadeErase = {
+      id: "shade-erase",
+      tool: "erase" as const,
+      color: "#000",
+      size: 8,
+      opacity: 1,
+      logicalLayer: "shade" as const,
+      points: [10, -5, 0.5, 20, 1100, 0.5],
+    }
+    const gated = strokesForLegacyFrameGate([ink, shadeErase])
+    expect(gated).toEqual([ink])
+    expect(artworkExceedsLegacyBounds([ink, shadeErase])).toBe(true)
+    expect(artworkExceedsLegacyBounds(gated)).toBe(false)
   })
 })

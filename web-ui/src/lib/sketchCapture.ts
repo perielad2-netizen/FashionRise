@@ -1,6 +1,6 @@
 import { exportSketchPng, type ExportOptions } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
-import { artworkExceedsLegacyBounds } from '@/lib/paperBounds'
+import { artworkExceedsLegacyBounds, strokesForLegacyFrameGate } from '@/lib/paperBounds'
 import type { FillOp } from '@/lib/fills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 import { liveArtworkYSpan } from '@/lib/tryOnDesignHints'
@@ -47,9 +47,15 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
   if (!hasArtwork) {
     throw new Error('Draw a sketch before using Magic.')
   }
-  // Fail closed when artwork uses the extended paper margins — do not silently
+  // Fail closed when garment ink/fills use extended paper margins — do not silently
   // crop oversized garments into the legacy Magic input frame (0 paid AI).
-  if (artworkExceedsLegacyBounds(options.strokes, options.fills ?? [])) {
+  // Shade/highlight Sketch Engine strokes are ignored (incidental eraser overshoot).
+  if (
+    artworkExceedsLegacyBounds(
+      strokesForLegacyFrameGate(options.strokes),
+      options.fills ?? [],
+    )
+  ) {
     throw new Error(
       'This sketch extends beyond the standard Magic frame. Pull oversized strokes inside the croquis area, or export a PNG instead — Magic was not started.',
     )
@@ -161,7 +167,9 @@ export async function captureGarmentArtworkForTryOn(options: {
   if (!hasArtwork) {
     throw new Error('Draw a garment before using Try On Person.')
   }
-  if (artworkExceedsLegacyBounds(options.strokes, fills)) {
+  // Same gate as Magic: ink/fills only. Shade-layer eraser tips outside 768×1024
+  // were blocking all Try On after Sketch Engine V1 (generic SMART_TRY_ON_FAILURE).
+  if (artworkExceedsLegacyBounds(strokesForLegacyFrameGate(options.strokes), fills)) {
     throw new Error(
       'This sketch extends beyond the standard try-on frame. Pull oversized strokes inside the croquis area — Try On Person was not started.',
     )
