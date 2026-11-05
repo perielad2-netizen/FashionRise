@@ -176,7 +176,8 @@ export function detectBilateralSleevesFromFills(
 
 /**
  * Dark footwear ink near the feet / hem (#184).
- * Heuristic: dark stroke or fill whose bounds sit in the lower ~22% of the plane.
+ * Heuristic: dark stroke or any opaque solid/gradient fill whose bounds sit in
+ * the lower ~22% of the plane (filled black/brown shoes, not only outline ink).
  */
 export function detectFootwearInk(
   strokes: Stroke[],
@@ -193,16 +194,21 @@ export function detectFootwearInk(
   }
   for (const fill of fills) {
     const style = fill.style
-    const hex =
-      style.kind === 'solid'
-        ? style.color
-        : style.kind === 'gradient'
-          ? style.colors[0]
-          : ''
-    if (!hex || !isOutlineInk(hex)) continue
+    if (style.kind !== 'solid' && style.kind !== 'gradient') continue
+    const hex = style.kind === 'solid' ? style.color : style.colors[0]
+    if (!hex) continue
     const b = fillBounds(fill)
     if (!b) continue
-    if (b.minY >= footBand && b.maxY > footBand) return true
+    // Shoe-sized: sits in the foot band and is not a full-leg pant fill.
+    const h = b.maxY - b.minY
+    if (b.minY < footBand) continue
+    if (b.maxY <= footBand) continue
+    if (h > designHeight * 0.28) continue
+    // Dark enough to read as footwear (black/brown/navy), not pale skin/highlight.
+    const c = parseHexColor(hex)
+    if (!c) continue
+    if ((c.r + c.g + c.b) / 3 > 140) continue
+    return true
   }
   return false
 }
@@ -361,12 +367,12 @@ export function buildTryOnDesignHints(args: {
   if (detectFootwearInk(args.strokes, fills)) {
     pushUnique(
       priority,
-      'footwear: drawn shoes/boots in image 2 — replace the photo shoes; do not keep original boots',
+      'footwear: drawn shoes/boots in image 2 — replace the photo shoes/boots entirely; do not keep original boots',
     )
   } else if (detectOnePieceFullCoverage(fills) && !detectFloorLengthHem(fills)) {
-    // Secondary so bridal neckline/sleeve/pale + colors keep priority budget.
+    // Priority: photo boots were surviving when this was secondary-only.
     pushUnique(
-      secondary,
+      priority,
       'footwear: image 2 has no shoes drawn — remove photo boots/shoes; show bare feet matching image 1',
     )
   }

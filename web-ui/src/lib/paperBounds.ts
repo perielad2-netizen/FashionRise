@@ -127,6 +127,15 @@ export function strokesForLegacyFrameGate(strokes: Stroke[]): Stroke[] {
   return strokes.filter((s) => s.logicalLayer !== 'shade' && s.logicalLayer !== 'highlight')
 }
 
+/**
+ * Soft pad for the legacy 768×1024 gate. Flood-fill contours tuck a few px under
+ * outline ink (FILL_UNDER_INK_PX); shoe/hem fills at the croquis feet often land
+ * 1–6px past y=1024. Without this pad, drawing shoes blocked Try On Person with
+ * "extends beyond the standard try-on frame" while the artwork was still on-figure.
+ * Real extended-paper work (margins of tens of px) still trips the gate.
+ */
+export const LEGACY_FRAME_SOFT_PAD_PX = 8
+
 /** True when any stroke sample or fill contour vertex leaves the legacy croquis box. */
 export function artworkExceedsLegacyBounds(
   strokes: Stroke[],
@@ -205,7 +214,13 @@ export function resolveExportFrame(
   strokes: Stroke[],
   fills: FillBoundsSource[] = [],
 ): ExportFrame {
-  if (!artworkExceedsLegacyBounds(strokesForLegacyFrameGate(strokes), fills)) {
+  if (
+    !artworkExceedsLegacyBounds(
+      strokesForLegacyFrameGate(strokes),
+      fills,
+      LEGACY_FRAME_SOFT_PAD_PX,
+    )
+  ) {
     return legacyExportFrame()
   }
   return paperExportFrame()

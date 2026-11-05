@@ -290,4 +290,35 @@ describe('captureGarmentArtworkForTryOn', () => {
     ).rejects.toThrow(/extends beyond the standard try-on frame/i)
     expect(exportMock).not.toHaveBeenCalled()
   })
+
+  it('allows shoe fill a few px past legacy frame (under-ink soft pad)', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
+    await expect(
+      captureGarmentArtworkForTryOn({
+        strokes: [],
+        fills: [
+          {
+            id: 'suit',
+            contour: [200, 200, 500, 200, 500, 700, 200, 700],
+            style: { kind: 'solid', color: '#B91C1C' },
+            seedX: 350,
+            seedY: 400,
+          },
+          {
+            id: 'shoe',
+            contour: [300, 980, 360, 980, 360, 1026, 300, 1026],
+            style: { kind: 'solid', color: '#111111' },
+            seedX: 330,
+            seedY: 1000,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ referenceIncluded: false })
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ frame: 'legacy', garmentOnly: true }),
+    )
+  })
 })

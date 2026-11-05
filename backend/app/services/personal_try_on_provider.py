@@ -29,7 +29,7 @@ from app.services.personal_croquis_provider import (
 logger = logging.getLogger(__name__)
 
 TRY_ON_JOB_TYPE = "personal_try_on"
-# V1/V3 kept for historical jobs. Live OpenAI enqueue uses V2.5.
+# V1/V3 kept for historical jobs. Live OpenAI enqueue uses V2.6.
 # V3 (swimwear skin-coverage wording) caused 100% OpenAI input moderation_blocked
 # category=sexual on ordinary outfits (job 461c9419…). Avoid V3 phrasing.
 # V2.1 kept V2 print/identity rules; clarified fashion slits must not become trousers.
@@ -40,7 +40,9 @@ TRY_ON_JOB_TYPE = "personal_try_on"
 # skin" language — FASHN remains preferred for coverage-sensitive swimwear.
 # V2.5: when image 2 has no drawn footwear and the garment is a one-piece / high-cut
 # ending above the ankles, remove photo boots/shoes and show bare feet.
-TRY_ON_PROMPT_VERSION = "try-on-person-v2.5"
+# V2.6: stronger footwear contract — drawn shoes must fully replace photo boots;
+# barefoot one-piece must not keep tall boots (owner red swimsuit kept beige boots).
+TRY_ON_PROMPT_VERSION = "try-on-person-v2.6"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.
@@ -249,6 +251,53 @@ TRY_ON_PROMPT_V2_5 = (
     "Output a single realistic photograph."
 )
 
+# V2.6 — V2.5 + emphatic footwear replace / barefoot (photo tall boots were surviving).
+TRY_ON_PROMPT_V2_6 = (
+    "Create a photorealistic photograph of the person from image 1 wearing the garment "
+    "design shown in image 2. "
+    "Image 1 is the authoritative full-body photograph — preserve the person's exact face, "
+    "hairstyle, skin tone, body proportions, pose, stance, visible skin, and the original "
+    "background/scene. Do not slim, elongate, beautify, or reshape the person. Do not "
+    "alter the environment. "
+    "Image 2 is the authoritative fashion-design artwork for garment type, cut, placement, "
+    "neckline depth, sleeve count and length, hemline, footwear/shoes when drawn, coverage, "
+    "exact chosen colors (including intentional pale cream, ivory, peach, or white fabric), "
+    "and print geometry. "
+    "Image 2 may sit on a neutral dark matte for readability — the matte is NOT clothing; "
+    "only the drawn garment pixels are the design. "
+    "Read print topology from image 2 pixels literally: a checkerboard must stay a "
+    "checkerboard (not stripes); plaids, dots, and freehand motifs must keep their "
+    "structure; do not invent a different graphic. "
+    "Include every deliberately drawn garment piece and design accessory in image 2 — "
+    "tops, bottoms, dresses, one-piece garments, hats/caps, belts, scarves, shoes/footwear "
+    "— placed on the corresponding body region. Hats/caps may cover hair while keeping "
+    "identity recognizable. "
+    "Footwear is mandatory to resolve from image 2: if image 2 draws any shoes, boots, "
+    "flats, heels, or laced footwear on the feet, you MUST fully replace image 1's shoes "
+    "or boots with that drawn footwear (match color and style). Never leave image 1's tall "
+    "boots, combat boots, or heels when image 2 shows different shoes or bare feet. "
+    "If image 2 shows bare feet or no footwear at all and the garment is a one-piece or "
+    "high-cut design ending above the ankles, remove image 1's shoes and boots completely "
+    "and render bare feet with skin tone matching image 1. Floor-length dresses without "
+    "drawn footwear may keep image 1 shoes. "
+    "Wherever image 2 shows continuous opaque garment coverage on the torso and through "
+    "the hips or crotch, replace the person's clothing in those regions with that opaque "
+    "design. A one-piece design is not a separate top over trousers — do not leave jeans, "
+    "trousers, or shorts from image 1 under a one-piece. Match the designed hem and leg "
+    "openings from image 2. "
+    "Adapt garments naturally to pose and folds as an approximate drape only. "
+    "Preserve open / plunging / deep-V necklines exactly — do not fill cleavage or raise "
+    "the neckline. If image 2 shows sleeves on both arms, keep both sleeves; do not invent "
+    "a one-shoulder or sleeveless redesign. "
+    "Do not invent extra garments, logos, text, or accessories absent from image 2. "
+    "Keep the look as an opaque fashion catalog presentation. Do not create nudity, sheer "
+    "intimate exposure, or suggestive posing. Fashion necklines, hems, cutouts, and "
+    "slits drawn in image 2 are opaque garment styling — keep that cut; do not convert a "
+    "dress or skirt with a slit into trousers or a jumpsuit. "
+    "Do not copy mannequin outlines into the photo. "
+    "Output a single realistic photograph."
+)
+
 # V3 — legitimate opaque fashion/swimwear coverage (#156).
 # Removes V2's contradiction that forbade showing skin newly uncovered by a swimsuit
 # when image 1 is street clothes. Still forbids nudity / sexual framing.
@@ -299,13 +348,13 @@ TRY_ON_USER_PROVIDER_REJECT_MESSAGE = (
 
 
 def build_try_on_prompt(design_hints: list[str] | None = None) -> str:
-    """Active OpenAI try-on prompt (V2.5) plus optional Studio-derived design hints.
+    """Active OpenAI try-on prompt (V2.6) plus optional Studio-derived design hints.
 
     V3 remains in-module for audit only — do not activate for live OpenAI Try On.
     Coverage-sensitive swimwear still prefers the separate FASHN provider path;
-    V2.5 clarifies one-piece clothing replacement and bare feet when no footwear is drawn.
+    V2.6 strengthens footwear replace / barefoot so photo boots do not survive.
     """
-    prompt = TRY_ON_PROMPT_V2_5
+    prompt = TRY_ON_PROMPT_V2_6
     cleaned: list[str] = []
     for raw in design_hints or []:
         if not isinstance(raw, str):

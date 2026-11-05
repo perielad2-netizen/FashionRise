@@ -1,6 +1,10 @@
 import { exportSketchPng, type ExportOptions } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
-import { artworkExceedsLegacyBounds, strokesForLegacyFrameGate } from '@/lib/paperBounds'
+import {
+  artworkExceedsLegacyBounds,
+  LEGACY_FRAME_SOFT_PAD_PX,
+  strokesForLegacyFrameGate,
+} from '@/lib/paperBounds'
 import type { FillOp } from '@/lib/fills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 import { liveArtworkYSpan } from '@/lib/tryOnDesignHints'
@@ -50,10 +54,13 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
   // Fail closed when garment ink/fills use extended paper margins — do not silently
   // crop oversized garments into the legacy Magic input frame (0 paid AI).
   // Shade/highlight Sketch Engine strokes are ignored (incidental eraser overshoot).
+  // Soft pad: fill-under-ink / shoe fills at the croquis feet may sit a few px past
+  // 1024 without being true extended-paper artwork.
   if (
     artworkExceedsLegacyBounds(
       strokesForLegacyFrameGate(options.strokes),
       options.fills ?? [],
+      LEGACY_FRAME_SOFT_PAD_PX,
     )
   ) {
     throw new Error(
@@ -173,7 +180,14 @@ export async function captureGarmentArtworkForTryOn(options: {
   }
   // Same gate as Magic: ink/fills only. Shade-layer eraser tips outside 768×1024
   // were blocking all Try On after Sketch Engine V1 (generic SMART_TRY_ON_FAILURE).
-  if (artworkExceedsLegacyBounds(strokesForLegacyFrameGate(options.strokes), fills)) {
+  // Soft pad so shoe/hem fills that tuck a few px under outline ink still start.
+  if (
+    artworkExceedsLegacyBounds(
+      strokesForLegacyFrameGate(options.strokes),
+      fills,
+      LEGACY_FRAME_SOFT_PAD_PX,
+    )
+  ) {
     throw new Error(
       'This sketch extends beyond the standard try-on frame. Pull oversized strokes inside the croquis area — Try On Person was not started.',
     )

@@ -19,6 +19,7 @@ import {
   PAPER_ORIGIN_Y,
   PAPER_WIDTH,
   artworkExceedsLegacyBounds,
+  LEGACY_FRAME_SOFT_PAD_PX,
   strokesForLegacyFrameGate,
   resolveExportFrame,
 } from '@/lib/paperBounds'
@@ -342,5 +343,18 @@ describe("strokesForLegacyFrameGate", () => {
     expect(artworkExceedsLegacyBounds(gated)).toBe(false)
     // Export frame must stay legacy — paper letterboxing cropped Try On hems.
     expect(resolveExportFrame([ink, shadeErase]).mode).toBe("legacy")
+  })
+
+  it("allows fill contours a few px past legacy (shoe under-ink) with soft pad", () => {
+    const shoeFill = {
+      id: "shoe",
+      contour: [300, 980, 360, 980, 360, 1026, 300, 1026],
+      seedX: 330,
+      seedY: 1000,
+      style: { kind: "solid" as const, color: "#111111" },
+    }
+    expect(artworkExceedsLegacyBounds([], [shoeFill])).toBe(true)
+    expect(artworkExceedsLegacyBounds([], [shoeFill], LEGACY_FRAME_SOFT_PAD_PX)).toBe(false)
+    expect(resolveExportFrame([], [shoeFill]).mode).toBe("legacy")
   })
 })

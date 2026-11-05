@@ -335,7 +335,8 @@ def openai_one_piece_coverage_hints(geometry: LowerGarmentGeometry) -> list[str]
     # Mid-thigh / high-cut one-piece (not floor gown): do not keep photo boots.
     if geometry.hem_y_frac < 0.88:
         hints.append(
-            "footwear: image 2 has no shoes drawn — remove photo boots/shoes; show bare feet matching image 1"
+            "footwear: image 2 has no shoes drawn — remove photo boots/shoes completely; "
+            "show bare feet matching image 1 — never keep tall boots from image 1"
         )
     return hints
 
