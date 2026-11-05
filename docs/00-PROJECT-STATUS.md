@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**PR #187 PM hardening amendment** — **NOT merged/deployed** · approved main **`1cab0a7b`** · Charcoal V4 FE still **`70eb0fcd`** · **0** agent paid AI calls.)
+**Last updated:** 2026-11-05 (**PR #187 final P0 closure-negation fix** — **NOT merged/deployed** · approved main **`1cab0a7b`** · Charcoal V4 FE still **`70eb0fcd`** · **0** agent paid AI calls.)
 
 **Phase:** Protected family beta. Create My Croquis / Studio / Fashion Magic / Smart Try-On **unchanged** this milestone. Focus = Create Real Design / Professional Technical Pack fidelity only.
 
@@ -22,13 +22,14 @@
 
 **Base:** approved GitHub main **`1cab0a7be1de4d8bb2d19dda26e77a3e42f5edfc`**. Branch `cursor/web-techpack-final-quality-77c6` · PR **#187**. **No production deploy / merge.**
 
-### PM hardening amendment (post-`f0a150f8`)
+### PM hardening amendment (post-`f0a150f8`) + final closure-negation P0
 | P0/P1 | Correction |
 |---|---|
 | **P0-1 fingerprints** | V1/V2 piece snapshots restored to historical shape; `color_treatment` / `fabric_pattern` only in explicit **V3** payload (`"v": 3`). Golden hashes vs approved main match. Fail-closed for older queued jobs before paid calls preserved; completed historical exports not backfilled. |
 | **P0-2 construction** | Designer-authored / explicitly confirmed steps never rewritten; conflicts emit review warnings. AI/estimate boilerplate only rewritten (pull-on) or marked UNVERIFIED (named but unconfirmed). Idempotent. |
 | **P0-3 PDF** | `filter_construction_steps` / `filter_bom_rows` receive piece context; confirmed zipper/buttons retained in rendered PDF text; missing analysis does not destroy designer steps. |
 | **P1 materials** | Legacy cleanup only when `source=estimate` and name exactly equals `{color_hint} fabric`. Preserves “Italian silk fabric”, designer-confirmed shells, unknown materials. |
+| **Final P0 negation** | `closure_hardware_named` resolves explicit absence (`no zipper`, `no buttons`, `buttonless`, `without zipper`, `pull-on`, …) **before** positive hardware matching. Bare `na`/`-` are not absence proof. AI analysis alone never confirms hardware. Confirmed “no zipper” ≠ confirmed zipper. |
 
 ### Quality scorecard (offline)
 
@@ -57,8 +58,8 @@
 | D gradient + confirmed buttons | Pass (buttons + qty 7 retained; V3 fp differs solid) |
 | E incomplete UNVERIFIED | Pass (DESIGN_CONCEPT) |
 
-### Tests (amendment)
-`test_techpack_final_quality_fidelity` + p0 reliability + meas integrity + manufacturing + pdf-only + preserve + v2 fixtures + autofill → **118 passed**. Agent paid AI calls: **0**.
+### Tests (amendment + closure-negation)
+`test_techpack_final_quality_fidelity` + p0 reliability + meas integrity + manufacturing + pdf-only + preserve + v2 fixtures + autofill → **127 passed**. Agent paid AI calls: **0**.
 
 ### Confirmed remaining / owner visual
 - Pixel-level flat vs Magic for FR-* requires owner-paid regen or private visual review (0 paid calls).

@@ -5,6 +5,7 @@ Never invent corrections — emit review warnings and filter unsupported generic
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.services.techpack_garments import POM_LABELS
@@ -156,22 +157,50 @@ def collect_compatibility_warnings(spec: dict[str, Any]) -> list[dict[str, Any]]
     return warnings
 
 
-_CLOSURE_NONE_TOKENS = (
-    "none",
-    "n/a",
-    "na",
-    "not visible",
-    "not verified",
-    "no closure",
-    "no buttons",
-    "no zipper",
-    "pull-on",
-    "pull on",
-    "open",
-    "—",
-    "-",
+# Unambiguous absence phrases — checked BEFORE positive hardware matching.
+# Do NOT treat bare "na", "-", or "—" alone as proof of missing hardware.
+_CLOSURE_ABSENT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\bnone\b",
+        r"\bn/a\b",
+        r"\bnot\s+applicable\b",
+        r"\bnot\s+visible\b",
+        r"\bnot\s+verified\b",
+        r"\bno\s+closures?\b",
+        r"\bno\s+fasteners?\b",
+        r"\bno\s+zip(?:per)?s?\b",
+        r"\bwithout\s+zip(?:per)?s?\b",
+        r"\bno\s+buttons?\b",
+        r"\bwithout\s+buttons?\b",
+        r"\bbuttonless\b",
+        r"\bno\s+placket\b",
+        r"\bno\s+draw(?:string|cord)s?\b",
+        r"\bwithout\s+draw(?:string|cord)s?\b",
+        r"\bpull[-\s]?on\b",
+        r"\bpullover\b",
+        r"\bslip[-\s]?on\b",
+    )
 )
 
+# Positive hardware — word-boundary aware; never match through "no zipper"/"buttonless".
+_CLOSURE_HARDWARE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\binvisible\s+zippers?\b",
+        r"\bzip(?:per|pered)?s?\b",
+        r"\bzip[-\s]?front\b",
+        r"\bbutton[-\s]?front\b",
+        r"\bbuttonholes?\b",
+        r"\bbuttons?\b",
+        r"\bplackets?\b",
+        r"\bdraw(?:string|cord)s?\b",
+        r"\bsnaps?\b",
+        r"\bhook(?:-|\s+)?(?:and|&)(?:-|\s+)?eyes?\b",
+    )
+)
+
+# Kept for construction-step mention scans (instruction text, not closure type identity).
 _CLOSURE_HARDWARE_TOKENS = (
     "zipper",
     "zip ",
@@ -270,29 +299,55 @@ def _already_anti_invention_text(text: str) -> bool:
     return "do not invent zipper" in lower or "do not invent zipper/buttons" in lower
 
 
-def closure_hardware_named(
+def _closure_text_blob(
     *,
     analysis: dict[str, Any] | None = None,
     piece: dict[str, Any] | None = None,
-) -> bool:
-    """True when zipper/buttons/drawstring are named on the piece or analysis."""
+) -> tuple[str, str]:
+    """Return (type_txt, combined_blob) lowercased/stripped for closure semantics."""
     closures = piece.get("closures") if isinstance(piece, dict) else None
     closures_d = closures if isinstance(closures, dict) else {}
     type_txt = _text(closures_d.get("type") or closures_d.get("display_type"))
     notes_txt = _text(closures_d.get("notes"))
     visible = _text(analysis.get("closure_visible") if isinstance(analysis, dict) else "")
     blob = f"{type_txt} {notes_txt} {visible}".strip()
+    return type_txt, blob
+
+
+def closure_explicitly_absent(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> bool:
+    """True for unambiguous negative/absent closure statements (checked before positives)."""
+    type_txt, blob = _closure_text_blob(analysis=analysis, piece=piece)
+    if not blob:
+        return False
+    if type_txt in {"true", "false", "1", "0", "yes", "no"}:
+        # Boolean placeholders are inconclusive — not an explicit absence claim.
+        return False
+    # Prefer type field, then full blob. Negation must win over substring hardware.
+    for text in (type_txt, blob):
+        if text and any(pat.search(text) for pat in _CLOSURE_ABSENT_PATTERNS):
+            return True
+    return False
+
+
+def closure_hardware_named(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> bool:
+    """True when zipper/buttons/drawstring are positively named (not negated)."""
+    type_txt, blob = _closure_text_blob(analysis=analysis, piece=piece)
     if not blob:
         return False
     if type_txt in {"true", "false", "1", "0", "yes", "no"}:
         return False
-    if any(tok in type_txt for tok in ("zip", "button", "draw", "snap", "hook", "placket")):
-        return True
-    if any(tok in blob for tok in _CLOSURE_HARDWARE_TOKENS) and not any(
-        tok in blob for tok in _CLOSURE_NONE_TOKENS
-    ):
-        return True
-    return False
+    # Negation first — "no zipper" / "buttonless" must never count as named hardware.
+    if closure_explicitly_absent(analysis=analysis, piece=piece):
+        return False
+    return any(pat.search(blob) for pat in _CLOSURE_HARDWARE_PATTERNS)
 
 
 def closure_lacks_hardware_evidence(
@@ -300,7 +355,7 @@ def closure_lacks_hardware_evidence(
     analysis: dict[str, Any] | None = None,
     piece: dict[str, Any] | None = None,
 ) -> bool:
-    """True for pull-on / none / empty — inventing zipper install is unsupported."""
+    """True when inventing zipper/buttons install is unsupported (absent/empty/ambiguous)."""
     return not closure_hardware_named(analysis=analysis, piece=piece)
 
 
@@ -309,11 +364,17 @@ def closure_hardware_confirmed(
     analysis: dict[str, Any] | None = None,
     piece: dict[str, Any] | None = None,
 ) -> bool:
-    """True only when closures are explicitly confirmed AND name hardware."""
+    """True only when piece closures are explicitly confirmed AND positively name hardware.
+
+    AI analysis alone never confirms hardware — pass analysis for API symmetry but ignore it.
+    """
+    _ = analysis
     closures = piece.get("closures") if isinstance(piece, dict) else None
     if not _is_explicitly_confirmed_meta(closures):
         return False
-    return closure_hardware_named(analysis=analysis, piece=piece)
+    # Confirmed "no zipper" is confirmed absence — not confirmed hardware.
+    # Ignore analysis: unverified vision text must not upgrade to confirmed fact.
+    return closure_hardware_named(analysis=None, piece=piece)
 
 
 def closure_hardware_unverified(

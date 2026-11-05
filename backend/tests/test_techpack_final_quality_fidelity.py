@@ -19,7 +19,9 @@ from pypdf import PdfReader
 from app.services.techpack_ai import enrich_spec_heuristic
 from app.services.techpack_ai_professional import OpenAIProfessionalProvider
 from app.services.techpack_compatibility import (
+    closure_explicitly_absent,
     closure_hardware_confirmed,
+    closure_hardware_named,
     closure_hardware_unverified,
     closure_lacks_hardware_evidence,
     filter_bom_rows,
@@ -589,3 +591,184 @@ def test_flat_and_detail_prompts_include_color_treatment_and_closure_honesty():
     for prompt in (flat, detail):
         assert "color_treatment_mode=gradient" in prompt
         assert "closure_visible" in prompt
+
+
+# --- Final P0: closure negation before positive hardware matching -----------------
+
+
+def test_confirmed_no_zipper_is_absent_not_named_hardware():
+    piece = _dress_piece(
+        closures={
+            "type": "no zipper",
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+        }
+    )
+    assert closure_explicitly_absent(piece=piece) is True
+    assert closure_hardware_named(piece=piece) is False
+    assert closure_hardware_confirmed(piece=piece) is False
+    assert closure_lacks_hardware_evidence(piece=piece) is True
+
+
+def test_confirmed_no_buttons_is_absent_not_named_hardware():
+    piece = _dress_piece(
+        category="shirt",
+        closures={
+            "type": "no buttons",
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+        }
+    )
+    assert closure_explicitly_absent(piece=piece) is True
+    assert closure_hardware_named(piece=piece) is False
+    assert closure_hardware_confirmed(piece=piece) is False
+
+
+def test_confirmed_buttonless_and_without_zipper_phrases():
+    for phrase in (
+        "buttonless",
+        "without zipper",
+        "without buttons",
+        "pull-on",
+        "none",
+        "not visible",
+    ):
+        piece = _dress_piece(
+            closures={
+                "type": phrase,
+                "designer_confirmed": True,
+                "review_status": "confirmed",
+            }
+        )
+        assert closure_explicitly_absent(piece=piece) is True, phrase
+        assert closure_hardware_named(piece=piece) is False, phrase
+        assert closure_hardware_confirmed(piece=piece) is False, phrase
+
+
+def test_bare_dash_or_na_not_treated_as_explicit_absence():
+    for phrase in ("-", "—", "na"):
+        piece = _dress_piece(closures={"type": phrase})
+        assert closure_explicitly_absent(piece=piece) is False, phrase
+
+
+def test_confirmed_invisible_zipper_and_button_front_retained():
+    zip_piece = _dress_piece(
+        closures={
+            "type": "invisible zipper",
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+        }
+    )
+    btn_piece = _dress_piece(
+        category="shirt",
+        closures={
+            "type": "button-front placket",
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+        }
+    )
+    assert closure_hardware_named(piece=zip_piece) is True
+    assert closure_hardware_confirmed(piece=zip_piece) is True
+    assert closure_hardware_named(piece=btn_piece) is True
+    assert closure_hardware_confirmed(piece=btn_piece) is True
+
+
+def test_ai_analysis_zipper_alone_never_confirms_hardware():
+    piece = _dress_piece(
+        closures={"type": "", "source": "estimate"},
+    )
+    analysis = {"closure_visible": "center-front zipper visible"}
+    # May be named via analysis for anti-invention filtering…
+    assert closure_hardware_named(analysis=analysis, piece=piece) is True
+    # …but never manufacturing-confirmed from analysis alone.
+    assert closure_hardware_confirmed(analysis=analysis, piece=piece) is False
+    assert closure_hardware_unverified(analysis=analysis, piece=piece) is True
+
+
+def test_pdf_confirmed_no_zipper_does_not_assert_install():
+    piece = _dress_piece(
+        closures={
+            "type": "no zipper",
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+            "notes": "Pull-on neckline finish only",
+        },
+        construction_steps=[
+            {
+                "step": 1,
+                "instruction": "Install closure (buttons/placket/zipper) and press.",
+                "source": "estimate",
+            },
+            {
+                "step": 2,
+                "instruction": "Finish neckline clean; no zipper.",
+                "source": "designer",
+                "designer_confirmed": True,
+                "review_status": "confirmed",
+            },
+        ],
+        bom=[
+            {
+                "item": "Buttons or zipper",
+                "qty": "TBD",
+                "unit": "pcs",
+                "source": "estimate",
+            }
+        ],
+        illustrations={},
+    )
+    spec = default_spec(look_summary="no zip dress")
+    spec["outfit"] = {"pieces": [piece], "piece_count": 1}
+    text = _pdf_text(spec, style_code="QA-NOZIP")
+    assert "Install closure (buttons/placket/zipper)" not in text
+    assert "Finish neckline clean; no zipper." in text
+    assert "do not invent" in text.lower() or "UNVERIFIED" in text
+    # Confirmed absence must not surface as confirmed zipper hardware.
+    assert closure_hardware_confirmed(piece=piece) is False
+
+
+def test_pdf_confirmed_no_buttons_does_not_assert_buttons():
+    piece = _dress_piece(
+        category="shirt",
+        label="QA No Buttons",
+        closures={
+            "type": "no buttons",
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+        },
+        construction_steps=[
+            {
+                "step": 1,
+                "instruction": "Sew buttonholes and attach buttons.",
+                "source": "estimate",
+            }
+        ],
+        bom=[
+            {
+                "item": "Buttons",
+                "qty": "8",
+                "unit": "pcs",
+                "source": "estimate",
+            }
+        ],
+        illustrations={},
+    )
+    spec = default_spec(look_summary="no buttons top")
+    spec["outfit"] = {"pieces": [piece], "piece_count": 1}
+    text = _pdf_text(spec, style_code="QA-NOBTN").lower()
+    # Estimate button install rewritten / not asserted as confirmed fact.
+    assert "sew buttonholes and attach buttons" not in text or "unverified" in text
+    assert closure_hardware_confirmed(piece=piece) is False
+
+
+def test_seven_buttons_positive_phrase_confirmed():
+    piece = _dress_piece(
+        category="shirt",
+        closures={
+            "type": "seven buttons",
+            "designer_confirmed": True,
+            "review_status": "confirmed",
+        }
+    )
+    assert closure_hardware_named(piece=piece) is True
+    assert closure_hardware_confirmed(piece=piece) is True
