@@ -3,20 +3,44 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-04 (**smart Max soft-pass + footwear** **LIVE** · BE/FE **`900bda6b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Professional Sketch Engine V1** **LIVE** FE · **`ac3e219c`** · BE still **`900bda6b`** · **0** agent paid calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Try On Person: **one-button smart flow** — OpenAI **v2.1** first; on **eligible technical** failure **or output-stage moderation**, invisible FASHN Try-On Max (Balanced · 1k) (#180 of #179/#178). Input moderation / unknown outcomes stay terminal. Owner-only v1.6 / Max experiment tools preserved. Jumpsuits fail closed on FASHN prep. Soft structure review is provenance-gated.
+**Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing now includes Professional Sketch Engine V1 (tapered ink / charcoal / airbrush + ink·shade·highlight layers). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`900bda6b`** — release `/var/www/fashionrise/releases/900bda6b` · Smart Max soft-pass + footwear hints. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`ac3e219c`** — release `/var/www/fashionrise/releases/ac3e219c` · Professional Sketch Engine V1. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`968a7838`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`ac3e219c`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## Professional Sketch Engine V1 — LIVE FE (2026-11-05)
+
+### Delivered
+| Area | Change |
+|---|---|
+| Brushes | **A** tapered ink (perfect-freehand) · **B** deterministic charcoal · **C** soft airbrush |
+| Layers | Logical **ink / shade / highlight**; shade·highlight erase does **not** punch base fills or croquis |
+| Export / Magic | `paintInkStrokes` / `compositeFillAndInkLayers` composite the same shade→ink→highlight stack |
+| Persistence | Optional stroke + brush-engine fields; legacy drafts open unchanged |
+| UI | Brush picker with stroke previews; Layer chips; Advanced flow/softness/texture/blend |
+
+### Safety
+| Field | Value |
+|---|---|
+| FE release | `/var/www/fashionrise/releases/ac3e219c` |
+| Prior FE | **`900bda6b`** |
+| Rollback | `/var/backups/fashionrise/sketch-engine-v1-*/ROLLBACK.sh` → FE **`900bda6b`** |
+| BE / Alembic / spend | unchanged |
+| Agent paid AI calls | **0** |
+| Tests | `professionalBrushes` + export/draft/flood suite **85 passed**; `tsc --noEmit` clean |
+
+### Owner acceptance (manual)
+Outline with Ink → base fill → Airbrush shadows (Multiply) on Shadows layer → Charcoal folds → Highlights → erase Shadows only → undo/redo → save/reopen → Front/Back → Magic capture → mouse/stylus/tablet.
 
 ## #180 P0 Mobile Regression, Smart Failures & Recovery — LIVE (2026-11-02)
 
