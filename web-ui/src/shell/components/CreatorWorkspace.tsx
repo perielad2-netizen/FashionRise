@@ -684,6 +684,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               brushColor={editor.color}
               brushSize={editor.brushSize}
               brushOpacity={editor.opacity}
+              brushEngine={editor.brushEngine}
               fillStyle={editor.fillStyle}
               referenceUrl={editor.referenceUrl}
               referenceOpacity={editor.referenceOpacity}
@@ -829,10 +830,13 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               tool={editor.tool}
               brushSize={editor.brushSize}
               opacity={editor.opacity}
+              brushEngine={editor.brushEngine}
               dimmed={editor.dimmed}
               toolLabel={toolLabel}
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
+              onBrushKind={editor.setBrushKind}
+              onBrushEnginePatch={editor.patchBrushEngine}
               onToggleDim={() => editor.setDimmed((v) => !v)}
             />
           )}
@@ -858,8 +862,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               tool={editor.tool}
               brushSize={editor.brushSize}
               opacity={editor.opacity}
+              brushEngine={editor.brushEngine}
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
+              onBrushKind={editor.setBrushKind}
+              onBrushEnginePatch={editor.patchBrushEngine}
             />
           </div>
         </div>

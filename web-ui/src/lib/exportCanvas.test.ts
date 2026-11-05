@@ -196,7 +196,8 @@ describe('compositeFillAndInkLayers', () => {
       height: 32,
     })
 
-    expect(created).toHaveLength(2)
+    // fill layer, ink composite, then shade/ink/highlight logical layers
+    expect(created).toHaveLength(5)
     expect(drawImage).toHaveBeenCalledTimes(2)
     expect(drawImage.mock.calls[0]![0]).toBe(created[0])
     expect(drawImage.mock.calls[1]![0]).toBe(created[1])

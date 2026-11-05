@@ -1,6 +1,7 @@
 import { Expand } from 'lucide-react'
 import { DrawingCanvas } from '@/components/studio/DrawingCanvas'
 import type { FillOp, FillStyle } from '@/lib/fills'
+import type { BrushEngineState } from '@/lib/professionalBrushes'
 import type { Stroke, ToolKind } from '@/lib/strokes'
 import type { StudioPaperSide } from '@/lib/studioSideArtwork'
 import type { ViewportState } from '@/lib/viewportTransform'
@@ -14,6 +15,7 @@ type Props = {
   brushColor: string
   brushSize: number
   brushOpacity: number
+  brushEngine?: BrushEngineState
   fillStyle: FillStyle
   referenceUrl: string | null
   referenceOpacity: number
@@ -54,6 +56,7 @@ export function DrawingWorkspace({
   brushColor,
   brushSize,
   brushOpacity,
+  brushEngine,
   fillStyle,
   referenceUrl,
   referenceOpacity,
@@ -117,6 +120,7 @@ export function DrawingWorkspace({
           brushColor={brushColor}
           brushSize={brushSize}
           brushOpacity={brushOpacity}
+          brushEngine={brushEngine}
           fillStyle={fillStyle}
           referenceUrl={referenceUrl}
           referenceOpacity={referenceOpacity}

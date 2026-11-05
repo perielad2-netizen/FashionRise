@@ -13,6 +13,7 @@ import {
   type StudioPaperSide,
   type StudioSideBag,
 } from '@/lib/studioSideArtwork'
+import { pickProfessionalFields } from '@/lib/professionalBrushes'
 import {
   BRUSH_SIZE_DEFAULT_PX,
   BRUSH_SIZES,
@@ -43,6 +44,14 @@ export type StudioBrushState = {
   sizePx?: number
   opacity: number
   color: string
+  /** Professional Sketch Engine V1 — optional; absent → tapered / ink defaults. */
+  brushKind?: import('@/lib/strokes').BrushKind
+  logicalLayer?: import('@/lib/strokes').LogicalLayer
+  blendMode?: import('@/lib/strokes').StrokeBlendMode
+  flow?: number
+  softness?: number
+  textureIntensity?: number
+  garmentMask?: boolean
 }
 
 /** Normalize brush for fingerprints / equality so missing sizePx does not fake a conflict. */
@@ -58,6 +67,15 @@ export function normalizeStudioBrush(brush: StudioBrushState): StudioBrushState 
     sizePx,
     opacity: brush.opacity,
     color,
+    ...(brush.brushKind ? { brushKind: brush.brushKind } : {}),
+    ...(brush.logicalLayer ? { logicalLayer: brush.logicalLayer } : {}),
+    ...(brush.blendMode ? { blendMode: brush.blendMode } : {}),
+    ...(typeof brush.flow === 'number' ? { flow: brush.flow } : {}),
+    ...(typeof brush.softness === 'number' ? { softness: brush.softness } : {}),
+    ...(typeof brush.textureIntensity === 'number'
+      ? { textureIntensity: brush.textureIntensity }
+      : {}),
+    ...(typeof brush.garmentMask === 'boolean' ? { garmentMask: brush.garmentMask } : {}),
   }
 }
 
@@ -201,6 +219,7 @@ function parseSideStrokes(
     const tool = (s as Stroke).tool
     if (tool !== 'draw' && tool !== 'erase') continue
     if (!Array.isArray((s as Stroke).points)) continue
+    const raw = s as Record<string, unknown>
     strokes.push({
       id: String((s as Stroke).id || `stroke_${strokes.length}`),
       tool: tool as ToolKind,
@@ -208,6 +227,7 @@ function parseSideStrokes(
       color: typeof (s as Stroke).color === 'string' ? (s as Stroke).color : fallbackColor,
       size: typeof (s as Stroke).size === 'number' ? (s as Stroke).size : sizePx,
       opacity: typeof (s as Stroke).opacity === 'number' ? (s as Stroke).opacity : 1,
+      ...pickProfessionalFields(raw),
     })
   }
   return strokes
@@ -238,6 +258,7 @@ function parseStrictSideStrokes(rawList: unknown[]): Stroke[] | null {
       color: (s as Stroke).color,
       size: (s as Stroke).size,
       opacity: (s as Stroke).opacity,
+      ...pickProfessionalFields(s as Record<string, unknown>),
     })
   }
   return strokes
@@ -365,7 +386,16 @@ export function parseStudioDraftDocument(raw: unknown): StudioDraftDocument | nu
         : null,
     personalCroquisId,
     personalCroquisVersion,
-    brush: { sizeId, sizePx, opacity, color },
+    brush: normalizeStudioBrush({
+      sizeId,
+      sizePx,
+      opacity,
+      color,
+      ...pickProfessionalFields((raw.brush ?? {}) as Record<string, unknown>),
+      ...(typeof (raw.brush as { garmentMask?: unknown } | undefined)?.garmentMask === 'boolean'
+        ? { garmentMask: (raw.brush as { garmentMask: boolean }).garmentMask }
+        : {}),
+    }),
     dimmed: Boolean(raw.dimmed),
     clientRevision:
       typeof raw.clientRevision === 'number' && raw.clientRevision > 0
@@ -557,6 +587,14 @@ export function documentFromEditorState(input: {
   opacity: number
   color: string
   dimmed: boolean
+  /** Professional Sketch Engine V1 — optional brush engine persistence. */
+  brushKind?: StudioBrushState['brushKind']
+  logicalLayer?: StudioBrushState['logicalLayer']
+  blendMode?: StudioBrushState['blendMode']
+  flow?: number
+  softness?: number
+  textureIntensity?: number
+  garmentMask?: boolean
 }): StudioDraftDocument {
   const sizePx =
     typeof input.sizePx === 'number' && Number.isFinite(input.sizePx)
@@ -576,6 +614,16 @@ export function documentFromEditorState(input: {
     input.model === 'personal'
       ? requestedPins
       : { personalCroquisId: null, personalCroquisVersion: null }
+  const brushExtras: Partial<StudioBrushState> = {}
+  if (input.brushKind) brushExtras.brushKind = input.brushKind
+  if (input.logicalLayer) brushExtras.logicalLayer = input.logicalLayer
+  if (input.blendMode) brushExtras.blendMode = input.blendMode
+  if (typeof input.flow === 'number') brushExtras.flow = input.flow
+  if (typeof input.softness === 'number') brushExtras.softness = input.softness
+  if (typeof input.textureIntensity === 'number') {
+    brushExtras.textureIntensity = input.textureIntensity
+  }
+  if (typeof input.garmentMask === 'boolean') brushExtras.garmentMask = input.garmentMask
   const patch: Partial<StudioDraftDocument> = {
     strokes: input.strokes,
     fills: input.fills ?? input.prev.fills ?? [],
@@ -584,12 +632,13 @@ export function documentFromEditorState(input: {
     customReferenceKey: input.customReferenceKey,
     personalCroquisId: pins.personalCroquisId,
     personalCroquisVersion: pins.personalCroquisVersion,
-    brush: {
+    brush: normalizeStudioBrush({
       sizeId: BRUSH_SIZES[input.sizeId] === sizePx ? input.sizeId : nearestBrushSizeId(sizePx),
       sizePx,
       opacity: input.opacity,
       color: input.color,
-    },
+      ...brushExtras,
+    }),
     dimmed: input.dimmed,
   }
   if (input.back !== undefined) patch.back = input.back

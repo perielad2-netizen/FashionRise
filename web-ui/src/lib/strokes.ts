@@ -1,5 +1,13 @@
 export type ToolKind = 'draw' | 'erase' | 'fill' | 'eyedropper'
 
+/** Professional Sketch Engine V1 brush kinds (optional on legacy strokes). */
+export type BrushKind = 'tapered' | 'charcoal' | 'airbrush'
+
+/** Non-destructive paint targets; croquis/reference is never a target. */
+export type LogicalLayer = 'ink' | 'shade' | 'highlight'
+
+export type StrokeBlendMode = 'source-over' | 'multiply' | 'soft-light' | 'screen'
+
 export type Stroke = {
   id: string
   tool: ToolKind
@@ -12,6 +20,20 @@ export type Stroke = {
   color: string
   size: number
   opacity: number
+  /** V1 professional brush; absent → tapered ink (legacy). */
+  brushKind?: BrushKind
+  /** V1 logical layer; absent erase punches all ink layers + fills (legacy). */
+  logicalLayer?: LogicalLayer
+  /** Canvas composite for draw strokes; absent → source-over. */
+  blendMode?: StrokeBlendMode
+  /** Airbrush / charcoal accumulation (0–1). */
+  flow?: number
+  /** Airbrush feather (0–1). */
+  softness?: number
+  /** Charcoal grain amount (0–1). */
+  textureIntensity?: number
+  /** Deterministic charcoal seed; prefer stroke id when absent. */
+  textureSeed?: string | number
 }
 
 export type BrushSizeId = 'thin' | 'medium' | 'thick' | 'bold'

@@ -7,6 +7,16 @@ import { floodFillRegion } from '@/lib/floodFill'
 import type { FillOp, FillStyle } from '@/lib/fills'
 import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { paintFillsWithErasers } from '@/lib/exportCanvas'
+import {
+  applyBrushEngineToStroke,
+  compositeLogicalLayers,
+  DEFAULT_BRUSH_ENGINE,
+  erasePunchesFills,
+  paintLogicalArtworkLayers,
+  paintProfessionalDrawStroke,
+  resolveBrushKind,
+  type BrushEngineState,
+} from '@/lib/professionalBrushes'
 import { sampleArtworkPixel } from '@/lib/sampleArtworkPixel'
 import {
   BRUSH_SIZE_STEP_PX,
@@ -47,6 +57,8 @@ type Props = {
   brushSize: number
   /** Opacity for new ink strokes (0–1). Older strokes keep their saved opacity. */
   brushOpacity?: number
+  /** Professional Sketch Engine V1 brush settings for new strokes. */
+  brushEngine?: BrushEngineState
   /** Style applied when the Fill tool succeeds. */
   fillStyle?: FillStyle
   referenceUrl: string | null
@@ -98,6 +110,44 @@ function renderFillsImage(fills: FillOp[], strokes: Stroke[]): HTMLImageElement 
   return img
 }
 
+/** Rasterize professional ink stack (shade → ink → highlight) to match Magic export. */
+function renderInkArtworkImage(strokes: Stroke[]): HTMLImageElement | null {
+  if (strokes.length === 0) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  try {
+    const layers = paintLogicalArtworkLayers(PAPER_WIDTH, PAPER_HEIGHT, strokes, {
+      originX: PAPER_ORIGIN_X,
+      originY: PAPER_ORIGIN_Y,
+    })
+    compositeLogicalLayers(ctx, layers, PAPER_WIDTH, PAPER_HEIGHT)
+  } catch {
+    return null
+  }
+  const img = new window.Image()
+  img.src = canvas.toDataURL('image/png')
+  return img
+}
+
+function renderDraftBrushImage(stroke: Stroke): HTMLImageElement | null {
+  if (stroke.tool !== 'draw') return null
+  const kind = resolveBrushKind(stroke)
+  if (kind === 'tapered') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.translate(-PAPER_ORIGIN_X, -PAPER_ORIGIN_Y)
+  paintProfessionalDrawStroke(ctx, stroke)
+  const img = new window.Image()
+  img.src = canvas.toDataURL('image/png')
+  return img
+}
+
 /**
  * Pointer Events only. A stroke lives only while the pointer is down.
  * Window-level pointerup/cancel and a mouse buttons check stop a lost release
@@ -113,6 +163,7 @@ export function DrawingCanvas({
   brushColor,
   brushSize,
   brushOpacity = 1,
+  brushEngine = DEFAULT_BRUSH_ENGINE,
   fillStyle,
   referenceUrl,
   referenceOpacity,
@@ -136,6 +187,8 @@ export function DrawingCanvas({
   const [draft, setDraft] = useState<Stroke | null>(null)
   const [refImage, setRefImage] = useState<HTMLImageElement | null>(null)
   const [fillsImage, setFillsImage] = useState<HTMLImageElement | null>(null)
+  const [inkArtworkImage, setInkArtworkImage] = useState<HTMLImageElement | null>(null)
+  const [draftBrushImage, setDraftBrushImage] = useState<HTMLImageElement | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const [wheelHint, setWheelHint] = useState(false)
   const drawing = useRef(false)
@@ -280,6 +333,44 @@ export function DrawingCanvas({
       cancelled = true
     }
   }, [fills, strokes])
+
+  useEffect(() => {
+    let cancelled = false
+    if (strokes.length === 0) {
+      setInkArtworkImage(null)
+      return
+    }
+    const img = renderInkArtworkImage(strokes)
+    if (!img) {
+      setInkArtworkImage(null)
+      return
+    }
+    img.onload = () => {
+      if (!cancelled) setInkArtworkImage(img)
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [strokes])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!draft || draft.tool !== 'draw') {
+      setDraftBrushImage(null)
+      return
+    }
+    const img = renderDraftBrushImage(draft)
+    if (!img) {
+      setDraftBrushImage(null)
+      return
+    }
+    img.onload = () => {
+      if (!cancelled) setDraftBrushImage(img)
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [draft])
 
   const fitScale = size.w / DESIGN_WIDTH
   const contentScale = immersive && viewport ? viewport.scale : fitScale
@@ -743,7 +834,7 @@ export function DrawingCanvas({
         /* capture optional */
       }
       const clamped = clampPointToPaper(point.x, point.y)
-      const stroke: Stroke = {
+      const base: Stroke = {
         id: createStrokeId(),
         tool: activeTool,
         points: appendPoint([], { ...point, x: clamped.x, y: clamped.y }),
@@ -751,6 +842,7 @@ export function DrawingCanvas({
         size: brushSize,
         opacity: activeTool === 'erase' ? 1 : brushOpacity,
       }
+      const stroke = applyBrushEngineToStroke(base, brushEngine)
       draftRef.current = stroke
       setDraft(stroke)
     },
@@ -758,6 +850,7 @@ export function DrawingCanvas({
       activeTool,
       applyFillAt,
       brushColor,
+      brushEngine,
       brushOpacity,
       brushSize,
       cancelDraft,
@@ -940,7 +1033,6 @@ export function DrawingCanvas({
     return () => host.removeEventListener('touchmove', onTouchMove)
   }, [immersive])
 
-  const all = draft ? [...strokes, draft] : strokes
   const inkTool = !panTool && (activeTool === 'draw' || activeTool === 'erase')
   // Space+drag pan uses a ref in handlers; cursor grab reflects the Hand tool only (avoid render-time refs).
   const cursor = panTool
@@ -988,7 +1080,7 @@ export function DrawingCanvas({
             height={PAPER_HEIGHT}
           />
         ) : null}
-        {draft && draft.tool === 'erase'
+        {draft && draft.tool === 'erase' && erasePunchesFills(draft)
           ? (() => {
               const data = strokeToSvgPath(draft)
               if (!data) return null
@@ -1006,22 +1098,58 @@ export function DrawingCanvas({
           : null}
       </Layer>
       <Layer x={immersive ? panX : 0} y={immersive ? panY : 0} scaleX={immersive ? contentScale : 1} scaleY={immersive ? contentScale : 1}>
-        {all.map((stroke) => {
-          const data = strokeToSvgPath(stroke)
-          if (!data) return null
-          return (
-            <Path
-              key={stroke.id}
-              data={data}
-              fill={stroke.tool === 'erase' ? '#F8F4F0' : stroke.color}
-              opacity={stroke.tool === 'erase' ? 1 : stroke.opacity}
-              globalCompositeOperation={
-                stroke.tool === 'erase' ? 'destination-out' : 'source-over'
-              }
-              listening={false}
-            />
-          )
-        })}
+        {inkArtworkImage ? (
+          <KonvaImage
+            image={inkArtworkImage}
+            x={PAPER_ORIGIN_X}
+            y={PAPER_ORIGIN_Y}
+            width={PAPER_WIDTH}
+            height={PAPER_HEIGHT}
+            listening={false}
+          />
+        ) : null}
+        {draft && draft.tool === 'erase'
+          ? (() => {
+              const data = strokeToSvgPath(draft)
+              if (!data) return null
+              return (
+                <Path
+                  key={`ink-erase-${draft.id}`}
+                  data={data}
+                  fill="#F8F4F0"
+                  opacity={1}
+                  globalCompositeOperation="destination-out"
+                  listening={false}
+                />
+              )
+            })()
+          : null}
+        {draft && draft.tool === 'draw' && resolveBrushKind(draft) === 'tapered'
+          ? (() => {
+              const data = strokeToSvgPath(draft)
+              if (!data) return null
+              return (
+                <Path
+                  key={draft.id}
+                  data={data}
+                  fill={draft.color}
+                  opacity={draft.opacity}
+                  globalCompositeOperation={draft.blendMode ?? 'source-over'}
+                  listening={false}
+                />
+              )
+            })()
+          : null}
+        {draft && draft.tool === 'draw' && draftBrushImage ? (
+          <KonvaImage
+            image={draftBrushImage}
+            x={PAPER_ORIGIN_X}
+            y={PAPER_ORIGIN_Y}
+            width={PAPER_WIDTH}
+            height={PAPER_HEIGHT}
+            listening={false}
+          />
+        ) : null}
         {fillGapHint ? (
           <Circle
             x={fillGapHint.x}

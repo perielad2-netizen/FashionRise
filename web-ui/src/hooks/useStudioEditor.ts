@@ -130,6 +130,12 @@ import {
   type MagicLookResult,
 } from '@/services/ai/aiJobTypes'
 import { StrokeHistory } from '@/lib/history'
+import {
+  DEFAULT_BRUSH_ENGINE,
+  defaultsForBrushKind,
+  type BrushEngineState,
+  type BrushKind,
+} from '@/lib/professionalBrushes'
 import { validateReferenceImageFile } from '@/lib/referenceFile'
 import {
   BRUSH_SIZE_DEFAULT_PX,
@@ -254,6 +260,7 @@ export function useStudioEditor() {
   const [tool, setTool] = useState<ToolKind>('draw')
   const [brushSizePx, setBrushSizePxState] = useState(BRUSH_SIZE_DEFAULT_PX)
   const [opacity, setOpacity] = useState(1)
+  const [brushEngine, setBrushEngine] = useState<BrushEngineState>(DEFAULT_BRUSH_ENGINE)
   const [color, setColor] = useState<string>(INK_SWATCHES[0]!.color)
   const [fillStyle, setFillStyle] = useState<FillStyle>(() => solidStyle(INK_SWATCHES[0]!.color))
   const [model, setModelState] = useState<ModelChoice>(DEFAULT_MODEL)
@@ -517,6 +524,20 @@ export function useStudioEditor() {
     setPersonalUnderlayReloadToken((n) => n + 1)
     setBrushSizePxState(resolveBrushSizePx(doc.brush))
     setOpacity(doc.brush.opacity)
+    setBrushEngine({
+      ...DEFAULT_BRUSH_ENGINE,
+      ...(doc.brush.brushKind ? { brushKind: doc.brush.brushKind } : {}),
+      ...(doc.brush.logicalLayer ? { logicalLayer: doc.brush.logicalLayer } : {}),
+      ...(doc.brush.blendMode ? { blendMode: doc.brush.blendMode } : {}),
+      ...(typeof doc.brush.flow === 'number' ? { flow: doc.brush.flow } : {}),
+      ...(typeof doc.brush.softness === 'number' ? { softness: doc.brush.softness } : {}),
+      ...(typeof doc.brush.textureIntensity === 'number'
+        ? { textureIntensity: doc.brush.textureIntensity }
+        : {}),
+      ...(typeof doc.brush.garmentMask === 'boolean'
+        ? { garmentMask: doc.brush.garmentMask }
+        : {}),
+    })
     setColor(doc.brush.color)
     setFillStyle(solidStyle(doc.brush.color))
     setDimmed(doc.dimmed)
@@ -862,6 +883,13 @@ export function useStudioEditor() {
       opacity,
       color,
       dimmed,
+      brushKind: brushEngine.brushKind,
+      logicalLayer: brushEngine.logicalLayer,
+      blendMode: brushEngine.blendMode,
+      flow: brushEngine.flow,
+      softness: brushEngine.softness,
+      textureIntensity: brushEngine.textureIntensity,
+      garmentMask: brushEngine.garmentMask,
     })
     if (draftContentFingerprint(prev) === draftContentFingerprint(next)) return
     void commitDocument(next)
@@ -878,6 +906,7 @@ export function useStudioEditor() {
     personalCroquisVersion,
     brushSizePx,
     opacity,
+    brushEngine,
     color,
     dimmed,
     ready,
@@ -3248,6 +3277,14 @@ export function useStudioEditor() {
     setOpacity(clamped)
   }, [])
 
+  const setBrushKind = useCallback((kind: BrushKind) => {
+    setBrushEngine((prev) => ({ ...prev, ...defaultsForBrushKind(kind) }))
+  }, [])
+
+  const patchBrushEngine = useCallback((patch: Partial<BrushEngineState>) => {
+    setBrushEngine((prev) => ({ ...prev, ...patch }))
+  }, [])
+
   const selectColor = useCallback((next: string) => {
     const hex = next.toUpperCase()
     setColor(hex)
@@ -3945,6 +3982,9 @@ export function useStudioEditor() {
     nudgeBrushSizePx,
     opacity,
     setBrushOpacity,
+    brushEngine,
+    setBrushKind,
+    patchBrushEngine,
     color,
     setColor: selectColor,
     setColorHex,

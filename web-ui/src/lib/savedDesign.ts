@@ -4,6 +4,7 @@ import {
   type ModelChoice,
 } from '@/assets/modelLibrary'
 import { cloneFills, parseFillOp, type FillOp } from '@/lib/fills'
+import { pickProfessionalFields } from '@/lib/professionalBrushes'
 import {
   BRUSH_SIZES,
   resolveBrushSizePx,
@@ -249,6 +250,7 @@ function parseStroke(raw: unknown): Stroke | null {
     color: s.color,
     size: s.size,
     opacity: s.opacity,
+    ...pickProfessionalFields(s),
   }
 }
 

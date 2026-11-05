@@ -3,6 +3,12 @@ import type { FillOp } from '@/lib/fills'
 import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { paintFillOps } from '@/lib/paintFills'
 import {
+  compositeLogicalLayers,
+  erasePunchesFills,
+  paintInkStrokesProfessional,
+  paintLogicalArtworkLayers,
+} from '@/lib/professionalBrushes'
+import {
   legacyExportFrame,
   paperExportFrame,
   resolveExportFrame,
@@ -78,6 +84,9 @@ export function paintEraseStroke(ctx: Canvas2DLike, stroke: Stroke): void {
 /**
  * Paint ink strokes onto an ink-only context.
  * Eraser uses destination-out against ink pixels — never against reference/base.
+ * Professional brushes composite shade → ink → highlight on an identity canvas
+ * (caller must not pre-transform `ctx` when using logical layers — see
+ * `compositeFillAndInkLayers`). Seal-tip barrier paints stay a flat tapered stack.
  */
 export function paintInkStrokes(
   ctx: Canvas2DLike,
@@ -85,22 +94,23 @@ export function paintInkStrokes(
   options?: PaintInkOptions,
 ): void {
   const sealTips = options?.sealTips === true
-  for (const stroke of strokes) {
-    const path = strokeToSvgPath(stroke, stroke.tool === 'draw' && sealTips ? { sealTips: true } : undefined)
-    if (!path) continue
-    const p = new Path2D(path)
-    ctx.save()
-    if (stroke.tool === 'erase') {
-      ctx.globalCompositeOperation = 'destination-out'
-      ctx.fillStyle = 'rgba(0,0,0,1)'
-    } else {
-      ctx.globalCompositeOperation = 'source-over'
-      ctx.globalAlpha = stroke.opacity
-      ctx.fillStyle = stroke.color
-    }
-    ctx.fill(p)
-    ctx.restore()
+  if (sealTips) {
+    paintInkStrokesProfessional(ctx as CanvasRenderingContext2D, strokes, { sealTips: true })
+    return
   }
+  const canvas = (ctx as CanvasRenderingContext2D).canvas
+  const width = canvas?.width ?? 0
+  const height = canvas?.height ?? 0
+  if (width > 0 && height > 0) {
+    try {
+      const layers = paintLogicalArtworkLayers(width, height, strokes, { sealTips: false })
+      compositeLogicalLayers(ctx as CanvasRenderingContext2D, layers, width, height)
+      return
+    } catch {
+      /* fall through to flat paint */
+    }
+  }
+  paintInkStrokesProfessional(ctx as CanvasRenderingContext2D, strokes, { sealTips: false })
 }
 
 /**
@@ -118,7 +128,8 @@ export function paintFillsWithErasers(
     const after = fill.eraseAfterStrokeIndex ?? 0
     for (let i = after; i < strokes.length; i += 1) {
       const stroke = strokes[i]!
-      if (stroke.tool === 'erase') paintEraseStroke(ctx, stroke)
+      // Shade/highlight erasers must not destroy base fabric fills.
+      if (stroke.tool === 'erase' && erasePunchesFills(stroke)) paintEraseStroke(ctx, stroke)
     }
   }
 }
@@ -190,10 +201,33 @@ export function compositeFillAndInkLayers(target: Canvas2DLike, options: Artwork
   inkLayer.height = height
   const inkCtx = inkLayer.getContext('2d')
   if (!inkCtx) throw new Error('Canvas 2D unavailable')
-  if (needsTransform) {
-    applyDesignTransform(inkCtx, { scaleX: sx, scaleY: sy, originX: ox, originY: oy, offsetX, offsetY })
+  // Bake design→output transform into logical layer paint (do not also
+  // transform inkCtx — that would double-scale professional stamps).
+  try {
+    const layers = paintLogicalArtworkLayers(width, height, strokes, {
+      sealTips: false,
+      scaleX: sx,
+      scaleY: sy,
+      originX: ox,
+      originY: oy,
+      offsetX,
+      offsetY,
+    })
+    compositeLogicalLayers(inkCtx, layers, width, height)
+  } catch {
+    // jsdom / missing Canvas2D — fall back to flat chronological paint.
+    if (needsTransform) {
+      applyDesignTransform(inkCtx, {
+        scaleX: sx,
+        scaleY: sy,
+        originX: ox,
+        originY: oy,
+        offsetX,
+        offsetY,
+      })
+    }
+    paintInkStrokesProfessional(inkCtx, strokes, { sealTips: false })
   }
-  paintInkStrokes(inkCtx, strokes)
   target.drawImage(inkLayer, 0, 0, width, height)
 }
 

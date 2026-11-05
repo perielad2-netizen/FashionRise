@@ -106,6 +106,13 @@ export function buildDocumentFromEditor(args: {
   color: string
   dimmed: boolean
   clearBackIntent?: boolean
+  brushKind?: StudioDraftDocument['brush']['brushKind']
+  logicalLayer?: StudioDraftDocument['brush']['logicalLayer']
+  blendMode?: StudioDraftDocument['brush']['blendMode']
+  flow?: number
+  softness?: number
+  textureIntensity?: number
+  garmentMask?: boolean
 }): StudioDraftDocument {
   const frontBack = isStudioFrontBackEnabled()
   let schema = args.prev.schema
@@ -158,6 +165,13 @@ export function buildDocumentFromEditor(args: {
     opacity: args.opacity,
     color: args.color,
     dimmed: args.dimmed,
+    brushKind: args.brushKind,
+    logicalLayer: args.logicalLayer,
+    blendMode: args.blendMode,
+    flow: args.flow,
+    softness: args.softness,
+    textureIntensity: args.textureIntensity,
+    garmentMask: args.garmentMask,
   })
 
   if (frontBack && schema === STUDIO_DRAFT_SCHEMA_V2) {
