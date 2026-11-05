@@ -482,10 +482,21 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
     comps = _connected_components(mask)
     min_px = max(_MIN_COMPONENT_PIXELS, int(opaque * _MIN_COMPONENT_FRACTION))
     significant = [(cells, n) for cells, n in comps if n >= min_px]
-    discarded_opaque = sum(n for cells, n in comps if n < min_px)
+    # Tiny foot-band crumbs (eraser leftovers after deleting shoes) must not count
+    # as "dropped garment mass" — they only inflate vertical span / discarded totals.
+    discarded_opaque = sum(
+        n
+        for cells, n in comps
+        if n < min_px and not _is_footwear_component(cells, src.height, src.width)
+    )
     if not significant:
         significant = sorted(comps, key=lambda t: t[1], reverse=True)[:1]
-        discarded_opaque = sum(n for cells, n in comps if cells is not significant[0][0])
+        discarded_opaque = sum(
+            n
+            for cells, n in comps
+            if cells is not significant[0][0]
+            and not _is_footwear_component(cells, src.height, src.width)
+        )
 
     # Sort top → bottom by bbox y0.
     significant.sort(key=lambda t: _bbox(t[0])[1])
@@ -577,10 +588,18 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
         pieces = [_piece_from_cells(src, merged, cat)]  # type: ignore[arg-type]
         fashn_calls = 1
 
-    # Completeness compares against apparel-only mass/bbox so intentional shoe
-    # omission does not false-fail "dropped substantial regions" / shortened hem.
-    apparel_cells = set(source_cells) - footwear_cells
-    apparel_opaque = max(1, opaque - footwear_opaque) if footwear_cells else opaque
+    # Completeness compares against significant apparel components only.
+    # Foot-band speckles left after deleting shoes sit in source_cells but are
+    # below min_px — including them inflated vertical span to ~40% retention
+    # (owner incident 2026-11-05 deleted-shoes FASHN block).
+    apparel_cells: set[tuple[int, int]] = set()
+    for cells, _n in apparel_significant:
+        apparel_cells |= cells
+    if not apparel_cells:
+        apparel_cells = set(source_cells) - footwear_cells
+    apparel_opaque = max(1, sum(n for _c, n in apparel_significant)) if apparel_significant else max(
+        1, opaque - footwear_opaque
+    )
     apparel_bbox = _bbox(apparel_cells) if apparel_cells else source_bbox
 
     quality_ok, quality_notes = _quality_gate(pieces)

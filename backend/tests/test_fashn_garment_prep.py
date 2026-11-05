@@ -128,3 +128,21 @@ def test_one_piece_with_drawn_shoes_stays_one_piece():
     plate = Image.open(io.BytesIO(prep.pieces[0].png_bytes)).convert("RGB")
     colors = plate.getcolors(maxcolors=100000) or []
     assert any(c[1][0] > 150 and c[1][1] < 80 for c in colors)
+
+
+def test_one_piece_with_foot_speckles_after_shoe_delete_stays_ok():
+    """Leftover 1px foot crumbs after deleting shoes must not fail span retention.
+
+    Owner incident: deleted shoes → "kept 40% of the original vertical span".
+    """
+    img = _transparent_canvas(220, 440)
+    for y in range(40, 220):
+        for x in range(70, 150):
+            img.putpixel((x, y), (185, 28, 28, 255))
+    # Speckles near feet (below min component size)
+    for x, y in ((90, 400), (91, 401), (120, 405), (121, 406)):
+        img.putpixel((x, y), (17, 17, 17, 255))
+    prep = prepare_garment_reference(_png(img))
+    assert prep.layout == "one_piece"
+    assert prep.quality_ok is True
+    assert "shortened" not in prep.quality_notes.lower()

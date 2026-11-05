@@ -65,6 +65,7 @@ from app.services.fashn_try_on_max_provider import (
     DEFAULT_MAX_PROMPT,
     FASHN_MAX_PROMPT_VERSION,
     FASHN_MAX_PROVIDER_ID,
+    build_smart_max_prompt,
     estimate_fashn_max_cost_cents,
     fashn_max_configured,
     fashn_max_credits_per_image,
@@ -639,11 +640,12 @@ def enqueue_personal_try_on(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="FASHN notice hash mismatch."
             )
-        # #178 smart public fallback always uses Balanced · 1k · default prompt.
+        # #178 smart public fallback always uses Balanced · 1k; footwear appendix
+        # from Studio hints so Max does not keep photo boots on barefoot one-pieces.
         if smart_lane:
             mode = normalize_max_generation_mode("balanced")
             resolution = normalize_max_resolution("1k")
-            prompt_text = normalize_max_prompt(None)
+            prompt_text = build_smart_max_prompt(hints)
             seed_value = normalize_max_seed(42)
         else:
             mode = normalize_max_generation_mode(fashn_max_generation_mode)

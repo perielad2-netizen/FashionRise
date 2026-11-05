@@ -2262,6 +2262,7 @@ export function useStudioEditor() {
         }
 
         // Server auto-stamps accept for smart_fallback Max enqueue; no review dialog.
+        // Pass Studio footwear/one-piece hints so Max does not keep photo boots.
         const maxJob = await enqueuePersonalTryOn({
           croquisId,
           croquisVersion,
@@ -2272,6 +2273,7 @@ export function useStudioEditor() {
           contentFingerprint,
           consentAcknowledged: true,
           consentVersion: prep.consent_version,
+          designHints,
           provider: 'fashn_max',
           approvedGarmentPieces: pieces.map((p) => ({
             category: p.category,

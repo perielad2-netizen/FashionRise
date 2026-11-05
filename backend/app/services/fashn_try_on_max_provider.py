@@ -58,6 +58,20 @@ DEFAULT_MAX_PROMPT = (
     "person's identity, pose, proportions, and background."
 )
 
+# Appended for high-cut / one-piece smart fallback when Studio has no drawn shoes —
+# Max otherwise keeps photo boots (owner red swimsuit kept beige boots on Max success).
+MAX_BAREFOOT_PROMPT_SUFFIX = (
+    "The garment is a one-piece or high-cut design without footwear in the product image — "
+    "remove the model's boots or shoes and show bare feet matching their skin tone. "
+    "Do not keep tall boots from the model photo."
+)
+
+MAX_DRAWN_FOOTWEAR_PROMPT_SUFFIX = (
+    "Replace the model's boots or shoes with footwear matching the Studio design "
+    "(small dark flats/shoes when that is what the design shows). "
+    "Do not keep tall boots from the model photo."
+)
+
 
 def fashn_max_prompt_hash(prompt: str) -> str:
     return hashlib.sha256((prompt or "").encode("utf-8")).hexdigest()
@@ -106,6 +120,29 @@ def normalize_max_prompt(raw: str | None) -> str:
     if not text:
         return DEFAULT_MAX_PROMPT
     return text[:1000]
+
+
+def build_smart_max_prompt(design_hints: list[str] | None = None) -> str:
+    """Default Max prompt plus footwear guidance from Studio design hints.
+
+    Smart public fallback previously always used DEFAULT_MAX_PROMPT alone, so
+    swimwear Max results kept photo boots even when the sketch had bare feet or
+    small drawn shoes.
+    """
+    base = DEFAULT_MAX_PROMPT
+    hints = [str(h).strip().lower() for h in (design_hints or []) if str(h).strip()]
+    joined = " | ".join(hints)
+    suffix = ""
+    if any("bare feet" in h or "no shoes drawn" in h or "remove photo boots" in h for h in hints):
+        suffix = MAX_BAREFOOT_PROMPT_SUFFIX
+    elif any("footwear" in h and ("drawn" in h or "replace" in h) for h in hints):
+        suffix = MAX_DRAWN_FOOTWEAR_PROMPT_SUFFIX
+    elif "one-piece" in joined and "footwear" not in joined:
+        # Continuous one-piece without an explicit footwear hint → barefoot.
+        suffix = MAX_BAREFOOT_PROMPT_SUFFIX
+    if not suffix:
+        return normalize_max_prompt(base)
+    return normalize_max_prompt(f"{base} {suffix}")
 
 
 def normalize_max_seed(raw: int | None) -> int:
