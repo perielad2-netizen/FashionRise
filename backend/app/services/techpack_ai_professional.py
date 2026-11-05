@@ -215,20 +215,27 @@ class OpenAIProfessionalProvider:
         cat = str(piece.get("category") or "other")
         label = str(piece.get("label") or cat)
         system = (
-            "You are a fashion technical designer analyzing a finished fashion look photo. "
+            "You are a fashion technical designer analyzing a finished fashion look photo "
+            "to write a factory-ready technical pack. "
             "Return JSON only with keys: schema_version, category, silhouette, length, "
             "neckline, sleeves, fit, closure_visible, fabric_pattern, stripe_direction, "
             "colors, panels_seams, distinctive_features (array of strings), "
             "pattern_pieces_suggested (array of {id,name,cut_qty,notes}), "
-            "construction_notes (array of strings), confidence (low|medium|high), "
-            "assumptions (array of strings). "
+            "construction_notes (array of strings), "
+            "construction_operations (array of {operation,stitch_type,spi,seam_allowance_cm,notes}), "
+            "confidence (low|medium|high), assumptions (array of strings). "
+            "construction_operations MUST be a sew-order list specific to THIS look "
+            "(wrap/drape/slit/zip/sash/lining as visible) — never generic dress boilerplate. "
+            "pattern_pieces_suggested MUST list every shell panel a patternmaker would cut "
+            "(front/back/sleeve/drape/sash/facing) with cut_qty. "
             "Describe ONLY what is visually supported. Do not invent exact centimeters. "
             f"schema_version must be '{ANALYSIS_SCHEMA_VERSION}'."
         )
         user_text = (
             f"Garment tab: category={cat}, label={label}. "
             f"Look notes: {(look_notes or '')[:400]}. "
-            "Extract construction-relevant features for a professional technical pack."
+            "Extract construction-relevant features AND write design-specific sewing "
+            "operations + cut-piece inventory for a professional technical pack."
         )
         kwargs = chat_completion_kwargs(
             model=settings.openai_model,
@@ -529,6 +536,36 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
         "construction_notes": [
             "Stabilize deep V neckline before setting sleeves.",
             "Match diagonal stripe continuity at side seams.",
+        ],
+        "construction_operations": [
+            {
+                "operation": "Staystitch deep V neckline",
+                "stitch_type": "301 lockstitch",
+                "spi": "3.5–4 /cm",
+                "seam_allowance_cm": 1.0,
+                "notes": "Stabilize bias plunge before any shaping.",
+            },
+            {
+                "operation": "Join side seams matching diagonal stripes",
+                "stitch_type": "301 + 504 overlock",
+                "spi": "3.5–4 /cm",
+                "seam_allowance_cm": 1.0,
+                "notes": "Keep stripe continuity across CF/SS.",
+            },
+            {
+                "operation": "Set long sleeves",
+                "stitch_type": "301 + 504",
+                "spi": "3.5–4 /cm",
+                "seam_allowance_cm": 1.0,
+                "notes": "Ease sleeve head; press seam toward sleeve.",
+            },
+            {
+                "operation": "Hem mini skirt",
+                "stitch_type": "Blind hem / 301",
+                "spi": "per fabric",
+                "seam_allowance_cm": 2.5,
+                "notes": "Even hem on form; match stripe at CF if applicable.",
+            },
         ],
         "confidence": "high",
         "assumptions": ["Mock analysis for FR-7182-style pink striped dress"],

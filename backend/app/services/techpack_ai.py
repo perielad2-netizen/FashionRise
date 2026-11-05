@@ -931,11 +931,73 @@ def _persist_professional_result(
                 "Refusing to attach illustrations to the wrong garment."
             )
         analysis = pr.get("analysis") if isinstance(pr.get("analysis"), dict) else {}
-        # Merge AI construction tips without wiping designer fields.
-        if analysis.get("construction_notes") and not piece.get("construction_steps"):
+        # Prefer AI sew ops over heuristic/estimate defaults (designer-confirmed kept).
+        prior_steps = (
+            piece.get("construction_steps")
+            if isinstance(piece.get("construction_steps"), list)
+            else []
+        )
+        designer_locked_steps = any(
+            isinstance(s, dict)
+            and (
+                bool(s.get("designer_confirmed"))
+                or str(s.get("source") or "").lower() in {"designer", "user"}
+            )
+            for s in prior_steps
+        )
+        estimate_only = (not prior_steps) or all(
+            isinstance(s, dict)
+            and str(s.get("source") or "").lower() in {"estimate", "heuristic", ""}
+            for s in prior_steps
+        )
+        ops = analysis.get("construction_operations")
+        if (
+            isinstance(ops, list)
+            and ops
+            and not designer_locked_steps
+            and estimate_only
+        ):
+            built: list[dict[str, Any]] = []
+            for i, row in enumerate(ops):
+                if not isinstance(row, dict):
+                    continue
+                op = str(row.get("operation") or row.get("instruction") or "").strip()
+                if not op:
+                    continue
+                built.append(
+                    {
+                        "step": int(row.get("step") or (i + 1)),
+                        "operation": op[:200],
+                        "instruction": op[:400],
+                        "stitch_type": str(row.get("stitch_type") or "301 lockstitch")[:80],
+                        "spi": str(row.get("spi") or "3.5–4 /cm")[:40],
+                        "seam_allowance_cm": row.get("seam_allowance_cm", 1.0),
+                        "notes": str(row.get("notes") or "")[:400],
+                        "source": "ai",
+                        "provenance": "ai_inferred",
+                    }
+                )
+            if built:
+                piece["construction_steps"] = built
+        elif (
+            analysis.get("construction_notes")
+            and not designer_locked_steps
+            and estimate_only
+        ):
             piece["construction_steps"] = [
-                {"step": i + 1, "instruction": str(n)[:400], "source": "ai"}
+                {
+                    "step": i + 1,
+                    "operation": str(n)[:200],
+                    "instruction": str(n)[:400],
+                    "stitch_type": "301 lockstitch (confirm)",
+                    "spi": "3.5–4 /cm",
+                    "seam_allowance_cm": 1.0,
+                    "notes": "From AI construction notes — confirm stitch class.",
+                    "source": "ai",
+                    "provenance": "ai_inferred",
+                }
                 for i, n in enumerate(analysis.get("construction_notes") or [])
+                if str(n).strip()
             ]
         if analysis.get("pattern_pieces_suggested"):
             piece["pattern_pieces"] = [
@@ -951,6 +1013,7 @@ def _persist_professional_result(
                     "notes": str(x.get("notes") or "")
                     + " — illustrative inventory, not a verified cutting pattern",
                     "provenance": "ai_inferred",
+                    "review_state": "proposed_unverified",
                 }
                 for i, x in enumerate(analysis["pattern_pieces_suggested"])
                 if isinstance(x, dict)
