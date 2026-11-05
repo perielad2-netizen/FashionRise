@@ -10,6 +10,31 @@ export type FabricAsset = {
   byte_size: number
   created_at: string
   deleted: boolean
+  source?: 'upload' | 'ai' | string
+  prompt_short?: string | null
+  color_hex?: string | null
+}
+
+export type AiFabricMissingDetail = {
+  code: 'missing_fields'
+  missing: string[]
+  message: string
+}
+
+function parseApiDetail(parsed: unknown, fallback: string): string {
+  if (typeof parsed === 'object' && parsed !== null && 'detail' in parsed) {
+    const detail = (parsed as { detail: unknown }).detail
+    if (typeof detail === 'string') return detail
+    if (
+      typeof detail === 'object' &&
+      detail !== null &&
+      'message' in detail &&
+      typeof (detail as { message: unknown }).message === 'string'
+    ) {
+      return (detail as { message: string }).message
+    }
+  }
+  return fallback
 }
 
 export async function listMyFabrics(signal?: AbortSignal): Promise<FabricAsset[]> {
@@ -64,17 +89,45 @@ export async function uploadFabric(
   }
 
   if (!response.ok) {
-    const detail =
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'detail' in parsed &&
-      typeof (parsed as { detail: unknown }).detail === 'string'
-        ? (parsed as { detail: string }).detail
-        : 'Fabric upload failed'
-    throw new ApiError(detail, response.status, parsed)
+    throw new ApiError(parseApiDetail(parsed, 'Fabric upload failed'), response.status, parsed)
   }
 
   return parsed as FabricAsset
+}
+
+export async function createAiFabric(
+  input: { prompt: string; colorHex?: string | null; name?: string | null },
+  signal?: AbortSignal,
+): Promise<FabricAsset> {
+  const body: Record<string, string> = { prompt: input.prompt.trim() }
+  if (input.colorHex?.trim()) body.color_hex = input.colorHex.trim()
+  if (input.name?.trim()) body.name = input.name.trim()
+
+  try {
+    return await apiRequest<FabricAsset>('/fabrics/ai-generate', {
+      method: 'POST',
+      body,
+      signal,
+    })
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const detail =
+        typeof err.body === 'object' &&
+        err.body !== null &&
+        'detail' in err.body
+          ? (err.body as { detail: unknown }).detail
+          : null
+      if (
+        typeof detail === 'object' &&
+        detail !== null &&
+        'message' in detail &&
+        typeof (detail as { message: unknown }).message === 'string'
+      ) {
+        throw new ApiError((detail as { message: string }).message, err.status, err.body)
+      }
+    }
+    throw err
+  }
 }
 
 /** Authenticated fabric bytes for canvas/export (never public static URLs). */

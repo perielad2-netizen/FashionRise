@@ -145,11 +145,40 @@ def create_fabric_asset(
         )
 
     png_bytes, content_type, width, height = _normalize_image_bytes(raw, kind)
+    return create_fabric_asset_from_png(
+        db,
+        user,
+        png_bytes=png_bytes,
+        name=name,
+        source="upload",
+    )
+
+
+def create_fabric_asset_from_png(
+    db: Session,
+    user: User,
+    *,
+    png_bytes: bytes,
+    name: str | None,
+    source: str = "upload",
+    prompt_raw: str | None = None,
+    prompt_short: str | None = None,
+    color_hex: str | None = None,
+) -> FabricAsset:
+    """Persist already-normalized PNG bytes into the private fabric library."""
+    if not png_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty fabric image")
+    # Re-normalize so AI / upload paths share the same PNG + dimension guards.
+    png_bytes, content_type, width, height = _normalize_image_bytes(png_bytes, "png")
     asset_id = uuid.uuid4()
     storage_key = f"fabrics/{user.id}/{asset_id}.png"
     storage = LocalStorageBackend()
     # Private subtree — sibling of upload_subdir, never mounted at /static/uploads.
     storage.save_private_file(key=storage_key, data=io.BytesIO(png_bytes), content_type=content_type)
+
+    src = (source or "upload").strip().lower()
+    if src not in {"upload", "ai"}:
+        src = "upload"
 
     row = FabricAsset(
         id=asset_id,
@@ -160,6 +189,10 @@ def create_fabric_asset(
         height=height,
         byte_size=len(png_bytes),
         storage_key=storage_key,
+        source=src,
+        prompt_raw=prompt_raw,
+        prompt_short=(prompt_short[:160] if prompt_short else None),
+        color_hex=color_hex,
     )
     db.add(row)
     db.commit()

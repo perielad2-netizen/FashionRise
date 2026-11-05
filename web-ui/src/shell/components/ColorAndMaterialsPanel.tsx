@@ -16,6 +16,7 @@ import {
 } from '@/lib/fills'
 import { INK_SWATCHES } from '@/lib/strokes'
 import {
+  createAiFabric,
   deleteFabric,
   listMyFabrics,
   uploadFabric,
@@ -23,6 +24,7 @@ import {
 } from '@/services/fabricAssetsApi'
 import { ApiError } from '@/services/api/client'
 import { loadFabricAssetImage } from '@/lib/fabricAssetCache'
+import { rememberFabricAssets, rememberFabricPromptShort } from '@/lib/fabricPromptCache'
 import { CustomGradientDesigner } from '@/shell/components/CustomGradientDesigner'
 import { ProfessionalColorPicker } from '@/shell/components/ProfessionalColorPicker'
 import styles from './ColorAndMaterialsPanel.module.css'
@@ -60,11 +62,19 @@ export function ColorAndMaterialsPanel({
   const [pendingPreview, setPendingPreview] = useState<string | null>(null)
   const [pendingName, setPendingName] = useState('')
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiColor, setAiColor] = useState<string | null>(null)
+  const [aiName, setAiName] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
   const [tab, setTab] = useState<'colors' | 'fabrics' | 'gradients'>('colors')
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [gradientDesignerOpen, setGradientDesignerOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const nameFieldId = useId()
+  const aiPromptId = useId()
+  const aiNameId = useId()
   const scale =
     fillStyle.kind === 'uploaded-fabric' ? fillStyle.scale : UPLOADED_FABRIC_SCALE_DEFAULT
   const inferredTab: 'colors' | 'fabrics' | 'gradients' =
@@ -87,7 +97,10 @@ export function ColorAndMaterialsPanel({
     setLibraryBusy(true)
     void listMyFabrics()
       .then((rows) => {
-        if (!cancelled) setMyFabrics(rows)
+        if (!cancelled) {
+          setMyFabrics(rows)
+          rememberFabricAssets(rows)
+        }
       })
       .catch(() => {
         if (!cancelled) setMyFabrics([])
@@ -204,6 +217,7 @@ export function ColorAndMaterialsPanel({
     try {
       await deleteFabric(fabric.id)
       setMyFabrics((prev) => prev.filter((f) => f.id !== fabric.id))
+      rememberFabricPromptShort(fabric.id, null)
       if (fillStyle.kind === 'uploaded-fabric' && fillStyle.assetId === fabric.id) {
         onFillStyle({ kind: 'fabric', fabricId: 'satin' })
       }
@@ -212,6 +226,45 @@ export function ColorAndMaterialsPanel({
       )
     } catch (err) {
       onNotice?.(err instanceof ApiError ? err.message : 'Could not remove fabric.')
+    }
+  }
+
+  const closeAiDialog = () => {
+    if (aiBusy) return
+    setAiOpen(false)
+    setAiPrompt('')
+    setAiColor(null)
+    setAiName('')
+    setAiError(null)
+  }
+
+  const confirmAiFabric = async () => {
+    if (aiBusy) return
+    const prompt = aiPrompt.trim()
+    if (!prompt) {
+      setAiError('Describe the fabric or pattern you want.')
+      return
+    }
+    setAiBusy(true)
+    setAiError(null)
+    try {
+      const created = await createAiFabric({
+        prompt,
+        colorHex: aiColor,
+        name: aiName.trim() || null,
+      })
+      rememberFabricPromptShort(created.id, created.prompt_short)
+      setMyFabrics((prev) => [created, ...prev.filter((f) => f.id !== created.id)])
+      const style = uploadedFabricStyle(created.id, scale)
+      if (style) onFillStyle(style)
+      onNotice?.(
+        `AI fabric “${created.name}” saved. Tap Fill inside a closed region.`,
+      )
+      setAiBusy(false)
+      closeAiDialog()
+    } catch (err) {
+      setAiError(err instanceof ApiError ? err.message : 'Fabric generation failed.')
+      setAiBusy(false)
     }
   }
 
@@ -337,15 +390,28 @@ export function ColorAndMaterialsPanel({
           <section className={styles.card} role="tabpanel" aria-label="Fabrics">
             <div className={styles.head}>
               <h3>Fabrics</h3>
-              <button
-                type="button"
-                className={styles.addFabric}
-                onClick={openPicker}
-                disabled={uploading}
-              >
-                <Plus size={14} aria-hidden="true" />
-                Add Fabric
-              </button>
+              <div className={styles.fabricActions}>
+                <button
+                  type="button"
+                  className={styles.addFabric}
+                  onClick={() => {
+                    setAiError(null)
+                    setAiOpen(true)
+                  }}
+                  disabled={uploading || aiBusy}
+                >
+                  Create with AI
+                </button>
+                <button
+                  type="button"
+                  className={styles.addFabric}
+                  onClick={openPicker}
+                  disabled={uploading || aiBusy}
+                >
+                  <Plus size={14} aria-hidden="true" />
+                  Upload
+                </button>
+              </div>
             </div>
             <p className={styles.note}>Select a fabric, then use Fill on a closed outline.</p>
             <input
@@ -536,6 +602,90 @@ export function ColorAndMaterialsPanel({
                 disabled={!pendingFile || uploading}
               >
                 {uploading ? 'Uploading…' : 'Save fabric'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {aiOpen ? (
+        <div className={styles.uploadScrim} role="presentation">
+          <div
+            className={styles.uploadDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Create fabric with AI"
+          >
+            <h3 className={styles.uploadTitle}>Create fabric with AI</h3>
+            <label className={styles.uploadField} htmlFor={aiPromptId}>
+              Fabric prompt
+              <textarea
+                id={aiPromptId}
+                className={styles.aiPrompt}
+                value={aiPrompt}
+                maxLength={400}
+                rows={3}
+                placeholder="gold shiny with diamonds like glitters"
+                onChange={(e) => setAiPrompt(e.target.value)}
+                disabled={aiBusy}
+              />
+            </label>
+            <p className={styles.note}>Fabric / pattern only. Unrelated prompts are rejected.</p>
+            <div className={styles.aiColorRow} role="group" aria-label="Optional color">
+              <button
+                type="button"
+                className={aiColor === null ? styles.aiColorActive : styles.aiColorSwatch}
+                onClick={() => setAiColor(null)}
+                disabled={aiBusy}
+              >
+                From prompt
+              </button>
+              {FASHION_PALETTE.map((swatch) => {
+                const active = aiColor?.toUpperCase() === swatch.color.toUpperCase()
+                return (
+                  <button
+                    key={swatch.id}
+                    type="button"
+                    className={active ? styles.aiColorActive : styles.aiColorSwatch}
+                    style={{ background: swatch.color }}
+                    aria-label={swatch.label}
+                    aria-pressed={active}
+                    title={swatch.label}
+                    onClick={() => setAiColor(swatch.color)}
+                    disabled={aiBusy}
+                  />
+                )
+              })}
+            </div>
+            <label className={styles.uploadField} htmlFor={aiNameId}>
+              Name (optional)
+              <input
+                id={aiNameId}
+                className={styles.hex}
+                value={aiName}
+                maxLength={80}
+                onChange={(e) => setAiName(e.target.value)}
+                disabled={aiBusy}
+              />
+            </label>
+            {aiError ? (
+              <p className={styles.uploadError} role="alert">
+                {aiError}
+              </p>
+            ) : (
+              <p className={styles.note}>Saved to My Fabrics · used in Magic when you fill with it</p>
+            )}
+            <div className={styles.uploadActions}>
+              <button type="button" className={styles.uploadGhost} onClick={closeAiDialog} disabled={aiBusy}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.uploadPrimary}
+                onClick={() => void confirmAiFabric()}
+                disabled={aiBusy || !aiPrompt.trim()}
+              >
+                {aiBusy ? 'Creating…' : 'Generate fabric'}
               </button>
             </div>
           </div>

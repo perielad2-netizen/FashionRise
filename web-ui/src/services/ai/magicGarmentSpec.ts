@@ -4,6 +4,7 @@ import {
   frontArtworkFromDoc,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
+import { getFabricPromptShort } from '@/lib/fabricPromptCache'
 import { FABRIC_PRESETS, type FillOp } from '@/lib/fills'
 import { sampleColorFromStyle } from '@/lib/paintFills'
 import {
@@ -70,6 +71,10 @@ function fillMaterialLabels(fill: FillOp): string[] {
     return [`${name} repeating textile (exact Studio tile reference)`]
   }
   if (style.kind === 'uploaded-fabric') {
+    const promptShort = getFabricPromptShort(style.assetId)
+    if (promptShort) {
+      return [`${promptShort} repeating textile (exact Studio tile reference)`]
+    }
     return ['uploaded fabric repeating textile (exact Studio tile reference)']
   }
   if (style.kind === 'gradient') return ['gradient fabric']
