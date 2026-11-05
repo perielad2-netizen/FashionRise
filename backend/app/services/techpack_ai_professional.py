@@ -142,15 +142,23 @@ class OpenAIProfessionalProvider:
             "You are a fashion technical designer analyzing a finished fashion look photo. "
             "Return JSON only with keys: schema_version, category, silhouette, length, "
             "neckline, sleeves, fit, closure_visible, fabric_pattern, stripe_direction, "
+            "color_treatment (object with mode solid|gradient|print|stripe, stops array, "
+            "direction, placement — use nulls when unverified), "
             "colors, panels_seams, distinctive_features (array of strings), "
             "pattern_pieces_suggested (array of {id,name,cut_qty,notes}), "
             "construction_notes (array of strings), confidence (low|medium|high), "
             "assumptions (array of strings). "
             "Describe ONLY what is visually supported. Do not invent exact centimeters. "
+            "Do not invent zipper, buttons, or drawstring when not visible. "
+            "Preserve gradients, stripe direction, and multi-color treatments — do not flatten to a solid. "
             f"schema_version must be '{ANALYSIS_SCHEMA_VERSION}'."
         )
+        ct = piece.get("color_treatment") if isinstance(piece.get("color_treatment"), dict) else {}
         user_text = (
             f"Garment tab: category={cat}, label={label}. "
+            f"Color hint: {piece.get('color_hint') or '—'}. "
+            f"Designer color_treatment: mode={ct.get('mode') or '—'}, "
+            f"direction={ct.get('direction') or '—'}, placement={ct.get('placement') or '—'}. "
             f"Look notes: {(look_notes or '')[:400]}. "
             "Extract construction-relevant features for a professional technical pack."
         )
@@ -257,6 +265,27 @@ class OpenAIProfessionalProvider:
         return raw, usage
 
     @staticmethod
+    def _color_treatment_prompt_fragment(
+        analysis: dict[str, Any], piece: dict[str, Any]
+    ) -> str:
+        ct_piece = piece.get("color_treatment") if isinstance(piece.get("color_treatment"), dict) else {}
+        ct_analysis = (
+            analysis.get("color_treatment")
+            if isinstance(analysis.get("color_treatment"), dict)
+            else {}
+        )
+        mode = ct_piece.get("mode") or ct_analysis.get("mode") or ""
+        direction = ct_piece.get("direction") or ct_analysis.get("direction") or ""
+        placement = ct_piece.get("placement") or ct_analysis.get("placement") or ""
+        stops = ct_piece.get("stops") or ct_analysis.get("stops") or []
+        return (
+            f"color_treatment_mode={mode or 'unverified'}, "
+            f"gradient_or_stripe_direction={direction or analysis.get('stripe_direction') or 'unverified'}, "
+            f"placement={placement or 'unverified'}, stops={stops or analysis.get('colors')}, "
+            "Preserve designer-confirmed gradients/stripes — do not flatten to a solid fill."
+        )
+
+    @staticmethod
     def _flat_prompt(analysis: dict[str, Any], *, view: str, piece: dict[str, Any]) -> str:
         features = ", ".join(str(x) for x in (analysis.get("distinctive_features") or [])[:12])
         unverified = ""
@@ -264,6 +293,7 @@ class OpenAIProfessionalProvider:
             unverified = (
                 " Label clearly as PROPOSED BACK — UNVERIFIED. Do not claim this is a photographed back."
             )
+        color_frag = OpenAIProfessionalProvider._color_treatment_prompt_fragment(analysis, piece)
         return (
             "Create a professional fashion TECHNICAL FLAT illustration of THIS exact garment from the "
             f"reference photo. View: {view.replace('_', ' ')}.{unverified} "
@@ -273,8 +303,11 @@ class OpenAIProfessionalProvider:
             f"neckline={analysis.get('neckline')}, sleeves={analysis.get('sleeves')}, "
             f"fit={analysis.get('fit')}, fabric_pattern={analysis.get('fabric_pattern')}, "
             f"stripe_direction={analysis.get('stripe_direction')}, colors={analysis.get('colors')}, "
+            f"{color_frag}, "
+            f"closure_visible={analysis.get('closure_visible')}, "
             f"features={features}. "
             f"Category hint: {piece.get('category')}. "
+            "Do NOT invent zipper, buttons, or drawstring when closure_visible does not support them. "
             "Do NOT draw a generic A-line dress if the source is fitted/bodycon with long sleeves or a deep V. "
             "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack."
         )
@@ -283,6 +316,7 @@ class OpenAIProfessionalProvider:
     def _detail_prompt(analysis: dict[str, Any], *, piece: dict[str, Any]) -> str:
         cat = str(piece.get("category") or "garment")
         label = str(piece.get("label") or cat)
+        color_frag = OpenAIProfessionalProvider._color_treatment_prompt_fragment(analysis, piece)
         return (
             "Create a professional fashion technical DETAIL callout sheet for ONE garment only: "
             f"category={cat}, label={label}. "
@@ -290,9 +324,12 @@ class OpenAIProfessionalProvider:
             "(e.g. never put hoodie zippers/hood/drawcord on a shorts detail sheet, and never put "
             "waistband/inseam/leg-opening callouts on a top detail sheet). "
             "White background. Show close-up construction callouts that belong to THIS category "
-            "(neckline/sleeve/cuff/hem/zipper for tops; waistband/pockets/hem/fly for bottoms). "
+            "(neckline/sleeve/cuff/hem for tops; waistband/pockets/hem for bottoms). "
+            "Only show zipper/buttons/drawstring callouts when closure_visible supports them. "
             f"Neckline={analysis.get('neckline')}; sleeves={analysis.get('sleeves')}; "
             f"pattern={analysis.get('fabric_pattern')} {analysis.get('stripe_direction')}; "
+            f"closure_visible={analysis.get('closure_visible')}; "
+            f"{color_frag}; "
             f"silhouette={analysis.get('silhouette')}. "
             "If a detail is not visible on this garment, omit it rather than inventing another garment's parts. "
             "No model body. Label callouts briefly. Not a photo — a technical illustration. "
@@ -316,11 +353,24 @@ class OpenAIProfessionalProvider:
         )
 
 
+def _color_treatment_from_piece(piece: dict[str, Any]) -> dict[str, Any] | None:
+    raw = piece.get("color_treatment")
+    if isinstance(raw, dict) and (raw.get("mode") or raw.get("stops")):
+        return {
+            "mode": raw.get("mode") or raw.get("type"),
+            "stops": list(raw.get("stops") or raw.get("colors") or []),
+            "direction": raw.get("direction"),
+            "placement": raw.get("placement"),
+        }
+    return None
+
+
 def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str, Any]:
     """Category-aware mock vision — supports shirt+trousers regression without paid AI."""
     cat = str(piece.get("category") or "other").lower()
     notes = (look_notes or "").lower()
     color_hint = str(piece.get("color_hint") or "").lower()
+    color_treatment = _color_treatment_from_piece(piece)
 
     if cat in ("shirt", "top", "blouse"):
         neckline = "V-slit neckline"
@@ -347,6 +397,7 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
             "closure_visible": "none clearly verified — confirm placket/buttons",
             "fabric_pattern": "solid" if "black" in colors else "solid tonal",
             "stripe_direction": None,
+            "color_treatment": color_treatment,
             "colors": colors,
             "panels_seams": "shoulder seams; side seams; set-in sleeves",
             "distinctive_features": [neckline, sleeves, f"{colors[0]} shell"],
@@ -382,6 +433,7 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
             "closure_visible": "waistband — closure not verified from front alone",
             "fabric_pattern": "solid woven appearance",
             "stripe_direction": None,
+            "color_treatment": color_treatment,
             "colors": colors,
             "panels_seams": "side seams; inseam; waistband",
             "distinctive_features": [f"{colors[0]} trousers", "straight leg", length],
@@ -413,6 +465,7 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
             "closure_visible": "not verified",
             "fabric_pattern": "solid",
             "stripe_direction": None,
+            "color_treatment": color_treatment,
             "colors": [color_hint] if color_hint else ["unknown"],
             "panels_seams": "side seams",
             "distinctive_features": ["skirt"],
@@ -437,6 +490,13 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
         "closure_visible": "none visible — pull-on assumed",
         "fabric_pattern": "bright pink and white diagonal stripes",
         "stripe_direction": "diagonal",
+        "color_treatment": color_treatment
+        or {
+            "mode": "stripe",
+            "stops": ["#FF2D8A", "#FFFFFF"],
+            "direction": "diagonal",
+            "placement": "body",
+        },
         "colors": ["bright pink", "white"],
         "panels_seams": "side seams; set-in sleeves",
         "distinctive_features": [

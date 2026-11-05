@@ -3,20 +3,49 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Charcoal V4 width-gradient** **LIVE** FE · **`70eb0fcd`** · BE still **`900bda6b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Professional Technical Pack final quality** PR — **NOT deployed** · approved main **`1cab0a7b`** · Charcoal V4 FE still **`70eb0fcd`** · **0** agent paid AI calls.)
 
-**Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
+**Phase:** Protected family beta. Create My Croquis / Studio / Fashion Magic / Smart Try-On **unchanged** this milestone. Focus = Create Real Design / Professional Technical Pack fidelity only.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`70eb0fcd`** — release `/var/www/fashionrise/releases/70eb0fcd` · Charcoal V4 width-gradient. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
+| Frontend (`web-ui`) | **`70eb0fcd`** — release `/var/www/fashionrise/releases/70eb0fcd` · Charcoal V4 width-gradient. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**. |
+| Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**. Tech Pack final-quality branch **awaiting PM** — do not deploy before review. |
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
 | Nginx | photos `client_max_body_size` **25m** · FE `current` → **`70eb0fcd`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## Professional Technical Pack — final quality & fidelity (2026-11-05) — STOP for PM
+
+**Base:** approved GitHub main **`1cab0a7be1de4d8bb2d19dda26e77a3e42f5edfc`**. Branch `cursor/web-techpack-final-quality-77c6`. **No production deploy.**
+
+### Quality scorecard (offline)
+
+| Area | Score | Notes |
+|---|---|---|
+| Garment type / multi-piece structure | Strong | FR-3958 / live FR-D47D / FR-B9F9 retain separate pieces; anti piece-1 gates intact |
+| Silhouette / neckline / sleeves (prompt + analysis) | Strong on path | FR-7182 vision text matches deep V + long sleeves + diagonal stripes; pixel regen still owner-paid |
+| Closures anti-invention | Fixed | Defaults + BOM no longer assert zipper/buttons; filter strips invented hardware when unverified |
+| Color / gradient / stripe fidelity | Fixed (code path) | `INPUT_FINGERPRINT_VERSION=3` includes `color_treatment` + `fabric_pattern`; flat/detail prompts carry treatment |
+| Materials anti-invention | Fixed | Heuristic enrich no longer invents `{color} fabric` / cotton from `color_hint` |
+| Manufacturing readiness honesty | Strong | Successful PDF ≠ SAMPLE-DEVELOPMENT READY; QA-A/B/E offline remain `DESIGN_CONCEPT` |
+| PDF dirty / save-reopen / pdf-only | Strong | Existing suites pass; color_treatment now dirties professional fingerprint |
+| Studio / Magic / Croquis / Try-On | Unchanged | Diff scoped to `techpack_*` services + tests/docs only |
+
+### Historical problems already fixed (pre-this-PR)
+Multi-piece structure; FR-3958 cross-garment detail rejection; PROPOSED BACK — UNVERIFIED; measurement dirty + PDF-only update; mid-run identity drift (incl. color_treatment bind skip); readiness never auto-promotes from PDF success; NOT TO SCALE banners.
+
+### Confirmed remaining / owner visual
+- Pixel-level flat vs Magic for FR-* requires owner-paid regen or private visual review of existing arts (agent made **0** paid calls).
+- FR-B9F9 local PDF page extract missing in this workspace (prod draft + 6 arts exist).
+- FR-CF5A sleeveless + designer sleeve_length=60 cm — warning path when analysis present; owner confirm.
+- No CV-based cross-garment detector beyond prompt/filter rules.
+
+### Recommended ONE owner-paid acceptance test
+Re-open **FR-7182** (or equivalent fitted striped dress look) → confirm pull-on / no zipper → Generate Professional Pack once. Expect: dress stays dress; deep V + long sleeves + diagonal stripes in flats; construction/BOM do **not** invent zipper; pack stays DRAFT/UNVERIFIED / DESIGN CONCEPT unless designer confirms manufacturing checklist. Historical FR-7182 paid cost was **165¢** (~$1.65); expect similar order (~$1–3) unless image budget changes.
 
 ## Charcoal V3 pencil-tip — LIVE FE (2026-11-05)
 

@@ -29,7 +29,8 @@ OPTIONAL_IMAGE_KIND_PHASES: tuple[str, ...] = (
 # Versioned authorized-input snapshot for queued Professional runs.
 # v1 = piece/materials/finished POMs + notes/units only (incomplete — do not authorize new runs).
 # v2 = + shared body, preferences, size/sample, draft title/style, Magic job refs.
-INPUT_FINGERPRINT_VERSION = 2
+# v3 = + color_treatment / fabric_pattern (gradient↔solid drift must dirty PDF / fail-close auth).
+INPUT_FINGERPRINT_VERSION = 3
 
 _INCONCLUSIVE_CATEGORIES = frozenset({"", "other"})
 _INCONCLUSIVE_LABELS = frozenset(
@@ -186,6 +187,28 @@ def _measurement_snapshot(cell: Any) -> dict[str, Any] | None:
     return out
 
 
+def _color_treatment_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
+    """Stable color_treatment for PDF dirty / auth fingerprints (aligned with identity hash)."""
+    raw = piece.get("color_treatment")
+    if not isinstance(raw, dict):
+        return {}
+    mode = str(raw.get("mode") or raw.get("type") or "").strip().lower()
+    stops_raw = raw.get("stops") if raw.get("stops") is not None else raw.get("colors")
+    stops: list[Any] = list(stops_raw) if isinstance(stops_raw, list) else []
+    named = raw.get("named_colors")
+    return {
+        "mode": mode,
+        "stops": stops,
+        "named_colors": list(named) if isinstance(named, list) else [],
+        "direction": str(raw.get("direction") or "").strip(),
+        "placement": str(raw.get("placement") or "").strip(),
+        "gradient_id": str(raw.get("gradient_id") or "").strip(),
+        "angle": raw.get("angle") if isinstance(raw.get("angle"), (int, float)) else None,
+        "designer_confirmed": bool(raw.get("designer_confirmed")),
+        "notes": str(raw.get("notes") or "").strip(),
+    }
+
+
 def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
     """Generation/PDF-relevant fields only — no volatile illustration/AI bookkeeping."""
     mats = _as_dict(piece.get("materials"))
@@ -201,6 +224,9 @@ def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
     closures = _as_dict(piece.get("closures"))
     fit = _as_dict(piece.get("fit"))
     visible = _as_dict(piece.get("visible_details"))
+    pattern_raw = piece.get("fabric_pattern")
+    if pattern_raw is None:
+        pattern_raw = shell.get("pattern") or mats.get("pattern")
     return _stable_jsonable(
         {
             "id": piece_id(piece),
@@ -208,6 +234,8 @@ def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
             "role": str(piece.get("role") or ""),
             "label": str(piece.get("label") or ""),
             "color_hint": str(piece.get("color_hint") or ""),
+            "color_treatment": _color_treatment_input_snapshot(piece),
+            "fabric_pattern": str(pattern_raw or ""),
             "category_user_confirmed": bool(piece.get("category_user_confirmed")),
             "detection_source": str(piece.get("detection_source") or ""),
             "materials": {

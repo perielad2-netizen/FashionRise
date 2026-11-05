@@ -156,15 +156,76 @@ def collect_compatibility_warnings(spec: dict[str, Any]) -> list[dict[str, Any]]
     return warnings
 
 
+_CLOSURE_NONE_TOKENS = (
+    "none",
+    "n/a",
+    "na",
+    "not visible",
+    "not verified",
+    "no closure",
+    "no buttons",
+    "no zipper",
+    "pull-on",
+    "pull on",
+    "open",
+    "—",
+    "-",
+)
+
+_CLOSURE_HARDWARE_TOKENS = (
+    "zipper",
+    "zip ",
+    " zip",
+    "button",
+    "placket",
+    "drawstring",
+    "drawcord",
+    "snap",
+    "hook-and-eye",
+    "hook and eye",
+)
+
+
+def closure_hardware_unverified(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> bool:
+    """True when no verified zipper/buttons/drawstring should be asserted."""
+    closures = piece.get("closures") if isinstance(piece, dict) else None
+    closures_d = closures if isinstance(closures, dict) else {}
+    type_txt = _text(closures_d.get("type"))
+    notes_txt = _text(closures_d.get("notes"))
+    visible = _text(analysis.get("closure_visible") if isinstance(analysis, dict) else "")
+    blob = f"{type_txt} {notes_txt} {visible}".strip()
+    if not blob:
+        return True
+    if any(tok in blob for tok in _CLOSURE_HARDWARE_TOKENS):
+        # Explicit hardware named — keep (may still be estimate; readiness gate handles that).
+        if any(tok in blob for tok in _CLOSURE_NONE_TOKENS) and not any(
+            hw in type_txt for hw in ("zip", "button", "draw", "snap", "hook")
+        ):
+            return True
+        return False
+    if any(tok in blob for tok in _CLOSURE_NONE_TOKENS):
+        return True
+    # Boolean-ish leftovers (legacy “True”/“False” closure strings) are not hardware.
+    if type_txt in {"true", "false", "1", "0"}:
+        return True
+    return False
+
+
 def filter_construction_steps(
     steps: list[Any],
     *,
     analysis: dict[str, Any] | None,
+    piece: dict[str, Any] | None = None,
 ) -> list[Any]:
-    """Drop or mark sleeve-set instructions when analysis indicates sleeveless."""
+    """Adjust sleeve-set / invented-closure steps to match verified garment evidence."""
     if not steps:
         return steps
     sleeveless = is_sleeveless_analysis(analysis)
+    no_hw = closure_hardware_unverified(analysis=analysis, piece=piece)
     out: list[Any] = []
     for step in steps:
         text = ""
@@ -191,7 +252,59 @@ def filter_construction_steps(
                     "Finish armholes for sleeveless design (do not set sleeves)."
                 )
             continue
+        if no_hw and any(tok in lower for tok in _CLOSURE_HARDWARE_TOKENS):
+            replacement = (
+                "Confirm closure with designer — do not invent zipper, buttons, or drawstring "
+                "when none is verified on the source design. Finish openings as designed; press."
+            )
+            if isinstance(step, dict):
+                out.append(
+                    {
+                        **step,
+                        "instruction": replacement,
+                        "review_status": "adjusted_for_garment",
+                        "source": step.get("source") or "validated",
+                    }
+                )
+            else:
+                out.append(replacement)
+            continue
         out.append(step)
+    return out
+
+
+def filter_bom_rows(
+    rows: list[dict[str, Any]],
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Drop invented closure hardware BOM lines when no closure is verified."""
+    if not rows:
+        return rows
+    if not closure_hardware_unverified(analysis=analysis, piece=piece):
+        return rows
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        item = _text(row.get("item"))
+        notes = _text(row.get("notes"))
+        blob = f"{item} {notes}"
+        if any(tok in blob for tok in _CLOSURE_HARDWARE_TOKENS):
+            out.append(
+                {
+                    **row,
+                    "item": "Closure hardware (if designed)",
+                    "qty": "UNVERIFIED",
+                    "notes": (
+                        "Do not invent zipper/buttons/drawstring — confirm with designer "
+                        "before cutting."
+                    ),
+                    "source": "unverified",
+                    "review_state": "proposed_unverified",
+                }
+            )
+            continue
+        out.append(row)
     return out
 
 

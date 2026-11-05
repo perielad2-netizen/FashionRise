@@ -731,6 +731,11 @@ def _propose_finished_measurements(piece: dict[str, Any], body: dict[str, Any], 
 
 
 def enrich_spec_heuristic(spec: dict[str, Any]) -> dict[str, Any]:
+    from app.services.techpack_compatibility import (
+        filter_bom_rows,
+        filter_construction_steps,
+    )
+
     out = ensure_v2(spec)
     fit = str((out.get("preferences") or {}).get("fit_preference") or "regular")
     body = out.get("body") if isinstance(out.get("body"), dict) else {}
@@ -749,12 +754,37 @@ def enrich_spec_heuristic(spec: dict[str, Any]) -> dict[str, Any]:
             p["construction_steps"] = default_construction_steps(cat)
         if not p.get("bom"):
             p["bom"] = default_bom(cat, color_hint=str(p.get("color_hint") or ""))
+        # Never invent a shell fabric identity from color_hint alone (anti-invention).
+        # Colorway stays on color_hint / color_treatment until the designer confirms materials.
         mats = p.get("materials") if isinstance(p.get("materials"), dict) else {}
         shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
-        if not shell.get("name") and p.get("color_hint"):
-            shell = {**shell, "name": f"{p['color_hint']} fabric", "suggestion": "cotton", "source": "estimate"}
-            mats["shell"] = shell
+        if shell.get("source") == "estimate" and str(shell.get("name") or "").endswith(" fabric"):
+            # Clear legacy heuristic inventions like "pink fabric" + cotton suggestion.
+            shell = {
+                k: v
+                for k, v in shell.items()
+                if k not in {"name", "suggestion", "source"}
+            }
+            if shell:
+                mats["shell"] = shell
+            elif "shell" in mats:
+                mats.pop("shell", None)
             p["materials"] = mats
+        # Strip invented closure hardware from defaults when none is verified.
+        illust = p.get("illustrations") if isinstance(p.get("illustrations"), dict) else {}
+        analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+        if p.get("construction_steps"):
+            p["construction_steps"] = filter_construction_steps(
+                list(p.get("construction_steps") or []),
+                analysis=analysis,
+                piece=p,
+            )
+        if p.get("bom"):
+            p["bom"] = filter_bom_rows(
+                [r for r in (p.get("bom") or []) if isinstance(r, dict)],
+                analysis=analysis,
+                piece=p,
+            )
         p["illustrations"] = {
             **(p.get("illustrations") if isinstance(p.get("illustrations"), dict) else {}),
             "flat_front": "schematic",
@@ -985,6 +1015,7 @@ def _persist_professional_result(
     from app.services.techpack_autofill import snapshot_garment_analysis
     from app.services.techpack_compatibility import (
         collect_compatibility_warnings,
+        filter_bom_rows,
         filter_construction_steps,
         filter_pattern_inventory,
         is_sleeveless_analysis,
@@ -1003,6 +1034,13 @@ def _persist_professional_result(
             piece["construction_steps"] = filter_construction_steps(
                 list(piece.get("construction_steps") or []),
                 analysis=analysis,
+                piece=piece,
+            )
+        if piece.get("bom"):
+            piece["bom"] = filter_bom_rows(
+                [r for r in (piece.get("bom") or []) if isinstance(r, dict)],
+                analysis=analysis,
+                piece=piece,
             )
         if piece.get("pattern_pieces"):
             piece["pattern_pieces"] = filter_pattern_inventory(

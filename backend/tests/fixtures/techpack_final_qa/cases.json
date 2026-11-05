@@ -1,0 +1,200 @@
+{
+  "A_fitted_striped_dress": {
+    "id": "QA-A",
+    "title": "Single fitted dress \u2014 deep V, long sleeves, diagonal stripes",
+    "analog": "FR-7182 (private prod reference; not committed)",
+    "source_design": {
+      "garment_type": "dress",
+      "piece_count": 1,
+      "silhouette": "fitted bodycon mini",
+      "neckline": "deep plunging V",
+      "sleeves": "long fitted",
+      "closure": "pull-on / none visible",
+      "fabric": "hot-pink and white diagonal stripes",
+      "color_treatment": {
+        "mode": "stripe",
+        "direction": "diagonal",
+        "stops": [
+          "#FF2D8A",
+          "#FFFFFF"
+        ]
+      }
+    },
+    "spec_piece": {
+      "id": "qa-a-dress",
+      "category": "dress",
+      "role": "one_piece",
+      "label": "QA Fitted Striped Dress",
+      "color_hint": "hot pink",
+      "color_treatment": {
+        "mode": "stripe",
+        "direction": "diagonal",
+        "stops": [
+          "#FF2D8A",
+          "#FFFFFF"
+        ],
+        "designer_confirmed": true
+      },
+      "closures": {
+        "type": "pull-on",
+        "notes": "No zipper/buttons verified"
+      },
+      "fit": {
+        "silhouette": "fitted"
+      },
+      "fabric_pattern": "diagonal stripes"
+    },
+    "acceptance": [
+      "dress remains dress",
+      "deep V preserved in analysis/prompts",
+      "long sleeves preserved",
+      "stripe direction in fingerprint + flat prompt",
+      "no invented zipper in construction/BOM",
+      "PDF status DRAFT/UNVERIFIED \u2014 not SAMPLE-DEVELOPMENT READY from generate alone"
+    ]
+  },
+  "B_multi_piece_top_trousers": {
+    "id": "QA-B",
+    "title": "Multi-piece \u2014 shirt/top + trousers",
+    "analog": "FR-D47D current prod (top+trousers); historical PDF was single dress \u2014 already corrected",
+    "source_design": {
+      "garment_type": "multi",
+      "piece_count": 2,
+      "pieces": [
+        "top/shirt",
+        "trousers"
+      ]
+    },
+    "spec_pieces": [
+      {
+        "id": "qa-b-top",
+        "category": "top",
+        "role": "top",
+        "label": "QA Top",
+        "closures": {
+          "type": "none clearly verified"
+        },
+        "color_hint": "black"
+      },
+      {
+        "id": "qa-b-trousers",
+        "category": "trousers",
+        "role": "bottom",
+        "label": "QA Trousers",
+        "closures": {
+          "type": "not verified"
+        },
+        "color_hint": "beige"
+      }
+    ],
+    "acceptance": [
+      "two separate pieces retained",
+      "detail sheets do not mix top/trouser callouts",
+      "no invented zipper when unverified"
+    ]
+  },
+  "C_asymmetric_opening": {
+    "id": "QA-C",
+    "title": "Unusual construction \u2014 asymmetric hem / opening",
+    "analog": "FR-CF5A (burgundy slip, asymmetric high-low hem)",
+    "source_design": {
+      "garment_type": "dress",
+      "neckline": "cowl / soft drape",
+      "sleeves": "sleeveless spaghetti straps",
+      "hem": "asymmetric high-low",
+      "closure": "pull-on"
+    },
+    "spec_piece": {
+      "id": "qa-c-dress",
+      "category": "dress",
+      "role": "one_piece",
+      "label": "QA Asymmetric Slip",
+      "closures": {
+        "type": "pull-on"
+      },
+      "fit": {
+        "silhouette": "slim"
+      },
+      "visible_details": {
+        "hem": "asymmetric high-low",
+        "straps": "spaghetti"
+      }
+    },
+    "acceptance": [
+      "sleeveless preserved; sleeve_length contradictions flagged not silently trusted",
+      "asymmetric hem called out in visible_details",
+      "proposed back labeled UNVERIFIED when no Magic back"
+    ]
+  },
+  "D_gradient_or_pattern": {
+    "id": "QA-D",
+    "title": "Patterned / gradient color garment",
+    "analog": "FR-B9F9 (closure + color fidelity); FR-7182 stripes",
+    "source_design": {
+      "color_treatment": {
+        "mode": "gradient",
+        "direction": "top-to-bottom",
+        "stops": [
+          "#7A1FA2",
+          "#F5E6FF"
+        ]
+      },
+      "closure": "buttons (shirt) \u2014 only when designer-confirmed"
+    },
+    "spec_piece": {
+      "id": "qa-d-shirt",
+      "category": "shirt",
+      "role": "top",
+      "label": "QA Gradient Shirt",
+      "color_hint": "burgundy",
+      "color_treatment": {
+        "mode": "gradient",
+        "direction": "top-to-bottom",
+        "stops": [
+          "#7A1FA2",
+          "#F5E6FF"
+        ],
+        "designer_confirmed": true
+      },
+      "closures": {
+        "type": "buttons",
+        "notes": "front placket"
+      },
+      "fabric_pattern": "gradient"
+    },
+    "acceptance": [
+      "gradient mode in professional fingerprint",
+      "flat prompt includes color_treatment_mode=gradient",
+      "gradient\u2192solid same color_hint changes fingerprint"
+    ]
+  },
+  "E_incomplete_unverified": {
+    "id": "QA-E",
+    "title": "Incomplete specification must remain UNVERIFIED",
+    "analog": "synthetic",
+    "source_design": {
+      "missing": [
+        "materials.shell",
+        "finished_measurements",
+        "closures",
+        "sample_size"
+      ]
+    },
+    "spec_piece": {
+      "id": "qa-e-other",
+      "category": "other",
+      "role": "one_piece",
+      "label": "Garment (confirm category)",
+      "color_hint": "",
+      "closures": {},
+      "materials": {},
+      "finished_measurements": {}
+    },
+    "acceptance": [
+      "manufacturing readiness stays DESIGN_CONCEPT / not SAMPLE-DEVELOPMENT READY",
+      "UNVERIFIED markers retained",
+      "no invented precise cm from image",
+      "no invented shell from empty color_hint"
+    ]
+  }
+}
