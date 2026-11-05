@@ -11,6 +11,7 @@ Allow authenticated Cloudflare Access clients (with FashionRise Authenticated Or
 | Method | Path |
 |--------|------|
 | `POST` | `/api/v1/fabrics` |
+| `POST` | `/api/v1/fabrics/ai-generate` |
 | `GET` | `/api/v1/fabrics` |
 | `GET` | `/api/v1/fabrics/{uuid}` |
 | `DELETE` | `/api/v1/fabrics/{uuid}` |
