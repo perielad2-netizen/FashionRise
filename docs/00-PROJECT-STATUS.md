@@ -11,12 +11,16 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`966e4cd6`** — release `/var/www/fashionrise/releases/966e4cd6` · high-cut hem V2.7. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`ad8e7772`** — release `/var/www/fashionrise/releases/ad8e7772` · erase-shoes completeness span. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`966e4cd6`** · Try On **`v2.7`** high-cut hem · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`966e4cd6`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`ad8e7772`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## Try On erase-shoes completeness — LIVE FE (2026-11-05)
+
+After deleting drawn shoes, leftover foot-band outline crumbs inflated live maxY and blocked Try On with “Garment capture lost lower parts”. Completeness now ignores foot-only strokes below a high-cut one-piece fill hem. App **`ad8e7772`**. Rollback `/var/backups/fashionrise/tryon-erase-shoes-span-20261105T212814Z`. Prior hem FE/BE **`966e4cd6`**.
 
 ## Fill flush under outline — LIVE FE (2026-11-05)
 
