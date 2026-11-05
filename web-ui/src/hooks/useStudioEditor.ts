@@ -930,7 +930,9 @@ export function useStudioEditor() {
   const brushSize = brushSizePx
   const sizeId = nearestBrushSizeId(brushSizePx)
 
-  const rearAvailable = canOpenBackPaper(model)
+  // Canvas Flip control only when a published rear croquis image exists.
+  // Personal / atelier-without-rear stay Front-only in the paper chrome.
+  const rearAvailable = rearReferenceAvailable(model)
   const personalUnderlayMatchesPin = useMemo(() => {
     if (model !== 'personal' || !personalObjectUrl) return false
     return underlayMatchesPin(personalUnderlayIdentity, {
@@ -2185,7 +2187,13 @@ export function useStudioEditor() {
         if (controller.signal.aborted) return
         if (prep.quality_ok === false || prep.openai_live_http === false) {
           setMagicPhase('failed')
-          setMagicError(SMART_TRY_ON_FAILURE)
+          const prepNote =
+            typeof prep.quality_notes === 'string' ? prep.quality_notes.trim() : ''
+          setMagicError(
+            prepNote ||
+              smartTryOnTerminalFailureMessage(failedJob) ||
+              SMART_TRY_ON_FAILURE,
+          )
           setMagicStatusHint(null)
           return
         }
@@ -2254,6 +2262,7 @@ export function useStudioEditor() {
         }
 
         // Server auto-stamps accept for smart_fallback Max enqueue; no review dialog.
+        // Pass Studio footwear/one-piece hints so Max does not keep photo boots.
         const maxJob = await enqueuePersonalTryOn({
           croquisId,
           croquisVersion,
@@ -2264,6 +2273,7 @@ export function useStudioEditor() {
           contentFingerprint,
           consentAcknowledged: true,
           consentVersion: prep.consent_version,
+          designHints,
           provider: 'fashn_max',
           approvedGarmentPieces: pieces.map((p) => ({
             category: p.category,
@@ -2351,6 +2361,10 @@ export function useStudioEditor() {
         const apiMsg = err instanceof ApiError ? err.message : ''
         if (isAdultsAttestationError(apiMsg)) {
           setMagicError(apiMsg || ADULTS_ATTESTATION_REQUIRED)
+        } else if (!(err instanceof ApiError) && err instanceof Error && err.message.trim()) {
+          // Capture / client gates (bounds, empty garment, fabric load) are already
+          // written for humans — do not bury them under generic SMART_TRY_ON_FAILURE.
+          setMagicError(err.message)
         } else {
           setMagicError(SMART_TRY_ON_FAILURE)
         }

@@ -120,7 +120,7 @@ def test_narrow_jumpsuit_keeps_additive_hints():
     assert geo.looks_like_trousers is True
     assert any("jumpsuit" in h.lower() or "trousers" in h.lower() for h in hints)
     prompt = build_try_on_prompt(hints)
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.3"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.7"
     assert prompt.startswith(build_try_on_prompt(None))
     assert "Studio design evidence" in prompt
 

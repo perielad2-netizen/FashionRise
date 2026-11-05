@@ -41,6 +41,8 @@ describe('smartTryOn (#178/#179/#180)', () => {
       input_data: {},
       result_data: {
         error_code: 'PROVIDER_MODERATION_BLOCKED',
+        summary:
+          'Our image provider blocked the generated preview after creating it (output safety filter).',
         provider_rejection: { moderation_stage: 'output', categories: ['sexual'] },
       },
       error_message: 'blocked',
@@ -60,6 +62,7 @@ describe('smartTryOn (#178/#179/#180)', () => {
     // Terminal copy only if Max path could not start.
     expect(smartTryOnTerminalFailureMessage(inputMod)).toBe(SMART_TRY_ON_INPUT_MODERATION)
     expect(smartTryOnTerminalFailureMessage(inputMod).toLowerCase()).toMatch(/safety checks/)
+    expect(smartTryOnTerminalFailureMessage(outputMod).toLowerCase()).toMatch(/output safety/)
 
     const timeoutJob = {
       ...outputMod,

@@ -48,6 +48,7 @@ describe('captureSketchForMagic', () => {
     expect(exportMock).toHaveBeenCalledWith(
       expect.objectContaining({
         fills: expect.arrayContaining([expect.objectContaining({ id: 'f1' })]),
+        frame: 'legacy',
         onReferenceError: 'skip',
         onFabricError: 'throw',
       }),
@@ -191,6 +192,7 @@ describe('captureGarmentArtworkForTryOn', () => {
         garmentOnly: true,
         width: DESIGN_WIDTH * TRY_ON_GARMENT_CAPTURE_SCALE,
         height: DESIGN_HEIGHT * TRY_ON_GARMENT_CAPTURE_SCALE,
+        frame: 'legacy',
         onReferenceError: 'skip',
         onFabricError: 'throw',
       }),
@@ -221,5 +223,109 @@ describe('captureGarmentArtworkForTryOn', () => {
         ],
       }),
     ).rejects.toThrow(/croquis underlay/i)
+  })
+
+  it('does not block Try On when only shade-layer erasers overshoot the legacy frame', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
+    // Prod incident 2026-11-05: shade erase tips at y≈-13 / y≈1098 blocked all Try On.
+    const ink = {
+      id: 'ink1',
+      tool: 'draw' as const,
+      color: '#111111',
+      size: 4,
+      opacity: 1,
+      brushKind: 'tapered' as const,
+      logicalLayer: 'ink' as const,
+      points: [100, 100, 0.5, 120, 140, 0.5],
+    }
+    const shadeEraseOutside = {
+      id: 'shade-erase-out',
+      tool: 'erase' as const,
+      color: '#000000',
+      size: 8,
+      opacity: 1,
+      brushKind: 'tapered' as const,
+      logicalLayer: 'shade' as const,
+      points: [449, -3, 0.5, 459, -13, 0.5, 310, 1076, 0.5],
+    }
+    await expect(
+      captureGarmentArtworkForTryOn({
+        strokes: [ink, shadeEraseOutside],
+        fills: [
+          {
+            id: 'f1',
+            contour: [80, 80, 200, 80, 200, 400, 80, 400],
+            style: { kind: 'solid', color: '#B91C1C' },
+            seedX: 120,
+            seedY: 200,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ referenceIncluded: false })
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ frame: 'legacy', garmentOnly: true }),
+    )
+  })
+
+  it('clips oversized ink into the legacy frame instead of blocking Try On', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
+    await expect(
+      captureGarmentArtworkForTryOn({
+        strokes: [
+          {
+            id: 'ink-out',
+            tool: 'draw',
+            color: '#111111',
+            size: 4,
+            opacity: 1,
+            brushKind: 'tapered',
+            logicalLayer: 'ink',
+            points: [100, 100, 0.5, 900, 500, 0.5],
+          },
+        ],
+        fills: [],
+      }),
+    ).resolves.toMatchObject({ referenceIncluded: false })
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ frame: 'legacy', garmentOnly: true }),
+    )
+  })
+
+  it('allows shoe fills well past legacy frame (clip, do not reject)', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
+    await expect(
+      captureGarmentArtworkForTryOn({
+        strokes: [],
+        fills: [
+          {
+            id: 'suit',
+            contour: [200, 200, 500, 200, 500, 700, 200, 700],
+            style: { kind: 'solid', color: '#B91C1C' },
+            seedX: 350,
+            seedY: 400,
+          },
+          {
+            id: 'shoe',
+            // Owner incident: shoes past soft-pad still blocked on 448192c0.
+            contour: [300, 980, 360, 980, 360, 1100, 300, 1100],
+            style: { kind: 'solid', color: '#111111' },
+            seedX: 330,
+            seedY: 1000,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ referenceIncluded: false })
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ frame: 'legacy', garmentOnly: true }),
+    )
   })
 })

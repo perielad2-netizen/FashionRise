@@ -5,6 +5,7 @@ import {
   detectFootwearInk,
   detectOpenNecklineFromFills,
   detectTrouserLegFills,
+  liveArtworkYSpan,
 } from '@/lib/tryOnDesignHints'
 import type { FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
@@ -100,20 +101,102 @@ describe('buildTryOnDesignHints', () => {
     ]
     expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
     const hints = buildTryOnDesignHints({ strokes: [], fills })
-    expect(hints.some((h) => /jumpsuit|trousers|pant legs/i.test(h))).toBe(false)
+    expect(hints.some((h) => /jumpsuit|pant legs/i.test(h) || /^garment type: trousers/i.test(h))).toBe(
+      false,
+    )
+    expect(hints.some((h) => /continuous one-piece|do not leave jeans/i.test(h))).toBe(true)
   })
 
-  it('does not inject trousers hints for swimsuit-like high fills', () => {
+  it('ignores foot-band stroke crumbs after shoe erase for try-on completeness span', () => {
     const fills: FillOp[] = [
       {
         id: 'swim',
-        contour: [320, 120, 448, 120, 480, 420, 288, 420],
+        contour: [320, 140, 460, 140, 500, 620, 280, 620],
         seedX: 380,
-        seedY: 260,
+        seedY: 360,
+        style: { kind: 'solid', color: '#0E7490' },
+      },
+    ]
+    // Leftover shoe outline crumbs after erase (foot band only).
+    const crumbs: Stroke[] = [
+      stroke({
+        id: 'shoe-crumb',
+        color: '#111111',
+        points: [300, 920, 0.5, 320, 940, 0.5, 310, 960, 0.5],
+      }),
+    ]
+    const raw = liveArtworkYSpan({ strokes: crumbs, fills })
+    const gated = liveArtworkYSpan({
+      strokes: crumbs,
+      fills,
+      forTryOnCompleteness: true,
+    })
+    expect(raw?.maxY).toBeGreaterThan(900)
+    expect(gated?.maxY).toBeLessThanOrEqual(620 + 24)
+  })
+
+  it('ignores erased shoe fills + full shoe strokes for try-on completeness (back croquis)', () => {
+    // Swimsuit body + black shoe fills still in the document after ink-erase
+    // punched them out of capture alpha (owner: "deleted everything, no leftovers").
+    const fills: FillOp[] = [
+      {
+        id: 'swim',
+        contour: [320, 140, 460, 140, 500, 620, 280, 620],
+        seedX: 380,
+        seedY: 360,
+        style: { kind: 'solid', color: '#0E7490' },
+      },
+      {
+        id: 'shoeL',
+        contour: [280, 900, 340, 900, 340, 1000, 280, 1000],
+        seedX: 310,
+        seedY: 950,
+        style: { kind: 'solid', color: '#111111' },
+      },
+      {
+        id: 'shoeR',
+        contour: [420, 900, 480, 900, 480, 1000, 420, 1000],
+        seedX: 450,
+        seedY: 950,
+        style: { kind: 'solid', color: '#111111' },
+      },
+    ]
+    const shoeStrokes: Stroke[] = [
+      stroke({
+        id: 'shoe-outline',
+        color: '#111111',
+        // Full shoe stroke from ankle into foot band — not a tiny crumb.
+        points: [300, 860, 0.5, 330, 940, 0.5, 310, 990, 0.5],
+      }),
+    ]
+    const raw = liveArtworkYSpan({ strokes: shoeStrokes, fills })
+    const gated = liveArtworkYSpan({
+      strokes: shoeStrokes,
+      fills,
+      forTryOnCompleteness: true,
+    })
+    expect(raw?.maxY).toBeGreaterThanOrEqual(990)
+    // Shoe fills must not defeat high-cut body span (prior fix only dropped crumbs).
+    expect(gated?.maxY).toBeLessThanOrEqual(620 + 24)
+  })
+
+  it('injects one-piece coverage hints for swimsuit-like fills (not trousers)', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'swim',
+        // Torso → upper-thigh hem on the 1024 design plane (owner one-piece case).
+        contour: [320, 140, 460, 140, 500, 620, 280, 620],
+        seedX: 380,
+        seedY: 360,
         style: { kind: 'solid', color: '#0E7490' },
       },
     ]
     expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
+    const hints = buildTryOnDesignHints({ strokes: [], fills })
+    expect(hints.some((h) => /continuous one-piece/i.test(h))).toBe(true)
+    expect(hints.some((h) => /do not leave jeans/i.test(h))).toBe(true)
+    expect(hints.some((h) => /bare feet|remove photo boots/i.test(h))).toBe(true)
+    expect(hints.some((h) => /high-cut one-piece|do not lengthen into a dress/i.test(h))).toBe(true)
   })
 
   it('detects dark footwear ink near the feet (#184)', () => {
@@ -127,6 +210,29 @@ describe('buildTryOnDesignHints', () => {
     expect(detectFootwearInk(strokes, [])).toBe(true)
     const hints = buildTryOnDesignHints({ strokes, fills: [] })
     expect(hints.some((h) => /footwear|shoes|boots/i.test(h))).toBe(true)
+  })
+
+  it('detects filled black shoes near the feet (not only outline strokes)', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'suit',
+        contour: [220, 180, 520, 180, 500, 720, 240, 720],
+        seedX: 360,
+        seedY: 400,
+        style: { kind: 'solid', color: '#B91C1C' },
+      },
+      {
+        id: 'shoeL',
+        contour: [280, 920, 340, 920, 340, 1000, 280, 1000],
+        seedX: 310,
+        seedY: 960,
+        style: { kind: 'solid', color: '#111111' },
+      },
+    ]
+    expect(detectFootwearInk([], fills)).toBe(true)
+    const hints = buildTryOnDesignHints({ strokes: [], fills })
+    expect(hints.some((h) => /replace the photo shoes/i.test(h))).toBe(true)
+    expect(hints.some((h) => /bare feet/i.test(h))).toBe(false)
   })
 
   it('promotes pale bridal fills and skips outline ink as solid fill (#182)', () => {

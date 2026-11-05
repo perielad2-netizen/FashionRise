@@ -32,6 +32,14 @@ export const MAX_FILL_PIXELS = MAX_PAPER_FILL_PIXELS
 
 /** Default morphological dilate (design px) after sealed-tip rasterization. */
 export const DEFAULT_GAP_CLOSE_PX = 2
+
+/**
+ * After a successful flood (against the dilated barrier), grow the painted
+ * contour this many px into barrier ink so the fill tucks under the visible
+ * outline. Without this, gap-close dilate + anti-aliased stroke fringes leave a
+ * white paper margin between solid fill and the black line.
+ */
+export const FILL_UNDER_INK_PX = DEFAULT_GAP_CLOSE_PX + 1
 /**
  * Automatic cross-stroke endpoint seal (design px). Kept tight so intentional
  * slits / adjacent panels within ~4–5px are not silently bridged. sealTips +
@@ -213,8 +221,8 @@ export function floodFillAgainstBarrier(input: {
     }
   }
 
-  const contour = traceContour(visited, minX, minY, maxX, maxY)
-  if (contour.length < 6) {
+  const tightContour = traceContour(visited, minX, minY, maxX, maxY)
+  if (tightContour.length < 6) {
     return {
       ok: false,
       reason: 'empty_region',
@@ -222,16 +230,11 @@ export function floodFillAgainstBarrier(input: {
     }
   }
 
-  // Persist the same contour the canvas will paint — cutout safety must judge this
-  // polygon, not a pre-simplify trace the user never sees.
-  const simplifiedPaper = simplifyContour(contour, 1.4)
-
-  // Single-contour FillOp cannot represent holes. Use pre-dilation visible ink so
-  // a hollow sealed only by morphological expand still fails closed — without
-  // treating the dilate fringe along the flood frontier as a cutout.
-  // Contour is still in paper-index space here so it aligns with visited/barrier.
+  // Cutout safety must judge the tight flood (pre under-ink expand). Expanding into
+  // shared seams/walls first falsely flags split panels (bodice/skirt) as cutouts.
+  const tightSimplified = simplifyContour(tightContour, 1.4)
   const visibleInk = input.visibleInk ?? barrier
-  if (floodEnclosesUnsupportedCutout(visited, barrier, visibleInk, simplifiedPaper)) {
+  if (floodEnclosesUnsupportedCutout(visited, barrier, visibleInk, tightSimplified)) {
     return {
       ok: false,
       reason: 'unsupported_cutout',
@@ -239,6 +242,17 @@ export function floodFillAgainstBarrier(input: {
         'This area has an inner cutout. Fills can’t keep holes empty yet — tap a simpler closed area, or erase the inner outline first.',
     }
   }
+
+  // Reclaim dilate inset + AA fringe: extend fill under outline ink (ink paints on top).
+  const grown = expandVisitedUnderBarrier(visited, barrier, FILL_UNDER_INK_PX, {
+    minX,
+    minY,
+    maxX,
+    maxY,
+  })
+  const paintContour = traceContour(visited, grown.minX, grown.minY, grown.maxX, grown.maxY)
+  const simplifiedPaper =
+    paintContour.length >= 6 ? simplifyContour(paintContour, 1.4) : tightSimplified
 
   // Persist design-space contour (may include negative / >legacy coordinates).
   const simplified: number[] = []
@@ -605,6 +619,70 @@ export type DilateMaskOptions = {
    * opening. Later pencil ink already present in `mask` is kept (chronology).
    */
   eraseCoverage?: Uint8Array
+}
+
+/**
+ * Grow a flooded interior into neighboring barrier pixels (outline ink / dilate
+ * fringe) so the persisted fill contour sits under the visible stroke.
+ */
+export function expandVisitedUnderBarrier(
+  visited: Uint8Array,
+  barrier: Uint8Array,
+  radius: number,
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  if (radius <= 0) return bounds
+  let minX = bounds.minX
+  let minY = bounds.minY
+  let maxX = bounds.maxX
+  let maxY = bounds.maxY
+  const neighbors: Array<[number, number]> = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+  ]
+  for (let pass = 0; pass < radius; pass += 1) {
+    const addX: number[] = []
+    const addY: number[] = []
+    const x0 = Math.max(0, minX - 1)
+    const y0 = Math.max(0, minY - 1)
+    const x1 = Math.min(PAPER_WIDTH - 1, maxX + 1)
+    const y1 = Math.min(PAPER_HEIGHT - 1, maxY + 1)
+    for (let y = y0; y <= y1; y += 1) {
+      for (let x = x0; x <= x1; x += 1) {
+        const i = y * PAPER_WIDTH + x
+        if (visited[i] || !barrier[i]) continue
+        let near = false
+        for (const [dx, dy] of neighbors) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= PAPER_WIDTH || ny >= PAPER_HEIGHT) continue
+          if (visited[ny * PAPER_WIDTH + nx]) {
+            near = true
+            break
+          }
+        }
+        if (!near) continue
+        addX.push(x)
+        addY.push(y)
+      }
+    }
+    for (let k = 0; k < addX.length; k += 1) {
+      const x = addX[k]!
+      const y = addY[k]!
+      visited[y * PAPER_WIDTH + x] = 1
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+    }
+  }
+  return { minX, minY, maxX, maxY }
 }
 
 export function dilateMask(

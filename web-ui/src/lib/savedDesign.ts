@@ -126,6 +126,9 @@ export function createSaveRequestId(): string {
 }
 
 function canonicalStroke(s: Stroke): Stroke {
+  // Preserve Sketch Engine V1 fields (charcoal / airbrush / layers). Stripping them
+  // made Save-as-design ack fingerprints diverge from the POST body after Charcoal
+  // shipped — server echoed brush extras the parser then dropped.
   return {
     id: s.id,
     tool: s.tool,
@@ -133,6 +136,7 @@ function canonicalStroke(s: Stroke): Stroke {
     color: s.color,
     size: s.size,
     opacity: s.opacity,
+    ...pickProfessionalFields(s as unknown as Record<string, unknown>),
   }
 }
 
@@ -318,12 +322,14 @@ export function parseSavedDesignSnapshot(raw: unknown): SavedDesignSnapshot | nu
     model,
     personalCroquisId,
     personalCroquisVersion,
-    brush: {
+    brush: normalizeStudioBrush({
       sizeId: brush.sizeId as BrushSizeId,
       sizePx,
       opacity: brush.opacity,
       color: brush.color,
-    },
+      ...pickProfessionalFields(brush),
+      ...(typeof brush.garmentMask === 'boolean' ? { garmentMask: brush.garmentMask } : {}),
+    }),
     dimmed: s.dimmed,
   }
   if ('activeSide' in s) {

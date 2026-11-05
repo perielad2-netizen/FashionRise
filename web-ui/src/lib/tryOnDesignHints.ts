@@ -176,7 +176,8 @@ export function detectBilateralSleevesFromFills(
 
 /**
  * Dark footwear ink near the feet / hem (#184).
- * Heuristic: dark stroke or fill whose bounds sit in the lower ~22% of the plane.
+ * Heuristic: dark stroke or any opaque solid/gradient fill whose bounds sit in
+ * the lower ~22% of the plane (filled black/brown shoes, not only outline ink).
  */
 export function detectFootwearInk(
   strokes: Stroke[],
@@ -193,16 +194,21 @@ export function detectFootwearInk(
   }
   for (const fill of fills) {
     const style = fill.style
-    const hex =
-      style.kind === 'solid'
-        ? style.color
-        : style.kind === 'gradient'
-          ? style.colors[0]
-          : ''
-    if (!hex || !isOutlineInk(hex)) continue
+    if (style.kind !== 'solid' && style.kind !== 'gradient') continue
+    const hex = style.kind === 'solid' ? style.color : style.colors[0]
+    if (!hex) continue
     const b = fillBounds(fill)
     if (!b) continue
-    if (b.minY >= footBand && b.maxY > footBand) return true
+    // Shoe-sized: sits in the foot band and is not a full-leg pant fill.
+    const h = b.maxY - b.minY
+    if (b.minY < footBand) continue
+    if (b.maxY <= footBand) continue
+    if (h > designHeight * 0.28) continue
+    // Dark enough to read as footwear (black/brown/navy), not pale skin/highlight.
+    const c = parseHexColor(hex)
+    if (!c) continue
+    if ((c.r + c.g + c.b) / 3 > 140) continue
+    return true
   }
   return false
 }
@@ -267,6 +273,43 @@ export function detectTrouserLegFills(
   return { looksLikeTrousers, looksLikeNarrow, looksLikeWide, looksLikeJumpsuit }
 }
 
+/**
+ * Continuous torso→hip fill (one-piece swimsuit / bodysuit / dress) — not trousers
+ * and not a waist-length top. Drives OpenAI hints so photo jeans are replaced.
+ */
+export function detectOnePieceFullCoverage(
+  fills: FillOp[],
+  designHeight = 1024,
+): boolean {
+  const parts = fills.map((f) => fillBounds(f)).filter(Boolean) as InkBounds[]
+  const u = unionBounds(parts)
+  if (!u) return false
+  const span = u.maxY - u.minY
+  if (span < designHeight * 0.28) return false
+  if (u.maxY < designHeight * 0.5) return false
+  if (u.minY > designHeight * 0.48) return false
+  // Reject clear two-leg trousers — those use the trouser hint path instead.
+  if (detectTrouserLegFills(fills, designHeight).looksLikeTrousers) return false
+  return true
+}
+
+/** Hem near the ankles / floor — gowns may keep photo shoes when no footwear is drawn. */
+export function detectFloorLengthHem(fills: FillOp[], designHeight = 1024): boolean {
+  const parts = fills.map((f) => fillBounds(f)).filter(Boolean) as InkBounds[]
+  const u = unionBounds(parts)
+  if (!u) return false
+  return u.maxY >= designHeight * 0.85
+}
+
+/** High-cut one-piece hem (above ~mid-thigh) — must not be lengthened into a dress. */
+export function detectHighCutOnePieceHem(fills: FillOp[], designHeight = 1024): boolean {
+  if (!detectOnePieceFullCoverage(fills, designHeight)) return false
+  const parts = fills.map((f) => fillBounds(f)).filter(Boolean) as InkBounds[]
+  const u = unionBounds(parts)
+  if (!u) return false
+  return u.maxY < designHeight * 0.72
+}
+
 /** Build optional try-on design hints from the frozen front artwork. */
 export function buildTryOnDesignHints(args: {
   strokes: Stroke[]
@@ -301,6 +344,24 @@ export function buildTryOnDesignHints(args: {
       pushUnique(priority, 'preserve original leg width and length — do not flare or merge legs')
     }
     pushUnique(priority, 'do not connect the legs into a continuous skirt panel')
+  } else if (detectOnePieceFullCoverage(fills)) {
+    // Continuous one-piece (swimsuit / bodysuit / dress) — do not leave photo jeans under it.
+    // Two priority slots only so bridal neckline/sleeve/pale + color hints still fit.
+    pushUnique(
+      priority,
+      'garment type: continuous one-piece covering torso through hips — not a separate top over trousers',
+    )
+    pushUnique(
+      priority,
+      "replace photo clothing wherever image 2's opaque garment covers; do not leave jeans, trousers, or shorts under this one-piece",
+    )
+    if (detectHighCutOnePieceHem(fills)) {
+      // Owner back try-on lengthened high-cut one-piece into a knee dress.
+      pushUnique(
+        priority,
+        'hem: high-cut one-piece as drawn — end at the designed leg openings; do not lengthen into a dress or skirt',
+      )
+    }
   }
 
   // #182 — open neckline + both sleeves before color noise (bridal / pale dresses).
@@ -318,10 +379,17 @@ export function buildTryOnDesignHints(args: {
   }
 
   // #184 — dark footwear ink near the hem/feet must replace photo shoes/boots.
+  // One-piece / high-cut with no drawn shoes → bare feet (do not keep photo boots).
   if (detectFootwearInk(args.strokes, fills)) {
     pushUnique(
       priority,
-      'footwear: drawn shoes/boots in image 2 — replace the photo shoes; do not keep original boots',
+      'footwear: drawn shoes/boots in image 2 — replace the photo shoes/boots entirely; do not keep original boots',
+    )
+  } else if (detectOnePieceFullCoverage(fills) && !detectFloorLengthHem(fills)) {
+    // Priority: photo boots were surviving when this was secondary-only.
+    pushUnique(
+      priority,
+      'footwear: image 2 has no shoes drawn — remove photo boots/shoes; show bare feet matching image 1',
     )
   }
 
@@ -404,14 +472,64 @@ export function buildTryOnDesignHints(args: {
   return hints.slice(0, MAX_HINTS)
 }
 
+/**
+ * Shoe-sized fill sitting in the foot band (not a pant leg). Erasing shoes leaves
+ * these FillOps in the document while capture alpha is punched out — including them
+ * in the live Y span false-fails "lost lower parts".
+ */
+function isFootwearLikeFillBounds(b: InkBounds, designHeight: number): boolean {
+  const footBand = designHeight * 0.78
+  const h = b.maxY - b.minY
+  if (b.minY < footBand) return false
+  if (h > designHeight * 0.28) return false
+  return true
+}
+
 /** Live ink vertical span for capture completeness checks (#170). */
 export function liveArtworkYSpan(args: {
   strokes: Stroke[]
   fills?: FillOp[]
+  /**
+   * Try On completeness only: measure apparel body span, not erased shoe geometry.
+   * Erasing shoes leaves draw strokes + shoe FillOps in the document while capture
+   * alpha is punched out. Foot-band-only fills and strokes below the apparel hem
+   * must not inflate live maxY (owner back croquis 2026-11-05).
+   */
+  forTryOnCompleteness?: boolean
+  designHeight?: number
 }): InkBounds | null {
-  const strokeParts = args.strokes
+  const fills = args.fills ?? []
+  const designHeight = args.designHeight ?? 1024
+  const fillParts = fills.map((f) => fillBounds(f))
+  let strokeParts = args.strokes
     .filter((s) => s.tool === 'draw')
     .map((s) => strokeBounds(s))
-  const fillParts = (args.fills ?? []).map((f) => fillBounds(f))
-  return unionBounds([...strokeParts, ...fillParts])
+
+  if (!args.forTryOnCompleteness) {
+    return unionBounds([...strokeParts, ...fillParts])
+  }
+
+  // Apparel body fills only — drop shoe-sized foot-band fills that erase punched out.
+  const apparelFillParts = fillParts.filter((b): b is InkBounds => {
+    if (!b) return false
+    return !isFootwearLikeFillBounds(b, designHeight)
+  })
+  const apparelUnion = unionBounds(apparelFillParts)
+  if (!apparelUnion) {
+    return unionBounds([...strokeParts, ...fillParts])
+  }
+
+  const hemPad = 24
+  const apparelHem = apparelUnion.maxY
+  // When the body hem ends above the feet, ignore anything entirely below it
+  // (full shoe strokes, ankle crumbs, leftover shoe fills already dropped).
+  if (apparelHem < designHeight * 0.78) {
+    strokeParts = strokeParts.filter((b) => {
+      if (!b) return false
+      return b.minY <= apparelHem + hemPad
+    })
+    return unionBounds([...strokeParts, ...apparelFillParts])
+  }
+
+  return unionBounds([...strokeParts, ...apparelFillParts])
 }

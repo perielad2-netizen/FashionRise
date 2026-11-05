@@ -284,6 +284,31 @@ def _union_in_band(
     return merged
 
 
+def _is_footwear_component(cells: set[tuple[int, int]], canvas_h: int, canvas_w: int) -> bool:
+    """True for shoe-sized blobs in the foot band (not a bottoms garment).
+
+    Owner incident 2026-11-05: one-piece swimsuit + drawn shoes was split into
+    two_piece tops/bottoms; black shoe fills failed the bottoms fill-color gate
+    and Max fallback died after OpenAI output moderation. Footwear is not a
+    FASHN bottoms plate — keep the torso garment as one_piece.
+    """
+    if not cells or canvas_h <= 0:
+        return False
+    _x0, y0, _x1, y1 = _bbox(cells)
+    h = max(1, y1 - y0)
+    w = max(1, _x1 - _x0)
+    # Must sit primarily in the lower ~28% of the canvas.
+    if y0 < canvas_h * 0.72:
+        return False
+    # Shoe height, not a pant/skirt panel.
+    if h > canvas_h * 0.28:
+        return False
+    # Narrow-ish relative to canvas (full-width hems are not shoes).
+    if w > canvas_w * 0.55:
+        return False
+    return True
+
+
 def _piece_from_cells(
     src: Image.Image,
     cells: set[tuple[int, int]],
@@ -457,23 +482,51 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
     comps = _connected_components(mask)
     min_px = max(_MIN_COMPONENT_PIXELS, int(opaque * _MIN_COMPONENT_FRACTION))
     significant = [(cells, n) for cells, n in comps if n >= min_px]
-    discarded_opaque = sum(n for cells, n in comps if n < min_px)
+    # Tiny foot-band crumbs (eraser leftovers after deleting shoes) must not count
+    # as "dropped garment mass" — they only inflate vertical span / discarded totals.
+    discarded_opaque = sum(
+        n
+        for cells, n in comps
+        if n < min_px and not _is_footwear_component(cells, src.height, src.width)
+    )
     if not significant:
         significant = sorted(comps, key=lambda t: t[1], reverse=True)[:1]
-        discarded_opaque = sum(n for cells, n in comps if cells is not significant[0][0])
+        discarded_opaque = sum(
+            n
+            for cells, n in comps
+            if cells is not significant[0][0]
+            and not _is_footwear_component(cells, src.height, src.width)
+        )
 
     # Sort top → bottom by bbox y0.
     significant.sort(key=lambda t: _bbox(t[0])[1])
+
+    # Drawn shoes near the croquis feet are not a bottoms garment. Split them out
+    # so one-piece swimsuits are not misclassified as two_piece tops+bottoms.
+    apparel_significant: list[tuple[set[tuple[int, int]], int]] = []
+    footwear_opaque = 0
+    footwear_cells: set[tuple[int, int]] = set()
+    for cells, n in significant:
+        if _is_footwear_component(cells, src.height, src.width):
+            footwear_opaque += n
+            footwear_cells |= cells
+        else:
+            apparel_significant.append((cells, n))
+    if not apparel_significant:
+        apparel_significant = list(significant)
+        footwear_opaque = 0
+        footwear_cells = set()
+
     layout: PieceLayout = "one_piece"
     top_band: tuple[int, int] | None = None
     bot_band: tuple[int, int] | None = None
 
-    if len(significant) >= 2:
-        top_cells, _top_n = significant[0]
+    if len(apparel_significant) >= 2:
+        top_cells, _top_n = apparel_significant[0]
         top_box = _bbox(top_cells)
         below = [
             (cells, n)
-            for cells, n in significant[1:]
+            for cells, n in apparel_significant[1:]
             if _bbox(cells)[1] >= top_box[3]
         ]
         if below:
@@ -500,8 +553,8 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
 
     pieces: list[PreparedPiece] = []
     if layout == "two_piece" and top_band and bot_band:
-        top_merged = _union_in_band(significant, top_band[0], top_band[1], canvas_h=src.height)
-        bot_merged = _union_in_band(significant, bot_band[0], bot_band[1], canvas_h=src.height)
+        top_merged = _union_in_band(apparel_significant, top_band[0], top_band[1], canvas_h=src.height)
+        bot_merged = _union_in_band(apparel_significant, bot_band[0], bot_band[1], canvas_h=src.height)
         if not top_merged or not bot_merged:
             layout = "one_piece"
         else:
@@ -509,14 +562,17 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
             pieces.append(_piece_from_cells(src, bot_merged, "bottoms"))
             fashn_calls = 2
             # Components outside the two bands still count as discarded mass.
+            # Footwear discarded above is intentional and not counted here.
             kept_cells = top_merged | bot_merged
-            extra = sum(n for cells, n in significant if not cells.issubset(kept_cells))
+            extra = sum(n for cells, n in apparel_significant if not cells.issubset(kept_cells))
             discarded_opaque += extra
 
     if layout == "one_piece":
         merged: set[tuple[int, int]] = set()
-        for cells, _n in significant:
+        for cells, _n in apparel_significant:
             merged |= cells
+        if not merged:
+            merged = set(source_cells) - footwear_cells
         if not merged:
             merged = set(source_cells)
         # Owner incident: category=auto let FASHN turn a high-cut swimsuit into a dress.
@@ -532,11 +588,25 @@ def prepare_garment_reference(garment_png: bytes) -> GarmentPrepResult:
         pieces = [_piece_from_cells(src, merged, cat)]  # type: ignore[arg-type]
         fashn_calls = 1
 
+    # Completeness compares against significant apparel components only.
+    # Foot-band speckles left after deleting shoes sit in source_cells but are
+    # below min_px — including them inflated vertical span to ~40% retention
+    # (owner incident 2026-11-05 deleted-shoes FASHN block).
+    apparel_cells: set[tuple[int, int]] = set()
+    for cells, _n in apparel_significant:
+        apparel_cells |= cells
+    if not apparel_cells:
+        apparel_cells = set(source_cells) - footwear_cells
+    apparel_opaque = max(1, sum(n for _c, n in apparel_significant)) if apparel_significant else max(
+        1, opaque - footwear_opaque
+    )
+    apparel_bbox = _bbox(apparel_cells) if apparel_cells else source_bbox
+
     quality_ok, quality_notes = _quality_gate(pieces)
     if quality_ok:
         ok_c, note_c = _completeness_gate(
-            source_opaque=opaque,
-            source_bbox=source_bbox,
+            source_opaque=apparel_opaque,
+            source_bbox=apparel_bbox,
             source_h=src.height,
             pieces=pieces,
             discarded_opaque=discarded_opaque,

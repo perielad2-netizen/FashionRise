@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Charcoal V4 width-gradient** **LIVE** FE · **`70eb0fcd`** · BE still **`900bda6b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Try On erase-shoes apparel span** **LIVE** FE · **`3ee39a54`** · prior **`ad8e7772`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,12 +11,28 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`70eb0fcd`** — release `/var/www/fashionrise/releases/70eb0fcd` · Charcoal V4 width-gradient. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
+| Frontend (`web-ui`) | **`3ee39a54`** — release `/var/www/fashionrise/releases/3ee39a54` · erase-shoes apparel span. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`966e4cd6`** · Try On **`v2.7`** high-cut hem · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`70eb0fcd`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`3ee39a54`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## Try On erase-shoes apparel span — LIVE FE (2026-11-05)
+
+Deleting shoes (back croquis) still blocked Try On: shoe **FillOps** + full shoe strokes remain in the document after ink-erase punches capture alpha, so live maxY stayed at the feet while the swimsuit hem did not. Completeness now uses apparel-body fills only and drops geometry below that hem. App **`3ee39a54`** (supersedes crumb-only **`ad8e7772`**). Rollback `/var/backups/fashionrise/tryon-erase-shoes-apparel-20261105T214101Z`.
+
+## Fill flush under outline — LIVE FE (2026-11-05)
+
+Bucket fill stopped short of visible ink because the flood barrier includes a 2px gap-close dilate (+ AA fringe). New fills expand under outline ink before contour persist so color meets the stroke (ink still paints on top). App **`0cb34bf1`**. Rollback `/var/backups/fashionrise/fill-flush-outline-*/ROLLBACK.sh` → **`0ec4d653`**. Re-tap Fill on older regions to refresh.
+
+## Try On shade-erase paper-frame hem — LIVE FE (2026-11-05)
+
+Shade eraser tips outside 768×1024 no longer flip garment capture to the extended-paper frame (which letterboxed fills and failed completeness with “lost lower parts”). `resolveExportFrame` ignores shade/highlight; Magic/Try On capture force `frame: 'legacy'` after the ink/fills gate. App **`b8c599b2`**. Rollback `/var/backups/fashionrise/tryon-paper-frame-*/ROLLBACK.sh` → **`d18ad628`**.
+
+## Try On shade-bounds + Flip hide — LIVE FE (2026-11-05)
+
+Shade/highlight eraser overshoot no longer blocks Try On Person capture; paper-corner Flip is hidden when no published rear croquis exists (My Croquis / personal). App **`d18ad628`** (PR #188). Rollback `/var/backups/fashionrise/tryon-flip-hotfix-*/ROLLBACK.sh` → **`70eb0fcd`**.
 
 ## Charcoal V3 pencil-tip — LIVE FE (2026-11-05)
 
