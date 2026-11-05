@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**AI Create Fabric** pending pin · prior erase-shoes **`3ee39a54`** · **0** agent paid calls in tests; live generate is owner-paid.)
+**Last updated:** 2026-11-05 (**AI Create Fabric** **LIVE** FE/BE · **`e377b7f1`** · Alembic **`016`** · prior erase-shoes **`3ee39a54`**.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`3ee39a54`** — release `/var/www/fashionrise/releases/3ee39a54` · erase-shoes apparel span. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`966e4cd6`** · Try On **`v2.7`** high-cut hem · Alembic **`015`**.
+| Frontend (`web-ui`) | **`e377b7f1`** — release `/var/www/fashionrise/releases/e377b7f1` · AI Create Fabric. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`e377b7f1`** · AI Create Fabric · Try On **`v2.7`** · Alembic **`016`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`3ee39a54`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`e377b7f1`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## Try On erase-shoes apparel span — LIVE FE (2026-11-05)
