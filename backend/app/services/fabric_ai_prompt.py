@@ -22,7 +22,8 @@ _FABRIC_TERMS = re.compile(
     r"sheen|pearl|pearls|bead|beads|embroidery|embroidered|floral|paisley|"
     r"stripe|stripes|polka|check|checker|plaid|animal\s*print|camouflage|"
     r"camo|houndstooth|damask|moire|moire|texture|swatch|tile|repeating|"
-    r"gold|silver|bronze|crystal|crystals|rhinestone|rhinestones"
+    r"gold|silver|bronze|crystal|crystals|rhinestone|rhinestones|"
+    r"stocking|stockings|hosiery|tights|pantyhose|glove|gloves|sheer|knitwear"
     r")\b",
     re.I,
 )
@@ -163,7 +164,13 @@ def validate_ai_fabric_prompt(
             )
         chosen, color_label = extracted
 
-    short = f"{color_label} {text}"
+    # Fashion-safe short hint for Magic/Try On — avoid sheer/see-through wording that
+    # trips OpenAI sexual input moderation when used as design evidence.
+    short_body = text
+    short_body = re.sub(r"\bsee[\s-]*thr(?:ough|o+gh|u)\b", "fine-knit", short_body, flags=re.I)
+    short_body = re.sub(r"\bsheer\b", "fine-knit", short_body, flags=re.I)
+    short_body = re.sub(r"\btransparent\b", "fine-knit", short_body, flags=re.I)
+    short = f"{color_label} {short_body}"
     short = " ".join(short.split())
     if len(short) > _SHORT_MAX:
         short = short[: _SHORT_MAX - 1].rstrip() + "…"

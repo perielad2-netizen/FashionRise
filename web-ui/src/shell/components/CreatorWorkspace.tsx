@@ -283,7 +283,17 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
     : editor.comingSoon
       ? { message: editor.comingSoon, dismiss: () => editor.setComingSoon(null) }
       : editor.studioNotice
-        ? { message: editor.studioNotice, dismiss: () => editor.setStudioNotice(null) }
+        ? {
+            message: editor.studioNotice,
+            dismiss: () => {
+              editor.setStudioNotice(null)
+              // Offline banner is often a one-shot restore miss while the API is fine —
+              // retry personal croquis underlay when dismissing.
+              if (/working offline/i.test(editor.studioNotice ?? '')) {
+                editor.reloadPersonalCroquisUnderlay()
+              }
+            },
+          }
         : null
 
   const applyImmersiveTool = (next: ImmersiveTool) => {
@@ -1024,6 +1034,13 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
             could not be loaded (erased or inaccessible). Studio will not switch models
             automatically.
           </p>
+          <button
+            type="button"
+            className={styles.damagedCloudBannerButton}
+            onClick={() => editor.reloadPersonalCroquisUnderlay()}
+          >
+            Retry croquis
+          </button>
         </div>
       ) : null}
 

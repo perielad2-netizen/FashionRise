@@ -239,6 +239,7 @@ function useLayoutLabEditor(): StudioEditor {
       personalCroquisId: null,
       personalCroquisVersion: null,
       personalUnavailable: false,
+      reloadPersonalCroquisUnderlay: () => undefined,
       personalUnderlayReady: false,
       draftConflict: null,
       resolveConflictKeepLocal: noop,

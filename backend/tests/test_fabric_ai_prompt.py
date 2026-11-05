@@ -47,3 +47,11 @@ def test_non_fabric_prompt_rejected():
         validate_ai_fabric_prompt(prompt="make a spaceship blueprint")
     assert ei.value.status_code == 400
     assert "Unrelated prompt" in str(ei.value.detail)
+
+
+def test_stockings_see_through_sanitized_in_prompt_short():
+    plan = validate_ai_fabric_prompt(prompt="white see through stockings fabric")
+    assert "stocking" in plan.prompt_short.lower()
+    assert "fine-knit" in plan.prompt_short.lower()
+    assert "see thr" not in plan.prompt_short.lower()
+    assert "sheer" not in plan.prompt_short.lower()

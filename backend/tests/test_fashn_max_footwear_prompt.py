@@ -35,3 +35,17 @@ def test_one_piece_without_footwear_hint_defaults_barefoot():
         ["garment type: continuous one-piece covering torso through hips — not a separate top"]
     )
     assert "bare feet" in prompt.lower() or "boots or shoes" in prompt.lower()
+
+
+def test_stockings_and_gloves_hints_append_hosiery_suffix():
+    prompt = build_smart_max_prompt(
+        [
+            "garment type: separate top and bottom as drawn — keep both pieces",
+            "include drawn stockings/hosiery on both legs from image 2 — fine fashion knit",
+            "include drawn gloves on both hands from image 2",
+            "footwear: image 2 has no shoes drawn — remove photo boots/shoes; show bare feet matching image 1",
+        ]
+    )
+    assert "stocking" in prompt.lower() or "hosiery" in prompt.lower()
+    assert "glove" in prompt.lower()
+    assert "bare feet" in prompt.lower() or "remove the model" in prompt.lower()
