@@ -267,6 +267,26 @@ export function detectTrouserLegFills(
   return { looksLikeTrousers, looksLikeNarrow, looksLikeWide, looksLikeJumpsuit }
 }
 
+/**
+ * Continuous torso→hip fill (one-piece swimsuit / bodysuit / dress) — not trousers
+ * and not a waist-length top. Drives OpenAI hints so photo jeans are replaced.
+ */
+export function detectOnePieceFullCoverage(
+  fills: FillOp[],
+  designHeight = 1024,
+): boolean {
+  const parts = fills.map((f) => fillBounds(f)).filter(Boolean) as InkBounds[]
+  const u = unionBounds(parts)
+  if (!u) return false
+  const span = u.maxY - u.minY
+  if (span < designHeight * 0.28) return false
+  if (u.maxY < designHeight * 0.5) return false
+  if (u.minY > designHeight * 0.48) return false
+  // Reject clear two-leg trousers — those use the trouser hint path instead.
+  if (detectTrouserLegFills(fills, designHeight).looksLikeTrousers) return false
+  return true
+}
+
 /** Build optional try-on design hints from the frozen front artwork. */
 export function buildTryOnDesignHints(args: {
   strokes: Stroke[]
@@ -301,6 +321,17 @@ export function buildTryOnDesignHints(args: {
       pushUnique(priority, 'preserve original leg width and length — do not flare or merge legs')
     }
     pushUnique(priority, 'do not connect the legs into a continuous skirt panel')
+  } else if (detectOnePieceFullCoverage(fills)) {
+    // Continuous one-piece (swimsuit / bodysuit / dress) — do not leave photo jeans under it.
+    // Two priority slots only so bridal neckline/sleeve/pale + color hints still fit.
+    pushUnique(
+      priority,
+      'garment type: continuous one-piece covering torso through hips — not a separate top over trousers',
+    )
+    pushUnique(
+      priority,
+      "replace photo clothing wherever image 2's opaque garment covers; do not leave jeans, trousers, or shorts under this one-piece",
+    )
   }
 
   // #182 — open neckline + both sleeves before color noise (bridal / pale dresses).

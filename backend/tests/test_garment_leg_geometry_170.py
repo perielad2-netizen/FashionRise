@@ -135,7 +135,11 @@ def test_dress_slit_not_trousers():
     geo = analyze_lower_garment_geometry(_dress_with_slit_png())
     assert geo.looks_like_trousers is False
     assert geo.looks_like_high_slit_dress is False
-    assert openai_trouser_design_hints(geo) == []
+    hints = openai_trouser_design_hints(geo)
+    # Continuous dress panel still gets one-piece coverage replacement hints (no jeans under).
+    assert hints
+    assert any("one-piece" in h.lower() or "jeans" in h.lower() for h in hints)
+    assert not any("jumpsuit" in h.lower() and "not a dress" in h.lower() for h in hints)
 
 
 def test_high_slit_dress_not_jumpsuit_hints():
@@ -194,6 +198,20 @@ def test_swimsuit_one_piece_still_ok():
     assert prep.quality_ok is True
 
 
+def test_swimsuit_one_piece_coverage_hints():
+    """Owner one-piece must tell OpenAI to replace photo jeans under the design."""
+    from app.services.garment_leg_geometry import looks_like_one_piece_full_coverage
+
+    geo = analyze_lower_garment_geometry(_swimsuit_png())
+    assert geo.looks_like_trousers is False
+    assert looks_like_one_piece_full_coverage(geo) is True
+    hints = openai_trouser_design_hints(geo)
+    assert any("one-piece" in h.lower() for h in hints)
+    assert any("jeans" in h.lower() for h in hints)
+    prompt = build_try_on_prompt(hints)
+    assert "do not leave jeans" in prompt.lower() or "one-piece" in prompt.lower()
+
+
 def test_discarded_leg_component_fails_completeness():
     """Completeness gate rejects when substantial opaque mass was dropped."""
     from app.services.fashn_garment_prep import PreparedPiece, _completeness_gate
@@ -219,7 +237,7 @@ def test_discarded_leg_component_fails_completeness():
 
 def test_openai_v2_prompt_unchanged_without_hints():
     prompt = build_try_on_prompt(None)
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.3"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.4"
     # Base V2 text present; no trouser appendix when hints empty.
     assert "Studio design evidence" not in prompt
     with_hints = build_try_on_prompt(openai_trouser_design_hints(analyze_lower_garment_geometry(_narrow_jumpsuit_png())))

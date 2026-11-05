@@ -299,9 +299,45 @@ def analyze_lower_garment_geometry(png: bytes) -> LowerGarmentGeometry:
     )
 
 
+def looks_like_one_piece_full_coverage(geometry: LowerGarmentGeometry) -> bool:
+    """Continuous torso→hip opaque garment (one-piece / dress / bodysuit) — not trousers or a crop top.
+
+    Used so OpenAI Try On replaces photo jeans under the design instead of treating the
+    artwork as a shirt layered over street bottoms.
+    """
+    if geometry.looks_like_trousers:
+        return False
+    if not geometry.mid_body_connected:
+        return False
+    if geometry.opaque_pixels < 400:
+        return False
+    if geometry.coverage_y_span_frac < 0.28:
+        return False
+    # Must cover through the seat/hips (waist-length tops stay false).
+    if geometry.hem_y_frac < 0.50:
+        return False
+    # Top of bbox should sit in upper/mid torso, not a skirt-only panel.
+    top_frac = geometry.hem_y_frac - geometry.coverage_y_span_frac
+    if top_frac > 0.48:
+        return False
+    return True
+
+
+def openai_one_piece_coverage_hints(geometry: LowerGarmentGeometry) -> list[str]:
+    """Additive hints so continuous one-piece coverage replaces photo jeans/trousers."""
+    if not looks_like_one_piece_full_coverage(geometry):
+        return []
+    return [
+        "garment type: continuous one-piece covering torso through hips — not a separate top over trousers",
+        "replace photo clothing wherever image 2's opaque garment covers; do not leave jeans, trousers, or shorts under this one-piece",
+        "match the designed hem and leg openings from image 2 — photo lower garments must not remain below that hem",
+    ]
+
+
 def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
     """Additive V2 hints for clear trouser OR high-slit dress geometry. Empty when ambiguous."""
     if geometry.looks_like_high_slit_dress and not geometry.looks_like_trousers:
+        # Still remind the model to replace street bottoms under the dress panel.
         return [
             "garment type: dress or gown with a high fashion slit — not trousers or a jumpsuit",
             "Preserve this as a dress with an intentional leg opening/slit. Maintain the "
@@ -312,9 +348,11 @@ def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:
             "keep one continuous skirt/dress panel beside the slit; do not invent a second pant leg",
             "match the slit height and which side opens from the source design",
             "a white gap in an isolated plate is negative space / slit — not two trouser legs",
+            *openai_one_piece_coverage_hints(geometry)[:1],
         ]
     if not geometry.looks_like_trousers:
-        return []
+        # One-piece swimsuit / bodysuit / closed dress — coverage replacement only.
+        return openai_one_piece_coverage_hints(geometry)
     hints: list[str] = []
     if geometry.looks_like_jumpsuit:
         hints.append(

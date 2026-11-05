@@ -197,7 +197,10 @@ def test_swimsuit_not_false_positive_contradiction():
     geo = analyze_lower_garment_geometry(swim)
     assert geo.looks_like_trousers is False
     assert geo.looks_like_high_slit_dress is False
-    assert openai_trouser_design_hints(geo) == []
+    hints = openai_trouser_design_hints(geo)
+    assert hints
+    assert any("one-piece" in h.lower() for h in hints)
+    assert any("jeans" in h.lower() or "trousers" in h.lower() for h in hints)
     assert garment_structure_contradiction(source_png=swim, product_png=swim) is None
 
 

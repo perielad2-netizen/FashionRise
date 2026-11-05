@@ -100,20 +100,27 @@ describe('buildTryOnDesignHints', () => {
     ]
     expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
     const hints = buildTryOnDesignHints({ strokes: [], fills })
-    expect(hints.some((h) => /jumpsuit|trousers|pant legs/i.test(h))).toBe(false)
+    expect(hints.some((h) => /jumpsuit|pant legs/i.test(h) || /^garment type: trousers/i.test(h))).toBe(
+      false,
+    )
+    expect(hints.some((h) => /continuous one-piece|do not leave jeans/i.test(h))).toBe(true)
   })
 
-  it('does not inject trousers hints for swimsuit-like high fills', () => {
+  it('injects one-piece coverage hints for swimsuit-like fills (not trousers)', () => {
     const fills: FillOp[] = [
       {
         id: 'swim',
-        contour: [320, 120, 448, 120, 480, 420, 288, 420],
+        // Torso → upper-thigh hem on the 1024 design plane (owner one-piece case).
+        contour: [320, 140, 460, 140, 500, 620, 280, 620],
         seedX: 380,
-        seedY: 260,
+        seedY: 360,
         style: { kind: 'solid', color: '#0E7490' },
       },
     ]
     expect(detectTrouserLegFills(fills).looksLikeTrousers).toBe(false)
+    const hints = buildTryOnDesignHints({ strokes: [], fills })
+    expect(hints.some((h) => /continuous one-piece/i.test(h))).toBe(true)
+    expect(hints.some((h) => /do not leave jeans/i.test(h))).toBe(true)
   })
 
   it('detects dark footwear ink near the feet (#184)', () => {
