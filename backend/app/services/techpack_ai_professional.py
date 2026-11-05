@@ -37,6 +37,16 @@ class ProviderUsage:
 
 
 class ProfessionalAIProvider(Protocol):
+    def classify_outfit(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        look_notes: str,
+    ) -> tuple[dict[str, Any], ProviderUsage]:
+        """Return JSON outfit structure ``{pieces:[{category,label,color_hint}], confidence}``."""
+        ...
+
     def analyze_garment(
         self,
         *,
@@ -119,6 +129,72 @@ def _usage_cents_from_image(*, fallback: int = 40) -> int:
 
 class OpenAIProfessionalProvider:
     """Live OpenAI provider — only invoked after spend gates in techpack_ai."""
+
+    def classify_outfit(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        look_notes: str,
+    ) -> tuple[dict[str, Any], ProviderUsage]:
+        """Paid vision pass: identify apparel piece count + categories from the Magic look."""
+        from openai import OpenAI
+
+        settings = get_settings()
+        client = OpenAI(
+            api_key=(settings.openai_api_key or "").strip(),
+            base_url=settings.openai_base_url or None,
+            timeout=settings.openai_timeout_seconds,
+        )
+        system = (
+            "You are a fashion technical designer identifying garment structure for a factory tech pack. "
+            "Return JSON only with keys: pieces (array), confidence (high|medium|low), notes (string). "
+            "Each piece must have: category, label, color_hint. "
+            "category MUST be one of: dress, shirt, top, jacket, skirt, trousers, shorts, jumpsuit, set. "
+            "List every distinct apparel piece the designer clearly drew or photographed "
+            "(e.g. shirt+trousers = 2 pieces; dress alone = 1; matching two-piece set = set or two pieces). "
+            "Do NOT list hosiery, stockings, tights, gloves, shoes, jewelry, bags, or hair as pieces — "
+            "fold them into notes instead. Prefer concrete apparel categories; never return category other. "
+            "Use the image as ground truth; look notes are optional hints only."
+        )
+        user_text = (
+            f"Look notes (optional): {(look_notes or '')[:500] or '(none)'}. "
+            "Identify the apparel garment structure for a technical pack."
+        )
+        kwargs = chat_completion_kwargs(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": system},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": _image_data_url(image_bytes, mime)},
+                        },
+                    ],
+                },
+            ],
+            max_completion_tokens=min(900, int(settings.openai_max_completion_tokens or 1400)),
+            reasoning_effort=settings.openai_reasoning_effort,
+        )
+        kwargs["response_format"] = {"type": "json_object"}
+        result = client.chat.completions.create(**kwargs)
+        content = (result.choices[0].message.content or "").strip() if result.choices else ""
+        try:
+            parsed = json.loads(content) if content else {}
+        except json.JSONDecodeError:
+            parsed = {"pieces": [], "confidence": "low", "notes": "JSON parse failed"}
+        if not isinstance(parsed, dict):
+            parsed = {"pieces": [], "confidence": "low", "notes": "Non-object response"}
+        usage = ProviderUsage(
+            cost_usd_cents=_usage_cents_from_chat(result, fallback=8),
+            vision_model=settings.openai_model,
+            vision_calls=1,
+            notes=["outfit_structure_classify"],
+        )
+        return parsed, usage
 
     def analyze_garment(
         self,
@@ -462,9 +538,53 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
 class MockProfessionalProvider:
     """Deterministic fixture provider for tests — incurs $0 real spend."""
 
-    def __init__(self, analysis_override: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        analysis_override: dict[str, Any] | None = None,
+        *,
+        outfit_override: dict[str, Any] | None = None,
+    ) -> None:
         self.analysis_override = analysis_override
+        self.outfit_override = outfit_override
         self.calls: list[str] = []
+
+    def classify_outfit(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        look_notes: str,
+    ) -> tuple[dict[str, Any], ProviderUsage]:
+        self.calls.append(f"classify:{len(image_bytes)}:{mime}")
+        if self.outfit_override:
+            data = dict(self.outfit_override)
+        else:
+            text = (look_notes or "").lower()
+            pieces: list[dict[str, Any]] = []
+            if "shirt" in text and ("trouser" in text or "pant" in text):
+                pieces = [
+                    {"category": "shirt", "label": "Shirt", "color_hint": ""},
+                    {"category": "trousers", "label": "Trousers", "color_hint": ""},
+                ]
+            elif "jumpsuit" in text or "romper" in text:
+                pieces = [{"category": "jumpsuit", "label": "Jumpsuit", "color_hint": ""}]
+            elif "skirt" in text:
+                pieces = [{"category": "skirt", "label": "Skirt", "color_hint": ""}]
+            elif "trouser" in text or "pant" in text or "jeans" in text:
+                pieces = [{"category": "trousers", "label": "Trousers", "color_hint": ""}]
+            elif "jacket" in text or "coat" in text:
+                pieces = [{"category": "jacket", "label": "Jacket", "color_hint": ""}]
+            elif "top" in text or "blouse" in text or "tee" in text:
+                pieces = [{"category": "top", "label": "Top", "color_hint": ""}]
+            else:
+                pieces = [{"category": "dress", "label": "Dress", "color_hint": ""}]
+            data = {"pieces": pieces, "confidence": "high", "notes": "mock_classify"}
+        return data, ProviderUsage(
+            cost_usd_cents=2,
+            vision_model="mock-vision",
+            vision_calls=1,
+            notes=["outfit_structure_classify"],
+        )
 
     def analyze_garment(
         self,

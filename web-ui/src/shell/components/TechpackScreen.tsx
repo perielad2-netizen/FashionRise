@@ -20,7 +20,6 @@ import {
 import { DetailsEditorSheet } from '@/shell/components/techpack/DetailsEditorSheet'
 import { GenerateAiPdfOverlay } from '@/shell/components/techpack/GenerateAiPdfOverlay'
 import { MeasurementProfileCard } from '@/shell/components/techpack/MeasurementProfileCard'
-import { PieceCategoryConfirm } from '@/shell/components/techpack/PieceCategoryConfirm'
 import {
   buildEditorPersistSnapshot,
   editorPersistFingerprint,
@@ -499,10 +498,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       setError('Add body measurements for the person first — save them with a name to reuse later.')
       return
     }
-    if ((spec?.outfit?.pieces ?? []).some(isInconclusivePiece)) {
-      setError('Choose a garment type below (What did you design?), then Generate again.')
-      return
-    }
+    // Garment categories: AI vision names them from the Magic look on Generate.
+    // Manual chips are optional (Advanced details) — never block full-AI generate.
 
     // Already have a valid Professional PDF for this revision — show Download, no paid call.
     if (hasReadyPdf && readyExportId) {
@@ -885,8 +882,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           </button>
           <h1 className={styles.title}>Create Real Design</h1>
           <p className={styles.subtitle}>
-            Body measurements + your Magic look. AI fills the technical pack — garment pieces,
-            flats, and factory details.
+            Just body measurements. AI reads your Magic look, names every garment, and fills the
+            technical pack — pieces, flats, and factory details.
           </p>
         </div>
         <span className={styles.pill} data-testid="app-version" title={`App ${BUILD_VERSION}`}>
@@ -925,23 +922,16 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           disabled={busy}
         />
 
-        <PieceCategoryConfirm
-          pieces={pieces}
-          units={spec?.units || 'cm'}
-          disabled={busy}
-          onConfirm={(pieceId, next) => {
-            updatePiece(pieceId, () => next)
-            setError(null)
-            void persist({ silent: true })
-          }}
-        />
-
-        {pieces.length ? (
+        {pieces.length && !pieces.some(isInconclusivePiece) ? (
           <p className={styles.subtleHint} data-testid="detected-pieces-hint">
             AI sees {pieces.length} garment piece{pieces.length === 1 ? '' : 's'}
             {pieces.map((p) => ` · ${p.label || p.category}`).join('')}
           </p>
-        ) : null}
+        ) : (
+          <p className={styles.subtleHint} data-testid="detected-pieces-hint">
+            AI will identify garment types from your Magic look when you Generate.
+          </p>
+        )}
 
         {hasReadyPdf ? (
           <button

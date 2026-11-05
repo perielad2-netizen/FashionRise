@@ -34,7 +34,7 @@ from app.services.techpack_ai_professional import (
     estimate_professional_cents,
     run_professional_pipeline,
 )
-from app.services.techpack_detect import detect_pieces_from_evidence
+from app.services.techpack_detect import detect_pieces_from_evidence, pieces_from_vision_payload
 from app.services.techpack_flats import (
     default_bom,
     default_construction_steps,
@@ -54,6 +54,80 @@ _PROVIDER_OVERRIDE: ProfessionalAIProvider | None = None
 def set_professional_provider_override(provider: ProfessionalAIProvider | None) -> None:
     global _PROVIDER_OVERRIDE
     _PROVIDER_OVERRIDE = provider
+
+
+def resolve_outfit_structure_with_ai(
+    db: Session,
+    draft: TechpackDraft,
+    spec: dict[str, Any],
+    *,
+    provider: ProfessionalAIProvider | None = None,
+    persist: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """When garment categories are inconclusive, spend vision to name pieces from the Magic look.
+
+    Returns ``(spec, meta)`` where meta includes ``resolved`` and optional ``usage``.
+    Designer-locked outfits are never overwritten. Fail closed if vision cannot name apparel.
+    """
+    from app.services.techpack_structure import (
+        apply_ai_structure_detection,
+        detection_has_credible_pieces,
+        outfit_needs_ai_structure,
+    )
+
+    working = ensure_v2(spec if isinstance(spec, dict) else {})
+    if not outfit_needs_ai_structure(working):
+        return working, {"resolved": False, "reason": "structure_already_clear"}
+
+    storage = LocalStorageBackend()
+    front = _resolve_job_bytes(storage, draft.front_job_id, db)
+    back = _resolve_job_bytes(storage, draft.back_job_id, db)
+    primary = front or back
+    if primary is None:
+        raise ValidationAppError(
+            "Cannot start AI Professional: Magic look image is missing, so AI cannot "
+            "identify garment types. Re-open the look and try Generate again."
+        )
+    image_bytes, mime = primary
+    look_notes = str(working.get("look_notes") or "")
+    active = provider or _PROVIDER_OVERRIDE or default_provider()
+    if _PROVIDER_OVERRIDE is None and provider is None and not (get_settings().openai_api_key or "").strip():
+        raise ForbiddenError("OpenAI API key missing for professional AI")
+
+    raw, usage = active.classify_outfit(
+        image_bytes=image_bytes,
+        mime=mime,
+        look_notes=look_notes,
+    )
+    detection = pieces_from_vision_payload(
+        raw if isinstance(raw, dict) else {},
+        units=str(working.get("units") or "cm"),
+    )
+    if not detection_has_credible_pieces(detection):
+        raise ValidationAppError(
+            "AI looked at your Magic look but could not identify clear garment types. "
+            "Open Advanced details to set the garment type, then Generate again."
+        )
+    working = apply_ai_structure_detection(working, detection)
+    usage_meta: dict[str, Any] = {
+        "resolved": True,
+        "piece_count": detection.get("piece_count"),
+        "detection_confidence": detection.get("detection_confidence"),
+        "vision_confidence": detection.get("vision_confidence"),
+        "usage": {
+            "cost_usd_cents": int(getattr(usage, "cost_usd_cents", 0) or 0),
+            "vision_model": getattr(usage, "vision_model", None),
+            "vision_calls": int(getattr(usage, "vision_calls", 0) or 0),
+        },
+    }
+    if persist:
+        draft.spec = working
+        draft.updated_at = datetime.now(UTC)
+        flag_modified(draft, "spec")
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
+    return working, usage_meta
 
 
 def _owned_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraft:
@@ -1332,11 +1406,22 @@ def enqueue_generate_one_tap_professional(
         db.commit()
         db.refresh(draft)
 
-    # Resolve/validate outfit BEFORE spend gates or queue insert (fail closed, $0).
+    # Resolve/validate outfit BEFORE spend gates or queue insert.
+    # When text heuristics are inconclusive, spend a vision call to name garments
+    # from the Magic look (full AI — body measurements are the only required input).
     # Also reconcile outdated historical Download so reuse cannot clear a stale pack.
     reconcile_professional_export_validity(db, draft)
     draft = _owned_draft(db, user, draft_id)
     spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    structure_vision_meta: dict[str, Any] = {"resolved": False}
+    try:
+        spec, structure_vision_meta = resolve_outfit_structure_with_ai(
+            db, draft, spec, persist=True
+        )
+        draft = _owned_draft(db, user, draft_id)
+        spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    except ValidationAppError:
+        raise
     spec, pieces, structure_meta = prepare_professional_outfit(
         db, draft, spec, persist_repair=True
     )
@@ -1571,6 +1656,7 @@ def enqueue_generate_one_tap_professional(
             "piece_ids": structure_meta["piece_ids"],
             "piece_count": structure_meta["piece_count"],
             "draft_revision": structure_meta["draft_revision"],
+            "structure_vision": structure_vision_meta,
             # Immutable Magic-source snapshot for later PDF-only compatibility checks.
             "front_job_id": str(draft.front_job_id) if draft.front_job_id else None,
             "back_job_id": str(draft.back_job_id) if draft.back_job_id else None,
@@ -1582,6 +1668,14 @@ def enqueue_generate_one_tap_professional(
             },
         },
     )
+    vision_cents = int(
+        ((structure_vision_meta.get("usage") or {}) if isinstance(structure_vision_meta, dict) else {}).get(
+            "cost_usd_cents"
+        )
+        or 0
+    )
+    if vision_cents > 0:
+        run.cost_usd_cents = vision_cents
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -1714,6 +1808,7 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
     )
 
     # Worker boundary: re-validate structure + authorized inputs before first paid call.
+    # Outfit categories were resolved at enqueue (heuristic or AI vision); do not reclassify here.
     try:
         spec, pieces, structure_meta = prepare_professional_outfit(
             db, draft, draft.spec if isinstance(draft.spec, dict) else {}, persist_repair=False
@@ -2313,6 +2408,12 @@ def run_generate(
 
     if mode == "professional":
         # Shared structure gate with one-tap path — never invent piece-1.
+        # Full AI: vision names garments when text heuristics are inconclusive.
+        spec, _structure_vision_meta = resolve_outfit_structure_with_ai(
+            db, draft, spec, persist=True
+        )
+        draft = _owned_draft(db, user, draft_id)
+        spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
         spec, pieces, structure_meta = prepare_professional_outfit(
             db, draft, spec, persist_repair=True
         )

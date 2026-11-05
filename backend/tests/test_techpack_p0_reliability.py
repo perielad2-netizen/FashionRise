@@ -17,6 +17,7 @@ from app.models.techpack_ai_run import TechpackAIRun
 from app.services.techpack_ai import (
     _persist_professional_result,
     ensure_professional_pdf_for_run,
+    resolve_outfit_structure_with_ai,
     set_professional_provider_override,
 )
 from app.services.techpack_ai_professional import (
@@ -25,11 +26,12 @@ from app.services.techpack_ai_professional import (
 )
 from app.services.techpack_ai_worker import run_techpack_worker_tick
 from app.services.techpack_compatibility import filter_pattern_inventory
-from app.services.techpack_detect import detect_pieces_from_evidence
+from app.services.techpack_detect import detect_pieces_from_evidence, pieces_from_vision_payload
 from app.services.techpack_pdf import build_techpack_pdf
 from app.services.techpack_structure import (
     is_inconclusive_piece,
     list_outfit_pieces,
+    outfit_needs_ai_structure,
     plan_professional_image_kinds,
     prepare_professional_outfit,
     professional_input_fingerprint,
@@ -311,6 +313,88 @@ def test_two_piece_one_tap_preserves_both_garments(client, db_session, monkeypat
         assert arts["flat_front"].get("artifact_id")
 
 
+def test_one_tap_inconclusive_resolved_by_ai_vision(client, db_session, monkeypatch):
+    """Full AI path: unclear Magic text → vision names dress → Professional completes."""
+    tokens = register_with_invite(client, db_session, "p0_fullai@example.com", "p0_fullai")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    monkeypatch.setenv("TECHPACK_AI_ENABLED", "true")
+    monkeypatch.setenv("TECHPACK_AI_SPEND_CEILING_USD", "20")
+    monkeypatch.setenv("TECHPACK_AI_MAX_USD_PER_RUN", "8")
+    monkeypatch.setenv("TECHPACK_AI_OWNER_ALLOWLIST", me["email"])
+    monkeypatch.setenv("TECHPACK_AI_MAX_IMAGES_PER_RUN", "8")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-used")
+    get_settings.cache_clear()
+
+    provider = MockProfessionalProvider(
+        outfit_override={
+            "pieces": [{"category": "dress", "label": "Black evening dress", "color_hint": "black"}],
+            "confidence": "high",
+        }
+    )
+    set_professional_provider_override(provider)
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image(),
+        summary="soft studio lighting abstract silhouette",
+        design_identity={"main_colors": ["#111"]},
+    )
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "Full AI inconclusive"},
+    )
+    assert created.status_code == 201, created.text
+    draft = created.json()
+    # Force inconclusive fallback piece (what Create Real Design showed the owner).
+    client.patch(
+        f"/api/v1/techpacks/{draft['id']}",
+        headers=_auth(tokens),
+        json={
+            "spec": {
+                "look_notes": "soft studio lighting abstract silhouette",
+                "outfit": {
+                    "piece_count": 1,
+                    "pieces": [
+                        {
+                            "id": "piece-fallback",
+                            "category": "other",
+                            "label": "Garment (confirm category)",
+                            "detection_source": "heuristic_fallback",
+                        }
+                    ],
+                },
+            }
+        },
+    )
+
+    idem = f"idem-fullai-{uuid.uuid4().hex}"
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": idem, "propose_back": True},
+    )
+    assert gen.status_code == 202, gen.text
+    body = gen.json()
+    assert body["status"] == "queued"
+    assert any(c.startswith("classify:") for c in provider.calls)
+    assert run_techpack_worker_tick(db_session, limit=2) == 1
+    settled = client.get(
+        f"/api/v1/techpacks/ai/runs/{body['run_id']}",
+        headers=_auth(tokens),
+    )
+    assert settled.status_code == 200
+    settled_body = settled.json()
+    assert settled_body["status"] == "completed"
+    assert settled_body.get("pdf_ready") is True
+
+    refreshed = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
+    pieces = refreshed["spec"]["outfit"]["pieces"]
+    assert len(pieces) == 1
+    assert pieces[0]["category"] == "dress"
+    assert is_inconclusive_piece(pieces[0]) is False
+
+
 def test_structure_repair_marks_historical_pdf_dirty(client, db_session, monkeypatch):
     tokens = register_with_invite(client, db_session, "p0_dirty@example.com", "p0_dirty")
     me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
@@ -529,6 +613,88 @@ def test_detect_fallback_is_inconclusive_not_validated():
     assert is_inconclusive_piece(piece) is True
 
 
+def test_pieces_from_vision_payload_maps_concrete_categories():
+    detection = pieces_from_vision_payload(
+        {
+            "pieces": [
+                {"category": "dress", "label": "Ivory midi dress", "color_hint": "ivory"},
+                {"category": "pants", "label": "Wide trousers", "color_hint": "black"},
+            ],
+            "confidence": "high",
+        },
+        units="cm",
+    )
+    assert detection["detection_confidence"] == "ai_vision"
+    assert detection["piece_count"] == 2
+    cats = [p["category"] for p in detection["pieces"]]
+    assert cats == ["dress", "trousers"]
+    assert all(not is_inconclusive_piece(p) for p in detection["pieces"])
+    assert all(p["detection_source"] == "ai_vision" for p in detection["pieces"])
+
+
+def test_resolve_inconclusive_outfit_with_mock_vision(db_session, client):
+    tokens = register_with_invite(client, db_session, "p0_vision@example.com", "p0_vision")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image(),
+        summary="soft studio lighting abstract silhouette",
+    )
+    created = client.post(
+        "/api/v1/techpacks",
+        headers=_auth(tokens),
+        json={"look_id": str(job.id), "title": "Vision resolve"},
+    )
+    from app.models.techpack_draft import TechpackDraft
+
+    draft = db_session.get(TechpackDraft, uuid.UUID(created.json()["id"]))
+    assert draft
+    spec = {
+        "schema_version": "2.0",
+        "units": "cm",
+        "look_notes": "soft studio lighting abstract silhouette",
+        "outfit": {
+            "piece_count": 1,
+            "pieces": [
+                {
+                    "id": "piece-fallback",
+                    "category": "other",
+                    "label": "Garment (confirm category)",
+                    "detection_source": "heuristic_fallback",
+                }
+            ],
+        },
+    }
+    assert outfit_needs_ai_structure(spec) is True
+    provider = MockProfessionalProvider(
+        outfit_override={
+            "pieces": [{"category": "dress", "label": "Evening dress", "color_hint": "black"}],
+            "confidence": "high",
+        }
+    )
+    set_professional_provider_override(provider)
+    try:
+        next_spec, meta = resolve_outfit_structure_with_ai(
+            db_session, draft, spec, provider=provider, persist=True
+        )
+    finally:
+        set_professional_provider_override(None)
+    assert meta["resolved"] is True
+    pieces = list_outfit_pieces(next_spec)
+    assert len(pieces) == 1
+    assert pieces[0]["category"] == "dress"
+    assert pieces[0]["detection_source"] == "ai_vision"
+    assert outfit_needs_ai_structure(next_spec) is False
+    # prepare now succeeds without designer confirm chips
+    out, validated, _ = prepare_professional_outfit(
+        db_session, draft, next_spec, persist_repair=False
+    )
+    assert len(validated) == 1
+    assert validated[0]["category"] == "dress"
+    assert out["outfit"]["piece_count"] == 1
+
+
 def test_prepare_rejects_empty_draft_without_credible_evidence(db_session, client):
     tokens = register_with_invite(client, db_session, "p0_empty@example.com", "p0_empty")
     me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
@@ -557,8 +723,8 @@ def test_prepare_rejects_empty_draft_without_credible_evidence(db_session, clien
     with pytest.raises(ValidationAppError) as ei:
         prepare_professional_outfit(db_session, draft, spec, persist_repair=False)
     msg = str(ei.value).lower()
-    assert "confirm" in msg
-    assert "categor" in msg
+    assert "categor" in msg or "garment" in msg
+    assert "vision" in msg or "generate" in msg or "advanced" in msg
 
 
 def test_prepare_rejects_generic_other_piece(db_session, client):
@@ -597,7 +763,7 @@ def test_prepare_rejects_generic_other_piece(db_session, client):
     with pytest.raises(ValidationAppError) as ei:
         prepare_professional_outfit(db_session, draft, spec, persist_repair=False)
     msg = str(ei.value).lower()
-    assert "garment type" in msg or "inconclusive" in msg or "confirm" in msg
+    assert "garment" in msg or "categor" in msg or "vision" in msg
 
 
 def test_prepare_preserves_designer_confirmed_despite_weak_other_detector(db_session, client):
