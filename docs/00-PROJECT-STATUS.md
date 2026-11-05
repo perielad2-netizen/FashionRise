@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Try On shoe-prep Max fallback** pending pin · prior FE **`153c14e2`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Try On shoe-prep Max fallback** **LIVE** FE/BE · **`c96c1e7b`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`153c14e2`** — release `/var/www/fashionrise/releases/153c14e2` · Try On clips out-of-frame shoes (no hard reject). FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`448192c0`** · Try On **`v2.6`** footwear + soft-pad gate · Alembic **`015`**.
+| Frontend (`web-ui`) | **`c96c1e7b`** — release `/var/www/fashionrise/releases/c96c1e7b` · shoe-prep Max fallback + clip-frame. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`c96c1e7b`** · Try On **`v2.6`** + shoe-prep Max fallback · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`153c14e2`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`c96c1e7b`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## Fill flush under outline — LIVE FE (2026-11-05)
