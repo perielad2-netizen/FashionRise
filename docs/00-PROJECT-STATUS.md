@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Professional Sketch Engine V1** **LIVE** FE · **`ac3e219c`** · BE still **`900bda6b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Professional Sketch Engine V1** **LIVE** FE · **`f8bc3b82`** · BE still **`900bda6b`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing now includes Professional Sketch Engine V1 (tapered ink / charcoal / airbrush + ink·shade·highlight layers). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`ac3e219c`** — release `/var/www/fashionrise/releases/ac3e219c` · Professional Sketch Engine V1. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`f8bc3b82`** — release `/var/www/fashionrise/releases/f8bc3b82` · Sketch Engine V1 + mobile Ink/Charcoal/Airbrush chips. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`ac3e219c`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`f8bc3b82`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## Professional Sketch Engine V1 — LIVE FE (2026-11-05)
@@ -32,9 +32,9 @@
 ### Safety
 | Field | Value |
 |---|---|
-| FE release | `/var/www/fashionrise/releases/ac3e219c` |
-| Prior FE | **`900bda6b`** |
-| Rollback | `/var/backups/fashionrise/sketch-engine-v1-*/ROLLBACK.sh` → FE **`900bda6b`** |
+| FE release | `/var/www/fashionrise/releases/f8bc3b82` (discoverability fix on top of `ac3e219c`) |
+| Prior FE | **`ac3e219c`** ← **`900bda6b`** |
+| Rollback | `/var/backups/fashionrise/sketch-engine-v1-*/ROLLBACK.sh` |
 | BE / Alembic / spend | unchanged |
 | Agent paid AI calls | **0** |
 | Tests | `professionalBrushes` + export/draft/flood suite **85 passed**; `tsc --noEmit` clean |
