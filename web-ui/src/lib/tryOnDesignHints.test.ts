@@ -121,6 +121,7 @@ describe('buildTryOnDesignHints', () => {
     const hints = buildTryOnDesignHints({ strokes: [], fills })
     expect(hints.some((h) => /continuous one-piece/i.test(h))).toBe(true)
     expect(hints.some((h) => /do not leave jeans/i.test(h))).toBe(true)
+    expect(hints.some((h) => /bare feet|remove photo boots/i.test(h))).toBe(true)
   })
 
   it('detects dark footwear ink near the feet (#184)', () => {

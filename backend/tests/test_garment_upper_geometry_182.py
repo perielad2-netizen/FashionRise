@@ -13,7 +13,7 @@ from app.services.garment_upper_geometry import (
     prepare_openai_try_on_garment_visibility,
 )
 from app.services.personal_try_on_provider import (
-    TRY_ON_PROMPT_V2_4,
+    TRY_ON_PROMPT_V2_5,
     TRY_ON_PROMPT_VERSION,
     build_try_on_prompt,
 )
@@ -81,9 +81,9 @@ def test_visibility_matte_composites_pale_garment():
 
 
 def test_try_on_prompt_v2_2_bridal_rules():
-    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.4"
+    assert TRY_ON_PROMPT_VERSION == "try-on-person-v2.5"
     prompt = build_try_on_prompt(None)
-    assert prompt == TRY_ON_PROMPT_V2_4
+    assert prompt == TRY_ON_PROMPT_V2_5
     assert "pale cream" in prompt.lower() or "ivory" in prompt.lower()
     assert "matte" in prompt.lower()
     assert "plunging" in prompt.lower() or "deep-v" in prompt.lower()

@@ -327,11 +327,17 @@ def openai_one_piece_coverage_hints(geometry: LowerGarmentGeometry) -> list[str]
     """Additive hints so continuous one-piece coverage replaces photo jeans/trousers."""
     if not looks_like_one_piece_full_coverage(geometry):
         return []
-    return [
+    hints = [
         "garment type: continuous one-piece covering torso through hips — not a separate top over trousers",
         "replace photo clothing wherever image 2's opaque garment covers; do not leave jeans, trousers, or shorts under this one-piece",
         "match the designed hem and leg openings from image 2 — photo lower garments must not remain below that hem",
     ]
+    # Mid-thigh / high-cut one-piece (not floor gown): do not keep photo boots.
+    if geometry.hem_y_frac < 0.88:
+        hints.append(
+            "footwear: image 2 has no shoes drawn — remove photo boots/shoes; show bare feet matching image 1"
+        )
+    return hints
 
 
 def openai_trouser_design_hints(geometry: LowerGarmentGeometry) -> list[str]:

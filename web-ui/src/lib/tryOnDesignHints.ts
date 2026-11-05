@@ -287,6 +287,14 @@ export function detectOnePieceFullCoverage(
   return true
 }
 
+/** Hem near the ankles / floor — gowns may keep photo shoes when no footwear is drawn. */
+export function detectFloorLengthHem(fills: FillOp[], designHeight = 1024): boolean {
+  const parts = fills.map((f) => fillBounds(f)).filter(Boolean) as InkBounds[]
+  const u = unionBounds(parts)
+  if (!u) return false
+  return u.maxY >= designHeight * 0.85
+}
+
 /** Build optional try-on design hints from the frozen front artwork. */
 export function buildTryOnDesignHints(args: {
   strokes: Stroke[]
@@ -349,10 +357,17 @@ export function buildTryOnDesignHints(args: {
   }
 
   // #184 — dark footwear ink near the hem/feet must replace photo shoes/boots.
+  // One-piece / high-cut with no drawn shoes → bare feet (do not keep photo boots).
   if (detectFootwearInk(args.strokes, fills)) {
     pushUnique(
       priority,
       'footwear: drawn shoes/boots in image 2 — replace the photo shoes; do not keep original boots',
+    )
+  } else if (detectOnePieceFullCoverage(fills) && !detectFloorLengthHem(fills)) {
+    // Secondary so bridal neckline/sleeve/pale + colors keep priority budget.
+    pushUnique(
+      secondary,
+      'footwear: image 2 has no shoes drawn — remove photo boots/shoes; show bare feet matching image 1',
     )
   }
 
