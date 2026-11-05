@@ -3,6 +3,7 @@
  * Evidence only — never invent garment details beyond fills/strokes present.
  */
 
+import { getFabricPromptShort } from '@/lib/fabricPromptCache'
 import { FABRIC_PRESETS, type FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
 
@@ -419,9 +420,12 @@ export function buildTryOnDesignHints(args: {
       const label = preset?.label ?? style.fabricId
       pushUnique(secondary, `${label} repeating fabric fill — keep exact Studio print geometry`)
     } else if (style.kind === 'uploaded-fabric') {
+      const promptShort = getFabricPromptShort(style.assetId)
       pushUnique(
         secondary,
-        'uploaded fabric repeating fill — preserve the exact print topology from the artwork pixels',
+        promptShort
+          ? `${promptShort} repeating fill — preserve exact print topology from artwork pixels`
+          : 'uploaded fabric repeating fill — preserve the exact print topology from the artwork pixels',
       )
     }
   }

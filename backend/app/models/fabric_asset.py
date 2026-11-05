@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,8 @@ class FabricAsset(Base):
     authenticated owner routes — never via public ``/static/uploads``.
     Soft-delete removes the asset from the library list while keeping bytes
     so historical designs can still render for the owner.
+
+    AI-created fabrics set ``source='ai'`` and keep ``prompt_short`` for Magic.
     """
 
     __tablename__ = "fabric_assets"
@@ -33,6 +35,10 @@ class FabricAsset(Base):
     height: Mapped[int] = mapped_column(Integer, nullable=False)
     byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="upload")
+    prompt_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt_short: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    color_hex: Mapped[str | None] = mapped_column(String(7), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

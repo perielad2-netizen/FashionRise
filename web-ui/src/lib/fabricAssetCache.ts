@@ -2,6 +2,7 @@ import {
   collectUploadedFabricAssetIds,
   type FillOp,
 } from '@/lib/fills'
+import { clearFabricPromptCache } from '@/lib/fabricPromptCache'
 import { fetchFabricImageBlob } from '@/services/fabricAssetsApi'
 
 /** Authenticated owner currently bound to the in-memory fabric caches. */
@@ -47,6 +48,7 @@ export function bindFabricCacheToUser(ownerId: string | null): void {
   cacheGeneration += 1
   imageCache.clear()
   inflight.clear()
+  clearFabricPromptCache()
   runClearHooks()
   activeOwnerId = next
 }

@@ -3,6 +3,7 @@
  * tile (built-in or uploaded). Used as Magic images.edit image #2.
  */
 import { getCachedFabricImage, ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
+import { getFabricPromptShort } from '@/lib/fabricPromptCache'
 import type { FillOp } from '@/lib/fills'
 import {
   BUILTIN_FABRIC_TILE_PX,
@@ -105,9 +106,13 @@ export async function captureFabricSwatchForMagic(
       throw new Error('Fabric swatch is too large to send to Magic. Try a smaller fabric image.')
     }
     const approxBytes = Math.floor((dataUrl.length * 3) / 4)
+    const promptShort = getFabricPromptShort(fill.style.assetId)
+    const label = promptShort
+      ? `${promptShort} repeating textile (exact Studio tile)`
+      : 'uploaded fabric repeating textile (exact Studio tile)'
     return {
       dataUrl,
-      label: 'uploaded fabric repeating textile (exact Studio tile)',
+      label,
       kind: 'uploaded-fabric',
       assetId: fill.style.assetId,
       byteLength: approxBytes,

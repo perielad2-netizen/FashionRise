@@ -8,8 +8,12 @@ from app.auth.dependencies import CurrentUser
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.db.session import get_db
-from app.schemas.fabric_asset import FabricAssetRead, fabric_asset_to_read
-from app.services import fabric_asset_service
+from app.schemas.fabric_asset import (
+    AiFabricCreateRequest,
+    FabricAssetRead,
+    fabric_asset_to_read,
+)
+from app.services import fabric_ai_service, fabric_asset_service
 
 router = APIRouter()
 
@@ -44,6 +48,26 @@ def upload_fabric(
         raw=raw,
         declared_content_type=file.content_type,
         name=name,
+    )
+    return fabric_asset_to_read(row)
+
+
+@router.post("/ai-generate", response_model=FabricAssetRead, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
+def ai_generate_fabric(
+    request: Request,
+    user: CurrentUser,
+    body: AiFabricCreateRequest,
+    db: Session = Depends(get_db),
+) -> FabricAssetRead:
+    """Create a seamless textile tile from a fabric-only prompt (+ optional palette color)."""
+    _ = request.url
+    row = fabric_ai_service.create_ai_fabric_asset(
+        db,
+        user,
+        prompt=body.prompt,
+        color_hex=body.color_hex,
+        name=body.name,
     )
     return fabric_asset_to_read(row)
 

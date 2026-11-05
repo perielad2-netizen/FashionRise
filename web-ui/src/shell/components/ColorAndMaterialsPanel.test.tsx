@@ -6,6 +6,7 @@ import { solidStyle } from '@/lib/fills'
 vi.mock('@/services/fabricAssetsApi', () => ({
   listMyFabrics: vi.fn(async () => []),
   uploadFabric: vi.fn(),
+  createAiFabric: vi.fn(),
   deleteFabric: vi.fn(),
   fetchFabricImageBlob: vi.fn(),
 }))
@@ -55,7 +56,8 @@ describe('ColorAndMaterialsPanel', () => {
     expect(onToggleEyedropper).toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Fabrics' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /Add Fabric/i })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Create with AI/i })).toBeTruthy())
+    expect(screen.getByRole('button', { name: /Upload/i })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Denim' }))
     expect(onFillStyle).toHaveBeenCalledWith({ kind: 'fabric', fabricId: 'denim' })
     expect(screen.getByText(/My Fabrics/i)).toBeTruthy()

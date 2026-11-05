@@ -9,6 +9,7 @@ import { BRUSH_SIZES, INK_SWATCHES } from '@/lib/strokes'
 vi.mock('@/services/fabricAssetsApi', () => ({
   listMyFabrics: vi.fn(async () => []),
   uploadFabric: vi.fn(),
+  createAiFabric: vi.fn(),
   deleteFabric: vi.fn(),
   fetchFabricImageBlob: vi.fn(),
 }))
