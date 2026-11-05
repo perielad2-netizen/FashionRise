@@ -508,6 +508,66 @@ def update_draft(db: Session, user: User, draft_id: uuid.UUID, data: TechpackUpd
     return _draft_read(db, draft)
 
 
+def apply_body_profile(
+    db: Session,
+    user: User,
+    draft_id: uuid.UUID,
+    *,
+    profile_id: uuid.UUID | None = None,
+) -> TechpackDraftRead:
+    """Apply a named body profile (or the owner default) onto the draft body section."""
+    from app.services.body_measurement_profile_service import (
+        apply_profile_to_spec,
+        get_default,
+        get_owned,
+    )
+
+    draft = _owned_draft(db, user, draft_id)
+    if profile_id is not None:
+        profile = get_owned(db, user, profile_id)
+    else:
+        profile = get_default(db, user)
+        if profile is None:
+            raise ValidationAppError(
+                "No measurement profile selected — create one with a name first "
+                "(for example “Me” or “Mom”)."
+            )
+    prior_spec = draft.spec if isinstance(draft.spec, dict) else {}
+    prior_ai = prior_spec.get("ai") if isinstance(prior_spec.get("ai"), dict) else {}
+    had_professional = (
+        str(prior_ai.get("last_mode") or "") == "professional" and bool(prior_ai.get("last_run_id"))
+    )
+    was_dirty = bool(prior_ai.get("dirty_since_generation"))
+    next_spec = apply_profile_to_spec(prior_spec, profile)
+    if had_professional:
+        ai = dict(next_spec.get("ai") if isinstance(next_spec.get("ai"), dict) else {})
+        ai["dirty_since_generation"] = True
+        prior_export = str(prior_ai.get("export_id") or ai.get("export_id") or "").strip()
+        if prior_export and not ai.get("outdated_export_id"):
+            ai["outdated_export_id"] = prior_export
+        for k in (
+            "last_run_id",
+            "last_mode",
+            "paid_sections",
+            "export_id",
+            "vision_model",
+            "image_model",
+        ):
+            if prior_ai.get(k) is not None and ai.get(k) is None:
+                ai[k] = prior_ai.get(k)
+        next_spec["ai"] = ai
+        if not was_dirty:
+            draft.revision = int(draft.revision or 1) + 1
+    draft.spec = next_spec
+    draft.status = "DRAFT"
+    draft.verification = "UNVERIFIED"
+    draft.updated_at = datetime.now(UTC)
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    return _draft_read(db, draft)
+
+
 def find_export_for_ai_run(
     db: Session, user: User, *, draft_id: uuid.UUID, ai_run_id: uuid.UUID
 ) -> TechpackExport | None:

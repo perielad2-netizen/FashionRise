@@ -10,6 +10,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.ai_job import AIJob
+    from app.models.body_measurement_profile import BodyMeasurementProfile
     from app.models.design_export import DesignExport
     from app.models.design_revision import DesignRevision
     from app.models.fabric_asset import FabricAsset
@@ -54,6 +55,9 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     fabric_assets: Mapped[list["FabricAsset"]] = relationship(back_populates="owner")
+    body_measurement_profiles: Mapped[list["BodyMeasurementProfile"]] = relationship(
+        back_populates="owner"
+    )
     private_media_assets: Mapped[list["PrivateMediaAsset"]] = relationship(back_populates="owner")
     consent_events: Mapped[list["UserConsentEvent"]] = relationship(back_populates="owner")
     personal_croquis: Mapped[list["PersonalCroquis"]] = relationship(back_populates="owner")

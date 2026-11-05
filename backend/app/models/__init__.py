@@ -1,4 +1,5 @@
 from app.models.ai_job import AIJob
+from app.models.body_measurement_profile import BodyMeasurementProfile
 from app.models.color_palette import ColorPalette
 from app.models.design_export import DesignExport
 from app.models.design_revision import DesignRevision
@@ -29,6 +30,7 @@ from app.models.user_profile import UserProfile
 
 __all__ = [
     "AIJob",
+    "BodyMeasurementProfile",
     "ColorPalette",
     "DesignExport",
     "DesignRevision",

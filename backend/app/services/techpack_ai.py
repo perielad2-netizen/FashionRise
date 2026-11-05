@@ -1268,6 +1268,7 @@ def enqueue_generate_one_tap_professional(
     idempotency_key: str,
     propose_back: bool = True,
     sections: list[str] | None = None,
+    body_profile_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Authorize one bounded Professional run and enqueue durable work (HTTP returns promptly)."""
     challenge = create_confirm_challenge(
@@ -1282,6 +1283,11 @@ def enqueue_generate_one_tap_professional(
     if not idempotency_key or len(idempotency_key) < 8:
         raise ValidationAppError("idempotency_key required")
 
+    from app.services.body_measurement_profile_service import (
+        apply_profile_to_spec,
+        get_default,
+        get_owned,
+    )
     from app.services.techpack_service import reconcile_professional_export_validity
     from app.services.techpack_structure import (
         list_outfit_pieces,
@@ -1290,6 +1296,41 @@ def enqueue_generate_one_tap_professional(
         professional_pack_is_current_for_draft,
         scoped_idempotency_key,
     )
+
+    # Apply named body profile (or owner default) before structure/spend gates so
+    # finished POM proposals have designer body numbers to grade from.
+    profile = None
+    if body_profile_id is not None:
+        profile = get_owned(db, user, body_profile_id)
+    else:
+        # Prefer an already-linked profile on the draft; else owner default.
+        ai_meta = (
+            (draft.spec or {}).get("ai")
+            if isinstance(draft.spec, dict)
+            else {}
+        )
+        linked = None
+        if isinstance(ai_meta, dict) and ai_meta.get("body_profile_id"):
+            try:
+                linked = uuid.UUID(str(ai_meta["body_profile_id"]))
+            except (TypeError, ValueError):
+                linked = None
+        if linked is not None:
+            try:
+                profile = get_owned(db, user, linked)
+            except NotFoundError:
+                profile = None
+        if profile is None:
+            profile = get_default(db, user)
+    if profile is not None:
+        next_spec = apply_profile_to_spec(
+            draft.spec if isinstance(draft.spec, dict) else {}, profile
+        )
+        draft.spec = next_spec
+        draft.updated_at = datetime.now(UTC)
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
 
     # Resolve/validate outfit BEFORE spend gates or queue insert (fail closed, $0).
     # Also reconcile outdated historical Download so reuse cannot clear a stale pack.

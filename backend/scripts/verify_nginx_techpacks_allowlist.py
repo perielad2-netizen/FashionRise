@@ -22,6 +22,21 @@ location = /api/v1/techpacks/ai/status {
     proxy_pass http://127.0.0.1:8010;
 }
 
+location = /api/v1/techpacks/measurement-profiles {
+    limit_except GET POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location ~ "^/api/v1/techpacks/measurement-profiles/[0-9a-fA-F-]{36}$" {
+    limit_except GET PATCH DELETE { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location ~ "^/api/v1/techpacks/[0-9a-fA-F-]{36}/apply-body-profile$" {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
 location ~ "^/api/v1/techpacks/ai/runs/[0-9a-fA-F-]{36}$" {
     limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
@@ -69,11 +84,17 @@ MATRIX = [
     ("POST", "/api/v1/techpacks", "allow_create"),
     ("DELETE", "/api/v1/techpacks", "deny_list_delete"),
     ("GET", "/api/v1/techpacks/ai/status", "allow_ai_status"),
+    ("GET", "/api/v1/techpacks/measurement-profiles", "allow_profiles_list"),
+    ("POST", "/api/v1/techpacks/measurement-profiles", "allow_profiles_create"),
+    ("GET", f"/api/v1/techpacks/measurement-profiles/{UUID}", "allow_profiles_get"),
+    ("PATCH", f"/api/v1/techpacks/measurement-profiles/{UUID}", "allow_profiles_patch"),
+    ("DELETE", f"/api/v1/techpacks/measurement-profiles/{UUID}", "allow_profiles_delete"),
     ("GET", f"/api/v1/techpacks/ai/runs/{UUID}", "allow_ai_run"),
     ("GET", f"/api/v1/techpacks/{UUID}", "allow_get"),
     ("PATCH", f"/api/v1/techpacks/{UUID}", "allow_patch"),
     ("DELETE", f"/api/v1/techpacks/{UUID}", "deny_delete"),
     ("POST", f"/api/v1/techpacks/{UUID}/export", "allow_export"),
+    ("POST", f"/api/v1/techpacks/{UUID}/apply-body-profile", "allow_apply_body"),
     ("GET", f"/api/v1/techpacks/{UUID}/exports", "allow_exports"),
     ("POST", f"/api/v1/techpacks/{UUID}/ai/confirm", "allow_ai_confirm"),
     ("POST", f"/api/v1/techpacks/{UUID}/ai/generate", "allow_ai_generate"),
@@ -85,9 +106,12 @@ MATRIX = [
 
 _LIST_EXACT = "/api/v1/techpacks"
 _AI_STATUS = "/api/v1/techpacks/ai/status"
+_PROFILES_EXACT = "/api/v1/techpacks/measurement-profiles"
 _AI_RUN_RE = re.compile(r"^/api/v1/techpacks/ai/runs/[0-9a-fA-F-]{36}$")
+_PROFILES_ITEM_RE = re.compile(r"^/api/v1/techpacks/measurement-profiles/[0-9a-fA-F-]{36}$")
 _ITEM_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}$")
 _EXPORT_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/export$")
+_APPLY_BODY_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/apply-body-profile$")
 _EXPORTS_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/exports$")
 _AI_CONFIRM_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/confirm$")
 _AI_GENERATE_RE = re.compile(r"^/api/v1/techpacks/[0-9a-fA-F-]{36}/ai/generate$")
@@ -100,6 +124,10 @@ def _assert_snippet(text: str) -> None:
         raise SystemExit("FAIL: missing exact /api/v1/techpacks location")
     if "location = /api/v1/techpacks/ai/status" not in text:
         raise SystemExit("FAIL: missing ai/status location")
+    if "location = /api/v1/techpacks/measurement-profiles" not in text:
+        raise SystemExit("FAIL: missing measurement-profiles location")
+    if "/apply-body-profile$" not in text:
+        raise SystemExit("FAIL: missing apply-body-profile location")
     if "/ai/confirm$" not in text:
         raise SystemExit("FAIL: missing ai/confirm location")
     if "/ai/generate$" not in text:
@@ -119,6 +147,20 @@ def _classify(method: str, path: str) -> str:
         return "deny_list_delete"
     if path == _AI_STATUS:
         return "allow_ai_status" if method == "GET" else "deny_extra"
+    if path == _PROFILES_EXACT:
+        if method == "GET":
+            return "allow_profiles_list"
+        if method == "POST":
+            return "allow_profiles_create"
+        return "deny_extra"
+    if _PROFILES_ITEM_RE.fullmatch(path):
+        if method == "GET":
+            return "allow_profiles_get"
+        if method == "PATCH":
+            return "allow_profiles_patch"
+        if method == "DELETE":
+            return "allow_profiles_delete"
+        return "deny_extra"
     if _AI_RUN_RE.fullmatch(path):
         return "allow_ai_run" if method == "GET" else "deny_extra"
     if _ITEM_RE.fullmatch(path):
@@ -129,6 +171,8 @@ def _classify(method: str, path: str) -> str:
         return "deny_delete"
     if _EXPORT_RE.fullmatch(path):
         return "allow_export" if method == "POST" else "deny_extra"
+    if _APPLY_BODY_RE.fullmatch(path):
+        return "allow_apply_body" if method == "POST" else "deny_extra"
     if _EXPORTS_RE.fullmatch(path):
         return "allow_exports" if method == "GET" else "deny_extra"
     if _AI_CONFIRM_RE.fullmatch(path):

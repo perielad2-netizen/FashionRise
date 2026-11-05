@@ -5,12 +5,18 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import CurrentUser
 from app.db.session import get_db
+from app.schemas.body_measurement_profile import (
+    BodyMeasurementProfileApplyRequest,
+    BodyMeasurementProfileCreate,
+    BodyMeasurementProfileRead,
+    BodyMeasurementProfileUpdate,
+)
 from app.schemas.techpack import (
     TechpackAiConfirmRequest,
     TechpackAiGenerateRequest,
@@ -23,9 +29,77 @@ from app.schemas.techpack import (
     TechpackListResponse,
     TechpackUpdate,
 )
+from app.services import body_measurement_profile_service as body_profiles
 from app.services import techpack_ai, techpack_service
 
 router = APIRouter()
+
+
+@router.get("/measurement-profiles", response_model=list[BodyMeasurementProfileRead])
+def list_measurement_profiles(
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> list[BodyMeasurementProfileRead]:
+    """List the owner's named body measurement profiles (reusable people / clients)."""
+    return [
+        BodyMeasurementProfileRead.model_validate(r)
+        for r in body_profiles.list_profiles(db, user)
+    ]
+
+
+@router.post(
+    "/measurement-profiles",
+    response_model=BodyMeasurementProfileRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_measurement_profile(
+    data: BodyMeasurementProfileCreate,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> BodyMeasurementProfileRead:
+    row = body_profiles.create_profile(db, user, data)
+    return BodyMeasurementProfileRead.model_validate(row)
+
+
+@router.get(
+    "/measurement-profiles/{profile_id}",
+    response_model=BodyMeasurementProfileRead,
+)
+def get_measurement_profile(
+    profile_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> BodyMeasurementProfileRead:
+    row = body_profiles.get_owned(db, user, profile_id)
+    return BodyMeasurementProfileRead.model_validate(row)
+
+
+@router.patch(
+    "/measurement-profiles/{profile_id}",
+    response_model=BodyMeasurementProfileRead,
+)
+def update_measurement_profile(
+    profile_id: uuid.UUID,
+    data: BodyMeasurementProfileUpdate,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> BodyMeasurementProfileRead:
+    row = body_profiles.update_profile(db, user, profile_id, data)
+    return BodyMeasurementProfileRead.model_validate(row)
+
+
+@router.delete(
+    "/measurement-profiles/{profile_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+def delete_measurement_profile(
+    profile_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> Response:
+    body_profiles.delete_profile(db, user, profile_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/ai/status")
@@ -136,6 +210,19 @@ def update_techpack(
     return techpack_service.update_draft(db, user, draft_id, data)
 
 
+@router.post("/{draft_id}/apply-body-profile", response_model=TechpackDraftRead)
+def apply_body_profile_to_draft(
+    draft_id: uuid.UUID,
+    data: BodyMeasurementProfileApplyRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> TechpackDraftRead:
+    """Copy a named body profile onto this draft (no paid AI)."""
+    return techpack_service.apply_body_profile(
+        db, user, draft_id, profile_id=data.profile_id
+    )
+
+
 @router.post("/{draft_id}/export", response_model=TechpackExportRead, status_code=status.HTTP_201_CREATED)
 def export_techpack_pdf(
     draft_id: uuid.UUID,
@@ -216,6 +303,7 @@ def techpack_ai_generate_professional_one_tap(
         idempotency_key=data.idempotency_key,
         propose_back=data.propose_back,
         sections=data.sections,
+        body_profile_id=data.body_profile_id,
     )
 
 

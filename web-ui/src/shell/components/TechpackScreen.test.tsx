@@ -11,6 +11,7 @@ const getTechpackAiStatus = vi.fn()
 const generateTechpackAiProfessionalOneTap = vi.fn()
 const getTechpackAiRun = vi.fn()
 const getLatestTechpackAiRun = vi.fn()
+const listBodyMeasurementProfiles = vi.fn()
 
 vi.mock('@/services/techpacksApi', () => ({
   getTechpackDraft: (...args: unknown[]) => getTechpackDraft(...args),
@@ -25,6 +26,11 @@ vi.mock('@/services/techpacksApi', () => ({
     generateTechpackAiProfessionalOneTap(...args),
   getTechpackAiRun: (...args: unknown[]) => getTechpackAiRun(...args),
   getLatestTechpackAiRun: (...args: unknown[]) => getLatestTechpackAiRun(...args),
+  listBodyMeasurementProfiles: (...args: unknown[]) => listBodyMeasurementProfiles(...args),
+  createBodyMeasurementProfile: vi.fn(),
+  updateBodyMeasurementProfile: vi.fn(),
+  deleteBodyMeasurementProfile: vi.fn(),
+  applyBodyMeasurementProfile: vi.fn(),
 }))
 
 vi.mock('@/hooks/useAuthJobImage', () => ({
@@ -119,6 +125,25 @@ describe('TechpackScreen simplified UX', () => {
     getTechpackAiRun.mockReset()
     getLatestTechpackAiRun.mockReset()
     getLatestTechpackAiRun.mockResolvedValue(null)
+    listBodyMeasurementProfiles.mockReset()
+    listBodyMeasurementProfiles.mockResolvedValue([
+      {
+        id: 'profile-me',
+        name: 'Me',
+        units: 'cm',
+        sample_size: 'M',
+        is_default: true,
+        measurements: {
+          height: { value: 170, unit: 'cm', source: 'designer' },
+          bust: { value: 90, unit: 'cm', source: 'designer' },
+          waist: { value: 72, unit: 'cm', source: 'designer' },
+          hip: { value: 96, unit: 'cm', source: 'designer' },
+          inseam: { value: null, unit: 'cm', source: 'empty' },
+        },
+        created_at: '2026-11-06T00:00:00Z',
+        updated_at: '2026-11-06T00:00:00Z',
+      },
+    ])
     getTechpackDraft.mockImplementation(async () => currentDraft)
     getTechpackAiStatus.mockResolvedValue({
       enabled: false,
@@ -149,10 +174,11 @@ describe('TechpackScreen simplified UX', () => {
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     expect(await screen.findByRole('heading', { level: 1, name: 'Create Real Design' })).toBeInTheDocument()
     expect(
-      screen.getByText(/Turn your Magic look into a professional AI technical pack/i),
+      screen.getByText(/Body measurements \+ your Magic look/i),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Generate AI PDF/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Edit measurements & details/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Advanced details \(optional\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Who is this for/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Back to My Looks/i })).toBeInTheDocument()
     // Wizard / Basic / Save maze removed from primary flow.
     expect(screen.queryByRole('navigation', { name: /Create Real Design stages/i })).not.toBeInTheDocument()
@@ -181,7 +207,7 @@ describe('TechpackScreen simplified UX', () => {
     })
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
-    fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Advanced details \(optional\)/i }))
     expect(await screen.findByRole('dialog', { name: /Measurements & details/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: /Body measurements/i }))
     const height = await screen.findByLabelText(/^Height$/i)
@@ -203,7 +229,7 @@ describe('TechpackScreen simplified UX', () => {
     updateTechpackDraft.mockRejectedValueOnce(new Error('network down'))
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
-    fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Advanced details \(optional\)/i }))
     const dialog = await screen.findByRole('dialog', { name: /Measurements & details/i })
     fireEvent.click(within(dialog).getByRole('tab', { name: /Body measurements/i }))
     const height = await within(dialog).findByLabelText(/^Height$/i)
@@ -217,7 +243,7 @@ describe('TechpackScreen simplified UX', () => {
   it('Done with no edits closes without PATCH', async () => {
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
-    fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Advanced details \(optional\)/i }))
     expect(await screen.findByRole('dialog', { name: /Measurements & details/i })).toBeInTheDocument()
     updateTechpackDraft.mockClear()
     fireEvent.click(screen.getByTestId('details-done'))
@@ -347,7 +373,7 @@ describe('TechpackScreen simplified UX', () => {
 
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     // Completed reopen shows the normal screen — no blocking ready overlay.
-    await screen.findByRole('button', { name: /Edit measurements & details/i })
+    await screen.findByRole('button', { name: /Advanced details \(optional\)/i })
     expect(
       screen.queryByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
     ).not.toBeInTheDocument()
@@ -391,7 +417,7 @@ describe('TechpackScreen simplified UX', () => {
     })
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     expect(await screen.findByRole('button', { name: /Download PDF/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Edit measurements & details/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Advanced details \(optional\)/i })).toBeEnabled()
     expect(
       screen.queryByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
     ).not.toBeInTheDocument()
@@ -442,7 +468,7 @@ describe('TechpackScreen simplified UX', () => {
         screen.queryByRole('dialog', { name: /Your AI Technical Pack Is Ready/i }),
       ).not.toBeInTheDocument(),
     )
-    expect(screen.getByRole('button', { name: /Edit measurements & details/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Advanced details \(optional\)/i })).toBeEnabled()
   })
 
   it('maps configuration errors from one-tap generate', async () => {
@@ -677,7 +703,7 @@ describe('TechpackScreen simplified UX', () => {
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     expect(await screen.findByTestId('update-pdf-no-ai')).toBeInTheDocument()
     expect(screen.getByTestId('outdated-pdf-notice')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Edit measurements & details/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Advanced details \(optional\)/i })).toBeEnabled()
     fireEvent.click(screen.getByTestId('update-pdf-no-ai'))
     await waitFor(() => expect(exportTechpackPdf).toHaveBeenCalled())
     expect(exportTechpackPdf.mock.calls[0][1]).toMatchObject({ mode: 'pdf_only_update' })

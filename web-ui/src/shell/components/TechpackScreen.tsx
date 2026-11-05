@@ -19,6 +19,7 @@ import {
 } from '@/services/techpacksApi'
 import { DetailsEditorSheet } from '@/shell/components/techpack/DetailsEditorSheet'
 import { GenerateAiPdfOverlay } from '@/shell/components/techpack/GenerateAiPdfOverlay'
+import { MeasurementProfileCard } from '@/shell/components/techpack/MeasurementProfileCard'
 import {
   buildEditorPersistSnapshot,
   editorPersistFingerprint,
@@ -61,6 +62,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   const [readyExportId, setReadyExportId] = useState<string | null>(null)
   const [readyFilename, setReadyFilename] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [selectedBodyProfileId, setSelectedBodyProfileId] = useState<string | null>(null)
   const [intentIdempotencyKey, setIntentIdempotencyKey] = useState<string | null>(null)
   /** Bumps when the saved fingerprint changes so React can recompute editorDirty. */
   const [savedTick, setSavedTick] = useState(0)
@@ -140,6 +142,11 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       }
       const ai = wrapped.spec.ai
       if (ai?.last_run_id) setLastRunId(String(ai.last_run_id))
+      const linkedProfile =
+        ai && typeof ai === 'object' && typeof (ai as { body_profile_id?: unknown }).body_profile_id === 'string'
+          ? String((ai as { body_profile_id: string }).body_profile_id)
+          : null
+      if (linkedProfile) setSelectedBodyProfileId(linkedProfile)
       // Keep export identity even when dirty so outdated/Update-PDF CTAs can reference history.
       // Download gating uses hasReadyPdf (!dirtySinceGeneration), not mere presence of the id.
       const exportFromAi = ai && typeof ai === 'object' ? (ai as { export_id?: string }).export_id : null
@@ -486,6 +493,10 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       return
     }
     if (busy) return
+    if (!selectedBodyProfileId) {
+      setError('Add body measurements for the person first — save them with a name to reuse later.')
+      return
+    }
 
     // Already have a valid Professional PDF for this revision — show Download, no paid call.
     if (hasReadyPdf && readyExportId) {
@@ -513,6 +524,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       const accepted = await generateTechpackAiProfessionalOneTap(draftId, {
         idempotency_key: idem,
         propose_back: true,
+        body_profile_id: selectedBodyProfileId,
       })
       const runId = accepted.run_id
       setLastRunId(runId)
@@ -867,7 +879,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           </button>
           <h1 className={styles.title}>Create Real Design</h1>
           <p className={styles.subtitle}>
-            Turn your Magic look into a professional AI technical pack.
+            Body measurements + your Magic look. AI fills the technical pack — garment pieces,
+            flats, and factory details.
           </p>
         </div>
         <span className={styles.pill} data-testid="app-version" title={`App ${BUILD_VERSION}`}>
@@ -900,13 +913,18 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           )}
         </div>
 
-        <button
-          type="button"
-          className={styles.detailsLink}
-          onClick={() => setDetailsOpen(true)}
-        >
-          Edit measurements & details
-        </button>
+        <MeasurementProfileCard
+          selectedId={selectedBodyProfileId}
+          onSelect={setSelectedBodyProfileId}
+          disabled={busy}
+        />
+
+        {pieces.length ? (
+          <p className={styles.subtleHint} data-testid="detected-pieces-hint">
+            AI sees {pieces.length} garment piece{pieces.length === 1 ? '' : 's'}
+            {pieces.map((p) => ` · ${p.label || p.category}`).join('')}
+          </p>
+        ) : null}
 
         {hasReadyPdf ? (
           <button
@@ -937,7 +955,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           <button
             type="button"
             className={styles.primaryCta}
-            disabled={busy || !professionalAvailable}
+            disabled={busy || !professionalAvailable || !selectedBodyProfileId}
             onClick={() => void runOneTapGenerate()}
           >
             <Sparkles size={18} aria-hidden />
@@ -949,13 +967,21 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           <button
             type="button"
             className={styles.detailsLink}
-            disabled={busy || !professionalAvailable}
+            disabled={busy || !professionalAvailable || !selectedBodyProfileId}
             data-testid="generate-ai-pdf-secondary"
             onClick={() => void runOneTapGenerate()}
           >
             Generate AI PDF (paid — new illustrations)
           </button>
         ) : null}
+
+        <button
+          type="button"
+          className={styles.detailsLink}
+          onClick={() => setDetailsOpen(true)}
+        >
+          Advanced details (optional)
+        </button>
 
         {!professionalAvailable && professionalDisabledReason ? (
           <p className={styles.subtleHint}>{professionalDisabledReason}</p>

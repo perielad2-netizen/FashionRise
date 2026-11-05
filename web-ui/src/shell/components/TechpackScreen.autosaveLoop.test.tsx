@@ -28,6 +28,22 @@ vi.mock('@/services/techpacksApi', () => ({
   fetchTechpackPdfBlob: (...args: unknown[]) => fetchTechpackPdfBlob(...args),
   exportTechpackPdf: (...args: unknown[]) => exportTechpackPdf(...args),
   fetchTechpackArtifactBlob: (...args: unknown[]) => fetchTechpackArtifactBlob(...args),
+  listBodyMeasurementProfiles: vi.fn(async () => [
+    {
+      id: 'profile-me',
+      name: 'Me',
+      units: 'cm',
+      sample_size: 'M',
+      is_default: true,
+      measurements: { height: { value: 170, unit: 'cm', source: 'designer' } },
+      created_at: '2026-11-06T00:00:00Z',
+      updated_at: '2026-11-06T00:00:00Z',
+    },
+  ]),
+  createBodyMeasurementProfile: vi.fn(),
+  updateBodyMeasurementProfile: vi.fn(),
+  deleteBodyMeasurementProfile: vi.fn(),
+  applyBodyMeasurementProfile: vi.fn(),
 }))
 
 vi.mock('@/hooks/useAuthJobImage', () => ({
@@ -125,7 +141,7 @@ async function openEditor() {
     </StrictMode>,
   )
   await screen.findByText('Create Real Design')
-  fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+  fireEvent.click(screen.getByRole('button', { name: /Advanced details \(optional\)/i }))
   return screen.findByRole('dialog', { name: /Measurements & details/i })
 }
 
