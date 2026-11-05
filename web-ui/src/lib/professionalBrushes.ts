@@ -66,9 +66,10 @@ export function defaultsForBrushKind(kind: BrushKind): Partial<BrushEngineState>
       brushKind: 'charcoal',
       logicalLayer: 'shade',
       blendMode: 'multiply',
-      flow: 0.55,
-      softness: 0.35,
-      textureIntensity: 0.75,
+      flow: 0.38,
+      softness: 0.78,
+      // Fine paper grain only — not spray scatter.
+      textureIntensity: 0.32,
     }
   }
   return {
@@ -232,34 +233,60 @@ function paintTapered(ctx: Ctx2d, stroke: Stroke, sealTips?: boolean): void {
   ctx.restore()
 }
 
+/**
+ * Charcoal = soft fashion-illustration shading (blending-stump feel),
+ * not spray/smoke. Continuous soft radial build-up + optional fine grain
+ * constrained inside each dab. Deterministic via textureSeed.
+ */
 function paintCharcoal(ctx: Ctx2d, stroke: Stroke): void {
-  const intensity = clamp01(stroke.textureIntensity ?? DEFAULT_TEXTURE_INTENSITY, DEFAULT_TEXTURE_INTENSITY)
-  const flow = clamp01(stroke.flow ?? DEFAULT_FLOW, DEFAULT_FLOW)
+  const intensity = clamp01(stroke.textureIntensity ?? 0.32, 0.32)
+  const flow = clamp01(stroke.flow ?? 0.38, 0.38)
+  const softness = clamp01(stroke.softness ?? 0.78, 0.78)
   const seedStr = String(stroke.textureSeed ?? stroke.id)
   const rnd = mulberry32(hashSeed(seedStr))
-  const spacing = Math.max(1.2, stroke.size * (0.28 + (1 - intensity) * 0.35))
+  // Tight spacing so dabs melt into a smooth shadow ribbon.
+  const spacing = Math.max(0.85, stroke.size * (0.12 + (1 - softness) * 0.1))
   const stamps = stampCenters(stroke.points, spacing)
   const blend = resolveBlendMode(stroke)
+  const radius = Math.max(1.4, stroke.size * (0.95 + softness * 0.55))
 
   ctx.save()
   ctx.globalCompositeOperation = blend
 
-  for (let i = 0; i < stamps.length; i += 1) {
-    const s = stamps[i]!
-    const press = 0.35 + s.p * 0.65
-    const baseR = (stroke.size / 2) * (0.55 + press * 0.7)
-    const grains = 3 + Math.floor(intensity * 5)
-    for (let g = 0; g < grains; g += 1) {
-      const ox = (rnd() - 0.5) * baseR * (0.9 + intensity)
-      const oy = (rnd() - 0.5) * baseR * (0.9 + intensity)
-      const r = baseR * (0.15 + rnd() * (0.45 + intensity * 0.35))
-      const a = stroke.opacity * flow * (0.25 + rnd() * 0.55) * press
-      ctx.beginPath()
-      ctx.fillStyle = stroke.color
-      ctx.globalAlpha = Math.min(1, a)
-      // Slightly elliptical / broken edge
-      ctx.ellipse(s.x + ox, s.y + oy, r, r * (0.55 + rnd() * 0.6), rnd() * Math.PI, 0, Math.PI * 2)
-      ctx.fill()
+  for (const s of stamps) {
+    const press = 0.42 + s.p * 0.58
+    const r = radius * (0.78 + press * 0.3)
+    // Low per-dab alpha → overlaps blend into soft volume, not blotches.
+    const alpha = Math.min(
+      1,
+      stroke.opacity * flow * (0.1 + press * 0.18) * (0.7 + softness * 0.35),
+    )
+    const mid = 0.22 + softness * 0.48
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r)
+    g.addColorStop(0, hexWithAlpha(stroke.color, 1))
+    g.addColorStop(Math.min(0.82, mid), hexWithAlpha(stroke.color, 0.42))
+    g.addColorStop(1, hexWithAlpha(stroke.color, 0))
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = g
+    ctx.beginPath()
+    ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Subtle paper grain only — tiny dots, center-biased, never wide scatter.
+    if (intensity > 0.04) {
+      const grains = Math.floor(3 + intensity * 8 + r * 0.22)
+      for (let i = 0; i < grains; i += 1) {
+        const ang = rnd() * Math.PI * 2
+        const dist = Math.pow(rnd(), 0.7) * r * 0.62
+        const gx = s.x + Math.cos(ang) * dist
+        const gy = s.y + Math.sin(ang) * dist
+        const gr = 0.28 + rnd() * (0.45 + intensity * 0.35)
+        ctx.globalAlpha = alpha * (0.06 + intensity * 0.12) * press
+        ctx.fillStyle = stroke.color
+        ctx.beginPath()
+        ctx.arc(gx, gy, gr, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
   }
   ctx.restore()

@@ -19,7 +19,7 @@ type Props = {
 
 const BRUSH_OPTIONS: Array<{ id: BrushKind; label: string; hint: string }> = [
   { id: 'tapered', label: 'Ink', hint: 'Tapered pencil / seams' },
-  { id: 'charcoal', label: 'Charcoal', hint: 'Grainy fabric texture' },
+  { id: 'charcoal', label: 'Charcoal', hint: 'Smooth fabric shadow' },
   { id: 'airbrush', label: 'Airbrush', hint: 'Soft shade & volume' },
 ]
 
