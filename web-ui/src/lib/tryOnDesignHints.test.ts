@@ -122,6 +122,7 @@ describe('buildTryOnDesignHints', () => {
     expect(hints.some((h) => /continuous one-piece/i.test(h))).toBe(true)
     expect(hints.some((h) => /do not leave jeans/i.test(h))).toBe(true)
     expect(hints.some((h) => /bare feet|remove photo boots/i.test(h))).toBe(true)
+    expect(hints.some((h) => /high-cut one-piece|do not lengthen into a dress/i.test(h))).toBe(true)
   })
 
   it('detects dark footwear ink near the feet (#184)', () => {

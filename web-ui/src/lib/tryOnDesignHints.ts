@@ -301,6 +301,15 @@ export function detectFloorLengthHem(fills: FillOp[], designHeight = 1024): bool
   return u.maxY >= designHeight * 0.85
 }
 
+/** High-cut one-piece hem (above ~mid-thigh) — must not be lengthened into a dress. */
+export function detectHighCutOnePieceHem(fills: FillOp[], designHeight = 1024): boolean {
+  if (!detectOnePieceFullCoverage(fills, designHeight)) return false
+  const parts = fills.map((f) => fillBounds(f)).filter(Boolean) as InkBounds[]
+  const u = unionBounds(parts)
+  if (!u) return false
+  return u.maxY < designHeight * 0.72
+}
+
 /** Build optional try-on design hints from the frozen front artwork. */
 export function buildTryOnDesignHints(args: {
   strokes: Stroke[]
@@ -346,6 +355,13 @@ export function buildTryOnDesignHints(args: {
       priority,
       "replace photo clothing wherever image 2's opaque garment covers; do not leave jeans, trousers, or shorts under this one-piece",
     )
+    if (detectHighCutOnePieceHem(fills)) {
+      // Owner back try-on lengthened high-cut one-piece into a knee dress.
+      pushUnique(
+        priority,
+        'hem: high-cut one-piece as drawn — end at the designed leg openings; do not lengthen into a dress or skirt',
+      )
+    }
   }
 
   // #182 — open neckline + both sleeves before color noise (bridal / pale dresses).

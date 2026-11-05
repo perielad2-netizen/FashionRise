@@ -323,6 +323,17 @@ def looks_like_one_piece_full_coverage(geometry: LowerGarmentGeometry) -> bool:
     return True
 
 
+def looks_like_high_cut_one_piece(geometry: LowerGarmentGeometry) -> bool:
+    """One-piece whose hem ends above mid-thigh (bodysuit / high-cut), not a midi/floor dress.
+
+    Owner back try-on (job abc05c51): OpenAI lengthened a hem_y≈0.53 one-piece into a
+    knee dress. High-cut hems need an explicit "do not lengthen" contract.
+    """
+    if not looks_like_one_piece_full_coverage(geometry):
+        return False
+    return geometry.hem_y_frac < 0.72
+
+
 def openai_one_piece_coverage_hints(geometry: LowerGarmentGeometry) -> list[str]:
     """Additive hints so continuous one-piece coverage replaces photo jeans/trousers."""
     if not looks_like_one_piece_full_coverage(geometry):
@@ -332,6 +343,11 @@ def openai_one_piece_coverage_hints(geometry: LowerGarmentGeometry) -> list[str]
         "replace photo clothing wherever image 2's opaque garment covers; do not leave jeans, trousers, or shorts under this one-piece",
         "match the designed hem and leg openings from image 2 — photo lower garments must not remain below that hem",
     ]
+    if looks_like_high_cut_one_piece(geometry):
+        hints.append(
+            "hem: high-cut one-piece as drawn — end at the designed leg openings; "
+            "do not lengthen into a dress, skirt, or midi gown"
+        )
     # Mid-thigh / high-cut one-piece (not floor gown): do not keep photo boots.
     if geometry.hem_y_frac < 0.88:
         hints.append(

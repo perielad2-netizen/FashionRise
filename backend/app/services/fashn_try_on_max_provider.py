@@ -54,8 +54,9 @@ MAX_CREDIT_TABLE: dict[str, dict[str, int]] = {
 DEFAULT_MAX_PROMPT = (
     "Fit the exact garment from the provided approved product image onto the person. "
     "Preserve the garment's silhouette, neckline depth, leg openings, color, and overall "
-    "construction. Do not turn it into a skirt, dress, or different garment. Preserve the "
-    "person's identity, pose, proportions, and background."
+    "construction. Keep the designed hem length — a high-cut one-piece must not become a "
+    "skirt or dress. Do not turn it into a different garment. Preserve the person's "
+    "identity, pose, proportions, and background."
 )
 
 # Appended for high-cut / one-piece smart fallback when Studio has no drawn shoes —
