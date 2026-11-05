@@ -135,6 +135,51 @@ describe('buildTryOnDesignHints', () => {
     expect(gated?.maxY).toBeLessThanOrEqual(620 + 24)
   })
 
+  it('ignores erased shoe fills + full shoe strokes for try-on completeness (back croquis)', () => {
+    // Swimsuit body + black shoe fills still in the document after ink-erase
+    // punched them out of capture alpha (owner: "deleted everything, no leftovers").
+    const fills: FillOp[] = [
+      {
+        id: 'swim',
+        contour: [320, 140, 460, 140, 500, 620, 280, 620],
+        seedX: 380,
+        seedY: 360,
+        style: { kind: 'solid', color: '#0E7490' },
+      },
+      {
+        id: 'shoeL',
+        contour: [280, 900, 340, 900, 340, 1000, 280, 1000],
+        seedX: 310,
+        seedY: 950,
+        style: { kind: 'solid', color: '#111111' },
+      },
+      {
+        id: 'shoeR',
+        contour: [420, 900, 480, 900, 480, 1000, 420, 1000],
+        seedX: 450,
+        seedY: 950,
+        style: { kind: 'solid', color: '#111111' },
+      },
+    ]
+    const shoeStrokes: Stroke[] = [
+      stroke({
+        id: 'shoe-outline',
+        color: '#111111',
+        // Full shoe stroke from ankle into foot band — not a tiny crumb.
+        points: [300, 860, 0.5, 330, 940, 0.5, 310, 990, 0.5],
+      }),
+    ]
+    const raw = liveArtworkYSpan({ strokes: shoeStrokes, fills })
+    const gated = liveArtworkYSpan({
+      strokes: shoeStrokes,
+      fills,
+      forTryOnCompleteness: true,
+    })
+    expect(raw?.maxY).toBeGreaterThanOrEqual(990)
+    // Shoe fills must not defeat high-cut body span (prior fix only dropped crumbs).
+    expect(gated?.maxY).toBeLessThanOrEqual(620 + 24)
+  })
+
   it('injects one-piece coverage hints for swimsuit-like fills (not trousers)', () => {
     const fills: FillOp[] = [
       {

@@ -472,15 +472,28 @@ export function buildTryOnDesignHints(args: {
   return hints.slice(0, MAX_HINTS)
 }
 
+/**
+ * Shoe-sized fill sitting in the foot band (not a pant leg). Erasing shoes leaves
+ * these FillOps in the document while capture alpha is punched out — including them
+ * in the live Y span false-fails "lost lower parts".
+ */
+function isFootwearLikeFillBounds(b: InkBounds, designHeight: number): boolean {
+  const footBand = designHeight * 0.78
+  const h = b.maxY - b.minY
+  if (b.minY < footBand) return false
+  if (h > designHeight * 0.28) return false
+  return true
+}
+
 /** Live ink vertical span for capture completeness checks (#170). */
 export function liveArtworkYSpan(args: {
   strokes: Stroke[]
   fills?: FillOp[]
   /**
-   * Try On completeness only: for high-cut one-pieces, ignore draw strokes that
-   * sit entirely in the foot band below the fill hem. Erasing shoes often leaves
-   * thin outline crumbs that inflate live maxY and false-fail "lost lower parts"
-   * even though the swimsuit fill is intact (owner 2026-11-05).
+   * Try On completeness only: measure apparel body span, not erased shoe geometry.
+   * Erasing shoes leaves draw strokes + shoe FillOps in the document while capture
+   * alpha is punched out. Foot-band-only fills and strokes below the apparel hem
+   * must not inflate live maxY (owner back croquis 2026-11-05).
    */
   forTryOnCompleteness?: boolean
   designHeight?: number
@@ -488,25 +501,35 @@ export function liveArtworkYSpan(args: {
   const fills = args.fills ?? []
   const designHeight = args.designHeight ?? 1024
   const fillParts = fills.map((f) => fillBounds(f))
-  const fillUnion = unionBounds(fillParts.filter(Boolean) as InkBounds[])
   let strokeParts = args.strokes
     .filter((s) => s.tool === 'draw')
     .map((s) => strokeBounds(s))
-  if (
-    args.forTryOnCompleteness &&
-    fillUnion &&
-    detectHighCutOnePieceHem(fills, designHeight)
-  ) {
-    const footBand = designHeight * 0.78
-    const hemPad = 24
+
+  if (!args.forTryOnCompleteness) {
+    return unionBounds([...strokeParts, ...fillParts])
+  }
+
+  // Apparel body fills only — drop shoe-sized foot-band fills that erase punched out.
+  const apparelFillParts = fillParts.filter((b): b is InkBounds => {
+    if (!b) return false
+    return !isFootwearLikeFillBounds(b, designHeight)
+  })
+  const apparelUnion = unionBounds(apparelFillParts)
+  if (!apparelUnion) {
+    return unionBounds([...strokeParts, ...fillParts])
+  }
+
+  const hemPad = 24
+  const apparelHem = apparelUnion.maxY
+  // When the body hem ends above the feet, ignore anything entirely below it
+  // (full shoe strokes, ankle crumbs, leftover shoe fills already dropped).
+  if (apparelHem < designHeight * 0.78) {
     strokeParts = strokeParts.filter((b) => {
       if (!b) return false
-      // Keep strokes that meet the garment fill (straps, outline near hem).
-      if (b.minY <= fillUnion.maxY + hemPad) return true
-      // Drop foot-only crumbs left after erasing shoes.
-      if (b.minY >= footBand) return false
-      return true
+      return b.minY <= apparelHem + hemPad
     })
+    return unionBounds([...strokeParts, ...apparelFillParts])
   }
-  return unionBounds([...strokeParts, ...fillParts])
+
+  return unionBounds([...strokeParts, ...apparelFillParts])
 }
