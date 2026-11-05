@@ -1,12 +1,32 @@
-import { describe, expect, it, vi } from 'vitest'
-import { PreviewRenderer, previewReferenceUrl } from '@/lib/designPreview'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { PreviewRenderer, previewReferenceUrl, resolvePreviewReferenceUrl } from '@/lib/designPreview'
 import type { SavedDesignSnapshot } from '@/lib/savedDesign'
+
+vi.mock('@/services/personalCroquisApi', () => ({
+  getPersonalCroquisVersion: vi.fn(),
+}))
+
+vi.mock('@/lib/personalCroquisCache', () => ({
+  loadPersonalCroquisObjectUrl: vi.fn(),
+}))
+
+import { getPersonalCroquisVersion } from '@/services/personalCroquisApi'
+import { loadPersonalCroquisObjectUrl } from '@/lib/personalCroquisCache'
 
 const snapshot: SavedDesignSnapshot = {
   strokes: [],
   model: 'female',
   brush: { sizeId: 'thin', opacity: 1, color: '#1C1C1E' },
   dimmed: false,
+}
+
+const personalSnapshot: SavedDesignSnapshot = {
+  strokes: [],
+  model: 'personal',
+  personalCroquisId: 'croquis-1',
+  personalCroquisVersion: 2,
+  brush: { sizeId: 'thin', opacity: 1, color: '#1C1C1E' },
+  dimmed: true,
 }
 
 function deferred() {
@@ -104,10 +124,83 @@ describe('PreviewRenderer', () => {
     expect(renderer.liveUrlCount).toBe(0)
   })
 
-  it('uses the croquis only for built-in models', () => {
+  it('uses the croquis only for built-in models (sync helper)', () => {
     expect(previewReferenceUrl({ model: 'female' })).toMatch(/female/)
     expect(previewReferenceUrl({ model: 'male' })).toMatch(/male/)
     expect(previewReferenceUrl({ model: 'custom' })).toBeNull()
     expect(previewReferenceUrl({ model: 'blank' })).toBeNull()
+    expect(previewReferenceUrl({ model: 'personal' })).toBeNull()
+  })
+
+  it('passes ownerId into render so personal underlays can resolve', async () => {
+    const render = vi.fn(async () => new Blob(['x']))
+    const renderer = new PreviewRenderer({
+      ownerId: 'owner-1',
+      render,
+      createObjectURL: () => 'blob:preview-personal',
+      revokeObjectURL: vi.fn(),
+    })
+    await expect(renderer.request('p1', personalSnapshot)).resolves.toBe('blob:preview-personal')
+    expect(render).toHaveBeenCalledWith(personalSnapshot, { ownerId: 'owner-1' })
   })
 })
+
+describe('resolvePreviewReferenceUrl (My Croquis thumbnails)', () => {
+  beforeEach(() => {
+    vi.mocked(getPersonalCroquisVersion).mockReset()
+    vi.mocked(loadPersonalCroquisObjectUrl).mockReset()
+  })
+
+  it('loads the exact personal croquis asset for model=personal', async () => {
+    vi.mocked(getPersonalCroquisVersion).mockResolvedValue({
+      id: 'ver-row',
+      croquis_id: 'croquis-1',
+      version: 2,
+      status: 'accepted',
+      generated_asset_id: 'asset-9',
+      geometry_profile: null,
+      prompt_version: null,
+      created_at: '2026-11-02T00:00:00Z',
+      accepted_at: '2026-11-02T00:00:00Z',
+    })
+    vi.mocked(loadPersonalCroquisObjectUrl).mockResolvedValue('blob:personal-underlay')
+
+    await expect(
+      resolvePreviewReferenceUrl(personalSnapshot, { ownerId: 'owner-1' }),
+    ).resolves.toBe('blob:personal-underlay')
+
+    expect(getPersonalCroquisVersion).toHaveBeenCalledWith('croquis-1', 2)
+    expect(loadPersonalCroquisObjectUrl).toHaveBeenCalledWith({
+      userId: 'owner-1',
+      croquisId: 'croquis-1',
+      version: 2,
+      assetId: 'asset-9',
+    })
+  })
+
+  it('returns null when personal pins or owner are missing (fail soft)', async () => {
+    await expect(
+      resolvePreviewReferenceUrl(
+        { model: 'personal', personalCroquisId: null, personalCroquisVersion: null },
+        { ownerId: 'owner-1' },
+      ),
+    ).resolves.toBeNull()
+    await expect(
+      resolvePreviewReferenceUrl(personalSnapshot, { ownerId: null }),
+    ).resolves.toBeNull()
+    expect(getPersonalCroquisVersion).not.toHaveBeenCalled()
+  })
+
+  it('returns null on personal asset load failure without throwing', async () => {
+    vi.mocked(getPersonalCroquisVersion).mockRejectedValue(new Error('unavailable'))
+    await expect(
+      resolvePreviewReferenceUrl(personalSnapshot, { ownerId: 'owner-1' }),
+    ).resolves.toBeNull()
+  })
+
+  it('keeps stock model resolution unchanged', async () => {
+    await expect(resolvePreviewReferenceUrl({ model: 'female' })).resolves.toMatch(/female/)
+    expect(getPersonalCroquisVersion).not.toHaveBeenCalled()
+  })
+})
+

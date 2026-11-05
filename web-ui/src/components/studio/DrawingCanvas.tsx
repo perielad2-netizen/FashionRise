@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Stage, Layer, Image as KonvaImage, Path, Rect } from 'react-konva'
+import { Stage, Layer, Image as KonvaImage, Path, Rect, Circle } from 'react-konva'
 import type Konva from 'konva'
 import { appendPoint, strokeToSvgPath } from '@/lib/freehand'
 import { decidePointer, pressureForPointer } from '@/lib/pointerSession'
 import { floodFillRegion } from '@/lib/floodFill'
 import type { FillOp, FillStyle } from '@/lib/fills'
 import { ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
+import { paintFillsWithErasers } from '@/lib/exportCanvas'
 import { paintFillOps } from '@/lib/paintFills'
+import {
+  applyBrushEngineToStroke,
+  compositeLogicalLayers,
+  DEFAULT_BRUSH_ENGINE,
+  erasePunchesFills,
+  paintLogicalArtworkLayers,
+  paintProfessionalDrawStroke,
+  resolveBrushKind,
+  type BrushEngineState,
+} from '@/lib/professionalBrushes'
 import { sampleArtworkPixel } from '@/lib/sampleArtworkPixel'
 import {
   BRUSH_SIZE_STEP_PX,
@@ -18,6 +29,13 @@ import {
   type Stroke,
   type ToolKind,
 } from '@/lib/strokes'
+import {
+  PAPER_HEIGHT,
+  PAPER_ORIGIN_X,
+  PAPER_ORIGIN_Y,
+  PAPER_WIDTH,
+  clampPointToPaper,
+} from '@/lib/paperBounds'
 import {
   clampPan,
   distance,
@@ -40,13 +58,27 @@ type Props = {
   brushSize: number
   /** Opacity for new ink strokes (0–1). Older strokes keep their saved opacity. */
   brushOpacity?: number
+  /** Professional Sketch Engine V1 brush settings for new strokes. */
+  brushEngine?: BrushEngineState
   /** Style applied when the Fill tool succeeds. */
   fillStyle?: FillStyle
   referenceUrl: string | null
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
   onFillComplete?: (fill: FillOp) => void
-  onFillError?: (message: string) => void
+  onFillError?: (
+    message: string,
+    detail?: {
+      reason: string
+      gapHint?: { x: number; y: number }
+      suggestCloseGaps?: boolean
+    },
+  ) => void
+  /** One-shot stronger joint seal for the next fill tap (Close small gaps). */
+  fillCloseSmallGaps?: boolean
+  onFillCloseSmallGapsConsumed?: () => void
+  /** Optional gap marker in design space after an open-outline failure. */
+  fillGapHint?: { x: number; y: number } | null
   onEyedropperSample?: (color: string) => void
   /** Optional: Alt + mouse wheel adjusts brush size without drawing. */
   onBrushSize?: (px: number) => void
@@ -63,14 +95,74 @@ type Props = {
   onViewportChange?: (next: ViewportState) => void
 }
 
-function renderFillsImage(fills: FillOp[]): HTMLImageElement | null {
+/** Rasterize fills with chronological eraser punches (never includes croquis). */
+function renderFillsImage(fills: FillOp[], strokes: Stroke[]): HTMLImageElement | null {
   if (fills.length === 0) return null
   const canvas = document.createElement('canvas')
-  canvas.width = DESIGN_WIDTH
-  canvas.height = DESIGN_HEIGHT
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
+  // Design-space Path2D (incl. negative margin coords) → paper raster.
+  ctx.translate(-PAPER_ORIGIN_X, -PAPER_ORIGIN_Y)
+  paintFillsWithErasers(ctx, fills, strokes)
+  const img = new window.Image()
+  img.src = canvas.toDataURL('image/png')
+  return img
+}
+
+/** Rasterize professional ink stack (shade → ink → highlight) to match Magic export. */
+function renderInkArtworkImage(strokes: Stroke[], fills: FillOp[]): HTMLImageElement | null {
+  if (strokes.length === 0) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  try {
+    const layers = paintLogicalArtworkLayers(PAPER_WIDTH, PAPER_HEIGHT, strokes, {
+      originX: PAPER_ORIGIN_X,
+      originY: PAPER_ORIGIN_Y,
+      fills,
+    })
+    compositeLogicalLayers(ctx, layers, PAPER_WIDTH, PAPER_HEIGHT)
+  } catch {
+    return null
+  }
+  const img = new window.Image()
+  img.src = canvas.toDataURL('image/png')
+  return img
+}
+
+/** Rasterize fill alpha in paper pixel space for soft-brush garment clipping. */
+function buildGarmentAlpha(fills: FillOp[]): HTMLCanvasElement | null {
+  if (fills.length === 0) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.translate(-PAPER_ORIGIN_X, -PAPER_ORIGIN_Y)
   paintFillOps(ctx, fills)
+  return canvas
+}
+
+function renderDraftBrushImage(
+  stroke: Stroke,
+  garmentAlpha: HTMLCanvasElement | null,
+): HTMLImageElement | null {
+  if (stroke.tool !== 'draw') return null
+  const kind = resolveBrushKind(stroke)
+  if (kind === 'tapered') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = PAPER_WIDTH
+  canvas.height = PAPER_HEIGHT
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.translate(-PAPER_ORIGIN_X, -PAPER_ORIGIN_Y)
+  paintProfessionalDrawStroke(ctx, stroke, {
+    garmentAlpha: stroke.garmentMask ? garmentAlpha : null,
+  })
   const img = new window.Image()
   img.src = canvas.toDataURL('image/png')
   return img
@@ -91,12 +183,16 @@ export function DrawingCanvas({
   brushColor,
   brushSize,
   brushOpacity = 1,
+  brushEngine = DEFAULT_BRUSH_ENGINE,
   fillStyle,
   referenceUrl,
   referenceOpacity,
   onStrokeComplete,
   onFillComplete,
   onFillError,
+  fillCloseSmallGaps = false,
+  onFillCloseSmallGapsConsumed,
+  fillGapHint = null,
   onEyedropperSample,
   onBrushSize,
   framed = true,
@@ -111,6 +207,8 @@ export function DrawingCanvas({
   const [draft, setDraft] = useState<Stroke | null>(null)
   const [refImage, setRefImage] = useState<HTMLImageElement | null>(null)
   const [fillsImage, setFillsImage] = useState<HTMLImageElement | null>(null)
+  const [inkArtworkImage, setInkArtworkImage] = useState<HTMLImageElement | null>(null)
+  const [draftBrushImage, setDraftBrushImage] = useState<HTMLImageElement | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const [wheelHint, setWheelHint] = useState(false)
   const drawing = useRef(false)
@@ -241,7 +339,8 @@ export function DrawingCanvas({
     void (async () => {
       await ensureFabricAssetsForFills(fills, { required: false }).catch(() => undefined)
       if (cancelled) return
-      const img = renderFillsImage(fills)
+      // Committed strokes only — live erase draft punches via Konva Path below.
+      const img = renderFillsImage(fills, strokes)
       if (!img) {
         setFillsImage(null)
         return
@@ -253,7 +352,50 @@ export function DrawingCanvas({
     return () => {
       cancelled = true
     }
-  }, [fills])
+  }, [fills, strokes])
+
+  useEffect(() => {
+    let cancelled = false
+    if (strokes.length === 0) {
+      setInkArtworkImage(null)
+      return
+    }
+    const img = renderInkArtworkImage(strokes, fills)
+    if (!img) {
+      setInkArtworkImage(null)
+      return
+    }
+    img.onload = () => {
+      if (!cancelled) setInkArtworkImage(img)
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [strokes, fills])
+
+  const garmentAlphaForDraft = useMemo(() => {
+    if (!draft?.garmentMask) return null
+    return buildGarmentAlpha(fills)
+  }, [draft?.garmentMask, fills])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!draft || draft.tool !== 'draw') {
+      setDraftBrushImage(null)
+      return
+    }
+    const img = renderDraftBrushImage(draft, garmentAlphaForDraft)
+    if (!img) {
+      setDraftBrushImage(null)
+      return
+    }
+    img.onload = () => {
+      if (!cancelled) setDraftBrushImage(img)
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [draft, garmentAlphaForDraft])
 
   const fitScale = size.w / DESIGN_WIDTH
   const contentScale = immersive && viewport ? viewport.scale : fitScale
@@ -365,7 +507,11 @@ export function DrawingCanvas({
   const extendDraft = useCallback((point: { x: number; y: number; pressure: number }) => {
     const prev = draftRef.current
     if (!prev) return
-    const next = { ...prev, points: appendPoint(prev.points, point) }
+    const clamped = clampPointToPaper(point.x, point.y)
+    const next = {
+      ...prev,
+      points: appendPoint(prev.points, { ...point, x: clamped.x, y: clamped.y }),
+    }
     draftRef.current = next
     setDraft(next)
   }, [])
@@ -588,14 +734,28 @@ export function DrawingCanvas({
   const applyFillAt = useCallback(
     (x: number, y: number) => {
       const style = fillStyle ?? { kind: 'solid' as const, color: brushColor }
-      const result = floodFillRegion({ strokes, x, y, style })
+      const closeSmallGaps = fillCloseSmallGaps
+      if (closeSmallGaps) onFillCloseSmallGapsConsumed?.()
+      const result = floodFillRegion({ strokes, x, y, style, closeSmallGaps })
       if (!result.ok) {
-        onFillError?.(result.message)
+        onFillError?.(result.message, {
+          reason: result.reason,
+          gapHint: result.gapHint,
+          suggestCloseGaps: result.suggestCloseGaps,
+        })
         return
       }
       onFillComplete?.(result.fill)
     },
-    [brushColor, fillStyle, onFillComplete, onFillError, strokes],
+    [
+      brushColor,
+      fillCloseSmallGaps,
+      fillStyle,
+      onFillCloseSmallGapsConsumed,
+      onFillComplete,
+      onFillError,
+      strokes,
+    ],
   )
 
   const sampleAt = useCallback(
@@ -698,14 +858,16 @@ export function DrawingCanvas({
       } catch {
         /* capture optional */
       }
-      const stroke: Stroke = {
+      const clamped = clampPointToPaper(point.x, point.y)
+      const base: Stroke = {
         id: createStrokeId(),
         tool: activeTool,
-        points: appendPoint([], point),
+        points: appendPoint([], { ...point, x: clamped.x, y: clamped.y }),
         color: brushColor,
         size: brushSize,
         opacity: activeTool === 'erase' ? 1 : brushOpacity,
       }
+      const stroke = applyBrushEngineToStroke(base, brushEngine)
       draftRef.current = stroke
       setDraft(stroke)
     },
@@ -713,6 +875,7 @@ export function DrawingCanvas({
       activeTool,
       applyFillAt,
       brushColor,
+      brushEngine,
       brushOpacity,
       brushSize,
       cancelDraft,
@@ -895,7 +1058,6 @@ export function DrawingCanvas({
     return () => host.removeEventListener('touchmove', onTouchMove)
   }, [immersive])
 
-  const all = draft ? [...strokes, draft] : strokes
   const inkTool = !panTool && (activeTool === 'draw' || activeTool === 'erase')
   // Space+drag pan uses a ref in handlers; cursor grab reflects the Hand tool only (avoid render-time refs).
   const cursor = panTool
@@ -916,7 +1078,14 @@ export function DrawingCanvas({
   const content = (
     <>
       <Layer listening={false} x={immersive ? panX : 0} y={immersive ? panY : 0} scaleX={immersive ? contentScale : 1} scaleY={immersive ? contentScale : 1}>
-        <Rect x={0} y={0} width={DESIGN_WIDTH} height={DESIGN_HEIGHT} fill="#F8F4F0" />
+        {/* Extended paper — croquis reference stays on the legacy 768×1024 plane. */}
+        <Rect
+          x={PAPER_ORIGIN_X}
+          y={PAPER_ORIGIN_Y}
+          width={PAPER_WIDTH}
+          height={PAPER_HEIGHT}
+          fill="#F8F4F0"
+        />
         {refImage && refFit ? (
           <KonvaImage
             image={refImage}
@@ -928,26 +1097,96 @@ export function DrawingCanvas({
           />
         ) : null}
         {fillsImage ? (
-          <KonvaImage image={fillsImage} x={0} y={0} width={DESIGN_WIDTH} height={DESIGN_HEIGHT} />
+          <KonvaImage
+            image={fillsImage}
+            x={PAPER_ORIGIN_X}
+            y={PAPER_ORIGIN_Y}
+            width={PAPER_WIDTH}
+            height={PAPER_HEIGHT}
+          />
         ) : null}
+        {draft && draft.tool === 'erase' && erasePunchesFills(draft)
+          ? (() => {
+              const data = strokeToSvgPath(draft)
+              if (!data) return null
+              return (
+                <Path
+                  key={`fill-erase-${draft.id}`}
+                  data={data}
+                  fill="#F8F4F0"
+                  opacity={1}
+                  globalCompositeOperation="destination-out"
+                  listening={false}
+                />
+              )
+            })()
+          : null}
       </Layer>
       <Layer x={immersive ? panX : 0} y={immersive ? panY : 0} scaleX={immersive ? contentScale : 1} scaleY={immersive ? contentScale : 1}>
-        {all.map((stroke) => {
-          const data = strokeToSvgPath(stroke)
-          if (!data) return null
-          return (
-            <Path
-              key={stroke.id}
-              data={data}
-              fill={stroke.tool === 'erase' ? '#F8F4F0' : stroke.color}
-              opacity={stroke.tool === 'erase' ? 1 : stroke.opacity}
-              globalCompositeOperation={
-                stroke.tool === 'erase' ? 'destination-out' : 'source-over'
-              }
-              listening={false}
-            />
-          )
-        })}
+        {inkArtworkImage ? (
+          <KonvaImage
+            image={inkArtworkImage}
+            x={PAPER_ORIGIN_X}
+            y={PAPER_ORIGIN_Y}
+            width={PAPER_WIDTH}
+            height={PAPER_HEIGHT}
+            listening={false}
+          />
+        ) : null}
+        {draft && draft.tool === 'erase'
+          ? (() => {
+              const data = strokeToSvgPath(draft)
+              if (!data) return null
+              return (
+                <Path
+                  key={`ink-erase-${draft.id}`}
+                  data={data}
+                  fill="#F8F4F0"
+                  opacity={1}
+                  globalCompositeOperation="destination-out"
+                  listening={false}
+                />
+              )
+            })()
+          : null}
+        {draft && draft.tool === 'draw' && resolveBrushKind(draft) === 'tapered'
+          ? (() => {
+              const data = strokeToSvgPath(draft)
+              if (!data) return null
+              return (
+                <Path
+                  key={draft.id}
+                  data={data}
+                  fill={draft.color}
+                  opacity={draft.opacity}
+                  globalCompositeOperation={draft.blendMode ?? 'source-over'}
+                  listening={false}
+                />
+              )
+            })()
+          : null}
+        {draft && draft.tool === 'draw' && draftBrushImage ? (
+          <KonvaImage
+            image={draftBrushImage}
+            x={PAPER_ORIGIN_X}
+            y={PAPER_ORIGIN_Y}
+            width={PAPER_WIDTH}
+            height={PAPER_HEIGHT}
+            listening={false}
+          />
+        ) : null}
+        {fillGapHint ? (
+          <Circle
+            x={fillGapHint.x}
+            y={fillGapHint.y}
+            radius={10}
+            stroke="#C2410C"
+            strokeWidth={2.5}
+            dash={[4, 3]}
+            listening={false}
+            perfectDrawEnabled={false}
+          />
+        ) : null}
       </Layer>
     </>
   )

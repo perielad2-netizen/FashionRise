@@ -1,15 +1,19 @@
+import type { BrushEngineState, BrushKind } from '@/lib/professionalBrushes'
 import type { ToolKind } from '@/lib/strokes'
-import { BrushSizeControl } from '@/shell/components/BrushSizeControl'
+import { BrushControls } from '@/shell/components/BrushControls'
 import styles from './SettingsInspector.module.css'
 
 type Props = {
   tool: ToolKind
   brushSize: number
   opacity: number
+  brushEngine?: BrushEngineState
   dimmed: boolean
   toolLabel: string
   onBrushSize: (px: number) => void
   onOpacity: (value: number) => void
+  onBrushKind?: (kind: BrushKind) => void
+  onBrushEnginePatch?: (patch: Partial<BrushEngineState>) => void
   onToggleDim: () => void
 }
 
@@ -17,10 +21,13 @@ export function SettingsInspector({
   tool,
   brushSize,
   opacity,
+  brushEngine,
   dimmed,
   toolLabel,
   onBrushSize,
   onOpacity,
+  onBrushKind,
+  onBrushEnginePatch,
   onToggleDim,
 }: Props) {
   return (
@@ -38,7 +45,7 @@ export function SettingsInspector({
         <h3>Canvas</h3>
         <div className={styles.row}>
           <span>Size</span>
-          <strong>768 × 1024</strong>
+          <strong>768 × 1024</strong> croquis · extended paper 1280 × 1536
         </div>
         <div className={styles.row}>
           <span>Background</span>
@@ -62,39 +69,17 @@ export function SettingsInspector({
           <span>Tool</span>
           <strong>{toolLabel}</strong>
         </div>
-        <BrushSizeControl
+        <BrushControls
           tool={tool === 'erase' ? 'erase' : 'draw'}
           brushSize={brushSize}
           opacity={opacity}
+          brushEngine={brushEngine}
+          variant="flat"
           onBrushSize={onBrushSize}
-          tone="dark"
+          onOpacity={onOpacity}
+          onBrushKind={onBrushKind}
+          onBrushEnginePatch={onBrushEnginePatch}
         />
-        <div className={styles.row}>
-          <span>Opacity</span>
-          <strong>{Math.round(opacity * 100)}%</strong>
-        </div>
-        <input
-          className={styles.slider}
-          type="range"
-          min={5}
-          max={100}
-          step={1}
-          value={Math.round(opacity * 100)}
-          aria-label="Brush opacity"
-          disabled={tool === 'erase'}
-          onChange={(e) => onOpacity(Number(e.target.value) / 100)}
-        />
-        <div className={styles.row}>
-          <span>Pressure sensitivity</span>
-          <button
-            type="button"
-            className={styles.toggle}
-            disabled
-            aria-disabled
-            title="Uses device pressure when available; not configurable"
-            aria-label="Pressure sensitivity unavailable"
-          />
-        </div>
       </section>
 
       <section className={styles.section}>

@@ -28,6 +28,41 @@ location = /api/v1/ai/sketch/polish {
     proxy_pass http://127.0.0.1:8010;
 }
 
+location = /api/v1/ai/personal-try-on {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location = /api/v1/ai/personal-try-on/preflight {
+    limit_except GET { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location = /api/v1/ai/personal-try-on/fashn/prepare {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location = /api/v1/ai/personal-try-on/fashn/garment-realism {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location ~ "^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$" {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location = /api/v1/ai/personal-try-on/fashn/garment-realism/accepted {
+    limit_except GET { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
+location ~ "^/api/v1/ai/personal-try-on/[0-9a-fA-F-]{36}/experiment-verdict$" {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
 location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {
     limit_except GET { deny all; }
     proxy_pass http://127.0.0.1:8010;
@@ -40,6 +75,44 @@ location /api/v1/ai/ { return 403; }
 MATRIX = [
     ("POST", "/api/v1/ai/sketch/polish", "allow_exact_polish"),
     ("GET", "/api/v1/ai/sketch/polish", "deny_method_polish"),
+    ("POST", "/api/v1/ai/personal-try-on", "allow_exact_try_on"),
+    ("GET", "/api/v1/ai/personal-try-on", "deny_method_try_on"),
+    ("GET", "/api/v1/ai/personal-try-on/preflight", "allow_exact_try_on_preflight"),
+    ("POST", "/api/v1/ai/personal-try-on/preflight", "deny_method_try_on_preflight"),
+    ("POST", "/api/v1/ai/personal-try-on/fashn/prepare", "allow_exact_fashn_prepare"),
+    ("GET", "/api/v1/ai/personal-try-on/fashn/prepare", "deny_method_fashn_prepare"),
+    ("POST", "/api/v1/ai/personal-try-on/fashn/garment-realism", "allow_exact_fashn_garment_realism"),
+    ("GET", "/api/v1/ai/personal-try-on/fashn/garment-realism", "deny_method_fashn_garment_realism"),
+    (
+        "POST",
+        "/api/v1/ai/personal-try-on/fashn/garment-realism/11111111-1111-1111-1111-111111111111/accept",
+        "allow_regex_fashn_garment_realism_accept",
+    ),
+    (
+        "GET",
+        "/api/v1/ai/personal-try-on/fashn/garment-realism/11111111-1111-1111-1111-111111111111/accept",
+        "deny_method_fashn_garment_realism_accept",
+    ),
+    (
+        "GET",
+        "/api/v1/ai/personal-try-on/fashn/garment-realism/accepted",
+        "allow_exact_fashn_accepted_catalog",
+    ),
+    (
+        "POST",
+        "/api/v1/ai/personal-try-on/fashn/garment-realism/accepted",
+        "deny_method_fashn_accepted_catalog",
+    ),
+    (
+        "POST",
+        "/api/v1/ai/personal-try-on/11111111-1111-1111-1111-111111111111/experiment-verdict",
+        "allow_regex_try_on_experiment_verdict",
+    ),
+    (
+        "GET",
+        "/api/v1/ai/personal-try-on/11111111-1111-1111-1111-111111111111/experiment-verdict",
+        "deny_method_try_on_experiment_verdict",
+    ),
     ("GET", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111", "allow_regex_job"),
     ("GET", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111/image", "allow_regex_image"),
     ("POST", "/api/v1/ai/jobs/11111111-1111-1111-1111-111111111111", "deny_method_job"),
@@ -49,6 +122,12 @@ MATRIX = [
 ]
 
 _JOB_RE = re.compile(r"^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$")
+_ACCEPT_RE = re.compile(
+    r"^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$"
+)
+_VERDICT_RE = re.compile(
+    r"^/api/v1/ai/personal-try-on/[0-9a-fA-F-]{36}/experiment-verdict$"
+)
 
 
 def _assert_snippet_precedence(text: str) -> None:
@@ -63,11 +142,41 @@ def _assert_snippet_precedence(text: str) -> None:
         raise SystemExit("FAIL: missing regex jobs allowlist")
     if "location = /api/v1/ai/sketch/polish" not in text:
         raise SystemExit("FAIL: missing exact polish allowlist")
-    regex_at = text.find("location ~ ^/api/v1/ai/jobs/")
+    if "location = /api/v1/ai/personal-try-on" not in text:
+        raise SystemExit("FAIL: missing exact personal-try-on allowlist")
+    if "location = /api/v1/ai/personal-try-on/preflight" not in text:
+        raise SystemExit("FAIL: missing exact personal-try-on preflight allowlist")
+    if "location = /api/v1/ai/personal-try-on/fashn/prepare" not in text:
+        raise SystemExit("FAIL: missing exact personal-try-on fashn prepare allowlist")
+    if "location = /api/v1/ai/personal-try-on/fashn/garment-realism" not in text:
+        raise SystemExit("FAIL: missing exact personal-try-on fashn garment-realism allowlist")
+    if not re.search(
+        r'location\s+~\s+"?\^/api/v1/ai/personal-try-on/fashn/garment-realism/'
+        r'\[0-9a-fA-F-\]\{36\}/accept\$"?',
+        text,
+    ):
+        raise SystemExit("FAIL: missing regex garment-realism accept allowlist (#170)")
+    if "location = /api/v1/ai/personal-try-on/fashn/garment-realism/accepted" not in text:
+        raise SystemExit("FAIL: missing exact accepted-garment catalog allowlist (#176)")
+    if not re.search(
+        r'location\s+~\s+"?\^/api/v1/ai/personal-try-on/'
+        r'\[0-9a-fA-F-\]\{36\}/experiment-verdict\$"?',
+        text,
+    ):
+        raise SystemExit("FAIL: missing regex experiment-verdict allowlist (#176)")
+    accept_at = text.find("/api/v1/ai/personal-try-on/fashn/garment-realism/")
+    # Prefer the accept location line (quoted or bare).
+    accept_line = text.find("garment-realism/[0-9a-fA-F-]{36}/accept")
+    verdict_line = text.find("experiment-verdict")
+    regex_at = text.find("/api/v1/ai/jobs/[0-9a-fA-F-]{36}")
     prefix_at = text.find("location /api/v1/ai/ {")
+    if accept_line < 0 or prefix_at < 0 or accept_line > prefix_at:
+        raise SystemExit("FAIL: regex accept rule must be declared before plain prefix deny")
+    if verdict_line < 0 or prefix_at < 0 or verdict_line > prefix_at:
+        raise SystemExit("FAIL: experiment-verdict rule must be declared before plain prefix deny")
     if regex_at < 0 or prefix_at < 0 or regex_at > prefix_at:
         raise SystemExit("FAIL: regex jobs rule must be declared before plain prefix deny")
-
+    _ = accept_at  # kept for readability in diffs
 
 def _classify(method: str, path: str) -> str:
     """Model intended allowlist outcome for the candidate snippet."""
@@ -75,6 +184,44 @@ def _classify(method: str, path: str) -> str:
         return "deny_static_uploads"
     if path == "/api/v1/ai/sketch/polish":
         return "allow_exact_polish" if method == "POST" else "deny_method_polish"
+    if path == "/api/v1/ai/personal-try-on":
+        return "allow_exact_try_on" if method == "POST" else "deny_method_try_on"
+    if path == "/api/v1/ai/personal-try-on/preflight":
+        return (
+            "allow_exact_try_on_preflight"
+            if method == "GET"
+            else "deny_method_try_on_preflight"
+        )
+    if path == "/api/v1/ai/personal-try-on/fashn/prepare":
+        return (
+            "allow_exact_fashn_prepare"
+            if method == "POST"
+            else "deny_method_fashn_prepare"
+        )
+    if path == "/api/v1/ai/personal-try-on/fashn/garment-realism/accepted":
+        return (
+            "allow_exact_fashn_accepted_catalog"
+            if method == "GET"
+            else "deny_method_fashn_accepted_catalog"
+        )
+    if path == "/api/v1/ai/personal-try-on/fashn/garment-realism":
+        return (
+            "allow_exact_fashn_garment_realism"
+            if method == "POST"
+            else "deny_method_fashn_garment_realism"
+        )
+    if _ACCEPT_RE.fullmatch(path):
+        return (
+            "allow_regex_fashn_garment_realism_accept"
+            if method == "POST"
+            else "deny_method_fashn_garment_realism_accept"
+        )
+    if _VERDICT_RE.fullmatch(path):
+        return (
+            "allow_regex_try_on_experiment_verdict"
+            if method == "POST"
+            else "deny_method_try_on_experiment_verdict"
+        )
     job = _JOB_RE.fullmatch(path)
     if job:
         if method != "GET":
@@ -85,7 +232,6 @@ def _classify(method: str, path: str) -> str:
     if path.startswith("/api/v1/ai/"):
         return "deny_prefix_sibling"
     raise SystemExit(f"FAIL: unmapped matrix path {method} {path}")
-
 
 def main() -> int:
     _assert_snippet_precedence(SNIPPET)

@@ -20,8 +20,6 @@ type Props = {
   saveError: string | null
   onRetrySave?: () => void
   onSaveDesign?: () => void
-  onExportPng?: () => void
-  exporting?: boolean
   onOpenLibrary?: () => void
 }
 
@@ -42,8 +40,6 @@ export function WorkspaceHeader({
   saveError,
   onRetrySave,
   onSaveDesign,
-  onExportPng,
-  exporting = false,
   onOpenLibrary,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -166,20 +162,6 @@ export function WorkspaceHeader({
                   }}
                 >
                   Save as design…
-                </button>
-              ) : null}
-              {onExportPng ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={styles.moreItem}
-                  disabled={exporting}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onExportPng()
-                  }}
-                >
-                  {exporting ? 'Exporting PNG…' : 'Export PNG'}
                 </button>
               ) : null}
               {onOpenLibrary ? (

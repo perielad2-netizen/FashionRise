@@ -12,8 +12,13 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
+import type { BrushKind } from '@/lib/professionalBrushes'
 import type { ToolKind } from '@/lib/strokes'
 import { formatBrushSizePx } from '@/lib/strokes'
+import {
+  BrushKindStrip,
+  brushKindShortLabel,
+} from '@/shell/components/BrushKindStrip'
 import styles from './ImmersiveToolbar.module.css'
 
 export type ImmersiveTool = ToolKind | 'pan'
@@ -23,6 +28,7 @@ type Props = {
   canUndo: boolean
   canRedo: boolean
   brushSize: number
+  brushKind?: BrushKind
   zoomPercent: number
   nativeFullscreen: boolean
   onTool: (tool: ImmersiveTool) => void
@@ -37,8 +43,8 @@ type Props = {
   onOpenMaterials: () => void
   onOpenBrush: () => void
   onOpenModels: () => void
+  onBrushKind?: (kind: BrushKind) => void
   onSave: () => void
-  onExport: () => void
   onExit: () => void
   saveLabel?: string
 }
@@ -48,6 +54,7 @@ export function ImmersiveToolbar({
   canUndo,
   canRedo,
   brushSize,
+  brushKind = 'tapered',
   zoomPercent,
   nativeFullscreen,
   onTool,
@@ -62,13 +69,23 @@ export function ImmersiveToolbar({
   onOpenMaterials,
   onOpenBrush,
   onOpenModels,
+  onBrushKind,
   onSave,
-  onExport,
   onExit,
   saveLabel = 'Save',
 }: Props) {
+  const brushLabel = `${brushKindShortLabel(brushKind)} · ${formatBrushSizePx(brushSize)} px`
   return (
     <div className={styles.bar} role="toolbar" aria-label="Immersive drawing toolbar" data-testid="immersive-toolbar">
+      {onBrushKind && tool === 'draw' ? (
+        <div className={`${styles.row} ${styles.rowKinds}`}>
+          <BrushKindStrip
+            compact
+            brushKind={brushKind}
+            onBrushKind={onBrushKind}
+          />
+        </div>
+      ) : null}
       <div className={`${styles.row} ${styles.rowPrimary}`}>
         <div className={styles.cluster} role="group" aria-label="Drawing tools">
           <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
@@ -135,7 +152,7 @@ export function ImmersiveToolbar({
 
         <div className={styles.cluster} role="group" aria-label="Studio actions">
           <button type="button" className={styles.textBtn} onClick={onOpenBrush} aria-label="Brush settings">
-            {formatBrushSizePx(brushSize)} px
+            {brushLabel}
           </button>
           <button type="button" className={styles.textBtn} onClick={onOpenMaterials}>
             Materials
@@ -145,9 +162,6 @@ export function ImmersiveToolbar({
           </button>
           <button type="button" className={styles.textBtn} onClick={onSave}>
             {saveLabel}
-          </button>
-          <button type="button" className={styles.textBtn} onClick={onExport}>
-            Export PNG
           </button>
         </div>
       </div>

@@ -37,6 +37,11 @@
   justify-content: flex-start;
 }
 
+.rowKinds {
+  justify-content: flex-start;
+  padding: 2px 4px 0;
+}
+
 .cluster {
   display: inline-flex;
   flex-wrap: wrap;

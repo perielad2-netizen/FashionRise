@@ -9,6 +9,7 @@ import {
   defaultModelForGender,
   isLegacyModelId,
   isModelChoice,
+  modelHasRearAsset,
   modelLabel,
   normalizeModelChoice,
 } from '@/assets/modelLibrary'
@@ -48,6 +49,21 @@ describe('modelLibrary', () => {
     expect(canvasSrcForModel('female-hand-hip')).toContain('female-hand-hip')
     expect(canvasSrcForModel('blank')).toBeNull()
     expect(canvasSrcForModel('custom')).toBeNull()
+  })
+
+  it('resolves rear library paths for selectables but not legacy/custom', () => {
+    expect(canvasSrcForModel('female-straight', 'back')).toBe('/models/library/female-straight-back.png')
+    expect(canvasSrcForModel('female', 'back')).toBeNull()
+    expect(canvasSrcForModel('custom', 'back')).toBeNull()
+    expect(canvasSrcForModel('blank', 'back')).toBeNull()
+  })
+
+  it('gates rear availability through the publish manifest (atelier unpublished)', () => {
+    expect(modelHasRearAsset('female-straight')).toBe(true)
+    expect(modelHasRearAsset('male-walk')).toBe(true)
+    expect(modelHasRearAsset('female-atelier')).toBe(false)
+    expect(modelHasRearAsset('female')).toBe(false)
+    expect(modelHasRearAsset('custom')).toBe(false)
   })
 
   it('preserves stored model ids without remapping legacy to new defaults', () => {

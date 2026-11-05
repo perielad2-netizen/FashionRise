@@ -788,3 +788,96 @@ def test_create_reconcile_detects_fill_only_difference(client, db_session):
     got = client.get(f"/api/v1/designs/{design_id}", headers=headers)
     assert got.json()["design_data"].get("fills") in ([], None)
     assert got.json()["design_data"]["clientRevision"] == 1
+
+
+def _personal_studio_payload(
+    client_revision: int,
+    *,
+    croquis_id: str,
+    version: int,
+    stroke_id: str | None = "s1",
+) -> dict:
+    payload = _studio_payload(client_revision, model="personal", stroke_id=stroke_id)
+    payload["design_data"]["personalCroquisId"] = croquis_id
+    payload["design_data"]["personalCroquisVersion"] = version
+    payload["metadata"]["personalCroquisId"] = croquis_id
+    payload["metadata"]["personalCroquisVersion"] = version
+    return payload
+
+
+def test_personal_croquis_pin_switch_persists_new_pins(client, db_session):
+    """Personal A→B must rewrite design_data pins (not idempotent same_content).
+
+    Regression for #148 reopen: BE fingerprint omitted personalCroquisId/Version so a
+    pin-only switch returned HTTP 200 with the prior pin, and FE opened a false conflict.
+    """
+    from app.services.design_service import _studio_content_fingerprint
+
+    tokens = _register(client, db_session, "pin_switch@example.com", "pin_switch")
+    headers = _auth(tokens["access_token"])
+    croquis_a = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    croquis_b = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+
+    pin_a = {
+        "schema": "fashionrise.studio.draft.v1",
+        "strokes": [],
+        "fills": [],
+        "model": "personal",
+        "personalCroquisId": croquis_a,
+        "personalCroquisVersion": 1,
+        "brush": {"sizeId": "thin"},
+        "dimmed": False,
+    }
+    pin_b = {**pin_a, "personalCroquisId": croquis_b, "personalCroquisVersion": 2}
+    assert _studio_content_fingerprint(pin_a) != _studio_content_fingerprint(pin_b)
+
+    created = client.post(
+        "/api/v1/designs",
+        headers=headers,
+        json=_personal_studio_payload(1, croquis_id=croquis_a, version=1),
+    )
+    assert created.status_code == 201, created.text
+    design_id = created.json()["id"]
+    assert created.json()["design_data"]["personalCroquisId"] == croquis_a
+    assert created.json()["design_data"]["personalCroquisVersion"] == 1
+
+    switched = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={
+            **_personal_studio_payload(2, croquis_id=croquis_b, version=2, stroke_id="s1"),
+            "expected_revision": 1,
+        },
+    )
+    assert switched.status_code == 200, switched.text
+    body = switched.json()["design_data"]
+    assert body["personalCroquisId"] == croquis_b
+    assert body["personalCroquisVersion"] == 2
+    assert body["clientRevision"] == 2
+    assert body["strokes"][0]["id"] == "s1"
+
+    # Idempotent retry of the same pin+content must not 409 or rewrite.
+    retry = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={
+            **_personal_studio_payload(2, croquis_id=croquis_b, version=2, stroke_id="s1"),
+            "expected_revision": 2,
+        },
+    )
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["design_data"]["personalCroquisId"] == croquis_b
+
+    # Switch back B→A preserves strokes and stores A again.
+    back = client.put(
+        f"/api/v1/designs/{design_id}",
+        headers=headers,
+        json={
+            **_personal_studio_payload(3, croquis_id=croquis_a, version=1, stroke_id="s1"),
+            "expected_revision": 2,
+        },
+    )
+    assert back.status_code == 200, back.text
+    assert back.json()["design_data"]["personalCroquisId"] == croquis_a
+    assert back.json()["design_data"]["personalCroquisVersion"] == 1
+    assert back.json()["design_data"]["strokes"][0]["id"] == "s1"

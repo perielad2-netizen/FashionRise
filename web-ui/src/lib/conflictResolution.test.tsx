@@ -76,6 +76,8 @@ const api = vi.hoisted(() => ({
   designs: new Map<string, { id: string; design_data: StudioDraftDocument; metadata: Record<string, unknown>; visibility: string; updated_at: string }>(),
   updateCalls: 0,
   raceOnExpected: null as number | null,
+  /** When true, every Keep/PUT loses OCC so the bounded retry still renews conflict. */
+  alwaysRace: false,
   createReturnsDifferent: false,
 }))
 
@@ -129,16 +131,19 @@ vi.mock('@/services/designsApi', async (importOriginal) => {
       api.updateCalls += 1
       const existing = api.designs.get(designId)
       if (!existing) throw new ApiError('missing', 404, null)
-      if (api.raceOnExpected != null && options?.expectedRevision === api.raceOnExpected) {
+      if (
+        api.alwaysRace ||
+        (api.raceOnExpected != null && options?.expectedRevision === api.raceOnExpected)
+      ) {
         const raced = bumpDraftDocument(existing.design_data, { model: 'male' })
-        raced.clientRevision = api.raceOnExpected + 2
+        raced.clientRevision = (options?.expectedRevision ?? existing.design_data.clientRevision) + 2
         existing.design_data = raced
         throw new ApiError('conflict', 409, {
           detail: {
             code: 'conflict',
             message: 'Draft was updated elsewhere.',
             payload: {
-              expected_revision: options.expectedRevision,
+              expected_revision: options?.expectedRevision,
               current_revision: raced.clientRevision,
               design: designRow(designId, raced),
             },
@@ -228,6 +233,7 @@ describe('WEB-V2.1C conflict resolution', () => {
     api.designs.clear()
     api.updateCalls = 0
     api.raceOnExpected = null
+    api.alwaysRace = false
     api.createReturnsDifferent = false
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -294,7 +300,7 @@ describe('WEB-V2.1C conflict resolution', () => {
     expect(api.designs.get('d1')!.design_data.model).toBe('male')
   })
 
-  it('renews the conflict when the server advances during Keep this device', async () => {
+  it('rebases once when the server advances during Keep this device, then saves local', async () => {
     seedConflict(strokeDoc('female', 2), strokeDoc('blank', 4))
     api.raceOnExpected = 4
     const user = userEvent.setup()
@@ -304,8 +310,27 @@ describe('WEB-V2.1C conflict resolution', () => {
       </MemoryRouter>,
     )
     await user.click(await screen.findByRole('button', { name: 'Keep this device' }))
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /draft recovery conflict/i })).not.toBeInTheDocument()
+    // Operator chose this device — female strokes win after a single OCC rebase retry.
+    expect(api.designs.get('d1')!.design_data.model).toBe('female')
+    expect(api.designs.get('d1')!.design_data.strokes[0]?.id).toBe('stroke-female')
+  })
+
+  it('renews the conflict when Keep this device loses two consecutive OCC races', async () => {
+    seedConflict(strokeDoc('female', 2), strokeDoc('blank', 4))
+    api.alwaysRace = true
+    api.updateCalls = 0
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <StudioPage />
+      </MemoryRouter>,
+    )
+    await user.click(await screen.findByRole('button', { name: 'Keep this device' }))
     expect(await screen.findByRole('dialog', { name: /draft recovery conflict/i })).toBeInTheDocument()
     expect(screen.queryByText(/^Saved$/)).not.toBeInTheDocument()
+    expect(api.updateCalls).toBeGreaterThanOrEqual(2)
     expect(api.designs.get('d1')!.design_data.model).toBe('male')
   })
 

@@ -17,6 +17,10 @@ type Props = {
   onUndo: () => void
   onRedo: () => void
   orientation?: 'vertical' | 'horizontal'
+  /** Highlight when the next Fill will use a bounded Close-small-gaps seal. */
+  closeSmallGapsArmed?: boolean
+  onCloseSmallGaps?: () => void
+  showCloseSmallGaps?: boolean
 }
 
 export function FloatingToolRail({
@@ -27,6 +31,9 @@ export function FloatingToolRail({
   onUndo,
   onRedo,
   orientation = 'vertical',
+  closeSmallGapsArmed = false,
+  onCloseSmallGaps,
+  showCloseSmallGaps = false,
 }: Props) {
   return (
     <div
@@ -59,11 +66,24 @@ export function FloatingToolRail({
         className={tool === 'fill' ? styles.btnActive : styles.btn}
         aria-label="Fill"
         aria-pressed={tool === 'fill'}
-        title="Fill a closed dress region"
+        title="Fill a closed outline"
         onClick={() => onTool('fill')}
       >
         <PaintBucket size={18} strokeWidth={1.75} />
       </button>
+      {showCloseSmallGaps && onCloseSmallGaps ? (
+        <button
+          type="button"
+          className={closeSmallGapsArmed ? styles.btnActive : styles.btn}
+          aria-label="Close small gaps"
+          aria-pressed={closeSmallGapsArmed}
+          title="Close small gaps — seals nearby stroke joins for the next Fill only"
+          data-testid="close-small-gaps"
+          onClick={() => onCloseSmallGaps()}
+        >
+          <span className={styles.gapCloseLabel}>Gaps</span>
+        </button>
+      ) : null}
       <button
         type="button"
         className={tool === 'eyedropper' ? styles.btnActive : styles.btn}

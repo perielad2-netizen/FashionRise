@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Expand } from 'lucide-react'
 import { modelLabel } from '@/assets/modelLibrary'
 import { matchStudioShortcut } from '@/lib/studioShortcuts'
+import { rearUnavailableReasonForModel } from '@/shell/rearUnavailableReason'
 import {
   centerPan,
   fitPage,
@@ -12,14 +12,18 @@ import {
   zoomPercent,
 } from '@/lib/viewportTransform'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
+import { FashnGarmentReview } from '@/components/studio/FashnGarmentReview'
 import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { BrushControls } from '@/shell/components/BrushControls'
+import { BrushKindStrip } from '@/shell/components/BrushKindStrip'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
 import { ImmersiveToolbar, type ImmersiveTool } from '@/shell/components/ImmersiveToolbar'
 import { ModelLibraryPanel } from '@/shell/components/ModelLibraryPanel'
+import { CreateMyCroquisWizard } from '@/shell/components/CreateMyCroquisWizard'
 import { BetaNotice } from '@/shell/components/BetaNotice'
+import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import { MagicLookPanel } from '@/shell/components/MagicLookPanel'
 import { SettingsInspector } from '@/shell/components/SettingsInspector'
 import { WorkspaceHeader } from '@/shell/components/WorkspaceHeader'
@@ -31,6 +35,7 @@ type Dock = 'models' | 'materials' | 'settings' | 'brush' | null
 type Props = {
   editor: StudioEditor
   onOpenLibrary?: () => void
+  onOpenLooks?: (lookId?: string) => void
 }
 
 const FOCUSABLE =
@@ -56,7 +61,7 @@ function fullscreenElement(): Element | null {
   return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null
 }
 
-export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
+export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) {
   const [dock, setDock] = useState<Dock>(null)
   const [immersive, setImmersive] = useState(false)
   const [nativeFullscreen, setNativeFullscreen] = useState(false)
@@ -269,7 +274,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         : editor.tool === 'eyedropper'
           ? 'Eyedropper'
           : 'Pencil'
-  const brushOverlay = dock === 'brush' && (tablet || immersive)
+  // Phone + tablet + immersive all use the brush sheet (not desktop settings column).
+  const brushOverlay = dock === 'brush' && overlayPanels
   const panelScrim =
     (dock === 'materials' || dock === 'settings' || dock === 'models') && overlayPanels
   const betaNotice = editor.magicNotice
@@ -308,6 +314,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
       customPreviewUrl={editor.customUrl}
       onSelect={editor.setModel}
       onCustomFile={editor.onCustomFile}
+      onCreateMyCroquis={editor.openCroquisWizard}
       variant={overlayPanels ? 'gallery' : 'sidebar'}
     />
   )
@@ -338,8 +345,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           saveError={editor.saveError}
           onRetrySave={editor.retrySave}
           onSaveDesign={editor.beginSaveDesign}
-          onExportPng={() => void editor.exportPng()}
-          exporting={editor.exporting}
           onOpenLibrary={onOpenLibrary}
         />
       ) : null}
@@ -348,19 +353,234 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         <BetaNotice message={betaNotice.message} onDismiss={betaNotice.dismiss} />
       ) : null}
 
+      {editor.magicDestinationOpen ? (
+        <ConfirmDialog
+          title="Magic"
+          busy={editor.magicDestinationBusy}
+          scrollable
+          onEscape={editor.cancelMagicDestination}
+          actions={[
+            {
+              label: 'Cancel',
+              onClick: editor.cancelMagicDestination,
+              variant: 'ghost',
+            },
+            {
+              label: 'Fashion Magic',
+              onClick: editor.chooseFashionMagic,
+              variant: 'ghost',
+            },
+            {
+              label: 'Try On Person',
+              onClick: editor.chooseTryOnPerson,
+              variant: 'primary',
+            },
+            ...(editor.magicOwnerExperimentAvailable
+              ? [
+                  {
+                    label: 'Owner FASHN experiment',
+                    onClick: editor.chooseFashnTryOn,
+                    variant: 'ghost' as const,
+                  },
+                ]
+              : []),
+          ]}
+        >
+          <p>
+            Fashion Magic polishes this sketch into an illustration. Try On Person shows your design
+            on the original Create My Croquis photo — concept preview only, not a fit guarantee.
+          </p>
+          {editor.magicTryOnNotice ? <p>{editor.magicTryOnNotice}</p> : null}
+          {editor.magicOwnerExperimentAvailable ? (
+            <p>
+              Owner FASHN experiment keeps the manual v1.6 / Max comparison tools for internal
+              testing. Ordinary Try On Person stays one button with no review dialog.
+            </p>
+          ) : null}
+        </ConfirmDialog>
+      ) : null}
+
+      {editor.fashnPrepOpen && editor.fashnPrep ? (
+        <ConfirmDialog
+          title={
+            editor.fashnRealisticPieces?.length
+              ? 'Accept realistic garment'
+              : 'Review garment for FASHN'
+          }
+          busy={editor.fashnPrepBusy || editor.fashnRealismBusy}
+          scrollable
+          onEscape={editor.cancelFashnPrep}
+          actions={[
+            {
+              label: 'Cancel',
+              onClick: editor.cancelFashnPrep,
+              variant: 'ghost',
+            },
+            ...(editor.fashnRealisticPieces?.length
+              ? [
+                  {
+                    label: 'Regenerate Garment',
+                    onClick: () => {
+                      void editor.generateFashnRealisticGarment()
+                    },
+                    variant: 'ghost' as const,
+                    disabled:
+                      editor.fashnPrep.quality_ok === false ||
+                      editor.fashnPrep.openai_live_http === false,
+                  },
+                  {
+                    label:
+                      editor.fashnOwnerExperimentAllowed &&
+                      editor.fashnMaxOwnerAllowed &&
+                      editor.fashnExperimentProvider === 'fashn_max'
+                        ? `Accept & Try On Max (${editor.fashnMaxMode})`
+                        : 'Accept & Try On',
+                    onClick: () => {
+                      void editor.confirmFashnTryOn()
+                    },
+                    variant: 'primary' as const,
+                    disabled:
+                      !editor.fashnPrep.configured ||
+                      !editor.fashnPrep.live_http ||
+                      Boolean(
+                        editor.fashnRealisticPieces?.some(
+                          (p) => p.fidelity && p.fidelity.ok === false,
+                        ),
+                      ),
+                  },
+                ]
+              : [
+                  {
+                    label: 'Generate realistic garment',
+                    onClick: () => {
+                      void editor.generateFashnRealisticGarment()
+                    },
+                    variant: 'primary' as const,
+                    disabled:
+                      editor.fashnPrep.quality_ok === false ||
+                      editor.fashnPrep.openai_live_http === false ||
+                      !editor.fashnPrep.configured,
+                  },
+                ]),
+          ]}
+        >
+          <FashnGarmentReview
+            prep={editor.fashnPrep}
+            realisticPieces={editor.fashnRealisticPieces}
+            realismBusy={editor.fashnRealismBusy}
+            realismError={editor.fashnRealismError}
+            detailsOpen={editor.fashnDetailsOpen}
+            onToggleDetails={editor.toggleFashnDetails}
+            experiment={
+              editor.fashnOwnerExperimentAllowed
+                ? {
+                    ownerAllowed: true,
+                    maxSelectable: Boolean(editor.fashnMaxOwnerAllowed),
+                    maxUnavailableReason: editor.fashnMaxUnavailableReason,
+                    provider: editor.fashnExperimentProvider,
+                    onProviderChange: editor.setFashnExperimentProvider,
+                    mode: editor.fashnMaxMode,
+                    onModeChange: editor.setFashnMaxMode,
+                    resolution: editor.fashnMaxResolution,
+                    onResolutionChange: editor.setFashnMaxResolution,
+                    prompt: editor.fashnMaxPrompt,
+                    onPromptChange: editor.setFashnMaxPrompt,
+                    promptOpen: editor.fashnMaxPromptOpen,
+                    onTogglePrompt: () =>
+                      editor.setFashnMaxPromptOpen(!editor.fashnMaxPromptOpen),
+                    softBudgetCredits: editor.fashnMaxSoftBudgetCredits,
+                    creditsBalanced: editor.fashnMaxCreditsBalanced,
+                    creditsQuality: editor.fashnMaxCreditsQuality,
+                    estimateBalancedCents: editor.fashnMaxEstimateBalancedCents,
+                    estimateQualityCents: editor.fashnMaxEstimateQualityCents,
+                    v16Category: editor.fashnV16Category,
+                    onV16CategoryChange: editor.setFashnV16Category,
+                    v16SegmentationFree: editor.fashnV16SegmentationFree,
+                    onV16SegmentationFreeChange: editor.setFashnV16SegmentationFree,
+                    v16Mode: editor.fashnV16Mode,
+                    onV16ModeChange: editor.setFashnV16Mode,
+                    v16Seed: editor.fashnV16Seed,
+                    onV16SeedChange: editor.setFashnV16Seed,
+                    acceptedOptions: editor.fashnAcceptedOptions.map((row) => ({
+                      jobId: row.job_id,
+                      label: `${(row.accepted_at || 'accepted').slice(0, 19)} · ${
+                        row.piece_categories.join('+') || `${row.piece_count} pcs`
+                      } · ${(row.piece_shas[0] || '').slice(0, 8) || 'sha?'}`,
+                      pieceCount: row.piece_count,
+                      categories: row.piece_categories,
+                    })),
+                    selectedAcceptedJobId: editor.fashnSelectedAcceptedJobId,
+                    onSelectAcceptedJobId: editor.setFashnSelectedAcceptedJobId,
+                    onLoadAcceptedJob: (jobId) => {
+                      void editor.loadAcceptedFashnGarment(jobId)
+                    },
+                    acceptedLoadBusy: editor.fashnAcceptedLoadBusy,
+                  }
+                : null
+            }
+          />
+        </ConfirmDialog>
+      ) : null}
+
       <MagicLookPanel
         open={editor.magicOpen}
         phase={editor.magicPhase}
         result={editor.magicResult}
         lookObjectUrl={editor.magicLookUrl}
         sketchObjectUrl={editor.magicSketchUrl}
+        originalPhotoUrl={editor.magicOriginalPhotoUrl}
         error={editor.magicError}
+        statusHint={editor.magicStatusHint}
         canRecover={editor.magicCanRecover}
+        resultMode={editor.magicResultMode}
+        experimentVerdictBusy={editor.experimentVerdictBusy}
+        onExperimentVerdict={
+          editor.magicResult?.experimentMeta?.experiment
+            ? (verdict) => {
+                void editor.setExperimentVerdict(verdict)
+              }
+            : undefined
+        }
+        dual={
+          editor.magicDualActive && editor.magicOperationId
+            ? {
+                operationId: editor.magicOperationId,
+                viewSide: editor.magicDualViewSide,
+                onViewSide: editor.setMagicDualViewSide,
+                front: editor.magicFront,
+                back: editor.magicBack,
+                onRetrySide: editor.retryMagicSide,
+                onDownloadSide: editor.downloadMagicSide,
+              }
+            : null
+        }
         onClose={editor.closeMagicPanel}
         onCancel={editor.cancelMagicWait}
         onDownload={editor.downloadMagicLook}
         onRecover={editor.recoverLastMagic}
         onBackToSketch={editor.backToSketchFromMagic}
+        onViewInMyLooks={
+          onOpenLooks
+            ? () => {
+                void (async () => {
+                  // #179 — confirm My Looks eligibility before navigating (no fake save).
+                  if (editor.magicResultMode === 'try_on') {
+                    const savedId = await editor.saveTryOnInMyLooks()
+                    if (!savedId) return
+                    editor.closeMagicPanel()
+                    onOpenLooks(savedId)
+                    return
+                  }
+                  const lookId =
+                    editor.magicDualActive && editor.magicOperationId
+                      ? editor.magicOperationId
+                      : editor.magicResult?.jobId
+                  editor.closeMagicPanel()
+                  onOpenLooks(lookId)
+                })()
+              }
+            : undefined
+        }
       />
 
       <div
@@ -445,15 +665,29 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
 
         <div className={styles.center}>
           {!immersive ? (
-            <FloatingToolRail
-              tool={editor.tool}
-              canUndo={editor.canUndo}
-              canRedo={editor.canRedo}
-              onTool={editor.setTool}
-              onUndo={editor.undo}
-              onRedo={editor.redo}
-              orientation={narrow ? 'horizontal' : 'vertical'}
-            />
+            <div className={styles.toolColumn}>
+              <FloatingToolRail
+                tool={editor.tool}
+                canUndo={editor.canUndo}
+                canRedo={editor.canRedo}
+                onTool={editor.setTool}
+                onUndo={editor.undo}
+                onRedo={editor.redo}
+                orientation={narrow ? 'horizontal' : 'vertical'}
+                showCloseSmallGaps={editor.showCloseSmallGaps}
+                closeSmallGapsArmed={editor.fillCloseSmallGaps}
+                onCloseSmallGaps={editor.armCloseSmallGaps}
+              />
+              {editor.tool === 'draw' && editor.setBrushKind ? (
+                <div className={styles.kindStripWrap}>
+                  <BrushKindStrip
+                    compact={narrow}
+                    brushKind={editor.brushEngine?.brushKind ?? 'tapered'}
+                    onBrushKind={editor.setBrushKind}
+                  />
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <div className={styles.canvasStage}>
             <DrawingWorkspace
@@ -463,42 +697,41 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               brushColor={editor.color}
               brushSize={editor.brushSize}
               brushOpacity={editor.opacity}
+              brushEngine={editor.brushEngine}
               fillStyle={editor.fillStyle}
               referenceUrl={editor.referenceUrl}
               referenceOpacity={editor.referenceOpacity}
               onStrokeComplete={editor.onStrokeComplete}
               onFillComplete={editor.onFillComplete}
               onFillError={editor.onFillError}
+              fillCloseSmallGaps={editor.fillCloseSmallGaps}
+              onFillCloseSmallGapsConsumed={editor.onFillCloseSmallGapsConsumed}
+              fillGapHint={editor.fillGapHint}
               onEyedropperSample={editor.onEyedropperSample}
               onBrushSize={editor.setBrushSizePx}
               immersive={immersive}
               panTool={panTool}
               viewport={immersive ? viewport : undefined}
               onViewportChange={immersive ? setViewport : undefined}
+              frontBackEnabled={editor.frontBackEnabled}
+              activeSide={editor.activeSide}
+              rearAvailable={editor.rearAvailable}
+              rearUnavailableReason={rearUnavailableReasonForModel(editor.model)}
+              onSideChange={editor.changeActiveSide}
+              onUnavailableFlip={(reason) => editor.publishStudioNotice(reason)}
+              onEnterFullscreen={immersive ? undefined : () => void enterImmersive()}
             />
-            {!immersive ? (
-              <div className={styles.canvasActions}>
-                <button
-                  type="button"
-                  className={styles.immersiveToggle}
-                  aria-label="Enter full screen drawing"
-                  title="Full screen drawing — nearly the whole device, with zoom and pan"
-                  onClick={() => void enterImmersive()}
-                >
-                  <Expand size={16} />
-                  <span>Full screen</span>
-                </button>
-              </div>
-            ) : null}
             {immersive ? (
               <ImmersiveToolbar
                 tool={immersiveTool}
                 canUndo={editor.canUndo}
                 canRedo={editor.canRedo}
                 brushSize={editor.brushSize}
+                brushKind={editor.brushEngine?.brushKind ?? 'tapered'}
                 zoomPercent={zoomPercent(viewport.scale)}
                 nativeFullscreen={nativeFullscreen}
                 onTool={applyImmersiveTool}
+                onBrushKind={editor.setBrushKind}
                 onUndo={editor.undo}
                 onRedo={editor.redo}
                 onZoomIn={() => zoomStep(1)}
@@ -539,7 +772,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                 onOpenBrush={() => setDock(dock === 'brush' ? null : 'brush')}
                 onOpenModels={toggleModels}
                 onSave={editor.beginSaveDesign}
-                onExport={() => void editor.exportPng()}
                 onExit={exitImmersive}
                 saveLabel={editor.saveStatusLabel || 'Save'}
               />
@@ -600,10 +832,13 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
                   tool={editor.tool}
                   brushSize={editor.brushSize}
                   opacity={editor.opacity}
+                  brushEngine={editor.brushEngine}
                   dimmed={editor.dimmed}
                   toolLabel={toolLabel}
                   onBrushSize={editor.setBrushSizePx}
                   onOpacity={editor.setBrushOpacity}
+                  onBrushKind={editor.setBrushKind}
+                  onBrushEnginePatch={editor.patchBrushEngine}
                   onToggleDim={() => editor.setDimmed((v) => !v)}
                 />
               </div>
@@ -613,10 +848,13 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               tool={editor.tool}
               brushSize={editor.brushSize}
               opacity={editor.opacity}
+              brushEngine={editor.brushEngine}
               dimmed={editor.dimmed}
               toolLabel={toolLabel}
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
+              onBrushKind={editor.setBrushKind}
+              onBrushEnginePatch={editor.patchBrushEngine}
               onToggleDim={() => editor.setDimmed((v) => !v)}
             />
           )}
@@ -642,8 +880,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
               tool={editor.tool}
               brushSize={editor.brushSize}
               opacity={editor.opacity}
+              brushEngine={editor.brushEngine}
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
+              onBrushKind={editor.setBrushKind}
+              onBrushEnginePatch={editor.patchBrushEngine}
             />
           </div>
         </div>
@@ -674,6 +915,31 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </ConfirmDialog>
       ) : null}
 
+      {editor.personalPinPrompt ? (
+        <ConfirmDialog
+          title="Switch personal croquis?"
+          actions={[
+            { label: 'Cancel', onClick: editor.cancelPersonalPinSwitch, variant: 'ghost' },
+            {
+              label: 'Keep strokes',
+              onClick: () => editor.confirmPersonalPinKeepStrokes(),
+              variant: 'primary',
+            },
+            {
+              label: 'Clear strokes',
+              onClick: () => editor.confirmPersonalPinClearStrokes(),
+              variant: 'danger',
+            },
+          ]}
+        >
+          <p>
+            Your current sketch will stay on the canvas if you keep strokes. Clearing removes ink
+            before switching to the selected My Croquis underlay. Front and Back artwork follow the
+            same choice.
+          </p>
+        </ConfirmDialog>
+      ) : null}
+
       {editor.draftConflict ? (
         <ConfirmDialog
           title="Draft recovery conflict"
@@ -697,7 +963,50 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
         </ConfirmDialog>
       ) : null}
 
-      {editor.saveDesignDialog && !editor.draftConflict && !editor.modelSwitchPrompt ? (
+      {editor.damagedCloud && editor.damagedCloudDialogOpen ? (
+        <ConfirmDialog
+          title="Damaged cloud draft"
+          actions={[
+            {
+              label: 'Continue on this device only',
+              onClick: editor.resolveDamagedCloudContinueLocal,
+              variant: 'ghost',
+            },
+            ...(editor.damagedCloud.hasLocalRecovery || editor.hasBackInk || editor.strokes.length > 0
+              ? [
+                  {
+                    label: 'Replace cloud with this device',
+                    onClick: editor.resolveDamagedCloudReplaceCloud,
+                    variant: 'danger' as const,
+                  },
+                ]
+              : []),
+          ]}
+        >
+          <p>
+            Your private cloud Studio draft exists but could not be read safely. The original cloud
+            row was left unchanged. Automatic sync is paused. Choose recovery deliberately — nothing
+            is overwritten until you confirm.
+          </p>
+        </ConfirmDialog>
+      ) : null}
+
+      {editor.damagedCloud && !editor.damagedCloudDialogOpen ? (
+        <div className={styles.damagedCloudBanner} role="alert">
+          <p>
+            Cloud draft recovery is still paused. The damaged private copy was not changed.
+          </p>
+          <button type="button" className={styles.damagedCloudBannerButton} onClick={editor.reopenDamagedCloudRecovery}>
+            Review recovery options
+          </button>
+        </div>
+      ) : null}
+
+      {editor.saveDesignDialog &&
+      !editor.draftConflict &&
+      !editor.damagedCloudDialogOpen &&
+      !editor.modelSwitchPrompt &&
+      !editor.personalPinPrompt ? (
         <SaveDesignDialog
           defaultTitle={editor.saveDesignDialog.defaultTitle}
           saving={editor.saveDesignDialog.saving}
@@ -705,6 +1014,26 @@ export function CreatorWorkspace({ editor, onOpenLibrary }: Props) {
           customReferenceOmitted={editor.saveDesignDialog.customReferenceOmitted}
           onConfirm={(title) => void editor.confirmSaveDesign(title)}
           onCancel={editor.cancelSaveDesign}
+        />
+      ) : null}
+
+      {editor.model === 'personal' && editor.personalUnavailable ? (
+        <div className={styles.damagedCloudBanner} role="status">
+          <p>
+            Croquis unavailable — your strokes and fills are kept. The pinned My Croquis reference
+            could not be loaded (erased or inaccessible). Studio will not switch models
+            automatically.
+          </p>
+        </div>
+      ) : null}
+
+      {isMyCroquisUiEnabled() && editor.croquisWizardOpen ? (
+        <CreateMyCroquisWizard
+          open
+          onClose={editor.closeCroquisWizard}
+          onPinAccepted={(croquisId, version) =>
+            editor.requestPersonalCroquisPin(croquisId, version)
+          }
         />
       ) : null}
     </section>

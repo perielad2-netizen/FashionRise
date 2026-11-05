@@ -116,6 +116,7 @@
 |--------|------|-------------|
 | POST | `/ai/sketch/clean` | V2: enqueue **`sketch_clean`** job; body optional `SketchPipelineBody` (`design_id`, `input_data`) |
 | POST | `/ai/sketch/polish` | V2: enqueue **`sketch_polish`** |
+| POST | `/ai/sketch/polish-dual` | V2: enqueue coordinated front+back **`sketch_polish`** jobs (`SketchPolishDualBody`; WEB-V4J Stage C) |
 | POST | `/ai/style/suggest` | V2: enqueue **`style_suggest`** |
 | POST | `/ai/jobs` | Create job (`AIJobCreate`) — generic |
 | GET | `/ai/jobs/{job_id}` | Job status |

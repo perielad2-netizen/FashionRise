@@ -20,6 +20,22 @@
   gap: 0;
 }
 
+.toolColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kindStripWrap {
+  max-width: 160px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(12, 16, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 .center {
   min-width: 0;
   min-height: 0;
@@ -37,35 +53,6 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.canvasActions {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 5;
-  display: inline-flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-  max-width: calc(100% - 20px);
-}
-
-.immersiveToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(214, 51, 132, 0.35);
-  background: rgba(214, 51, 132, 0.16);
-  color: #9d174d;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
 }
 
 .immersiveMode {
@@ -259,7 +246,8 @@
 .brushOverlay {
   position: absolute;
   inset: 0;
-  z-index: 30;
+  /* Above immersive toolbar (20) and dock so Ink/Charcoal/Airbrush is reachable. */
+  z-index: 50;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -284,7 +272,7 @@
   background: #121a2c;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.4);
-  max-height: min(42vh, 320px);
+  max-height: min(58vh, 440px);
   overflow: auto;
   padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
 }
@@ -470,6 +458,16 @@
     padding: 6px 8px 8px;
   }
 
+  .toolColumn {
+    grid-row: 1;
+    width: 100%;
+  }
+
+  .kindStripWrap {
+    max-width: none;
+    width: 100%;
+  }
+
   .canvasStage {
     grid-row: 2;
     min-height: 0;
@@ -521,4 +519,46 @@
 
 .immersiveMode .canvasStage [data-studio-paper='true'] {
   --paper-max-w: none;
+}
+
+.damagedCloudBanner {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(28, 25, 16, 0.94);
+  color: #fde68a;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.damagedCloudBanner p {
+  margin: 0;
+  flex: 1 1 16rem;
+}
+
+.damagedCloudBannerButton {
+  appearance: none;
+  border: 1px solid rgba(253, 230, 138, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fef3c7;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.damagedCloudBannerButton:focus-visible {
+  outline: 2px solid #fbbf24;
+  outline-offset: 2px;
 }

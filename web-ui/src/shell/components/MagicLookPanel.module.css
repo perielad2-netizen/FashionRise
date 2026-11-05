@@ -1,29 +1,42 @@
 .overlay {
-  position: absolute;
+  /* #180 — fixed + safe-area so Android Chrome/Samsung toolbars cannot clip actions */
+  position: fixed;
   inset: 0;
   z-index: 40;
   display: grid;
   place-items: center;
-  padding: 12px;
+  padding:
+    max(8px, env(safe-area-inset-top, 0px))
+    max(8px, env(safe-area-inset-right, 0px))
+    max(8px, env(safe-area-inset-bottom, 0px))
+    max(8px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
   background: rgba(8, 12, 22, 0.72);
   backdrop-filter: blur(6px);
+  overflow: hidden;
 }
 
 .panel {
   width: min(920px, 100%);
-  height: min(92dvh, 900px);
-  max-height: min(92dvh, 900px);
+  /* Prefer small viewport height so expanding mobile chrome cannot bury the footer */
+  max-height: min(
+    calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px),
+    calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px),
+    900px
+  );
+  height: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 14px 12px;
+  gap: 0;
+  padding: 14px 14px 0;
   border-radius: var(--fr-radius-lg, 18px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(165deg, #1a2438 0%, #10182a 100%);
   box-shadow: var(--fr-shadow, 0 18px 48px rgba(0, 0, 0, 0.45));
   color: #f4efe8;
   overflow: hidden;
-  min-height: 0;
+  box-sizing: border-box;
 }
 
 .header {
@@ -32,6 +45,7 @@
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
+  padding-bottom: 10px;
 }
 
 .titleBlock h2 {
@@ -63,10 +77,128 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+.panelBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.dualTabs {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dualTab,
+.dualTabActive {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dualTabActive {
+  border-color: rgba(236, 72, 153, 0.45);
+  background: rgba(236, 72, 153, 0.12);
+}
+
+.dualTabLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dualTabStatus {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.dualStageGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.dualPane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.dualPaneActive {
+  border-color: rgba(236, 72, 153, 0.35);
+}
+
+.dualPaneHead {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dualImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  flex: 1;
+  min-height: 0;
+}
+
+.dualPaneError,
+.dualPanePending {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: rgba(244, 239, 232, 0.85);
+}
+
+.dualPaneError button {
+  font: inherit;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+}
+
 .stage {
   position: relative;
   flex: 1 1 auto;
-  min-height: 0;
+  /* Bound height inside the flex panel so object-fit can shrink the preview
+     instead of overflowing and clipping the head/hem (#180 owner report). */
+  min-height: 160px;
+  max-height: min(64dvh, 640px);
   border-radius: 14px;
   overflow: hidden;
   background:
@@ -80,17 +212,91 @@
 
 .image,
 .sketchPreview {
+  /* Fill the stage box; contain keeps the full person visible (no CSS crop). */
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
-  width: auto;
-  height: auto;
   object-fit: contain;
-  object-position: center;
+  object-position: center center;
   display: block;
 }
 
 .sketchPreview {
   background: #f8f4f0;
+}
+
+
+.compareGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  min-height: 0;
+}
+
+.comparePane {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.comparePane figcaption {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(244, 239, 232, 0.78);
+}
+
+.comparePane img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  flex: 1;
+  min-height: 0;
+  background: #0b1220;
+}
+
+@media (max-width: 640px) {
+  .compareGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.fidelityBanner {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.45);
+  color: #fef2f2;
+}
+
+.fidelityBanner strong {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.fidelityBanner p {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: rgba(254, 242, 242, 0.92);
 }
 
 .statusBox {
@@ -103,6 +309,18 @@
   display: block;
   margin-bottom: 8px;
   font-size: 1.05rem;
+}
+
+.errorText {
+  margin: 0;
+  max-width: 36rem;
+  max-height: min(28dvh, 160px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
+  font-size: 0.9rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .spinner {
@@ -164,6 +382,14 @@
   flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
+  /* Sticky footer within the panel — always above mobile browser chrome */
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 8px;
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(16, 24, 42, 0.92) 0%, #10182a 35%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .actions button {
@@ -201,14 +427,29 @@
   border: 1px solid rgba(248, 113, 113, 0.35);
   color: #fecaca;
   font-size: 0.88rem;
-  flex-shrink: 0;
+  line-height: 1.4;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(28dvh, 160px);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 820px) {
   .panel {
-    padding: 10px;
-    height: min(94dvh, 900px);
-    max-height: 94dvh;
+    padding: 10px 10px 0;
+    width: 100%;
+    max-height: min(
+      calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12px),
+      calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12px)
+    );
+    border-radius: 14px;
+  }
+
+  .stage {
+    min-height: 120px;
   }
 
   .details {
@@ -220,9 +461,24 @@
   }
 }
 
+@media (max-width: 430px) {
+  .titleBlock h2 {
+    font-size: 1.05rem;
+  }
+
+  .actions button {
+    font-size: 0.85rem;
+    min-height: 40px;
+  }
+}
+
 @media (max-height: 640px) {
   .titleBlock p {
     display: none;
+  }
+
+  .stage {
+    min-height: 96px;
   }
 
   .details {
@@ -231,5 +487,17 @@
 
   .actions button {
     min-height: 38px;
+  }
+}
+
+@media (max-height: 480px) {
+  .statusBox {
+    padding: 16px 12px;
+  }
+
+  .spinner {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 10px;
   }
 }

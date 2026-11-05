@@ -13,12 +13,35 @@ export type AiJobRead = {
   updated_at: string
 }
 
+export type TryOnExperimentMeta = {
+  experiment: boolean
+  verdict: 'accepted' | 'rejected' | 'unreviewed' | null
+  provider: string | null
+  promptVersion: string | null
+  costCents: number | null
+  predictionIds: string[] | null
+  garmentRealismJobId: string | null
+  approvedGarmentShas: string[] | null
+  croquisId: string | null
+  croquisVersion: number | null
+  v16Settings: Record<string, unknown> | null
+  fashnMaxExperiment: Record<string, unknown> | null
+}
+
 export type MagicLookResult = {
   jobId: string
   status: AiJobStatus
   summary: string
   bullets: string[]
   hasImage: boolean
+  /** #171 — verified structure failure (not ordinary inconclusive/not_applicable). */
+  fidelityOk?: boolean | null
+  structureReviewState?: string | null
+  structureReviewMessage?: string | null
+  /** True when UI must warn and must not present as an accepted My Look. */
+  structureRejected?: boolean
+  /** #176 — owner FASHN comparison provenance (private). */
+  experimentMeta?: TryOnExperimentMeta | null
 }
 
 export function extractImageUrl(resultData: Record<string, unknown> | null | undefined): string | null {
@@ -30,9 +53,55 @@ export function extractImageUrl(resultData: Record<string, unknown> | null | und
   return null
 }
 
+const RAW_PROVIDER_LEAK =
+  /BadRequestError|moderation_blocked|request_id=|Error code:\s*400|categories=sexual|Your request was rejected/i
+
+const TRY_ON_MODERATION_FALLBACK =
+  'This design could not be rendered by our image provider. Your sketch is saved. You can continue editing or choose Fashion Magic.'
+
+/** True when the provider refused the edit under safety/content-policy rules. */
+export function isMagicSafetyRefusal(summary: string | null | undefined): boolean {
+  if (!summary) return false
+  return /safety rules|content policy|content_policy|could not edit this sketch under|PROVIDER_MODERATION_BLOCKED|could not be rendered by our image provider/i.test(
+    summary,
+  )
+}
+
+function sanitizedFailedSummary(job: AiJobRead): string {
+  const data = job.result_data
+  const code = typeof data?.error_code === 'string' ? data.error_code : ''
+  const structured =
+    typeof data?.summary === 'string' && data.summary.trim() ? data.summary.trim() : null
+
+  // Prefer structured owner-safe summary from the worker.
+  if (structured && !RAW_PROVIDER_LEAK.test(structured)) {
+    if (code === 'PROVIDER_MODERATION_BLOCKED' || isMagicSafetyRefusal(structured)) {
+      return structured
+    }
+    return structured
+  }
+
+  const raw = job.error_message?.trim() || structured || 'Magic could not finish this look.'
+  if (code === 'PROVIDER_MODERATION_BLOCKED' || /moderation_blocked/i.test(raw)) {
+    return TRY_ON_MODERATION_FALLBACK
+  }
+  if (RAW_PROVIDER_LEAK.test(raw)) {
+    return job.job_type === 'personal_try_on'
+      ? TRY_ON_MODERATION_FALLBACK
+      : 'This look could not be rendered by our image provider. Your sketch is unchanged.'
+  }
+  if (isMagicSafetyRefusal(raw)) {
+    return (
+      `${raw} Edit the sketch, then start a new Magic operation — ` +
+      `identical retries are not sent automatically.`
+    )
+  }
+  return raw
+}
+
 export function extractMagicSummary(job: AiJobRead): string {
   if (job.status === 'failed') {
-    return job.error_message?.trim() || 'Magic could not finish this look.'
+    return sanitizedFailedSummary(job)
   }
   const data = job.result_data
   if (!data) return job.status
@@ -45,18 +114,121 @@ export function extractMagicSummary(job: AiJobRead): string {
 
 export function extractPolishBullets(job: AiJobRead): string[] {
   const structured = job.result_data?.structured
-  if (!structured || typeof structured !== 'object') return []
-  const bullets = (structured as { polish_bullets?: unknown }).polish_bullets
-  if (!Array.isArray(bullets)) return []
-  return bullets.filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+  if (structured && typeof structured === 'object') {
+    const bullets = (structured as { polish_bullets?: unknown }).polish_bullets
+    if (Array.isArray(bullets)) {
+      return bullets.filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+    }
+  }
+  // Try On Person (and similar) store bullets at result_data.bullets.
+  const top = job.result_data?.bullets
+  if (Array.isArray(top)) {
+    return top.filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+  }
+  return []
 }
 
 export function toMagicLookResult(job: AiJobRead): MagicLookResult {
+  // #170/#171 — only verified structure failures become completed_unverified in the UI.
+  // not_applicable / inconclusive keep ordinary completed presentation.
+  const data = job.result_data
+  const dataStatus = typeof data?.status === 'string' ? String(data.status) : null
+  const fidelityOkRaw = data?.fidelity_ok
+  const fidelityOk =
+    fidelityOkRaw === false ? false : fidelityOkRaw === true ? true : null
+  const review =
+    data?.structure_review && typeof data.structure_review === 'object'
+      ? (data.structure_review as Record<string, unknown>)
+      : null
+  const structureReviewState =
+    typeof review?.state === 'string' ? String(review.state) : null
+  const structureReviewMessage =
+    typeof review?.message === 'string' ? String(review.message) : null
+  // Only verified failures downgrade presentation. Historical #170 "unverified" ordinary
+  // outfits (completed_unverified without fidelity_ok=false) stay ordinary completed.
+  const structureRejected = fidelityOk === false || structureReviewState === 'failed'
+  const status: AiJobStatus =
+    job.status === 'completed' && structureRejected
+      ? 'completed_unverified'
+      : job.status === 'completed' && dataStatus === 'completed_unverified' && !structureRejected
+        ? 'completed'
+        : job.status
+  const provider =
+    typeof data?.provider === 'string'
+      ? data.provider
+      : typeof job.input_data?.provider === 'string'
+        ? String(job.input_data.provider)
+        : null
+  const verdictRaw = typeof data?.experiment_verdict === 'string' ? data.experiment_verdict : null
+  const verdict =
+    verdictRaw === 'accepted' || verdictRaw === 'rejected' || verdictRaw === 'unreviewed'
+      ? verdictRaw
+      : null
+  const predictionIds = Array.isArray(data?.prediction_ids)
+    ? data.prediction_ids.filter((v): v is string => typeof v === 'string')
+    : null
+  const approvedShas = Array.isArray(data?.approved_garment_shas)
+    ? data.approved_garment_shas.filter((v): v is string => typeof v === 'string')
+    : null
+  const costRaw = data?.cost_cents
+  const costCents = typeof costRaw === 'number' && Number.isFinite(costRaw) ? costRaw : null
+  // #179 — experiment UI depends on provenance, not account role or Max provider alone.
+  // Smart public Max stamps experiment=false; owner experiment stamps experiment=true.
+  const isSmartPublic =
+    data?.smart_fallback === true ||
+    job.input_data?.smart_fallback === true ||
+    (data?.smart_pipeline &&
+      typeof data.smart_pipeline === 'object' &&
+      (data.smart_pipeline as { lane?: string }).lane === 'smart_public') ||
+    (job.input_data?.smart_pipeline &&
+      typeof job.input_data.smart_pipeline === 'object' &&
+      (job.input_data.smart_pipeline as { lane?: string }).lane === 'smart_public')
+  const isOwnerExperiment =
+    !isSmartPublic &&
+    (data?.experiment === true ||
+      job.input_data?.experiment === true ||
+      // Legacy owner v1.6 / Max experiment results without an explicit false stamp.
+      ((provider === 'fashn_tryon_v1_6' ||
+        provider === 'fashn_tryon_max' ||
+        job.input_data?.provider === 'fashn' ||
+        job.input_data?.provider === 'fashn_max') &&
+        data?.experiment !== false &&
+        job.input_data?.experiment !== false &&
+        data?.looks_eligible !== true))
+  const experimentMeta: TryOnExperimentMeta | null = isOwnerExperiment
+    ? {
+        experiment: true,
+        verdict,
+        provider,
+        promptVersion: typeof data?.prompt_version === 'string' ? data.prompt_version : null,
+        costCents,
+        predictionIds,
+        garmentRealismJobId:
+          typeof data?.garment_realism_job_id === 'string' ? data.garment_realism_job_id : null,
+        approvedGarmentShas: approvedShas,
+        croquisId: typeof data?.croquis_id === 'string' ? data.croquis_id : null,
+        croquisVersion:
+          typeof data?.croquis_version === 'number' ? data.croquis_version : null,
+        v16Settings:
+          data?.v16_settings && typeof data.v16_settings === 'object'
+            ? (data.v16_settings as Record<string, unknown>)
+            : null,
+        fashnMaxExperiment:
+          data?.fashn_max_experiment && typeof data.fashn_max_experiment === 'object'
+            ? (data.fashn_max_experiment as Record<string, unknown>)
+            : null,
+      }
+    : null
   return {
     jobId: job.id,
-    status: job.status,
+    status,
     summary: extractMagicSummary(job),
     bullets: extractPolishBullets(job),
     hasImage: Boolean(extractImageUrl(job.result_data)),
+    fidelityOk,
+    structureReviewState,
+    structureReviewMessage,
+    structureRejected,
+    experimentMeta,
   }
 }

@@ -5,7 +5,21 @@
   background: rgba(4, 6, 12, 0.62);
   display: grid;
   place-items: center;
-  padding: 16px;
+  align-content: center;
+  /* Safe-area + live browser chrome (--fr-browser-chrome-bottom from visualViewport). */
+  padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))
+    max(
+      16px,
+      env(safe-area-inset-bottom, 0px),
+      calc(12px + var(--fr-browser-chrome-bottom, 0px))
+    )
+    max(12px, env(safe-area-inset-left, 0px));
+  /* Stay within the visible viewport; chrome offset applied via padding. */
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
 }
 
 .dialog {
@@ -16,6 +30,26 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   padding: 18px;
   color: #f5f0ea;
+  box-sizing: border-box;
+  /* All confirm dialogs stay inside the visible viewport (Magic pink CTA). */
+  max-height: min(
+    92dvh,
+    calc(
+      100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+        var(--fr-browser-chrome-bottom, 0px)
+    )
+  );
+  max-height: min(92vh, calc(100vh - 24px));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Viewport-bounded / tall content (FASHN garment review). */
+.dialogScrollable {
+  width: min(480px, 100%);
+  padding: 14px 14px 12px;
 }
 
 .title {
@@ -23,6 +57,12 @@
   font-family: "Playfair Display", Georgia, serif;
   font-size: 20px;
   font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.dialogScrollable .title {
+  margin-bottom: 8px;
+  font-size: 18px;
 }
 
 .body {
@@ -30,6 +70,19 @@
   line-height: 1.45;
   color: #c7d0e0;
   margin-bottom: 16px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dialogScrollable .body {
+  margin-bottom: 0;
+  padding-bottom: 8px;
 }
 
 .actions {
@@ -37,18 +90,48 @@
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  margin-top: 4px;
+  padding-top: 10px;
+  padding-bottom: max(4px, env(safe-area-inset-bottom, 0px));
+  background: #151d30;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%;
+}
+
+.dialogScrollable .actions {
+  background: linear-gradient(180deg, rgba(21, 29, 48, 0.72) 0%, #151d30 28%);
+}
+
+@media (max-width: 430px) {
+  .actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .actions > button {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
 }
 
 .primary,
 .danger,
 .ghost {
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 14px;
   border-radius: 999px;
   border: 0;
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
 }
 
 .primary {
@@ -123,4 +206,119 @@
   margin: 0 0 8px;
   font-size: 12px;
   color: #fca5a5;
+}
+
+/* Compact cost / notice chips used by FASHN review body. */
+.costRow {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: #e8eef8;
+}
+
+.costRow strong {
+  color: #fff;
+  font-weight: 650;
+}
+
+.pieceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 10px 0 4px;
+}
+
+.pieceCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pieceLabel {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #9aa6bd;
+}
+
+.pieceThumb {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: zoom-in;
+}
+
+.pieceActions {
+  display: flex;
+  gap: 6px;
+}
+
+.pieceActions button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.detailsToggle {
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #f9a8d4;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.detailsToggle:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.86);
+  display: grid;
+  place-items: center;
+  padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+  overflow: auto;
+}
+
+.lightboxImg {
+  max-width: min(96vw, 720px);
+  max-height: min(85dvh, 85vh);
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.lightboxClose {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
 }

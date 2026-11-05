@@ -52,10 +52,17 @@ function installFakeCanvas(options: { noContext?: boolean; blob?: Blob | null } 
         ctx.globalCompositeOperation = 'source-over'
       },
       scale: (x: number, y: number) => ops.push({ canvas: index, op: 'scale', detail: [x, y] }),
+      translate: (x: number, y: number) => ops.push({ canvas: index, op: 'translate', detail: [x, y] }),
       createLinearGradient: () => ({
         addColorStop: () => undefined,
       }),
+      createRadialGradient: () => ({
+        addColorStop: () => undefined,
+      }),
       createPattern: () => ({ id: `pattern-${index}` }),
+      ellipse: () => undefined,
+      beginPath: () => undefined,
+      arc: () => undefined,
     }
     const canvas = {
       width: 0,
@@ -101,21 +108,33 @@ describe('renderSketchCanvas composition', () => {
     })
     expect(result.referenceIncluded).toBe(true)
     const base = ops.filter((o) => o.canvas === 0)
-    const fillLayer = ops.filter((o) => o.canvas === 1)
-    const ink = ops.filter((o) => o.canvas === 2)
     expect(base[0]).toMatchObject({ op: 'fillRect', detail: { a: [0, 0, 768, 1024], fill: '#F8F4F0' } })
-    expect(base[1]).toMatchObject({ op: 'drawImage', detail: { img: reference, alpha: 0.4, a: [192, 0, 384, 1024] } })
-    // Fills paint on their own layer (under ink), never destination-out on the base.
-    expect(fillLayer.some((o) => o.op === 'fill')).toBe(true)
-    expect(fillLayer[0]).toMatchObject({ detail: { fill: '#B91C1C' } })
-    // Eraser runs on the ink canvas only; the base never receives destination-out.
-    expect(ink.map((o) => (o.detail as { mode: string }).mode)).toEqual(['source-over', 'destination-out'])
-    expect(ink[0]).toMatchObject({ detail: { alpha: 0.5, fill: '#D63384' } })
+    // Reference is drawn in design space after scale/translate on the base context.
+    expect(base.find((o) => o.op === 'drawImage' && (o.detail as { img: unknown }).img === reference)).toMatchObject({
+      detail: { img: reference, alpha: 0.4, a: [192, 0, 384, 1024] },
+    })
+    // Fills paint somewhere under ink; eraser punches fill pixels.
+    const fillPaint = ops.filter(
+      (o) => o.op === 'fill' && (o.detail as { fill?: string }).fill === '#B91C1C',
+    )
+    expect(fillPaint.length).toBeGreaterThan(0)
+    expect(ops.some((o) => o.op === 'fill' && (o.detail as { mode?: string }).mode === 'destination-out')).toBe(
+      true,
+    )
+    // Tapered ink draw + at least one erase punch across logical layers.
+    const inkDraw = ops.filter(
+      (o) =>
+        o.op === 'fill' &&
+        (o.detail as { fill?: string }).fill === '#D63384' &&
+        (o.detail as { mode?: string }).mode === 'source-over',
+    )
+    expect(inkDraw.length).toBeGreaterThan(0)
+    expect(inkDraw[0]).toMatchObject({ detail: { alpha: 0.5, fill: '#D63384' } })
     expect(base.some((o) => o.op === 'fill')).toBe(false)
-    expect(base[2]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
-    expect(((base[2]!.detail as { img: { id: string } }).img).id).toBe('canvas-1')
-    expect(base[3]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
-    expect(((base[3]!.detail as { img: { id: string } }).img).id).toBe('canvas-2')
+    const baseLayerDraws = base.filter((o) => o.op === 'drawImage' && (o.detail as { img: { id?: string } }).img?.id)
+    expect(baseLayerDraws.length).toBeGreaterThanOrEqual(2)
+    expect(baseLayerDraws[0]).toMatchObject({ op: 'drawImage', detail: { a: [0, 0, 768, 1024] } })
+    expect(((baseLayerDraws[0]!.detail as { img: { id: string } }).img).id).toBe('canvas-1')
   })
 
   it('scales design-space strokes and reference to a smaller output', async () => {
@@ -127,22 +146,30 @@ describe('renderSketchCanvas composition', () => {
       height: 320,
       loadReference: async () => reference,
     })
-    // Fill layer (canvas 1) and ink layer (canvas 2) both scale; first scale is the fill layer.
-    expect(ops.find((o) => o.op === 'scale')).toMatchObject({ canvas: 1, detail: [0.3125, 0.3125] })
-    expect(ops.filter((o) => o.op === 'scale').map((o) => o.canvas)).toEqual([1, 2])
-    expect(ops.find((o) => o.canvas === 0 && o.op === 'drawImage')).toMatchObject({ detail: { a: [60, 0, 120, 320] } })
+    const scales = ops.filter((o) => o.op === 'scale')
+    expect(scales.length).toBeGreaterThanOrEqual(3)
+    expect(scales.every((o) => o.detail?.[0] === 0.3125)).toBe(true)
+    // Reference drawImage args stay in design space (context already scaled).
+    expect(ops.find((o) => o.canvas === 0 && o.op === 'drawImage')).toMatchObject({
+      detail: { a: [192, 0, 384, 1024] },
+    })
   })
 
   it('keeps exact stroke sizes unless a minimum output ink size is requested', async () => {
     installFakeCanvas()
     strokeToSvgPath.mockClear()
     await renderSketchCanvas({ strokes, referenceUrl: null, width: 240, height: 320 })
-    expect(strokeToSvgPath.mock.calls.map(([s]) => s.size)).toEqual([3.5, 7])
+    // Draw once; erase punches each logical layer (shade/ink/highlight).
+    const sizes = strokeToSvgPath.mock.calls.map(([s]) => s.size)
+    expect(sizes[0]).toBe(3.5)
+    expect(sizes.filter((n) => n === 7).length).toBeGreaterThanOrEqual(1)
 
     strokeToSvgPath.mockClear()
     await renderSketchCanvas({ strokes, referenceUrl: null, width: 240, height: 320, minInkSize: 1.5 })
     // 1.5 output px at 0.3125 scale = 4.8 design units; the 7-unit eraser is already larger.
-    expect(strokeToSvgPath.mock.calls.map(([s]) => s.size)).toEqual([4.8, 7])
+    const sized = strokeToSvgPath.mock.calls.map(([s]) => s.size)
+    expect(sized[0]).toBe(4.8)
+    expect(sized.some((n) => n === 7)).toBe(true)
     expect(strokes[0]!.size).toBe(3.5)
   })
 
@@ -164,7 +191,17 @@ describe('renderSketchCanvas composition', () => {
       },
     })
     expect(result.referenceIncluded).toBe(false)
-    expect(ops.filter((o) => o.canvas === 2 && o.op === 'fill')).toHaveLength(2)
+    expect(
+      ops.some(
+        (o) =>
+          o.op === 'fill' &&
+          (o.detail as { fill?: string }).fill === '#D63384' &&
+          (o.detail as { mode?: string }).mode === 'source-over',
+      ),
+    ).toBe(true)
+    expect(ops.some((o) => o.op === 'fill' && (o.detail as { mode?: string }).mode === 'destination-out')).toBe(
+      true,
+    )
   })
 
   it('throws on reference failure when asked to', async () => {

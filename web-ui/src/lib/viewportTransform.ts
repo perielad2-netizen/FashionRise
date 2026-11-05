@@ -1,4 +1,5 @@
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
+import { PAPER_HEIGHT, PAPER_ORIGIN_X, PAPER_ORIGIN_Y, PAPER_WIDTH } from '@/lib/paperBounds'
 
 /** Absolute scale: CSS pixels per design-space pixel. 1 = 100%. */
 export type ViewportState = {
@@ -16,10 +17,21 @@ export type ViewportSize = {
 export const ZOOM_REL_MIN = 0.5
 export const ZOOM_REL_MAX = 6
 
+/**
+ * Fit the legacy croquis reference plane (768×1024). Does not shrink the model
+ * to the extended paper — margins stay reachable via pan / zoom-out.
+ */
 export function fitPageScale(viewport: ViewportSize): number {
   const w = Math.max(1, viewport.width)
   const h = Math.max(1, viewport.height)
   return Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT)
+}
+
+/** Fit the full extended paper (1280×1536) into the viewport. */
+export function fitDrawingScale(viewport: ViewportSize): number {
+  const w = Math.max(1, viewport.width)
+  const h = Math.max(1, viewport.height)
+  return Math.min(w / PAPER_WIDTH, h / PAPER_HEIGHT)
 }
 
 export function fitWidthScale(viewport: ViewportSize): number {
@@ -33,8 +45,10 @@ export function absoluteHundredPercentScale(): number {
 
 export function scaleLimits(viewport: ViewportSize): { min: number; max: number } {
   const fit = fitPageScale(viewport)
+  const drawing = fitDrawingScale(viewport)
   const width = fitWidthScale(viewport)
-  const min = Math.max(0.05, Math.min(fit * ZOOM_REL_MIN, fit))
+  // Allow zooming out far enough to see the extended paper margins.
+  const min = Math.max(0.05, Math.min(fit * ZOOM_REL_MIN, drawing, fit))
   const max = Math.max(fit * ZOOM_REL_MAX, width, 1, fit)
   return { min, max }
 }
@@ -76,39 +90,53 @@ export function hundredPercent(viewport: ViewportSize): ViewportState {
 }
 
 /**
- * Clamp pan so the design remains reachable — never pan completely out of view.
- * When the page is smaller than the viewport, allow any pan that keeps the full
- * page visible (not only dead-center) so zoom-around-pointer stays stable.
+ * Clamp pan so the *extended paper* remains reachable — never pan completely out
+ * of view. Fit Page / Fit Width still frame the croquis; clamp uses paper bounds
+ * so oversized strokes in the margins stay reachable.
+ *
+ * Design (0,0) maps to screen (panX, panY); paper origin may be negative.
  */
 export function clampPan(state: ViewportState, viewport: ViewportSize): ViewportState {
   const scale = clampScale(state.scale, viewport)
-  const contentW = DESIGN_WIDTH * scale
-  const contentH = DESIGN_HEIGHT * scale
+  const originX = PAPER_ORIGIN_X * scale
+  const originY = PAPER_ORIGIN_Y * scale
+  const contentW = PAPER_WIDTH * scale
+  const contentH = PAPER_HEIGHT * scale
   const margin = Math.min(48, viewport.width * 0.2, viewport.height * 0.2)
 
   let minX: number
   let maxX: number
   if (contentW <= viewport.width) {
-    minX = 0
-    maxX = viewport.width - contentW
+    minX = -originX
+    maxX = viewport.width - contentW - originX
   } else {
-    minX = viewport.width - contentW - margin
-    maxX = margin
+    minX = viewport.width - contentW - originX - margin
+    maxX = -originX + margin
   }
 
   let minY: number
   let maxY: number
   if (contentH <= viewport.height) {
-    minY = 0
-    maxY = viewport.height - contentH
+    minY = -originY
+    maxY = viewport.height - contentH - originY
   } else {
-    minY = viewport.height - contentH - margin
-    maxY = margin
+    minY = viewport.height - contentH - originY - margin
+    maxY = -originY + margin
   }
 
   const panX = Number.isFinite(state.panX) ? Math.min(maxX, Math.max(minX, state.panX)) : (minX + maxX) / 2
   const panY = Number.isFinite(state.panY) ? Math.min(maxY, Math.max(minY, state.panY)) : (minY + maxY) / 2
   return { scale, panX, panY }
+}
+
+/** Center the full extended drawing paper in the viewport. */
+export function fitDrawing(viewport: ViewportSize): ViewportState {
+  const s = clampScale(fitDrawingScale(viewport), viewport)
+  return {
+    scale: s,
+    panX: (viewport.width - PAPER_WIDTH * s) / 2 - PAPER_ORIGIN_X * s,
+    panY: (viewport.height - PAPER_HEIGHT * s) / 2 - PAPER_ORIGIN_Y * s,
+  }
 }
 
 export function screenToDesign(

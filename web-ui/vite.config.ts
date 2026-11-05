@@ -1,5 +1,7 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
+import { execSync } from 'node:child_process'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
@@ -26,11 +28,58 @@ const pwaWorkbox = {
   navigateFallback: null,
 } as const
 
+function resolveBuildSha(): string {
+  const fromEnv =
+    process.env.VITE_BUILD_SHA || process.env.GITHUB_SHA || process.env.COMMIT_SHA || ''
+  if (fromEnv.trim()) return fromEnv.trim()
+  try {
+    // Prefer the real git SHA so production never ships a "dev" identity by accident.
+    return execSync('git rev-parse HEAD', {
+      cwd: path.resolve(rootDir, '..'),
+      encoding: 'utf8',
+    }).trim()
+  } catch {
+    return ''
+  }
+}
+
+const buildSha = resolveBuildSha()
+
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_BUILD_SHA': JSON.stringify(buildSha),
+  },
   plugins: [
     react(),
+    {
+      name: 'fashionrise-build-id',
+      transformIndexHtml(html) {
+        const short = (buildSha || 'unknown').slice(0, 8)
+        // No intrusive pink debug banner in production — SHA lives in meta + Settings/About.
+        return html
+          .replace('<title>FashionRise</title>', `<title>FashionRise · App ${short}</title>`)
+          .replace(
+            '<meta name="application-name" content="FashionRise" />',
+            `<meta name="application-name" content="FashionRise" />\n    <meta name="fr-app-version" content="${short}" />`,
+          )
+      },
+      closeBundle() {
+        const short = (buildSha || 'unknown').slice(0, 8)
+        fs.writeFileSync(
+          path.resolve(rootDir, 'dist/version.json'),
+          JSON.stringify({
+            app: short,
+            sha: buildSha || short,
+            builtAt: new Date().toISOString(),
+          }),
+        )
+        fs.writeFileSync(path.resolve(rootDir, 'dist/REVISION'), `${short}\n`)
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
+      // Registration is handled in main.tsx via virtual:pwa-register.
+      injectRegister: null,
       includeAssets: [
         'branding/fashion_rise_logo.png',
         'icons/favicon-32.png',

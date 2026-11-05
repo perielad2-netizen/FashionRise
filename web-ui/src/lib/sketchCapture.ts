@@ -1,8 +1,15 @@
 import { exportSketchPng, type ExportOptions } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
+import { artworkExceedsLegacyBounds } from '@/lib/paperBounds'
+import type { FillOp } from '@/lib/fills'
+import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
+import { liveArtworkYSpan } from '@/lib/tryOnDesignHints'
 
 /** Soft client bound; backend also enforces max_upload_size_mb. */
 export const MAGIC_MAX_SKETCH_BYTES = 8 * 1024 * 1024
+
+/** Try On garment capture at 2× design plane so fine prints survive provider resize. */
+export const TRY_ON_GARMENT_CAPTURE_SCALE = 2
 
 export type CapturedSketch = {
   blob: Blob
@@ -40,6 +47,13 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
   if (!hasArtwork) {
     throw new Error('Draw a sketch before using Magic.')
   }
+  // Fail closed when artwork uses the extended paper margins — do not silently
+  // crop oversized garments into the legacy Magic input frame (0 paid AI).
+  if (artworkExceedsLegacyBounds(options.strokes, options.fills ?? [])) {
+    throw new Error(
+      'This sketch extends beyond the standard Magic frame. Pull oversized strokes inside the croquis area, or export a PNG instead — Magic was not started.',
+    )
+  }
   const expectsReference = Boolean(options.referenceUrl)
   try {
     const { blob, referenceIncluded } = await exportSketchPng({
@@ -70,6 +84,114 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
     ) {
       throw new Error(
         'Could not capture the model reference for Magic. Check your connection and try again — your sketch was not sent.',
+      )
+    }
+    throw err
+  }
+}
+
+/**
+ * #170 — compare captured garment PNG opaque span to live Studio ink.
+ * Blocks paid try-on when legs / hems disappear during capture.
+ */
+export async function assertGarmentCaptureCompleteness(
+  blob: Blob,
+  options: { strokes: Stroke[]; fills?: FillOp[] },
+): Promise<void> {
+  const live = liveArtworkYSpan({ strokes: options.strokes, fills: options.fills ?? [] })
+  if (!live) return
+  const liveSpan = Math.max(1, live.maxY - live.minY)
+  // jsdom / older browsers may lack createImageBitmap — skip rather than false-fail.
+  if (typeof createImageBitmap !== 'function') return
+  const bitmap = await createImageBitmap(blob)
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(bitmap, 0, 0)
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    let minY = height
+    let maxY = 0
+    let found = false
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const a = data[(y * width + x) * 4 + 3]!
+        if (a >= 24) {
+          found = true
+          minY = Math.min(minY, y)
+          maxY = Math.max(maxY, y)
+        }
+      }
+    }
+    if (!found) {
+      throw new Error(
+        'Garment capture is empty. Redraw the filled design, then retry — Try On was not started.',
+      )
+    }
+    // Capture is at TRY_ON_GARMENT_CAPTURE_SCALE; live ink is design-plane coords.
+    const scaleY = height / DESIGN_HEIGHT
+    const captureSpanDesign = (maxY - minY) / Math.max(scaleY, 1e-6)
+    const retention = captureSpanDesign / liveSpan
+    const liveHemFrac = live.maxY / DESIGN_HEIGHT
+    const captureHemFrac = maxY / height
+    if (retention < 0.82 || (liveHemFrac - captureHemFrac) > 0.12) {
+      throw new Error(
+        'Garment capture lost lower parts of your design (trouser legs or hem). ' +
+          'Refill the legs as solid connected regions, then retry — Try On was not started.',
+      )
+    }
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
+ * Transparent garment-only PNG for Try On Person — strokes + fills + fabrics,
+ * no paper background and no croquis/mannequin underlay. Preserves spatial
+ * alignment with the Studio design plane.
+ */
+export async function captureGarmentArtworkForTryOn(options: {
+  strokes: Stroke[]
+  fills?: FillOp[]
+}): Promise<CapturedSketch> {
+  const fills = options.fills ?? []
+  const hasArtwork = options.strokes.length > 0 || fills.length > 0
+  if (!hasArtwork) {
+    throw new Error('Draw a garment before using Try On Person.')
+  }
+  if (artworkExceedsLegacyBounds(options.strokes, fills)) {
+    throw new Error(
+      'This sketch extends beyond the standard try-on frame. Pull oversized strokes inside the croquis area — Try On Person was not started.',
+    )
+  }
+  try {
+    const width = DESIGN_WIDTH * TRY_ON_GARMENT_CAPTURE_SCALE
+    const height = DESIGN_HEIGHT * TRY_ON_GARMENT_CAPTURE_SCALE
+    const { blob, referenceIncluded } = await exportSketchPng({
+      strokes: options.strokes,
+      fills,
+      referenceUrl: null,
+      garmentOnly: true,
+      width,
+      height,
+      onReferenceError: 'skip',
+      onFabricError: 'throw',
+    })
+    if (referenceIncluded) {
+      throw new Error('Try On Person capture unexpectedly included a croquis underlay.')
+    }
+    if (blob.size > MAGIC_MAX_SKETCH_BYTES) {
+      throw new Error('Garment artwork is too large for Try On Person.')
+    }
+    await assertGarmentCaptureCompleteness(blob, { strokes: options.strokes, fills })
+    const dataUrl = await blobToDataUrl(blob)
+    return { blob, dataUrl, byteLength: blob.size, referenceIncluded: false }
+  } catch (err) {
+    if (err instanceof FabricAssetLoadError) {
+      throw new Error(
+        'A custom fabric in this sketch could not be loaded. Check your connection or re-upload the fabric — Try On Person was not started.',
       )
     }
     throw err

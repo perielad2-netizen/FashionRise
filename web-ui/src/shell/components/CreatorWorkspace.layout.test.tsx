@@ -86,9 +86,54 @@ function mockEditor(overrides: Partial<StudioEditor> = {}): StudioEditor {
     magicError: null,
     magicLookUrl: null,
     magicSketchUrl: null,
+    magicOriginalPhotoUrl: null,
+    magicResultMode: 'fashion' as const,
+    magicDestinationOpen: false,
+    magicDestinationBusy: false,
+    magicTryOnNotice: null,
+    magicTryOnEstimateCents: null,
+    magicFashnAvailable: false,
+    magicOwnerExperimentAvailable: false,
+    magicFashnEstimatePerCall: null,
+    magicFashnCombinedEstimateCents: null,
+    magicStatusHint: null,
+    fashnPrepOpen: false,
+    fashnPrepBusy: false,
+    fashnPrep: null,
+    fashnRealisticPieces: null,
+    fashnRealismBusy: false,
+    fashnRealismError: null,
+    fashnDetailsOpen: false,
+    toggleFashnDetails: vi.fn(),
+    fashnOwnerExperimentAllowed: false,
+    fashnMaxOwnerAllowed: false,
+    fashnMaxUnavailableReason: null,
+    fashnExperimentProvider: 'fashn',
+    setFashnExperimentProvider: vi.fn(),
+    fashnMaxMode: 'balanced',
+    setFashnMaxMode: vi.fn(),
+    fashnMaxResolution: '1k',
+    setFashnMaxResolution: vi.fn(),
+    fashnMaxPrompt: '',
+    setFashnMaxPrompt: vi.fn(),
+    fashnMaxPromptOpen: false,
+    setFashnMaxPromptOpen: vi.fn(),
+    fashnMaxSoftBudgetCredits: null,
+    fashnMaxCreditsBalanced: null,
+    fashnMaxCreditsQuality: null,
+    fashnMaxEstimateBalancedCents: null,
+    fashnMaxEstimateQualityCents: null,
+    generateFashnRealisticGarment: vi.fn(),
+    cancelFashnPrep: vi.fn(),
+    confirmFashnTryOn: vi.fn(),
+    cancelMagicDestination: vi.fn(),
+    chooseFashionMagic: vi.fn(),
+    chooseTryOnPerson: vi.fn(),
+    chooseFashnTryOn: vi.fn(),
     magicCanRecover: false,
     closeMagicPanel: vi.fn(),
     cancelMagicWait: vi.fn(),
+    saveTryOnInMyLooks: vi.fn(async () => null),
     recoverLastMagic: vi.fn(),
     downloadMagicLook: vi.fn(),
     backToSketchFromMagic: vi.fn(),
@@ -107,9 +152,27 @@ function mockEditor(overrides: Partial<StudioEditor> = {}): StudioEditor {
     confirmModelKeepStrokes: vi.fn(),
     confirmModelClearStrokes: vi.fn(),
     cancelModelSwitch: vi.fn(),
+    personalPinPrompt: null,
+    requestPersonalCroquisPin: vi.fn(),
+    applyPersonalCroquisPin: vi.fn(),
+    confirmPersonalPinKeepStrokes: vi.fn(),
+    confirmPersonalPinClearStrokes: vi.fn(),
+    cancelPersonalPinSwitch: vi.fn(),
+    croquisWizardOpen: false,
+    openCroquisWizard: vi.fn(),
+    closeCroquisWizard: vi.fn(),
+    personalCroquisId: null,
+    personalCroquisVersion: null,
+    personalUnavailable: false,
+    personalUnderlayReady: false,
     draftConflict: null,
     resolveConflictKeepLocal: vi.fn(),
     resolveConflictUseServer: vi.fn(),
+    damagedCloud: null,
+    damagedCloudDialogOpen: false,
+    resolveDamagedCloudContinueLocal: vi.fn(),
+    resolveDamagedCloudReplaceCloud: vi.fn(),
+    reopenDamagedCloudRecovery: vi.fn(),
     exporting: false,
     exportPng: vi.fn(),
     saveDesignDialog: null,
@@ -272,6 +335,43 @@ describe('CreatorWorkspace tablet layout controls (WEB-V4I)', () => {
     last.focus()
     fireEvent.keyDown(window, { key: 'Tab' })
     expect(document.activeElement).toBe(first)
+  })
+
+  it('normal Magic destination is one-button Try On without cost/provider copy (#178)', () => {
+    render(
+      <CreatorWorkspace
+        editor={mockEditor({
+          magicDestinationOpen: true,
+          magicFashnAvailable: false,
+          magicOwnerExperimentAvailable: false,
+          magicFashnCombinedEstimateCents: 16,
+          magicTryOnEstimateCents: 8,
+        })}
+      />,
+    )
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Try On Person' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: /FASHN/i })).toBeNull()
+    expect(within(dialog).queryByText(/¢/)).toBeNull()
+    expect(within(dialog).queryByText(/credit/i)).toBeNull()
+    expect(within(dialog).queryByText(/two paid stages/i)).toBeNull()
+  })
+
+  it('owner experiment entry stays available without public cost copy (#178)', () => {
+    render(
+      <CreatorWorkspace
+        editor={mockEditor({
+          magicDestinationOpen: true,
+          magicFashnAvailable: true,
+          magicOwnerExperimentAvailable: true,
+        })}
+      />,
+    )
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Try On Person' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Owner FASHN experiment' })).toBeTruthy()
+    expect(within(dialog).queryByText(/¢/)).toBeNull()
+    expect(within(dialog).getByText(/manual v1\.6 \/ Max comparison/i)).toBeTruthy()
   })
 
   it('gives model-switch confirmation precedence for focus and Escape over Models gallery', () => {

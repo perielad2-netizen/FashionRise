@@ -32,8 +32,9 @@ def _settings(**env) -> Settings:
         "openai_model": "gpt-6-luna",
         "openai_reasoning_effort": "none",
         "openai_max_completion_tokens": 1400,
-        "openai_image_model": "gpt-image-1",
+        "openai_image_model": "gpt-image-2.5-sunburst",
         "openai_image_size": "1024x1536",
+        "openai_image_quality": "high",
         "openai_timeout_seconds": 180.0,
         "openai_http_timeout_seconds": 60.0,
         "openai_base_url": None,
@@ -197,6 +198,246 @@ def test_build_image_prompt_avoids_generic_outfit_homogenization():
     assert "invent a different garment" in prompt.lower() or "do not invent" in prompt.lower()
 
 
+def test_design_enhancement_contract_on_front_and_back():
+    """Front and Back both elevate the sketch; neither treats it as a pixel trace."""
+    for side in ("front", "back"):
+        job = _job(
+            studio_side=side,
+            shared_garment_spec={
+                "main_colors": ["#BE185D"],
+                "materials": ["Satin repeating textile (exact Studio tile reference)"],
+            },
+            fabric_swatch_base64="data:image/png;base64,aa",
+        )
+        prompt = sketch_openai._build_image_prompt(
+            {
+                "summary": "Pink patterned swimsuit",
+                "image_prompt": "one-piece pink geometric satin swimsuit",
+            },
+            "Pink patterned swimsuit",
+            job=job,
+        )
+        lower = prompt.lower()
+        assert "design enhancement" in lower
+        assert "pixel-perfect tracing" in lower or "not a pixel-perfect" in lower
+        assert "traced" in lower or "cartoon" in lower
+        assert "textile reference" in lower
+        assert "color fidelity" in lower
+        assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+        if side == "back":
+            assert "same polished" in lower or "not traced" in lower
+
+
+def test_color_fidelity_forbids_invented_accent_colors():
+    """Gray-only / applied-palette sketches must not invite pink/blue accent invention."""
+    job = _job(
+        studio_side="front",
+        shared_garment_spec={"main_colors": ["#9CA3AF"], "materials": ["solid fill"]},
+    )
+    prompt = sketch_openai._build_image_prompt(
+        {
+            "summary": "Gray dress",
+            "image_prompt": "simple gray sheath dress",
+            "design_identity": {"main_colors": "gray", "silhouette": "sheath"},
+        },
+        "Gray dress",
+        job=job,
+    )
+    lower = prompt.lower()
+    assert "color fidelity" in lower
+    assert "do not invent extra accent colors" in lower
+    assert "pink/blue accents on a gray-only dress" in lower
+    assert "applied main colors only" in lower
+    assert "colors/gradients/fabrics actually applied" in lower
+    # Textile / pattern fidelity protections remain alongside the color lock.
+    assert "fabric/textile patterns" in lower or "textile patterns" in lower
+    assert "non-photorealistic" in lower
+
+
+def _realistic_fe_gray_garment_spec() -> dict[str, Any]:
+    """Mirror FE buildSharedGarmentSpec for a gray-only solid dress (long details/notes)."""
+    notes = (
+        "Polished professional fashion concept: keep silhouette/cut and Front/Back coherence; "
+        "ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; "
+        "normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble); "
+        "no traced/cartoon look."
+    )
+    details = (
+        "model=teen_a; front_strokes=12; front_fills=1; back_strokes=10; back_fills=1; "
+        "render=polished_professional_enhancement; sketch_role=strong_guidance_not_pixel_trace; "
+        "color_authority=applied_fills_only; sketch_cleanup=normalize_imperfections; "
+        "fingerprint=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    )
+    return {
+        "notes": notes[:500],
+        "colors": ["#9CA3AF", "#111827"],
+        "main_colors": ["#9CA3AF"],
+        "materials": ["solid fill"],
+        "details": details[:1000],
+        "garment_category": "studio",
+    }
+
+
+def _shared_spec_payload_from_prompt(prompt: str) -> dict[str, Any]:
+    marker = "SHARED GARMENT SPEC (front/back consistency — do not contradict): "
+    assert marker in prompt
+    start = prompt.index(marker) + len(marker)
+    decoder = json.JSONDecoder()
+    obj, _offset = decoder.raw_decode(prompt[start:].lstrip())
+    assert isinstance(obj, dict)
+    return obj
+
+
+def test_shared_garment_spec_prioritizes_main_colors_over_long_details():
+    """Regression: alphabetical JSON[:320] dropped main_colors after lengthy details."""
+    spec = _realistic_fe_gray_garment_spec()
+    # Prove the old failure mode: alphabetical sort places lengthy details before main_colors.
+    naive = json.dumps(spec, ensure_ascii=True, sort_keys=True)
+    assert naive.find('"main_colors"') > sketch_openai._SHARED_GARMENT_SPEC_PROMPT_CHARS
+
+    clause = sketch_openai._shared_garment_spec_clause({"shared_garment_spec": spec})
+    payload = clause.split(": ", 1)[1]
+    assert len(payload) <= sketch_openai._SHARED_GARMENT_SPEC_PROMPT_CHARS
+    obj = json.loads(payload)  # must be complete JSON — never mid-field cut
+    assert obj.get("main_colors") == ["#9CA3AF"]
+    assert obj.get("materials") == ["solid fill"]
+    # Optional diagnostics may be clipped/omitted; color authority must remain.
+    details_text = obj.get("details") or ""
+    assert "fingerprint" not in details_text
+
+
+def test_build_image_prompt_gray_main_colors_authoritative_front_and_back():
+    """E2E: final images.edit brief must carry gray #9CA3AF as effective color authority."""
+    spec = _realistic_fe_gray_garment_spec()
+    structured = {
+        "summary": "Gray dress with uneven strap",
+        "image_prompt": (
+            "gray sheath dress on fashion croquis; left shoulder strap slightly uneven; "
+            "solid gray fill only; dark outline linework"
+        ),
+        "design_identity": {
+            "main_colors": "gray",
+            "silhouette": "sheath dress",
+            "garment_category": "dress",
+            "asymmetry_notes": None,
+        },
+        "refine_ok": ["uneven strap widths", "crooked edges"],
+    }
+    for side in ("front", "back"):
+        prompt = sketch_openai._build_image_prompt(
+            structured,
+            structured["summary"],
+            job=_job(studio_side=side, shared_garment_spec=spec),
+        )
+        assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+        payload = _shared_spec_payload_from_prompt(prompt)
+        assert payload.get("main_colors") == ["#9CA3AF"]
+        assert payload.get("materials") == ["solid fill"]
+        lower = prompt.lower()
+        assert "color fidelity" in lower
+        assert "pink/blue accents on a gray-only dress" in lower
+        assert "uneven strap" in lower
+        assert "normalize sketch glitches" in lower or "sketch glitches" in lower
+        assert "intentional design asymmetry" in lower
+        # Dark outline must not be promoted as fabric authority over gray fill.
+        assert payload["main_colors"] == ["#9CA3AF"]
+        assert "#111827" not in payload.get("main_colors", [])
+
+
+def test_build_image_prompt_keeps_fabric_identity_under_largest_safe_spec():
+    """Largest realistic patterned side payload still fits and keeps textile identity."""
+    notes = (
+        "Polished professional fashion concept: keep silhouette/cut and Front/Back coherence; "
+        "ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; "
+        "normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble); "
+        "no traced/cartoon look. Designer note: evening column with soft drape."
+    )
+    details = (
+        "model=female-atelier; front_strokes=48; front_fills=3; back_strokes=44; back_fills=3; "
+        "render=polished_professional_enhancement; sketch_role=strong_guidance_not_pixel_trace; "
+        "color_authority=applied_fills_only; sketch_cleanup=normalize_imperfections; "
+        "fingerprint=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    )
+    spec = {
+        "notes": notes[:500],
+        "colors": ["#BE185D", "#F9A8D4", "#111827"],
+        "main_colors": ["#BE185D", "#F9A8D4"],
+        "materials": [
+            "Floral satin repeating textile (exact Studio tile reference)",
+            "uploaded fabric repeating textile (exact Studio tile reference)",
+        ],
+        "details": details[:1000],
+        "garment_category": "studio",
+        "silhouette": "column gown",
+        "neckline": "sweetheart",
+        "hem": "floor",
+    }
+    for side in ("front", "back"):
+        prompt = sketch_openai._build_image_prompt(
+            {
+                "summary": "Pink floral column gown",
+                "image_prompt": "pink floral satin column gown, sweetheart neckline",
+                "design_identity": {
+                    "main_colors": "pink",
+                    "fabric_patterns": "floral satin",
+                    "silhouette": "column gown",
+                },
+            },
+            "Pink floral column gown",
+            job=_job(
+                studio_side=side,
+                shared_garment_spec=spec,
+                fabric_swatch_base64="data:image/png;base64,aa",
+            ),
+        )
+        assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+        payload = _shared_spec_payload_from_prompt(prompt)
+        assert payload.get("main_colors") == ["#BE185D", "#F9A8D4"]
+        materials = payload.get("materials") or []
+        assert any("repeating textile" in str(m) for m in materials)
+        lower = prompt.lower()
+        assert "textile reference" in lower
+        assert "design enhancement" in lower
+        assert "color fidelity" in lower
+
+
+def test_design_enhancement_normalizes_sketch_glitches_not_literal_mistakes():
+    """Uneven straps/sleeves and accidental asymmetry must be cleaned, not traced."""
+    prompt = sketch_openai._build_image_prompt(
+        {
+            "summary": "Blue swimsuit",
+            "image_prompt": "blue one-piece swimsuit with straps",
+            "design_identity": {
+                "main_colors": "blue",
+                "garment_category": "swimsuit",
+                "asymmetry_notes": None,
+            },
+            "refine_ok": ["uneven strap widths", "crooked edges"],
+        },
+        "Blue swimsuit",
+        job=_job(studio_side="front"),
+    )
+    lower = prompt.lower()
+    assert "design enhancement" in lower
+    assert "uneven strap" in lower
+    assert "normalize sketch glitches" in lower or "normalize" in lower
+    assert "sketch glitches" in lower
+    assert "intentional design asymmetry" in lower
+    assert "balance accidental uneven straps/sleeves" in lower
+    assert "pixel-perfect trace" in lower or "not a pixel-perfect" in lower
+    assert "non-photorealistic" in lower
+
+
+def test_system_prompt_asks_to_elevate_not_trace():
+    system = sketch_openai._system_prompt("sketch_polish")
+    lower = system.lower()
+    assert "elevate" in lower or "enhancement" in lower
+    assert "trace" in lower
+    assert "imperfections" in lower
+    assert "accent colors" in lower or "decorative panels" in lower
+    assert "uneven strap" in lower or "strap or sleeve" in lower
+
+
 def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, settings):
     captured: dict[str, Any] = {}
 
@@ -225,10 +466,12 @@ def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, setti
 
     assert url.startswith("http://127.0.0.1:8001/static/uploads/ai/")
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
-    assert captured["model"] == "gpt-image-1"
-    assert captured["input_fidelity"] == "high"
+    assert captured["model"] == "gpt-image-2.5-sunburst"
+    assert "input_fidelity" not in captured
+    assert captured["quality"] == "high"
+    assert captured["output_format"] == "png"
     assert captured["n"] == 1
     assert captured["size"] == "1024x1536"
     assert "only clean the linework and add a light color wash" not in captured["prompt"].lower()
@@ -252,7 +495,7 @@ def test_edit_failure_exactly_one_edit_no_generate_or_mini(monkeypatch, settings
             client, job, _operator_sample_structured(), "summary"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
@@ -267,12 +510,12 @@ def test_empty_edit_response_exactly_one_edit_no_generate(monkeypatch, settings)
             client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
 def test_configured_image_model_used_once_never_downgraded(monkeypatch):
-    s = _settings(openai_image_model="gpt-image-1")
+    s = _settings(openai_image_model="gpt-image-2.5-sunburst")
     monkeypatch.setattr(sketch_openai, "get_settings", lambda: s)
 
     def on_edit(**kwargs):
@@ -285,8 +528,9 @@ def test_configured_image_model_used_once_never_downgraded(monkeypatch):
             client, job, {"summary": "x", "image_prompt": "dress"}, "x"
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert "gpt-image-1-mini" not in client.edit_models
+    assert "gpt-image-2.5-flare" not in client.edit_models
     assert client.generate_calls == 0
 
 
@@ -416,7 +660,7 @@ def test_complete_polish_propagates_edit_failure(monkeypatch, settings):
             _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
         )
     assert client.option_calls == [{"max_retries": 0}]
-    assert client.edit_models == ["gpt-image-1"]
+    assert client.edit_models == ["gpt-image-2.5-sunburst"]
     assert client.generate_calls == 0
 
 
@@ -478,6 +722,140 @@ def test_edit_path_decodes_sketch_once(monkeypatch, settings):
     )
     assert decode_calls["n"] == 1
     assert client.option_calls == [{"max_retries": 0}]
+
+
+def test_edit_bad_request_safe_meta_no_body_leak(monkeypatch, settings, caplog):
+    """Issue #54 observability: persist allowlisted fields only; never raw provider bodies."""
+
+    class _FakeBadRequest(Exception):
+        def __init__(self):
+            super().__init__('{"error":{"message":"SECRET_BODY_SHOULD_NOT_LEAK","code":"invalid_image"}}')
+            self.status_code = 400
+            self.code = "invalid_image"
+            self.request_id = "req_test_observability_001"
+            self.body = {"error": {"message": "SECRET_BODY_SHOULD_NOT_LEAK", "code": "invalid_image"}}
+
+    def on_edit(**kwargs):
+        raise _FakeBadRequest()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with (
+        caplog.at_level(logging.WARNING),
+        pytest.raises(sketch_openai.SketchCompletionError) as excinfo,
+    ):
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    err = excinfo.value
+    assert str(err) == "sketch image edit failed"
+    assert err.safe_meta["error_category"] == "provider_bad_request"
+    assert err.safe_meta["http_status"] == 400
+    assert err.safe_meta["provider_code"] == "invalid_image"
+    assert err.safe_meta["request_id"] == "req_test_observability_001"
+    assert err.safe_meta["stage"] == "images.edit"
+    assert err.safe_meta["image_edit_attempted"] is True
+    assert err.safe_meta["image_bytes_returned"] is False
+    assert "SECRET_BODY" not in str(err)
+    assert "SECRET_BODY" not in json.dumps(err.safe_meta)
+    joined = "\n".join(r.getMessage() for r in caplog.records)
+    assert "SECRET_BODY" not in joined
+    assert "status=400" in joined
+    assert "code=invalid_image" in joined
+    assert "request_id=req_test_observability_001" in joined
+
+
+
+def test_moderation_blocked_maps_to_content_policy_not_bad_request(monkeypatch, settings):
+    class _FakeModeration(Exception):
+        def __init__(self):
+            super().__init__(
+                '{"error":{"code":"moderation_blocked","moderation_details":{"SECRET":true}}}'
+            )
+            self.status_code = 400
+            self.code = "moderation_blocked"
+            self.request_id = "req_moderation_abc123"
+            self.body = {"error": {"code": "moderation_blocked", "moderation_details": {"SECRET": True}}}
+
+    def on_edit(**kwargs):
+        raise _FakeModeration()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "two-piece swimsuit"}, "x"
+        )
+    meta = excinfo.value.safe_meta
+    assert meta["error_category"] == "provider_content_policy"
+    assert meta["provider_code"] == "moderation_blocked"
+    assert meta["http_status"] == 400
+    assert "SECRET" not in json.dumps(meta)
+    assert "moderation_details" not in meta
+    assert "safety rules" in str(excinfo.value).lower()
+
+
+
+def test_http_400_without_safety_code_is_not_content_policy(monkeypatch, settings):
+    class _FakeBadRequest(Exception):
+        def __init__(self):
+            super().__init__("bad")
+            self.status_code = 400
+            self.code = None
+            self.request_id = "req_plain400_zzzz99"
+
+    def on_edit(**kwargs):
+        raise _FakeBadRequest()
+
+    client = _EditTrackingClient(on_edit=on_edit)
+    job = _job(image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}")
+    with pytest.raises(sketch_openai.SketchCompletionError) as excinfo:
+        sketch_openai._generate_and_store_look_image(
+            client, job, {"summary": "x", "image_prompt": "dress"}, "x"
+        )
+    assert excinfo.value.safe_meta["error_category"] == "provider_bad_request"
+    assert str(excinfo.value) == "sketch image edit failed"
+
+
+
+def test_normalize_failure_meta_drops_unknown_fields():
+    kept = sketch_openai.normalize_failure_meta(
+        {
+            "error_category": "provider_bad_request",
+            "error_type": "BadRequestError",
+            "http_status": 400,
+            "provider_code": "invalid_image",
+            "request_id": "req_ok_normalize01",
+            "stage": "images.edit",
+            "image_edit_attempted": True,
+            "image_bytes_returned": False,
+            "raw_body": "SECRET",
+            "prompt": "SECRET",
+        }
+    )
+    assert kept == {
+        "error_category": "provider_bad_request",
+        "error_type": "BadRequestError",
+        "http_status": 400,
+        "provider_code": "invalid_image",
+        "request_id": "req_ok_normalize01",
+        "stage": "images.edit",
+        "image_edit_attempted": True,
+        "image_bytes_returned": False,
+    }
+    dropped = sketch_openai.normalize_failure_meta(
+        {
+            "error_category": "not_a_real_category",
+            "error_type": "EvilClassName",
+            "http_status": 400,
+            "provider_code": "not_allowlisted_code",
+            "request_id": "bad id with spaces!",
+            "stage": "images.hack",
+            "raw_body": "SECRET",
+        }
+    )
+    assert dropped == {"http_status": 400}
+
 
 
 def test_build_sketch_chat_request_polish_uses_new_system_prompt(settings):

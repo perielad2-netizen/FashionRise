@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   MAX_SNAPSHOT_STROKES,
   SAVED_DESIGN_SCHEMA,
+  SAVED_DESIGN_SCHEMA_V2,
   TITLE_MAX_LENGTH,
   buildSavedDesignPayload,
   parseSavedDesign,
+  parseSavedDesignSnapshot,
   partitionSavedDesigns,
   snapshotFingerprint,
   snapshotFromDocument,
@@ -15,7 +17,9 @@ import {
 import {
   STUDIO_DRAFT_KIND,
   STUDIO_DRAFT_SCHEMA,
+  STUDIO_DRAFT_SCHEMA_V2,
   createEmptyDraftDocument,
+  upgradeDraftToV2,
   studioDraftMetadata,
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
@@ -261,6 +265,95 @@ describe('parseSavedDesign safety', () => {
   })
 })
 
+describe('saved_design.v2 atomic Back parse', () => {
+  const frontStroke = {
+    id: 'f1',
+    tool: 'draw' as const,
+    points: [1, 2, 0.5],
+    color: '#1C1C1E',
+    size: 2,
+    opacity: 1,
+  }
+  const backStroke = {
+    id: 'b1',
+    tool: 'draw' as const,
+    points: [3, 4, 0.5],
+    color: '#222222',
+    size: 2,
+    opacity: 1,
+  }
+  const baseSnap = {
+    strokes: [frontStroke],
+    fills: [],
+    activeSide: 'front' as const,
+    model: 'female-straight' as const,
+    brush: { sizeId: 'thin' as const, opacity: 1, color: '#1C1C1E' },
+    dimmed: false,
+  }
+
+  it('accepts well-formed v2 Back ink', () => {
+    const snap = parseSavedDesignSnapshot({
+      ...baseSnap,
+      back: { strokes: [backStroke], fills: [] },
+    })
+    expect(snap?.back?.strokes).toHaveLength(1)
+  })
+
+  it.each([
+    ['back null', null],
+    ['back string', 'damaged'],
+    ['strokes missing', { fills: [] }],
+    ['fills wrong type', { strokes: [backStroke], fills: 'nope' }],
+    [
+      'malformed back stroke',
+      { strokes: [{ ...backStroke, tool: 'spray' }], fills: [] },
+    ],
+    [
+      'malformed back fill',
+      {
+        strokes: [backStroke],
+        fills: [{ id: 'x', contour: [1], style: { kind: 'solid', color: '#111111' }, seedX: 0, seedY: 0 }],
+      },
+    ],
+  ])('rejects whole snapshot when Back is malformed (%s)', (_label, back) => {
+    expect(parseSavedDesignSnapshot({ ...baseSnap, back })).toBeNull()
+  })
+
+  it('marks a saved_design.v2 row with malformed Back as damaged, not Front-only', () => {
+    const payload = buildSavedDesignPayload({
+      title: 'Two sided',
+      snapshot: {
+        ...baseSnap,
+        back: { strokes: [backStroke], fills: [] },
+      },
+      saveRequestId: 'req-v2',
+      sourceRevision: 3,
+    })
+    const designData = {
+      ...payload.design_data,
+      schema: SAVED_DESIGN_SCHEMA_V2,
+      snapshot: {
+        ...(payload.design_data.snapshot as object),
+        back: { strokes: 'broken', fills: [] },
+      },
+    }
+    const r = row({
+      id: 'v2-broken',
+      title: payload.title,
+      design_data: designData as unknown as Record<string, unknown>,
+      metadata: payload.metadata,
+    })
+    expect(parseSavedDesign(r, OWNER)).toBeNull()
+    const lib = partitionSavedDesigns([r], OWNER)
+    expect(lib.designs).toEqual([])
+    expect(lib.damaged.map((d) => d.id)).toEqual(['v2-broken'])
+  })
+
+  it('rejects invalid activeSide on snapshots', () => {
+    expect(parseSavedDesignSnapshot({ ...baseSnap, activeSide: 'middle' })).toBeNull()
+  })
+})
+
 describe('validateDesignTitle', () => {
   it('trims and collapses whitespace', () => {
     expect(validateDesignTitle('  Spring   coat \n ')).toEqual({ ok: true, title: 'Spring coat' })
@@ -289,5 +382,32 @@ describe('workingDocumentFromSnapshot', () => {
     expect(next.model).toBe('female')
     expect(next.strokes).toEqual(snapshot.strokes)
     expect(next.strokes).not.toBe(snapshot.strokes)
+  })
+
+  it('restores v2 snapshots with back ink when Front/Back flag is on', () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const current = doc()
+    const base = upgradeDraftToV2(current)
+    const snapshot = snapshotFromDocument({
+      ...base,
+      back: {
+        strokes: [
+          {
+            id: 'b1',
+            tool: 'draw',
+            points: [2, 2, 0.5],
+            color: '#1C1C1E',
+            size: 2,
+            opacity: 1,
+          },
+        ],
+        fills: [],
+      },
+      activeSide: 'back',
+    })
+    const next = workingDocumentFromSnapshot({ current, serverRevision: 1, snapshot })
+    expect(next.schema).toBe(STUDIO_DRAFT_SCHEMA_V2)
+    expect(next.back?.strokes).toHaveLength(1)
+    expect(next.activeSide).toBe('back')
   })
 })

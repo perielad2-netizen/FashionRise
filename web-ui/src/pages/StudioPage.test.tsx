@@ -211,18 +211,15 @@ describe('Studio beta notices stay outside Settings', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
       expect(screen.queryByRole('status', { name: /later milestone/i })).not.toBeInTheDocument()
 
-      fireEvent.click(screen.getByRole('button', { name: 'Settings, coming later' }))
-      const settingsNotice = noticeFor(/Settings — coming later/i)
-      expect(settingsNotice).toBeVisible()
-      expect(screen.getByLabelText(/settings inspector/i).contains(settingsNotice)).toBe(false)
-      expect(settingsDock.className).not.toMatch(/dockActive/)
-      fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
-      expect(screen.queryByRole('status', { name: /Settings — coming later/i })).not.toBeInTheDocument()
-
-      fireEvent.click(screen.getByRole('button', { name: 'Home, coming later' }))
+      // Coming-later nav destinations must surface outside Settings (Home is always disabled).
+      const homeBtn =
+        screen.queryByRole('button', { name: 'Home, coming later' }) ??
+        screen.getByRole('button', { name: /^Home$/i })
+      fireEvent.click(homeBtn)
       const home = noticeFor(/Home — coming later/i)
       expect(home).toBeVisible()
       expect(screen.getByLabelText(/settings inspector/i).contains(home)).toBe(false)
+      expect(settingsDock.className).not.toMatch(/dockActive/)
       fireEvent.click(screen.getByRole('button', { name: /^Magic/i }))
       expect(screen.queryByRole('status', { name: /Home — coming later/i })).not.toBeInTheDocument()
       expect(noticeFor(/later milestone/i)).toBeVisible()
@@ -374,8 +371,9 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     const nav = screen.getByRole('navigation', { name: 'FashionRise' })
     expect(nav.querySelector('img')).toBeNull()
     expect(within(nav).getByRole('button', { name: 'Create' })).toHaveAttribute('aria-current', 'page')
-    for (const label of ['Home', 'Design Book', 'Discover', 'My Looks']) {
+    for (const label of ['Home', 'Design Book', 'Discover']) {
       expect(within(nav).getByRole('button', { name: label })).toBeDisabled()
     }
+    expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
   })
 })

@@ -28,13 +28,13 @@ describe('ImmersiveToolbar', () => {
         onOpenBrush={vi.fn()}
         onOpenModels={vi.fn()}
         onSave={vi.fn()}
-        onExport={vi.fn()}
         onExit={onExit}
       />,
     )
 
     expect(screen.getByRole('toolbar', { name: 'Immersive drawing toolbar' })).toBeTruthy()
     expect(screen.getByText('125%')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Export PNG/i })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Hand pan' }))
     expect(onTool).toHaveBeenCalledWith('pan')
     fireEvent.click(screen.getByRole('button', { name: 'Fit width' }))
