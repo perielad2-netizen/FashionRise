@@ -20,12 +20,14 @@ import {
 import { DetailsEditorSheet } from '@/shell/components/techpack/DetailsEditorSheet'
 import { GenerateAiPdfOverlay } from '@/shell/components/techpack/GenerateAiPdfOverlay'
 import { MeasurementProfileCard } from '@/shell/components/techpack/MeasurementProfileCard'
+import { PieceCategoryConfirm } from '@/shell/components/techpack/PieceCategoryConfirm'
 import {
   buildEditorPersistSnapshot,
   editorPersistFingerprint,
 } from '@/shell/components/techpack/editorPersistSnapshot'
 import {
   asRecord,
+  isInconclusivePiece,
   wrapSpecForEditing,
 } from '@/shell/components/techpack/pieceHelpers'
 import styles from './TechpackScreen.module.css'
@@ -497,6 +499,10 @@ export function TechpackScreen({ draftId, onBack }: Props) {
       setError('Add body measurements for the person first — save them with a name to reuse later.')
       return
     }
+    if ((spec?.outfit?.pieces ?? []).some(isInconclusivePiece)) {
+      setError('Choose a garment type below (What did you design?), then Generate again.')
+      return
+    }
 
     // Already have a valid Professional PDF for this revision — show Download, no paid call.
     if (hasReadyPdf && readyExportId) {
@@ -917,6 +923,17 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           selectedId={selectedBodyProfileId}
           onSelect={setSelectedBodyProfileId}
           disabled={busy}
+        />
+
+        <PieceCategoryConfirm
+          pieces={pieces}
+          units={spec?.units || 'cm'}
+          disabled={busy}
+          onConfirm={(pieceId, next) => {
+            updatePiece(pieceId, () => next)
+            setError(null)
+            void persist({ silent: true })
+          }}
         />
 
         {pieces.length ? (

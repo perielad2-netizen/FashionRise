@@ -10,14 +10,16 @@ import {
   listBodyMeasurementProfiles,
   updateBodyMeasurementProfile,
 } from '@/services/techpacksApi'
+import { FieldHelp } from '@/shell/components/techpack/FieldHelp'
+import { getFieldHelp } from '@/shell/components/techpack/fieldHelpContent'
 import styles from './MeasurementProfileCard.module.css'
 
 const BODY_FIELDS = [
-  { key: 'height', label: 'Height' },
-  { key: 'bust', label: 'Bust / chest' },
-  { key: 'waist', label: 'Waist' },
-  { key: 'hip', label: 'Hip' },
-  { key: 'inseam', label: 'Inseam' },
+  { key: 'height', label: 'Height', helpKey: undefined as string | undefined },
+  { key: 'bust', label: 'Bust / chest', helpKey: undefined as string | undefined },
+  { key: 'waist', label: 'Waist', helpKey: undefined as string | undefined },
+  { key: 'hip', label: 'Hip', helpKey: undefined as string | undefined },
+  { key: 'inseam', label: 'Inseam', helpKey: 'body_inseam' },
 ] as const
 
 type DraftForm = {
@@ -223,9 +225,22 @@ export function MeasurementProfileCard({ selectedId, onSelect, disabled = false 
                 const cell = selected.measurements?.[f.key]
                 const v = cell?.value
                 if (v === null || v === undefined || v === '') return null
+                const help = f.helpKey ? getFieldHelp(f.helpKey) : null
                 return (
                   <div key={f.key}>
-                    <dt>{f.label}</dt>
+                    <dt>
+                      <span className={styles.labelWithHelp}>
+                        {f.label}
+                        {help ? (
+                          <FieldHelp
+                            title={help.title}
+                            explanation={help.explanation}
+                            examples={help.examples}
+                            diagram={help.diagram}
+                          />
+                        ) : null}
+                      </span>
+                    </dt>
                     <dd>
                       {v}
                       {cell?.unit ? ` ${cell.unit}` : ' cm'}
@@ -287,23 +302,36 @@ export function MeasurementProfileCard({ selectedId, onSelect, disabled = false 
             />
           </label>
           <div className={styles.grid}>
-            {BODY_FIELDS.map((f) => (
-              <label key={f.key} className={styles.field}>
-                <span>{f.label} (cm)</span>
-                <input
-                  inputMode="decimal"
-                  value={form.values[f.key] || ''}
-                  disabled={busy}
-                  placeholder="—"
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      values: { ...prev.values, [f.key]: e.target.value },
-                    }))
-                  }
-                />
-              </label>
-            ))}
+            {BODY_FIELDS.map((f) => {
+              const help = f.helpKey ? getFieldHelp(f.helpKey) : null
+              return (
+                <label key={f.key} className={styles.field}>
+                  <span className={styles.labelWithHelp}>
+                    {f.label} (cm)
+                    {help ? (
+                      <FieldHelp
+                        title={help.title}
+                        explanation={help.explanation}
+                        examples={help.examples}
+                        diagram={help.diagram}
+                      />
+                    ) : null}
+                  </span>
+                  <input
+                    inputMode="decimal"
+                    value={form.values[f.key] || ''}
+                    disabled={busy}
+                    placeholder="—"
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        values: { ...prev.values, [f.key]: e.target.value },
+                      }))
+                    }
+                  />
+                </label>
+              )
+            })}
             <label className={styles.field}>
               <span>Sample size (optional)</span>
               <input

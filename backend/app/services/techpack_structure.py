@@ -133,9 +133,8 @@ def reject_inconclusive_professional_pieces(pieces: list[dict[str, Any]]) -> lis
     bad = [p for p in pieces if is_inconclusive_piece(p)]
     if bad:
         raise ValidationAppError(
-            "Cannot start AI Professional: garment categories are inconclusive. "
-            "Open Measurements & details and confirm each garment category "
-            "(do not leave “Garment (confirm category)” / Other unresolved), then Generate again."
+            "Cannot start AI Professional: choose a garment type first "
+            "(What did you design? on Create Real Design), then Generate again."
         )
     return pieces
 
@@ -494,8 +493,8 @@ def prepare_professional_outfit(
         elif not pieces or all(is_inconclusive_piece(p) for p in pieces):
             raise ValidationAppError(
                 "Cannot start AI Professional: Magic look evidence does not identify clear "
-                "garment categories. Open Measurements & details, confirm each garment "
-                "category, then Generate again. No paid call was made."
+                "garment categories. Choose a garment type on Create Real Design "
+                "(What did you design?), then Generate again. No paid call was made."
             )
 
     pieces = validate_professional_pieces(pieces)

@@ -38,6 +38,12 @@
   max-width: 52ch;
 }
 
+.labelWithHelp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .muted {
   margin: 0;
   font-size: 12px;

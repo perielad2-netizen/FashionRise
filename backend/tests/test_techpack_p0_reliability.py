@@ -596,7 +596,8 @@ def test_prepare_rejects_generic_other_piece(db_session, client):
     }
     with pytest.raises(ValidationAppError) as ei:
         prepare_professional_outfit(db_session, draft, spec, persist_repair=False)
-    assert "inconclusive" in str(ei.value).lower() or "confirm" in str(ei.value).lower()
+    msg = str(ei.value).lower()
+    assert "garment type" in msg or "inconclusive" in msg or "confirm" in msg
 
 
 def test_prepare_preserves_designer_confirmed_despite_weak_other_detector(db_session, client):
