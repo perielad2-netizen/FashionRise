@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Save-as-design Sketch Engine ack + Try On/Flip** **LIVE** FE · **`d18ad628`** · BE still **`900bda6b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Try On shade-erase paper-frame hem fix** **LIVE** FE · **`b8c599b2`** · BE still **`900bda6b`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,12 +11,16 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`d18ad628`** — release `/var/www/fashionrise/releases/d18ad628` · Try On shade-layer bounds fix + hide Flip when no rear croquis. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`b8c599b2`** — release `/var/www/fashionrise/releases/b8c599b2` · Try On legacy-frame force (shade eraser overshoot no longer letterboxes hems) + prior Flip hide. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`d18ad628`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`b8c599b2`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## Try On shade-erase paper-frame hem — LIVE FE (2026-11-05)
+
+Shade eraser tips outside 768×1024 no longer flip garment capture to the extended-paper frame (which letterboxed fills and failed completeness with “lost lower parts”). `resolveExportFrame` ignores shade/highlight; Magic/Try On capture force `frame: 'legacy'` after the ink/fills gate. App **`b8c599b2`**. Rollback `/var/backups/fashionrise/tryon-paper-frame-*/ROLLBACK.sh` → **`d18ad628`**.
 
 ## Try On shade-bounds + Flip hide — LIVE FE (2026-11-05)
 
