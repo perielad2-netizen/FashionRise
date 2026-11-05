@@ -16,6 +16,7 @@ import { FashnGarmentReview } from '@/components/studio/FashnGarmentReview'
 import { SaveDesignDialog } from '@/components/studio/SaveDesignDialog'
 import { ColorAndMaterialsPanel } from '@/shell/components/ColorAndMaterialsPanel'
 import { BrushControls } from '@/shell/components/BrushControls'
+import { BrushKindStrip } from '@/shell/components/BrushKindStrip'
 import { DrawingWorkspace } from '@/shell/components/DrawingWorkspace'
 import { FloatingToolRail } from '@/shell/components/FloatingToolRail'
 import { ImmersiveToolbar, type ImmersiveTool } from '@/shell/components/ImmersiveToolbar'
@@ -273,7 +274,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         : editor.tool === 'eyedropper'
           ? 'Eyedropper'
           : 'Pencil'
-  const brushOverlay = dock === 'brush' && (tablet || immersive)
+  // Phone + tablet + immersive all use the brush sheet (not desktop settings column).
+  const brushOverlay = dock === 'brush' && overlayPanels
   const panelScrim =
     (dock === 'materials' || dock === 'settings' || dock === 'models') && overlayPanels
   const betaNotice = editor.magicNotice
@@ -663,18 +665,29 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
 
         <div className={styles.center}>
           {!immersive ? (
-            <FloatingToolRail
-              tool={editor.tool}
-              canUndo={editor.canUndo}
-              canRedo={editor.canRedo}
-              onTool={editor.setTool}
-              onUndo={editor.undo}
-              onRedo={editor.redo}
-              orientation={narrow ? 'horizontal' : 'vertical'}
-              showCloseSmallGaps={editor.showCloseSmallGaps}
-              closeSmallGapsArmed={editor.fillCloseSmallGaps}
-              onCloseSmallGaps={editor.armCloseSmallGaps}
-            />
+            <div className={styles.toolColumn}>
+              <FloatingToolRail
+                tool={editor.tool}
+                canUndo={editor.canUndo}
+                canRedo={editor.canRedo}
+                onTool={editor.setTool}
+                onUndo={editor.undo}
+                onRedo={editor.redo}
+                orientation={narrow ? 'horizontal' : 'vertical'}
+                showCloseSmallGaps={editor.showCloseSmallGaps}
+                closeSmallGapsArmed={editor.fillCloseSmallGaps}
+                onCloseSmallGaps={editor.armCloseSmallGaps}
+              />
+              {editor.tool === 'draw' && editor.setBrushKind ? (
+                <div className={styles.kindStripWrap}>
+                  <BrushKindStrip
+                    compact={narrow}
+                    brushKind={editor.brushEngine?.brushKind ?? 'tapered'}
+                    onBrushKind={editor.setBrushKind}
+                  />
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <div className={styles.canvasStage}>
             <DrawingWorkspace
@@ -714,9 +727,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
                 canUndo={editor.canUndo}
                 canRedo={editor.canRedo}
                 brushSize={editor.brushSize}
+                brushKind={editor.brushEngine?.brushKind ?? 'tapered'}
                 zoomPercent={zoomPercent(viewport.scale)}
                 nativeFullscreen={nativeFullscreen}
                 onTool={applyImmersiveTool}
+                onBrushKind={editor.setBrushKind}
                 onUndo={editor.undo}
                 onRedo={editor.redo}
                 onZoomIn={() => zoomStep(1)}
@@ -817,10 +832,13 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
                   tool={editor.tool}
                   brushSize={editor.brushSize}
                   opacity={editor.opacity}
+                  brushEngine={editor.brushEngine}
                   dimmed={editor.dimmed}
                   toolLabel={toolLabel}
                   onBrushSize={editor.setBrushSizePx}
                   onOpacity={editor.setBrushOpacity}
+                  onBrushKind={editor.setBrushKind}
+                  onBrushEnginePatch={editor.patchBrushEngine}
                   onToggleDim={() => editor.setDimmed((v) => !v)}
                 />
               </div>

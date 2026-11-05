@@ -92,6 +92,7 @@ export function BrushControls({
     <div
       className={variant === 'flat' ? styles.flat : styles.sheet}
       aria-label="Brush settings"
+      data-testid="brush-controls"
     >
       {variant === 'sheet' ? <p className={styles.title}>{title}</p> : null}
 
@@ -106,6 +107,7 @@ export function BrushControls({
                 role="radio"
                 aria-checked={selected}
                 className={selected ? styles.kindActive : styles.kind}
+                data-testid={`brush-kind-${opt.id}`}
                 onClick={() => onBrushKind(opt.id)}
               >
                 <BrushPreview kind={opt.id} />
