@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Charcoal Shading V2** **LIVE** FE · **`3f196e9a`** · BE still **`900bda6b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Charcoal V2** + draft fingerprint hotfix **LIVE** FE · **`PENDING`** · BE still **`900bda6b`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -19,6 +19,12 @@
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## Charcoal Shading V2 — LIVE FE (2026-11-05)
+
+### Hotfix — false Draft recovery conflict (2026-11-05)
+Selecting Charcoal/Airbrush then drawing opened **Draft recovery conflict**; **Keep this device** showed **Save failed**.
+**Cause:** FE `draftContentFingerprint` only sorted top-level keys. Professional stroke fields (`garmentMask` / `charcoalRenderer`) changed insertion order after `parseStudioDraftDocument`, so PUT **200** extract ≠ send fingerprint → false conflict. BE already uses deep `sort_keys`.
+**Fix:** deep-canonicalize nested objects in `draftContentFingerprint` (Python-equivalent). Ink/Airbrush paint unchanged.
+
 
 ### Root cause (V1 charcoal)
 Stamp-based `paintCharcoal` used `stampCenters()` + overlapping radial gradients. Slow pointer motion stacked more dabs → darker blobs; edges looked like spray/smoke instead of fashion graphite.

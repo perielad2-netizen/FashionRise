@@ -434,7 +434,27 @@ export function bumpDraftDocument(
   return next
 }
 
-/** Stage B BE-aligned content fingerprint (sort_keys stable via ordered keys). */
+/**
+ * Deep-canonicalize values the way Python `json.dumps(..., sort_keys=True)` does.
+ * Nested stroke/brush key insertion order must not open false Draft recovery conflicts
+ * after a successful PUT (professional charcoal fields reordered by parseStudioDraftDocument).
+ */
+export function canonicalJsonable(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalJsonable(item))
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>
+    const sorted: Record<string, unknown> = {}
+    for (const key of Object.keys(obj).sort()) {
+      sorted[key] = canonicalJsonable(obj[key])
+    }
+    return sorted
+  }
+  return value
+}
+
+/** Stage B BE-aligned content fingerprint (deep sort_keys, matching BE studio OCC). */
 export function draftContentFingerprint(doc: StudioDraftDocument): string {
   const pins = normalizePersonalCroquisPins(doc)
   const payload: Record<string, unknown> = {
@@ -451,10 +471,7 @@ export function draftContentFingerprint(doc: StudioDraftDocument): string {
     activeSide: normalizeActiveSide(doc),
     back: normalizeBackSentinel(doc),
   }
-  const keys = Object.keys(payload).sort()
-  const sorted: Record<string, unknown> = {}
-  for (const k of keys) sorted[k] = payload[k]
-  return JSON.stringify(sorted)
+  return JSON.stringify(canonicalJsonable(payload))
 }
 
 export function upgradeDraftToV2(doc: StudioDraftDocument): StudioDraftDocument {

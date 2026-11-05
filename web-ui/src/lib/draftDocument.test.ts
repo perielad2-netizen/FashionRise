@@ -3,10 +3,17 @@ import {
   bumpDraftDocument,
   createEmptyDraftDocument,
   documentFromEditorState,
+  draftContentFingerprint,
   parseStudioDraftDocument,
   resolveDraftConflict,
   STUDIO_DRAFT_SCHEMA,
 } from '@/lib/draftDocument'
+import { documentForCloud } from '@/services/designsApi'
+import {
+  applyBrushEngineToStroke,
+  defaultsForBrushKind,
+  type BrushEngineState,
+} from '@/lib/professionalBrushes'
 
 describe('draftDocument', () => {
   it('creates and bumps revisions without mutating schema', () => {
@@ -139,5 +146,70 @@ describe('draftDocument', () => {
     expect(next.strokes).toHaveLength(1)
     expect(next.model).toBe('male')
     expect(next.brush.sizeId).toBe('bold')
+  })
+
+  it('charcoal stroke key order after cloud parse does not false-conflict', () => {
+    // Regression: pickProfessionalFields reorders charcoalRenderer/garmentMask vs
+    // applyBrushEngineToStroke. Without deep sort_keys fingerprints, PUT 200 + extract
+    // opened Draft recovery conflict / Keep-this-device Save failed.
+    const charcoalEngine = {
+      ...defaultsForBrushKind('charcoal'),
+      brushKind: 'charcoal',
+    } as BrushEngineState
+    const liveStroke = applyBrushEngineToStroke(
+      {
+        id: 'charcoal-1',
+        tool: 'draw',
+        points: [10, 20, 0.5, 12, 40, 0.6],
+        color: '#111111',
+        size: 18,
+        opacity: 0.85,
+      },
+      charcoalEngine,
+    )
+    // Force the historical live key order (garmentMask before charcoalRenderer).
+    const reordered = {
+      id: liveStroke.id,
+      tool: liveStroke.tool,
+      points: liveStroke.points,
+      color: liveStroke.color,
+      size: liveStroke.size,
+      opacity: liveStroke.opacity,
+      brushKind: liveStroke.brushKind,
+      logicalLayer: liveStroke.logicalLayer,
+      blendMode: liveStroke.blendMode,
+      flow: liveStroke.flow,
+      softness: liveStroke.softness,
+      textureIntensity: liveStroke.textureIntensity,
+      textureSeed: liveStroke.textureSeed,
+      garmentMask: liveStroke.garmentMask,
+      charcoalRenderer: liveStroke.charcoalRenderer,
+    }
+    const liveDoc = bumpDraftDocument(createEmptyDraftDocument(), {
+      strokes: [reordered],
+      brush: {
+        sizeId: 'bold',
+        sizePx: 18,
+        opacity: 0.85,
+        color: '#111111',
+        brushKind: 'charcoal',
+        logicalLayer: 'shade',
+        blendMode: 'multiply',
+        flow: 0.42,
+        softness: 0.82,
+        textureIntensity: 0.14,
+        garmentMask: true,
+      },
+    })
+    const cloud = documentForCloud(liveDoc)
+    const extracted = parseStudioDraftDocument(JSON.parse(JSON.stringify(cloud)))
+    expect(extracted).not.toBeNull()
+    expect(draftContentFingerprint(cloud)).toBe(
+      draftContentFingerprint(documentForCloud(extracted!)),
+    )
+    expect(resolveDraftConflict(cloud, documentForCloud(extracted!))).toEqual({
+      equal: true,
+      needsUserChoice: false,
+    })
   })
 })

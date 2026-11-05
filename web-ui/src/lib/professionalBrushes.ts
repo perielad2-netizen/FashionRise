@@ -740,10 +740,10 @@ export function applyBrushEngineToStroke(
     softness: engine.softness,
     textureIntensity: engine.textureIntensity,
     textureSeed: stroke.textureSeed ?? stroke.id,
-    garmentMask: engine.garmentMask === true,
-    // New charcoal strokes always use continuous ribbon V2.
+    // Keep key order aligned with pickProfessionalFields (charcoalRenderer before garmentMask).
     charcoalRenderer:
       engine.brushKind === 'charcoal' ? CHARCOAL_RENDERER_CURRENT : stroke.charcoalRenderer,
+    garmentMask: engine.garmentMask === true,
   }
 }
 
