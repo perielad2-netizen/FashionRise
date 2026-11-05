@@ -2187,7 +2187,13 @@ export function useStudioEditor() {
         if (controller.signal.aborted) return
         if (prep.quality_ok === false || prep.openai_live_http === false) {
           setMagicPhase('failed')
-          setMagicError(SMART_TRY_ON_FAILURE)
+          const prepNote =
+            typeof prep.quality_notes === 'string' ? prep.quality_notes.trim() : ''
+          setMagicError(
+            prepNote ||
+              smartTryOnTerminalFailureMessage(failedJob) ||
+              SMART_TRY_ON_FAILURE,
+          )
           setMagicStatusHint(null)
           return
         }

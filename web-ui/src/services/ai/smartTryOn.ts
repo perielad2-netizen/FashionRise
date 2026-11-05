@@ -79,14 +79,15 @@ export function smartTryOnTerminalFailureMessage(job?: AiJobRead | null): string
     typeof job?.result_data?.error_code === 'string'
       ? String(job.result_data.error_code).trim().toUpperCase()
       : ''
-  // Moderation is normally Max-eligible; this copy is only if Max could not start.
-  if (code === 'PROVIDER_MODERATION_BLOCKED') {
-    return moderationStage(job) === 'input'
-      ? SMART_TRY_ON_INPUT_MODERATION
-      : SMART_TRY_ON_FAILURE
-  }
   const summary =
     typeof job?.result_data?.summary === 'string' ? job.result_data.summary.trim() : ''
+  // Moderation is normally Max-eligible; this copy is only if Max could not start.
+  if (code === 'PROVIDER_MODERATION_BLOCKED') {
+    if (moderationStage(job) === 'input') return SMART_TRY_ON_INPUT_MODERATION
+    // Prefer the server's human output-safety copy over the generic failure line.
+    if (summary && summary.length < 320) return summary
+    return SMART_TRY_ON_FAILURE
+  }
   if (summary && summary.length < 280) return summary
   return SMART_TRY_ON_FAILURE
 }
