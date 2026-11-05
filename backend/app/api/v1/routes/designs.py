@@ -88,6 +88,15 @@ def get_design_handoff(
     return design_service.build_handoff_manifest(db, design_id, user)
 
 
+@router.delete("/saved/{design_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_saved_design(
+    design_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)
+) -> Response:
+    """Delete one owner-private saved design (v1/v2 only). Rejects working drafts."""
+    design_service.delete_saved_design(db, design_id, user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/{design_id}", response_model=DesignRead)
 def get_design(
     design_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)

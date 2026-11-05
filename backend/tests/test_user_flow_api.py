@@ -1,23 +1,20 @@
 import uuid
 
 
-def _register(client, email: str, username: str, password: str = "StrongPass123!") -> dict:
-    r = client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "username": username, "password": password, "display_name": username},
-    )
-    assert r.status_code == 200, r.text
-    return r.json()
+def _register(client, db_session, email: str, username: str, password: str = "StrongPass123!") -> dict:
+    from tests.auth_test_helpers import register_with_invite
+
+    return register_with_invite(client, db_session, email, username, password)
 
 
 def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_end_to_end_user_social_design_flow(client):
+def test_end_to_end_user_social_design_flow(client, db_session):
     # Two users for social interactions.
-    a_tokens = _register(client, "a@example.com", "user_a")
-    b_tokens = _register(client, "b@example.com", "user_b")
+    a_tokens = _register(client, db_session, "a@example.com", "user_a")
+    b_tokens = _register(client, db_session, "b@example.com", "user_b")
     a_headers = _auth_header(a_tokens["access_token"])
     b_headers = _auth_header(b_tokens["access_token"])
 
@@ -192,8 +189,8 @@ def test_following_feed_requires_auth(client):
     assert detail["code"] == "unauthorized"
 
 
-def test_auth_refresh_and_logout_flow(client):
-    tokens = _register(client, "authflow@example.com", "auth_flow_user")
+def test_auth_refresh_and_logout_flow(client, db_session):
+    tokens = _register(client, db_session, "authflow@example.com", "auth_flow_user")
     access = tokens["access_token"]
     refresh = tokens["refresh_token"]
 

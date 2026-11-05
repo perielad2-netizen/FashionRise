@@ -1,0 +1,87 @@
+.rail,
+.railHorizontal {
+  display: flex;
+  gap: 8px;
+  padding: 12px 8px;
+  background: linear-gradient(180deg, #161f31 0%, #0d1422 100%);
+  border: 1px solid rgba(212, 175, 155, 0.36);
+  box-shadow: var(--shadow-soft);
+}
+
+.rail {
+  flex-direction: column;
+  align-items: center;
+  width: var(--panel-tools-w);
+  min-width: var(--panel-tools-w);
+  border-radius: var(--radius-xl);
+  margin: var(--space-md) 0 var(--space-md) var(--space-sm);
+  align-self: center;
+}
+
+.railHorizontal {
+  flex-direction: row;
+  justify-content: center;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.sep {
+  width: 56%;
+  height: 1px;
+  background: rgba(212, 175, 155, 0.42);
+  margin: 2px 0 4px;
+}
+
+.railHorizontal .sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 4px;
+}
+
+.btn,
+.btnActive {
+  width: var(--tool-size);
+  height: var(--tool-size);
+  min-width: var(--tool-size);
+  min-height: var(--tool-size);
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast),
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast),
+    opacity var(--duration-fast);
+}
+
+.btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(212, 175, 155, 0.28);
+}
+
+.btn:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+.btnActive {
+  background: rgba(236, 72, 153, 0.18);
+  border-color: var(--pink);
+  box-shadow:
+    0 0 0 1px rgba(236, 72, 153, 0.4),
+    0 0 18px rgba(236, 72, 153, 0.28);
+}
+
+.glyph {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+  display: block;
+}

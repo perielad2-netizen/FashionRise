@@ -1,0 +1,33 @@
+.designLabRoot {
+  --dl-navy: #070a14;
+  --dl-navy-2: #0c1220;
+  --dl-navy-3: #121a2c;
+  --dl-panel: #151d30;
+  --dl-panel-2: #1a2438;
+  --dl-pink: #d63384;
+  --dl-pink-soft: #f472b6;
+  --dl-pink-deep: #be185d;
+  --dl-cream: #f8f3ee;
+  --dl-cream-2: #fffaf5;
+  --dl-text: #f5f0ea;
+  --dl-muted: #9aa3b5;
+  --dl-line: rgba(212, 175, 155, 0.28);
+  --dl-serif: "Playfair Display", "Cormorant Garamond", Georgia, serif;
+  --dl-sans: "DM Sans", "Segoe UI", system-ui, sans-serif;
+  --dl-header-h: 56px;
+  --dl-nav-w: 92px;
+  --dl-models-w: 236px;
+  --dl-inspector-w: 236px;
+  --dl-radius: 14px;
+  --dl-radius-lg: 20px;
+  --dl-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  --dl-glow: 0 0 0 1px rgba(214, 51, 132, 0.35), 0 10px 28px rgba(214, 51, 132, 0.28);
+
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: var(--dl-sans);
+  color: var(--dl-text);
+  background: radial-gradient(1200px 700px at 18% -10%, #1a1030 0%, transparent 55%),
+    radial-gradient(900px 600px at 100% 0%, #15102a 0%, transparent 50%), var(--dl-navy);
+}

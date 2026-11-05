@@ -1,0 +1,155 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  /* Above StageSheet (90) and other techpack sheets — portal to document.body. */
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(5, 10, 22, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.card {
+  width: min(440px, 100%);
+  padding: 22px 20px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(244, 114, 182, 0.22), transparent 55%),
+    linear-gradient(180deg, #12182a, #0a1020);
+  color: #f8f3ee;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.kicker {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f9a8d4;
+}
+
+.title {
+  margin: 0 0 16px;
+  font-family: var(--fr-serif, 'Playfair Display', Georgia, serif);
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.visual {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 180px;
+  margin-bottom: 14px;
+}
+
+.thumb,
+.thumbPlaceholder {
+  /* Portrait thumb — full Magic figure via contain (no cover crop). */
+  width: min(160px, 48vw);
+  height: min(214px, 64vw);
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 12px;
+  border: 1px solid rgba(244, 114, 182, 0.4);
+  background: linear-gradient(180deg, #faf6f1 0%, #f3ebe3 100%);
+  flex: 0 0 auto;
+}
+
+.spinner {
+  /* Below the thumbnail so it never covers the garment. */
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 3px solid rgba(244, 114, 182, 0.25);
+  border-top-color: #f472b6;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 14px;
+  color: #e7e2dc;
+}
+
+.phases {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.phasePending {
+  color: rgba(231, 226, 220, 0.45);
+}
+
+.phaseActive {
+  color: #fce7f3;
+  font-weight: 650;
+}
+
+.phaseDone {
+  color: #86efac;
+}
+
+.phases li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.primary,
+.ghost {
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.primary {
+  border: none;
+  color: #1a0b14;
+  background: linear-gradient(135deg, #f9a8d4, #ec4899 55%, #db2777);
+}
+
+.ghost {
+  border: 1px solid rgba(244, 114, 182, 0.45);
+  color: #fce7f3;
+  background: transparent;
+}
+
+.ghost:disabled {
+  opacity: 0.5;
+}
+
+.footnote {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(231, 226, 220, 0.62);
+  text-align: center;
+}

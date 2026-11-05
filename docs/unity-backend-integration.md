@@ -1,5 +1,9 @@
 # FashionRise Unity ↔ FastAPI backend
 
+> **LEGACY / ARCHIVED REFERENCE (2026-10-18)**
+> Active client is **`web-ui/`**. This document describes the historical Unity REST wiring.
+> Backend contracts remain valid for the web client.
+
 ## Summary
 
 The Unity client can run in **mock mode** (offline-friendly defaults) or **API mode** (real `http(s)://…/api/v1` calls). UI screens depend only on `AppServices` interfaces; HTTP lives under `Assets/FashionRise/Infrastructure/Api/`.
