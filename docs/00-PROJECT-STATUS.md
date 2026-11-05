@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Charcoal Shading V2** **LIVE** FE · **`PENDING_SHA`** · BE still **`900bda6b`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Charcoal Shading V2** **LIVE** FE · **`3f196e9a`** · BE still **`900bda6b`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`PENDING_SHA`** — release `/var/www/fashionrise/releases/PENDING_SHA` · Charcoal Shading V2 continuous ribbon. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`3f196e9a`** — release `/var/www/fashionrise/releases/3f196e9a` · Charcoal Shading V2 continuous ribbon. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`900bda6b`** · Try On **`v2.3`** footwear + Max fidelity soft-pass · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`PENDING_SHA`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`3f196e9a`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## Charcoal Shading V2 — LIVE FE (2026-11-05)
@@ -36,7 +36,7 @@ Stamp-based `paintCharcoal` used `stampCenters()` + overlapping radial gradients
 ### Safety
 | Field | Value |
 |---|---|
-| FE release | `/var/www/fashionrise/releases/PENDING_SHA` |
+| FE release | `/var/www/fashionrise/releases/3f196e9a` |
 | Prior FE | **`69ab52b4`** (soft-stamp interim) ← **`f8bc3b82`** ← **`ac3e219c`** |
 | Rollback | `/var/backups/fashionrise/charcoal-v2-*/ROLLBACK.sh` → **`69ab52b4`** |
 | BE / Alembic / spend | unchanged |
@@ -44,7 +44,7 @@ Stamp-based `paintCharcoal` used `stampCenters()` + overlapping radial gradients
 | Tests | charcoal V2 visual + professionalBrushes + export suites pass; `tsc` clean; prod vite flags pass |
 
 ### Owner acceptance (manual)
-Hard-refresh until App SHA **`PENDING_SHA`**. Open a filled dress → select **Charcoal** (default ~18px) → shade waist / vertical fold / drape on **Shadows**. Expect smooth fabric darkening (no spray dots). Switch back to **Ink** → fine line restored. Airbrush should feel unchanged. Save/reopen/export/Magic unchanged.
+Hard-refresh until App SHA **`3f196e9a`**. Open a filled dress → select **Charcoal** (default ~18px) → shade waist / vertical fold / drape on **Shadows**. Expect smooth fabric darkening (no spray dots). Switch back to **Ink** → fine line restored. Airbrush should feel unchanged. Save/reopen/export/Magic unchanged.
 
 ## Professional Sketch Engine V1 — LIVE FE (2026-11-05)
 
