@@ -36,10 +36,15 @@ export const CHARCOAL_RENDERER_V1 = 1
 export const CHARCOAL_RENDERER_V2 = 2
 /**
  * Pencil-tip charcoal — hard tip/core with soft vanish away from the tip
- * (radial + along-stroke lift). New charcoal strokes use this.
+ * (radial + along-stroke lift). Kept for strokes saved as renderer 3.
  */
 export const CHARCOAL_RENDERER_V3 = 3
-export const CHARCOAL_RENDERER_CURRENT = CHARCOAL_RENDERER_V3
+/**
+ * Width-gradient charcoal — solid along the stroke, hard on one edge,
+ * soft vanish across the width (angled charcoal / side-of-pencil mark).
+ */
+export const CHARCOAL_RENDERER_V4 = 4
+export const CHARCOAL_RENDERER_CURRENT = CHARCOAL_RENDERER_V4
 
 /** Per-kind default sizes (design-space px). Ink stays fine; charcoal/airbrush shade wider. */
 export const BRUSH_KIND_DEFAULT_SIZE_PX: Record<BrushKind, number> = {
@@ -245,6 +250,16 @@ export function stampCenters(
     out.push(last)
   }
   return out
+}
+
+/** Even arc-length samples for width-ribbon charcoal (reuses stampCenters). */
+export function evenArcSamples(
+  pts: Array<{ x: number; y: number; p: number }>,
+  spacing: number,
+): Array<{ x: number; y: number; p: number }> {
+  const flat: number[] = []
+  for (const p of pts) flat.push(p.x, p.y, p.p)
+  return stampCenters(flat, spacing)
 }
 
 type Ctx2d = CanvasRenderingContext2D
@@ -508,9 +523,7 @@ function paintCharcoalV2(ctx: Ctx2d, stroke: Stroke): void {
 }
 
 /**
- * Charcoal V3 — pencil-tip fashion shading.
- * Hard tip/core, soft radial vanish, and tip→tail lift so vertical folds
- * feel like graphite: firm where the tip starts, fading away along the stroke.
+ * Charcoal V3 — tip→tail lift (saved renderer 3). Prefer V4 for new work.
  */
 function paintCharcoalV3(ctx: Ctx2d, stroke: Stroke): void {
   paintCharcoalRibbon(ctx, stroke, {
@@ -522,11 +535,188 @@ function paintCharcoalV3(ctx: Ctx2d, stroke: Stroke): void {
   })
 }
 
+/** Unit left-normal for a segment (points left of travel direction). */
+export function segmentLeftNormal(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): { nx: number; ny: number } {
+  const dx = bx - ax
+  const dy = by - ay
+  const len = Math.hypot(dx, dy)
+  if (len < 1e-6) return { nx: 0, ny: 0 }
+  return { nx: -dy / len, ny: dx / len }
+}
+
+/**
+ * Smooth per-vertex normals for an open polyline (averaged left-normals).
+ * Soft side = left of travel. Flip with `side` (-1 = right of travel).
+ */
+export function polylineSideNormals(
+  pts: Array<{ x: number; y: number }>,
+  side = 1,
+): Array<{ nx: number; ny: number }> {
+  if (pts.length === 0) return []
+  if (pts.length === 1) return [{ nx: side, ny: 0 }]
+  const out: Array<{ nx: number; ny: number }> = []
+  for (let i = 0; i < pts.length; i += 1) {
+    const prev = pts[Math.max(0, i - 1)]!
+    const next = pts[Math.min(pts.length - 1, i + 1)]!
+    const n = segmentLeftNormal(prev.x, prev.y, next.x, next.y)
+    const len = Math.hypot(n.nx, n.ny)
+    if (len < 1e-6) {
+      out.push({ nx: 0, ny: 0 })
+    } else {
+      out.push({ nx: (n.nx / len) * side, ny: (n.ny / len) * side })
+    }
+  }
+  return out
+}
+
+/**
+ * Charcoal V4 — solid stroke with width gradient.
+ *
+ * Hard dark edge along the path (pencil tip edge), soft vanish across the
+ * width only — density stays consistent along the stroke length. Built from
+ * even arc-length quads so pointer sample rate cannot blotch the mark.
+ */
+function paintCharcoalV4(ctx: Ctx2d, stroke: Stroke): void {
+  const intensity = clamp01(stroke.textureIntensity ?? 0.1, 0.1)
+  const flow = clamp01(stroke.flow ?? 0.48, 0.48)
+  const softness = clamp01(stroke.softness ?? 0.86, 0.86)
+  const pts = pointsAsTriples(stroke.points)
+  if (pts.length === 0) return
+
+  const press = averagePressure(pts)
+  const blend = resolveBlendMode(stroke)
+  // Narrow hard edge + soft width controlled by size/softness.
+  const hardW = Math.max(0.9, stroke.size * (0.14 + press * 0.1))
+  const softWidth = Math.max(
+    hardW * 2.2,
+    stroke.size * (0.85 + softness * 1.15 + intensity * 0.2) * (0.55 + press * 0.45),
+  )
+  const pad = Math.ceil(softWidth + hardW + 6)
+
+  let minX = pts[0]!.x
+  let minY = pts[0]!.y
+  let maxX = minX
+  let maxY = minY
+  for (const p of pts) {
+    minX = Math.min(minX, p.x)
+    minY = Math.min(minY, p.y)
+    maxX = Math.max(maxX, p.x)
+    maxY = Math.max(maxY, p.y)
+  }
+  const ox = minX - pad
+  const oy = minY - pad
+  const mw = Math.max(1, Math.ceil(maxX - minX + pad * 2))
+  const mh = Math.max(1, Math.ceil(maxY - minY + pad * 2))
+
+  const mask = document.createElement('canvas')
+  mask.width = mw
+  mask.height = mh
+  const mctx = mask.getContext('2d')
+  if (!mctx) return
+  mctx.translate(-ox, -oy)
+
+  if (pts.length === 1) {
+    // Single tap: hard center → soft half-disk vanish (angled tip feel).
+    const p = pts[0]!
+    const g = mctx.createLinearGradient(p.x, p.y, p.x + softWidth, p.y)
+    g.addColorStop(0, 'rgba(255,255,255,1)')
+    g.addColorStop(0.12, 'rgba(255,255,255,0.95)')
+    g.addColorStop(0.45, 'rgba(255,255,255,0.35)')
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    mctx.fillStyle = g
+    mctx.beginPath()
+    mctx.arc(p.x, p.y, softWidth, 0, Math.PI * 2)
+    mctx.fill()
+  } else {
+    // Even spacing along path — independent of pointer density / speed.
+    const spacing = Math.max(1.6, hardW * 0.85)
+    const spaced = evenArcSamples(pts, spacing)
+    const ribbon = spaced.length >= 2 ? spaced : pts
+    // Soft side = right of travel (screen-right for a downward vertical fold).
+    const normals = polylineSideNormals(ribbon, -1)
+
+    mctx.strokeStyle = '#ffffff'
+    mctx.lineCap = 'round'
+    mctx.lineJoin = 'round'
+
+    // Width gradient: full-path offset ribbons (outer soft → near hard edge).
+    // One stroke per offset — no along-path overdraw / no segment banding.
+    const steps = Math.max(8, Math.round(7 + softness * 10))
+    for (let i = steps; i >= 1; i -= 1) {
+      const t = i / steps // 1 = far soft edge, ~0 = near hard edge
+      const offset = softWidth * t
+      const alpha = Math.pow(1 - t, 1.85) * 0.9
+      const width = Math.max(1.1, hardW * 0.55 + softWidth * 0.22 * (1 - t))
+      const offsetPts = ribbon.map((p, idx) => {
+        const n = normals[idx]!
+        return {
+          x: p.x + n.nx * offset,
+          y: p.y + n.ny * offset,
+          p: p.p,
+        }
+      })
+      mctx.globalAlpha = Math.min(1, alpha)
+      mctx.lineWidth = width
+      traceRibbonPath(mctx, offsetPts)
+      mctx.stroke()
+    }
+
+    // Crisp hard edge along the tip path (solid graphite line).
+    mctx.globalAlpha = 1
+    mctx.lineWidth = Math.max(1.1, hardW)
+    traceRibbonPath(mctx, ribbon)
+    mctx.stroke()
+
+    // Tiny understated grain only inside soft width (never spray outside).
+    if (intensity > 0.05) {
+      const seedStr = String(stroke.textureSeed ?? stroke.id)
+      const rnd = mulberry32(hashSeed(seedStr))
+      const grains = Math.min(40, Math.floor(ribbon.length * intensity * 1.1))
+      for (let g = 0; g < grains; g += 1) {
+        const idx = Math.min(ribbon.length - 1, Math.floor(rnd() * ribbon.length))
+        const p = ribbon[idx]!
+        const n = normals[idx]!
+        const across = 0.18 + rnd() * 0.65
+        const gx = p.x + n.nx * softWidth * across
+        const gy = p.y + n.ny * softWidth * across
+        mctx.globalAlpha = (0.035 + intensity * 0.07) * (1 - across)
+        mctx.fillStyle = '#ffffff'
+        mctx.beginPath()
+        mctx.arc(gx, gy, 0.3 + rnd() * 0.45, 0, Math.PI * 2)
+        mctx.fill()
+      }
+      mctx.globalAlpha = 1
+    }
+  }
+
+  const tint = document.createElement('canvas')
+  tint.width = mw
+  tint.height = mh
+  const tctx = tint.getContext('2d')
+  if (!tctx) return
+  tctx.fillStyle = stroke.color
+  tctx.fillRect(0, 0, mw, mh)
+  tctx.globalCompositeOperation = 'destination-in'
+  tctx.drawImage(mask, 0, 0)
+
+  ctx.save()
+  ctx.globalCompositeOperation = blend
+  ctx.globalAlpha = clamp01(stroke.opacity * flow * (0.68 + press * 0.32), 0.55)
+  ctx.drawImage(tint, ox, oy)
+  ctx.restore()
+}
+
 function resolveCharcoalRenderer(stroke: Stroke): number {
   const v = stroke.charcoalRenderer
   if (v === CHARCOAL_RENDERER_V1) return CHARCOAL_RENDERER_V1
   if (v === CHARCOAL_RENDERER_V2) return CHARCOAL_RENDERER_V2
   if (v === CHARCOAL_RENDERER_V3) return CHARCOAL_RENDERER_V3
+  if (v === CHARCOAL_RENDERER_V4) return CHARCOAL_RENDERER_V4
   // Absent on legacy charcoal → keep stamp look for saved artwork.
   if (stroke.brushKind === 'charcoal' && v == null) return CHARCOAL_RENDERER_V1
   return CHARCOAL_RENDERER_CURRENT
@@ -542,7 +732,11 @@ function paintCharcoal(ctx: Ctx2d, stroke: Stroke): void {
     paintCharcoalV2(ctx, stroke)
     return
   }
-  paintCharcoalV3(ctx, stroke)
+  if (renderer === CHARCOAL_RENDERER_V3) {
+    paintCharcoalV3(ctx, stroke)
+    return
+  }
+  paintCharcoalV4(ctx, stroke)
 }
 
 function paintAirbrush(ctx: Ctx2d, stroke: Stroke): void {
@@ -888,6 +1082,7 @@ export const __test = {
   paintCharcoalV1,
   paintCharcoalV2,
   paintCharcoalV3,
+  paintCharcoalV4,
   resolveCharcoalRenderer,
   averagePressure,
 }

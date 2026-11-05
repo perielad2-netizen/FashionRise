@@ -60,31 +60,31 @@ function BrushPreview({ kind }: { kind: BrushKind }) {
       ) : null}
       {kind === 'charcoal' ? (
         <>
-          {/* Soft vanish toward the stroke end (pencil lift). */}
+          {/* Soft width fade (away from hard edge). */}
           <path
-            d={path}
+            d="M18 10 C 48 6, 78 8, 108 14"
             fill="none"
             stroke="currentColor"
-            strokeWidth={12}
+            strokeWidth={14}
             strokeLinecap="round"
-            opacity={0.14}
+            opacity={0.12}
           />
           <path
-            d={path}
+            d="M16 14 C 48 10, 78 12, 106 18"
             fill="none"
             stroke="currentColor"
-            strokeWidth={7}
+            strokeWidth={8}
             strokeLinecap="round"
             opacity={0.28}
           />
-          {/* Hard tip / graphite core. */}
+          {/* Hard solid edge along the tip path. */}
           <path
-            d="M10 22 C 28 14, 42 13, 58 16"
+            d="M14 18 C 48 14, 78 16, 104 22"
             fill="none"
             stroke="currentColor"
-            strokeWidth={3.2}
+            strokeWidth={2.8}
             strokeLinecap="round"
-            opacity={0.82}
+            opacity={0.88}
           />
         </>
       ) : null}
