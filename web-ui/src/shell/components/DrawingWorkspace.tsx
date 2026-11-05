@@ -103,7 +103,7 @@ export function DrawingWorkspace({
             <span className={styles.fullscreenLabel}>Full screen</span>
           </button>
         ) : null}
-        {frontBackEnabled && onSideChange ? (
+        {frontBackEnabled && rearAvailable && onSideChange ? (
           <FlipPaperControl
             compact={immersive}
             activeSide={activeSide}

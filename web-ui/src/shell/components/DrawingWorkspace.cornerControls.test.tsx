@@ -59,6 +59,21 @@ describe('DrawingWorkspace paper corner controls', () => {
     expect(screen.getByTestId('flip-paper-control')).toBeTruthy()
   })
 
+  it('hides Flip when there is no rear croquis image', () => {
+    render(
+      <DrawingWorkspace
+        {...baseProps}
+        frontBackEnabled
+        activeSide="front"
+        rearAvailable={false}
+        onSideChange={() => undefined}
+        onEnterFullscreen={() => undefined}
+      />,
+    )
+    expect(screen.getByTestId('paper-fullscreen-button')).toBeTruthy()
+    expect(screen.queryByTestId('flip-paper-control')).toBeNull()
+  })
+
   it('invokes enter-fullscreen and Front/Back flip handlers', async () => {
     const user = userEvent.setup()
     const onEnterFullscreen = vi.fn()

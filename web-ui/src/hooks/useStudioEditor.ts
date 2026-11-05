@@ -930,7 +930,9 @@ export function useStudioEditor() {
   const brushSize = brushSizePx
   const sizeId = nearestBrushSizeId(brushSizePx)
 
-  const rearAvailable = canOpenBackPaper(model)
+  // Canvas Flip control only when a published rear croquis image exists.
+  // Personal / atelier-without-rear stay Front-only in the paper chrome.
+  const rearAvailable = rearReferenceAvailable(model)
   const personalUnderlayMatchesPin = useMemo(() => {
     if (model !== 'personal' || !personalObjectUrl) return false
     return underlayMatchesPin(personalUnderlayIdentity, {
