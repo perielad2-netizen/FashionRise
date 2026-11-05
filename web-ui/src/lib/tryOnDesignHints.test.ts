@@ -5,6 +5,7 @@ import {
   detectFootwearInk,
   detectOpenNecklineFromFills,
   detectTrouserLegFills,
+  liveArtworkYSpan,
 } from '@/lib/tryOnDesignHints'
 import type { FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
@@ -104,6 +105,34 @@ describe('buildTryOnDesignHints', () => {
       false,
     )
     expect(hints.some((h) => /continuous one-piece|do not leave jeans/i.test(h))).toBe(true)
+  })
+
+  it('ignores foot-band stroke crumbs after shoe erase for try-on completeness span', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'swim',
+        contour: [320, 140, 460, 140, 500, 620, 280, 620],
+        seedX: 380,
+        seedY: 360,
+        style: { kind: 'solid', color: '#0E7490' },
+      },
+    ]
+    // Leftover shoe outline crumbs after erase (foot band only).
+    const crumbs: Stroke[] = [
+      stroke({
+        id: 'shoe-crumb',
+        color: '#111111',
+        points: [300, 920, 0.5, 320, 940, 0.5, 310, 960, 0.5],
+      }),
+    ]
+    const raw = liveArtworkYSpan({ strokes: crumbs, fills })
+    const gated = liveArtworkYSpan({
+      strokes: crumbs,
+      fills,
+      forTryOnCompleteness: true,
+    })
+    expect(raw?.maxY).toBeGreaterThan(900)
+    expect(gated?.maxY).toBeLessThanOrEqual(620 + 24)
   })
 
   it('injects one-piece coverage hints for swimsuit-like fills (not trousers)', () => {

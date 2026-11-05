@@ -476,10 +476,37 @@ export function buildTryOnDesignHints(args: {
 export function liveArtworkYSpan(args: {
   strokes: Stroke[]
   fills?: FillOp[]
+  /**
+   * Try On completeness only: for high-cut one-pieces, ignore draw strokes that
+   * sit entirely in the foot band below the fill hem. Erasing shoes often leaves
+   * thin outline crumbs that inflate live maxY and false-fail "lost lower parts"
+   * even though the swimsuit fill is intact (owner 2026-11-05).
+   */
+  forTryOnCompleteness?: boolean
+  designHeight?: number
 }): InkBounds | null {
-  const strokeParts = args.strokes
+  const fills = args.fills ?? []
+  const designHeight = args.designHeight ?? 1024
+  const fillParts = fills.map((f) => fillBounds(f))
+  const fillUnion = unionBounds(fillParts.filter(Boolean) as InkBounds[])
+  let strokeParts = args.strokes
     .filter((s) => s.tool === 'draw')
     .map((s) => strokeBounds(s))
-  const fillParts = (args.fills ?? []).map((f) => fillBounds(f))
+  if (
+    args.forTryOnCompleteness &&
+    fillUnion &&
+    detectHighCutOnePieceHem(fills, designHeight)
+  ) {
+    const footBand = designHeight * 0.78
+    const hemPad = 24
+    strokeParts = strokeParts.filter((b) => {
+      if (!b) return false
+      // Keep strokes that meet the garment fill (straps, outline near hem).
+      if (b.minY <= fillUnion.maxY + hemPad) return true
+      // Drop foot-only crumbs left after erasing shoes.
+      if (b.minY >= footBand) return false
+      return true
+    })
+  }
   return unionBounds([...strokeParts, ...fillParts])
 }

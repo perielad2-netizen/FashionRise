@@ -114,12 +114,18 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
  * Live ink is clamped to the legacy 768×1024 plane because Try On capture always
  * uses `frame: 'legacy'` (clips shoe/hem fringe past the croquis feet). Comparing
  * against unclamped live Y would false-fail "lost lower parts" for on-figure shoes.
+ * High-cut one-pieces also ignore foot-band stroke crumbs left after erasing shoes.
  */
 export async function assertGarmentCaptureCompleteness(
   blob: Blob,
   options: { strokes: Stroke[]; fills?: FillOp[] },
 ): Promise<void> {
-  const liveRaw = liveArtworkYSpan({ strokes: options.strokes, fills: options.fills ?? [] })
+  const liveRaw = liveArtworkYSpan({
+    strokes: options.strokes,
+    fills: options.fills ?? [],
+    forTryOnCompleteness: true,
+    designHeight: DESIGN_HEIGHT,
+  })
   if (!liveRaw) return
   const liveMinY = Math.max(0, liveRaw.minY)
   const liveMaxY = Math.min(DESIGN_HEIGHT, liveRaw.maxY)
