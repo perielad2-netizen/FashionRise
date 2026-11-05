@@ -18,6 +18,10 @@
 | Nginx | photos `client_max_body_size` **25m** · FE `current` → **`0cb34bf1`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
+## Fill flush under outline — LIVE FE (2026-11-05)
+
+Bucket fill stopped short of visible ink because the flood barrier includes a 2px gap-close dilate (+ AA fringe). New fills expand under outline ink before contour persist so color meets the stroke (ink still paints on top). App **`0cb34bf1`**. Rollback `/var/backups/fashionrise/fill-flush-outline-*/ROLLBACK.sh` → **`0ec4d653`**. Re-tap Fill on older regions to refresh.
+
 ## Try On shade-erase paper-frame hem — LIVE FE (2026-11-05)
 
 Shade eraser tips outside 768×1024 no longer flip garment capture to the extended-paper frame (which letterboxed fills and failed completeness with “lost lower parts”). `resolveExportFrame` ignores shade/highlight; Magic/Try On capture force `frame: 'legacy'` after the ink/fills gate. App **`b8c599b2`**. Rollback `/var/backups/fashionrise/tryon-paper-frame-*/ROLLBACK.sh` → **`d18ad628`**.
