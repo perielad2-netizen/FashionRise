@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Try On high-cut hem V2.7** pending pin · prior **`a3c17ae8`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Try On high-cut hem V2.7** **LIVE** FE/BE · **`966e4cd6`** · prompt **`try-on-person-v2.7`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,11 +11,11 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`a3c17ae8`** — release `/var/www/fashionrise/releases/a3c17ae8` · shoe-span + Max footwear prompt. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`a3c17ae8`** · Try On **`v2.6`** + shoe-span + Max footwear · Alembic **`015`**.
+| Frontend (`web-ui`) | **`966e4cd6`** — release `/var/www/fashionrise/releases/966e4cd6` · high-cut hem V2.7. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | tip **`966e4cd6`** · Try On **`v2.7`** high-cut hem · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`a3c17ae8`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`966e4cd6`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
 ## Fill flush under outline — LIVE FE (2026-11-05)
