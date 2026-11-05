@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**Try On erase-shoes apparel span** pending pin · prior **`ad8e7772`** · **0** agent paid calls.)
+**Last updated:** 2026-11-05 (**Try On erase-shoes apparel span** **LIVE** FE · **`3ee39a54`** · prior **`ad8e7772`** · **0** agent paid calls.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,16 +11,16 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`ad8e7772`** — release `/var/www/fashionrise/releases/ad8e7772` · erase-shoes completeness span. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Frontend (`web-ui`) | **`3ee39a54`** — release `/var/www/fashionrise/releases/3ee39a54` · erase-shoes apparel span. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
 | Backend (FastAPI + PostgreSQL) | tip **`966e4cd6`** · Try On **`v2.7`** high-cut hem · Alembic **`015`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
 | Database | `fashionrise_beta` — Alembic **`015`** (unchanged) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`ad8e7772`** |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`3ee39a54`** |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
 
-## Try On erase-shoes completeness — LIVE FE (2026-11-05)
+## Try On erase-shoes apparel span — LIVE FE (2026-11-05)
 
-After deleting drawn shoes, leftover foot-band outline crumbs inflated live maxY and blocked Try On with “Garment capture lost lower parts”. Completeness now ignores foot-only strokes below a high-cut one-piece fill hem. App **`ad8e7772`**. Rollback `/var/backups/fashionrise/tryon-erase-shoes-span-20261105T212814Z`. Prior hem FE/BE **`966e4cd6`**.
+Deleting shoes (back croquis) still blocked Try On: shoe **FillOps** + full shoe strokes remain in the document after ink-erase punches capture alpha, so live maxY stayed at the feet while the swimsuit hem did not. Completeness now uses apparel-body fills only and drops geometry below that hem. App **`3ee39a54`** (supersedes crumb-only **`ad8e7772`**). Rollback `/var/backups/fashionrise/tryon-erase-shoes-apparel-20261105T214101Z`.
 
 ## Fill flush under outline — LIVE FE (2026-11-05)
 
