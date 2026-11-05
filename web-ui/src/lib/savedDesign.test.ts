@@ -212,6 +212,65 @@ describe('saved design envelope format', () => {
     )
     expect(snapshotFingerprint(reordered)).toBe(snapshotFingerprint(snapshot))
   })
+
+  it('Save-as-design ack survives Sketch Engine brush + charcoal stroke round-trip', () => {
+    // Prod 2026-11-05: POST /designs 201 but FE rejected ack because parse dropped
+    // brushKind/flow/… while the outbound snapshot still fingerprinted them.
+    const source = doc({
+      strokes: [
+        {
+          id: 'ink1',
+          tool: 'draw',
+          points: [10, 20, 0.5, 30, 40, 0.6],
+          color: '#1C1C1E',
+          size: 1.75,
+          opacity: 1,
+          brushKind: 'tapered',
+          logicalLayer: 'ink',
+        },
+        {
+          id: 'ch1',
+          tool: 'draw',
+          points: [12, 22, 0.5, 40, 60, 0.4],
+          color: '#111111',
+          size: 8,
+          opacity: 0.85,
+          brushKind: 'charcoal',
+          logicalLayer: 'shade',
+          blendMode: 'multiply',
+          flow: 0.7,
+          softness: 0.4,
+          textureIntensity: 0.55,
+          charcoalRenderer: 4,
+        },
+      ],
+      brush: {
+        sizeId: 'thin',
+        sizePx: 1.75,
+        opacity: 1,
+        color: '#111111',
+        brushKind: 'tapered',
+        logicalLayer: 'ink',
+        blendMode: 'source-over',
+        flow: 1,
+        softness: 0.2,
+        textureIntensity: 0,
+        garmentMask: false,
+      },
+    })
+    const snapshot = snapshotFromDocument(source)
+    expect(snapshot.strokes[1]?.brushKind).toBe('charcoal')
+    expect(snapshot.brush.brushKind).toBe('tapered')
+
+    const row = savedRow('babe', snapshot)
+    // Simulate PostgreSQL JSONB key reorder on the wire response.
+    const wire = JSON.parse(JSON.stringify(row)) as DesignRead
+    const parsed = parseSavedDesign(wire, OWNER)
+    expect(parsed).not.toBeNull()
+    expect(parsed!.snapshot.strokes[1]?.brushKind).toBe('charcoal')
+    expect(parsed!.snapshot.brush.brushKind).toBe('tapered')
+    expect(snapshotFingerprint(parsed!.snapshot)).toBe(snapshotFingerprint(snapshot))
+  })
 })
 
 describe('parseSavedDesign safety', () => {
