@@ -731,6 +731,11 @@ def _propose_finished_measurements(piece: dict[str, Any], body: dict[str, Any], 
 
 
 def enrich_spec_heuristic(spec: dict[str, Any]) -> dict[str, Any]:
+    from app.services.techpack_compatibility import (
+        filter_bom_rows,
+        filter_construction_steps,
+    )
+
     out = ensure_v2(spec)
     fit = str((out.get("preferences") or {}).get("fit_preference") or "regular")
     body = out.get("body") if isinstance(out.get("body"), dict) else {}
@@ -749,12 +754,51 @@ def enrich_spec_heuristic(spec: dict[str, Any]) -> dict[str, Any]:
             p["construction_steps"] = default_construction_steps(cat)
         if not p.get("bom"):
             p["bom"] = default_bom(cat, color_hint=str(p.get("color_hint") or ""))
+        # Never invent a shell fabric identity from color_hint alone (anti-invention).
+        # Only clear identifiable legacy placeholders like "{color_hint} fabric" + estimate.
         mats = p.get("materials") if isinstance(p.get("materials"), dict) else {}
         shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
-        if not shell.get("name") and p.get("color_hint"):
-            shell = {**shell, "name": f"{p['color_hint']} fabric", "suggestion": "cotton", "source": "estimate"}
-            mats["shell"] = shell
+        color_hint = str(p.get("color_hint") or "").strip()
+        shell_name = str(shell.get("name") or "").strip()
+        is_legacy_placeholder = (
+            str(shell.get("source") or "").strip().lower() == "estimate"
+            and bool(color_hint)
+            and shell_name.lower() == f"{color_hint.lower()} fabric"
+            and shell.get("designer_confirmed") is not True
+            and str(shell.get("review_status") or "").strip().lower()
+            not in {"confirmed", "designer_confirmed", "accepted", "approved"}
+        )
+        if is_legacy_placeholder:
+            # Drop only the auto placeholder fields; keep any other shell keys.
+            shell = {
+                k: v
+                for k, v in shell.items()
+                if k not in {"name", "suggestion", "source"}
+            }
+            if shell:
+                mats["shell"] = shell
+            elif "shell" in mats:
+                mats.pop("shell", None)
             p["materials"] = mats
+        # Filter AI/estimate closure boilerplate; never destroy designer-authored steps.
+        illust = p.get("illustrations") if isinstance(p.get("illustrations"), dict) else {}
+        analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+        filter_warnings: list[dict[str, Any]] = []
+        if p.get("construction_steps"):
+            p["construction_steps"] = filter_construction_steps(
+                list(p.get("construction_steps") or []),
+                analysis=analysis,
+                piece=p,
+                warnings_out=filter_warnings,
+            )
+        if p.get("bom"):
+            p["bom"] = filter_bom_rows(
+                [r for r in (p.get("bom") or []) if isinstance(r, dict)],
+                analysis=analysis,
+                piece=p,
+            )
+        if filter_warnings:
+            p["_closure_filter_warnings"] = filter_warnings
         p["illustrations"] = {
             **(p.get("illustrations") if isinstance(p.get("illustrations"), dict) else {}),
             "flat_front": "schematic",
@@ -764,11 +808,21 @@ def enrich_spec_heuristic(spec: dict[str, Any]) -> dict[str, Any]:
             "mode": "heuristic",
         }
         enriched.append(p)
-    outfit["pieces"] = enriched
-    outfit["piece_count"] = len(enriched)
+    # Merge filter warnings then strip ephemeral stash keys from pieces.
+    closure_warns: list[dict[str, Any]] = []
+    cleaned_pieces: list[dict[str, Any]] = []
+    for p in enriched:
+        if not isinstance(p, dict):
+            continue
+        stash = p.pop("_closure_filter_warnings", None)
+        if isinstance(stash, list):
+            closure_warns.extend(w for w in stash if isinstance(w, dict))
+        cleaned_pieces.append(p)
+    outfit["pieces"] = cleaned_pieces
+    outfit["piece_count"] = len(cleaned_pieces)
     out["outfit"] = outfit
     out["workflow_stage"] = "generate"
-    out["warnings"] = collect_measurement_warnings(out)
+    out["warnings"] = list(collect_measurement_warnings(out)) + closure_warns
     prior = out.get("ai") if isinstance(out.get("ai"), dict) else {}
     # Heuristic regenerate must not keep claiming prior paid Professional sections.
     out["ai"] = {
@@ -985,6 +1039,7 @@ def _persist_professional_result(
     from app.services.techpack_autofill import snapshot_garment_analysis
     from app.services.techpack_compatibility import (
         collect_compatibility_warnings,
+        filter_bom_rows,
         filter_construction_steps,
         filter_pattern_inventory,
         is_sleeveless_analysis,
@@ -1003,6 +1058,13 @@ def _persist_professional_result(
             piece["construction_steps"] = filter_construction_steps(
                 list(piece.get("construction_steps") or []),
                 analysis=analysis,
+                piece=piece,
+            )
+        if piece.get("bom"):
+            piece["bom"] = filter_bom_rows(
+                [r for r in (piece.get("bom") or []) if isinstance(r, dict)],
+                analysis=analysis,
+                piece=piece,
             )
         if piece.get("pattern_pieces"):
             piece["pattern_pieces"] = filter_pattern_inventory(

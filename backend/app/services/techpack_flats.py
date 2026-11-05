@@ -180,51 +180,73 @@ def default_construction_steps(category: str) -> list[dict[str, Any]]:
             "Set sleeves or finish armholes for sleeveless design.",
             "Attach collar/neck finish; topstitch as designed.",
             "Close side seams; finish hems and cuffs.",
-            "Install closure (buttons/placket/zipper) and press.",
+            "Confirm closure with designer if designed — do not invent zipper/buttons; press.",
         ]
     elif cat in ("trousers", "shorts"):
         steps = [
             "Sew darts/pleats if present; assemble pocket bags.",
-            "Join front crotch; install fly/closure if designed.",
+            "Join front crotch; install fly/closure only if designed and verified.",
             "Join back crotch; sew inseams then outseams (or as preferred sequence).",
             "Attach waistband with even ease distribution.",
             "Hem legs; press creases only if design requires.",
-            "QC: rise balance, waistband seat, closure function.",
+            "QC: rise balance, waistband seat, and any verified closure function.",
         ]
     elif cat == "dress":
         steps = [
             "Join bust/waist darts or princess seams as designed.",
             "Close shoulders and side seams; finish edges.",
             "Set sleeves or finish armholes; attach neck finish.",
-            "Install closure; hem; press.",
-            "QC: length, neckline sit, closure alignment.",
+            "Confirm closure with designer if designed — do not invent hardware; hem; press.",
+            "QC: length, neckline sit, opening finish.",
         ]
     elif cat == "skirt":
         steps = [
-            "Join panels; insert zipper or other closure.",
+            "Join panels; finish opening — insert zipper or other closure only if designed.",
             "Attach waistband or facing; understitch.",
             "Hem; press; QC hang and opening finish.",
         ]
     else:
         steps = [
             "Confirm panel inventory with patternmaker.",
-            "Assemble major seams; install closures.",
+            "Assemble major seams; install closures only when verified on the design.",
             "Finish edges and hem; press; QC fit sample.",
         ]
     return [{"step": i + 1, "instruction": s, "source": "estimate"} for i, s in enumerate(steps)]
 
 
 def default_bom(category: str, *, color_hint: str = "") -> list[dict[str, Any]]:
-    shell_name = f"{color_hint} shell".strip() if color_hint else "Shell fabric"
+    # Color hint alone is not a fabric identity — keep shell generic until designer confirms.
+    shell_name = "Shell fabric"
+    notes = "Width/weight unknown until confirmed"
+    if color_hint:
+        notes = f"Colorway hint: {color_hint}. {notes}"
     rows = [
-        {"item": shell_name, "qty": "estimate TBD", "unit": "m", "source": "estimate", "notes": "Width/weight unknown until confirmed"},
+        {"item": shell_name, "qty": "estimate TBD", "unit": "m", "source": "estimate", "notes": notes},
         {"item": "Thread", "qty": "1", "unit": "cone", "source": "estimate", "notes": "Match shell"},
         {"item": "Care / brand label", "qty": "1", "unit": "set", "source": "estimate", "notes": ""},
     ]
     cat = (category or "").lower()
     if cat in ("shirt", "jacket"):
-        rows.insert(1, {"item": "Buttons or zipper", "qty": "TBD", "unit": "pcs", "source": "estimate", "notes": "Confirm closure choice"})
+        rows.insert(
+            1,
+            {
+                "item": "Closure hardware (if designed)",
+                "qty": "UNVERIFIED",
+                "unit": "pcs",
+                "source": "unverified",
+                "notes": "Confirm zipper/buttons only when supported by the design",
+            },
+        )
         rows.insert(1, {"item": "Interfacing", "qty": "estimate TBD", "unit": "m", "source": "estimate", "notes": "Collar/placket as needed"})
     if cat in ("trousers", "shorts", "skirt"):
-        rows.insert(1, {"item": "Zipper / elastic / closure", "qty": "1", "unit": "pcs", "source": "estimate", "notes": "Confirm closure"})
+        rows.insert(
+            1,
+            {
+                "item": "Closure hardware (if designed)",
+                "qty": "UNVERIFIED",
+                "unit": "pcs",
+                "source": "unverified",
+                "notes": "Confirm zipper/elastic/drawstring only when supported by the design",
+            },
+        )
     return rows

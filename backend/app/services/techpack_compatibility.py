@@ -5,6 +5,7 @@ Never invent corrections — emit review warnings and filter unsupported generic
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.services.techpack_garments import POM_LABELS
@@ -156,15 +157,248 @@ def collect_compatibility_warnings(spec: dict[str, Any]) -> list[dict[str, Any]]
     return warnings
 
 
+# Unambiguous absence phrases — checked BEFORE positive hardware matching.
+# Do NOT treat bare "na", "-", or "—" alone as proof of missing hardware.
+_CLOSURE_ABSENT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\bnone\b",
+        r"\bn/a\b",
+        r"\bnot\s+applicable\b",
+        r"\bnot\s+visible\b",
+        r"\bnot\s+verified\b",
+        r"\bno\s+closures?\b",
+        r"\bno\s+fasteners?\b",
+        r"\bno\s+zip(?:per)?s?\b",
+        r"\bwithout\s+zip(?:per)?s?\b",
+        r"\bno\s+buttons?\b",
+        r"\bwithout\s+buttons?\b",
+        r"\bbuttonless\b",
+        r"\bno\s+placket\b",
+        r"\bno\s+draw(?:string|cord)s?\b",
+        r"\bwithout\s+draw(?:string|cord)s?\b",
+        r"\bpull[-\s]?on\b",
+        r"\bpullover\b",
+        r"\bslip[-\s]?on\b",
+    )
+)
+
+# Positive hardware — word-boundary aware; never match through "no zipper"/"buttonless".
+_CLOSURE_HARDWARE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\binvisible\s+zippers?\b",
+        r"\bzip(?:per|pered)?s?\b",
+        r"\bzip[-\s]?front\b",
+        r"\bbutton[-\s]?front\b",
+        r"\bbuttonholes?\b",
+        r"\bbuttons?\b",
+        r"\bplackets?\b",
+        r"\bdraw(?:string|cord)s?\b",
+        r"\bsnaps?\b",
+        r"\bhook(?:-|\s+)?(?:and|&)(?:-|\s+)?eyes?\b",
+    )
+)
+
+# Kept for construction-step mention scans (instruction text, not closure type identity).
+_CLOSURE_HARDWARE_TOKENS = (
+    "zipper",
+    "zip ",
+    " zip",
+    "button",
+    "placket",
+    "drawstring",
+    "drawcord",
+    "snap",
+    "hook-and-eye",
+    "hook and eye",
+)
+
+_CONFIRMED_REVIEW = frozenset(
+    {
+        "confirmed",
+        "designer_confirmed",
+        "accepted",
+        "approved",
+        "visual_qa_confirmed",
+        "owner_accepted",
+    }
+)
+_UNRESOLVED_REVIEW = frozenset(
+    {
+        "open",
+        "needs_review",
+        "proposed",
+        "proposed_unverified",
+        "review",
+        "unverified",
+    }
+)
+_DESIGNER_AUTHOR_SOURCES = frozenset(
+    {
+        "designer",
+        "user",
+        "designer_confirmed",
+        "confirmed",
+    }
+)
+_ESTIMATE_SOURCES = frozenset(
+    {
+        "",
+        "estimate",
+        "ai",
+        "heuristic",
+        "proposed",
+        "unverified",
+        "validated",
+        "system",
+    }
+)
+
+_CLOSURE_ANTI_INVENTION_INSTRUCTION = (
+    "Confirm closure with designer — do not invent zipper, buttons, or drawstring "
+    "when none is verified on the source design. Finish openings as designed; press."
+)
+
+
+def _review_status_of(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    return str(value.get("review_status") or value.get("review_state") or "").strip().lower()
+
+
+def _is_explicitly_confirmed_meta(value: Any) -> bool:
+    """Match manufacturing semantics: source=designer alone is provenance, not approval."""
+    if not isinstance(value, dict):
+        return False
+    status = _review_status_of(value)
+    if status in _UNRESOLVED_REVIEW:
+        return False
+    if value.get("designer_confirmed") is True:
+        return True
+    return status in _CONFIRMED_REVIEW
+
+
+def _is_designer_authored(value: Any) -> bool:
+    """True for designer-entered content that must not be silently rewritten."""
+    if not isinstance(value, dict):
+        return False
+    if _is_explicitly_confirmed_meta(value):
+        return True
+    source = str(value.get("source") or "").strip().lower()
+    return source in _DESIGNER_AUTHOR_SOURCES
+
+
+def _mentions_closure_hardware(text: str) -> bool:
+    lower = text.lower()
+    return any(tok in lower for tok in _CLOSURE_HARDWARE_TOKENS)
+
+
+def _already_anti_invention_text(text: str) -> bool:
+    lower = text.lower()
+    return "do not invent zipper" in lower or "do not invent zipper/buttons" in lower
+
+
+def _closure_text_blob(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    """Return (type_txt, combined_blob) lowercased/stripped for closure semantics."""
+    closures = piece.get("closures") if isinstance(piece, dict) else None
+    closures_d = closures if isinstance(closures, dict) else {}
+    type_txt = _text(closures_d.get("type") or closures_d.get("display_type"))
+    notes_txt = _text(closures_d.get("notes"))
+    visible = _text(analysis.get("closure_visible") if isinstance(analysis, dict) else "")
+    blob = f"{type_txt} {notes_txt} {visible}".strip()
+    return type_txt, blob
+
+
+def closure_explicitly_absent(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> bool:
+    """True for unambiguous negative/absent closure statements (checked before positives)."""
+    type_txt, blob = _closure_text_blob(analysis=analysis, piece=piece)
+    if not blob:
+        return False
+    if type_txt in {"true", "false", "1", "0", "yes", "no"}:
+        # Boolean placeholders are inconclusive — not an explicit absence claim.
+        return False
+    # Prefer type field, then full blob. Negation must win over substring hardware.
+    for text in (type_txt, blob):
+        if text and any(pat.search(text) for pat in _CLOSURE_ABSENT_PATTERNS):
+            return True
+    return False
+
+
+def closure_hardware_named(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> bool:
+    """True when zipper/buttons/drawstring are positively named (not negated)."""
+    type_txt, blob = _closure_text_blob(analysis=analysis, piece=piece)
+    if not blob:
+        return False
+    if type_txt in {"true", "false", "1", "0", "yes", "no"}:
+        return False
+    # Negation first — "no zipper" / "buttonless" must never count as named hardware.
+    if closure_explicitly_absent(analysis=analysis, piece=piece):
+        return False
+    return any(pat.search(blob) for pat in _CLOSURE_HARDWARE_PATTERNS)
+
+
+def closure_lacks_hardware_evidence(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> bool:
+    """True when inventing zipper/buttons install is unsupported (absent/empty/ambiguous)."""
+    return not closure_hardware_named(analysis=analysis, piece=piece)
+
+
+def closure_hardware_confirmed(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> bool:
+    """True only when piece closures are explicitly confirmed AND positively name hardware.
+
+    AI analysis alone never confirms hardware — pass analysis for API symmetry but ignore it.
+    """
+    _ = analysis
+    closures = piece.get("closures") if isinstance(piece, dict) else None
+    if not _is_explicitly_confirmed_meta(closures):
+        return False
+    # Confirmed "no zipper" is confirmed absence — not confirmed hardware.
+    # Ignore analysis: unverified vision text must not upgrade to confirmed fact.
+    return closure_hardware_named(analysis=None, piece=piece)
+
+
+def closure_hardware_unverified(
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> bool:
+    """True when zipper/buttons/drawstring must not be asserted as manufacturing fact."""
+    return not closure_hardware_confirmed(analysis=analysis, piece=piece)
+
+
 def filter_construction_steps(
     steps: list[Any],
     *,
     analysis: dict[str, Any] | None,
+    piece: dict[str, Any] | None = None,
+    warnings_out: list[dict[str, Any]] | None = None,
 ) -> list[Any]:
-    """Drop or mark sleeve-set instructions when analysis indicates sleeveless."""
+    """Adjust AI/estimate sleeve/closure boilerplate; never destroy designer-authored steps."""
     if not steps:
         return steps
     sleeveless = is_sleeveless_analysis(analysis)
+    lacks_hw = closure_lacks_hardware_evidence(analysis=analysis, piece=piece)
+    hw_confirmed = closure_hardware_confirmed(analysis=analysis, piece=piece)
     out: list[Any] = []
     for step in steps:
         text = ""
@@ -173,7 +407,49 @@ def filter_construction_steps(
         else:
             text = str(step)
         lower = text.lower()
+        protected = _is_designer_authored(step)
+
         if sleeveless and ("set sleeve" in lower or "set sleeves" in lower):
+            if protected:
+                if isinstance(step, dict):
+                    note = str(step.get("note") or step.get("review_message") or "")
+                    msg = (
+                        "REVIEW: sleeveless analysis conflicts with sleeve-set instruction — "
+                        "designer text preserved."
+                    )
+                    if "REVIEW: sleeveless analysis conflicts" in note:
+                        out.append(step)
+                    else:
+                        out.append(
+                            {
+                                **step,
+                                "review_status": step.get("review_status")
+                                if _is_explicitly_confirmed_meta(step)
+                                else "needs_review",
+                                "review_message": msg,
+                                "note": ((note + " · " if note else "") + msg).strip(" ·"),
+                            }
+                        )
+                        if warnings_out is not None:
+                            warnings_out.append(
+                                {
+                                    "code": "construction_sleeve_conflict",
+                                    "piece_id": (piece or {}).get("id")
+                                    if isinstance(piece, dict)
+                                    else None,
+                                    "message": msg,
+                                    "severity": "warning",
+                                }
+                            )
+                else:
+                    out.append(step)
+                continue
+            if isinstance(step, dict) and (
+                _review_status_of(step) == "adjusted_for_garment"
+                or "do not set sleeves" in lower
+            ):
+                out.append(step)
+                continue
             if isinstance(step, dict):
                 out.append(
                     {
@@ -183,7 +459,7 @@ def filter_construction_steps(
                             f"AI sleeves: {analysis.get('sleeves') if analysis else 'sleeveless'})."
                         ),
                         "review_status": "adjusted_for_garment",
-                        "source": step.get("source") or "validated",
+                        "source": step.get("source") or "estimate",
                     }
                 )
             else:
@@ -191,7 +467,139 @@ def filter_construction_steps(
                     "Finish armholes for sleeveless design (do not set sleeves)."
                 )
             continue
+
+        if _mentions_closure_hardware(text):
+            if _already_anti_invention_text(text) or (
+                isinstance(step, dict)
+                and _review_status_of(step) == "adjusted_for_garment"
+            ):
+                out.append(step)
+                continue
+            if protected:
+                if lacks_hw:
+                    msg = (
+                        "REVIEW: construction mentions zipper/buttons/drawstring while closure "
+                        "field is unverified or pull-on — designer instruction preserved."
+                    )
+                    if isinstance(step, dict):
+                        note = str(step.get("note") or step.get("review_message") or "")
+                        if "construction mentions zipper" in note:
+                            out.append(step)
+                        else:
+                            out.append(
+                                {
+                                    **step,
+                                    "review_status": step.get("review_status")
+                                    if _is_explicitly_confirmed_meta(step)
+                                    else "needs_review",
+                                    "review_message": msg,
+                                    "note": ((note + " · " if note else "") + msg).strip(
+                                        " ·"
+                                    ),
+                                }
+                            )
+                            if warnings_out is not None:
+                                warnings_out.append(
+                                    {
+                                        "code": "construction_closure_conflict",
+                                        "piece_id": (piece or {}).get("id")
+                                        if isinstance(piece, dict)
+                                        else None,
+                                        "message": msg,
+                                        "severity": "warning",
+                                    }
+                                )
+                    else:
+                        out.append(step)
+                else:
+                    out.append(step)
+                continue
+            # AI / estimate boilerplate only.
+            if lacks_hw:
+                if isinstance(step, dict):
+                    out.append(
+                        {
+                            **step,
+                            "instruction": _CLOSURE_ANTI_INVENTION_INSTRUCTION,
+                            "review_status": "adjusted_for_garment",
+                            "source": step.get("source") or "estimate",
+                        }
+                    )
+                else:
+                    out.append(_CLOSURE_ANTI_INVENTION_INSTRUCTION)
+                continue
+            if not hw_confirmed and isinstance(step, dict):
+                # Named but unconfirmed hardware → keep text, mark UNVERIFIED (idempotent).
+                if _review_status_of(step) == "proposed_unverified":
+                    out.append(step)
+                else:
+                    out.append(
+                        {
+                            **step,
+                            "review_status": "proposed_unverified",
+                            "review_message": (
+                                "UNVERIFIED closure hardware — confirm zipper/buttons "
+                                "before manufacturing."
+                            ),
+                        }
+                    )
+                continue
         out.append(step)
+    return out
+
+
+def filter_bom_rows(
+    rows: list[dict[str, Any]],
+    *,
+    analysis: dict[str, Any] | None = None,
+    piece: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Preserve confirmed BOM hardware; mark unverified estimate lines only."""
+    if not rows:
+        return rows
+    lacks_hw = closure_lacks_hardware_evidence(analysis=analysis, piece=piece)
+    hw_confirmed = closure_hardware_confirmed(analysis=analysis, piece=piece)
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item = _text(row.get("item"))
+        notes = _text(row.get("notes"))
+        blob = f"{item} {notes}"
+        if not any(tok in blob for tok in _CLOSURE_HARDWARE_TOKENS):
+            out.append(row)
+            continue
+        if _is_designer_authored(row) or _is_explicitly_confirmed_meta(row):
+            out.append(row)
+            continue
+        if hw_confirmed:
+            out.append(row)
+            continue
+        # Idempotent unverified marker.
+        if str(row.get("review_state") or row.get("review_status") or "").lower() in {
+            "proposed_unverified",
+            "unverified",
+        } and str(row.get("qty") or "").upper() == "UNVERIFIED":
+            out.append(row)
+            continue
+        label = str(row.get("item") or "Closure hardware")
+        if lacks_hw:
+            label = "Closure hardware (if designed)"
+        out.append(
+            {
+                **row,
+                "item": label,
+                "qty": "UNVERIFIED",
+                "notes": (
+                    str(row.get("notes") or "").strip()
+                    + (" · " if str(row.get("notes") or "").strip() else "")
+                    + "UNVERIFIED — confirm zipper/buttons/drawstring before cutting."
+                ).strip(" ·"),
+                "source": row.get("source") or "unverified",
+                "review_state": "proposed_unverified",
+                "review_status": "proposed_unverified",
+            }
+        )
     return out
 
 

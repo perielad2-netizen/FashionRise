@@ -28,6 +28,7 @@ from app.services.techpack_compatibility import filter_pattern_inventory
 from app.services.techpack_detect import detect_pieces_from_evidence
 from app.services.techpack_pdf import build_techpack_pdf
 from app.services.techpack_structure import (
+    INPUT_FINGERPRINT_VERSION,
     is_inconclusive_piece,
     list_outfit_pieces,
     plan_professional_image_kinds,
@@ -652,7 +653,7 @@ def test_prepare_preserves_designer_confirmed_despite_weak_other_detector(db_ses
     assert pieces[0]["category"] == "top"
     assert meta["input_fingerprint"]
     assert meta["structure_fingerprint"]
-    assert meta["input_fingerprint_version"] == 2
+    assert meta["input_fingerprint_version"] == INPUT_FINGERPRINT_VERSION
     # Fingerprint stable across harmless bookkeeping
     fp2 = professional_input_fingerprint(out_spec, pieces, draft=draft)
     assert fp2 == meta["input_fingerprint"]
@@ -771,7 +772,7 @@ def test_queued_run_rejects_measurement_drift_before_provider(client, db_session
     assert run_row.status == "queued"
     req = run_row.request if isinstance(run_row.request, dict) else {}
     assert req.get("input_fingerprint")
-    assert req.get("input_fingerprint_version") == 2
+    assert req.get("input_fingerprint_version") == INPUT_FINGERPRINT_VERSION
     assert req.get("structure_fingerprint")
 
     # Change a measurement while keeping the same piece IDs/categories.
@@ -907,7 +908,7 @@ def test_queued_run_unchanged_inputs_complete_with_mock(client, db_session, monk
     assert run_row is not None
     req = run_row.request if isinstance(run_row.request, dict) else {}
     assert req.get("input_fingerprint")
-    assert req.get("input_fingerprint_version") == 2
+    assert req.get("input_fingerprint_version") == INPUT_FINGERPRINT_VERSION
     # Harmless server bookkeeping alone must not drift the fingerprint.
     from app.models.techpack_draft import TechpackDraft
 

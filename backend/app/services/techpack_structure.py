@@ -29,7 +29,8 @@ OPTIONAL_IMAGE_KIND_PHASES: tuple[str, ...] = (
 # Versioned authorized-input snapshot for queued Professional runs.
 # v1 = piece/materials/finished POMs + notes/units only (incomplete — do not authorize new runs).
 # v2 = + shared body, preferences, size/sample, draft title/style, Magic job refs.
-INPUT_FINGERPRINT_VERSION = 2
+# v3 = + color_treatment / fabric_pattern (gradient↔solid drift must dirty PDF / fail-close auth).
+INPUT_FINGERPRINT_VERSION = 3
 
 _INCONCLUSIVE_CATEGORIES = frozenset({"", "other"})
 _INCONCLUSIVE_LABELS = frozenset(
@@ -186,8 +187,34 @@ def _measurement_snapshot(cell: Any) -> dict[str, Any] | None:
     return out
 
 
+def _color_treatment_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
+    """Stable color_treatment for PDF dirty / auth fingerprints (aligned with identity hash)."""
+    raw = piece.get("color_treatment")
+    if not isinstance(raw, dict):
+        return {}
+    mode = str(raw.get("mode") or raw.get("type") or "").strip().lower()
+    stops_raw = raw.get("stops") if raw.get("stops") is not None else raw.get("colors")
+    stops: list[Any] = list(stops_raw) if isinstance(stops_raw, list) else []
+    named = raw.get("named_colors")
+    return {
+        "mode": mode,
+        "stops": stops,
+        "named_colors": list(named) if isinstance(named, list) else [],
+        "direction": str(raw.get("direction") or "").strip(),
+        "placement": str(raw.get("placement") or "").strip(),
+        "gradient_id": str(raw.get("gradient_id") or "").strip(),
+        "angle": raw.get("angle") if isinstance(raw.get("angle"), (int, float)) else None,
+        "designer_confirmed": bool(raw.get("designer_confirmed")),
+        "notes": str(raw.get("notes") or "").strip(),
+    }
+
+
 def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
-    """Generation/PDF-relevant fields only — no volatile illustration/AI bookkeeping."""
+    """Historical V1/V2 piece snapshot — frozen shape (no color_treatment / fabric_pattern).
+
+    Must remain bit-compatible with approved main ``1cab0a7b`` so recalculated
+    historical fingerprints match completed-run stamps.
+    """
     mats = _as_dict(piece.get("materials"))
     shell = _as_dict(mats.get("shell"))
     lining = _as_dict(mats.get("lining"))
@@ -224,6 +251,23 @@ def _piece_input_snapshot(piece: dict[str, Any]) -> dict[str, Any]:
                 for k in sorted(visible.keys(), key=lambda x: str(x))
                 if not str(k).endswith("_provenance") and visible.get(k) not in (None, "")
             },
+        }
+    )
+
+
+def _piece_input_snapshot_v3(piece: dict[str, Any]) -> dict[str, Any]:
+    """V3 piece snapshot — historical fields plus color_treatment / fabric_pattern."""
+    base = _piece_input_snapshot(piece)
+    mats = _as_dict(piece.get("materials"))
+    shell = _as_dict(mats.get("shell"))
+    pattern_raw = piece.get("fabric_pattern")
+    if pattern_raw is None:
+        pattern_raw = shell.get("pattern") or mats.get("pattern")
+    return _stable_jsonable(
+        {
+            **base,
+            "color_treatment": _color_treatment_input_snapshot(piece),
+            "fabric_pattern": str(pattern_raw or ""),
         }
     )
 
@@ -288,6 +332,7 @@ def _fingerprint_payload_v2(
     *,
     draft: Any | None,
 ) -> dict[str, Any]:
+    """Frozen v2 payload — historical piece snapshot only (no color_treatment)."""
     refs = _draft_source_refs(draft)
     quantity = spec_d.get("quantity")
     return {
@@ -315,6 +360,24 @@ def _fingerprint_payload_v2(
     }
 
 
+def _fingerprint_payload_v3(
+    spec_d: dict[str, Any],
+    pieces: list[dict[str, Any]],
+    *,
+    draft: Any | None,
+) -> dict[str, Any]:
+    """V3 payload — v2 shared fields + color_treatment / fabric_pattern on pieces."""
+    base = _fingerprint_payload_v2(spec_d, pieces, draft=draft)
+    return {
+        **base,
+        "v": 3,
+        "pieces": [
+            _piece_input_snapshot_v3(p)
+            for p in sorted(pieces, key=lambda x: piece_id(x))
+        ],
+    }
+
+
 def professional_input_fingerprint(
     spec: dict[str, Any] | None,
     pieces: list[dict[str, Any]],
@@ -327,8 +390,10 @@ def professional_input_fingerprint(
     ver = int(version)
     if ver <= 1:
         payload = _fingerprint_payload_v1(spec_d, pieces)
-    else:
+    elif ver == 2:
         payload = _fingerprint_payload_v2(spec_d, pieces, draft=draft)
+    else:
+        payload = _fingerprint_payload_v3(spec_d, pieces, draft=draft)
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
