@@ -4044,6 +4044,13 @@ export function useStudioEditor() {
     personalCroquisId,
     personalCroquisVersion,
     personalUnavailable,
+    reloadPersonalCroquisUnderlay: () => {
+      setPersonalUnavailable(false)
+      setPersonalObjectUrl(null)
+      setPersonalUnderlayIdentity(null)
+      personalLoadGenRef.current += 1
+      setPersonalUnderlayReloadToken((n) => n + 1)
+    },
     personalUnderlayReady: personalUnderlayMatchesPin,
     croquisWizardOpen,
     openCroquisWizard,

@@ -1,0 +1,69 @@
+.card {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(251, 191, 36, 0.12), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.title {
+  margin: 0;
+  font-family: var(--fr-serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fr-text);
+}
+
+.lead {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fr-muted);
+}
+
+.pieceBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pieceName {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fde68a;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 22, 38, 0.65);
+  color: var(--fr-text);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: rgba(244, 114, 182, 0.5);
+  background: rgba(244, 114, 182, 0.12);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

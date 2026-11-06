@@ -78,7 +78,9 @@ def test_analyze_garment_passes_reasoning_effort_and_image_bytes(monkeypatch):
     assert kwargs["model"] == "gpt-6-luna"
     assert kwargs["reasoning_effort"] == "none"
     assert kwargs["response_format"] == {"type": "json_object"}
-    assert kwargs["max_completion_tokens"] <= 1800
+    # Dense professional analysis needs headroom (3.2k truncated mid-JSON on real looks).
+    assert kwargs["max_completion_tokens"] >= 4096
+    assert kwargs["max_completion_tokens"] <= 8192
     assert "temperature" not in kwargs
     messages = kwargs["messages"]
     user = messages[1]["content"]

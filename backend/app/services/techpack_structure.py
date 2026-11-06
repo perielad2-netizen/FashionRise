@@ -22,8 +22,10 @@ REQUIRED_IMAGE_KIND = "flat_front"
 OPTIONAL_IMAGE_KIND_PHASES: tuple[str, ...] = (
     "flat_back",  # real back when present
     "flat_back_proposed",  # proposed back when allowed
-    "detail_callouts",
+    # Pattern-piece visuals are the MTM quality benchmark (dress V9) — allocate
+    # before detail close-ups so multi-garment packs are not left with ID cards only.
     "pattern_sheet",
+    "detail_callouts",
 )
 
 # Versioned authorized-input snapshot for queued Professional runs.
@@ -49,6 +51,7 @@ _CREDIBLE_DETECTION_CONFIDENCE = frozenset(
     {
         "look_identity",
         "heuristic",
+        "ai_vision",
     }
 )
 
@@ -128,14 +131,13 @@ def reject_inconclusive_professional_pieces(pieces: list[dict[str, Any]]) -> lis
     if not pieces:
         raise ValidationAppError(
             "Cannot start AI Professional: this draft has no garment pieces. "
-            "Open Measurements & details, confirm the outfit pieces from your Magic look, then try again."
+            "Generate again so AI can read your Magic look, or open Advanced details to set pieces."
         )
     bad = [p for p in pieces if is_inconclusive_piece(p)]
     if bad:
         raise ValidationAppError(
-            "Cannot start AI Professional: garment categories are inconclusive. "
-            "Open Measurements & details and confirm each garment category "
-            "(do not leave “Garment (confirm category)” / Other unresolved), then Generate again."
+            "Cannot start AI Professional: AI could not identify clear garment types from your Magic look. "
+            "Try Generate again, or open Advanced details to set the garment type."
         )
     return pieces
 
@@ -412,6 +414,41 @@ def evidence_detection(
     )
 
 
+def outfit_needs_ai_structure(spec: dict[str, Any] | None) -> bool:
+    """True when Generate should spend a vision call to name garment pieces."""
+    pieces = list_outfit_pieces(spec)
+    if not pieces:
+        return True
+    if designer_structure_locked(pieces):
+        return False
+    return all(is_inconclusive_piece(p) for p in pieces)
+
+
+def apply_ai_structure_detection(
+    spec: dict[str, Any],
+    detection: dict[str, Any],
+) -> dict[str, Any]:
+    """Replace inconclusive outfit pieces with AI vision detection (preserves body/prefs)."""
+    working = ensure_spec_dict(spec)
+    pieces = [p for p in (detection.get("pieces") or []) if isinstance(p, dict)]
+    if not pieces or not detection_has_credible_pieces(detection):
+        return working
+    outfit = _as_dict(working.get("outfit"))
+    working["outfit"] = {
+        **outfit,
+        "pieces": pieces,
+        "piece_count": len(pieces),
+        "detection_confidence": detection.get("detection_confidence") or "ai_vision",
+        "detection_note": detection.get("note") or "",
+        "needs_user_confirm": False,
+    }
+    ai = _as_dict(working.get("ai"))
+    ai["structure_source"] = "ai_vision"
+    ai["structure_vision_confidence"] = detection.get("vision_confidence")
+    working["ai"] = ai
+    return working
+
+
 def evidence_piece_categories(
     *,
     look_summary: str | None,
@@ -493,9 +530,9 @@ def prepare_professional_outfit(
             repaired = True
         elif not pieces or all(is_inconclusive_piece(p) for p in pieces):
             raise ValidationAppError(
-                "Cannot start AI Professional: Magic look evidence does not identify clear "
-                "garment categories. Open Measurements & details, confirm each garment "
-                "category, then Generate again. No paid call was made."
+                "Cannot start AI Professional: Magic look text does not identify clear "
+                "garment categories and AI vision has not resolved them yet. "
+                "Generate again so AI can read the look image. No paid generation was started."
             )
 
     pieces = validate_professional_pieces(pieces)

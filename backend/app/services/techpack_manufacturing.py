@@ -28,8 +28,8 @@ READINESS_LABELS = {
 # Measurement method definitions (shown in PDF / review UI).
 POM_DEFINITIONS: dict[str, dict[str, str]] = {
     "chest_bust": {
-        "label": "Chest / bust",
-        "method": "Full circumference at fullest bust/chest, parallel to floor.",
+        "label": "Chest / bust (full circ)",
+        "method": "Full circumference at fullest bust/chest, parallel to floor. Flat half ×2 must match.",
         "measure_type": "circumference",
     },
     "shoulder_width": {
@@ -53,24 +53,59 @@ POM_DEFINITIONS: dict[str, dict[str, str]] = {
         "measure_type": "circumference",
     },
     "hem": {
-        "label": "Hem",
-        "method": "Full hem circumference (or stated flat width ×2 if noted).",
+        "label": "Hem (full circ)",
+        "method": "Full hem circumference (flat side-to-side ×2 unless noted).",
         "measure_type": "circumference",
     },
     "neckline": {
-        "label": "Neckline / collar",
-        "method": "Neck opening circumference or specified collar stand.",
-        "measure_type": "circumference",
+        "label": "Neckline depth",
+        "method": "Depth from HPS (or stated CF/CB ref) to neckline edge — not a circumference unless noted.",
+        "measure_type": "length",
     },
     "waist": {
-        "label": "Waist",
-        "method": "Full waist circumference at waistband / natural waist as specified.",
+        "label": "Waist (full circ)",
+        "method": "Full waist circumference at waistband / natural waist as specified. Flat half ×2 must match.",
         "measure_type": "circumference",
     },
     "hip": {
-        "label": "Hip",
-        "method": "Full hip circumference at fullest seat.",
+        "label": "Hip (full circ)",
+        "method": "Full hip circumference at fullest seat. Flat half ×2 must match.",
         "measure_type": "circumference",
+    },
+    "wrap_overlap": {
+        "label": "Wrap overlap at waist",
+        "method": "Underlap depth at waist when wrap is closed (cm).",
+        "measure_type": "length",
+    },
+    "slit_start": {
+        "label": "Slit start from waist",
+        "method": "Waist seam straight down to top of thigh slit (cm).",
+        "measure_type": "length",
+    },
+    "overlay_length": {
+        "label": "Asymmetric overlay length",
+        "method": "Overlay attach point to free hem tip (cm).",
+        "measure_type": "length",
+    },
+    "sash_width": {
+        "label": "Sash / tie width",
+        "method": "Finished sash width (cm).",
+        "measure_type": "width",
+    },
+    "sash_length": {
+        "label": "Sash / tie length",
+        "method": "Total sash length including both tails (cm).",
+        "measure_type": "length",
+    },
+    "hem_high": {
+        "label": "Hem length (high side)",
+        "method": "HPS to higher hem edge when asymmetric (cm).",
+        "measure_type": "length",
+    },
+    "hem_low": {
+        "label": "Hem length (low / long side)",
+        "method": "HPS to longest hem / overlay tip when asymmetric (cm).",
+        "measure_type": "length",
     },
     "inseam": {
         "label": "Inseam",

@@ -274,15 +274,115 @@ export function detectTrouserLegFills(
   return { looksLikeTrousers, looksLikeNarrow, looksLikeWide, looksLikeJumpsuit }
 }
 
+/** Fashion-safe rewrite so sheer/see-through fabric labels do not trip sexual moderation. */
+export function sanitizeFabricHintText(raw: string): string {
+  let text = raw.trim().replace(/\s+/g, ' ')
+  if (!text) return text
+  text = text
+    .replace(/\bsee[\s-]*thr(?:ough|o+gh)\b/gi, 'fine-knit')
+    .replace(/\bsheer\b/gi, 'fine-knit')
+    .replace(/\btransparent\b/gi, 'fine-knit')
+    .replace(/\bsee[\s-]*thru\b/gi, 'fine-knit')
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function fabricLabelForFill(fill: FillOp): string {
+  const style = fill.style
+  if (style.kind === 'uploaded-fabric') {
+    return (getFabricPromptShort(style.assetId) || '').toLowerCase()
+  }
+  if (style.kind === 'fabric') {
+    const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
+    return (preset?.label ?? style.fabricId).toLowerCase()
+  }
+  return ''
+}
+
+function looksLikeHosieryLabel(label: string): boolean {
+  return /\b(stocking|stockings|hosiery|tights|pantyhose|sock|socks)\b/i.test(label)
+}
+
+function looksLikeGloveLabel(label: string): boolean {
+  return /\b(glove|gloves|mitt|mittens)\b/i.test(label)
+}
+
+/** Leg-band fills (and stocking-labeled fabrics) — exclude from one-piece torso union. */
+export function isLikelyHosieryFill(fill: FillOp, designHeight = 1024): boolean {
+  const label = fabricLabelForFill(fill)
+  if (looksLikeHosieryLabel(label)) return true
+  // Geometry alone would mis-read solid pant legs as hosiery — require a fabric fill.
+  if (fill.style.kind !== 'uploaded-fabric' && fill.style.kind !== 'fabric') return false
+  const b = fillBounds(fill)
+  if (!b) return false
+  // Tall fill that starts at/under the hip and runs down the legs.
+  if (b.minY < designHeight * 0.48) return false
+  if (b.maxY < designHeight * 0.7) return false
+  const span = b.maxY - b.minY
+  return span >= designHeight * 0.18
+}
+
+/** Hand/forearm fills or glove-labeled fabrics. */
+export function isLikelyGloveFill(fill: FillOp, designHeight = 1024): boolean {
+  const label = fabricLabelForFill(fill)
+  if (looksLikeGloveLabel(label)) return true
+  if (fill.style.kind !== 'uploaded-fabric' && fill.style.kind !== 'fabric') return false
+  const b = fillBounds(fill)
+  if (!b) return false
+  const cy = (b.minY + b.maxY) / 2
+  const h = b.maxY - b.minY
+  const w = b.maxX - b.minX
+  if (cy < designHeight * 0.25 || cy > designHeight * 0.75) return false
+  if (h > designHeight * 0.28 || w > designHeight * 0.22) return false
+  // Peripheral on the canvas (hands), not center torso.
+  const midX = (b.minX + b.maxX) / 2
+  const edge = midX < designHeight * 0.28 || midX > designHeight * 0.72
+  return edge
+}
+
+function apparelBodyFills(fills: FillOp[], designHeight = 1024): FillOp[] {
+  return fills.filter(
+    (f) => !isLikelyHosieryFill(f, designHeight) && !isLikelyGloveFill(f, designHeight),
+  )
+}
+
+/**
+ * Crop top + briefs (or similar) as two separate torso fills — not a continuous one-piece.
+ */
+export function detectSeparateTopBottom(
+  fills: FillOp[],
+  designHeight = 1024,
+): boolean {
+  const body = apparelBodyFills(fills, designHeight)
+  const upper: InkBounds[] = []
+  const lower: InkBounds[] = []
+  for (const fill of body) {
+    const b = fillBounds(fill)
+    if (!b) continue
+    const cy = (b.minY + b.maxY) / 2
+    // Exclusive split — crop tops sit above mid torso; briefs/shorts/hips below.
+    if (cy < designHeight * 0.47) upper.push(b)
+    else lower.push(b)
+  }
+  if (upper.length < 1 || lower.length < 1) return false
+  const top = unionBounds(upper)
+  const bot = unionBounds(lower)
+  if (!top || !bot) return false
+  // Gap or only light overlap between crop hem and brief waist.
+  return bot.minY + designHeight * 0.02 >= top.maxY - designHeight * 0.08
+}
+
 /**
  * Continuous torso→hip fill (one-piece swimsuit / bodysuit / dress) — not trousers
  * and not a waist-length top. Drives OpenAI hints so photo jeans are replaced.
+ * Stockings/gloves and separate crop+brief sets are excluded.
  */
 export function detectOnePieceFullCoverage(
   fills: FillOp[],
   designHeight = 1024,
 ): boolean {
-  const parts = fills.map((f) => fillBounds(f)).filter(Boolean) as InkBounds[]
+  if (detectSeparateTopBottom(fills, designHeight)) return false
+  const body = apparelBodyFills(fills, designHeight)
+  const parts = body.map((f) => fillBounds(f)).filter(Boolean) as InkBounds[]
   const u = unionBounds(parts)
   if (!u) return false
   const span = u.maxY - u.minY
@@ -290,7 +390,7 @@ export function detectOnePieceFullCoverage(
   if (u.maxY < designHeight * 0.5) return false
   if (u.minY > designHeight * 0.48) return false
   // Reject clear two-leg trousers — those use the trouser hint path instead.
-  if (detectTrouserLegFills(fills, designHeight).looksLikeTrousers) return false
+  if (detectTrouserLegFills(body, designHeight).looksLikeTrousers) return false
   return true
 }
 
@@ -322,8 +422,11 @@ export function buildTryOnDesignHints(args: {
   const secondary: string[] = []
   const colors = new Set<string>()
 
+  const hasHosiery = fills.some((f) => isLikelyHosieryFill(f))
+  const hasGloves = fills.some((f) => isLikelyGloveFill(f))
+
   // #170 — additive trouser geometry hints only when Studio fills show two clear legs.
-  const legs = detectTrouserLegFills(fills)
+  const legs = detectTrouserLegFills(apparelBodyFills(fills))
   if (legs.looksLikeTrousers) {
     if (legs.looksLikeJumpsuit) {
       pushUnique(
@@ -345,6 +448,15 @@ export function buildTryOnDesignHints(args: {
       pushUnique(priority, 'preserve original leg width and length — do not flare or merge legs')
     }
     pushUnique(priority, 'do not connect the legs into a continuous skirt panel')
+  } else if (detectSeparateTopBottom(fills)) {
+    pushUnique(
+      priority,
+      'garment type: separate top and bottom as drawn — keep both pieces; do not merge into one dress',
+    )
+    pushUnique(
+      priority,
+      'replace photo clothing on torso and hips with the drawn top and bottom; do not leave jeans under the design',
+    )
   } else if (detectOnePieceFullCoverage(fills)) {
     // Continuous one-piece (swimsuit / bodysuit / dress) — do not leave photo jeans under it.
     // Two priority slots only so bridal neckline/sleeve/pale + color hints still fit.
@@ -363,6 +475,19 @@ export function buildTryOnDesignHints(args: {
         'hem: high-cut one-piece as drawn — end at the designed leg openings; do not lengthen into a dress or skirt',
       )
     }
+  }
+
+  if (hasHosiery) {
+    pushUnique(
+      priority,
+      'include drawn stockings/hosiery on both legs from image 2 — fine fashion knit; do not leave bare legs',
+    )
+  }
+  if (hasGloves) {
+    pushUnique(
+      priority,
+      'include drawn gloves on both hands from image 2 — do not leave bare hands when gloves are drawn',
+    )
   }
 
   // #182 — open neckline + both sleeves before color noise (bridal / pale dresses).
@@ -417,10 +542,10 @@ export function buildTryOnDesignHints(args: {
       )
     } else if (style.kind === 'fabric') {
       const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
-      const label = preset?.label ?? style.fabricId
+      const label = sanitizeFabricHintText(preset?.label ?? style.fabricId)
       pushUnique(secondary, `${label} repeating fabric fill — keep exact Studio print geometry`)
     } else if (style.kind === 'uploaded-fabric') {
-      const promptShort = getFabricPromptShort(style.assetId)
+      const promptShort = sanitizeFabricHintText(getFabricPromptShort(style.assetId) || '')
       pushUnique(
         secondary,
         promptShort

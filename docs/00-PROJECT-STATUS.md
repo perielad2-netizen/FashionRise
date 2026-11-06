@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-05 (**AI Create Fabric** **LIVE** FE/BE · **`e377b7f1`** · Alembic **`016`** · prior erase-shoes **`3ee39a54`**.)
+**Last updated:** 2026-11-06 (**Create Real Design body profiles** **LIVE** FE/BE · **`3a01c179`** · Alembic **`017`** · Techpack V4 PDF preserved.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -11,12 +11,16 @@
 
 | Layer | Revision |
 |---|---|
-| Frontend (`web-ui`) | **`e377b7f1`** — release `/var/www/fashionrise/releases/e377b7f1` · AI Create Fabric. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
-| Backend (FastAPI + PostgreSQL) | tip **`e377b7f1`** · AI Create Fabric · Try On **`v2.7`** · Alembic **`016`**.
+| Frontend (`web-ui`) | **`3a01c179`** — release `/var/www/fashionrise/releases/3a01c179` · body measurement profiles. FRONT_BACK/MAGIC/DUAL **ON**, REGISTRATION **OFF**.
+| Backend (FastAPI + PostgreSQL) | overlay tip **`3a01c179`** · V4 PDF modules retained · Try On **`v2.7`** · Alembic **`017`**.
 | AI worker | `fashionrise-ai-worker` · croquis **v5** unchanged |
-| Database | `fashionrise_beta` — Alembic **`016`** (AI fabric prompt columns) |
-| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`e377b7f1`** · `POST /api/v1/fabrics/ai-generate` allowlisted |
+| Database | `fashionrise_beta` — Alembic **`017`** (body measurement profiles) |
+| Nginx | photos `client_max_body_size` **25m** · FE `current` → **`3a01c179`** · techpacks measurement-profiles + apply-body-profile allowlisted |
 | AI spend | **#175 unlock preserved**: ceiling **`$100000`** · per-run **`$1000`** · day **`$100000`** · max exposure **100000¢** · gens/day **OFF** · Max soft budget **100000**. |
+
+## Create Real Design — named body profiles LIVE (2026-11-06)
+
+Friendly UX: save full body measurements under a name (Me / Mom / client) and reuse across outfits. Generate AI PDF applies the profile; AI detects garment piece count from the Magic look and fills flats/BOM/construction. Advanced details stay optional. App/BE **`3a01c179`** · Alembic **`017`**. Rollback `/var/backups/fashionrise/techpack-measure-profiles-20261105T225536Z`. PR **#200**.
 
 ## AI Create Fabric — LIVE FE/BE (2026-11-05)
 

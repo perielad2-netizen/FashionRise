@@ -73,6 +73,13 @@ MAX_DRAWN_FOOTWEAR_PROMPT_SUFFIX = (
     "Do not keep tall boots from the model photo."
 )
 
+MAX_HOSIERY_GLOVES_PROMPT_SUFFIX = (
+    "Also fit any stockings, hosiery, tights, and gloves shown in the garment artwork "
+    "onto the person as fine fashion-knit layers — cover both legs and both hands when "
+    "those pieces are drawn. Do not leave bare legs or bare hands when stockings or "
+    "gloves are present in the design."
+)
+
 
 def fashn_max_prompt_hash(prompt: str) -> str:
     return hashlib.sha256((prompt or "").encode("utf-8")).hexdigest()
@@ -124,26 +131,31 @@ def normalize_max_prompt(raw: str | None) -> str:
 
 
 def build_smart_max_prompt(design_hints: list[str] | None = None) -> str:
-    """Default Max prompt plus footwear guidance from Studio design hints.
+    """Default Max prompt plus footwear / hosiery / gloves guidance from Studio hints.
 
     Smart public fallback previously always used DEFAULT_MAX_PROMPT alone, so
     swimwear Max results kept photo boots even when the sketch had bare feet or
-    small drawn shoes.
+    small drawn shoes. Stockings and gloves were also dropped on Max fallback.
     """
     base = DEFAULT_MAX_PROMPT
     hints = [str(h).strip().lower() for h in (design_hints or []) if str(h).strip()]
     joined = " | ".join(hints)
-    suffix = ""
+    parts: list[str] = []
     if any("bare feet" in h or "no shoes drawn" in h or "remove photo boots" in h for h in hints):
-        suffix = MAX_BAREFOOT_PROMPT_SUFFIX
+        parts.append(MAX_BAREFOOT_PROMPT_SUFFIX)
     elif any("footwear" in h and ("drawn" in h or "replace" in h) for h in hints):
-        suffix = MAX_DRAWN_FOOTWEAR_PROMPT_SUFFIX
+        parts.append(MAX_DRAWN_FOOTWEAR_PROMPT_SUFFIX)
     elif "one-piece" in joined and "footwear" not in joined:
         # Continuous one-piece without an explicit footwear hint → barefoot.
-        suffix = MAX_BAREFOOT_PROMPT_SUFFIX
-    if not suffix:
+        parts.append(MAX_BAREFOOT_PROMPT_SUFFIX)
+    if any(
+        "stocking" in h or "hosiery" in h or "tights" in h or "glove" in h
+        for h in hints
+    ):
+        parts.append(MAX_HOSIERY_GLOVES_PROMPT_SUFFIX)
+    if not parts:
         return normalize_max_prompt(base)
-    return normalize_max_prompt(f"{base} {suffix}")
+    return normalize_max_prompt(f"{base} {' '.join(parts)}")
 
 
 def normalize_max_seed(raw: int | None) -> int:

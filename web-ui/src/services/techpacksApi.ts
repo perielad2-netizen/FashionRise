@@ -396,7 +396,14 @@ export async function generateTechpackAi(
 /** One-tap Professional — server mints spend-gated intent; user click is authorization. */
 export async function generateTechpackAiProfessionalOneTap(
   draftId: string,
-  body: { idempotency_key: string; propose_back?: boolean; sections?: string[] },
+  body: {
+    idempotency_key: string
+    propose_back?: boolean
+    sections?: string[]
+    body_profile_id?: string | null
+    /** Skip reuse of current completed PDF — queue a new paid Professional run. */
+    force_new?: boolean
+  },
 ): Promise<TechpackAiGenerateResponse> {
   return apiRequest<TechpackAiGenerateResponse>(
     `/techpacks/${draftId}/ai/generate-professional`,
@@ -405,6 +412,69 @@ export async function generateTechpackAiProfessionalOneTap(
       body,
     },
   )
+}
+
+export type BodyMeasurementProfile = {
+  id: string
+  name: string
+  units: string
+  sample_size?: string | null
+  measurements: Record<string, MeasuredValue>
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type BodyMeasurementProfileWrite = {
+  name: string
+  units?: string
+  sample_size?: string | null
+  measurements: Record<string, MeasuredValue>
+  is_default?: boolean
+}
+
+export async function listBodyMeasurementProfiles(
+  signal?: AbortSignal,
+): Promise<BodyMeasurementProfile[]> {
+  return apiRequest<BodyMeasurementProfile[]>('/techpacks/measurement-profiles', {
+    method: 'GET',
+    signal,
+  })
+}
+
+export async function createBodyMeasurementProfile(
+  body: BodyMeasurementProfileWrite,
+): Promise<BodyMeasurementProfile> {
+  return apiRequest<BodyMeasurementProfile>('/techpacks/measurement-profiles', {
+    method: 'POST',
+    body,
+  })
+}
+
+export async function updateBodyMeasurementProfile(
+  profileId: string,
+  body: Partial<BodyMeasurementProfileWrite>,
+): Promise<BodyMeasurementProfile> {
+  return apiRequest<BodyMeasurementProfile>(`/techpacks/measurement-profiles/${profileId}`, {
+    method: 'PATCH',
+    body,
+  })
+}
+
+export async function deleteBodyMeasurementProfile(profileId: string): Promise<void> {
+  await apiRequest<void>(`/techpacks/measurement-profiles/${profileId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function applyBodyMeasurementProfile(
+  draftId: string,
+  profileId?: string | null,
+): Promise<TechpackDraft> {
+  return apiRequest<TechpackDraft>(`/techpacks/${draftId}/apply-body-profile`, {
+    method: 'POST',
+    body: profileId ? { profile_id: profileId } : {},
+  })
 }
 
 export async function getTechpackAiRun(

@@ -24,6 +24,54 @@ from app.services.sketch_openai import (
 logger = logging.getLogger(__name__)
 
 ANALYSIS_SCHEMA_VERSION = "techpack_analysis_v3"
+# Dense tailor JSON regularly exceeds 3k completion tokens; under-budget truncates mid-object.
+PROFESSIONAL_ANALYZE_MIN_TOKENS = 4096
+PROFESSIONAL_ANALYZE_MAX_TOKENS = 8192
+
+
+def _parse_analysis_json(content: str) -> dict[str, Any]:
+    """Parse vision JSON; tolerate fenced markdown and leading/trailing junk."""
+    text = (content or "").strip()
+    if not text:
+        return {"confidence": "low", "assumptions": ["Empty vision analysis content"]}
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+        return {"confidence": "low", "assumptions": ["Non-object analysis"]}
+    except json.JSONDecodeError:
+        pass
+    # Strip ```json fences if present.
+    if "```" in text:
+        start = text.find("```")
+        chunk = text[start + 3 :]
+        if chunk.lstrip().lower().startswith("json"):
+            chunk = chunk.lstrip()[4:]
+        end = chunk.find("```")
+        if end >= 0:
+            chunk = chunk[:end]
+        chunk = chunk.strip()
+        try:
+            parsed = json.loads(chunk)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            text = chunk
+    # First { … last } salvage.
+    lo = text.find("{")
+    hi = text.rfind("}")
+    if lo >= 0 and hi > lo:
+        try:
+            parsed = json.loads(text[lo : hi + 1])
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return {
+        "raw": text[:4000],
+        "confidence": "low",
+        "assumptions": ["JSON parse failed"],
+    }
 
 
 @dataclass
@@ -37,6 +85,16 @@ class ProviderUsage:
 
 
 class ProfessionalAIProvider(Protocol):
+    def classify_outfit(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        look_notes: str,
+    ) -> tuple[dict[str, Any], ProviderUsage]:
+        """Return JSON outfit structure ``{pieces:[{category,label,color_hint}], confidence}``."""
+        ...
+
     def analyze_garment(
         self,
         *,
@@ -44,6 +102,7 @@ class ProfessionalAIProvider(Protocol):
         mime: str,
         piece: dict[str, Any],
         look_notes: str,
+        body_context: str = "",
     ) -> tuple[dict[str, Any], ProviderUsage]: ...
 
     def generate_technical_flat(
@@ -120,14 +179,14 @@ def _usage_cents_from_image(*, fallback: int = 40) -> int:
 class OpenAIProfessionalProvider:
     """Live OpenAI provider — only invoked after spend gates in techpack_ai."""
 
-    def analyze_garment(
+    def classify_outfit(
         self,
         *,
         image_bytes: bytes,
         mime: str,
-        piece: dict[str, Any],
         look_notes: str,
     ) -> tuple[dict[str, Any], ProviderUsage]:
+        """Paid vision pass: identify apparel piece count + categories from the Magic look."""
         from openai import OpenAI
 
         settings = get_settings()
@@ -136,23 +195,20 @@ class OpenAIProfessionalProvider:
             base_url=settings.openai_base_url or None,
             timeout=settings.openai_timeout_seconds,
         )
-        cat = str(piece.get("category") or "other")
-        label = str(piece.get("label") or cat)
         system = (
-            "You are a fashion technical designer analyzing a finished fashion look photo. "
-            "Return JSON only with keys: schema_version, category, silhouette, length, "
-            "neckline, sleeves, fit, closure_visible, fabric_pattern, stripe_direction, "
-            "colors, panels_seams, distinctive_features (array of strings), "
-            "pattern_pieces_suggested (array of {id,name,cut_qty,notes}), "
-            "construction_notes (array of strings), confidence (low|medium|high), "
-            "assumptions (array of strings). "
-            "Describe ONLY what is visually supported. Do not invent exact centimeters. "
-            f"schema_version must be '{ANALYSIS_SCHEMA_VERSION}'."
+            "You are a fashion technical designer identifying garment structure for a factory tech pack. "
+            "Return JSON only with keys: pieces (array), confidence (high|medium|low), notes (string). "
+            "Each piece must have: category, label, color_hint. "
+            "category MUST be one of: dress, shirt, top, jacket, skirt, trousers, shorts, jumpsuit, set. "
+            "List every distinct apparel piece the designer clearly drew or photographed "
+            "(e.g. shirt+trousers = 2 pieces; dress alone = 1; matching two-piece set = set or two pieces). "
+            "Do NOT list hosiery, stockings, tights, gloves, shoes, jewelry, bags, or hair as pieces — "
+            "fold them into notes instead. Prefer concrete apparel categories; never return category other. "
+            "Use the image as ground truth; look notes are optional hints only."
         )
         user_text = (
-            f"Garment tab: category={cat}, label={label}. "
-            f"Look notes: {(look_notes or '')[:400]}. "
-            "Extract construction-relevant features for a professional technical pack."
+            f"Look notes (optional): {(look_notes or '')[:500] or '(none)'}. "
+            "Identify the apparel garment structure for a technical pack."
         )
         kwargs = chat_completion_kwargs(
             model=settings.openai_model,
@@ -169,25 +225,162 @@ class OpenAIProfessionalProvider:
                     ],
                 },
             ],
-            max_completion_tokens=min(1800, int(settings.openai_max_completion_tokens or 1400)),
+            max_completion_tokens=min(900, int(settings.openai_max_completion_tokens or 1400)),
             reasoning_effort=settings.openai_reasoning_effort,
         )
-        # Ensure response_format json (chat_completion_kwargs already sets json_object;
-        # keep explicit for adapter clarity / older helpers).
         kwargs["response_format"] = {"type": "json_object"}
         result = client.chat.completions.create(**kwargs)
         content = (result.choices[0].message.content or "").strip() if result.choices else ""
         try:
             parsed = json.loads(content) if content else {}
         except json.JSONDecodeError:
-            parsed = {"raw": content[:2000], "confidence": "low", "assumptions": ["JSON parse failed"]}
+            parsed = {"pieces": [], "confidence": "low", "notes": "JSON parse failed"}
         if not isinstance(parsed, dict):
-            parsed = {"confidence": "low", "assumptions": ["Non-object analysis"]}
-        parsed["schema_version"] = ANALYSIS_SCHEMA_VERSION
+            parsed = {"pieces": [], "confidence": "low", "notes": "Non-object response"}
         usage = ProviderUsage(
-            cost_usd_cents=_usage_cents_from_chat(result),
+            cost_usd_cents=_usage_cents_from_chat(result, fallback=8),
             vision_model=settings.openai_model,
             vision_calls=1,
+            notes=["outfit_structure_classify"],
+        )
+        return parsed, usage
+
+    def analyze_garment(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        piece: dict[str, Any],
+        look_notes: str,
+        body_context: str = "",
+    ) -> tuple[dict[str, Any], ProviderUsage]:
+        from openai import OpenAI
+
+        settings = get_settings()
+        client = OpenAI(
+            api_key=(settings.openai_api_key or "").strip(),
+            base_url=settings.openai_base_url or None,
+            timeout=settings.openai_timeout_seconds,
+        )
+        cat = str(piece.get("category") or "other")
+        label = str(piece.get("label") or cat)
+        system = (
+            "You are a senior fashion technical designer writing a SAMPLE-DEVELOPMENT "
+            "tech pack a tailor/patternmaker can work from. "
+            "Return ONE compact JSON object only (no markdown). Keys: schema_version, category, "
+            "silhouette, length, neckline, sleeves, fit, closure_visible, fabric_pattern, "
+            "stripe_direction, colors, panels_seams, distinctive_features (array of short strings), "
+            "pattern_pieces_suggested (array of {id,name,cut_qty,notes,grainline}), "
+            "construction_notes (array of short strings), "
+            "construction_operations (array of "
+            "{operation,stitch_type,spi,seam_allowance_cm,notes} — 8 to 14 sew-order steps), "
+            "finished_pom_estimates (object with NUMBERS in cm or null: "
+            "chest_bust, waist, hip = FULL garment circumferences ≈ body+ease — NEVER flat half; "
+            "garment_length, sleeve_length, shoulder_width, armhole, hem_sweep=full hem circ; "
+            "neckline_depth=DEPTH not circ; wrap_overlap; slit_start_from_waist; overlay_length; "
+            "sash_width; sash_length; hem_high; hem_low; "
+            "finished_pom_methods as a short string stating FULL circ vs depth/length), "
+            "fabric_estimate (object: hand, likely_fiber, gsm_range, drape, opacity, "
+            "lining_recommended bool, notes), "
+            "callout_points (array of {n,label,region} — 10 to 16 factory callouts for flats), "
+            "hardware (array of {item,spec,placement,qty,unit,color} — zip/hooks/buttons/tape), "
+            "pantone_estimate (short string — closest textile color guess, mark as proposed), "
+            "care_recommendation (object: wash, bleach, dry, iron, dry_clean — ISO 3758 style text), "
+            "back_construction_proposal (string — invent a coherent rear when back is unseen), "
+            "confidence (low|medium|high), assumptions (array of strings). "
+            "Keep every string field under 160 characters. "
+            "construction_operations MUST be specific to THIS look "
+            "(wrap/drape/slit/sash/zip/lining as applicable) — never generic dress boilerplate. "
+            "Use body measurements to propose proportional finished POMs when the photo "
+            "supports length/sleeve proportion; mark assumptions clearly. "
+            "Prefer useful sample-room estimates over leaving critical fields empty. "
+            "callout_points and hardware must be garment-specific for a tailor/sample room. "
+            f"schema_version must be '{ANALYSIS_SCHEMA_VERSION}'."
+        )
+        user_text = (
+            f"Garment tab: category={cat}, label={label}. "
+            f"Body measurements: {(body_context or 'not provided')[:400]}. "
+            f"Look notes: {(look_notes or '')[:400]}. "
+            "Write a tailor-ready analysis: design-specific sew ops, cut inventory, "
+            "fabric estimate, numeric POM estimates (cm), numbered flat callouts, "
+            "hardware list, care proposal, Pantone-style color guess, and a coherent "
+            "proposed back if the rear is not visible."
+        )
+        # Dense technical JSON needs headroom — 3.2k truncated mid-object on real looks.
+        configured = int(settings.openai_max_completion_tokens or 1400)
+        token_budget = max(PROFESSIONAL_ANALYZE_MIN_TOKENS, configured)
+        token_budget = min(token_budget, PROFESSIONAL_ANALYZE_MAX_TOKENS)
+        messages = [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_text},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": _image_data_url(image_bytes, mime)},
+                    },
+                ],
+            },
+        ]
+
+        def _once(budget: int):
+            kwargs = chat_completion_kwargs(
+                model=settings.openai_model,
+                messages=messages,
+                max_completion_tokens=budget,
+                reasoning_effort=settings.openai_reasoning_effort,
+            )
+            kwargs["response_format"] = {"type": "json_object"}
+            result = client.chat.completions.create(**kwargs)
+            choice = result.choices[0] if result.choices else None
+            content = ((choice.message.content if choice else None) or "").strip()
+            finish = getattr(choice, "finish_reason", None) if choice else None
+            return result, content, finish
+
+        result, content, finish = _once(token_budget)
+        parsed = _parse_analysis_json(content)
+        # Retry once at max budget if truncated or unusable.
+        needs_retry = (
+            finish == "length"
+            or "JSON parse failed" in (parsed.get("assumptions") or [])
+            or (
+                not str(parsed.get("silhouette") or "").strip()
+                and not parsed.get("construction_operations")
+            )
+        )
+        total_cents = _usage_cents_from_chat(result)
+        vision_calls = 1
+        if needs_retry and token_budget < PROFESSIONAL_ANALYZE_MAX_TOKENS:
+            result2, content2, finish2 = _once(PROFESSIONAL_ANALYZE_MAX_TOKENS)
+            parsed2 = _parse_analysis_json(content2)
+            total_cents += _usage_cents_from_chat(result2)
+            vision_calls += 1
+            better = (
+                "JSON parse failed" not in (parsed2.get("assumptions") or [])
+                and (
+                    str(parsed2.get("silhouette") or "").strip()
+                    or parsed2.get("construction_operations")
+                )
+            )
+            if better:
+                parsed = parsed2
+                finish = finish2
+            elif finish2:
+                parsed.setdefault("assumptions", [])
+                if isinstance(parsed["assumptions"], list):
+                    parsed["assumptions"].append(f"retry_finish={finish2}")
+        if not isinstance(parsed, dict):
+            parsed = {"confidence": "low", "assumptions": ["Non-object analysis"]}
+        if finish == "length":
+            parsed.setdefault("assumptions", [])
+            if isinstance(parsed["assumptions"], list):
+                parsed["assumptions"].append("Vision JSON may be truncated (finish_reason=length)")
+        parsed["schema_version"] = ANALYSIS_SCHEMA_VERSION
+        usage = ProviderUsage(
+            cost_usd_cents=total_cents,
+            vision_model=settings.openai_model,
+            vision_calls=vision_calls,
         )
         return parsed, usage
 
@@ -276,7 +469,10 @@ class OpenAIProfessionalProvider:
             f"features={features}. "
             f"Category hint: {piece.get('category')}. "
             "Do NOT draw a generic A-line dress if the source is fitted/bodycon with long sleeves or a deep V. "
-            "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack."
+            "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack. "
+            "Do NOT burn in numbered callout dots, floating numbers, red markers, leader lines, "
+            "stamp text, or annotation columns — the PDF carries the written discussion list. "
+            "Keep the garment drawing clean and complete with no erased-label patches."
         )
 
     @staticmethod
@@ -295,9 +491,10 @@ class OpenAIProfessionalProvider:
             f"pattern={analysis.get('fabric_pattern')} {analysis.get('stripe_direction')}; "
             f"silhouette={analysis.get('silhouette')}. "
             "If a detail is not visible on this garment, omit it rather than inventing another garment's parts. "
-            "No model body. Label callouts briefly. Not a photo — a technical illustration. "
-            "If you cannot produce category-correct details, leave callouts blank rather than borrowing "
-            "from a different garment — failures require designer review, not silent approval."
+            "No model body. Prefer clean unlabeled close-ups of the real design features; "
+            "if labels are needed keep them short and off the garment face. Not a photo — a "
+            "technical illustration. If you cannot produce category-correct details, leave "
+            "callouts blank rather than borrowing from a different garment."
         )
 
     @staticmethod
@@ -306,13 +503,19 @@ class OpenAIProfessionalProvider:
         names = ", ".join(
             str(p.get("name") or p.get("id")) for p in pieces if isinstance(p, dict)
         )[:300]
+        cat = str(piece.get("category") or "garment")
         return (
-            "Create a PATTERN DEVELOPMENT SCHEMATIC sheet (NOT TO SCALE) for THIS garment. "
-            "Show named pattern pieces with illustrative shapes matching the garment "
-            f"(e.g. {names or 'front, back, sleeves'}), grainline arrows, fold marks, and cut quantities. "
-            "White background. Do NOT use generic unlabeled rectangles labeled only Piece A/B/C. "
-            "Include banner text: NOT TO SCALE — PATTERNMAKER VALIDATION REQUIRED. "
-            f"Silhouette={analysis.get('silhouette')}; sleeves={analysis.get('sleeves')}."
+            "Create a PATTERN DEVELOPMENT SCHEMATIC sheet (NOT TO SCALE) for THIS garment only "
+            f"(category={cat}). "
+            "Show LARGE named pattern pieces with illustrative cutting shapes matching the garment "
+            f"(e.g. {names or 'front, back, sleeves / legs, waistband'}), grainline arrows, fold marks, "
+            "and cut quantities clearly tied to each piece. "
+            "Cream or white technical background. Pieces must be easy to examine — not tiny icons. "
+            "Do NOT use generic unlabeled rectangles labeled only Piece A/B/C. "
+            "Do NOT invent a center-back zipper on a wrap dress. "
+            "Banner: NOT TO SCALE — NOT A PRINTABLE SEWING PATTERN. "
+            f"Silhouette={analysis.get('silhouette')}; sleeves={analysis.get('sleeves')}; "
+            f"features={', '.join(str(x) for x in (analysis.get('distinctive_features') or [])[:8])}."
         )
 
 
@@ -454,6 +657,56 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
             "Stabilize deep V neckline before setting sleeves.",
             "Match diagonal stripe continuity at side seams.",
         ],
+        "construction_operations": [
+            {
+                "operation": "Staystitch deep V neckline",
+                "stitch_type": "301 lockstitch",
+                "spi": "3.5–4 /cm",
+                "seam_allowance_cm": 1.0,
+                "notes": "Stabilize bias plunge before any shaping.",
+            },
+            {
+                "operation": "Join side seams matching diagonal stripes",
+                "stitch_type": "301 + 504 overlock",
+                "spi": "3.5–4 /cm",
+                "seam_allowance_cm": 1.0,
+                "notes": "Keep stripe continuity across CF/SS.",
+            },
+            {
+                "operation": "Set long sleeves",
+                "stitch_type": "301 + 504",
+                "spi": "3.5–4 /cm",
+                "seam_allowance_cm": 1.0,
+                "notes": "Ease sleeve head; press seam toward sleeve.",
+            },
+            {
+                "operation": "Hem mini skirt",
+                "stitch_type": "Blind hem / 301",
+                "spi": "per fabric",
+                "seam_allowance_cm": 2.5,
+                "notes": "Even hem on form; match stripe at CF if applicable.",
+            },
+        ],
+        "finished_pom_estimates": {
+            "garment_length": 92.0,
+            "sleeve_length": 60.0,
+            "neckline_depth": 28.0,
+            "hem_sweep": 48.0,
+            "finished_pom_methods": {
+                "garment_length": "Proportion from body height + mini silhouette",
+                "sleeve_length": "Long sleeve to wrist from shoulder proportion",
+            },
+        },
+        "fabric_estimate": {
+            "hand": "smooth light stretch knit look",
+            "likely_fiber": "polyester / elastane jersey",
+            "gsm_range": "180–220",
+            "drape": "fluid",
+            "opacity": "opaque",
+            "lining_recommended": False,
+            "notes": "Mock fabric estimate for striped mini dress",
+        },
+        "back_construction_proposal": "Center-back invisible zip with self-fabric facing; back neck sits higher than front V.",
         "confidence": "high",
         "assumptions": ["Mock analysis for FR-7182-style pink striped dress"],
     }
@@ -462,9 +715,53 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
 class MockProfessionalProvider:
     """Deterministic fixture provider for tests — incurs $0 real spend."""
 
-    def __init__(self, analysis_override: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        analysis_override: dict[str, Any] | None = None,
+        *,
+        outfit_override: dict[str, Any] | None = None,
+    ) -> None:
         self.analysis_override = analysis_override
+        self.outfit_override = outfit_override
         self.calls: list[str] = []
+
+    def classify_outfit(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        look_notes: str,
+    ) -> tuple[dict[str, Any], ProviderUsage]:
+        self.calls.append(f"classify:{len(image_bytes)}:{mime}")
+        if self.outfit_override:
+            data = dict(self.outfit_override)
+        else:
+            text = (look_notes or "").lower()
+            pieces: list[dict[str, Any]] = []
+            if "shirt" in text and ("trouser" in text or "pant" in text):
+                pieces = [
+                    {"category": "shirt", "label": "Shirt", "color_hint": ""},
+                    {"category": "trousers", "label": "Trousers", "color_hint": ""},
+                ]
+            elif "jumpsuit" in text or "romper" in text:
+                pieces = [{"category": "jumpsuit", "label": "Jumpsuit", "color_hint": ""}]
+            elif "skirt" in text:
+                pieces = [{"category": "skirt", "label": "Skirt", "color_hint": ""}]
+            elif "trouser" in text or "pant" in text or "jeans" in text:
+                pieces = [{"category": "trousers", "label": "Trousers", "color_hint": ""}]
+            elif "jacket" in text or "coat" in text:
+                pieces = [{"category": "jacket", "label": "Jacket", "color_hint": ""}]
+            elif "top" in text or "blouse" in text or "tee" in text:
+                pieces = [{"category": "top", "label": "Top", "color_hint": ""}]
+            else:
+                pieces = [{"category": "dress", "label": "Dress", "color_hint": ""}]
+            data = {"pieces": pieces, "confidence": "high", "notes": "mock_classify"}
+        return data, ProviderUsage(
+            cost_usd_cents=2,
+            vision_model="mock-vision",
+            vision_calls=1,
+            notes=["outfit_structure_classify"],
+        )
 
     def analyze_garment(
         self,
@@ -473,8 +770,9 @@ class MockProfessionalProvider:
         mime: str,
         piece: dict[str, Any],
         look_notes: str,
+        body_context: str = "",
     ) -> tuple[dict[str, Any], ProviderUsage]:
-        self.calls.append(f"analyze:{len(image_bytes)}:{mime}")
+        self.calls.append(f"analyze:{len(image_bytes)}:{mime}:{len(body_context or '')}")
         if self.analysis_override:
             data = dict(self.analysis_override)
             # Keep override but stamp category from piece when absent so multi-piece tests work.
@@ -564,6 +862,7 @@ def run_professional_pipeline(
     max_images: int,
     on_progress: ProgressCallback | None = None,
     image_plan: dict[str, Any] | None = None,
+    body_context: str = "",
 ) -> dict[str, Any]:
     """Analyze source Magic image and produce per-piece analysis + illustration bytes.
 
@@ -650,6 +949,7 @@ def run_professional_pipeline(
             mime=src_mime,
             piece=piece,
             look_notes=look_notes,
+            body_context=body_context or "",
         )
         total_usage.cost_usd_cents += u.cost_usd_cents
         total_usage.vision_calls += u.vision_calls

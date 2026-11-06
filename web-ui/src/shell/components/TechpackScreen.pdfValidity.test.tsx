@@ -34,6 +34,22 @@ vi.mock('@/services/techpacksApi', () => ({
       idempotencyKey: args[1] ? String(args[1]) : undefined,
     }),
   fetchTechpackArtifactBlob: (...args: unknown[]) => fetchTechpackArtifactBlob(...args),
+  listBodyMeasurementProfiles: vi.fn(async () => [
+    {
+      id: 'profile-me',
+      name: 'Me',
+      units: 'cm',
+      sample_size: 'M',
+      is_default: true,
+      measurements: { height: { value: 170, unit: 'cm', source: 'designer' } },
+      created_at: '2026-11-06T00:00:00Z',
+      updated_at: '2026-11-06T00:00:00Z',
+    },
+  ]),
+  createBodyMeasurementProfile: vi.fn(),
+  updateBodyMeasurementProfile: vi.fn(),
+  deleteBodyMeasurementProfile: vi.fn(),
+  applyBodyMeasurementProfile: vi.fn(),
 }))
 
 vi.mock('@/hooks/useAuthJobImage', () => ({
@@ -235,7 +251,7 @@ describe.each([
       </StrictMode>,
     )
     await screen.findByRole('button', { name: /Download PDF/i })
-    fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Advanced details \(optional\)/i }))
     const dialog = await screen.findByRole('dialog', { name: /Measurements & details/i })
     fireEvent.click(within(dialog).getByRole('tab', { name: /Body measurements/i }))
     const height = await within(dialog).findByLabelText(/^Height$/i)
@@ -253,7 +269,7 @@ describe.each([
       </StrictMode>,
     )
     await screen.findByRole('button', { name: /Download PDF/i })
-    fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Advanced details \(optional\)/i }))
     const dialog = await screen.findByRole('dialog', { name: /Measurements & details/i })
     fireEvent.click(within(dialog).getByRole('tab', { name: /Body measurements/i }))
     fireEvent.change(await within(dialog).findByLabelText(/^Height$/i), {
@@ -328,7 +344,7 @@ describe.each([
       </StrictMode>,
     )
     await screen.findByRole('button', { name: /Download PDF/i })
-    fireEvent.click(screen.getByRole('button', { name: /Edit measurements & details/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Advanced details \(optional\)/i }))
     const dialog = await screen.findByRole('dialog', { name: /Measurements & details/i })
     fireEvent.click(within(dialog).getByRole('tab', { name: /Body measurements/i }))
     const height = await within(dialog).findByLabelText(/^Height$/i)

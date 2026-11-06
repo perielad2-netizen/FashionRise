@@ -151,6 +151,7 @@ function mockEditor(): StudioEditor {
     personalCroquisId: null,
     personalCroquisVersion: null,
     personalUnavailable: false,
+    reloadPersonalCroquisUnderlay: vi.fn(),
     personalUnderlayReady: false,
     draftConflict: null,
     resolveConflictKeepLocal: vi.fn(),

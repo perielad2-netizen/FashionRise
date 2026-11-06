@@ -1,12 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import {
   buildTryOnDesignHints,
   detectBilateralSleevesFromFills,
   detectFootwearInk,
   detectOpenNecklineFromFills,
+  detectSeparateTopBottom,
   detectTrouserLegFills,
   liveArtworkYSpan,
+  sanitizeFabricHintText,
 } from '@/lib/tryOnDesignHints'
+import { clearFabricPromptCache, rememberFabricPromptShort } from '@/lib/fabricPromptCache'
 import type { FillOp } from '@/lib/fills'
 import type { Stroke } from '@/lib/strokes'
 
@@ -323,5 +326,54 @@ describe('buildTryOnDesignHints', () => {
     expect(hints.some((h) => /jumpsuit/i.test(h))).toBe(true)
     expect(hints.some((h) => /separate/i.test(h))).toBe(true)
     expect(hints.some((h) => /skirt panel/i.test(h))).toBe(true)
+  })
+
+  it('sanitizes see-through fabric wording', () => {
+    expect(sanitizeFabricHintText('white White see throgh stockings fabric')).toMatch(/fine-knit/i)
+    expect(sanitizeFabricHintText('white White see throgh stockings fabric')).not.toMatch(/see thr/i)
+  })
+
+  it('prioritizes stockings and gloves and avoids false one-piece for crop+briefs', () => {
+    clearFabricPromptCache()
+    rememberFabricPromptShort('stock-1', 'white White see throgh stockings fabric')
+    rememberFabricPromptShort('glove-1', 'white gloves fabric')
+    const fills: FillOp[] = [
+      {
+        id: 'top',
+        contour: [300, 120, 500, 120, 500, 380, 300, 380],
+        seedX: 400,
+        seedY: 250,
+        style: { kind: 'solid', color: '#F5F0E6' },
+      },
+      {
+        id: 'brief',
+        contour: [320, 420, 480, 420, 480, 560, 320, 560],
+        seedX: 400,
+        seedY: 490,
+        style: { kind: 'solid', color: '#F5F0E6' },
+      },
+      {
+        id: 'hose',
+        contour: [320, 560, 480, 560, 480, 980, 320, 980],
+        seedX: 400,
+        seedY: 770,
+        style: { kind: 'uploaded-fabric', assetId: 'stock-1', scale: 1 },
+      },
+      {
+        id: 'gloveL',
+        contour: [40, 360, 120, 360, 120, 480, 40, 480],
+        seedX: 80,
+        seedY: 420,
+        style: { kind: 'uploaded-fabric', assetId: 'glove-1', scale: 1 },
+      },
+    ]
+    expect(detectSeparateTopBottom(fills)).toBe(true)
+    const hints = buildTryOnDesignHints({ strokes: [], fills })
+    expect(hints.some((h) => /separate top and bottom/i.test(h))).toBe(true)
+    expect(hints.some((h) => /stockings\/hosiery/i.test(h))).toBe(true)
+    expect(hints.some((h) => /gloves/i.test(h))).toBe(true)
+    expect(hints.some((h) => /fine-knit/i.test(h))).toBe(true)
+    expect(hints.some((h) => /see thr/i.test(h))).toBe(false)
+    expect(hints.some((h) => /continuous one-piece/i.test(h))).toBe(false)
   })
 })

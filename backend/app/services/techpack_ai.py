@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -34,7 +35,7 @@ from app.services.techpack_ai_professional import (
     estimate_professional_cents,
     run_professional_pipeline,
 )
-from app.services.techpack_detect import detect_pieces_from_evidence
+from app.services.techpack_detect import detect_pieces_from_evidence, pieces_from_vision_payload
 from app.services.techpack_flats import (
     default_bom,
     default_construction_steps,
@@ -54,6 +55,80 @@ _PROVIDER_OVERRIDE: ProfessionalAIProvider | None = None
 def set_professional_provider_override(provider: ProfessionalAIProvider | None) -> None:
     global _PROVIDER_OVERRIDE
     _PROVIDER_OVERRIDE = provider
+
+
+def resolve_outfit_structure_with_ai(
+    db: Session,
+    draft: TechpackDraft,
+    spec: dict[str, Any],
+    *,
+    provider: ProfessionalAIProvider | None = None,
+    persist: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """When garment categories are inconclusive, spend vision to name pieces from the Magic look.
+
+    Returns ``(spec, meta)`` where meta includes ``resolved`` and optional ``usage``.
+    Designer-locked outfits are never overwritten. Fail closed if vision cannot name apparel.
+    """
+    from app.services.techpack_structure import (
+        apply_ai_structure_detection,
+        detection_has_credible_pieces,
+        outfit_needs_ai_structure,
+    )
+
+    working = ensure_v2(spec if isinstance(spec, dict) else {})
+    if not outfit_needs_ai_structure(working):
+        return working, {"resolved": False, "reason": "structure_already_clear"}
+
+    storage = LocalStorageBackend()
+    front = _resolve_job_bytes(storage, draft.front_job_id, db)
+    back = _resolve_job_bytes(storage, draft.back_job_id, db)
+    primary = front or back
+    if primary is None:
+        raise ValidationAppError(
+            "Cannot start AI Professional: Magic look image is missing, so AI cannot "
+            "identify garment types. Re-open the look and try Generate again."
+        )
+    image_bytes, mime = primary
+    look_notes = str(working.get("look_notes") or "")
+    active = provider or _PROVIDER_OVERRIDE or default_provider()
+    if _PROVIDER_OVERRIDE is None and provider is None and not (get_settings().openai_api_key or "").strip():
+        raise ForbiddenError("OpenAI API key missing for professional AI")
+
+    raw, usage = active.classify_outfit(
+        image_bytes=image_bytes,
+        mime=mime,
+        look_notes=look_notes,
+    )
+    detection = pieces_from_vision_payload(
+        raw if isinstance(raw, dict) else {},
+        units=str(working.get("units") or "cm"),
+    )
+    if not detection_has_credible_pieces(detection):
+        raise ValidationAppError(
+            "AI looked at your Magic look but could not identify clear garment types. "
+            "Open Advanced details to set the garment type, then Generate again."
+        )
+    working = apply_ai_structure_detection(working, detection)
+    usage_meta: dict[str, Any] = {
+        "resolved": True,
+        "piece_count": detection.get("piece_count"),
+        "detection_confidence": detection.get("detection_confidence"),
+        "vision_confidence": detection.get("vision_confidence"),
+        "usage": {
+            "cost_usd_cents": int(getattr(usage, "cost_usd_cents", 0) or 0),
+            "vision_model": getattr(usage, "vision_model", None),
+            "vision_calls": int(getattr(usage, "vision_calls", 0) or 0),
+        },
+    }
+    if persist:
+        draft.spec = working
+        draft.updated_at = datetime.now(UTC)
+        flag_modified(draft, "spec")
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
+    return working, usage_meta
 
 
 def _owned_draft(db: Session, user: User, draft_id: uuid.UUID) -> TechpackDraft:
@@ -239,6 +314,259 @@ def _measurement_cell_empty(cell: Any) -> bool:
     if not isinstance(cell, dict):
         return True
     return cell.get("value") in (None, "")
+
+
+def _format_body_context(body: dict[str, Any] | None) -> str:
+    """Compact body-measurement string for vision prompts (sample-room proportional POMs)."""
+    if not isinstance(body, dict) or not body:
+        return ""
+    parts: list[str] = []
+    for key in ("height", "bust", "waist", "hip", "inseam", "shoulder_width", "arm_length"):
+        cell = body.get(key)
+        if not isinstance(cell, dict):
+            continue
+        val = cell.get("value")
+        if val in (None, ""):
+            continue
+        unit = str(cell.get("unit") or "cm")
+        parts.append(f"{key}={val}{unit}")
+    return ", ".join(parts)
+
+
+def _coerce_pom_number(raw: Any) -> float | None:
+    """Accept numeric POMs or short range strings like '59–61' / 'Approx. 145-150'."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip().lower().replace("cm", " ")
+    # Prefer the first number, or midpoint when a simple a-b range is present.
+    nums = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", text)]
+    if not nums:
+        return None
+    if len(nums) >= 2 and any(sep in text for sep in ("-", "–", "—", "to")):
+        return round((nums[0] + nums[1]) / 2.0, 1)
+    return nums[0]
+
+
+def _normalize_finished_pom_estimates(estimates: dict[str, Any]) -> dict[str, Any]:
+    """Map alternate vision POM keys into the canonical finished_pom_estimates shape."""
+    aliases = {
+        "garment_length": (
+            "garment_length",
+            "garment_length_cm",
+            "center_back_length_cm",
+            "center_back_length",
+            "cb_length",
+            "length_cm",
+        ),
+        "sleeve_length": ("sleeve_length", "sleeve_length_cm"),
+        "shoulder_width": ("shoulder_width", "shoulder_width_cm"),
+        "hem_sweep": ("hem_sweep", "hem", "hem_circumference_cm", "hem_cm"),
+        "neckline_depth": ("neckline_depth", "neckline", "neckline_depth_cm"),
+        "armhole": ("armhole", "armhole_cm", "armhole_circumference_cm"),
+        "skirt_length": ("skirt_length", "skirt_length_cm"),
+        "inseam": ("inseam", "inseam_cm"),
+        "slit_start_from_waist": ("slit_start_from_waist", "slit_height_cm", "slit_height", "slit_start"),
+        "wrap_overlap": ("wrap_overlap", "wrap_overlap_cm", "overlap_at_waist"),
+        "overlay_length": ("overlay_length", "overlay_length_cm", "drape_length", "drape_length_cm"),
+        "sash_width": ("sash_width", "sash_width_cm", "tie_width"),
+        "sash_length": ("sash_length", "sash_length_cm", "tie_length"),
+        "hem_high": ("hem_high", "hem_high_cm", "high_hem_length"),
+        "hem_low": ("hem_low", "hem_low_cm", "low_hem_length", "longest_hem"),
+        "chest_bust": ("chest_bust", "bust", "bust_circumference", "bust_circ_cm"),
+        "waist": ("waist", "waist_circumference", "waist_circ_cm"),
+        "hip": ("hip", "hip_circumference", "hip_circ_cm"),
+    }
+    out: dict[str, Any] = {}
+    methods_raw = estimates.get("finished_pom_methods")
+    if isinstance(methods_raw, dict):
+        out["finished_pom_methods"] = methods_raw
+    elif isinstance(methods_raw, str) and methods_raw.strip():
+        out["finished_pom_methods"] = {"_all": methods_raw.strip()}
+    for canon, keys in aliases.items():
+        for key in keys:
+            if key not in estimates:
+                continue
+            num = _coerce_pom_number(estimates.get(key))
+            if num is None:
+                continue
+            out[canon] = num
+            break
+    return out
+
+
+def _apply_ai_pom_estimates(piece: dict[str, Any], analysis: dict[str, Any]) -> None:
+    """Fill empty finished POM cells from vision proportional estimates (never overwrite designer)."""
+    estimates_raw = analysis.get("finished_pom_estimates")
+    if not isinstance(estimates_raw, dict):
+        return
+    estimates = _normalize_finished_pom_estimates(estimates_raw)
+    methods_raw = estimates.get("finished_pom_methods")
+    methods: dict[str, Any] = methods_raw if isinstance(methods_raw, dict) else {}
+    finished_raw = piece.get("finished_measurements")
+    finished: dict[str, Any] = finished_raw if isinstance(finished_raw, dict) else {}
+    if not finished:
+        return
+    # Map vision keys → finished POM skeleton keys (category skeletons vary).
+    key_map = {
+        "garment_length": "garment_length",
+        "sleeve_length": "sleeve_length",
+        "shoulder_width": "shoulder_width",
+        "hem_sweep": "hem",
+        "hem": "hem",
+        "neckline_depth": "neckline",
+        "neckline": "neckline",
+        "armhole": "armhole",
+        "skirt_length": "skirt_length",
+        "inseam": "inseam",
+        "front_rise": "front_rise",
+        "back_rise": "back_rise",
+        "leg_opening": "leg_opening",
+        "slit_start_from_waist": "slit_start",
+        "slit_start": "slit_start",
+        "wrap_overlap": "wrap_overlap",
+        "overlay_length": "overlay_length",
+        "sash_width": "sash_width",
+        "sash_length": "sash_length",
+        "hem_high": "hem_high",
+        "hem_low": "hem_low",
+        "chest_bust": "chest_bust",
+        "waist": "waist",
+        "hip": "hip",
+    }
+    # Ensure design-specific dress keys exist so AI can fill them on older drafts.
+    for ensure_key in (
+        "wrap_overlap",
+        "slit_start",
+        "overlay_length",
+        "sash_width",
+        "sash_length",
+        "hem_high",
+        "hem_low",
+        "neckline",
+        "hem",
+        "shoulder_width",
+        "armhole",
+        "sleeve_length",
+        "garment_length",
+        "chest_bust",
+        "waist",
+        "hip",
+    ):
+        if ensure_key not in finished:
+            finished[ensure_key] = {
+                "value": None,
+                "unit": "cm",
+                "source": "empty",
+                "confidence": "unknown",
+                "review_status": "open",
+                "assumptions": [],
+                "note": "",
+            }
+    changed = False
+    for ai_key, pom_key in key_map.items():
+        if pom_key not in finished:
+            continue
+        if not _measurement_cell_empty(finished.get(pom_key)):
+            continue
+        val = estimates.get(ai_key)
+        if not isinstance(val, (int, float)):
+            continue
+        method = str(
+            methods.get(ai_key) or methods.get(pom_key) or methods.get("_all") or ""
+        ).strip()
+        assumptions = [
+            method or "Proportional estimate from Magic look + body measurements",
+            "AI sample-room proposal — confirm on form before cutting",
+            "Circumference values are FULL circ (not flat half) unless noted as depth/length",
+        ]
+        finished[pom_key] = {
+            **(finished[pom_key] if isinstance(finished.get(pom_key), dict) else {}),
+            "value": round(float(val), 1),
+            "unit": "cm",
+            "source": "ai",
+            "confidence": "medium",
+            "review_status": "proposed",
+            "assumptions": assumptions,
+            "note": "AI proportional POM — review before manufacturing",
+        }
+        changed = True
+    if changed:
+        piece["finished_measurements"] = finished
+
+
+def _apply_ai_fabric_estimate(piece: dict[str, Any], analysis: dict[str, Any]) -> None:
+    """Enrich empty shell material fields from vision fabric_estimate."""
+    fab = analysis.get("fabric_estimate")
+    if not isinstance(fab, dict):
+        return
+    mats = piece.get("materials") if isinstance(piece.get("materials"), dict) else {}
+    shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
+    fiber = str(fab.get("likely_fiber") or "").strip()
+    gsm = str(fab.get("gsm_range") or "").strip()
+    hand = str(fab.get("hand") or "").strip()
+    drape = str(fab.get("drape") or "").strip()
+    opacity = str(fab.get("opacity") or "").strip()
+    notes = str(fab.get("notes") or "").strip()
+    if fiber and not str(shell.get("composition") or "").strip():
+        shell["composition"] = fiber[:120]
+    if gsm and not str(shell.get("weight_gsm") or shell.get("gsm") or "").strip():
+        shell["weight_gsm"] = gsm[:40]
+    if hand and not str(shell.get("hand") or "").strip():
+        shell["hand"] = hand[:80]
+    if drape and not str(shell.get("drape") or "").strip():
+        shell["drape"] = drape[:80]
+    if opacity and not str(shell.get("opacity") or "").strip():
+        shell["opacity"] = opacity[:40]
+    if notes:
+        prior = str(shell.get("notes") or "").strip()
+        if not prior:
+            shell["notes"] = notes[:240]
+    if fiber or gsm or hand:
+        shell.setdefault("source", "ai")
+        shell.setdefault("suggestion", fiber or shell.get("suggestion") or "confirm fabric")
+        if not str(shell.get("name") or "").strip():
+            color = str(piece.get("color_hint") or "").strip()
+            shell["name"] = (f"{color} {fiber}" if color else fiber or "Shell fabric")[:120]
+    mats["shell"] = shell
+    if fab.get("lining_recommended") is True:
+        lining = mats.get("lining") if isinstance(mats.get("lining"), dict) else {}
+        if not str(lining.get("name") or "").strip():
+            lining = {
+                **lining,
+                "name": "Lining (recommended)",
+                "suggestion": "lightweight lining to match shell hand",
+                "source": "ai",
+                "notes": "Vision suggested lining for opacity/structure — confirm",
+            }
+            mats["lining"] = lining
+    piece["materials"] = mats
+    # Mirror into BOM shell row notes when present and empty.
+    bom = piece.get("bom") if isinstance(piece.get("bom"), list) else []
+    for row in bom:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("component") or row.get("item") or "").lower() not in {
+            "shell",
+            "self",
+            "fabric",
+            "shell fabric",
+        } and str(row.get("category") or "").lower() not in {"fabric", "shell"}:
+            # Prefer rows tagged as shell fabric / material
+            name = str(row.get("name") or row.get("description") or "").lower()
+            if "shell" not in name and "fabric" not in name:
+                continue
+        if fiber and not str(row.get("composition") or "").strip():
+            row["composition"] = fiber[:120]
+        if gsm and not str(row.get("weight") or row.get("gsm") or "").strip():
+            row["weight"] = gsm[:40]
+        if not str(row.get("notes") or "").strip() and (hand or notes):
+            row["notes"] = (notes or f"Hand: {hand}; drape: {drape}")[:200]
+        if fiber or gsm:
+            row.setdefault("source", "ai")
 
 
 def _designer_owned_meas_fingerprint(spec: dict[str, Any]) -> str:
@@ -857,11 +1185,73 @@ def _persist_professional_result(
                 "Refusing to attach illustrations to the wrong garment."
             )
         analysis = pr.get("analysis") if isinstance(pr.get("analysis"), dict) else {}
-        # Merge AI construction tips without wiping designer fields.
-        if analysis.get("construction_notes") and not piece.get("construction_steps"):
+        # Prefer AI sew ops over heuristic/estimate defaults (designer-confirmed kept).
+        prior_steps = (
+            piece.get("construction_steps")
+            if isinstance(piece.get("construction_steps"), list)
+            else []
+        )
+        designer_locked_steps = any(
+            isinstance(s, dict)
+            and (
+                bool(s.get("designer_confirmed"))
+                or str(s.get("source") or "").lower() in {"designer", "user"}
+            )
+            for s in prior_steps
+        )
+        estimate_only = (not prior_steps) or all(
+            isinstance(s, dict)
+            and str(s.get("source") or "").lower() in {"estimate", "heuristic", ""}
+            for s in prior_steps
+        )
+        ops = analysis.get("construction_operations")
+        if (
+            isinstance(ops, list)
+            and ops
+            and not designer_locked_steps
+            and estimate_only
+        ):
+            built: list[dict[str, Any]] = []
+            for i, row in enumerate(ops):
+                if not isinstance(row, dict):
+                    continue
+                op = str(row.get("operation") or row.get("instruction") or "").strip()
+                if not op:
+                    continue
+                built.append(
+                    {
+                        "step": int(row.get("step") or (i + 1)),
+                        "operation": op[:200],
+                        "instruction": op[:400],
+                        "stitch_type": str(row.get("stitch_type") or "301 lockstitch")[:80],
+                        "spi": str(row.get("spi") or "3.5–4 /cm")[:40],
+                        "seam_allowance_cm": row.get("seam_allowance_cm", 1.0),
+                        "notes": str(row.get("notes") or "")[:400],
+                        "source": "ai",
+                        "provenance": "ai_inferred",
+                    }
+                )
+            if built:
+                piece["construction_steps"] = built
+        elif (
+            analysis.get("construction_notes")
+            and not designer_locked_steps
+            and estimate_only
+        ):
             piece["construction_steps"] = [
-                {"step": i + 1, "instruction": str(n)[:400], "source": "ai"}
+                {
+                    "step": i + 1,
+                    "operation": str(n)[:200],
+                    "instruction": str(n)[:400],
+                    "stitch_type": "301 lockstitch (confirm)",
+                    "spi": "3.5–4 /cm",
+                    "seam_allowance_cm": 1.0,
+                    "notes": "From AI construction notes — confirm stitch class.",
+                    "source": "ai",
+                    "provenance": "ai_inferred",
+                }
                 for i, n in enumerate(analysis.get("construction_notes") or [])
+                if str(n).strip()
             ]
         if analysis.get("pattern_pieces_suggested"):
             piece["pattern_pieces"] = [
@@ -877,10 +1267,23 @@ def _persist_professional_result(
                     "notes": str(x.get("notes") or "")
                     + " — illustrative inventory, not a verified cutting pattern",
                     "provenance": "ai_inferred",
+                    "review_state": "proposed_unverified",
                 }
                 for i, x in enumerate(analysis["pattern_pieces_suggested"])
                 if isinstance(x, dict)
             ]
+
+        # Fill tailor fields the model may omit, then densify POMs + fabric.
+        from app.services.techpack_tailor_ready import enrich_tailor_analysis_fields
+
+        enrich_tailor_analysis_fields(analysis, piece)
+        _apply_ai_pom_estimates(piece, analysis)
+        _apply_ai_fabric_estimate(piece, analysis)
+        back_proposal = str(analysis.get("back_construction_proposal") or "").strip()
+        if back_proposal:
+            notes_prior = str(piece.get("construction_notes_text") or "").strip()
+            if not notes_prior:
+                piece["construction_notes_text"] = f"Proposed back: {back_proposal[:400]}"
 
         illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
         art_meta: dict[str, Any] = {}
@@ -946,6 +1349,10 @@ def _persist_professional_result(
                         "colors",
                         "panels_seams",
                         "distinctive_features",
+                        "construction_operations",
+                        "finished_pom_estimates",
+                        "fabric_estimate",
+                        "back_construction_proposal",
                         "confidence",
                         "assumptions",
                     )
@@ -1268,6 +1675,8 @@ def enqueue_generate_one_tap_professional(
     idempotency_key: str,
     propose_back: bool = True,
     sections: list[str] | None = None,
+    body_profile_id: uuid.UUID | None = None,
+    force_new: bool = False,
 ) -> dict[str, Any]:
     """Authorize one bounded Professional run and enqueue durable work (HTTP returns promptly)."""
     challenge = create_confirm_challenge(
@@ -1282,6 +1691,11 @@ def enqueue_generate_one_tap_professional(
     if not idempotency_key or len(idempotency_key) < 8:
         raise ValidationAppError("idempotency_key required")
 
+    from app.services.body_measurement_profile_service import (
+        apply_profile_to_spec,
+        get_default,
+        get_owned,
+    )
     from app.services.techpack_service import reconcile_professional_export_validity
     from app.services.techpack_structure import (
         list_outfit_pieces,
@@ -1291,11 +1705,57 @@ def enqueue_generate_one_tap_professional(
         scoped_idempotency_key,
     )
 
-    # Resolve/validate outfit BEFORE spend gates or queue insert (fail closed, $0).
+    # Apply named body profile (or owner default) before structure/spend gates so
+    # finished POM proposals have designer body numbers to grade from.
+    profile = None
+    if body_profile_id is not None:
+        profile = get_owned(db, user, body_profile_id)
+    else:
+        # Prefer an already-linked profile on the draft; else owner default.
+        ai_meta = (
+            (draft.spec or {}).get("ai")
+            if isinstance(draft.spec, dict)
+            else {}
+        )
+        linked = None
+        if isinstance(ai_meta, dict) and ai_meta.get("body_profile_id"):
+            try:
+                linked = uuid.UUID(str(ai_meta["body_profile_id"]))
+            except (TypeError, ValueError):
+                linked = None
+        if linked is not None:
+            try:
+                profile = get_owned(db, user, linked)
+            except NotFoundError:
+                profile = None
+        if profile is None:
+            profile = get_default(db, user)
+    if profile is not None:
+        next_spec = apply_profile_to_spec(
+            draft.spec if isinstance(draft.spec, dict) else {}, profile
+        )
+        draft.spec = next_spec
+        draft.updated_at = datetime.now(UTC)
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
+
+    # Resolve/validate outfit BEFORE spend gates or queue insert.
+    # When text heuristics are inconclusive, spend a vision call to name garments
+    # from the Magic look (full AI — body measurements are the only required input).
     # Also reconcile outdated historical Download so reuse cannot clear a stale pack.
     reconcile_professional_export_validity(db, draft)
     draft = _owned_draft(db, user, draft_id)
     spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    structure_vision_meta: dict[str, Any] = {"resolved": False}
+    try:
+        spec, structure_vision_meta = resolve_outfit_structure_with_ai(
+            db, draft, spec, persist=True
+        )
+        draft = _owned_draft(db, user, draft_id)
+        spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
+    except ValidationAppError:
+        raise
     spec, pieces, structure_meta = prepare_professional_outfit(
         db, draft, spec, persist_repair=True
     )
@@ -1465,10 +1925,11 @@ def enqueue_generate_one_tap_professional(
 
     # Reuse a completed Professional run + PDF for this draft (no second paid job)
     # only with positive evidence the run is current for the live outfit.
+    # force_new (testing / compare) skips reuse and queues a fresh paid run.
     spec_now = draft.spec if isinstance(draft.spec, dict) else {}
     ai_now = spec_now.get("ai") if isinstance(spec_now.get("ai"), dict) else {}
     dirty = bool(ai_now.get("dirty_since_generation"))
-    if not dirty:
+    if not dirty and not force_new:
         completed = db.scalars(
             select(TechpackAIRun)
             .where(
@@ -1521,6 +1982,7 @@ def enqueue_generate_one_tap_professional(
             "sections": sections or ["all"],
             "propose_back": effective_propose,
             "authorization": "user_click_one_tap",
+            "force_new": bool(force_new),
             "estimate_cents": hi,
             "max_images": max_images,
             "image_plan": image_plan,
@@ -1530,6 +1992,7 @@ def enqueue_generate_one_tap_professional(
             "piece_ids": structure_meta["piece_ids"],
             "piece_count": structure_meta["piece_count"],
             "draft_revision": structure_meta["draft_revision"],
+            "structure_vision": structure_vision_meta,
             # Immutable Magic-source snapshot for later PDF-only compatibility checks.
             "front_job_id": str(draft.front_job_id) if draft.front_job_id else None,
             "back_job_id": str(draft.back_job_id) if draft.back_job_id else None,
@@ -1541,6 +2004,14 @@ def enqueue_generate_one_tap_professional(
             },
         },
     )
+    vision_cents = int(
+        ((structure_vision_meta.get("usage") or {}) if isinstance(structure_vision_meta, dict) else {}).get(
+            "cost_usd_cents"
+        )
+        or 0
+    )
+    if vision_cents > 0:
+        run.cost_usd_cents = vision_cents
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -1673,6 +2144,7 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
     )
 
     # Worker boundary: re-validate structure + authorized inputs before first paid call.
+    # Outfit categories were resolved at enqueue (heuristic or AI vision); do not reclassify here.
     try:
         spec, pieces, structure_meta = prepare_professional_outfit(
             db, draft, draft.spec if isinstance(draft.spec, dict) else {}, persist_repair=False
@@ -1764,6 +2236,9 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             except Exception:  # noqa: BLE001
                 db.rollback()
 
+        body_ctx = _format_body_context(
+            spec.get("body") if isinstance(spec.get("body"), dict) else {}
+        )
         pipeline = run_professional_pipeline(
             provider=provider,
             pieces=pieces,
@@ -1774,6 +2249,7 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             max_images=max_images,
             on_progress=_on_progress,
             image_plan=image_plan,
+            body_context=body_ctx,
         )
         usage_cost = int((pipeline.get("usage") or {}).get("cost_usd_cents") or 0)
         _set_run_progress(
@@ -2272,6 +2748,12 @@ def run_generate(
 
     if mode == "professional":
         # Shared structure gate with one-tap path — never invent piece-1.
+        # Full AI: vision names garments when text heuristics are inconclusive.
+        spec, _structure_vision_meta = resolve_outfit_structure_with_ai(
+            db, draft, spec, persist=True
+        )
+        draft = _owned_draft(db, user, draft_id)
+        spec = ensure_v2(draft.spec if isinstance(draft.spec, dict) else {})
         spec, pieces, structure_meta = prepare_professional_outfit(
             db, draft, spec, persist_repair=True
         )
@@ -2426,6 +2908,9 @@ def run_generate(
                 except Exception:  # noqa: BLE001
                     db.rollback()
 
+            body_ctx = _format_body_context(
+                spec.get("body") if isinstance(spec.get("body"), dict) else {}
+            )
             pipeline = run_professional_pipeline(
                 provider=provider,
                 pieces=pieces,
@@ -2436,6 +2921,7 @@ def run_generate(
                 max_images=max_images,
                 on_progress=_on_progress,
                 image_plan=image_plan,
+                body_context=body_ctx,
             )
             _set_run_progress(
                 db,

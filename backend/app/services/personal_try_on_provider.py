@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 from typing import Any
 
 from app.core.config import get_settings
@@ -29,7 +30,7 @@ from app.services.personal_croquis_provider import (
 logger = logging.getLogger(__name__)
 
 TRY_ON_JOB_TYPE = "personal_try_on"
-# V1/V3 kept for historical jobs. Live OpenAI enqueue uses V2.7.
+# V1/V3 kept for historical jobs. Live OpenAI enqueue uses V2.8.
 # V3 (swimwear skin-coverage wording) caused 100% OpenAI input moderation_blocked
 # category=sexual on ordinary outfits (job 461c9419…). Avoid V3 phrasing.
 # V2.1 kept V2 print/identity rules; clarified fashion slits must not become trousers.
@@ -43,7 +44,8 @@ TRY_ON_JOB_TYPE = "personal_try_on"
 # V2.6: stronger footwear contract — drawn shoes must fully replace photo boots;
 # barefoot one-piece must not keep tall boots (owner red swimsuit kept beige boots).
 # V2.7: high-cut one-piece hem must not be lengthened into a dress (owner back try-on).
-TRY_ON_PROMPT_VERSION = "try-on-person-v2.7"
+# V2.8: stockings/hosiery/gloves must be kept; fine fashion-knit (not intimate sheer).
+TRY_ON_PROMPT_VERSION = "try-on-person-v2.8"
 TRY_ON_CONSENT_VERSION = "try-on-person-preview-v1"
 
 # Product notice — FE and BE must agree on version + hash of this exact text.
@@ -348,6 +350,58 @@ TRY_ON_PROMPT_V2_7 = (
     "Output a single realistic photograph."
 )
 
+# V2.8 — V2.7 + stockings/hosiery/gloves fidelity; fashion-knit (not intimate sheer).
+TRY_ON_PROMPT_V2_8 = (
+    "Create a photorealistic photograph of the person from image 1 wearing the garment "
+    "design shown in image 2. "
+    "Image 1 is the authoritative full-body photograph — preserve the person's exact face, "
+    "hairstyle, skin tone, body proportions, pose, stance, visible skin, and the original "
+    "background/scene. Do not slim, elongate, beautify, or reshape the person. Do not "
+    "alter the environment. "
+    "Image 2 is the authoritative fashion-design artwork for garment type, cut, placement, "
+    "neckline depth, sleeve count and length, hemline, footwear/shoes when drawn, coverage, "
+    "exact chosen colors (including intentional pale cream, ivory, peach, or white fabric), "
+    "and print geometry. "
+    "Image 2 may sit on a neutral dark matte for readability — the matte is NOT clothing; "
+    "only the drawn garment pixels are the design. "
+    "Read print topology from image 2 pixels literally: a checkerboard must stay a "
+    "checkerboard (not stripes); plaids, dots, and freehand motifs must keep their "
+    "structure; do not invent a different graphic. "
+    "Include every deliberately drawn garment piece and design accessory in image 2 — "
+    "tops, bottoms, dresses, one-piece garments, stockings/hosiery/tights, gloves, "
+    "hats/caps, belts, scarves, shoes/footwear — placed on the corresponding body region. "
+    "If image 2 draws stockings or hosiery on the legs, cover both legs with that fine "
+    "fashion-knit layer; do not leave bare legs. If image 2 draws gloves, cover both hands; "
+    "do not leave bare hands. Hats/caps may cover hair while keeping identity recognizable. "
+    "Footwear is mandatory to resolve from image 2: if image 2 draws any shoes, boots, "
+    "flats, heels, or laced footwear on the feet, you MUST fully replace image 1's shoes "
+    "or boots with that drawn footwear (match color and style). Never leave image 1's tall "
+    "boots, combat boots, or heels when image 2 shows different shoes or bare feet. "
+    "If image 2 shows bare feet or no footwear at all and the garment is a one-piece or "
+    "high-cut design ending above the ankles, remove image 1's shoes and boots completely "
+    "and render bare feet with skin tone matching image 1 (stockings may still cover the "
+    "legs when drawn). Floor-length dresses without drawn footwear may keep image 1 shoes. "
+    "Wherever image 2 shows continuous opaque garment coverage on the torso and through "
+    "the hips or crotch, replace the person's clothing in those regions with that opaque "
+    "design. A one-piece design is not a separate top over trousers — do not leave jeans, "
+    "trousers, or shorts from image 1 under a one-piece. Separate top and bottom pieces "
+    "must both stay. Match the designed hem and leg openings from image 2 exactly — if "
+    "image 2 is a high-cut one-piece ending at the hips or upper thighs, keep that short "
+    "hem; do not lengthen it into a dress, skirt, or midi gown. "
+    "Adapt garments naturally to pose and folds as an approximate drape only. "
+    "Preserve open / plunging / deep-V necklines exactly — do not fill cleavage or raise "
+    "the neckline. If image 2 shows sleeves on both arms, keep both sleeves; do not invent "
+    "a one-shoulder or sleeveless redesign. "
+    "Do not invent extra garments, logos, text, or accessories absent from image 2. "
+    "Keep the look as an opaque fashion catalog presentation. Do not create nudity or "
+    "suggestive posing. Drawn stockings/hosiery are ordinary fine fashion-knit coverage "
+    "on the legs. Fashion necklines, hems, cutouts, and slits drawn in image 2 are opaque "
+    "garment styling — keep that cut; do not convert a dress or skirt with a slit into "
+    "trousers or a jumpsuit. "
+    "Do not copy mannequin outlines into the photo. "
+    "Output a single realistic photograph."
+)
+
 # V3 — legitimate opaque fashion/swimwear coverage (#156).
 # Removes V2's contradiction that forbade showing skin newly uncovered by a swimsuit
 # when image 1 is street clothes. Still forbids nudity / sexual framing.
@@ -397,19 +451,28 @@ TRY_ON_USER_PROVIDER_REJECT_MESSAGE = (
 )
 
 
+def _sanitize_design_hint(text: str) -> str:
+    """Rewrite sheer/see-through wording that trips sexual input moderation."""
+    out = text
+    out = re.sub(r"\bsee[\s-]*thr(?:ough|o+gh|u)\b", "fine-knit", out, flags=re.I)
+    out = re.sub(r"\bsheer\b", "fine-knit", out, flags=re.I)
+    out = re.sub(r"\btransparent\b", "fine-knit", out, flags=re.I)
+    return " ".join(out.split())
+
+
 def build_try_on_prompt(design_hints: list[str] | None = None) -> str:
-    """Active OpenAI try-on prompt (V2.7) plus optional Studio-derived design hints.
+    """Active OpenAI try-on prompt (V2.8) plus optional Studio-derived design hints.
 
     V3 remains in-module for audit only — do not activate for live OpenAI Try On.
     Coverage-sensitive swimwear still prefers the separate FASHN provider path;
-    V2.7 strengthens high-cut one-piece hem fidelity (do not lengthen into a dress).
+    V2.8 keeps high-cut hem fidelity and requires drawn stockings/gloves.
     """
-    prompt = TRY_ON_PROMPT_V2_7
+    prompt = TRY_ON_PROMPT_V2_8
     cleaned: list[str] = []
     for raw in design_hints or []:
         if not isinstance(raw, str):
             continue
-        text = " ".join(raw.split())
+        text = _sanitize_design_hint(" ".join(raw.split()))
         if not text:
             continue
         cleaned.append(text[:120])

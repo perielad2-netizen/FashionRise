@@ -109,6 +109,119 @@ def _pieces_from_identity_components(
     return out or None
 
 
+_ALLOWED_VISION_CATEGORIES = frozenset(
+    {
+        "dress",
+        "shirt",
+        "top",
+        "jacket",
+        "skirt",
+        "trousers",
+        "shorts",
+        "jumpsuit",
+        "set",
+    }
+)
+
+
+def _normalize_vision_category(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    c = raw.strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "pants": "trousers",
+        "pant": "trousers",
+        "jeans": "trousers",
+        "blouse": "shirt",
+        "tee": "top",
+        "t_shirt": "top",
+        "tshirt": "top",
+        "coat": "jacket",
+        "gown": "dress",
+        "romper": "jumpsuit",
+        "overall": "jumpsuit",
+        "overalls": "jumpsuit",
+        "crop": "top",
+        "crop_top": "top",
+        "bodysuit": "jumpsuit",
+        "one_piece": "jumpsuit",
+        "swimsuit": "jumpsuit",
+        "bikini": "set",
+        "matching_set": "set",
+        "two_piece": "set",
+    }
+    c = aliases.get(c, c)
+    return c if c in _ALLOWED_VISION_CATEGORIES else None
+
+
+def pieces_from_vision_payload(payload: dict[str, Any] | None, *, units: str = "cm") -> dict[str, Any]:
+    """Map a vision JSON outfit structure into techpack pieces (no network).
+
+    Expected payload shape::
+        {
+          "pieces": [
+            {"category": "dress", "label": "Black midi dress", "color_hint": "black"}
+          ],
+          "confidence": "high"|"medium"|"low"
+        }
+    """
+    data = payload if isinstance(payload, dict) else {}
+    raw_pieces = data.get("pieces") if isinstance(data.get("pieces"), list) else []
+    out: list[dict[str, Any]] = []
+    for item in raw_pieces:
+        if not isinstance(item, dict):
+            continue
+        cat = _normalize_vision_category(item.get("category") or item.get("type") or item.get("garment_category"))
+        if not cat:
+            # Free-text label fallback (e.g. "navy shirt")
+            label_probe = str(item.get("label") or item.get("name") or "").lower()
+            cat = _normalize_vision_category(label_probe.split()[-1] if label_probe else "")
+            if not cat:
+                top = next((w for w in _TOP_WORDS if re.search(rf"\b{re.escape(w)}\b", label_probe)), None)
+                bottom = next((w for w in _BOTTOM_WORDS if re.search(rf"\b{re.escape(w)}\b", label_probe)), None)
+                if any(w in label_probe for w in _DRESS_WORDS):
+                    cat = "dress"
+                elif any(w in label_probe for w in _JUMP_WORDS):
+                    cat = "jumpsuit"
+                elif top and not bottom:
+                    cat = "jacket" if top in ("jacket", "coat") else "shirt" if top in ("shirt", "blouse") else "top"
+                elif bottom and not top:
+                    cat = "skirt" if bottom == "skirt" else "shorts" if bottom == "shorts" else "trousers"
+                else:
+                    continue
+        label = str(item.get("label") or item.get("name") or cat).strip()[:80] or cat.title()
+        color = str(item.get("color_hint") or item.get("color") or "")[:40]
+        out.append(
+            default_piece(
+                piece_id=f"piece-{uuid.uuid4().hex[:8]}",
+                category=cat,
+                label=label.title() if label.lower() == cat else label,
+                color_hint=color,
+                detection_source="ai_vision",
+                units=units,
+            )
+        )
+    if not out:
+        return {
+            "piece_count": 0,
+            "pieces": [],
+            "detection_confidence": "inconclusive",
+            "needs_user_confirm": False,
+            "note": "Vision could not identify apparel categories from the Magic look.",
+        }
+    confidence = str(data.get("confidence") or "medium").strip().lower()
+    if confidence not in ("high", "medium", "low"):
+        confidence = "medium"
+    return {
+        "piece_count": len(out),
+        "pieces": out,
+        "detection_confidence": "ai_vision",
+        "needs_user_confirm": False,
+        "vision_confidence": confidence,
+        "note": "Garment structure identified by AI vision from your Magic look.",
+    }
+
+
 def detect_pieces_from_evidence(
     *,
     look_summary: str | None,

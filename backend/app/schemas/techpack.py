@@ -119,3 +119,8 @@ class TechpackAiOneTapRequest(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=128)
     propose_back: bool = True
     sections: list[str] | None = None
+    body_profile_id: uuid.UUID | None = None
+    """Optional named body profile applied before generation (designer body POMs)."""
+    force_new: bool = False
+    """When true, skip reuse of a current completed Professional PDF and queue a new paid run
+    (comparison / testing). Prior exports remain downloadable as history."""

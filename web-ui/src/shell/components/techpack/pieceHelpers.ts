@@ -410,3 +410,38 @@ export function retargetFinishedMeasurements(
     finished_measurements: next,
   }
 }
+
+const INCONCLUSIVE_CATEGORIES = new Set(['', 'other'])
+const INCONCLUSIVE_LABELS = new Set([
+  'garment (confirm category)',
+  'garment',
+  'confirm category',
+])
+const INCONCLUSIVE_SOURCES = new Set(['heuristic_fallback', 'inconclusive'])
+
+/** Mirrors BE techpack_structure.is_inconclusive_piece — designer-confirmed is never inconclusive. */
+export function isInconclusivePiece(piece: TechpackPiece): boolean {
+  if (piece.category_user_confirmed) return false
+  if (String(piece.detection_source || '') === 'designer') return false
+  const cat = String(piece.category || '').trim().toLowerCase()
+  const label = String(piece.label || '').trim().toLowerCase()
+  const source = String(piece.detection_source || '').trim().toLowerCase()
+  if (INCONCLUSIVE_SOURCES.has(source)) return true
+  if (INCONCLUSIVE_CATEGORIES.has(cat)) return true
+  return INCONCLUSIVE_LABELS.has(label)
+}
+
+export const FRIENDLY_CATEGORY_CHOICES: Array<{
+  id: (typeof PIECE_CATEGORIES)[number]
+  label: string
+}> = [
+  { id: 'dress', label: 'Dress' },
+  { id: 'top', label: 'Top / crop' },
+  { id: 'shirt', label: 'Shirt' },
+  { id: 'shorts', label: 'Shorts / briefs' },
+  { id: 'skirt', label: 'Skirt' },
+  { id: 'trousers', label: 'Trousers' },
+  { id: 'jacket', label: 'Jacket' },
+  { id: 'jumpsuit', label: 'One-piece / jumpsuit' },
+  { id: 'set', label: 'Matching set' },
+]
