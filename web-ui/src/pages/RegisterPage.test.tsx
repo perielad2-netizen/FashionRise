@@ -9,6 +9,7 @@ const authState = {
   user: null as null | { id: string },
   bootstrapping: false,
   isAuthenticated: false,
+  googleOAuthAvailable: false,
   login: vi.fn(),
   register: registerMock,
   logout: vi.fn(),

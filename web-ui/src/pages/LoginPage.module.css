@@ -143,6 +143,39 @@
   font-size: var(--font-size-sm);
 }
 
+.google {
+  width: 100%;
+  margin-top: var(--space-sm);
+  min-height: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out), background var(--duration-fast);
+}
+
+.google:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.google:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.orDivider {
+  margin: var(--space-md) 0 var(--space-sm);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
 .submit {
   margin-top: var(--space-xs);
   min-height: 52px;

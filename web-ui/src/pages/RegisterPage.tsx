@@ -5,6 +5,7 @@ import { UI_ASSETS } from '@/assets/uiAssets'
 import { mapRegisterError } from '@/lib/mapRegisterError'
 import { validateRegister, type RegisterFieldErrors } from '@/lib/validateRegister'
 import { ApiError } from '@/services/api/client'
+import { getGoogleOAuthStartUrl } from '@/services/auth/authApi'
 import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './RegisterPage.module.css'
 
@@ -13,7 +14,7 @@ function initialFromQuery(params: URLSearchParams, key: string): string {
 }
 
 export function RegisterPage() {
-  const { register, isAuthenticated, bootstrapping } = useAuth()
+  const { register, isAuthenticated, bootstrapping, googleOAuthAvailable } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   // Email-only query prefill is safe. Never put invitation tokens in URL query params
@@ -33,6 +34,11 @@ export function RegisterPage() {
 
   if (bootstrapping) return null
   if (isAuthenticated) return <Navigate to="/studio" replace />
+
+  function onGoogle() {
+    if (busy) return
+    window.location.assign(getGoogleOAuthStartUrl('/studio'))
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -102,8 +108,20 @@ export function RegisterPage() {
 
         <h1 className={styles.title}>Create account</h1>
         <p className={styles.subtitle}>
-          Enter your invitation details to join FashionRise and open Creator Studio.
+          Join FashionRise with Google, or use an invitation to create an email account.
         </p>
+
+        {googleOAuthAvailable ? (
+          <button type="button" className={styles.google} disabled={busy} onClick={onGoogle}>
+            Continue with Google
+          </button>
+        ) : null}
+
+        {googleOAuthAvailable ? (
+          <p className={styles.orDivider} role="separator">
+            or register with invitation
+          </p>
+        ) : null}
 
         <form className={styles.form} onSubmit={onSubmit} noValidate>
           <label className={styles.field}>

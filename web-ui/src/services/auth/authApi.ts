@@ -1,4 +1,4 @@
-import { apiRequest } from '@/services/api/client'
+import { apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore, type StoredTokens } from '@/services/auth/tokenStore'
 
 export type User = {
@@ -41,6 +41,12 @@ export type CfAccessSsoStatus = {
   note?: string
 }
 
+export type GoogleOAuthStatus = {
+  google_oauth_enabled: boolean
+  auto_register?: boolean
+  note?: string
+}
+
 export async function getCfAccessSsoStatus(signal?: AbortSignal): Promise<CfAccessSsoStatus> {
   return apiRequest<CfAccessSsoStatus>('/auth/cf-access/status', {
     method: 'GET',
@@ -49,8 +55,46 @@ export async function getCfAccessSsoStatus(signal?: AbortSignal): Promise<CfAcce
   })
 }
 
+export async function getGoogleOAuthStatus(signal?: AbortSignal): Promise<GoogleOAuthStatus> {
+  return apiRequest<GoogleOAuthStatus>('/auth/google/status', {
+    method: 'GET',
+    auth: false,
+    signal,
+  })
+}
+
+/** Browser navigation target that begins Google Sign-In (server redirects to Google). */
+export function getGoogleOAuthStartUrl(nextPath = '/studio'): string {
+  const base = getApiBaseUrl()
+  const next = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/studio'
+  return `${base}/auth/google/start?next=${encodeURIComponent(next)}`
+}
+
 /**
- * Seamless login using the Cloudflare Access JWT that the edge forwards to origin.
+ * Apply tokens returned from the Google OAuth complete redirect (hash fragment).
+ */
+export async function completeGoogleOAuthSession(tokens: {
+  access_token: string
+  refresh_token: string
+}): Promise<{ user: User; tokens: StoredTokens }> {
+  tokenStore.clear()
+  const stored = toStored({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    token_type: 'bearer',
+  })
+  tokenStore.set(stored)
+  try {
+    const user = await fetchMe()
+    return { user, tokens: stored }
+  } catch (err) {
+    tokenStore.clear()
+    throw err
+  }
+}
+
+/**
+ * Legacy Cloudflare Access seamless login (kept for rollback; prefer Google OAuth).
  * Maps verified Access email → existing FashionRise user only (never invents accounts).
  */
 export async function loginWithCloudflareAccess(): Promise<{ user: User; tokens: StoredTokens }> {

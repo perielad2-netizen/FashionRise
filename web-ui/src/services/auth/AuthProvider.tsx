@@ -9,9 +9,8 @@ import {
 } from 'react'
 import { bindFabricCacheToUser } from '@/lib/fabricAssetCache'
 import {
-  getCfAccessSsoStatus,
+  getGoogleOAuthStatus,
   login as apiLogin,
-  loginWithCloudflareAccess,
   logoutLocal,
   register as apiRegister,
   restoreSession,
@@ -25,11 +24,10 @@ type AuthState = {
   user: User | null
   bootstrapping: boolean
   login: (payload: LoginPayload) => Promise<void>
-  loginWithAccess?: () => Promise<boolean>
   register: (payload: RegisterPayload) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
-  accessSsoAvailable: boolean
+  googleOAuthAvailable: boolean
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -37,12 +35,11 @@ const AuthContext = createContext<AuthState | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [bootstrapping, setBootstrapping] = useState(true)
-  const [accessSsoAvailable, setAccessSsoAvailable] = useState(false)
+  const [googleOAuthAvailable, setGoogleOAuthAvailable] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      // Existing FashionRise session first.
       if (tokenStore.get()) {
         const restored = await restoreSession()
         if (!cancelled) {
@@ -51,25 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return
       }
-      // Optional seamless Cloudflare Access login (feature-flagged on the server).
       try {
-        const status = await getCfAccessSsoStatus()
-        if (!cancelled) setAccessSsoAvailable(Boolean(status.sso_enabled))
-        if (status.sso_enabled) {
-          try {
-            const result = await loginWithCloudflareAccess()
-            if (!cancelled) {
-              bindFabricCacheToUser(result.user.id)
-              setUser(result.user)
-              setBootstrapping(false)
-              return
-            }
-          } catch {
-            // Keep password login — Access verification failed or email not linked.
-          }
-        }
+        const status = await getGoogleOAuthStatus()
+        if (!cancelled) setGoogleOAuthAvailable(Boolean(status.google_oauth_enabled))
       } catch {
-        /* status endpoint unavailable — fall through to password login */
+        /* status unavailable — password / register still work */
       }
       if (!cancelled) setBootstrapping(false)
     })()
@@ -79,25 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback(async (payload: LoginPayload) => {
-    // Drop any prior in-memory identity before applying the new session.
     setUser(null)
     bindFabricCacheToUser(null)
     const result = await apiLogin(payload)
     bindFabricCacheToUser(result.user.id)
     setUser(result.user)
-  }, [])
-
-  const loginWithAccess = useCallback(async () => {
-    try {
-      setUser(null)
-      bindFabricCacheToUser(null)
-      const result = await loginWithCloudflareAccess()
-      bindFabricCacheToUser(result.user.id)
-      setUser(result.user)
-      return true
-    } catch {
-      return false
-    }
   }, [])
 
   const register = useCallback(async (payload: RegisterPayload) => {
@@ -114,7 +83,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
-  // Keep fabric caches scoped to the restored / current user (covers session restore).
   useEffect(() => {
     bindFabricCacheToUser(user?.id ?? null)
   }, [user?.id])
@@ -124,13 +92,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       bootstrapping,
       login,
-      loginWithAccess,
       register,
       logout,
       isAuthenticated: Boolean(user),
-      accessSsoAvailable,
+      googleOAuthAvailable,
     }),
-    [user, bootstrapping, login, loginWithAccess, register, logout, accessSsoAvailable],
+    [user, bootstrapping, login, register, logout, googleOAuthAvailable],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

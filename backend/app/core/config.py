@@ -191,7 +191,18 @@ class Settings(BaseSettings):
     cf_access_aud: str = ""
     # Optional seamless app login: verify Access JWT → map email to existing User → issue tokens.
     # Requires team domain + AUD. Never auto-provisions users. Default off until AUD is configured.
+    # Prefer Google OAuth for public login; keep CF Access SSO off when Access is removed.
     cf_access_sso_login: bool = False
+
+    # Google Sign-In (Gmail) — app login/register without Cloudflare Access.
+    # When client id+secret+redirect are set, /auth/google/* is enabled.
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    google_oauth_redirect_uri: str = ""
+    # Where to send the browser after Google callback (SPA).
+    public_app_url: str = "https://fashionrise.app"
+    # Auto-create FashionRise users on first Google sign-in (no invite).
+    google_oauth_auto_register: bool = True
 
     @field_validator("cors_origins", mode="before")
     @classmethod

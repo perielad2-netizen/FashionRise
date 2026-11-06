@@ -1,33 +1,29 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { isRegistrationUiEnabled } from '@/config/registrationUi'
 import { validateLogin, type LoginFieldErrors } from '@/lib/validateLogin'
 import { ApiError } from '@/services/api/client'
+import { getGoogleOAuthStartUrl } from '@/services/auth/authApi'
 import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './LoginPage.module.css'
 
 export function LoginPage() {
-  const { login, loginWithAccess, isAuthenticated, bootstrapping, accessSsoAvailable } = useAuth()
+  const { login, isAuthenticated, bootstrapping, googleOAuthAvailable } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [accessHint, setAccessHint] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!accessSsoAvailable) {
-      setAccessHint(null)
-      return
-    }
-    setAccessHint(
-      'Cloudflare Access verified — continue with FashionRise credentials if automatic sign-in did not complete.',
-    )
-  }, [accessSsoAvailable])
+    const err = searchParams.get('error')
+    if (err) setFormError(err)
+  }, [searchParams])
 
   if (bootstrapping) return null
   if (isAuthenticated) return <Navigate to="/studio" replace />
@@ -59,6 +55,11 @@ export function LoginPage() {
     }
   }
 
+  function onGoogle() {
+    if (busy) return
+    window.location.assign(getGoogleOAuthStartUrl('/studio'))
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.glow} aria-hidden />
@@ -76,29 +77,22 @@ export function LoginPage() {
 
         <h2 className={styles.title}>Welcome back</h2>
         <p className={styles.subtitle}>Sign in to open Creator Studio.</p>
-        {accessHint ? <p className={styles.subtitle}>{accessHint}</p> : null}
-        {accessSsoAvailable && loginWithAccess ? (
+
+        {googleOAuthAvailable ? (
           <button
             type="button"
-            className={styles.submit}
-            style={{ marginBottom: 12 }}
+            className={styles.google}
             disabled={busy}
-            onClick={() => {
-              void (async () => {
-                setBusy(true)
-                setFormError(null)
-                const ok = await loginWithAccess()
-                setBusy(false)
-                if (ok) navigate('/studio', { replace: true })
-                else
-                  setFormError(
-                    'Could not link Cloudflare Access to a FashionRise account. Sign in with email below once.',
-                  )
-              })()
-            }}
+            onClick={onGoogle}
           >
-            Continue with Cloudflare Access
+            Continue with Google
           </button>
+        ) : null}
+
+        {googleOAuthAvailable ? (
+          <p className={styles.orDivider} role="separator">
+            or use email
+          </p>
         ) : null}
 
         <form className={styles.form} onSubmit={onSubmit} noValidate>
@@ -172,7 +166,12 @@ export function LoginPage() {
 
         {isRegistrationUiEnabled() ? (
           <p className={styles.footerLinks}>
-            Invited to the beta? <Link to="/register">Create account</Link>
+            New here? <Link to="/register">Create account</Link>
+            {googleOAuthAvailable ? ' or continue with Google above.' : null}
+          </p>
+        ) : googleOAuthAvailable ? (
+          <p className={styles.footerLinks}>
+            No account yet? Continue with Google to create one automatically.
           </p>
         ) : null}
       </div>

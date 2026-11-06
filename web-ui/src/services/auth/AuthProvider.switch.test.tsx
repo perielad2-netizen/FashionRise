@@ -23,6 +23,7 @@ vi.mock('@/services/auth/authApi', () => ({
   register: (...args: unknown[]) => api.register(...args),
   restoreSession: (...args: unknown[]) => api.restoreSession(...args),
   logoutLocal: () => api.logoutLocal(),
+  getGoogleOAuthStatus: async () => ({ google_oauth_enabled: false }),
 }))
 
 vi.mock('@/services/auth/tokenStore', () => ({ tokenStore }))

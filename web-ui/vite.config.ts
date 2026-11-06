@@ -10,11 +10,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
 /**
- * Cloudflare Access sits in front of fashionrise.app.
  * Never precache HTML or install a Workbox NavigationRoute/navigateFallback:
  * a cached /index.html shell can satisfy /login|/register|/studio navigations
- * without an Access round-trip, so the following credentialed API calls fail
- * (Access 302 cross-origin → "Unable to reach FashionRise").
+ * and leave auth/session bootstrapping inconsistent with the live API.
  * Nginx already serves SPA HTML via try_files; offline app shell is intentionally
  * not provided for document navigations.
  */

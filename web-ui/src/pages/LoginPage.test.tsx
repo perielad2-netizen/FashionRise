@@ -10,6 +10,7 @@ vi.mock('@/services/auth/AuthProvider', () => ({
     user: null,
     bootstrapping: false,
     isAuthenticated: false,
+    googleOAuthAvailable: false,
     login,
     register: vi.fn(),
     logout: vi.fn(),
