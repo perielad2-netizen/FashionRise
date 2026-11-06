@@ -41,13 +41,13 @@ from app.services.techpack_designer_spec import (
     mtm_dim_priority_note,
     mtm_worksheet_rows,
 )
+from app.services.techpack_pattern_art import render_pattern_breakdown_png
 from app.services.techpack_tailor_ready import (
     callout_legend_for_piece,
     care_icons_drawing,
     care_recommendation,
     extract_fabric_swatch,
     pantone_or_color_code,
-    pattern_inventory_schematic,
     prepare_mtm_flat,
     scrub_contradictory_flat_labels,
 )
@@ -736,11 +736,14 @@ def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: di
             ]
         )
     story.append(_table(decision_rows, [40 * mm, 78 * mm, 36 * mm, 20 * mm], styles))
-    # Keep worksheet on the same flow when short categories leave space; still page-break
-    # after decisions so multi-piece packs stay readable.
-    story.append(PageBreak())
 
-    story.append(Paragraph(f"Tailor measurement worksheet — {heading}", styles["h2"]))
+    # Dense layout for non-dress: worksheet continues on the same page when short.
+    # Dress worksheets stay on a dedicated page so body measures remain roomy.
+    if not is_formal_dress_category(cat) and detect_closure_family(piece) != "wrap":
+        story.append(Paragraph("Tailor measurement worksheet", styles["h3"]))
+    else:
+        story.append(PageBreak())
+        story.append(Paragraph(f"Tailor measurement worksheet — {heading}", styles["h2"]))
     story.append(
         Paragraph(
             f"Record live body measurements for this <b>{cat}</b>. These override cover reference "
@@ -875,13 +878,28 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
         "main / size / care labels",
         "care labels",
     )
+    # Jeans: drop generic fashion-lining / dressy care noise.
+    if cat in {"trousers", "shorts", "jeans"}:
+        skip_tokens = skip_tokens + ("lining", "acetate", "cupro", "dry clean")
+    # Shirt: prefer button language over generic zipper rows when button-front.
+    if closure_family == "button":
+        skip_tokens = skip_tokens + ("zipper",)
     slim: list[dict[str, Any]] = []
     for row in bom:
         if not isinstance(row, dict):
             continue
         item = str(row.get("item") or row.get("name") or "").lower()
-        if any(tok in item for tok in skip_tokens):
+        desc = str(row.get("description") or row.get("notes") or "").lower()
+        blob = f"{item} {desc}"
+        if any(tok in blob for tok in skip_tokens):
             continue
+        # Rewrite generic "buttons or zipper" toward button-front when detected.
+        if closure_family == "button" and "button" in item and "zipper" in item:
+            row = {
+                **row,
+                "item": "Buttons (front placket)",
+                "notes": "Proposed button-front — confirm count/spacing with tailor",
+            }
         slim.append(row)
     story.append(Paragraph("Materials checklist (discuss with tailor)", styles["h3"]))
     data = [
@@ -1099,50 +1117,58 @@ def _pattern_visual_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[
     )
     pattern_art = _art_path(piece, "pattern_sheet")
     pattern_excl = _art_exclusion_note(piece, "pattern_sheet")
-    if pattern_art is not None:
-        # ID key first so piece A/B/C stay tied to the large illustration on one page.
-        id_bits = [
-            f"{row.get('id') or '?'}={str(row.get('name') or '')[:24]}"
-            for row in patterns[:10]
-            if isinstance(row, dict)
-        ]
-        if id_bits:
-            story.append(
-                Paragraph(
-                    "<b>Inventory key:</b> " + " · ".join(id_bits),
-                    styles["small"],
-                )
+    id_bits = [
+        f"{row.get('id') or '?'}={str(row.get('name') or '')[:24]}"
+        for row in patterns[:10]
+        if isinstance(row, dict)
+    ]
+    if id_bits:
+        story.append(
+            Paragraph(
+                "<b>Inventory key:</b> " + " · ".join(id_bits),
+                styles["small"],
             )
+        )
+    if pattern_art is not None:
         clean = prepare_mtm_flat(pattern_art) or pattern_art
         story.append(_look_image(clean, 180 * mm, 205 * mm, styles))
     elif pattern_excl:
         story.append(
             Paragraph(
-                f"<b>MISSING / EXCLUDED:</b> {pattern_excl} Original preserved.",
+                f"<b>MISSING / EXCLUDED:</b> {pattern_excl} Original preserved. "
+                "Showing a FashionRise visual piece map from the inventory so the tailor "
+                "can still examine components.",
                 styles["warn"],
             )
         )
-        story.append(pattern_inventory_schematic(patterns, category=cat))
+        fallback = render_pattern_breakdown_png(
+            patterns, category=cat, label=str(piece.get("label") or "")
+        )
+        if fallback is not None:
+            story.append(_look_image(fallback, 180 * mm, 210 * mm, styles))
     else:
+        # Multi-garment Professional runs may skip AI pattern_sheet under image budget.
+        # Still deliver a dress-benchmark visual piece map from the inventory.
         story.append(
             Paragraph(
-                "<b>Full piece-breakdown illustration was not generated for this run.</b> "
-                "The ID map below is a planning aid only — it is <b>not</b> equivalent to the "
-                "large cutting illustration. Use Magic look + flats + inventory with the tailor.",
-                styles["warn"],
-            )
-        )
-        story.append(pattern_inventory_schematic(patterns, category=cat))
-        from app.services.techpack_pdf import _cutting_layout_schematic
-
-        story.append(Spacer(1, 4 * mm))
-        story.append(
-            Paragraph(
-                "Optional fabric-width / grain planning sketch (also not a cutting pattern):",
+                "AI pattern-sheet art was not generated for this garment (image budget). "
+                "The large visual piece map below is a FashionRise schematic built from the "
+                "inventory — still <b>NOT</b> a printable sewing pattern.",
                 styles["muted"],
             )
         )
-        story.append(_cutting_layout_schematic(cat))
+        fallback = render_pattern_breakdown_png(
+            patterns, category=cat, label=str(piece.get("label") or "")
+        )
+        if fallback is not None:
+            story.append(_look_image(fallback, 180 * mm, 210 * mm, styles))
+        else:
+            story.append(
+                Paragraph(
+                    "Could not render a piece map — use the inventory table with the Magic look.",
+                    styles["warn"],
+                )
+            )
     story.append(PageBreak())
     return story
 
@@ -1168,9 +1194,16 @@ def _design_details_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[
         piece, kind="detail_callouts", artifact_meta=detail_meta
     )
     if detail_art is not None and detail_decision.get("include", True) and not detail_excl:
-        clean = prepare_mtm_flat(detail_art) or scrub_contradictory_flat_labels(
-            detail_art, wipe_all_text=True, always_banner=False
-        ) or detail_art
+        clean = (
+            prepare_mtm_flat(detail_art)
+            or scrub_contradictory_flat_labels(
+                detail_art,
+                wipe_callout_markers=True,
+                wipe_small_labels=True,
+                always_banner=False,
+            )
+            or detail_art
+        )
         story.append(_look_image(clean, 180 * mm, 155 * mm, styles))
     elif detail_excl:
         story.append(Paragraph(f"<b>MISSING / EXCLUDED:</b> {detail_excl}", styles["warn"]))

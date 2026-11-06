@@ -631,6 +631,40 @@ def _red_marker_boxes(px, *, w: int, h: int) -> list[tuple[int, int, int, int]]:
     return boxes
 
 
+def _soft_cover_patch(
+    im,
+    px,
+    *,
+    w: int,
+    h: int,
+    left: int,
+    top: int,
+    right: int,
+    bottom: int,
+    paper: tuple[int, int, int],
+) -> None:
+    """Fill a small patch using local neighbour colour (no hard white rectangles)."""
+    from PIL import ImageDraw
+
+    left = max(0, left)
+    top = max(0, top)
+    right = min(w, right)
+    bottom = min(h, bottom)
+    if right - left < 3 or bottom - top < 3:
+        return
+    # Reject huge patches — those create unfinished-looking slabs on the garment.
+    if (right - left) * (bottom - top) > (w * h) // 18:
+        return
+    fill = _local_fill_color(
+        px, w=w, h=h, left=left, top=top, right=right, bottom=bottom, paper=paper
+    )
+    # Prefer a slightly inset cover so fabric edges stay intact.
+    pad_in = 1 if min(right - left, bottom - top) > 10 else 0
+    ImageDraw.Draw(im).rectangle(
+        [left + pad_in, top + pad_in, right - pad_in, bottom - pad_in], fill=fill
+    )
+
+
 def scrub_contradictory_flat_labels(
     source: Path | None,
     *,
@@ -638,15 +672,15 @@ def scrub_contradictory_flat_labels(
     replacement_note: str | None = None,
     always_banner: bool = False,
     wipe_all_text: bool = False,
+    wipe_callout_markers: bool = False,
+    wipe_small_labels: bool = False,
 ) -> Path | None:
     """Silently cover burned-in AI text / red callout markers that clutter the brief.
 
-    Default behaviour for MTM packs:
-    - Cover forbidden tokens (zip…) and optionally *all* OCR text so the garment
-      drawing stays clean — no \"REMOVED\" stamps and no correction banners in-image.
-    - Also cover compact red numbered markers left after label erasure.
-    - Fill patches from local neighbourhood colour (not paper white) to avoid
-      unfinished-looking white rectangles on pattern pieces.
+    Customer-facing MTM behaviour:
+    - Prefer removing compact red markers + short callout labels only.
+    - Avoid blanket OCR wipes that leave visible white / cream rectangles.
+    - Fill from local neighbourhood colour, never paper white on fabric.
     Returns a temp PNG, or None if the source cannot be opened.
     """
     if source is None or not source.exists():
@@ -666,18 +700,51 @@ def scrub_contradictory_flat_labels(
             hit_idxs: set[int] = set()
             for i, word in enumerate(words):
                 token = word["low"]
+                wh = max(1, int(word.get("height") or 1))
+                ww = max(1, int(word.get("right", 0) - word.get("left", 0)))
                 if wipe_all_text:
-                    # Drop tiny OCR noise / single punctuation.
                     if len(token) >= 1 and any(ch.isalnum() for ch in token):
                         hit_idxs.add(i)
                     continue
                 if token in forbid or any(tok in token for tok in forbid):
                     hit_idxs.add(i)
+                    continue
+                if wipe_small_labels:
+                    # Callout digits / short stamps only — skip long body copy OCR noise
+                    # that would require large cover rectangles.
+                    is_digit = token.isdigit() and len(token) <= 2
+                    is_short = 1 <= len(token) <= 12 and wh <= max(28, h // 28) and ww <= max(120, w // 8)
+                    looks_label = is_digit or (
+                        is_short
+                        and any(ch.isalpha() for ch in token)
+                        and token
+                        not in {
+                            "front",
+                            "back",
+                            "left",
+                            "right",
+                            "view",
+                            "flat",
+                            "cm",
+                        }
+                    )
+                    # Prefer tokens near image margins (typical annotation columns).
+                    near_margin = (
+                        word["left"] < w * 0.12
+                        or word["right"] > w * 0.88
+                        or word["top"] < h * 0.08
+                        or word["bottom"] > h * 0.92
+                    )
+                    if is_digit or (looks_label and near_margin):
+                        hit_idxs.add(i)
             # Expand zip hits to same-line context (CENTER BACK ZIPPER…).
             if hit_idxs and not wipe_all_text:
                 expanded = set(hit_idxs)
                 for i in list(hit_idxs):
                     base = words[i]
+                    base_is_zip = base["low"] in forbid or any(tok in base["low"] for tok in forbid)
+                    if not base_is_zip:
+                        continue
                     for j, other in enumerate(words):
                         if j in expanded:
                             continue
@@ -692,66 +759,40 @@ def scrub_contradictory_flat_labels(
                 (words[i]["left"], words[i]["top"], words[i]["right"], words[i]["bottom"])
                 for i in sorted(hit_idxs)
             ]
-            # Slightly larger pad when wiping all text so leader lines / callout
-            # numbers near labels disappear with the words.
-            pad = max(12 if wipe_all_text else 8, w // (120 if wipe_all_text else 180))
+            pad = max(6, w // 220)
+            if wipe_all_text:
+                pad = max(10, w // 140)
             patches = _merge_label_boxes(boxes, pad=pad)
 
             paper = im.getpixel((min(8, w - 1), min(8, h - 1)))
             if isinstance(paper, int):
                 paper = (paper, paper, paper)
-            # Soft cream fallback typical of FashionRise flats.
             if sum(paper[:3]) < 500:
                 paper = (245, 240, 232)
 
-            def _cover(left: int, top: int, right: int, bottom: int) -> None:
-                left = max(0, left)
-                top = max(0, top)
-                right = min(w, right)
-                bottom = min(h, bottom)
-                if right - left < 4 or bottom - top < 4:
-                    return
-                fill = _local_fill_color(
-                    px, w=w, h=h, left=left, top=top, right=right, bottom=bottom, paper=paper
-                )
-                draw.rectangle([left, top, right, bottom], fill=fill)
-
             redacted = 0
             for left, top, right, bottom in patches:
-                _cover(left, top, right, bottom)
+                _soft_cover_patch(
+                    im, px, w=w, h=h, left=left, top=top, right=right, bottom=bottom, paper=paper
+                )
                 redacted += 1
 
-            # Wipe residual red callout dots / numbers that OCR often misses.
-            if wipe_all_text:
+            # Red callout dots / digits — always for MTM marker mode.
+            if wipe_callout_markers or wipe_all_text:
                 for left, top, right, bottom in _red_marker_boxes(px, w=w, h=h):
-                    pad_r = max(3, min(10, (right - left + bottom - top) // 4))
-                    _cover(left - pad_r, top - pad_r, right + pad_r, bottom + pad_r)
+                    pad_r = max(2, min(8, (right - left + bottom - top) // 5))
+                    _soft_cover_patch(
+                        im,
+                        px,
+                        w=w,
+                        h=h,
+                        left=left - pad_r,
+                        top=top - pad_r,
+                        right=right + pad_r,
+                        bottom=bottom + pad_r,
+                        paper=paper,
+                    )
                     redacted += 1
-
-            # Second pass for residual forbidden tokens only (not full wipe — OCR
-            # after a full wipe often invents noise).
-            if redacted and not wipe_all_text:
-                tmp_pass = Path(tempfile.mkstemp(prefix="fr_flat_scrub_pass_", suffix=".png")[1])
-                im.save(tmp_pass, format="PNG")
-                try:
-                    residual = _tesseract_word_boxes(tmp_pass)
-                    residual_boxes: list[tuple[int, int, int, int]] = []
-                    for word in residual:
-                        token = word["low"]
-                        if token in forbid or any(tok in token for tok in forbid):
-                            residual_boxes.append(
-                                (word["left"], word["top"], word["right"], word["bottom"])
-                            )
-                    for left, top, right, bottom in _merge_label_boxes(
-                        residual_boxes, pad=max(10, w // 160)
-                    ):
-                        _cover(left, top, right, bottom)
-                        redacted += 1
-                finally:
-                    try:
-                        tmp_pass.unlink(missing_ok=True)
-                    except Exception:
-                        pass
 
             # Optional legacy banner — off by default so corrections stay invisible.
             if always_banner:
@@ -775,10 +816,19 @@ def scrub_contradictory_flat_labels(
 
 
 def prepare_mtm_flat(source: Path | None) -> Path | None:
-    """Clean garment flat for made-to-measure briefs: wipe burned-in AI text + red markers."""
+    """Clean MTM flats without leaving visible white erasure patches.
+
+    Strategy (customer-facing):
+    - Remove compact red callout markers via local neighbour fill.
+    - Remove only small OCR tokens that look like callout numbers / short labels,
+      plus forbidden zip stamps — never blanket-cover the whole drawing.
+    - Prefer leaving a clean garment over rectangular paper patches.
+    """
     return scrub_contradictory_flat_labels(
         source,
-        wipe_all_text=True,
+        wipe_all_text=False,
+        wipe_callout_markers=True,
+        wipe_small_labels=True,
         always_banner=False,
         replacement_note=None,
     )

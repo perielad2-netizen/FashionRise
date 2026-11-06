@@ -470,9 +470,9 @@ class OpenAIProfessionalProvider:
             f"Category hint: {piece.get('category')}. "
             "Do NOT draw a generic A-line dress if the source is fitted/bodycon with long sleeves or a deep V. "
             "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack. "
-            "Add small RED NUMBERED CALLOUT DOTS (1–12) with short leader lines at key construction "
-            "points (neckline, waist, sleeve set, hem, slit/zip) — factory annotation style like a "
-            "Michael Kors / GarmentSpec sheet. Keep numbers legible; do not cover critical seams."
+            "Do NOT burn in numbered callout dots, floating numbers, red markers, leader lines, "
+            "stamp text, or annotation columns — the PDF carries the written discussion list. "
+            "Keep the garment drawing clean and complete with no erased-label patches."
         )
 
     @staticmethod
@@ -491,9 +491,10 @@ class OpenAIProfessionalProvider:
             f"pattern={analysis.get('fabric_pattern')} {analysis.get('stripe_direction')}; "
             f"silhouette={analysis.get('silhouette')}. "
             "If a detail is not visible on this garment, omit it rather than inventing another garment's parts. "
-            "No model body. Label callouts briefly. Not a photo — a technical illustration. "
-            "If you cannot produce category-correct details, leave callouts blank rather than borrowing "
-            "from a different garment — failures require designer review, not silent approval."
+            "No model body. Prefer clean unlabeled close-ups of the real design features; "
+            "if labels are needed keep them short and off the garment face. Not a photo — a "
+            "technical illustration. If you cannot produce category-correct details, leave "
+            "callouts blank rather than borrowing from a different garment."
         )
 
     @staticmethod
@@ -502,13 +503,19 @@ class OpenAIProfessionalProvider:
         names = ", ".join(
             str(p.get("name") or p.get("id")) for p in pieces if isinstance(p, dict)
         )[:300]
+        cat = str(piece.get("category") or "garment")
         return (
-            "Create a PATTERN DEVELOPMENT SCHEMATIC sheet (NOT TO SCALE) for THIS garment. "
-            "Show named pattern pieces with illustrative shapes matching the garment "
-            f"(e.g. {names or 'front, back, sleeves'}), grainline arrows, fold marks, and cut quantities. "
-            "White background. Do NOT use generic unlabeled rectangles labeled only Piece A/B/C. "
-            "Include banner text: NOT TO SCALE — PATTERNMAKER VALIDATION REQUIRED. "
-            f"Silhouette={analysis.get('silhouette')}; sleeves={analysis.get('sleeves')}."
+            "Create a PATTERN DEVELOPMENT SCHEMATIC sheet (NOT TO SCALE) for THIS garment only "
+            f"(category={cat}). "
+            "Show LARGE named pattern pieces with illustrative cutting shapes matching the garment "
+            f"(e.g. {names or 'front, back, sleeves / legs, waistband'}), grainline arrows, fold marks, "
+            "and cut quantities clearly tied to each piece. "
+            "Cream or white technical background. Pieces must be easy to examine — not tiny icons. "
+            "Do NOT use generic unlabeled rectangles labeled only Piece A/B/C. "
+            "Do NOT invent a center-back zipper on a wrap dress. "
+            "Banner: NOT TO SCALE — NOT A PRINTABLE SEWING PATTERN. "
+            f"Silhouette={analysis.get('silhouette')}; sleeves={analysis.get('sleeves')}; "
+            f"features={', '.join(str(x) for x in (analysis.get('distinctive_features') or [])[:8])}."
         )
 
 

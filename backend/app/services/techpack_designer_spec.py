@@ -1421,7 +1421,172 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                 if k not in _DRESS_ONLY_DIM_KEYS
             }
             out["finished_measurements"] = cleaned_fm
+
+    _sanitize_misleading_mtm_poms(out)
+    _reconcile_mtm_construction_inventory(out)
     return out
+
+
+def _clear_pom_value(cell: dict[str, Any], reason: str) -> dict[str, Any]:
+    cleared = dict(cell)
+    cleared["value"] = None
+    cleared["source"] = "empty"
+    cleared["review_status"] = "open"
+    note = str(cleared.get("note") or "")
+    cleared["note"] = (
+        f"Estimate withheld — {reason}. Tailor measures. " + note
+    ).strip()
+    return cleared
+
+
+def _sanitize_misleading_mtm_poms(piece: dict[str, Any]) -> None:
+    """Leave unreliable AI estimates empty rather than show misleading starting values."""
+    cat = str(piece.get("category") or "").lower()
+    illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+    analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+    length_note = str(analysis.get("length") or "").lower()
+    neckline_note = str(analysis.get("neckline") or "").lower()
+    fm = piece.get("finished_measurements") if isinstance(piece.get("finished_measurements"), dict) else {}
+    if not fm:
+        return
+
+    if cat in {"shirt", "top", "blouse"}:
+        gl = fm.get("garment_length") if isinstance(fm.get("garment_length"), dict) else None
+        if gl and isinstance(gl.get("value"), (int, float)):
+            # Hip-length shirts are typically ~65–80 cm; 115 cm is dress/tunic territory.
+            if gl["value"] >= 100 and any(t in length_note for t in ("hip", "shirt-tail", "high-hip", "waist")):
+                fm["garment_length"] = _clear_pom_value(
+                    gl, "AI length conflicted with hip-length shirt description"
+                )
+            elif gl["value"] >= 120:
+                fm["garment_length"] = _clear_pom_value(gl, "AI length looked like a dress, not this shirt")
+        neck = fm.get("neckline") if isinstance(fm.get("neckline"), dict) else None
+        if neck and isinstance(neck.get("value"), (int, float)):
+            standing = any(t in neckline_note for t in ("stand", "collar", "band", "mandarin"))
+            if standing and neck["value"] >= 25:
+                fm["neckline"] = _clear_pom_value(
+                    neck, "deep neckline estimate does not match standing-collar shirt"
+                )
+            elif neck["value"] >= 40:
+                fm["neckline"] = _clear_pom_value(neck, "neckline depth estimate was unrealistic")
+
+    piece["finished_measurements"] = fm
+
+
+def _reconcile_mtm_construction_inventory(piece: dict[str, Any]) -> None:
+    """Keep construction steps, back proposal, and pattern inventory describing one design."""
+    import re as _re
+
+    cat = str(piece.get("category") or "").lower()
+    family = detect_closure_family(piece)
+    illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+    analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+    back_prop = str(analysis.get("back_construction_proposal") or "").lower()
+    steps = piece.get("construction_steps") if isinstance(piece.get("construction_steps"), list) else []
+    patterns = piece.get("pattern_pieces") if isinstance(piece.get("pattern_pieces"), list) else []
+
+    # Shirt: back proposal "no pleat" must not coexist with box-pleat sew steps.
+    if cat in {"shirt", "top", "blouse"} and "no pleat" in back_prop:
+        cleaned_steps: list[Any] = []
+        for step in steps:
+            blob = (
+                " ".join(str(step.get(k) or "") for k in ("operation", "instruction", "notes"))
+                if isinstance(step, dict)
+                else str(step)
+            ).lower()
+            if "box pleat" in blob or "box-pleat" in blob:
+                if isinstance(step, dict):
+                    s = dict(step)
+                    notes = str(s.get("notes") or "")
+                    s["notes"] = (
+                        "CONSISTENCY: proposed back has no pleat — omit box pleat unless "
+                        "customer/tailor choose one. " + notes
+                    ).strip()
+                    if "pleat" in str(s.get("operation") or "").lower():
+                        s["operation"] = _re.sub(
+                            r"\b(?:add|set|form)?\s*2\s*cm\s*box[- ]?pleat\b",
+                            "join back (no pleat — per proposed back)",
+                            str(s.get("operation") or ""),
+                            flags=_re.I,
+                        )
+                    cleaned_steps.append(s)
+                continue
+            cleaned_steps.append(step)
+        piece["construction_steps"] = cleaned_steps
+        steps = cleaned_steps
+
+        # Sleeve: if sew steps describe clean forearm hem, mark cuff/placket inventory OPTIONAL.
+        sew_blob = " ".join(
+            (
+                " ".join(str(s.get(k) or "") for k in ("operation", "instruction", "notes"))
+                if isinstance(s, dict)
+                else str(s)
+            )
+            for s in steps
+        ).lower()
+        clean_sleeve = any(
+            t in sew_blob
+            for t in (
+                "forearm",
+                "clean hem",
+                "inward twice",
+                "turned inward",
+                "without cuff",
+                "no cuff",
+                "no separate cuff",
+            )
+        )
+        if clean_sleeve and patterns:
+            synced: list[dict[str, Any]] = []
+            for row in patterns:
+                if not isinstance(row, dict):
+                    continue
+                r = dict(row)
+                name = str(r.get("name") or "").lower()
+                if "cuff" in name or "sleeve placket" in name or name.endswith("placket"):
+                    notes = str(r.get("notes") or "")
+                    r["notes"] = (
+                        "OPTIONAL / CONFIRM — construction suggests clean sleeve hem; "
+                        "choose cuff+placket OR clean hem, not both. " + notes
+                    ).strip()
+                    r["review_state"] = "needs_review"
+                synced.append(r)
+            piece["pattern_pieces"] = synced
+            patterns = synced
+
+    # Dress sash: inventory cut qty is authority when illustration disagrees.
+    if family == "wrap" or is_formal_dress_category(cat):
+        synced_sash: list[dict[str, Any]] = []
+        for row in patterns:
+            if not isinstance(row, dict):
+                continue
+            r = dict(row)
+            name = str(r.get("name") or "").lower()
+            if "sash" in name:
+                cut = r.get("cut_qty")
+                if cut in (2, "2"):
+                    r["cut_qty"] = 1
+                    notes = str(r.get("notes") or "")
+                    r["notes"] = (
+                        "Cut qty 1 continuous sash (do not cut a mirrored pair unless tailor splits). "
+                        + notes
+                    ).strip()
+                elif cut in (1, "1", None):
+                    notes = str(r.get("notes") or "")
+                    if "cut qty" not in notes.lower():
+                        r["notes"] = (
+                            "Cut qty 1 — if an illustration shows two sash shapes, treat as one "
+                            "piece laid twice for clarity, not two cuts. " + notes
+                        ).strip()
+                synced_sash.append(r)
+            else:
+                synced_sash.append(r)
+        if synced_sash:
+            piece["pattern_pieces"] = synced_sash
+
+    # Wrap: strip zip language from construction that survived earlier scrub.
+    if family == "wrap" and steps:
+        piece["construction_steps"] = _drop_zip_construction_steps(list(steps))
 
 
 def humanize_readiness_gap(item: str) -> str:

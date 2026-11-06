@@ -22,8 +22,10 @@ REQUIRED_IMAGE_KIND = "flat_front"
 OPTIONAL_IMAGE_KIND_PHASES: tuple[str, ...] = (
     "flat_back",  # real back when present
     "flat_back_proposed",  # proposed back when allowed
-    "detail_callouts",
+    # Pattern-piece visuals are the MTM quality benchmark (dress V9) — allocate
+    # before detail close-ups so multi-garment packs are not left with ID cards only.
     "pattern_sheet",
+    "detail_callouts",
 )
 
 # Versioned authorized-input snapshot for queued Professional runs.

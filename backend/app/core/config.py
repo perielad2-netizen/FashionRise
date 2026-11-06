@@ -115,7 +115,8 @@ class Settings(BaseSettings):
     # Max concurrent paid professional runs system-wide (reservation lock).
     techpack_ai_max_concurrent_runs: int = 2
     # Max image generations per professional run (front/back/detail/pattern).
-    techpack_ai_max_images_per_run: int = 6
+    # 10 allows 2-piece outfits: front+back+pattern+detail per garment.
+    techpack_ai_max_images_per_run: int = 10
     # Entitlement boundary placeholder for future premium billing (not charged here).
     techpack_ai_requires_entitlement: bool = False
 

@@ -135,9 +135,11 @@ def test_image_budget_requires_front_for_each_garment_first():
     assert plan["required_images"] == 2
     assert "flat_front" in plan["per_piece"]["top-1"]["required"]
     assert "flat_front" in plan["per_piece"]["tr-1"]["required"]
-    # Fair optional: both should get proposed backs before second details monopolize budget
+    # Fair optional: backs first, then pattern_sheet before details (MTM cutting benchmark)
     assert "flat_back_proposed" in plan["per_piece"]["top-1"]["all"]
     assert "flat_back_proposed" in plan["per_piece"]["tr-1"]["all"]
+    assert "pattern_sheet" in plan["per_piece"]["top-1"]["all"]
+    assert "pattern_sheet" in plan["per_piece"]["tr-1"]["all"]
     with pytest.raises(ValidationAppError):
         plan_professional_image_kinds(
             pieces, propose_back=True, has_back_image=False, max_images=1

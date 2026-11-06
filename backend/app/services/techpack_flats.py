@@ -222,9 +222,52 @@ def default_bom(category: str, *, color_hint: str = "") -> list[dict[str, Any]]:
         {"item": "Care / brand label", "qty": "1", "unit": "set", "source": "estimate", "notes": ""},
     ]
     cat = (category or "").lower()
-    if cat in ("shirt", "jacket"):
+    if cat in ("shirt", "top", "blouse"):
+        rows.insert(
+            1,
+            {
+                "item": "Buttons (front placket)",
+                "qty": "TBD",
+                "unit": "pcs",
+                "source": "estimate",
+                "notes": "Proposed button-front — confirm count/spacing with tailor",
+            },
+        )
+        rows.insert(
+            1,
+            {
+                "item": "Interfacing",
+                "qty": "estimate TBD",
+                "unit": "m",
+                "source": "estimate",
+                "notes": "Collar stand + placket as needed",
+            },
+        )
+    elif cat == "jacket":
         rows.insert(1, {"item": "Buttons or zipper", "qty": "TBD", "unit": "pcs", "source": "estimate", "notes": "Confirm closure choice"})
-        rows.insert(1, {"item": "Interfacing", "qty": "estimate TBD", "unit": "m", "source": "estimate", "notes": "Collar/placket as needed"})
-    if cat in ("trousers", "shorts", "skirt"):
+        rows.insert(1, {"item": "Interfacing", "qty": "estimate TBD", "unit": "m", "source": "estimate", "notes": "Collar/facing as needed"})
+    if cat in ("trousers", "shorts", "jeans"):
+        rows.insert(
+            1,
+            {
+                "item": "Fly zipper (proposed)",
+                "qty": "1",
+                "unit": "pcs",
+                "source": "estimate",
+                "notes": "Keep proposed until appointment confirms",
+            },
+        )
+        rows.insert(
+            1,
+            {
+                "item": "Waistband button / rivets",
+                "qty": "TBD",
+                "unit": "pcs",
+                "source": "estimate",
+                "notes": "Confirm with tailor",
+            },
+        )
+        # Jeans rarely need fashion lining — drop generic lining row if present later.
+    elif cat == "skirt":
         rows.insert(1, {"item": "Zipper / elastic / closure", "qty": "1", "unit": "pcs", "source": "estimate", "notes": "Confirm closure"})
     return rows
