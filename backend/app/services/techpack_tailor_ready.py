@@ -478,9 +478,9 @@ def seam_allowance_standards() -> list[tuple[str, str]]:
 
 def thread_spi_defaults() -> list[tuple[str, str, str]]:
     return [
-        ("301 lockstitch", "3.5–4 /cm", "Seams, staystitch, zip, labels"),
+        ("301 lockstitch", "3.5–4 /cm", "Seams, staystitch, labels"),
         ("504 overlock 3-th", "3–4 /cm", "Edge finish (wovens)"),
         ("514 overlock 4-th", "3–4 /cm", "Knit seams / clean finish"),
         ("Blind hem", "per fabric", "Dress / formal hems"),
-        ("Invisible zip", "3–3.5 /cm", "CB / SS concealed opening"),
+        ("Invisible zip", "3–3.5 /cm", "CB / SS concealed opening — only if zip confirmed"),
     ]

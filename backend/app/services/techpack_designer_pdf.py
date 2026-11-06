@@ -451,9 +451,25 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
         )
     )
     if analysis.get("back_construction_proposal") and arts.get("flat_back_proposed") and not arts.get("flat_back"):
+        back_txt = str(analysis.get("back_construction_proposal") or "")
+        if detect_closure_family(piece) == "wrap":
+            # Do not present invented CB zip as wrap-compatible construction.
+            import re as _re
+
+            back_txt = _re.sub(
+                r"[^.]*\b(?:invisible\s+)?zip(?:per)?\b[^.]*\.",
+                "",
+                back_txt,
+                flags=_re.I,
+            ).strip()
+            back_txt = (
+                f"{back_txt} "
+                "WRAP CLOSURE: proposed back must NOT introduce a CB zipper unless the designer "
+                "explicitly confirms one — current pack assumes sash/tie wrap only."
+            ).strip()
         story.append(
             Paragraph(
-                f"<b>Proposed back:</b> {str(analysis.get('back_construction_proposal'))[:280]}",
+                f"<b>Proposed back (UNVERIFIED):</b> {back_txt[:360]}",
                 styles["small"],
             )
         )
