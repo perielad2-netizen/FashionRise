@@ -117,8 +117,8 @@ def test_circ_grades_suppressed_until_confirmed():
     }
     rows = {r["key"]: r for r in graded_pom_rows(piece, sample_size="38")}
     assert all(v is None for v in rows["chest_bust"]["grades"].values())
-    # Non-circ length may still propose grades from numeric base.
-    assert rows["sleeve_length"]["grades"]["M"] is not None or rows["sleeve_length"]["grades"]["L"] is not None
+    # AI / open length POMs also withhold grades until designer confirms.
+    assert all(v is None for v in rows["sleeve_length"]["grades"].values())
 
 
 def test_wrap_callouts_exclude_zipper_even_if_ai_lists_one():
@@ -142,6 +142,41 @@ def test_wrap_callouts_exclude_zipper_even_if_ai_lists_one():
     legend = " ".join(lab for _n, lab in callout_legend_for_piece(piece)).lower()
     assert "zip" not in legend
     assert "wrap" in legend or "deep" in legend
+
+
+def test_enrich_syncs_v_depth_length_and_sash_bom():
+    piece = {
+        "category": "dress",
+        "label": "Wrap dress",
+        "color_hint": "beige",
+        "illustrations": {
+            "analysis": {
+                "closure_visible": "No zipper; waist sash wrap",
+                "silhouette": "wrap",
+                "distinctive_features": ["deep V wrap"],
+            }
+        },
+        "finished_measurements": {
+            "neckline": {"value": 31, "unit": "cm", "source": "ai", "review_status": "proposed"},
+            "garment_length": {"value": 142, "unit": "cm", "source": "ai", "review_status": "proposed"},
+            "hem_low": {"value": 145, "unit": "cm", "source": "ai", "review_status": "proposed"},
+            "sash_width": {"value": 4, "unit": "cm", "source": "ai", "review_status": "proposed"},
+            "sash_length": {"value": 190, "unit": "cm", "source": "ai", "review_status": "proposed"},
+        },
+        "bom": [{"item": "Invisible zipper", "qty": "1", "placement": "CB"}],
+    }
+    enriched = enrich_piece_for_designer_pdf(piece)
+    assert enriched["finished_measurements"]["v_depth"]["value"] == 31.0
+    assert enriched["finished_measurements"]["garment_length"]["value"] == 145.0
+    assert enriched["finished_measurements"]["hem_low"]["value"] == 145.0
+    sash = next(r for r in enriched["bom"] if "sash" in str(r.get("item") or "").lower())
+    assert "4" in str(sash.get("description") or "")
+    assert "190" in str(sash.get("description") or "")
+    from app.services.techpack_designer_spec import humanize_readiness_gap, pom_code
+
+    assert pom_code("slit_start") == "S1"
+    assert pom_code("v_depth") == "I2"
+    assert "Confirm the dress fastening" in humanize_readiness_gap("piece-aa3:closures_specified")
 
 
 def test_enrich_wrap_redacts_invented_back_zip():

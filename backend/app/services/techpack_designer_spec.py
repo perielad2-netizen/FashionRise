@@ -35,12 +35,14 @@ POM_CODES: dict[str, str] = {
     "knee": "T",
     # Design-specific dress callouts (full lengths / depths — not circ).
     "wrap_overlap": "U",
-    "slit_start": "V",
+    "slit_start": "S1",
     "overlay_length": "W",
     "sash_width": "X",
     "sash_length": "Y",
     "hem_high": "Z1",
     "hem_low": "Z2",
+    # Deep-V depth — distinct from slit_start (was colliding on letter "V").
+    "v_depth": "I2",
 }
 
 # Default finished tolerances (cm) when designer has not set pom_tolerances.
@@ -102,8 +104,9 @@ DRESS_POM_HOW_TO: dict[str, str] = {
     ),
     "sleeve_length": "Sleeve length — shoulder seam to cuff / hem along outer sleeve.",
     "neckline": (
-        "Neckline DEPTH (cm) — HPS (or stated CF/CB ref) straight down to neckline edge. "
-        "Not a circumference. State reference point in notes."
+        "Neckline / deep-V DEPTH (cm) — HPS (or stated CF ref) straight down to the lowest "
+        "neckline edge / V apex. Same physical measure as v_depth on deep-V wraps. "
+        "Not a circumference."
     ),
     "opening": "Opening / slit length (cm) — start point to hem, or zip placket length if zip used.",
     "wrap_overlap": (
@@ -940,8 +943,125 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                 if "missing" not in str(upgraded.get("note") or "").lower():
                     upgraded["note"] = missing_note
                 finished[key] = upgraded
+
+        # Deep-V: neckline depth and v_depth are the same HPS→apex measure — keep one value.
+        neck = finished.get("neckline") if isinstance(finished.get("neckline"), dict) else None
+        vdep = finished.get("v_depth") if isinstance(finished.get("v_depth"), dict) else None
+        neck_val = neck.get("value") if isinstance(neck, dict) else None
+        v_val = vdep.get("value") if isinstance(vdep, dict) else None
+        if isinstance(neck_val, (int, float)) and v_val in (None, "", "—"):
+            finished["v_depth"] = {
+                **(vdep or {}),
+                "value": float(neck_val),
+                "unit": str((neck or {}).get("unit") or "cm"),
+                "source": str((neck or {}).get("source") or "ai"),
+                "review_status": str((neck or {}).get("review_status") or "proposed"),
+                "note": "Same measure as neckline depth (HPS → V apex) — not a second dimension.",
+            }
+        elif isinstance(v_val, (int, float)) and neck_val in (None, "", "—"):
+            finished["neckline"] = {
+                **(neck or {}),
+                "value": float(v_val),
+                "unit": str((vdep or {}).get("unit") or "cm"),
+                "source": str((vdep or {}).get("source") or "ai"),
+                "review_status": str((vdep or {}).get("review_status") or "proposed"),
+                "note": "Same measure as v_depth (HPS → V apex).",
+            }
+
+        # Longest hem: garment_length must match hem_low when both are present.
+        glen = finished.get("garment_length") if isinstance(finished.get("garment_length"), dict) else None
+        hlow = finished.get("hem_low") if isinstance(finished.get("hem_low"), dict) else None
+        g_val = glen.get("value") if isinstance(glen, dict) else None
+        hl_val = hlow.get("value") if isinstance(hlow, dict) else None
+        if isinstance(g_val, (int, float)) and isinstance(hl_val, (int, float)):
+            longest = max(float(g_val), float(hl_val))
+            if float(g_val) != longest:
+                finished["garment_length"] = {
+                    **glen,
+                    "value": longest,
+                    "note": (
+                        f"Aligned to longest hem (was {g_val:g} cm; hem_low {hl_val:g} cm). "
+                        "Garment length = HPS → longest finished hem."
+                    ),
+                }
+            if float(hl_val) != longest:
+                finished["hem_low"] = {
+                    **hlow,
+                    "value": longest,
+                    "note": (
+                        f"Aligned to garment length longest hem ({longest:g} cm). "
+                        "hem_low is the longer asymmetric hem from HPS."
+                    ),
+                }
+
+        # Flow sash POMs into sash BOM rows so tables agree.
+        sw = finished.get("sash_width") if isinstance(finished.get("sash_width"), dict) else {}
+        sl = finished.get("sash_length") if isinstance(finished.get("sash_length"), dict) else {}
+        sw_v, sl_v = sw.get("value"), sl.get("value")
+        if isinstance(out.get("bom"), list) and (
+            isinstance(sw_v, (int, float)) or isinstance(sl_v, (int, float))
+        ):
+            synced_bom: list[Any] = []
+            for row in out["bom"]:
+                if not isinstance(row, dict):
+                    continue
+                item = str(row.get("item") or "").lower()
+                if "sash" in item or ("tie" in item and "waist" in item):
+                    width_txt = f"{float(sw_v):g} cm" if isinstance(sw_v, (int, float)) else "width TBD"
+                    length_txt = f"{float(sl_v):g} cm" if isinstance(sl_v, (int, float)) else "length TBD"
+                    src = str(sw.get("source") or sl.get("source") or "ai")
+                    status = str(sw.get("review_status") or sl.get("review_status") or "proposed")
+                    synced_bom.append(
+                        {
+                            **row,
+                            "description": f"Finished sash {width_txt} × {length_txt} — match shell; finish ends",
+                            "notes": (
+                                f"From POM sash_width/sash_length · source={src} · status={status} "
+                                "— AI/proposed until designer confirms."
+                            ),
+                            "review_status": "needs_review"
+                            if status not in {"confirmed", "approved", "designer_confirmed"}
+                            else row.get("review_status"),
+                        }
+                    )
+                else:
+                    synced_bom.append(row)
+            out["bom"] = synced_bom
+
         out["finished_measurements"] = finished
     return out
+
+
+def humanize_readiness_gap(item: str) -> str:
+    """Turn internal readiness tokens into designer-facing checklist language."""
+    raw = str(item or "").strip()
+    if not raw:
+        return raw
+    low = raw.lower()
+    # Strip piece UUID prefixes: piece-aa3dd7b4:closures_specified → closures_specified
+    if ":" in raw:
+        raw = raw.split(":", 1)[-1]
+        low = raw.lower()
+    mapping = {
+        "designer_confirmation_checklist": "Complete the designer confirmation checklist before sample cut.",
+        "closures_specified": "Confirm the dress fastening method (wrap/tie, optional snap, or zip).",
+        "construction_decisions": "Approve the construction / sew-order instructions for this garment.",
+        "finished_poms_confirmed": "Verify and approve the final finished garment measurements.",
+        "fit_ease_reviewed": "Review fit and ease against the sample size body measurements.",
+        "material_specified": "Approve the shell fabric (fibre, composition, GSM / stretch) — color alone is not enough.",
+        "pom_tolerances": "Confirm measurement tolerances for the sample.",
+        "named_sample_size": "Confirm the named sample size.",
+        "outfit_pieces": "Confirm garment pieces / components on the outfit.",
+        "garment_identity": "Confirm garment category and identity for this piece.",
+        "chest_and_length_poms": "Confirm bust / chest and length measurements.",
+        "waist_hip_inseam_poms": "Confirm waist, hip, and inseam measurements.",
+        "back_artwork_unverified": "Review the proposed back design (no Magic back image was provided).",
+        "detail_artwork_unverified": "Review detail callout artwork against the design.",
+    }
+    if low in mapping:
+        return mapping[low]
+    # Soft fallback: readable words from snake_case
+    return raw.replace("_", " ").strip().capitalize() + "."
 
 
 def callouts_for_piece(piece: dict[str, Any]) -> list[tuple[str, str]]:

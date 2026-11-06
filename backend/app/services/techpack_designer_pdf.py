@@ -27,6 +27,7 @@ from app.services.techpack_designer_spec import (
     enrich_piece_for_designer_pdf,
     finished_pom_rows,
     formal_dress_bom,
+    humanize_readiness_gap,
     is_formal_dress_category,
     qc_for_piece,
 )
@@ -665,8 +666,27 @@ def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: di
         how = str(row["how_to"])
         if len(how) > 70:
             how = how[:67] + "…"
-        status = str(row.get("source") or "")
-        how_status = f"{how} [{status}]" if status else how
+        status = str(row.get("source") or "").lower()
+        review = str(row.get("review_status") or "").lower()
+        if status in {"ai", "ai_vision", "ai_inferred", "estimate", "calculated"} or review in {
+            "proposed",
+            "needs_review",
+            "open",
+        }:
+            provenance = "AI ESTIMATE — not approved"
+        elif status in {"designer", "confirmed", "user"} and review in {
+            "confirmed",
+            "approved",
+            "designer_confirmed",
+        }:
+            provenance = "DESIGNER CONFIRMED"
+        elif status:
+            provenance = status.upper()
+        else:
+            provenance = "UNSOURCED"
+        if row.get("grades_suppressed"):
+            provenance = f"{provenance} · grades withheld"
+        how_status = f"{how} [{provenance}]"
         cells = [
             Paragraph(str(row["code"]), styles["small"]),
             Paragraph(str(row["label"]), styles["small"]),
@@ -1248,9 +1268,32 @@ def _revision_and_readiness(
     )
     missing = mfg.get("missing_required") if isinstance(mfg.get("missing_required"), list) else []
     if missing:
-        story.append(Paragraph("Missing for SAMPLE-DEVELOPMENT READY", styles["h3"]))
+        story.append(Paragraph("Designer approvals still needed", styles["h3"]))
+        story.append(
+            Paragraph(
+                "Resolve each item below before treating this pack as sample-development ready. "
+                "These are design decisions — not software errors.",
+                styles["muted"],
+            )
+        )
+        seen_human: set[str] = set()
         for item in missing[:40]:
-            story.append(Paragraph(f"• {item}", styles["warn"]))
+            human = humanize_readiness_gap(str(item))
+            if human in seen_human:
+                continue
+            seen_human.add(human)
+            story.append(Paragraph(f"• {human}", styles["warn"]))
+    # Prefer a short designer checklist over backend field dumps.
+    story.append(Paragraph("Quick review checklist", styles["h3"]))
+    for line in (
+        "Confirm the dress fastening method (wrap/tie only, or add a hidden snap).",
+        "Approve the fabric fibre, composition, GSM / stretch, and lining — not just the color name.",
+        "Verify finished garment measurements (especially wrap, slit, sash, hems) and mark AI estimates reviewed.",
+        "Approve construction steps for this specific dress.",
+        "Confirm measurement tolerances for the sample size.",
+        "Review the proposed back design (marked UNVERIFIED when no Magic back exists).",
+    ):
+        story.append(Paragraph(f"• {line}", styles["body"]))
     # All measurement / compatibility notes live here (not on overview) to avoid orphan pages.
     overview_warnings = [
         w for w in (v2.get("warnings") if isinstance(v2.get("warnings"), list) else [])
@@ -1268,11 +1311,15 @@ def _revision_and_readiness(
                 continue
             seen_w.add(key)
             msg = w.get("message") if isinstance(w, dict) else w
-            story.append(Paragraph(f"• {str(msg)[:280]}", styles["warn"]))
+            # Soften internal piece-id noise in free-text warnings.
+            text = str(msg)
+            if "piece-" in text.lower():
+                text = humanize_readiness_gap(text) if ":" in text else text
+            story.append(Paragraph(f"• {text[:280]}", styles["warn"]))
     story.append(
         Paragraph(
             "Before factory send, confirm: (1) every POM has how-to + tolerance, "
-            "(2) size table grades or sample is sealed, (3) every material has supplier ref + color code, "
+            "(2) size grades only after sample POMs are sealed, (3) every material has supplier ref + color code, "
             "(4) every operation has stitch type + SPI, (5) label positions measured from a fixed point, "
             "(6) revision log matches cover revision.",
             styles["body"],

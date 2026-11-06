@@ -191,13 +191,18 @@ def graded_pom_rows(
         val = row.get("value")
         key = str(row.get("key") or "")
         grades: dict[str, Any] = {sz: None for sz in GRADE_SIZES}
-        allow_grade = isinstance(val, (int, float)) and (
-            key not in _CIRC_GRADE_KEYS or _pom_basis_confirmed(row)
-        )
+        # Never auto-grade AI / open / estimated values — circ or length.
+        allow_grade = isinstance(val, (int, float)) and _pom_basis_confirmed(row)
         if allow_grade:
             for sz in GRADE_SIZES:
                 grades[sz] = grade_value(float(val), key=key, size=sz, sample_size=sample_size)
-        out.append({**row, "grades": grades, "grades_suppressed": not allow_grade and isinstance(val, (int, float))})
+        out.append(
+            {
+                **row,
+                "grades": grades,
+                "grades_suppressed": (not allow_grade) and isinstance(val, (int, float)),
+            }
+        )
     return out
 
 
@@ -317,16 +322,26 @@ def hardware_rows(piece: dict[str, Any]) -> list[dict[str, Any]]:
     from app.services.techpack_designer_spec import detect_closure_family
 
     if detect_closure_family(piece) == "wrap":
-        rows = [
-            r
-            for r in rows
-            if "zip" not in f"{r.get('item','')} {r.get('spec','')} {r.get('placement','')}".lower()
-            and not (
-                "hook" in str(r.get("item") or "").lower()
-                and "eye" in str(r.get("item") or "").lower()
-                and "zip" in f"{r.get('placement','')} {r.get('spec','')}".lower()
-            )
-        ]
+        cleaned_hw: list[dict[str, Any]] = []
+        for r in rows:
+            blob = f"{r.get('item','')} {r.get('spec','')} {r.get('placement','')}".lower()
+            if "zip" in blob:
+                continue
+            if "hook" in blob and "eye" in blob and "zip" in blob:
+                continue
+            # Optional snaps/hooks must not appear as confirmed qty 1.
+            if any(tok in blob for tok in ("snap", "hook", "press stud", "hook and eye")):
+                r = {
+                    **r,
+                    "item": f"{r.get('item','Optional fastener')} · OPTIONAL / UNCONFIRMED",
+                    "spec": (
+                        "DESIGN DECISION — not confirmed. Do not cut or sew until designer approves."
+                    ),
+                    "qty": "TBD",
+                    "unit": "—",
+                }
+            cleaned_hw.append(r)
+        rows = cleaned_hw
     # Deduplicate by item+placement
     seen: set[str] = set()
     uniq: list[dict[str, Any]] = []
