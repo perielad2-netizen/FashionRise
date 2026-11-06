@@ -608,8 +608,9 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           type="button"
           className={dock === 'brush' ? styles.dockActive : styles.dockBtn}
           onClick={() => setDock(dock === 'brush' ? null : 'brush')}
+          aria-label="Brush panel"
         >
-          Brush panel
+          Brush
         </button>
         <button
           type="button"

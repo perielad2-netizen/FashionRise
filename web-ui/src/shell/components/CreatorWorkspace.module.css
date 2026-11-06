@@ -212,25 +212,24 @@
 
 .mobileDock {
   display: none;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 12px 0;
+  /* 6-col grid: 3 equal on row 1, 2 equal on row 2 (no orphan gap). */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 12px 4px;
   flex-shrink: 0;
 }
 
 .mobileDockVisible {
-  display: flex;
+  display: grid;
 }
 
 .dockBtn,
 .dockActive {
-  /* Equal footprint — longest label (Brush panel / Full screen) sets the rhythm. */
-  flex: 1 1 calc(33.333% - 6px);
-  min-width: calc(33.333% - 6px);
-  max-width: calc(33.333% - 6px);
+  grid-column: span 2;
+  width: 100%;
   box-sizing: border-box;
-  min-height: 34px;
-  padding: 0 8px;
+  min-height: 36px;
+  padding: 0 6px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
@@ -244,6 +243,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.dockBtn:nth-child(4),
+.dockBtn:nth-child(5),
+.dockActive:nth-child(4),
+.dockActive:nth-child(5) {
+  grid-column: span 3;
 }
 
 .dockActive {
@@ -430,17 +436,14 @@
   }
 
   .mobileDock {
-    gap: 6px;
-    padding: 6px 10px 0;
+    gap: 5px;
+    padding: 6px 10px 2px;
   }
 
   .dockBtn,
   .dockActive {
     min-height: 30px;
-    padding: 0 6px;
-    flex: 1 1 calc(33.333% - 4px);
-    min-width: calc(33.333% - 4px);
-    max-width: calc(33.333% - 4px);
+    padding: 0 4px;
   }
 
   .settingsSlot.slotOpen {
@@ -473,11 +476,19 @@
   .toolColumn {
     grid-row: 1;
     width: 100%;
+    gap: 6px;
   }
 
   .kindStripWrap {
     max-width: none;
     width: 100%;
+    padding: 0;
+    background: transparent;
+    border: 0;
+  }
+
+  .mobileDock {
+    padding-bottom: 2px;
   }
 
   .canvasStage {

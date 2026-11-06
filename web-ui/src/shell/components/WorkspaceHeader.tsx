@@ -84,7 +84,7 @@ export function WorkspaceHeader({
 
   return (
     <div className={`${styles.header} ${menuOpen ? styles.headerMenuOpen : ''}`}>
-      <div className={styles.left}>
+      <div className={styles.brand}>
         <button
           type="button"
           className={`${styles.iconBtn} ${styles.unavailable}`}
@@ -96,8 +96,8 @@ export function WorkspaceHeader({
         </button>
         <h1 className={styles.title}>New Design</h1>
       </div>
-      {/* Middle cluster may shrink/wrap; More stays pinned so Clear canvas never clips off-screen. */}
-      <div className={styles.right}>
+
+      <div className={styles.meta}>
         <span
           className={statusClass}
           title={saveError ?? 'Private draft for your account'}
@@ -145,6 +145,9 @@ export function WorkspaceHeader({
           <Star size={14} aria-hidden />
           {starsUnlimited ? '∞' : starsBalance ?? 0}
         </button>
+      </div>
+
+      <div className={styles.ctaRow}>
         <button
           type="button"
           className={magicEnabled ? styles.magicReady : styles.magicSoon}
@@ -181,6 +184,7 @@ export function WorkspaceHeader({
           </button>
         ) : null}
       </div>
+
       <div className={styles.moreWrap} ref={menuRef} data-testid="workspace-more">
         <button
           type="button"
@@ -274,6 +278,7 @@ export function WorkspaceHeader({
           </div>
         ) : null}
       </div>
+
       <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
       <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} payload={{ kind: 'app' }} />
     </div>

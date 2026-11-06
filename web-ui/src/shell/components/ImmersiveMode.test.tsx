@@ -14,6 +14,28 @@ vi.mock('@/services/fabricAssetsApi', () => ({
   fetchFabricImageBlob: vi.fn(),
 }))
 
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: {
+      id: 'u1',
+      email: 't@example.com',
+      username: 'Tester',
+      is_active: true,
+      is_admin: false,
+      ai_stars: 20,
+      ai_stars_unlimited: false,
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    bootstrapping: false,
+    isAuthenticated: true,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+    googleOAuthAvailable: false,
+  }),
+}))
+
 vi.mock('@/components/studio/DrawingCanvas', () => ({
   DrawingCanvas: (props: { immersive?: boolean; panTool?: boolean }) => (
     <div
