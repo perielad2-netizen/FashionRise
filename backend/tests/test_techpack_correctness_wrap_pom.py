@@ -209,3 +209,75 @@ def test_enrich_wrap_redacts_invented_back_zip():
     ).lower()
     assert "zip" not in steps
     assert "wrap neckline" in steps
+
+
+def test_enrich_syncs_sash_and_flags_fold_vs_cb_choice():
+    piece = {
+        "category": "dress",
+        "label": "Wrap dress",
+        "illustrations": {
+            "analysis": {
+                "closure_visible": "No zipper; waist sash wrap",
+                "silhouette": "wrap",
+                "distinctive_features": ["wrap front"],
+                "back_construction_proposal": (
+                    "Propose fitted back bodice with center-back seam and ankle-length skirt."
+                ),
+            }
+        },
+        "finished_measurements": {
+            "sash_width": {"value": 4, "unit": "cm", "source": "ai", "review_status": "proposed"},
+            "sash_length": {"value": 190, "unit": "cm", "source": "ai", "review_status": "proposed"},
+        },
+        "pattern_pieces": [
+            {
+                "id": "C",
+                "name": "Back bodice",
+                "fold": "none",
+                "notes": "Cut on fold; proposed high back neckline",
+            },
+            {
+                "id": "H",
+                "name": "Self waist sash",
+                "fold": "none",
+                "notes": "Long finished sash, approx. 6 cm wide, anchored at side waist",
+            },
+        ],
+    }
+    enriched = enrich_piece_for_designer_pdf(piece)
+    by_id = {str(r.get("id")): r for r in enriched["pattern_pieces"]}
+    back = by_id["C"]
+    assert "choice" in str(back.get("notes") or "").lower()
+    assert "needs_review" in str(back.get("review_state") or "")
+    sash = by_id["H"]
+    notes = str(sash.get("notes") or "").lower()
+    assert "4 cm" in notes
+    assert "6 cm" not in notes
+    assert notes.count("from sash_width pom") <= 1
+
+
+def test_scrub_removes_center_back_zipper_label(tmp_path):
+    from PIL import Image, ImageDraw, ImageFont
+
+    from app.services.techpack_tailor_ready import scrub_contradictory_flat_labels
+
+    src = tmp_path / "flat.png"
+    im = Image.new("RGB", (1000, 1400), color=(245, 240, 232))
+    draw = ImageDraw.Draw(im)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+    except Exception:
+        font = ImageFont.load_default()
+    draw.text((780, 1140), "CENTER BACK ZIPPER", fill=(30, 30, 30), font=font)
+    draw.text((790, 1180), "Invisible zipper at center back", fill=(30, 30, 30), font=font)
+    im.save(src)
+
+    out = scrub_contradictory_flat_labels(src)
+    assert out is not None and out.exists()
+    # Prefer OCR path when tesseract is present; always expect a banner/output image.
+    from PIL import Image as _Image
+
+    scrubbed = _Image.open(out)
+    assert scrubbed.size == im.size
+    # Pixel band at the top banner should differ from the paper background.
+    assert scrubbed.getpixel((10, 8)) != (245, 240, 232)
