@@ -612,11 +612,14 @@ def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: di
     story.append(
         Paragraph(
             f"Finished-garment POMs ({units}). Sample size <b>{sample_size or '—'}</b>. "
-            "<b>Circumference POMs (bust/waist/hip/hem) are FULL circumference</b> "
-            "(≈ body + ease). Sample-room flat check = edge-to-edge ×2. "
-            "Depth/length POMs (neckline depth, slit, wrap overlap, overlay, sash) are single lengths — not ×2. "
-            f"<b>Proposed grades</b> ({', '.join(GRADE_SIZES)}) are unverified until sample is sealed. "
-            "Empty design-specific POMs are listed as missing — do not invent them when cutting.",
+            "<b>Bust / waist / hip / hem values are FULL garment circumference</b> "
+            "(≈ body circ + ease) — <b>NOT flat half-widths</b>. "
+            "Flat ½ column = Full ÷ 2 for sample-room check only. "
+            "Depth/length POMs (V depth, slit start, wrap overlap, overlay, sash, hem high/low) "
+            "are single lengths — never ×2. "
+            f"<b>Size grades ({', '.join(GRADE_SIZES)}) stay blank until the base circ POM is "
+            "designer-confirmed</b> — do not cut graded sizes from AI/open values. "
+            "Empty design-specific POMs are MISSING — ask the designer; do not invent them.",
             styles["muted"],
         )
     )

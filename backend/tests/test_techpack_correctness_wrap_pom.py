@@ -95,6 +95,55 @@ def test_enrich_wrap_piece_qc_and_missing_design_poms():
     assert "1/2 bust" not in bust["how_to"].lower()
 
 
+def test_circ_grades_suppressed_until_confirmed():
+    from app.services.techpack_tailor_ready import graded_pom_rows
+
+    piece = {
+        "category": "dress",
+        "finished_measurements": {
+            "chest_bust": {
+                "value": 89,
+                "unit": "cm",
+                "source": "calculated",
+                "review_status": "needs_review",
+            },
+            "sleeve_length": {
+                "value": 59,
+                "unit": "cm",
+                "source": "ai",
+                "review_status": "open",
+            },
+        },
+    }
+    rows = {r["key"]: r for r in graded_pom_rows(piece, sample_size="38")}
+    assert all(v is None for v in rows["chest_bust"]["grades"].values())
+    # Non-circ length may still propose grades from numeric base.
+    assert rows["sleeve_length"]["grades"]["M"] is not None or rows["sleeve_length"]["grades"]["L"] is not None
+
+
+def test_wrap_callouts_exclude_zipper_even_if_ai_lists_one():
+    from app.services.techpack_tailor_ready import callout_legend_for_piece
+
+    piece = {
+        "category": "dress",
+        "label": "Wrap dress",
+        "illustrations": {
+            "analysis": {
+                "closure_visible": "No zipper; waist sash",
+                "silhouette": "wrap",
+                "distinctive_features": ["deep V wrap", "Invisible zipper (CB)", "thigh slit"],
+                "callout_points": [
+                    {"n": 1, "label": "Invisible zipper (CB or SS) + hook & eye"},
+                    {"n": 2, "label": "Deep overlapping V-front"},
+                ],
+            }
+        },
+    }
+    legend = " ".join(lab for _n, lab in callout_legend_for_piece(piece)).lower()
+    assert "zip" not in legend
+    assert "wrap" in legend or "deep" in legend
+
+
 def test_enrich_wrap_redacts_invented_back_zip():
     piece = {
         "category": "dress",

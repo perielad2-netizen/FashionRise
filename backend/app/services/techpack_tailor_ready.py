@@ -160,32 +160,53 @@ def grade_value(base: float, *, key: str, size: str, sample_size: str) -> float 
     return round(float(base) + delta * step, 1)
 
 
+_CIRC_GRADE_KEYS = {"chest_bust", "waist", "hip", "hem", "thigh", "leg_opening", "cuff", "knee"}
+
+
+def _pom_basis_confirmed(row: dict[str, Any]) -> bool:
+    """Grades require a confirmed base — AI/open/estimated circs must not auto-grade."""
+    review = str(row.get("review_status") or "").lower()
+    source = str(row.get("source") or "").lower()
+    if review in {"confirmed", "approved", "designer_confirmed"}:
+        return True
+    if source in {"designer", "confirmed", "user"} and review not in {
+        "needs_review",
+        "proposed",
+        "open",
+        "ai",
+    }:
+        return True
+    return False
+
+
 def graded_pom_rows(
     piece: dict[str, Any],
     *,
     sample_size: str,
 ) -> list[dict[str, Any]]:
-    """Finished POM rows with proposed XS–2XL grades (clearly unverified)."""
+    """Finished POM rows with proposed XS–2XL grades (suppressed until base is confirmed)."""
     rows = finished_pom_rows(piece)
     out: list[dict[str, Any]] = []
     for row in rows:
         val = row.get("value")
-        grades: dict[str, Any] = {}
-        if isinstance(val, (int, float)):
+        key = str(row.get("key") or "")
+        grades: dict[str, Any] = {sz: None for sz in GRADE_SIZES}
+        allow_grade = isinstance(val, (int, float)) and (
+            key not in _CIRC_GRADE_KEYS or _pom_basis_confirmed(row)
+        )
+        if allow_grade:
             for sz in GRADE_SIZES:
-                grades[sz] = grade_value(float(val), key=str(row["key"]), size=sz, sample_size=sample_size)
-        else:
-            for sz in GRADE_SIZES:
-                grades[sz] = None
-        out.append({**row, "grades": grades})
+                grades[sz] = grade_value(float(val), key=key, size=sz, sample_size=sample_size)
+        out.append({**row, "grades": grades, "grades_suppressed": not allow_grade and isinstance(val, (int, float))})
     return out
 
 
 def callout_legend_for_piece(piece: dict[str, Any]) -> list[tuple[str, str]]:
     """Numbered construction/design callouts for PDF legend + flat overlay."""
-    from app.services.techpack_designer_spec import callouts_for_piece
+    from app.services.techpack_designer_spec import callouts_for_piece, detect_closure_family
 
     cat = str(piece.get("category") or "other")
+    wrap = detect_closure_family(piece) == "wrap"
     if is_formal_dress_category(cat):
         callouts = list(callouts_for_piece(piece))
     else:
@@ -200,9 +221,14 @@ def callout_legend_for_piece(piece: dict[str, Any]) -> list[tuple[str, str]]:
     illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
     if isinstance(illust.get("analysis"), dict):
         analysis = illust["analysis"]
-    # Prefer AI-authored callout list when present.
+
+    def _zip_label(label: str) -> bool:
+        low = label.lower()
+        return "zip" in low or "zipper" in low
+
+    # Prefer AI-authored callouts only when they don't contradict wrap closure.
     ai_pts = analysis.get("callout_points") if isinstance(analysis.get("callout_points"), list) else []
-    if ai_pts:
+    if ai_pts and not wrap:
         rebuilt: list[tuple[str, str]] = []
         for i, pt in enumerate(ai_pts[:18], start=1):
             if isinstance(pt, dict):
@@ -216,11 +242,21 @@ def callout_legend_for_piece(piece: dict[str, Any]) -> list[tuple[str, str]]:
         if rebuilt:
             callouts = rebuilt
     else:
+        # Wrap: keep wrap legend as authority; append distinctive non-zip features only.
         features = analysis.get("distinctive_features") if isinstance(analysis.get("distinctive_features"), list) else []
         n = len(callouts)
         for feat in features[:6]:
+            label = str(feat).strip()
+            if not label:
+                continue
+            if wrap and _zip_label(label):
+                continue
             n += 1
-            callouts.append((str(n), str(feat)[:90]))
+            callouts.append((str(n), label[:90]))
+        if wrap:
+            callouts = [(n, lab) for n, lab in callouts if not _zip_label(lab)]
+            # Re-number after scrub.
+            callouts = [(str(i), lab) for i, (_n, lab) in enumerate(callouts, start=1)]
     return callouts
 
 

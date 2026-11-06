@@ -106,13 +106,35 @@ DRESS_POM_HOW_TO: dict[str, str] = {
         "Not a circumference. State reference point in notes."
     ),
     "opening": "Opening / slit length (cm) — start point to hem, or zip placket length if zip used.",
-    "wrap_overlap": "Wrap overlap at waist (cm) — CF underlap amount when wrapped closed.",
-    "slit_start": "Slit start from waist (cm) — waist seam down to top of thigh slit.",
-    "overlay_length": "Asymmetric overlay / drape length (cm) — attach point to free hem tip.",
-    "sash_width": "Waist sash / tie finished width (cm).",
-    "sash_length": "Waist sash / tie total length (cm), including both tails.",
-    "hem_high": "Higher hem length from HPS (cm) when hem is asymmetric.",
-    "hem_low": "Lower / longest hem length from HPS (cm) when hem is asymmetric.",
+    "wrap_overlap": (
+        "Wrap OVERLAP at waist (cm) — from CF underlap edge to CF overlap edge when the wrap "
+        "is closed as designed. Start: underlap CF; end: overlap CF. Not a circumference."
+    ),
+    "slit_start": (
+        "Slit START height (cm) — from the waist seam (or designed waist join) straight down "
+        "the underlayer side seam to the TOP of the thigh slit opening. Start: waist; end: slit apex."
+    ),
+    "overlay_length": (
+        "Asymmetric OVERLAY length (cm) — from the waist attach / catch-in point along the "
+        "drape panel to the free pointed hem tip. Start: waist attach; end: tip."
+    ),
+    "sash_width": "Sash WIDTH (cm) — finished width of the waist sash / tie strip (edge to edge).",
+    "sash_length": (
+        "Sash LENGTH (cm) — total finished length of the waist sash / tie including both tails "
+        "(end to end)."
+    ),
+    "hem_high": (
+        "HEM HIGH (cm) — HPS straight down to the SHORTER / higher finished hem edge "
+        "(asymmetric hems). Start: HPS; end: high hem."
+    ),
+    "hem_low": (
+        "HEM LOW (cm) — HPS straight down to the LONGER / lower finished hem edge "
+        "(asymmetric hems / overlay tip if that is the longest). Start: HPS; end: low hem."
+    ),
+    "v_depth": (
+        "Deep-V DEPTH (cm) — from HPS (or stated CF reference) straight down to the lowest "
+        "point of the V neckline edge. Start: HPS/CF ref; end: V apex. Not a circumference."
+    ),
 }
 
 # Numbered callout legend for zip-closure formal dresses.
@@ -821,25 +843,22 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                 out["illustrations"] = {**illust2, "analysis": analysis2}
     if is_formal_dress_category(cat):
         bom = out.get("bom") if isinstance(out.get("bom"), list) else []
-        if not bom:
+        if closure_family == "wrap":
+            # Replace estimated BOM entirely so AI zipper qty rows cannot survive scrub misses.
+            base_wrap = formal_dress_bom(color_hint=color, closure_family="wrap")
+            # Keep any non-closure designer-confirmed rows (supplier refs, custom trims).
+            kept = [
+                r
+                for r in (bom or [])
+                if isinstance(r, dict)
+                and str(r.get("source") or "").lower() in {"designer", "confirmed", "user"}
+                and "zip" not in f"{r.get('item','')} {r.get('description','')}".lower()
+            ]
+            out["bom"] = scrub_conflicting_closure_bom(base_wrap + kept, closure_family="wrap")
+        elif not bom:
             out["bom"] = formal_dress_bom(color_hint=color, closure_family=closure_family)
         else:
-            # Scrub zip rows that contradict a detected wrap (legacy estimate BOM).
             out["bom"] = scrub_conflicting_closure_bom(list(bom), closure_family=closure_family)
-            if closure_family == "wrap" and not any(
-                "sash" in str(r.get("item") or "").lower() or "tie" in str(r.get("item") or "").lower()
-                for r in out["bom"]
-                if isinstance(r, dict)
-            ):
-                # Ensure wrap hardware decision row exists.
-                sash_rows = [
-                    r
-                    for r in formal_dress_bom(color_hint=color, closure_family="wrap")
-                    if "sash" in str(r.get("item") or "").lower()
-                    or "hook / snap" in str(r.get("item") or "").lower()
-                    or "closure (unresolved)" in str(r.get("item") or "").lower()
-                ]
-                out["bom"] = list(out["bom"]) + sash_rows
         steps = out.get("construction_steps") if isinstance(out.get("construction_steps"), list) else []
         if closure_family == "wrap" and steps:
             steps = _drop_zip_construction_steps(list(steps))
