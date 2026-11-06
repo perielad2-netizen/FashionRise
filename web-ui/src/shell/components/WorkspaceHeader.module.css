@@ -97,6 +97,11 @@
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.starsBadge:hover {
+  background: rgba(250, 204, 21, 0.2);
 }
 
 .magicReady {

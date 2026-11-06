@@ -1968,6 +1968,9 @@ def enqueue_generate_one_tap_professional(
         has_back_image=draft.back_job_id is not None,
     )
     _assert_professional_allowed(db, user, estimate_cents=hi)
+    from app.services import ai_stars
+
+    ai_stars.debit_stars(db, user, "pdf")
 
     run = TechpackAIRun(
         id=uuid.uuid4(),

@@ -130,6 +130,13 @@ def me(user: CurrentUser) -> UserRead:
     return data
 
 
+@router.get("/stars")
+def stars_wallet(user: CurrentUser) -> dict:
+    """Public wallet + feature costs for Studio UI."""
+    bal = ai_stars.public_balance(user)
+    return bal
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("60/minute")
 def logout(request: Request, user: CurrentUser, db: Session = Depends(get_db)) -> Response:

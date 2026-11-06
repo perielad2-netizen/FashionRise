@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, BookmarkPlus, MoreHorizontal, Redo2, Sparkles, Star, Undo2 } from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
 import { useAuth } from '@/services/auth/AuthProvider'
+import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './WorkspaceHeader.module.css'
 
 type Props = {
@@ -49,6 +50,7 @@ export function WorkspaceHeader({
   const magicCost = 10
   const canAffordMagic = starsUnlimited || (starsBalance ?? 0) >= magicCost
   const [menuOpen, setMenuOpen] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -115,20 +117,22 @@ export function WorkspaceHeader({
         >
           <Redo2 size={17} />
         </button>
-        <span
+        <button
+          type="button"
           className={styles.starsBadge}
+          onClick={() => setShopOpen(true)}
           title={
             starsUnlimited
-              ? 'Unlimited Stars (owner)'
-              : `AI Stars — Magic costs ${magicCost}. New profiles start with ${magicCost}.`
+              ? 'Unlimited Stars (owner) — open shop'
+              : `AI Stars — Magic 10 · Croquis 10 · Fabric 5 · PDF 50. Tap for packages.`
           }
           aria-label={
-            starsUnlimited ? 'Unlimited Stars' : `${starsBalance ?? 0} Stars`
+            starsUnlimited ? 'Unlimited Stars, open shop' : `${starsBalance ?? 0} Stars, open shop`
           }
         >
           <Star size={14} aria-hidden />
           {starsUnlimited ? '∞' : starsBalance ?? 0}
-        </span>
+        </button>
         <button
           type="button"
           className={magicEnabled ? styles.magicReady : styles.magicSoon}
@@ -244,6 +248,7 @@ export function WorkspaceHeader({
           ) : null}
         </div>
       </div>
+      <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
     </div>
   )
 }

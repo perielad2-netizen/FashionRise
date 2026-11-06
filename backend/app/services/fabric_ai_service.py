@@ -120,6 +120,10 @@ def create_ai_fabric_asset(
         ) from exc
 
     plan = validate_ai_fabric_prompt(prompt=prompt, color_hex=color_hex, name=name)
+    from app.services import ai_stars
+
+    # Debit before provider call (same fail-closed style as Magic enqueue).
+    ai_stars.debit_stars(db, user, "fabric")
     # generate_png hook receives the generate prompt string for easy mocking.
     if generate_png is not None:
         png = generate_png(plan.generate_prompt)

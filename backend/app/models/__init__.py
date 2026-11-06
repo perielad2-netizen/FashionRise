@@ -20,6 +20,7 @@ from app.models.private_media_cleanup import PrivateMediaCleanupQueue
 from app.models.rating import Rating
 from app.models.refresh_token import RefreshToken
 from app.models.registration_invitation import RegistrationInvitation
+from app.models.star_cart import StarCart, StarCartItem
 from app.models.techpack_ai_artifact import TechpackAIArtifact
 from app.models.techpack_ai_run import TechpackAIRun
 from app.models.techpack_draft import TechpackDraft, TechpackExport
@@ -51,6 +52,8 @@ __all__ = [
     "Rating",
     "RefreshToken",
     "RegistrationInvitation",
+    "StarCart",
+    "StarCartItem",
     "TechpackAIArtifact",
     "TechpackAIRun",
     "TechpackDraft",

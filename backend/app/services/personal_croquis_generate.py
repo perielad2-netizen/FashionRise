@@ -416,6 +416,9 @@ def enqueue_personal_croquis_generate(
         return replay
     _assert_no_open_reconciliation(db, croquis_id=croquis.id, source_asset_id=source_asset_id)
     _assert_spend_allowed(db, user, max_exposure_cents=max_exposure)
+    from app.services import ai_stars
+
+    ai_stars.debit_stars(db, user, "croquis")
 
     max_ver = (
         db.query(func.max(PersonalCroquisVersion.version))

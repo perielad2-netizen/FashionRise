@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     personal_croquis,
     profiles,
     ratings,
+    shop,
     techpacks,
     templates,
     uploads,
@@ -20,6 +21,7 @@ from app.api.v1.routes import (
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(shop.router, prefix="/shop", tags=["shop"])
 api_router.include_router(profiles.router, prefix="/profiles", tags=["profiles"])
 api_router.include_router(designs.router, prefix="/designs", tags=["designs"])
 api_router.include_router(materials.router, prefix="/materials", tags=["materials"])

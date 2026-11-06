@@ -204,12 +204,17 @@ class Settings(BaseSettings):
     # Auto-create FashionRise users on first Google sign-in (no invite).
     google_oauth_auto_register: bool = True
 
-    # AI Stars wallet (phase 1: Magic spend gate).
-    # New profiles start with starting_balance; Magic costs magic_cost (first try free when equal).
+    # AI Stars wallet — spend gates for AI features.
+    # New profiles start with starting_balance (first Magic free when magic_cost equals it).
     ai_stars_starting_balance: int = 10
     ai_stars_magic_cost: int = 10
+    ai_stars_croquis_cost: int = 10
+    ai_stars_pdf_cost: int = 50
+    ai_stars_fabric_cost: int = 5
     # Comma-separated emails with endless Stars (never debit).
     ai_stars_unlimited_emails: str = "perielad@gmail.com,perielad2@gmail.com"
+    # Shop checkout remains disabled until payment is wired.
+    stars_shop_checkout_enabled: bool = False
 
     @field_validator("cors_origins", mode="before")
     @classmethod
