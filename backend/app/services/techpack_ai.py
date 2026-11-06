@@ -369,7 +369,16 @@ def _normalize_finished_pom_estimates(estimates: dict[str, Any]) -> dict[str, An
         "armhole": ("armhole", "armhole_cm", "armhole_circumference_cm"),
         "skirt_length": ("skirt_length", "skirt_length_cm"),
         "inseam": ("inseam", "inseam_cm"),
-        "slit_start_from_waist": ("slit_start_from_waist", "slit_height_cm", "slit_height"),
+        "slit_start_from_waist": ("slit_start_from_waist", "slit_height_cm", "slit_height", "slit_start"),
+        "wrap_overlap": ("wrap_overlap", "wrap_overlap_cm", "overlap_at_waist"),
+        "overlay_length": ("overlay_length", "overlay_length_cm", "drape_length", "drape_length_cm"),
+        "sash_width": ("sash_width", "sash_width_cm", "tie_width"),
+        "sash_length": ("sash_length", "sash_length_cm", "tie_length"),
+        "hem_high": ("hem_high", "hem_high_cm", "high_hem_length"),
+        "hem_low": ("hem_low", "hem_low_cm", "low_hem_length", "longest_hem"),
+        "chest_bust": ("chest_bust", "bust", "bust_circumference", "bust_circ_cm"),
+        "waist": ("waist", "waist_circumference", "waist_circ_cm"),
+        "hip": ("hip", "hip_circumference", "hip_circ_cm"),
     }
     out: dict[str, Any] = {}
     methods_raw = estimates.get("finished_pom_methods")
@@ -416,6 +425,17 @@ def _apply_ai_pom_estimates(piece: dict[str, Any], analysis: dict[str, Any]) -> 
         "front_rise": "front_rise",
         "back_rise": "back_rise",
         "leg_opening": "leg_opening",
+        "slit_start_from_waist": "slit_start",
+        "slit_start": "slit_start",
+        "wrap_overlap": "wrap_overlap",
+        "overlay_length": "overlay_length",
+        "sash_width": "sash_width",
+        "sash_length": "sash_length",
+        "hem_high": "hem_high",
+        "hem_low": "hem_low",
+        "chest_bust": "chest_bust",
+        "waist": "waist",
+        "hip": "hip",
     }
     changed = False
     for ai_key, pom_key in key_map.items():

@@ -85,6 +85,13 @@ FINISHED_POM: dict[str, tuple[str, ...]] = {
         "sleeve_length",
         "hem",
         "neckline",
+        "wrap_overlap",
+        "slit_start",
+        "overlay_length",
+        "sash_width",
+        "sash_length",
+        "hem_high",
+        "hem_low",
     ),
     "jumpsuit": (
         "chest_bust",
@@ -101,16 +108,16 @@ FINISHED_POM: dict[str, tuple[str, ...]] = {
 }
 
 POM_LABELS = {
-    "chest_bust": "Chest / bust circumference",
+    "chest_bust": "Chest / bust (full circ)",
     "shoulder_width": "Shoulder width",
     "garment_length": "Garment length (HPS to hem)",
     "sleeve_length": "Sleeve length",
     "armhole": "Armhole circumference",
     "cuff": "Cuff opening",
-    "hem": "Hem circumference",
-    "neckline": "Neckline / collar",
-    "waist": "Waist circumference",
-    "hip": "Hip circumference",
+    "hem": "Hem (full circ)",
+    "neckline": "Neckline depth",
+    "waist": "Waist (full circ)",
+    "hip": "Hip (full circ)",
     "inseam": "Inseam",
     "outseam": "Outseam",
     "front_rise": "Front rise",
@@ -121,6 +128,13 @@ POM_LABELS = {
     "waistband": "Waistband height",
     "skirt_length": "Skirt length",
     "opening": "Opening / slit",
+    "wrap_overlap": "Wrap overlap at waist",
+    "slit_start": "Slit start from waist",
+    "overlay_length": "Asymmetric overlay length",
+    "sash_width": "Sash / tie width",
+    "sash_length": "Sash / tie length",
+    "hem_high": "Hem length (high side)",
+    "hem_low": "Hem length (low / long side)",
 }
 
 BODY_KEYS = ("height", "bust", "waist", "hip", "inseam")

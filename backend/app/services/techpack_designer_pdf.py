@@ -22,12 +22,13 @@ from app.services.techpack_compatibility import (
     material_contradiction,
 )
 from app.services.techpack_designer_spec import (
-    FORMAL_DRESS_QC,
     GRADE_SIZES,
+    detect_closure_family,
     enrich_piece_for_designer_pdf,
     finished_pom_rows,
     formal_dress_bom,
     is_formal_dress_category,
+    qc_for_piece,
 )
 from app.services.techpack_tailor_ready import (
     annotate_flat_callouts,
@@ -594,20 +595,25 @@ def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: di
     story.append(Paragraph(f"Points of measure — {heading}", styles["h2"]))
     story.append(
         Paragraph(
-            f"Finished-garment POMs ({units}), measured flat. Sample size <b>{sample_size or '—'}</b>. "
-            "Half measurements edge-to-edge unless noted full circumference. "
-            f"<b>Proposed grades</b> ({', '.join(GRADE_SIZES)}) are proportional estimates from the "
-            "sample base for pattern development — <b>not</b> sealed production grades until sample is approved.",
+            f"Finished-garment POMs ({units}). Sample size <b>{sample_size or '—'}</b>. "
+            "<b>Circumference POMs (bust/waist/hip/hem) are FULL circumference</b> "
+            "(≈ body + ease). Sample-room flat check = edge-to-edge ×2. "
+            "Depth/length POMs (neckline depth, slit, wrap overlap, overlay, sash) are single lengths — not ×2. "
+            f"<b>Proposed grades</b> ({', '.join(GRADE_SIZES)}) are unverified until sample is sealed. "
+            "Empty design-specific POMs are listed as missing — do not invent them when cutting.",
             styles["muted"],
         )
     )
     rows = graded_pom_rows(piece, sample_size=sample_size or "M")
+    circ_keys = {"chest_bust", "waist", "hip", "hem", "thigh", "leg_opening", "armhole", "cuff", "knee"}
     header = [
         Paragraph("<b>Code</b>", styles["small"]),
         Paragraph("<b>POM</b>", styles["small"]),
-        Paragraph("<b>How to measure</b>", styles["small"]),
-        Paragraph(f"<b>Base ({sample_size or 'sample'})</b>", styles["small"]),
+        Paragraph("<b>Basis</b>", styles["small"]),
+        Paragraph(f"<b>Full ({sample_size or 'sample'})</b>", styles["small"]),
+        Paragraph("<b>Flat ½</b>", styles["small"]),
         Paragraph("<b>Tol</b>", styles["small"]),
+        Paragraph("<b>How / status</b>", styles["small"]),
     ]
     for sz in GRADE_SIZES:
         header.append(Paragraph(f"<b>{sz}</b>", styles["small"]))
@@ -621,35 +627,48 @@ def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: di
         )
     for row in rows:
         val = row["value"]
+        key = str(row.get("key") or "")
+        is_circ = key in circ_keys
         if val is None or val == "":
-            base_txt = "—"
-        elif isinstance(val, float):
-            base_txt = f"{val:g}"
+            base_txt = "MISSING"
+            half_txt = "—"
+        elif isinstance(val, (int, float)):
+            base_txt = f"{float(val):g}"
+            half_txt = f"{float(val) / 2.0:g}" if is_circ else "n/a"
         else:
             base_txt = str(val)
+            half_txt = "—"
         review = str(row.get("review_status") or "")
-        if review == "needs_review":
+        if review in {"needs_review", "proposed", "open"} and (val is None or val == ""):
+            base_txt = "MISSING"
+        elif review == "needs_review":
             base_txt = f"{base_txt} · REVIEW"
         how = str(row["how_to"])
-        if len(how) > 90:
-            how = how[:87] + "…"
+        if len(how) > 70:
+            how = how[:67] + "…"
+        status = str(row.get("source") or "")
+        how_status = f"{how} [{status}]" if status else how
         cells = [
             Paragraph(str(row["code"]), styles["small"]),
             Paragraph(str(row["label"]), styles["small"]),
-            Paragraph(how, styles["small"]),
+            Paragraph("FULL circ" if is_circ else "length/depth", styles["small"]),
             Paragraph(base_txt, styles["small"]),
+            Paragraph(half_txt, styles["small"]),
             Paragraph(f"±{row['tolerance_cm']:g}", styles["small"]),
+            Paragraph(how_status, styles["small"]),
         ]
         grades = row.get("grades") if isinstance(row.get("grades"), dict) else {}
         for sz in GRADE_SIZES:
             g = grades.get(sz)
             cells.append(Paragraph("—" if g is None else f"{g:g}", styles["small"]))
         data.append(cells)
-    widths = [10 * mm, 26 * mm, 48 * mm, 18 * mm, 12 * mm] + [11 * mm] * len(GRADE_SIZES)
+    widths = [9 * mm, 22 * mm, 14 * mm, 16 * mm, 12 * mm, 10 * mm, 36 * mm] + [
+        9 * mm
+    ] * len(GRADE_SIZES)
     story.append(_table(data, widths, styles))
     story.append(
         Paragraph(
-            "Grade rule (proposed): circumference/half-span ≈ ±1.0 cm per size step from sample; "
+            "Grade rule (proposed): full-circumference POMs ≈ ±2.0 cm per size step from sample; "
             "length ≈ ±0.7 cm; narrow POMs ≈ ±0.35 cm. Adjust after fit sample.",
             styles["muted"],
         )
@@ -664,10 +683,26 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     cat = str(piece.get("category") or "other")
     color = str(piece.get("color_hint") or "")
     story.append(Paragraph(f"Bill of materials — {heading}", styles["h2"]))
+    closure_family = detect_closure_family(piece)
+    if closure_family == "wrap":
+        story.append(
+            Paragraph(
+                "<b>Closure family: WRAP / TIE</b> — no invisible zipper is assumed. "
+                "Any zip row would be a designer-confirmed change, not a default.",
+                styles["warn"],
+            )
+        )
+    elif closure_family == "unknown":
+        story.append(
+            Paragraph(
+                "<b>Closure UNRESOLVED</b> — zip vs wrap/tie vs pull-on must be confirmed before sample cut.",
+                styles["warn"],
+            )
+        )
     story.append(
         Paragraph(
-            "List every material and trim down to thread and polybag. "
-            "Color codes: Pantone TCX, supplier number, or lab-dip reference — never color name alone for production.",
+            "Materials marked PROPOSED / UNRESOLVED are suggestions until fibre + GSM are locked. "
+            "Color codes: Pantone TCX / lab dip — never color name alone for production.",
             styles["muted"],
         )
     )
@@ -708,7 +743,10 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     bom = piece.get("bom") if isinstance(piece.get("bom"), list) else []
     if not bom:
         bom = (
-            formal_dress_bom(color_hint=color)
+            formal_dress_bom(
+                color_hint=color,
+                closure_family=detect_closure_family(piece),
+            )
             if is_formal_dress_category(cat)
             else default_bom(cat, color_hint=color)
         )
@@ -1257,9 +1295,11 @@ def build_story_v4_designer(
     # Sample QC checklist here (with care/labels) — never alone under cutting.
     formal_pieces = [p for p in pieces if is_formal_dress_category(str(p.get("category") or ""))]
     if formal_pieces:
-        story.append(Paragraph("Sample QC checklist", styles["h3"]))
-        qc_left = FORMAL_DRESS_QC[: (len(FORMAL_DRESS_QC) + 1) // 2]
-        qc_right = FORMAL_DRESS_QC[(len(FORMAL_DRESS_QC) + 1) // 2 :]
+        story.append(Paragraph("Sample QC checklist (design-specific)", styles["h3"]))
+        # Use first formal piece's closure family so wrap dresses don't get zip QC.
+        qc_items = qc_for_piece(formal_pieces[0])
+        qc_left = qc_items[: (len(qc_items) + 1) // 2]
+        qc_right = qc_items[(len(qc_items) + 1) // 2 :]
         left_tbl = Table(
             [[Paragraph(f"☐ {item}", styles["small"])] for item in qc_left],
             colWidths=[88 * mm],

@@ -33,6 +33,14 @@ POM_CODES: dict[str, str] = {
     "cuff": "R",
     "opening": "S",
     "knee": "T",
+    # Design-specific dress callouts (full lengths / depths — not circ).
+    "wrap_overlap": "U",
+    "slit_start": "V",
+    "overlay_length": "W",
+    "sash_width": "X",
+    "sash_length": "Y",
+    "hem_high": "Z1",
+    "hem_low": "Z2",
 }
 
 # Default finished tolerances (cm) when designer has not set pom_tolerances.
@@ -57,33 +65,57 @@ DEFAULT_TOLERANCE_CM: dict[str, float] = {
     "cuff": 0.5,
     "opening": 0.5,
     "knee": 0.7,
+    "wrap_overlap": 0.5,
+    "slit_start": 1.0,
+    "overlay_length": 1.0,
+    "sash_width": 0.3,
+    "sash_length": 1.5,
+    "hem_high": 1.0,
+    "hem_low": 1.0,
 }
 
 GRADE_SIZES = ("XS", "S", "M", "L", "XL", "2XL")
 
-# Factory-facing how-to text (GarmentSpec / atelier flat measure). Overrides body
-# circumference wording so the PDF matches how sample rooms measure dresses.
+# How-to MUST match stored values: finished circ POMs are FULL circumference (body + ease).
+# Flat half = stored value ÷ 2 — never store half and label as full (or vice versa).
 DRESS_POM_HOW_TO: dict[str, str] = {
     "chest_bust": (
-        "1/2 bust — lay flat; side seam to side seam, 2.5 cm (1 in) below the armhole."
+        "FULL bust circumference (cm). Stored value ≈ body bust + ease. "
+        "Sample-room flat check: lay garment flat, side seam to side seam 2.5 cm below armhole, "
+        "then ×2 must equal this number (±tol)."
     ),
     "waist": (
-        "1/2 waist — straight across at the waist seam, or at the narrowest point if no seam."
+        "FULL waist circumference (cm) at waist seam / narrowest. "
+        "Flat check: edge-to-edge ×2 = this value."
     ),
     "hip": (
-        "1/2 hip — straight across at the stated distance below the waist (e.g. 20 cm)."
+        "FULL hip circumference (cm) at fullest seat / stated distance below waist. "
+        "Flat check: edge-to-edge ×2 = this value."
     ),
-    "garment_length": "Length from HPS — high point of shoulder straight down to hem edge.",
+    "garment_length": "Length from HPS — high point of shoulder straight down to longest hem edge.",
     "skirt_length": "Skirt length — waist seam (or intended waist) straight down to hem.",
-    "shoulder_width": "Strap / shoulder width — across shoulder or strap at the shoulder seam.",
-    "armhole": "Armhole, straight — shoulder point to underarm point in a straight line.",
-    "hem": "1/2 sweep — along the hem edge side seam to side seam, following the curve.",
+    "shoulder_width": "Across-back shoulder / strap width at shoulder seam (NOT a circumference).",
+    "armhole": "Armhole circumference along the armhole seam (full).",
+    "hem": (
+        "FULL hem / sweep circumference. Flat check: along hem edge side-to-side ×2 "
+        "(or follow curve and ×2)."
+    ),
     "sleeve_length": "Sleeve length — shoulder seam to cuff / hem along outer sleeve.",
-    "neckline": "Neckline depth — HPS or CB/CF reference down to neckline edge (state which).",
-    "opening": "Opening length — CB or SS zip / placket opening, including stop.",
+    "neckline": (
+        "Neckline DEPTH (cm) — HPS (or stated CF/CB ref) straight down to neckline edge. "
+        "Not a circumference. State reference point in notes."
+    ),
+    "opening": "Opening / slit length (cm) — start point to hem, or zip placket length if zip used.",
+    "wrap_overlap": "Wrap overlap at waist (cm) — CF underlap amount when wrapped closed.",
+    "slit_start": "Slit start from waist (cm) — waist seam down to top of thigh slit.",
+    "overlay_length": "Asymmetric overlay / drape length (cm) — attach point to free hem tip.",
+    "sash_width": "Waist sash / tie finished width (cm).",
+    "sash_length": "Waist sash / tie total length (cm), including both tails.",
+    "hem_high": "Higher hem length from HPS (cm) when hem is asymmetric.",
+    "hem_low": "Lower / longest hem length from HPS (cm) when hem is asymmetric.",
 }
 
-# Numbered callout legend for formal dress flats (designer annotates on AI flat).
+# Numbered callout legend for zip-closure formal dresses.
 FORMAL_DRESS_CALLOUTS: list[tuple[str, str]] = [
     ("1", "Neckline finish (facing / binding / lining bag-out)"),
     ("2", "Bust dart, princess, or empire seam"),
@@ -97,6 +129,19 @@ FORMAL_DRESS_CALLOUTS: list[tuple[str, str]] = [
     ("10", "Special: slit, train, bustle points, beading zone"),
 ]
 
+WRAP_DRESS_CALLOUTS: list[tuple[str, str]] = [
+    ("1", "Deep-V / wrap neckline finish + stay tape"),
+    ("2", "Wrap crossover / underlap at bust"),
+    ("3", "Waist sash / tie anchorage"),
+    ("4", "Side seam / underarm join (no CB zip assumed)"),
+    ("5", "Sleeve set / armhole finish"),
+    ("6", "Waist seam or wrap continuous bodice"),
+    ("7", "Thigh slit reinforcement + underlap"),
+    ("8", "Asymmetric draped overlay attach + free edges"),
+    ("9", "Hem finishes (high vs low / overlay tip)"),
+    ("10", "Lining / facing hang (if used)"),
+]
+
 FORMAL_DRESS_QC: list[str] = [
     "Neckline sits clean on form without gaping; depth matches Magic reference.",
     "Bust apex / princess balance left–right; no twisting at CF.",
@@ -107,6 +152,19 @@ FORMAL_DRESS_QC: list[str] = [
     "If train/slit: length and start height match design intent; bustle points marked.",
     "Surface (sequin / lace / metallic): placement zones match callouts; no random fill.",
     "Press quality appropriate to fabric (cloth on satin/metallic; no shine marks).",
+    "Labels, hanger loops, and care content present before sample ship.",
+]
+
+WRAP_DRESS_QC: list[str] = [
+    "Wrap overlap at waist matches specified depth; underlap covers when walking.",
+    "Deep-V neckline stable — no gaping; stay tape present; depth matches Magic.",
+    "Waist sash / tie secures wrap; knot/bow position matches design intent.",
+    "Thigh slit start height and walk ease match Magic; reinforcement clean.",
+    "Asymmetric overlay / drape hangs balanced; free edges finished; tip length confirmed.",
+    "Sleeve set smooth; armhole no gaping; cuff/wrist length matches sample.",
+    "High vs low hem lengths match design (not accidental uneven hem).",
+    "No zipper QC unless a zip is an explicit designer-confirmed closure.",
+    "Press quality appropriate to fabric; no shine marks on crepe/satin.",
     "Labels, hanger loops, and care content present before sample ship.",
 ]
 
@@ -205,9 +263,57 @@ FORMAL_DRESS_CONSTRUCTION: list[dict[str, Any]] = [
 ]
 
 
-def formal_dress_bom(*, color_hint: str = "") -> list[dict[str, Any]]:
+def detect_closure_family(piece: dict[str, Any]) -> str:
+    """Return 'wrap' | 'zip' | 'unknown' from closures + AI analysis text."""
+    closures = piece.get("closures") if isinstance(piece.get("closures"), dict) else {}
+    blob_parts = [
+        str(closures.get("type") or ""),
+        str(closures.get("display_type") or ""),
+        str(closures.get("display") or ""),
+        str(piece.get("label") or ""),
+    ]
+    illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
+    analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+    if isinstance(analysis, dict):
+        blob_parts.append(str(analysis.get("closure_visible") or ""))
+        blob_parts.append(str(analysis.get("silhouette") or ""))
+        blob_parts.append(str(analysis.get("neckline") or ""))
+        feats = analysis.get("distinctive_features") if isinstance(analysis.get("distinctive_features"), list) else []
+        blob_parts.extend(str(f) for f in feats[:12])
+        blob_parts.append(str(analysis.get("back_construction_proposal") or ""))
+    blob = " ".join(blob_parts).lower()
+    wrap_tokens = ("wrap", "sash", "tie", "crossover", "overlap", "kimono")
+    zip_tokens = ("zip", "zipper", "invisible zip", "hook and eye at zip")
+    has_wrap = any(t in blob for t in wrap_tokens)
+    denies_zip = any(
+        t in blob
+        for t in (
+            "no closure",
+            "no zip",
+            "no zipper",
+            "without zip",
+            "no visible zipper",
+            "no visible closure",
+            "no closure hardware",
+        )
+    )
+    # Zip tokens in analysis "closure_visible" only — ignore BOM boilerplate not in blob.
+    has_zip = any(t in blob for t in zip_tokens) and not denies_zip
+    if has_wrap and (denies_zip or not has_zip):
+        return "wrap"
+    if has_zip and not has_wrap:
+        return "zip"
+    if has_wrap:
+        return "wrap"
+    if has_zip:
+        return "zip"
+    return "unknown"
+
+
+def formal_dress_bom(*, color_hint: str = "", closure_family: str = "unknown") -> list[dict[str, Any]]:
     shell = f"{color_hint} shell fabric".strip() if color_hint else "Shell fabric (fashion face)"
-    return [
+    proposed = "PROPOSED / UNRESOLVED — confirm fibre, GSM, hand before sample cut."
+    rows: list[dict[str, Any]] = [
         {
             "item": shell,
             "description": "Fashion face — confirm fibre, weight (GSM), hand, stretch",
@@ -217,55 +323,35 @@ def formal_dress_bom(*, color_hint: str = "") -> list[dict[str, Any]]:
             "color_code": color_hint or "lab dip TBD",
             "supplier_ref": "TBD",
             "source": "estimate",
-            "notes": "Do not invent composition — confirm before sample.",
+            "review_status": "needs_review",
+            "notes": proposed,
         },
         {
             "item": "Lining",
-            "description": "Acetate / cupro / poly lining suitable for formalwear",
+            "description": "Acetate / cupro / poly lining — confirm if required",
             "qty": "TBD",
             "unit": "m",
-            "placement": "Bodice + skirt (hang shorter than shell)",
+            "placement": "Bodice + skirt (hang shorter than shell) if used",
             "color_code": "match or nude",
             "supplier_ref": "TBD",
             "source": "estimate",
-            "notes": "Required for opaque evening / bridal shells unless designer waives.",
+            "review_status": "needs_review",
+            "notes": "PROPOSED — waive only if designer confirms unlined shell.",
         },
         {
             "item": "Fusing / interfacing",
-            "description": "Lightweight fusible for facings / zip shield",
+            "description": "Lightweight fusible for facings / stabilizers",
             "qty": "TBD",
             "unit": "m",
-            "placement": "Neck facing, zip tape, strap stabilizers",
+            "placement": "Neck facing, wrap edges, strap stabilizers",
             "color_code": "—",
             "supplier_ref": "TBD",
             "source": "estimate",
-            "notes": "",
-        },
-        {
-            "item": "Invisible zipper",
-            "description": "Concealed zip — length to match sample size opening",
-            "qty": "1",
-            "unit": "pcs",
-            "placement": "Center back (default) or side seam if designed",
-            "color_code": "match shell",
-            "supplier_ref": "TBD",
-            "source": "estimate",
-            "notes": "Confirm length after sample size locked.",
-        },
-        {
-            "item": "Hook and eye",
-            "description": "Metal / covered",
-            "qty": "1",
-            "unit": "set",
-            "placement": "Top of zipper",
-            "color_code": "match",
-            "supplier_ref": "TBD",
-            "source": "estimate",
-            "notes": "",
+            "notes": "PROPOSED",
         },
         {
             "item": "Sewing thread",
-            "description": "Poly / silk match — specialty metallic if shell is metallic",
+            "description": "Poly / silk match",
             "qty": "1",
             "unit": "cone",
             "placement": "All seams",
@@ -273,6 +359,17 @@ def formal_dress_bom(*, color_hint: str = "") -> list[dict[str, Any]]:
             "supplier_ref": "TBD",
             "source": "estimate",
             "notes": "",
+        },
+        {
+            "item": "Stay tape / clear elastic",
+            "description": "Stabilize neckline / wrap edges / slit",
+            "qty": "TBD",
+            "unit": "m",
+            "placement": "Bias edges, V neckline, slit top",
+            "color_code": "—",
+            "supplier_ref": "TBD",
+            "source": "estimate",
+            "notes": "Critical on bias / deep-V wrap necklines.",
         },
         {
             "item": "Hanger loops",
@@ -287,7 +384,7 @@ def formal_dress_bom(*, color_hint: str = "") -> list[dict[str, Any]]:
         },
         {
             "item": "Main / size / care labels",
-            "description": "Brand + size + fibre/care (ISO 3758 symbols)",
+            "description": "Brand + size + fibre/care (ISO 3758) — fibre TBD until material locked",
             "qty": "1",
             "unit": "set",
             "placement": "CB lining neck / side seam",
@@ -318,32 +415,102 @@ def formal_dress_bom(*, color_hint: str = "") -> list[dict[str, Any]]:
             "source": "estimate",
             "notes": "",
         },
-        {
-            "item": "Bust cups / support (optional)",
-            "description": "Sew-in or foam cups / soft boning if design requires",
-            "qty": "TBD",
-            "unit": "set",
-            "placement": "Bodice lining as designed",
-            "color_code": "nude / match",
-            "supplier_ref": "TBD",
-            "source": "estimate",
-            "notes": "Omit if design is soft / unlined support-free.",
-        },
-        {
-            "item": "Stay tape / clear elastic",
-            "description": "Stabilize neckline / strap / zipper opening",
-            "qty": "TBD",
-            "unit": "m",
-            "placement": "Bias edges and strap joins",
-            "color_code": "—",
-            "supplier_ref": "TBD",
-            "source": "estimate",
-            "notes": "Critical on bias evening necklines.",
-        },
     ]
+    if closure_family == "wrap":
+        rows[2:2] = [
+            {
+                "item": "Self-fabric waist sash / tie",
+                "description": "Width + length TBD — match shell; finish ends",
+                "qty": "1",
+                "unit": "pcs",
+                "placement": "Waist wrap anchorage",
+                "color_code": "match shell",
+                "supplier_ref": "TBD",
+                "source": "estimate",
+                "review_status": "needs_review",
+                "notes": "PROPOSED from wrap design — confirm dimensions (POMs sash_width / sash_length).",
+            },
+            {
+                "item": "Optional inner hook / snap (designer decision)",
+                "description": "NOT confirmed — only if wrap needs hidden security",
+                "qty": "TBD",
+                "unit": "set",
+                "placement": "Wrap underlap at bust/waist — if approved",
+                "color_code": "match",
+                "supplier_ref": "TBD",
+                "source": "estimate",
+                "review_status": "needs_review",
+                "notes": "DESIGN DECISION REQUIRED — do not treat as confirmed hardware.",
+            },
+        ]
+        # Explicit: no invisible zipper row for wrap family.
+    elif closure_family == "zip":
+        rows[2:2] = [
+            {
+                "item": "Invisible zipper",
+                "description": "Concealed zip — length to match sample size opening",
+                "qty": "1",
+                "unit": "pcs",
+                "placement": "Center back (default) or side seam if designed",
+                "color_code": "match shell",
+                "supplier_ref": "TBD",
+                "source": "estimate",
+                "notes": "Confirm length after sample size locked.",
+            },
+            {
+                "item": "Hook and eye",
+                "description": "Metal / covered",
+                "qty": "1",
+                "unit": "set",
+                "placement": "Top of zipper",
+                "color_code": "match",
+                "supplier_ref": "TBD",
+                "source": "estimate",
+                "notes": "",
+            },
+        ]
+    else:
+        rows.insert(
+            2,
+            {
+                "item": "Closure (UNRESOLVED)",
+                "description": "Zip vs wrap/tie vs pull-on — designer must choose before sample",
+                "qty": "TBD",
+                "unit": "—",
+                "placement": "TBD",
+                "color_code": "—",
+                "supplier_ref": "TBD",
+                "source": "estimate",
+                "review_status": "needs_review",
+                "notes": "DESIGN DECISION REQUIRED — do not cut until closure is confirmed.",
+            },
+        )
+    return rows
 
 
-def formal_dress_pattern_inventory() -> list[dict[str, Any]]:
+def scrub_conflicting_closure_bom(bom: list[Any], *, closure_family: str) -> list[dict[str, Any]]:
+    """Drop zipper rows when wrap is detected; mark residual conflicts for review."""
+    out: list[dict[str, Any]] = []
+    for row in bom:
+        if not isinstance(row, dict):
+            continue
+        item = str(row.get("item") or row.get("name") or "").lower()
+        desc = str(row.get("description") or "").lower()
+        blob = f"{item} {desc}"
+        is_zip = "zip" in blob or "zipper" in blob
+        is_hook_at_zip = "hook" in blob and "eye" in blob and ("zip" in blob or "zipper" in (row.get("placement") or "").lower())
+        if closure_family == "wrap" and (is_zip or is_hook_at_zip):
+            # Do not keep confirmed-looking zip qty on a wrap dress.
+            continue
+        cleaned = dict(row)
+        if closure_family == "wrap" and "zip" in str(cleaned.get("placement") or "").lower():
+            cleaned["placement"] = "N/A — wrap closure (no zip)"
+            cleaned["review_status"] = "needs_review"
+        out.append(cleaned)
+    return out
+
+
+def formal_dress_pattern_inventory(*, closure_family: str = "unknown") -> list[dict[str, Any]]:
     base = {
         "cut_qty": 1,
         "grainline": "straight",
@@ -351,16 +518,91 @@ def formal_dress_pattern_inventory() -> list[dict[str, Any]]:
         "seam_allowance_cm": 1.0,
         "source": "estimate",
         "review_state": "proposed_unverified",
+        "notes": "ILLUSTRATIVE INVENTORY — not a print-to-cut sewing pattern.",
     }
-    return [
-        {**base, "id": "DR-F", "name": "Front shell", "fabric": "shell", "cut_qty": 1, "notes": "Include neckline / dart shaping as designed"},
-        {**base, "id": "DR-B", "name": "Back shell", "fabric": "shell", "cut_qty": 1, "notes": "CB zip seam if applicable"},
+    if closure_family == "wrap":
+        return [
+            {
+                **base,
+                "id": "WR-LF",
+                "name": "Left wrap front",
+                "fabric": "shell",
+                "cut_qty": 1,
+                "notes": "Deep-V wrap panel + underlap — NOT TO SCALE inventory",
+            },
+            {
+                **base,
+                "id": "WR-RF",
+                "name": "Right wrap front / underlayer",
+                "fabric": "shell",
+                "cut_qty": 1,
+                "notes": "Supports wrap overlap — NOT TO SCALE inventory",
+            },
+            {
+                **base,
+                "id": "WR-B",
+                "name": "Back shell",
+                "fabric": "shell",
+                "cut_qty": 1,
+                "fold": "none",
+                "notes": (
+                    "PROPOSED back — do NOT cut on fold if a CB seam is later approved; "
+                    "current pack assumes NO CB zipper. Designer must confirm."
+                ),
+            },
+            {
+                **base,
+                "id": "WR-SK",
+                "name": "Skirt / overlay panels",
+                "fabric": "shell",
+                "cut_qty": "TBD",
+                "notes": "Slit + asymmetric drape panels — patternmaker drafts from POMs",
+            },
+            {
+                **base,
+                "id": "WR-SL",
+                "name": "Sleeve",
+                "fabric": "shell",
+                "cut_qty": 2,
+                "notes": "Omit if sleeveless",
+            },
+            {
+                **base,
+                "id": "WR-SASH",
+                "name": "Waist sash / tie",
+                "fabric": "shell",
+                "cut_qty": 1,
+                "notes": "From sash_width × sash_length POMs when filled",
+            },
+            {
+                **base,
+                "id": "WR-FC",
+                "name": "Neck / wrap facing",
+                "fabric": "shell or lining",
+                "cut_qty": 1,
+                "notes": "Stabilize deep-V; fuse lightly",
+            },
+        ]
+    rows = [
+        {**base, "id": "DR-F", "name": "Front shell", "fabric": "shell", "cut_qty": 1, "notes": "Include neckline / dart shaping as designed — NOT TO SCALE"},
+        {**base, "id": "DR-B", "name": "Back shell", "fabric": "shell", "cut_qty": 1, "notes": "CB seam only if zip confirmed — NOT cut-on-fold with zip"},
         {**base, "id": "DR-SL", "name": "Sleeve (if sleeved)", "fabric": "shell", "cut_qty": 2, "notes": "Omit if sleeveless"},
         {**base, "id": "DR-LF", "name": "Front lining", "fabric": "lining", "cut_qty": 1, "notes": "1–2 cm shorter at hem"},
-        {**base, "id": "DR-LB", "name": "Back lining", "fabric": "lining", "cut_qty": 1, "notes": "Zip shield / facing as needed"},
+        {**base, "id": "DR-LB", "name": "Back lining", "fabric": "lining", "cut_qty": 1, "notes": "Facing as needed"},
         {**base, "id": "DR-FC", "name": "Neck / armhole facing", "fabric": "shell or lining", "cut_qty": 1, "notes": "Fuse lightly"},
-        {**base, "id": "DR-ZS", "name": "Zipper shield", "fabric": "lining", "cut_qty": 1, "notes": "Optional"},
     ]
+    if closure_family == "zip":
+        rows.append(
+            {
+                **base,
+                "id": "DR-ZS",
+                "name": "Zipper shield",
+                "fabric": "lining",
+                "cut_qty": 1,
+                "notes": "Only when CB/SS invisible zip is confirmed",
+            }
+        )
+    return rows
 
 
 def pom_code(key: str) -> str:
@@ -434,10 +676,29 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
         out["illustrations"] = {**illust, "analysis": analysis}
     cat = str(out.get("category") or "other")
     color = str(out.get("color_hint") or "")
+    closure_family = detect_closure_family(out)
+    out["_closure_family"] = closure_family
     if is_formal_dress_category(cat):
         bom = out.get("bom") if isinstance(out.get("bom"), list) else []
         if not bom:
-            out["bom"] = formal_dress_bom(color_hint=color)
+            out["bom"] = formal_dress_bom(color_hint=color, closure_family=closure_family)
+        else:
+            # Scrub zip rows that contradict a detected wrap (legacy estimate BOM).
+            out["bom"] = scrub_conflicting_closure_bom(list(bom), closure_family=closure_family)
+            if closure_family == "wrap" and not any(
+                "sash" in str(r.get("item") or "").lower() or "tie" in str(r.get("item") or "").lower()
+                for r in out["bom"]
+                if isinstance(r, dict)
+            ):
+                # Ensure wrap hardware decision row exists.
+                sash_rows = [
+                    r
+                    for r in formal_dress_bom(color_hint=color, closure_family="wrap")
+                    if "sash" in str(r.get("item") or "").lower()
+                    or "hook / snap" in str(r.get("item") or "").lower()
+                    or "closure (unresolved)" in str(r.get("item") or "").lower()
+                ]
+                out["bom"] = list(out["bom"]) + sash_rows
         steps = out.get("construction_steps") if isinstance(out.get("construction_steps"), list) else []
         ai_sourced = any(
             isinstance(s, dict)
@@ -449,12 +710,67 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
             pass
         elif not steps:
             out["construction_steps"] = list(FORMAL_DRESS_CONSTRUCTION)
-        # Prefer richer formal construction when steps are plain strings / short defaults.
         elif steps and all(
             isinstance(s, dict) and not s.get("stitch_type") for s in steps
         ):
             out["construction_steps"] = list(FORMAL_DRESS_CONSTRUCTION)
         patterns = out.get("pattern_pieces") if isinstance(out.get("pattern_pieces"), list) else []
         if not patterns:
-            out["pattern_pieces"] = formal_dress_pattern_inventory()
+            out["pattern_pieces"] = formal_dress_pattern_inventory(closure_family=closure_family)
+        else:
+            # Flag cut-on-fold + zip conflicts on existing inventory.
+            flagged: list[dict[str, Any]] = []
+            for row in patterns:
+                if not isinstance(row, dict):
+                    continue
+                r = dict(row)
+                fold = str(r.get("fold") or "").lower()
+                notes = str(r.get("notes") or "")
+                if closure_family == "wrap" and ("zip" in notes.lower() or "zipper" in notes.lower()):
+                    r["notes"] = (
+                        notes + " · CONFLICT: wrap closure — ignore zip seam notes until designer confirms."
+                    ).strip(" ·")
+                    r["review_state"] = "needs_review"
+                if closure_family == "zip" and "fold" in fold and "cb" in (fold + notes.lower()):
+                    r["notes"] = (
+                        notes
+                        + " · CONFLICT: CB zip cannot be cut on fold — patternmaker must draft a CB seam."
+                    ).strip(" ·")
+                    r["review_state"] = "needs_review"
+                flagged.append(r)
+            out["pattern_pieces"] = flagged
+        # Ensure design-specific POM skeleton keys exist (empty until AI/designer fills).
+        finished = out.get("finished_measurements") if isinstance(out.get("finished_measurements"), dict) else {}
+        for key in (
+            "wrap_overlap",
+            "slit_start",
+            "overlay_length",
+            "sash_width",
+            "sash_length",
+            "hem_high",
+            "hem_low",
+        ):
+            if key not in finished:
+                finished[key] = {
+                    "value": None,
+                    "unit": "cm",
+                    "source": "empty",
+                    "confidence": "unknown",
+                    "review_status": "open",
+                    "assumptions": ["Missing design-specific POM — required for faithful sample"],
+                    "note": "MISSING — designer / AI should fill before sample cut",
+                }
+        out["finished_measurements"] = finished
     return out
+
+
+def callouts_for_piece(piece: dict[str, Any]) -> list[tuple[str, str]]:
+    if detect_closure_family(piece) == "wrap":
+        return list(WRAP_DRESS_CALLOUTS)
+    return list(FORMAL_DRESS_CALLOUTS)
+
+
+def qc_for_piece(piece: dict[str, Any]) -> list[str]:
+    if detect_closure_family(piece) == "wrap":
+        return list(WRAP_DRESS_QC)
+    return list(FORMAL_DRESS_QC)

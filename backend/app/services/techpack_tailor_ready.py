@@ -17,7 +17,6 @@ from reportlab.lib import colors
 from reportlab.lib.units import mm
 
 from app.services.techpack_designer_spec import (
-    FORMAL_DRESS_CALLOUTS,
     GRADE_SIZES,
     finished_pom_rows,
     is_formal_dress_category,
@@ -33,18 +32,18 @@ GRADE_STEP: dict[str, int] = {
     "2XL": 3,
 }
 
-# Per-step grade (cm) by measurement family — half measurements for circs.
+# Per-step grade (cm) — stored circ POMs are FULL circumference.
 GRADE_DELTA_CM: dict[str, float] = {
-    # Circumference / half-span
-    "chest_bust": 1.0,
-    "waist": 1.0,
-    "hip": 1.0,
-    "hem": 1.2,
-    "thigh": 0.7,
-    "leg_opening": 0.5,
-    "waistband": 1.0,
-    "cuff": 0.4,
-    "knee": 0.6,
+    # Full circumference
+    "chest_bust": 2.0,
+    "waist": 2.0,
+    "hip": 2.0,
+    "hem": 2.4,
+    "thigh": 1.4,
+    "leg_opening": 1.0,
+    "waistband": 0.3,  # height, not circ
+    "cuff": 0.8,
+    "knee": 1.2,
     # Length
     "garment_length": 0.7,
     "skirt_length": 0.7,
@@ -184,9 +183,11 @@ def graded_pom_rows(
 
 def callout_legend_for_piece(piece: dict[str, Any]) -> list[tuple[str, str]]:
     """Numbered construction/design callouts for PDF legend + flat overlay."""
+    from app.services.techpack_designer_spec import callouts_for_piece
+
     cat = str(piece.get("category") or "other")
     if is_formal_dress_category(cat):
-        callouts = list(FORMAL_DRESS_CALLOUTS)
+        callouts = list(callouts_for_piece(piece))
     else:
         callouts = [
             ("1", "Neckline / collar finish"),

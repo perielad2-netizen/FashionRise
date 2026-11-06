@@ -18,10 +18,10 @@ from app.services.techpack_tailor_ready import (
 
 
 def test_grade_value_steps_from_sample():
-    # Sample M / 38: L is +1 step → bust +1.0
+    # Sample M / 38: L is +1 step → full-circ bust +2.0
     assert grade_value(89.0, key="chest_bust", size="M", sample_size="38") == 89.0
-    assert grade_value(89.0, key="chest_bust", size="L", sample_size="38") == 90.0
-    assert grade_value(89.0, key="chest_bust", size="S", sample_size="38") == 88.0
+    assert grade_value(89.0, key="chest_bust", size="L", sample_size="38") == 91.0
+    assert grade_value(89.0, key="chest_bust", size="S", sample_size="38") == 87.0
     assert grade_value(142.0, key="garment_length", size="XL", sample_size="38") == 143.4
 
 
@@ -37,7 +37,7 @@ def test_graded_pom_rows_fill_sizes():
     assert rows
     bust = next(r for r in rows if r["key"] == "chest_bust")
     assert bust["grades"]["M"] == 89.0
-    assert bust["grades"]["L"] == 90.0
+    assert bust["grades"]["L"] == 91.0
     assert bust["grades"]["XS"] is not None
 
 
