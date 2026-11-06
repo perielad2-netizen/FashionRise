@@ -224,8 +224,13 @@
 
 .dockBtn,
 .dockActive {
+  /* Equal footprint — longest label (Brush panel / Full screen) sets the rhythm. */
+  flex: 1 1 calc(33.333% - 6px);
+  min-width: calc(33.333% - 6px);
+  max-width: calc(33.333% - 6px);
+  box-sizing: border-box;
   min-height: 34px;
-  padding: 0 12px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
@@ -235,6 +240,10 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dockActive {
@@ -428,7 +437,10 @@
   .dockBtn,
   .dockActive {
     min-height: 30px;
-    padding: 0 10px;
+    padding: 0 6px;
+    flex: 1 1 calc(33.333% - 4px);
+    min-width: calc(33.333% - 4px);
+    max-width: calc(33.333% - 4px);
   }
 
   .settingsSlot.slotOpen {
