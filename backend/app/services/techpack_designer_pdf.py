@@ -784,7 +784,7 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
                 styles["warn"],
             )
         )
-    story.append(PageBreak())
+    # No forced page break — hardware stays with BOM; construction continues on next natural page.
     return story
 
 
@@ -986,23 +986,7 @@ def _construction_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[An
 
         story.append(_cutting_layout_schematic(cat))
 
-    if is_formal_dress_category(cat):
-        story.append(Paragraph("Sample QC checklist", styles["h3"]))
-        # Two-column compact checklist — avoids a nearly blank orphan page.
-        qc_left = FORMAL_DRESS_QC[: (len(FORMAL_DRESS_QC) + 1) // 2]
-        qc_right = FORMAL_DRESS_QC[(len(FORMAL_DRESS_QC) + 1) // 2 :]
-        left_tbl = Table(
-            [[Paragraph(f"☐ {item}", styles["small"])] for item in qc_left],
-            colWidths=[88 * mm],
-        )
-        right_tbl = Table(
-            [[Paragraph(f"☐ {item}", styles["small"])] for item in qc_right],
-            colWidths=[88 * mm],
-        )
-        qc_table = Table([[left_tbl, right_tbl]], colWidths=[90 * mm, 90 * mm])
-        qc_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-        story.append(qc_table)
-
+    # QC moved to factory close so it never orphans under cutting art.
     story.append(PageBreak())
     return story
 
@@ -1267,9 +1251,26 @@ def build_story_v4_designer(
         story.extend(_bom_page(piece, styles))
         story.extend(_construction_page(piece, styles))
     # Factory close — one continuous section (no sparse colorways/labels-only pages).
-    story.append(Paragraph("Factory close — colorways, labels, readiness", styles["h2"]))
+    story.append(Paragraph("Factory close — colorways, labels, QC, readiness", styles["h2"]))
     story.extend(_colorways_page(pieces, styles))
     story.extend(_labels_packing_page(styles, pieces=pieces))
+    # Sample QC checklist here (with care/labels) — never alone under cutting.
+    formal_pieces = [p for p in pieces if is_formal_dress_category(str(p.get("category") or ""))]
+    if formal_pieces:
+        story.append(Paragraph("Sample QC checklist", styles["h3"]))
+        qc_left = FORMAL_DRESS_QC[: (len(FORMAL_DRESS_QC) + 1) // 2]
+        qc_right = FORMAL_DRESS_QC[(len(FORMAL_DRESS_QC) + 1) // 2 :]
+        left_tbl = Table(
+            [[Paragraph(f"☐ {item}", styles["small"])] for item in qc_left],
+            colWidths=[88 * mm],
+        )
+        right_tbl = Table(
+            [[Paragraph(f"☐ {item}", styles["small"])] for item in qc_right],
+            colWidths=[88 * mm],
+        )
+        qc_table = Table([[left_tbl, right_tbl]], colWidths=[90 * mm, 90 * mm])
+        qc_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        story.append(qc_table)
     story.extend(
         _revision_and_readiness(
             style_code=style_code,
