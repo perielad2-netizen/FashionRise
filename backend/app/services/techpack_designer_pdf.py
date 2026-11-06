@@ -22,13 +22,24 @@ from app.services.techpack_compatibility import (
     material_contradiction,
 )
 from app.services.techpack_designer_spec import (
-    FORMAL_DRESS_CALLOUTS,
     FORMAL_DRESS_QC,
     GRADE_SIZES,
     enrich_piece_for_designer_pdf,
     finished_pom_rows,
     formal_dress_bom,
     is_formal_dress_category,
+)
+from app.services.techpack_tailor_ready import (
+    annotate_flat_callouts,
+    callout_legend_for_piece,
+    care_icons_drawing,
+    care_recommendation,
+    extract_fabric_swatch,
+    graded_pom_rows,
+    hardware_rows,
+    pantone_or_color_code,
+    seam_allowance_standards,
+    thread_spi_defaults,
 )
 from app.services.techpack_flats import (
     default_bom,
@@ -106,7 +117,12 @@ def _compact_kv(rows: list[tuple[str, str]], styles: dict[str, Any], *, width: f
     return t
 
 
-def _fabric_strip(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
+def _fabric_strip(
+    piece: dict[str, Any],
+    styles: dict[str, Any],
+    *,
+    swatch_path: Path | None = None,
+) -> list[Any]:
     """Compact fabric / key-spec strip like industry bodycon / MK spec sheets."""
     analysis = _piece_analysis(piece)
     fab = analysis.get("fabric_estimate") if isinstance(analysis.get("fabric_estimate"), dict) else {}
@@ -129,12 +145,26 @@ def _fabric_strip(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
         ("GSM / hand", f"{shell.get('weight_gsm') or fab.get('gsm_range') or '—'} · {str(shell.get('hand') or fab.get('hand') or '—')[:50]}"),
         ("Drape", str(shell.get("drape") or fab.get("drape") or "—")[:70]),
         ("Opacity", str(shell.get("opacity") or fab.get("opacity") or "—")[:70]),
-        ("Color", str(piece.get("color_hint") or "—")[:40]),
+        ("Color / code", pantone_or_color_code(piece)[:90]),
         ("Fit", str(analysis.get("fit") or "—")[:90]),
     ]
     filtered = [(a, b) for a, b in rows if str(b).strip() and str(b).strip() != "—"]
     out: list[Any] = [Paragraph("Key garment / fabric specs", styles["h3"])]
-    out.append(_compact_kv(filtered, styles, width=180 * mm))
+    kv = _compact_kv(filtered, styles, width=140 * mm if swatch_path else 180 * mm)
+    if swatch_path is not None:
+        swatch = Table(
+            [
+                [Paragraph("<b>Fabric swatch</b> (from Magic look)", styles["small"])],
+                [_look_image(swatch_path, 36 * mm, 36 * mm, styles)],
+                [Paragraph("Confirm fibre / lab dip before cut", styles["muted"])],
+            ],
+            colWidths=[40 * mm],
+        )
+        row = Table([[kv, swatch]], colWidths=[140 * mm, 42 * mm])
+        row.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        out.append(row)
+    else:
+        out.append(kv)
     return out
 
 
@@ -329,7 +359,8 @@ def _cover_page(
         )
 
     if pieces:
-        story.extend(_fabric_strip(pieces[0], styles))
+        swatch = extract_fabric_swatch(front_image or back_image)
+        story.extend(_fabric_strip(pieces[0], styles, swatch_path=swatch))
 
     notes = (v2.get("look_notes") or "").strip()
     skip_notes = (not notes) or notes.lower().startswith("try on person preview")
@@ -342,7 +373,9 @@ def _cover_page(
     warn_n = len(v2.get("warnings") if isinstance(v2.get("warnings"), list) else []) + len(
         collect_compatibility_warnings(v2)
     )
-    footer_bits = ["Style sheet · Flats · POM · BOM · Construction & cutting · Factory close"]
+    footer_bits = [
+        "Tailor pack · Style · Annotated flats · Graded POM · BOM/hardware · Construction & cutting · Care"
+    ]
     if warn_n:
         footer_bits.insert(0, f"{warn_n} review note(s) → readiness (last page)")
     story.append(Paragraph(" · ".join(footer_bits), styles["muted"]))
@@ -424,18 +457,22 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
             )
         )
 
+    callouts = callout_legend_for_piece(piece)
+    # Annotate AI flats with numbered leaders (temp files) so legend maps to drawings.
+    front_ann = annotate_flat_callouts(front_art, callouts, side="left") if front_art else None
+    back_ann = annotate_flat_callouts(back_art, callouts, side="right") if back_art else None
     front_img = (
-        _look_image(front_art, 58 * mm, 78 * mm, styles)
-        if front_art
+        _look_image(front_ann or front_art, 58 * mm, 78 * mm, styles)
+        if (front_ann or front_art)
         else flat_for_category(cat, back=False)
     )
-    if back_art:
+    if back_art or back_ann:
         back_label = (
             "PROPOSED BACK"
             if arts.get("flat_back_proposed") and not arts.get("flat_back")
             else "BACK"
         )
-        back_img = _look_image(back_art, 58 * mm, 78 * mm, styles)
+        back_img = _look_image(back_ann or back_art, 58 * mm, 78 * mm, styles)
     else:
         back_label = "BACK (schematic)"
         back_img = flat_for_category(cat, back=True)
@@ -443,8 +480,8 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     flats_block = Table(
         [
             [
-                Paragraph("<b>FRONT</b>", styles["small"]),
-                Paragraph(f"<b>{back_label}</b>", styles["small"]),
+                Paragraph("<b>FRONT — annotated</b>", styles["small"]),
+                Paragraph(f"<b>{back_label} — annotated</b>", styles["small"]),
             ],
             [front_img, back_img],
         ],
@@ -452,31 +489,16 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     )
     flats_block.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
 
-    # Right-rail callout / POM legend (industry spec-sheet density).
     legend_rows: list[list[Any]] = [
         [
             Paragraph("<b>#</b>", styles["small"]),
             Paragraph("<b>Callout / POM point</b>", styles["small"]),
         ]
     ]
-    callouts = list(FORMAL_DRESS_CALLOUTS) if is_formal_dress_category(cat) else [
-        ("1", "Neckline / collar finish"),
-        ("2", "Shoulder / armhole"),
-        ("3", "Side seam / closure"),
-        ("4", "Hem finish"),
-        ("5", "Special feature (slit / pocket / trim)"),
-    ]
-    # Append distinctive AI features as extra callouts when present.
-    features = analysis.get("distinctive_features") if isinstance(analysis.get("distinctive_features"), list) else []
-    extra_n = len(callouts)
-    for feat in features[:6]:
-        extra_n += 1
-        callouts.append((str(extra_n), str(feat)[:90]))
     for num, label in callouts:
         legend_rows.append(
             [Paragraph(str(num), styles["small"]), Paragraph(str(label)[:110], styles["small"])]
         )
-    # POM codes quick reference
     pom_bits = []
     for row in finished_pom_rows(piece)[:10]:
         val = row.get("value")
@@ -486,12 +508,21 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     legend_cells: list[list[Any]] = [
         [Paragraph("<b>Callout / POM legend</b>", styles["small"])],
         [_table(legend_rows, [8 * mm, 40 * mm], styles)],
+        [
+            Paragraph(
+                "Red #s on flats are approximate leaders for sample room — "
+                "patternmaker confirms placement.",
+                styles["muted"],
+            )
+        ],
     ]
     if pom_bits:
         legend_cells.append([Paragraph("<b>Base POM values</b>", styles["small"])])
         legend_cells.append([Paragraph(" · ".join(pom_bits)[:420], styles["small"])])
     legend_block = Table(legend_cells, colWidths=[52 * mm])
-    legend_block.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+    legend_block.setStyle(
+        TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)])
+    )
 
     rail = Table([[flats_block, legend_block]], colWidths=[134 * mm, 52 * mm])
     rail.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
@@ -557,7 +588,7 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
 
 
 def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: dict[str, Any]) -> list[Any]:
-    """Dense POM table — base + tol only (no empty grade dash columns that waste width)."""
+    """Tailor-ready POM table with proposed XS–2XL grades from sample base."""
     story: list[Any] = []
     heading = _piece_heading(piece)
     story.append(Paragraph(f"Points of measure — {heading}", styles["h2"]))
@@ -565,19 +596,21 @@ def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: di
         Paragraph(
             f"Finished-garment POMs ({units}), measured flat. Sample size <b>{sample_size or '—'}</b>. "
             "Half measurements edge-to-edge unless noted full circumference. "
-            f"Grade columns ({', '.join(GRADE_SIZES)}) filled after sample seal — not invented here.",
+            f"<b>Proposed grades</b> ({', '.join(GRADE_SIZES)}) are proportional estimates from the "
+            "sample base for pattern development — <b>not</b> sealed production grades until sample is approved.",
             styles["muted"],
         )
     )
-    rows = finished_pom_rows(piece)
+    rows = graded_pom_rows(piece, sample_size=sample_size or "M")
     header = [
         Paragraph("<b>Code</b>", styles["small"]),
         Paragraph("<b>POM</b>", styles["small"]),
         Paragraph("<b>How to measure</b>", styles["small"]),
         Paragraph(f"<b>Base ({sample_size or 'sample'})</b>", styles["small"]),
-        Paragraph("<b>Tol ±</b>", styles["small"]),
-        Paragraph("<b>Source</b>", styles["small"]),
+        Paragraph("<b>Tol</b>", styles["small"]),
     ]
+    for sz in GRADE_SIZES:
+        header.append(Paragraph(f"<b>{sz}</b>", styles["small"]))
     data: list[list[Any]] = [header]
     if not rows:
         story.append(
@@ -598,19 +631,29 @@ def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: di
         if review == "needs_review":
             base_txt = f"{base_txt} · REVIEW"
         how = str(row["how_to"])
-        if len(how) > 140:
-            how = how[:137] + "…"
-        data.append(
-            [
-                Paragraph(str(row["code"]), styles["small"]),
-                Paragraph(str(row["label"]), styles["small"]),
-                Paragraph(how, styles["small"]),
-                Paragraph(base_txt, styles["small"]),
-                Paragraph(f"{row['tolerance_cm']:g}", styles["small"]),
-                Paragraph(_fmt_source({"source": row.get("source")}), styles["small"]),
-            ]
+        if len(how) > 90:
+            how = how[:87] + "…"
+        cells = [
+            Paragraph(str(row["code"]), styles["small"]),
+            Paragraph(str(row["label"]), styles["small"]),
+            Paragraph(how, styles["small"]),
+            Paragraph(base_txt, styles["small"]),
+            Paragraph(f"±{row['tolerance_cm']:g}", styles["small"]),
+        ]
+        grades = row.get("grades") if isinstance(row.get("grades"), dict) else {}
+        for sz in GRADE_SIZES:
+            g = grades.get(sz)
+            cells.append(Paragraph("—" if g is None else f"{g:g}", styles["small"]))
+        data.append(cells)
+    widths = [10 * mm, 26 * mm, 48 * mm, 18 * mm, 12 * mm] + [11 * mm] * len(GRADE_SIZES)
+    story.append(_table(data, widths, styles))
+    story.append(
+        Paragraph(
+            "Grade rule (proposed): circumference/half-span ≈ ±1.0 cm per size step from sample; "
+            "length ≈ ±0.7 cm; narrow POMs ≈ ±0.35 cm. Adjust after fit sample.",
+            styles["muted"],
         )
-    story.append(_table(data, [12 * mm, 36 * mm, 78 * mm, 22 * mm, 14 * mm, 20 * mm], styles))
+    )
     story.append(PageBreak())
     return story
 
@@ -641,6 +684,7 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
         _kv_table(
             [
                 ("Garment color", str(piece_n.get("color_hint") or color or "—")),
+                ("Color code / Pantone", pantone_or_color_code(piece_n)),
                 ("Shell material", shell_name if shell_name.strip() not in ("", "—") else "Not confirmed"),
                 ("Composition", composition),
                 ("Weight / GSM", str(shell.get("weight_gsm") or shell.get("gsm") or "not confirmed")),
@@ -706,6 +750,40 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
             styles,
         )
     )
+    hw = hardware_rows(piece_n)
+    story.append(Paragraph("Hardware & special trims", styles["h3"]))
+    if hw:
+        hdata = [
+            [
+                Paragraph("<b>Item</b>", styles["small"]),
+                Paragraph("<b>Spec</b>", styles["small"]),
+                Paragraph("<b>Placement</b>", styles["small"]),
+                Paragraph("<b>Color</b>", styles["small"]),
+                Paragraph("<b>Qty</b>", styles["small"]),
+                Paragraph("<b>Supplier</b>", styles["small"]),
+            ]
+        ]
+        for row in hw:
+            hdata.append(
+                [
+                    Paragraph(row["item"], styles["small"]),
+                    Paragraph(row["spec"], styles["small"]),
+                    Paragraph(row["placement"], styles["small"]),
+                    Paragraph(row["color"], styles["small"]),
+                    Paragraph(f"{row['qty']} {row['unit']}", styles["small"]),
+                    Paragraph(row["supplier"], styles["small"]),
+                ]
+            )
+        story.append(
+            _table(hdata, [28 * mm, 48 * mm, 36 * mm, 22 * mm, 16 * mm, 22 * mm], styles)
+        )
+    else:
+        story.append(
+            Paragraph(
+                "No hardware rows detected — confirm zip / hooks / buttons / stay tape on BOM before cut.",
+                styles["warn"],
+            )
+        )
     story.append(PageBreak())
     return story
 
@@ -773,13 +851,40 @@ def _construction_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[An
             ]
         )
     story.append(_table(data, [10 * mm, 48 * mm, 32 * mm, 22 * mm, 14 * mm, 54 * mm], styles))
-    story.append(
-        Paragraph(
-            "Common stitch classes (ISO 4915): 301 lockstitch · 401 chainstitch · "
-            "504 overlock 3-thread · 514 overlock 4-thread · 516 safety · 406/605 coverstitch.",
-            styles["muted"],
+
+    # Compact stitch + SA standards (industry tech-sheet densification).
+    spi_rows = [
+        [
+            Paragraph("<b>Stitch</b>", styles["small"]),
+            Paragraph("<b>SPI / SPCM</b>", styles["small"]),
+            Paragraph("<b>Use</b>", styles["small"]),
+        ]
+    ]
+    for name, spi, use in thread_spi_defaults():
+        spi_rows.append(
+            [
+                Paragraph(name, styles["small"]),
+                Paragraph(spi, styles["small"]),
+                Paragraph(use, styles["small"]),
+            ]
         )
+    sa_rows = [
+        [Paragraph("<b>Seam type</b>", styles["small"]), Paragraph("<b>SA</b>", styles["small"])]
+    ]
+    for name, sa in seam_allowance_standards():
+        sa_rows.append([Paragraph(name, styles["small"]), Paragraph(sa, styles["small"])])
+    std = Table(
+        [
+            [
+                _table(spi_rows, [32 * mm, 22 * mm, 36 * mm], styles),
+                _table(sa_rows, [50 * mm, 28 * mm], styles),
+            ]
+        ],
+        colWidths=[96 * mm, 84 * mm],
     )
+    std.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(Paragraph("Stitch & seam allowance standards (confirm per fabric)", styles["h3"]))
+    story.append(std)
 
     # Pattern inventory on same logical block (may spill page)
     story.append(Paragraph("Pattern piece development (NOT TO SCALE)", styles["h3"]))
@@ -916,43 +1021,61 @@ def _colorways_page(pieces: list[dict[str, Any]], styles: dict[str, Any]) -> lis
         [
             Paragraph("<b>Component</b>", styles["small"]),
             Paragraph("<b>Colorway 1</b>", styles["small"]),
-            Paragraph("<b>Colorway 2</b>", styles["small"]),
-            Paragraph("<b>Colorway 3</b>", styles["small"]),
+            Paragraph("<b>Color code</b>", styles["small"]),
+            Paragraph("<b>CW2 / CW3</b>", styles["small"]),
         ]
     ]
     for piece in pieces:
         label = _piece_heading(piece)
         color = str(piece.get("color_hint") or "—")
+        code = pantone_or_color_code(piece)
         data.append(
             [
                 Paragraph(f"{label} — shell", styles["small"]),
                 Paragraph(color, styles["small"]),
-                Paragraph("—", styles["small"]),
-                Paragraph("—", styles["small"]),
+                Paragraph(code[:60], styles["small"]),
+                Paragraph("— / —", styles["small"]),
             ]
         )
         data.append(
             [
                 Paragraph(f"{label} — lining / thread / zip", styles["small"]),
                 Paragraph("match / TBD", styles["small"]),
-                Paragraph("—", styles["small"]),
-                Paragraph("—", styles["small"]),
+                Paragraph("match shell · confirm", styles["small"]),
+                Paragraph("— / —", styles["small"]),
             ]
         )
-    story.append(_table(data, [55 * mm, 40 * mm, 40 * mm, 40 * mm], styles))
+    story.append(_table(data, [50 * mm, 35 * mm, 55 * mm, 30 * mm], styles))
     return story
 
 
-def _labels_packing_page(styles: dict[str, Any]) -> list[Any]:
-    """Labels block without forced page break (merged into factory close)."""
+def _labels_packing_page(styles: dict[str, Any], *, pieces: list[dict[str, Any]] | None = None) -> list[Any]:
+    """Labels + care icons without forced page break (merged into factory close)."""
     story: list[Any] = []
-    story.append(Paragraph("Labels and packing", styles["h3"]))
+    story.append(Paragraph("Labels, care & packing", styles["h3"]))
     story.append(
         Paragraph(
-            "Measure label positions from a fixed seam or edge. Care symbols follow ISO 3758.",
+            "Measure label positions from a fixed seam or edge. Care symbols follow ISO 3758 "
+            "(schematic icons below — confirm market language).",
             styles["muted"],
         )
     )
+    if pieces:
+        care = care_recommendation(pieces[0])
+        story.append(care_icons_drawing())
+        story.append(
+            _compact_kv(
+                [
+                    ("Wash", care["wash"]),
+                    ("Bleach", care["bleach"]),
+                    ("Dry", care["dry"]),
+                    ("Iron", care["iron"]),
+                    ("Dry clean", care["dry_clean"]),
+                ],
+                styles,
+                width=180 * mm,
+            )
+        )
     data = [
         [
             Paragraph("<b>Label</b>", styles["small"]),
@@ -1146,7 +1269,7 @@ def build_story_v4_designer(
     # Factory close — one continuous section (no sparse colorways/labels-only pages).
     story.append(Paragraph("Factory close — colorways, labels, readiness", styles["h2"]))
     story.extend(_colorways_page(pieces, styles))
-    story.extend(_labels_packing_page(styles))
+    story.extend(_labels_packing_page(styles, pieces=pieces))
     story.extend(
         _revision_and_readiness(
             style_code=style_code,

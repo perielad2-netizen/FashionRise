@@ -279,6 +279,10 @@ class OpenAIProfessionalProvider:
             "finished_pom_methods as a short string), "
             "fabric_estimate (object: hand, likely_fiber, gsm_range, drape, opacity, "
             "lining_recommended bool, notes), "
+            "callout_points (array of {n,label,region} — 10 to 16 factory callouts for flats), "
+            "hardware (array of {item,spec,placement,qty,unit,color} — zip/hooks/buttons/tape), "
+            "pantone_estimate (short string — closest textile color guess, mark as proposed), "
+            "care_recommendation (object: wash, bleach, dry, iron, dry_clean — ISO 3758 style text), "
             "back_construction_proposal (string — invent a coherent rear when back is unseen), "
             "confidence (low|medium|high), assumptions (array of strings). "
             "Keep every string field under 160 characters. "
@@ -287,6 +291,7 @@ class OpenAIProfessionalProvider:
             "Use body measurements to propose proportional finished POMs when the photo "
             "supports length/sleeve proportion; mark assumptions clearly. "
             "Prefer useful sample-room estimates over leaving critical fields empty. "
+            "callout_points and hardware must be garment-specific for a tailor/sample room. "
             f"schema_version must be '{ANALYSIS_SCHEMA_VERSION}'."
         )
         user_text = (
@@ -294,8 +299,9 @@ class OpenAIProfessionalProvider:
             f"Body measurements: {(body_context or 'not provided')[:400]}. "
             f"Look notes: {(look_notes or '')[:400]}. "
             "Write a tailor-ready analysis: design-specific sew ops, cut inventory, "
-            "fabric estimate, numeric POM estimates (cm), and a coherent proposed back "
-            "if the rear is not visible."
+            "fabric estimate, numeric POM estimates (cm), numbered flat callouts, "
+            "hardware list, care proposal, Pantone-style color guess, and a coherent "
+            "proposed back if the rear is not visible."
         )
         # Dense technical JSON needs headroom — 3.2k truncated mid-object on real looks.
         configured = int(settings.openai_max_completion_tokens or 1400)
@@ -460,7 +466,10 @@ class OpenAIProfessionalProvider:
             f"features={features}. "
             f"Category hint: {piece.get('category')}. "
             "Do NOT draw a generic A-line dress if the source is fitted/bodycon with long sleeves or a deep V. "
-            "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack."
+            "Output a clean vector-like technical fashion flat suitable for a manufacturing tech pack. "
+            "Add small RED NUMBERED CALLOUT DOTS (1–12) with short leader lines at key construction "
+            "points (neckline, waist, sleeve set, hem, slit/zip) — factory annotation style like a "
+            "Michael Kors / GarmentSpec sheet. Keep numbers legible; do not cover critical seams."
         )
 
     @staticmethod
