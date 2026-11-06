@@ -21,6 +21,7 @@ from app.models.ai_job import AIJob
 from app.models.garment_design import GarmentDesign
 from app.models.user import User
 from app.schemas.ai import STUDIO_SIDES, AIJobCreate, SketchPolishDualBody
+from app.services import ai_stars
 from app.services.reference_croquis import reference_from_job_input
 from app.storage.local import LocalStorageBackend
 
@@ -33,6 +34,37 @@ _DATA_URL_RE = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|webp));base64,(.+)$",
     re.IGNORECASE | re.DOTALL,
 )
+
+
+def _magic_operation_already_has_job(
+    db: Session, user_id: uuid.UUID, operation_id: str
+) -> bool:
+    """True when another sketch_polish job already exists for this Magic operation."""
+    op = (operation_id or "").strip()
+    if not op:
+        return False
+    row = (
+        db.query(AIJob.id)
+        .filter(
+            AIJob.user_id == user_id,
+            AIJob.job_type == "sketch_polish",
+            AIJob.input_data["magic_operation_id"].astext == op,
+        )
+        .first()
+    )
+    return row is not None
+
+
+def _debit_magic_if_needed(
+    db: Session,
+    user: User,
+    *,
+    operation_id: str | None = None,
+) -> None:
+    """Debit Stars once per Magic operation (linked front/back share one charge)."""
+    if operation_id and _magic_operation_already_has_job(db, user.id, operation_id):
+        return
+    ai_stars.debit_magic_stars(db, user)
 
 
 def _dual_magic_lock_key(user_id: uuid.UUID) -> int:
@@ -466,6 +498,7 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
                 operation_id=op_str,
             )
             if is_new:
+                _debit_magic_if_needed(db, user, operation_id=op_str)
                 db.add(job)
                 db.commit()
                 db.refresh(job)
@@ -496,6 +529,9 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
             job_type=data.job_type,
             input_data=input_data,
         )
+        op_single = input_data.get("magic_operation_id")
+        op_single_str = op_single.strip() if isinstance(op_single, str) else None
+        _debit_magic_if_needed(db, user, operation_id=op_single_str)
     job = AIJob(
         user_id=user.id,
         design_id=data.design_id,
@@ -694,6 +730,9 @@ def enqueue_dual_sketch_polish(
         operation_id=op_str,
     )
 
+    if front_is_new or back_is_new:
+        # One Magic operation = one Stars debit (front+back share the cost).
+        _debit_magic_if_needed(db, user, operation_id=op_str)
     if front_is_new:
         db.add(front_job)
     if back_is_new:

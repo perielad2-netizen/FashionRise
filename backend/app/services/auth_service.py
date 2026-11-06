@@ -13,7 +13,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.models.user_profile import UserProfile
 from app.schemas.auth import UserLogin, UserRegister
-from app.services import invitation_service
+from app.services import ai_stars, invitation_service
 
 
 def _normalize_email(email: str) -> str:
@@ -72,6 +72,7 @@ def register_user(db: Session, data: UserRegister) -> User:
         is_admin=False,
         is_active=True,
     )
+    ai_stars.apply_new_user_stars(user)
     db.add(user)
 
     try:

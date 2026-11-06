@@ -12,4 +12,6 @@ class UserRead(BaseModel):
     username: str
     is_active: bool
     is_admin: bool
+    ai_stars: int = 0
+    ai_stars_unlimited: bool = False
     created_at: datetime

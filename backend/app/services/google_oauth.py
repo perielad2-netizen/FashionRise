@@ -28,8 +28,7 @@ from app.core.errors import ForbiddenError, UnauthorizedError, ValidationAppErro
 from app.core.security import hash_password
 from app.models.user import User
 from app.models.user_profile import UserProfile
-from app.services import auth_service
-from app.services import invitation_service
+from app.services import ai_stars, auth_service, invitation_service
 
 _log = logging.getLogger(__name__)
 
@@ -202,6 +201,7 @@ def upsert_google_user(db: Session, *, userinfo: dict[str, Any]) -> User:
         is_admin=False,
         is_active=True,
     )
+    ai_stars.apply_new_user_stars(user)
     db.add(user)
     try:
         db.flush()

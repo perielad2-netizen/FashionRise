@@ -12,7 +12,7 @@ from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.schemas.auth import RefreshRequest, TokenResponse, UserLogin, UserRegister
 from app.schemas.user import UserRead
-from app.services import auth_service, cf_access_sso, google_oauth
+from app.services import ai_stars, auth_service, cf_access_sso, google_oauth
 
 router = APIRouter()
 
@@ -124,7 +124,10 @@ def refresh_token(request: Request, data: RefreshRequest, db: Session = Depends(
 
 @router.get("/me", response_model=UserRead)
 def me(user: CurrentUser) -> UserRead:
-    return UserRead.model_validate(user)
+    data = UserRead.model_validate(user)
+    if ai_stars.user_has_unlimited_stars(user):
+        return data.model_copy(update={"ai_stars_unlimited": True})
+    return data
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

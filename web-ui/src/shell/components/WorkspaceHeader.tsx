@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, BookmarkPlus, MoreHorizontal, Redo2, Sparkles, Undo2 } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, MoreHorizontal, Redo2, Sparkles, Star, Undo2 } from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
+import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './WorkspaceHeader.module.css'
 
 type Props = {
@@ -42,6 +43,11 @@ export function WorkspaceHeader({
   onSaveDesign,
   onOpenLibrary,
 }: Props) {
+  const { user } = useAuth()
+  const starsUnlimited = Boolean(user?.ai_stars_unlimited)
+  const starsBalance = starsUnlimited ? null : Number(user?.ai_stars ?? 0)
+  const magicCost = 10
+  const canAffordMagic = starsUnlimited || (starsBalance ?? 0) >= magicCost
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -109,22 +115,41 @@ export function WorkspaceHeader({
         >
           <Redo2 size={17} />
         </button>
+        <span
+          className={styles.starsBadge}
+          title={
+            starsUnlimited
+              ? 'Unlimited Stars (owner)'
+              : `AI Stars — Magic costs ${magicCost}. New profiles start with ${magicCost}.`
+          }
+          aria-label={
+            starsUnlimited ? 'Unlimited Stars' : `${starsBalance ?? 0} Stars`
+          }
+        >
+          <Star size={14} aria-hidden />
+          {starsUnlimited ? '∞' : starsBalance ?? 0}
+        </span>
         <button
           type="button"
           className={magicEnabled ? styles.magicReady : styles.magicSoon}
           onClick={onMagic}
-          disabled={magicEnabled && magicBusy}
+          disabled={magicEnabled && (magicBusy || !canAffordMagic)}
           aria-busy={magicEnabled && magicBusy}
           title={
-            magicEnabled
-              ? magicBusy
+            !magicEnabled
+              ? 'Magic is not available in this beta'
+              : magicBusy
                 ? 'Magic is already running'
-                : 'Turn your sketch into a finished fashion look'
-              : 'Magic is not available in this beta'
+                : !canAffordMagic
+                  ? `Not enough Stars (need ${magicCost})`
+                  : `Turn your sketch into a finished fashion look (−${magicCost} Stars)`
           }
         >
           <Sparkles size={15} />
           Magic
+          {magicEnabled && !starsUnlimited ? (
+            <span className={styles.soon}>−{magicCost}</span>
+          ) : null}
           {magicEnabled ? null : <span className={styles.soon}>Soon</span>}
         </button>
         {onSaveDesign ? (

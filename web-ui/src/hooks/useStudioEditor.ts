@@ -223,7 +223,7 @@ const OPEN_CUSTOM_REFERENCE_NOTE =
   ' Custom reference images are not saved with designs. Choose the image again if you need it.'
 
 export function useStudioEditor() {
-  const { user, logout } = useAuth()
+  const { user, logout, refreshUser } = useAuth()
   const navigate = useNavigate()
   const historyFront = useRef(new StrokeHistory())
   const historyBack = useRef(new StrokeHistory())
@@ -1695,6 +1695,7 @@ export function useStudioEditor() {
       })
       setMagicJobId(job.id)
       persistMagicJobId(user.id, job.id)
+      void refreshUser()
 
       setMagicPhase('polling')
       const settled = await settleMagicJobWithImage(job.id, controller.signal)
@@ -1730,6 +1731,9 @@ export function useStudioEditor() {
             : 'Magic could not complete.'
       setMagicPhase('failed')
       setMagicError(message)
+      if (err instanceof ApiError && /stars/i.test(err.message)) {
+        void refreshUser()
+      }
     } finally {
       magicInFlightRef.current = false
     }
@@ -1737,6 +1741,7 @@ export function useStudioEditor() {
     activeSide,
     dualMagicEnabled,
     frontBackEnabled,
+    refreshUser,
     publishStudioNotice,
     referenceOpacity,
     referenceUrl,

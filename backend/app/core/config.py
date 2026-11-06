@@ -204,6 +204,13 @@ class Settings(BaseSettings):
     # Auto-create FashionRise users on first Google sign-in (no invite).
     google_oauth_auto_register: bool = True
 
+    # AI Stars wallet (phase 1: Magic spend gate).
+    # New profiles start with starting_balance; Magic costs magic_cost (first try free when equal).
+    ai_stars_starting_balance: int = 10
+    ai_stars_magic_cost: int = 10
+    # Comma-separated emails with endless Stars (never debit).
+    ai_stars_unlimited_emails: str = "perielad@gmail.com,perielad2@gmail.com"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_cors(cls, v: str) -> str:

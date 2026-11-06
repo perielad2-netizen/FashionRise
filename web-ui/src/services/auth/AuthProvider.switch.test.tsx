@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   register: vi.fn(),
   restoreSession: vi.fn(),
   logoutLocal: vi.fn(),
+  fetchMe: vi.fn(),
 }))
 
 const tokenStore = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ vi.mock('@/services/auth/authApi', () => ({
   restoreSession: (...args: unknown[]) => api.restoreSession(...args),
   logoutLocal: () => api.logoutLocal(),
   getGoogleOAuthStatus: async () => ({ google_oauth_enabled: false }),
+  fetchMe: (...args: unknown[]) => api.fetchMe(...args),
 }))
 
 vi.mock('@/services/auth/tokenStore', () => ({ tokenStore }))

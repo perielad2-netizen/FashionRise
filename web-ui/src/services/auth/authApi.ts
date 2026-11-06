@@ -7,6 +7,10 @@ export type User = {
   username: string
   is_active: boolean
   is_admin: boolean
+  /** AI Stars balance (Magic spend). */
+  ai_stars?: number
+  /** Owner accounts never debit Stars. */
+  ai_stars_unlimited?: boolean
   created_at: string
 }
 

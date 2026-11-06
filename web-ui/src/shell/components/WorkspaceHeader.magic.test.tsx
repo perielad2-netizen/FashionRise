@@ -2,6 +2,28 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { WorkspaceHeader } from '@/shell/components/WorkspaceHeader'
 
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: {
+      id: 'u1',
+      email: 't@example.com',
+      username: 't',
+      is_active: true,
+      is_admin: false,
+      ai_stars: 10,
+      ai_stars_unlimited: false,
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    bootstrapping: false,
+    isAuthenticated: true,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+    googleOAuthAvailable: false,
+  }),
+}))
+
 describe('WorkspaceHeader Magic recovery', () => {
   it('exposes See last result without requiring a new Magic click', () => {
     const onRecover = vi.fn()

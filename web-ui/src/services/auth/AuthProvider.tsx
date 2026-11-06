@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { bindFabricCacheToUser } from '@/lib/fabricAssetCache'
 import {
+  fetchMe,
   getGoogleOAuthStatus,
   login as apiLogin,
   logoutLocal,
@@ -26,6 +27,7 @@ type AuthState = {
   login: (payload: LoginPayload) => Promise<void>
   register: (payload: RegisterPayload) => Promise<void>
   logout: () => void
+  refreshUser: () => Promise<void>
   isAuthenticated: boolean
   googleOAuthAvailable: boolean
 }
@@ -83,6 +85,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
+  const refreshUser = useCallback(async () => {
+    if (!tokenStore.get()) return
+    try {
+      const me = await fetchMe()
+      bindFabricCacheToUser(me.id)
+      setUser(me)
+    } catch {
+      /* keep existing session identity on transient /me failures */
+    }
+  }, [])
+
   useEffect(() => {
     bindFabricCacheToUser(user?.id ?? null)
   }, [user?.id])
@@ -94,10 +107,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      refreshUser,
       isAuthenticated: Boolean(user),
       googleOAuthAvailable,
     }),
-    [user, bootstrapping, login, register, logout, googleOAuthAvailable],
+    [user, bootstrapping, login, register, logout, refreshUser, googleOAuthAvailable],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
