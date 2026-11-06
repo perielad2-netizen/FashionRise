@@ -58,6 +58,65 @@
   margin-left: auto;
   background: transparent;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Compact sketch strip — more canvas, five essentials + maximize.
+   Center with left/right + margin auto (avoid transform clip on tablets). */
+.barMinimized {
+  left: max(8px, env(safe-area-inset-left, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin-left: auto;
+  margin-right: auto;
+  padding: 4px;
+  gap: 0;
+  border-radius: 14px;
+}
+
+.barMinimized .rowPrimary {
+  justify-content: center;
+  gap: 6px;
+}
+
+.barMinimized .cluster {
+  background: transparent;
+}
+
+.minimizeBtn,
+.expandBtn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.minimizeBtn:hover,
+.expandBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.expandBtn {
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+  background: rgba(214, 51, 132, 0.28);
+  color: #ffd6e8;
 }
 
 .btn,

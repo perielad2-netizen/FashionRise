@@ -1,5 +1,7 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
+  ChevronDown,
+  ChevronUp,
   Eraser,
   Hand,
   Maximize2,
@@ -47,6 +49,9 @@ type Props = {
   onSave: () => void
   onExit: () => void
   saveLabel?: string
+  /** Optional controlled minimize state (defaults to internal state). */
+  minimized?: boolean
+  onMinimizedChange?: (minimized: boolean) => void
 }
 
 export function ImmersiveToolbar({
@@ -73,10 +78,71 @@ export function ImmersiveToolbar({
   onSave,
   onExit,
   saveLabel = 'Save',
+  minimized: minimizedProp,
+  onMinimizedChange,
 }: Props) {
+  const [minimizedInternal, setMinimizedInternal] = useState(false)
+  const minimized = minimizedProp ?? minimizedInternal
+  const setMinimized = (next: boolean) => {
+    onMinimizedChange?.(next)
+    if (minimizedProp === undefined) setMinimizedInternal(next)
+  }
+
   const brushLabel = `${brushKindShortLabel(brushKind)} · ${formatBrushSizePx(brushSize)} px`
+
+  if (minimized) {
+    return (
+      <div
+        className={`${styles.bar} ${styles.barMinimized}`}
+        role="toolbar"
+        aria-label="Immersive drawing toolbar"
+        data-testid="immersive-toolbar"
+        data-minimized="true"
+      >
+        <div className={`${styles.row} ${styles.rowPrimary}`}>
+          <div className={styles.cluster} role="group" aria-label="Drawing tools">
+            <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
+              <Pencil size={18} strokeWidth={1.75} />
+            </ToolBtn>
+            <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
+              <Eraser size={18} strokeWidth={1.75} />
+            </ToolBtn>
+            <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
+              <PaintBucket size={18} strokeWidth={1.75} />
+            </ToolBtn>
+            <ToolBtn active={false} label="Undo" disabled={!canUndo} onClick={onUndo}>
+              <Undo2 size={18} strokeWidth={1.75} />
+            </ToolBtn>
+            <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
+              <Redo2 size={18} strokeWidth={1.75} />
+            </ToolBtn>
+          </div>
+          <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Expand toolbar">
+            <button
+              type="button"
+              className={styles.expandBtn}
+              onClick={() => setMinimized(false)}
+              aria-label="Maximize sketch toolbar"
+              aria-expanded={false}
+              data-testid="immersive-toolbar-maximize"
+              title="Maximize"
+            >
+              <ChevronUp size={18} strokeWidth={2} />
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className={styles.bar} role="toolbar" aria-label="Immersive drawing toolbar" data-testid="immersive-toolbar">
+    <div
+      className={styles.bar}
+      role="toolbar"
+      aria-label="Immersive drawing toolbar"
+      data-testid="immersive-toolbar"
+      data-minimized="false"
+    >
       {onBrushKind && tool === 'draw' ? (
         <div className={`${styles.row} ${styles.rowKinds}`}>
           <BrushKindStrip
@@ -111,7 +177,19 @@ export function ImmersiveToolbar({
           </ToolBtn>
         </div>
 
-        <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Exit">
+        <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Toolbar layout">
+          <button
+            type="button"
+            className={styles.minimizeBtn}
+            onClick={() => setMinimized(true)}
+            aria-label="Minimize sketch toolbar"
+            aria-expanded={true}
+            data-testid="immersive-toolbar-minimize"
+            title="Minimize"
+          >
+            <ChevronDown size={16} strokeWidth={2} />
+            <span>Minimize</span>
+          </button>
           <button
             type="button"
             className={styles.exitBtn}
