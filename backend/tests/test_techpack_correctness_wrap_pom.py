@@ -249,6 +249,8 @@ def test_enrich_syncs_sash_and_flags_fold_vs_cb_choice():
     back = by_id["C"]
     assert "choice" in str(back.get("notes") or "").lower()
     assert "needs_review" in str(back.get("review_state") or "")
+    assert "1 if fold" in str(back.get("cut_qty") or "").lower()
+    assert "2 if cb" in str(back.get("cut_qty") or "").lower()
     sash = by_id["H"]
     notes = str(sash.get("notes") or "").lower()
     assert "4 cm" in notes
@@ -256,10 +258,10 @@ def test_enrich_syncs_sash_and_flags_fold_vs_cb_choice():
     assert notes.count("from sash_width pom") <= 1
 
 
-def test_scrub_removes_center_back_zipper_label(tmp_path):
+def test_scrub_silently_clears_zipper_without_removed_stamp(tmp_path):
     from PIL import Image, ImageDraw, ImageFont
 
-    from app.services.techpack_tailor_ready import scrub_contradictory_flat_labels
+    from app.services.techpack_tailor_ready import prepare_mtm_flat, scrub_contradictory_flat_labels
 
     src = tmp_path / "flat.png"
     im = Image.new("RGB", (1000, 1400), color=(245, 240, 232))
@@ -272,12 +274,14 @@ def test_scrub_removes_center_back_zipper_label(tmp_path):
     draw.text((790, 1180), "Invisible zipper at center back", fill=(30, 30, 30), font=font)
     im.save(src)
 
-    out = scrub_contradictory_flat_labels(src)
+    out = scrub_contradictory_flat_labels(src, always_banner=False, wipe_all_text=False)
     assert out is not None and out.exists()
-    # Prefer OCR path when tesseract is present; always expect a banner/output image.
     from PIL import Image as _Image
 
     scrubbed = _Image.open(out)
     assert scrubbed.size == im.size
-    # Pixel band at the top banner should differ from the paper background.
-    assert scrubbed.getpixel((10, 8)) != (245, 240, 232)
+    # No correction banner strip by default.
+    assert scrubbed.getpixel((10, 8)) == (245, 240, 232)
+
+    cleaned = prepare_mtm_flat(src)
+    assert cleaned is not None and cleaned.exists()

@@ -935,10 +935,11 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                     )
                     if says_fold and (says_cb_seam or proposal_cb):
                         r["fold"] = "CHOICE — fold OR CB seam"
+                        r["cut_qty"] = "1 if fold / 2 if CB seam"
                         r["notes"] = (
-                            "CHOICE REQUIRED: inventory suggested cut-on-fold, while the proposed "
-                            "back describes a center-back seam. Customer + tailor must pick one "
-                            "before the toile — FashionRise does not decide. "
+                            "CHOICE REQUIRED: cut-on-fold → cut qty 1; center-back seam → cut qty 2 "
+                            "(mirror pair). Customer + tailor must pick one before the toile — "
+                            "FashionRise does not decide. "
                             + notes
                         )
                         r["review_state"] = "needs_review"

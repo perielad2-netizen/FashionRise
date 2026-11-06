@@ -523,13 +523,16 @@ def scrub_contradictory_flat_labels(
     source: Path | None,
     *,
     forbidden_tokens: tuple[str, ...] = _ZIP_LABEL_TOKENS,
-    replacement_note: str = "REMOVED — follow written brief (no zip)",
-    always_banner: bool = True,
+    replacement_note: str | None = None,
+    always_banner: bool = False,
+    wipe_all_text: bool = False,
 ) -> Path | None:
-    """Cover burned-in construction labels that contradict the written brief.
+    """Silently cover burned-in AI text that contradicts / clutters the brief.
 
-    Used for wrap MTM packs where AI flats still stamp \"CENTER BACK ZIPPER\".
-    Falls back to a non-authoritative banner when OCR finds nothing / is missing.
+    Default behaviour for MTM wrap packs:
+    - Cover forbidden tokens (zip…) and optionally *all* OCR text so the garment
+      drawing stays clean — no \"REMOVED\" stamps and no correction banners in-image.
+    - The PDF page caption states that illustrations are unverified concepts.
     Returns a temp PNG, or None if the source cannot be opened.
     """
     if source is None or not source.exists():
@@ -548,10 +551,15 @@ def scrub_contradictory_flat_labels(
             hit_idxs: set[int] = set()
             for i, word in enumerate(words):
                 token = word["low"]
+                if wipe_all_text:
+                    # Drop tiny OCR noise / single punctuation.
+                    if len(token) >= 1 and any(ch.isalnum() for ch in token):
+                        hit_idxs.add(i)
+                    continue
                 if token in forbid or any(tok in token for tok in forbid):
                     hit_idxs.add(i)
-            # Expand to same-line context tokens (CENTER BACK ZIPPER, invisible zipper…).
-            if hit_idxs:
+            # Expand zip hits to same-line context (CENTER BACK ZIPPER…).
+            if hit_idxs and not wipe_all_text:
                 expanded = set(hit_idxs)
                 for i in list(hit_idxs):
                     base = words[i]
@@ -569,63 +577,31 @@ def scrub_contradictory_flat_labels(
                 (words[i]["left"], words[i]["top"], words[i]["right"], words[i]["bottom"])
                 for i in sorted(hit_idxs)
             ]
-            patches = _merge_label_boxes(boxes, pad=max(8, w // 180))
-            try:
-                font = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                    max(12, min(22, w // 55)),
-                )
-                banner_font = ImageFont.truetype(
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                    max(14, min(28, w // 42)),
-                )
-            except Exception:
-                font = ImageFont.load_default()
-                banner_font = font
+            # Slightly larger pad when wiping all text so leader lines / callout
+            # numbers near labels disappear with the words.
+            pad = max(10 if wipe_all_text else 8, w // (140 if wipe_all_text else 180))
+            patches = _merge_label_boxes(boxes, pad=pad)
 
-            def _cover(left: int, top: int, right: int, bottom: int, *, stamp: str | None) -> None:
+            def _cover(left: int, top: int, right: int, bottom: int) -> None:
                 left = max(0, left)
                 top = max(0, top)
                 right = min(w, right)
                 bottom = min(h, bottom)
                 if right - left < 4 or bottom - top < 4:
                     return
-                # Sample nearby background for a soft cover (prefer cream/paper flats).
                 sx = min(w - 1, max(0, left - 4))
                 sy = min(h - 1, max(0, top - 4))
                 fill = im.getpixel((sx, sy))
                 draw.rectangle([left, top, right, bottom], fill=fill)
-                if not stamp:
-                    return
-                note = stamp
-                try:
-                    bbox = draw.textbbox((0, 0), note, font=font)
-                    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                except Exception:
-                    tw, th = len(note) * 6, 12
-                tx = left + 4
-                ty = top + max(0, ((bottom - top) - th) // 2)
-                if tw > (right - left - 8):
-                    note = "REMOVED — no zip"
-                    try:
-                        bbox = draw.textbbox((0, 0), note, font=font)
-                        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                    except Exception:
-                        tw, th = 80, 12
-                    ty = top + max(0, ((bottom - top) - th) // 2)
-                draw.rectangle(
-                    [tx - 2, ty - 2, min(right - 2, tx + tw + 2), min(bottom - 2, ty + th + 2)],
-                    fill=(255, 248, 230),
-                )
-                draw.text((tx, ty), note, fill=(140, 40, 30), font=font)
 
             redacted = 0
             for left, top, right, bottom in patches:
-                _cover(left, top, right, bottom, stamp=replacement_note)
+                _cover(left, top, right, bottom)
                 redacted += 1
 
-            # Second pass on the covered image: catch residual OCR fragments.
-            if redacted:
+            # Second pass for residual forbidden tokens only (not full wipe — OCR
+            # after a full wipe often invents noise).
+            if redacted and not wipe_all_text:
                 tmp_pass = Path(tempfile.mkstemp(prefix="fr_flat_scrub_pass_", suffix=".png")[1])
                 im.save(tmp_pass, format="PNG")
                 try:
@@ -634,15 +610,13 @@ def scrub_contradictory_flat_labels(
                     for word in residual:
                         token = word["low"]
                         if token in forbid or any(tok in token for tok in forbid):
-                            # Ignore our own short stamp text "no zip".
-                            if token in {"zip"} and word["top"] < max(40, h // 30):
-                                continue
                             residual_boxes.append(
                                 (word["left"], word["top"], word["right"], word["bottom"])
                             )
-                    for left, top, right, bottom in _merge_label_boxes(residual_boxes, pad=max(10, w // 160)):
-                        # Cover only — do not re-stamp the word "zip".
-                        _cover(left, top, right, bottom, stamp=None)
+                    for left, top, right, bottom in _merge_label_boxes(
+                        residual_boxes, pad=max(10, w // 160)
+                    ):
+                        _cover(left, top, right, bottom)
                         redacted += 1
                 finally:
                     try:
@@ -650,21 +624,35 @@ def scrub_contradictory_flat_labels(
                     except Exception:
                         pass
 
-            if always_banner or redacted:
-                banner = (
-                    "AI art labels are NON-AUTHORITATIVE"
-                    + (f" · {redacted} conflicting label(s) removed" if redacted else "")
-                    + " · follow the written brief"
-                )
+            # Optional legacy banner — off by default so corrections stay invisible.
+            if always_banner:
+                try:
+                    banner_font = ImageFont.truetype(
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                        max(14, min(28, w // 42)),
+                    )
+                except Exception:
+                    banner_font = ImageFont.load_default()
+                note = replacement_note or "UNVERIFIED concept illustration — follow written brief"
                 bh = max(28, h // 36)
                 draw.rectangle([0, 0, w, bh], fill=(255, 236, 210))
-                draw.text((max(8, w // 80), max(4, bh // 6)), banner, fill=(120, 40, 20), font=banner_font)
+                draw.text((max(8, w // 80), max(4, bh // 6)), note, fill=(120, 40, 20), font=banner_font)
 
             out = Path(tempfile.mkstemp(prefix="fr_flat_scrub_", suffix=".png")[1])
             im.save(out, format="PNG")
             return out
     except Exception:
         return None
+
+
+def prepare_mtm_flat(source: Path | None) -> Path | None:
+    """Clean garment flat for made-to-measure briefs: wipe burned-in AI text silently."""
+    return scrub_contradictory_flat_labels(
+        source,
+        wipe_all_text=True,
+        always_banner=False,
+        replacement_note=None,
+    )
 
 
 def annotate_flat_callouts(
