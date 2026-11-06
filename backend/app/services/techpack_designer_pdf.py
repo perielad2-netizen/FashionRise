@@ -832,12 +832,13 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
             _table(hdata, [28 * mm, 48 * mm, 36 * mm, 22 * mm, 16 * mm, 22 * mm], styles)
         )
     else:
-        story.append(
-            Paragraph(
-                "No hardware rows detected — confirm zip / hooks / buttons / stay tape on BOM before cut.",
-                styles["warn"],
-            )
+        empty_hw = (
+            "No hardware rows — wrap pack expects sash/tie (+ optional inner snap if approved). "
+            "Confirm stay tape on BOM before cut."
+            if detect_closure_family(piece) == "wrap"
+            else "No hardware rows detected — confirm zip / hooks / buttons / stay tape on BOM before cut."
         )
+        story.append(Paragraph(empty_hw, styles["warn"]))
     # No forced page break — hardware stays with BOM; construction continues on next natural page.
     return story
 
@@ -1096,9 +1097,14 @@ def _colorways_page(pieces: list[dict[str, Any]], styles: dict[str, Any]) -> lis
                 Paragraph("— / —", styles["small"]),
             ]
         )
+        trim_label = (
+            f"{label} — lining / thread / sash"
+            if detect_closure_family(piece) == "wrap"
+            else f"{label} — lining / thread / closure"
+        )
         data.append(
             [
-                Paragraph(f"{label} — lining / thread / zip", styles["small"]),
+                Paragraph(trim_label, styles["small"]),
                 Paragraph("match / TBD", styles["small"]),
                 Paragraph("match shell · confirm", styles["small"]),
                 Paragraph("— / —", styles["small"]),

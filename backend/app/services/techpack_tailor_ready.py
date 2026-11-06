@@ -277,6 +277,20 @@ def hardware_rows(piece: dict[str, Any]) -> list[dict[str, Any]]:
                     "supplier": "TBD",
                 }
             )
+    # Wrap dresses must not surface invented zipper hardware.
+    from app.services.techpack_designer_spec import detect_closure_family
+
+    if detect_closure_family(piece) == "wrap":
+        rows = [
+            r
+            for r in rows
+            if "zip" not in f"{r.get('item','')} {r.get('spec','')} {r.get('placement','')}".lower()
+            and not (
+                "hook" in str(r.get("item") or "").lower()
+                and "eye" in str(r.get("item") or "").lower()
+                and "zip" in f"{r.get('placement','')} {r.get('spec','')}".lower()
+            )
+        ]
     # Deduplicate by item+placement
     seen: set[str] = set()
     uniq: list[dict[str, Any]] = []

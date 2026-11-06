@@ -93,3 +93,35 @@ def test_enrich_wrap_piece_qc_and_missing_design_poms():
     bust = next(r for r in rows if r["key"] == "chest_bust")
     assert "full" in bust["how_to"].lower()
     assert "1/2 bust" not in bust["how_to"].lower()
+
+
+def test_enrich_wrap_redacts_invented_back_zip():
+    piece = {
+        "category": "dress",
+        "label": "Wrap dress",
+        "illustrations": {
+            "analysis": {
+                "closure_visible": "No zipper; waist sash wrap",
+                "silhouette": "wrap",
+                "distinctive_features": ["wrap front"],
+                "back_construction_proposal": (
+                    "Propose modest back neckline with center-back seam, "
+                    "concealed short invisible zip from upper back to waist, "
+                    "and center-back skirt seam."
+                ),
+            }
+        },
+        "construction_steps": [
+            {"operation": "Install invisible zipper", "notes": "CB"},
+            {"operation": "Finish wrap neckline", "notes": "stay tape"},
+        ],
+    }
+    enriched = enrich_piece_for_designer_pdf(piece)
+    prop = str(enriched["illustrations"]["analysis"]["back_construction_proposal"]).lower()
+    assert "invisible zip" not in prop
+    assert "wrap closure" in prop
+    steps = " ".join(
+        str(s.get("operation") or "") for s in enriched["construction_steps"] if isinstance(s, dict)
+    ).lower()
+    assert "zip" not in steps
+    assert "wrap neckline" in steps

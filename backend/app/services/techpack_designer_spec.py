@@ -263,6 +263,123 @@ FORMAL_DRESS_CONSTRUCTION: list[dict[str, Any]] = [
 ]
 
 
+WRAP_DRESS_CONSTRUCTION: list[dict[str, Any]] = [
+    {
+        "step": 1,
+        "operation": "Staystitch deep-V / wrap neckline + armholes",
+        "stitch_type": "301 lockstitch",
+        "spi": "3.5–4 /cm",
+        "seam_allowance_cm": 1.0,
+        "notes": "Stabilize bias wrap edges before shaping; press lightly.",
+        "source": "estimate",
+    },
+    {
+        "step": 2,
+        "operation": "Join wrap fronts / underlap + shoulder seams",
+        "stitch_type": "301 + 504 overlock",
+        "spi": "3.5–4 /cm",
+        "seam_allowance_cm": 1.0,
+        "notes": "Preserve designed wrap overlap; stay-tape V apex.",
+        "source": "estimate",
+    },
+    {
+        "step": 3,
+        "operation": "Side seams / underarm join (no CB zip assumed)",
+        "stitch_type": "301 + 504",
+        "spi": "3.5–4 /cm",
+        "seam_allowance_cm": 1.5,
+        "notes": "Leave wrap opening free; balance ease at bust/waist.",
+        "source": "estimate",
+    },
+    {
+        "step": 4,
+        "operation": "Set sleeves or finish armholes",
+        "stitch_type": "301 + 504",
+        "spi": "3.5–4 /cm",
+        "seam_allowance_cm": 1.0,
+        "notes": "Ease sleeve head; confirm armhole depth vs sample.",
+        "source": "estimate",
+    },
+    {
+        "step": 5,
+        "operation": "Attach draped overlay / waist sash anchorage",
+        "stitch_type": "301",
+        "spi": "3.5 /cm",
+        "seam_allowance_cm": 1.0,
+        "notes": "Match overlay balance; confirm sash width/length POMs before cut.",
+        "source": "estimate",
+    },
+    {
+        "step": 6,
+        "operation": "Reinforce thigh slit + finish wrap edges",
+        "stitch_type": "301 / bar-tack",
+        "spi": "3.5 /cm",
+        "seam_allowance_cm": 1.0,
+        "notes": "Bar-tack slit apex; clean-finish wrap edges with stay tape where needed.",
+        "source": "estimate",
+    },
+    {
+        "step": 7,
+        "operation": "Attach lining / facing (if used)",
+        "stitch_type": "301",
+        "spi": "3.5 /cm",
+        "seam_allowance_cm": 1.0,
+        "notes": "Bag lining shorter; do not block wrap opening.",
+        "source": "estimate",
+    },
+    {
+        "step": 8,
+        "operation": "Hem shell (+ lining) — asymmetric lengths if designed",
+        "stitch_type": "Blind hem / baby hem / 301",
+        "spi": "per fabric",
+        "seam_allowance_cm": 2.5,
+        "notes": "Record hem_high / hem_low; keep asymmetric hem intentional.",
+        "source": "estimate",
+    },
+    {
+        "step": 9,
+        "operation": "Labels + hanger loops",
+        "stitch_type": "301",
+        "spi": "3 /cm",
+        "seam_allowance_cm": 0,
+        "notes": "Care + size at side seam or CB lining (no zip); hanger loops at shoulders.",
+        "source": "estimate",
+    },
+    {
+        "step": 10,
+        "operation": "Final press + wrap QC",
+        "stitch_type": "—",
+        "spi": "—",
+        "seam_allowance_cm": 0,
+        "notes": "Check wrap overlap, neckline sit, slit movement, drape balance, sleeve fit — no zipper QC.",
+        "source": "estimate",
+    },
+]
+
+
+def construction_defaults_for_closure(closure_family: str) -> list[dict[str, Any]]:
+    if closure_family == "wrap":
+        return list(WRAP_DRESS_CONSTRUCTION)
+    return list(FORMAL_DRESS_CONSTRUCTION)
+
+
+def _drop_zip_construction_steps(steps: list[Any]) -> list[Any]:
+    cleaned: list[Any] = []
+    for step in steps:
+        blob = (
+            " ".join(
+                str(step.get(k) or "")
+                for k in ("operation", "instruction", "notes", "stitch_type")
+            ).lower()
+            if isinstance(step, dict)
+            else str(step).lower()
+        )
+        if "zip" in blob or "zipper" in blob:
+            continue
+        cleaned.append(step)
+    return cleaned
+
+
 def detect_closure_family(piece: dict[str, Any]) -> str:
     """Return 'wrap' | 'zip' | 'unknown' from closures + AI analysis text."""
     closures = piece.get("closures") if isinstance(piece.get("closures"), dict) else {}
@@ -678,6 +795,30 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
     color = str(out.get("color_hint") or "")
     closure_family = detect_closure_family(out)
     out["_closure_family"] = closure_family
+    if closure_family == "wrap":
+        # Redact invented CB-zip wording from AI back proposals so every page stays consistent.
+        illust2 = out.get("illustrations") if isinstance(out.get("illustrations"), dict) else {}
+        analysis2 = illust2.get("analysis") if isinstance(illust2.get("analysis"), dict) else None
+        if isinstance(analysis2, dict):
+            import re as _re
+
+            prop = str(analysis2.get("back_construction_proposal") or "")
+            if prop:
+                prop = _re.sub(
+                    r"[^.]*\b(?:invisible\s+)?zip(?:per)?\b[^.]*\.",
+                    "",
+                    prop,
+                    flags=_re.I,
+                ).strip()
+                prop = " ".join(prop.split())
+                if prop and not prop.endswith("."):
+                    prop += "."
+                prop = (
+                    f"{prop} WRAP CLOSURE: do not introduce a CB zipper unless the designer "
+                    "explicitly confirms one — pack assumes sash/tie wrap only."
+                ).strip()
+                analysis2 = {**analysis2, "back_construction_proposal": prop}
+                out["illustrations"] = {**illust2, "analysis": analysis2}
     if is_formal_dress_category(cat):
         bom = out.get("bom") if isinstance(out.get("bom"), list) else []
         if not bom:
@@ -700,20 +841,28 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                 ]
                 out["bom"] = list(out["bom"]) + sash_rows
         steps = out.get("construction_steps") if isinstance(out.get("construction_steps"), list) else []
+        if closure_family == "wrap" and steps:
+            steps = _drop_zip_construction_steps(list(steps))
+            out["construction_steps"] = steps
         ai_sourced = any(
             isinstance(s, dict)
             and str(s.get("source") or "").lower() in {"ai", "ai_vision", "ai_inferred"}
             for s in (steps or [])
         )
+        defaults = construction_defaults_for_closure(closure_family)
         if ai_sourced:
             # Keep look-specific AI sew steps — do not overwrite with generic formal defaults.
             pass
         elif not steps:
-            out["construction_steps"] = list(FORMAL_DRESS_CONSTRUCTION)
+            out["construction_steps"] = defaults
         elif steps and all(
             isinstance(s, dict) and not s.get("stitch_type") for s in steps
         ):
-            out["construction_steps"] = list(FORMAL_DRESS_CONSTRUCTION)
+            out["construction_steps"] = defaults
+        if closure_family == "wrap":
+            out["construction_steps"] = _drop_zip_construction_steps(
+                list(out.get("construction_steps") or [])
+            )
         patterns = out.get("pattern_pieces") if isinstance(out.get("pattern_pieces"), list) else []
         if not patterns:
             out["pattern_pieces"] = formal_dress_pattern_inventory(closure_family=closure_family)
