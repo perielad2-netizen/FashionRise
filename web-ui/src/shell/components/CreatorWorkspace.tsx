@@ -783,6 +783,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
                 onOpenModels={toggleModels}
                 onSave={editor.beginSaveDesign}
                 onExit={exitImmersive}
+                onClear={editor.clear}
                 saveLabel={editor.saveStatusLabel || 'Save'}
               />
             ) : null}

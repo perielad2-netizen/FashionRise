@@ -23,6 +23,7 @@ const baseProps = {
   onOpenModels: vi.fn(),
   onSave: vi.fn(),
   onExit: vi.fn(),
+  onClear: vi.fn(),
 }
 
 describe('ImmersiveToolbar', () => {
@@ -57,6 +58,15 @@ describe('ImmersiveToolbar', () => {
     expect(minimize.getAttribute('aria-label')).toBe('Minimize sketch toolbar')
     expect(screen.getByText('Minimize')).toBeTruthy()
     expect(screen.getByTestId('immersive-exit')).toBeTruthy()
+  })
+
+  it('exposes Clear canvas in the immersive More menu', () => {
+    const onClear = vi.fn()
+    render(<ImmersiveToolbar {...baseProps} onClear={onClear} />)
+    fireEvent.click(screen.getByTestId('immersive-toolbar-more'))
+    expect(screen.getByTestId('immersive-more-menu')).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Clear canvas' }))
+    expect(onClear).toHaveBeenCalled()
   })
 
   it('minimizes to pencil, eraser, fill, hand, undo, redo', () => {
