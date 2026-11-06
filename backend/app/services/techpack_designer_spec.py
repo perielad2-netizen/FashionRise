@@ -890,6 +890,7 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
             out["pattern_pieces"] = flagged
         # Ensure design-specific POM skeleton keys exist (empty until AI/designer fills).
         finished = out.get("finished_measurements") if isinstance(out.get("finished_measurements"), dict) else {}
+        missing_note = "MISSING — designer / AI should fill before sample cut"
         for key in (
             "wrap_overlap",
             "slit_start",
@@ -898,8 +899,10 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
             "sash_length",
             "hem_high",
             "hem_low",
+            "v_depth",
         ):
-            if key not in finished:
+            cell = finished.get(key) if isinstance(finished.get(key), dict) else None
+            if cell is None:
                 finished[key] = {
                     "value": None,
                     "unit": "cm",
@@ -907,8 +910,17 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                     "confidence": "unknown",
                     "review_status": "open",
                     "assumptions": ["Missing design-specific POM — required for faithful sample"],
-                    "note": "MISSING — designer / AI should fill before sample cut",
+                    "note": missing_note,
                 }
+            elif cell.get("value") in (None, "", "—"):
+                # Present empty cells as missing rather than quiet blanks.
+                upgraded = dict(cell)
+                upgraded.setdefault("unit", "cm")
+                upgraded["source"] = upgraded.get("source") or "empty"
+                upgraded["review_status"] = upgraded.get("review_status") or "open"
+                if "missing" not in str(upgraded.get("note") or "").lower():
+                    upgraded["note"] = missing_note
+                finished[key] = upgraded
         out["finished_measurements"] = finished
     return out
 
