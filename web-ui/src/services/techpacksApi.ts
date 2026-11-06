@@ -396,7 +396,13 @@ export async function generateTechpackAi(
 /** One-tap Professional — server mints spend-gated intent; user click is authorization. */
 export async function generateTechpackAiProfessionalOneTap(
   draftId: string,
-  body: { idempotency_key: string; propose_back?: boolean; sections?: string[] },
+  body: {
+    idempotency_key: string
+    propose_back?: boolean
+    sections?: string[]
+    /** Skip reuse of current completed PDF — queue a new paid Professional run. */
+    force_new?: boolean
+  },
 ): Promise<TechpackAiGenerateResponse> {
   return apiRequest<TechpackAiGenerateResponse>(
     `/techpacks/${draftId}/ai/generate-professional`,
