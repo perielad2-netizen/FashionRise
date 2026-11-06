@@ -110,6 +110,9 @@ export function ImmersiveToolbar({
             <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
               <PaintBucket size={18} strokeWidth={1.75} />
             </ToolBtn>
+            <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
+              <Hand size={18} strokeWidth={1.75} />
+            </ToolBtn>
             <ToolBtn active={false} label="Undo" disabled={!canUndo} onClick={onUndo}>
               <Undo2 size={18} strokeWidth={1.75} />
             </ToolBtn>
@@ -125,9 +128,10 @@ export function ImmersiveToolbar({
               aria-label="Maximize sketch toolbar"
               aria-expanded={false}
               data-testid="immersive-toolbar-maximize"
-              title="Maximize"
+              title="Maximize toolbar"
             >
-              <ChevronUp size={18} strokeWidth={2} />
+              <ChevronUp size={18} strokeWidth={2} aria-hidden />
+              <span className={styles.btnText}>Max</span>
             </button>
           </div>
         </div>
@@ -185,10 +189,10 @@ export function ImmersiveToolbar({
             aria-label="Minimize sketch toolbar"
             aria-expanded={true}
             data-testid="immersive-toolbar-minimize"
-            title="Minimize"
+            title="Minimize toolbar — keep pencil, eraser, fill, hand, undo, redo"
           >
-            <ChevronDown size={16} strokeWidth={2} />
-            <span>Minimize</span>
+            <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
+            <span className={styles.btnText}>Minimize</span>
           </button>
           <button
             type="button"
@@ -197,7 +201,7 @@ export function ImmersiveToolbar({
             aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
             data-testid="immersive-exit"
           >
-            {nativeFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {nativeFullscreen ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
             <span>Exit</span>
           </button>
         </div>
