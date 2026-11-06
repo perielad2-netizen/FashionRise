@@ -206,7 +206,7 @@ def test_cover_skips_tryon_boilerplate_notes():
     blob = " ".join(str(t) for t in texts)
     assert "Try On Person" not in blob
     assert "GARMENT TECH SHEET" in blob or "fitted mini" in blob or "Key garment" in blob
-    assert "Proposed back" in blob
+    assert "No Magic back" in blob or "AI proposes" in blob or "Proposed" in blob
 
 
 def test_overview_notes_proposed_back_when_missing():

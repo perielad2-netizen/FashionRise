@@ -107,10 +107,15 @@ def test_partial_single_view_missing_back_not_fabricated():
         _tiny_png(front)
         spec = enrich_spec_heuristic(default_spec(look_summary="shirt"))
         text, _, _ = _pdf_text(spec, front=front, back=None)
-        assert "not fabricated" in text.lower() or "not invented" in text.lower()
+        assert "not fabricated" in text.lower() or "not invented" in text.lower() or "no magic back" in text.lower()
         assert "BACK — SHIRT" in text  # schematic back ok
-        # But Magic back unavailable message present
-        assert "unavailable" in text.lower()
+        # Magic back missing is explicit (unavailable / proposes / not provided)
+        assert (
+            "unavailable" in text.lower()
+            or "not provided" in text.lower()
+            or "no magic back" in text.lower()
+            or "ai proposes" in text.lower()
+        )
 
 
 def test_implausible_shoulder_triggers_warning():

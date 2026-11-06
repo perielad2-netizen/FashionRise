@@ -319,6 +319,14 @@ def _cover_page(
     hero = Table([[look_cell, right_cell]], colWidths=[84 * mm, 96 * mm])
     hero.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.append(hero)
+    if not back_image:
+        story.append(
+            Paragraph(
+                "<b>Proposed back:</b> No Magic back image — AI invents a coherent rear flat "
+                "(PROPOSED / UNVERIFIED). Confirm before cutting.",
+                styles["warn"],
+            )
+        )
 
     if pieces:
         story.extend(_fabric_strip(pieces[0], styles))
