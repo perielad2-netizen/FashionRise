@@ -215,10 +215,17 @@ def test_overview_notes_proposed_back_when_missing():
     story = _overview_page(
         front_image=None,
         back_image=None,
-        v2={"preferences": {}, "body": {}, "warnings": []},
+        v2={
+            "preferences": {},
+            "body": {},
+            "warnings": [{"message": "POM tolerances not confirmed"}],
+        },
         styles=styles,
     )
     texts = [getattr(f, "text", "") for f in story if hasattr(f, "text")]
     blob = " ".join(str(t) for t in texts)
     assert "Proposed back" in blob
     assert "No Magic back" in blob
+    # Warnings stay off overview (pointer only) so they cannot orphan a near-empty page.
+    assert "Measurement review warnings" not in blob
+    assert "Manufacturing readiness" in blob

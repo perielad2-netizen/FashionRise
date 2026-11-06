@@ -309,32 +309,18 @@ def _overview_page(
             styles,
         )
     )
-    warnings = [w for w in (v2.get("warnings") if isinstance(v2.get("warnings"), list) else [])]
-    seen: set[str] = set()
-    merged: list[Any] = []
-    for w in list(warnings) + collect_compatibility_warnings(v2):
-        key = (
-            f"{w.get('code')}|{w.get('piece_id')}|{w.get('pom')}|{w.get('message')}"
-            if isinstance(w, dict)
-            else str(w)
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        merged.append(w)
-    if merged:
-        story.append(Paragraph("Measurement review warnings", styles["h3"]))
-        # Cap on this page so warnings don't spill into a near-empty orphan page.
-        for w in merged[:6]:
-            msg = w.get("message") if isinstance(w, dict) else w
-            story.append(Paragraph(f"• {str(msg)[:220]}", styles["warn"]))
-        if len(merged) > 6:
-            story.append(
-                Paragraph(
-                    f"• …and {len(merged) - 6} more — see Manufacturing readiness at the end of this pack.",
-                    styles["muted"],
-                )
+    # Keep overview to Magic refs + body only. Measurement/compatibility warnings used to
+    # spill onto a near-empty following page — they live on Manufacturing readiness instead.
+    warn_n = len(v2.get("warnings") if isinstance(v2.get("warnings"), list) else []) + len(
+        collect_compatibility_warnings(v2)
+    )
+    if warn_n:
+        story.append(
+            Paragraph(
+                f"{warn_n} measurement / review note(s) — see Manufacturing readiness at the end of this pack.",
+                styles["muted"],
             )
+        )
     story.append(PageBreak())
     return story
 
@@ -1029,13 +1015,22 @@ def _revision_and_readiness(
         story.append(Paragraph("Missing for SAMPLE-DEVELOPMENT READY", styles["h3"]))
         for item in missing[:40]:
             story.append(Paragraph(f"• {item}", styles["warn"]))
-    # Spillover warnings from overview (capped there to avoid empty pages).
+    # All measurement / compatibility notes live here (not on overview) to avoid orphan pages.
     overview_warnings = [
         w for w in (v2.get("warnings") if isinstance(v2.get("warnings"), list) else [])
     ] + collect_compatibility_warnings(v2)
-    if len(overview_warnings) > 6:
-        story.append(Paragraph("Additional measurement / review notes", styles["h3"]))
-        for w in overview_warnings[6:24]:
+    if overview_warnings:
+        story.append(Paragraph("Measurement / review notes", styles["h3"]))
+        seen_w: set[str] = set()
+        for w in overview_warnings[:24]:
+            key = (
+                f"{w.get('code')}|{w.get('piece_id')}|{w.get('pom')}|{w.get('message')}"
+                if isinstance(w, dict)
+                else str(w)
+            )
+            if key in seen_w:
+                continue
+            seen_w.add(key)
             msg = w.get("message") if isinstance(w, dict) else w
             story.append(Paragraph(f"• {str(msg)[:280]}", styles["warn"]))
     story.append(
