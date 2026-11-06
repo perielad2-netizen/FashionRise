@@ -1,9 +1,12 @@
-"""V4 Designer-perfect Create Real Design PDF — dense industry tech-pack layout.
+"""V4 Create Real Design PDF — custom / made-to-measure tailor brief.
 
-Page flow (inspired by factory spec sheets / GarmentSpec practice):
-  1 Style sheet — compact meta + Magic refs + body + AI fabric strip (one page)
-  2+ Per garment: flats + callout legend beside · POM · BOM · construction + cutting
-  Closing — colorways + labels + revision + readiness (merged, no orphan blanks)
+Page flow (for bringing a design to an experienced tailor):
+  1 Design brief — Magic look, silhouette, MADE-TO-MEASURE purpose
+  2 Large technical flats + readable callouts (proposed back clearly marked)
+  3 Design decisions — fastening, fabric characteristics, unique design dims
+     + blank tailor measurement worksheet (no mass-production grading)
+  4 Construction outline + illustrative pattern inventory
+  5 Tailor consultation checklist (no factory packing / carton pages)
 """
 
 from __future__ import annotations
@@ -22,7 +25,6 @@ from app.services.techpack_compatibility import (
     material_contradiction,
 )
 from app.services.techpack_designer_spec import (
-    GRADE_SIZES,
     detect_closure_family,
     enrich_piece_for_designer_pdf,
     finished_pom_rows,
@@ -37,11 +39,7 @@ from app.services.techpack_tailor_ready import (
     care_icons_drawing,
     care_recommendation,
     extract_fabric_swatch,
-    graded_pom_rows,
-    hardware_rows,
     pantone_or_color_code,
-    seam_allowance_standards,
-    thread_spi_defaults,
 )
 from app.services.techpack_flats import (
     default_bom,
@@ -250,13 +248,22 @@ def _cover_page(
         for p in pieces
     ) or "—"
 
-    story.append(Paragraph("FashionRise · GARMENT TECH SHEET", styles["muted"]))
+    story.append(Paragraph("FashionRise · CUSTOM TAILORING DESIGN BRIEF", styles["muted"]))
     story.append(Paragraph(title or "Untitled look", styles["title"]))
     story.append(
         Paragraph(
-            f"<b>{cover_prov['label']}</b> · {readiness_label} · {status_label} · "
-            "Schematics NOT TO SCALE · Sample-development pack",
+            f"<b>MADE-TO-MEASURE</b> · {cover_prov['label']} · {status_label} · "
+            "Schematics NOT TO SCALE · Take this brief to a professional tailor",
             styles["small"],
+        )
+    )
+    story.append(
+        Paragraph(
+            "Purpose: help a customer and tailor agree the design. The tailor takes the "
+            "customer’s real measurements, drafts the sewing pattern, recommends fabric, "
+            "and completes fittings. This PDF is a design brief — not a print-to-cut "
+            "industrial pattern or sealed factory tech pack.",
+            styles["body"],
         )
     )
 
@@ -376,7 +383,7 @@ def _cover_page(
         collect_compatibility_warnings(v2)
     )
     footer_bits = [
-        "Tailor pack · Style · Annotated flats · Graded POM · BOM/hardware · Construction & cutting · Care"
+        "Made-to-measure brief · Design look · Technical flats · Design dims · Fabric guidance · Tailor checklist"
     ]
     if warn_n:
         footer_bits.insert(0, f"{warn_n} review note(s) → readiness (last page)")
@@ -444,7 +451,8 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     story.append(
         Paragraph(
             (
-                "AI PROFESSIONAL flats · DRAFT / UNVERIFIED · annotate callout #s on flats before factory send."
+                "Technical illustrations for the tailor · DRAFT / UNVERIFIED · "
+                "callout numbers mark construction points to discuss — not sealed pattern marks."
                 if professional
                 else "Category schematics — run AI Professional for source-faithful flats."
             ),
@@ -475,22 +483,22 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
             )
         )
 
-    callouts = callout_legend_for_piece(piece)
-    # Annotate AI flats with numbered leaders (temp files) so legend maps to drawings.
+    # Fewer, clearer callouts — large flats first, legend underneath (readable).
+    callouts = callout_legend_for_piece(piece)[:10]
     front_ann = annotate_flat_callouts(front_art, callouts, side="left") if front_art else None
     back_ann = annotate_flat_callouts(back_art, callouts, side="right") if back_art else None
     front_img = (
-        _look_image(front_ann or front_art, 58 * mm, 78 * mm, styles)
+        _look_image(front_ann or front_art, 88 * mm, 118 * mm, styles)
         if (front_ann or front_art)
         else flat_for_category(cat, back=False)
     )
     if back_art or back_ann:
         back_label = (
-            "PROPOSED BACK"
+            "PROPOSED BACK (UNVERIFIED)"
             if arts.get("flat_back_proposed") and not arts.get("flat_back")
             else "BACK"
         )
-        back_img = _look_image(back_ann or back_art, 58 * mm, 78 * mm, styles)
+        back_img = _look_image(back_ann or back_art, 88 * mm, 118 * mm, styles)
     else:
         back_label = "BACK (schematic)"
         back_img = flat_for_category(cat, back=True)
@@ -498,53 +506,47 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     flats_block = Table(
         [
             [
-                Paragraph("<b>FRONT — annotated</b>", styles["small"]),
-                Paragraph(f"<b>{back_label} — annotated</b>", styles["small"]),
+                Paragraph("<b>FRONT</b>", styles["body"]),
+                Paragraph(f"<b>{back_label}</b>", styles["body"]),
             ],
             [front_img, back_img],
         ],
-        colWidths=[66 * mm, 66 * mm],
+        colWidths=[94 * mm, 94 * mm],
     )
     flats_block.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(flats_block)
 
     legend_rows: list[list[Any]] = [
         [
             Paragraph("<b>#</b>", styles["small"]),
-            Paragraph("<b>Callout / POM point</b>", styles["small"]),
+            Paragraph("<b>Construction / design callout</b>", styles["small"]),
+            Paragraph("<b>#</b>", styles["small"]),
+            Paragraph("<b>Construction / design callout</b>", styles["small"]),
         ]
     ]
-    for num, label in callouts:
+    mid = (len(callouts) + 1) // 2
+    left_c = callouts[:mid]
+    right_c = callouts[mid:]
+    for i in range(max(len(left_c), len(right_c))):
+        ln, ll = left_c[i] if i < len(left_c) else ("", "")
+        rn, rl = right_c[i] if i < len(right_c) else ("", "")
         legend_rows.append(
-            [Paragraph(str(num), styles["small"]), Paragraph(str(label)[:110], styles["small"])]
+            [
+                Paragraph(str(ln), styles["small"]),
+                Paragraph(str(ll)[:90], styles["small"]),
+                Paragraph(str(rn), styles["small"]),
+                Paragraph(str(rl)[:90], styles["small"]),
+            ]
         )
-    pom_bits = []
-    for row in finished_pom_rows(piece)[:10]:
-        val = row.get("value")
-        if val in (None, ""):
-            continue
-        pom_bits.append(f"{row.get('code')}: {val:g}" if isinstance(val, float) else f"{row.get('code')}: {val}")
-    legend_cells: list[list[Any]] = [
-        [Paragraph("<b>Callout / POM legend</b>", styles["small"])],
-        [_table(legend_rows, [8 * mm, 40 * mm], styles)],
-        [
-            Paragraph(
-                "Red #s on flats are approximate leaders for sample room — "
-                "patternmaker confirms placement.",
-                styles["muted"],
-            )
-        ],
-    ]
-    if pom_bits:
-        legend_cells.append([Paragraph("<b>Base POM values</b>", styles["small"])])
-        legend_cells.append([Paragraph(" · ".join(pom_bits)[:420], styles["small"])])
-    legend_block = Table(legend_cells, colWidths=[52 * mm])
-    legend_block.setStyle(
-        TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)])
+    story.append(Paragraph("Callout legend", styles["h3"]))
+    story.append(_table(legend_rows, [10 * mm, 82 * mm, 10 * mm, 82 * mm], styles))
+    story.append(
+        Paragraph(
+            "Numbers on the drawings are discussion points for the fitting — "
+            "the tailor confirms exact placement when drafting the pattern.",
+            styles["muted"],
+        )
     )
-
-    rail = Table([[flats_block, legend_block]], colWidths=[134 * mm, 52 * mm])
-    rail.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story.append(rail)
 
     if arts.get("flat_back_proposed") and not arts.get("flat_back"):
         story.append(
@@ -605,113 +607,166 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     return story
 
 
+_MTM_DESIGN_DIM_KEYS = (
+    "neckline",
+    "v_depth",
+    "wrap_overlap",
+    "slit_start",
+    "overlay_length",
+    "sash_width",
+    "sash_length",
+    "hem_high",
+    "hem_low",
+    "garment_length",
+)
+
+
 def _pom_page(piece: dict[str, Any], *, units: str, sample_size: str, styles: dict[str, Any]) -> list[Any]:
-    """Tailor-ready POM table with proposed XS–2XL grades from sample base."""
+    """Made-to-measure: unique design dimensions + blank tailor measurement worksheet."""
     story: list[Any] = []
     heading = _piece_heading(piece)
-    story.append(Paragraph(f"Points of measure — {heading}", styles["h2"]))
+    story.append(Paragraph(f"Design dimensions & tailor measurements — {heading}", styles["h2"]))
     story.append(
         Paragraph(
-            f"Finished-garment POMs ({units}). Sample size <b>{sample_size or '—'}</b>. "
-            "<b>Bust / waist / hip / hem values are FULL garment circumference</b> "
-            "(≈ body circ + ease) — <b>NOT flat half-widths</b>. "
-            "Flat ½ column = Full ÷ 2 for sample-room check only. "
-            "Depth/length POMs (V depth, slit start, wrap overlap, overlay, sash, hem high/low) "
-            "are single lengths — never ×2. "
-            f"<b>Size grades ({', '.join(GRADE_SIZES)}) stay blank until the base circ POM is "
-            "designer-confirmed</b> — do not cut graded sizes from AI/open values. "
-            "Empty design-specific POMs are MISSING — ask the designer; do not invent them.",
-            styles["muted"],
+            f"<b>MADE-TO-MEASURE.</b> The tailor takes the customer’s actual body measurements "
+            f"({units}) and drafts the pattern. FashionRise does <b>not</b> provide sealed "
+            "production size grades. Values below are <b>design intent</b> for features the "
+            "customer must agree with the tailor — AI estimates are starting points only.",
+            styles["body"],
         )
     )
-    rows = graded_pom_rows(piece, sample_size=sample_size or "M")
-    circ_keys = {"chest_bust", "waist", "hip", "hem", "thigh", "leg_opening", "armhole", "cuff", "knee"}
-    header = [
-        Paragraph("<b>Code</b>", styles["small"]),
-        Paragraph("<b>POM</b>", styles["small"]),
-        Paragraph("<b>Basis</b>", styles["small"]),
-        Paragraph(f"<b>Full ({sample_size or 'sample'})</b>", styles["small"]),
-        Paragraph("<b>Flat ½</b>", styles["small"]),
-        Paragraph("<b>Tol</b>", styles["small"]),
-        Paragraph("<b>How / status</b>", styles["small"]),
-    ]
-    for sz in GRADE_SIZES:
-        header.append(Paragraph(f"<b>{sz}</b>", styles["small"]))
-    data: list[list[Any]] = [header]
-    if not rows:
+
+    # Fastening — one authoritative statement for wrap.
+    closure_family = detect_closure_family(piece)
+    story.append(Paragraph("Fastening / closure", styles["h3"]))
+    if closure_family == "wrap":
         story.append(
             Paragraph(
-                "No finished measurements recorded — enter POMs before sampling.",
+                "<b>Appears to be a WRAP / TIE dress</b> (no visible zipper in the Magic look). "
+                "Final fastening — sash/tie only, optional hidden snap, or another method — "
+                "<b>must be agreed with the tailor</b>. Do not assume an invisible zipper "
+                "unless the customer and tailor explicitly choose one.",
                 styles["warn"],
             )
         )
-    for row in rows:
-        val = row["value"]
-        key = str(row.get("key") or "")
-        is_circ = key in circ_keys
-        if val is None or val == "":
-            base_txt = "MISSING"
-            half_txt = "—"
-        elif isinstance(val, (int, float)):
-            base_txt = f"{float(val):g}"
-            half_txt = f"{float(val) / 2.0:g}" if is_circ else "n/a"
-        else:
-            base_txt = str(val)
-            half_txt = "—"
-        review = str(row.get("review_status") or "")
-        if review in {"needs_review", "proposed", "open"} and (val is None or val == ""):
-            base_txt = "MISSING"
-        elif review == "needs_review":
-            base_txt = f"{base_txt} · REVIEW"
-        how = str(row["how_to"])
-        if len(how) > 70:
-            how = how[:67] + "…"
+    elif closure_family == "zip":
+        story.append(
+            Paragraph(
+                "Design appears to use a zipper closure. Confirm type, length, and placement "
+                "with the tailor before cutting.",
+                styles["body"],
+            )
+        )
+    else:
+        story.append(
+            Paragraph(
+                "Closure is unresolved. Customer and tailor must agree fastening before the first toile.",
+                styles["warn"],
+            )
+        )
+
+    # Design-critical dimensions only.
+    story.append(Paragraph("Unique design dimensions (agree with customer)", styles["h3"]))
+    finished = finished_pom_rows(piece)
+    by_key = {str(r.get("key")): r for r in finished}
+    dim_header = [
+        Paragraph("<b>Feature</b>", styles["small"]),
+        Paragraph("<b>Suggested (cm)</b>", styles["small"]),
+        Paragraph("<b>Source</b>", styles["small"]),
+        Paragraph("<b>How to interpret</b>", styles["small"]),
+        Paragraph("<b>Agreed with tailor</b>", styles["small"]),
+    ]
+    dim_data: list[list[Any]] = [dim_header]
+    for key in _MTM_DESIGN_DIM_KEYS:
+        row = by_key.get(key)
+        if not row:
+            continue
+        # Skip empty v_depth if neckline already listed with same value.
+        if key == "v_depth":
+            neck = by_key.get("neckline")
+            if (
+                neck
+                and isinstance(neck.get("value"), (int, float))
+                and isinstance(row.get("value"), (int, float))
+                and float(neck["value"]) == float(row["value"])
+            ):
+                continue
+        val = row.get("value")
         status = str(row.get("source") or "").lower()
         review = str(row.get("review_status") or "").lower()
-        if status in {"ai", "ai_vision", "ai_inferred", "estimate", "calculated"} or review in {
+        if val in (None, "", "—"):
+            val_txt = "TO AGREE"
+            src_txt = "missing"
+        elif status in {"ai", "ai_vision", "ai_inferred", "estimate", "calculated"} or review in {
             "proposed",
             "needs_review",
             "open",
         }:
-            provenance = "AI ESTIMATE — not approved"
-        elif status in {"designer", "confirmed", "user"} and review in {
-            "confirmed",
-            "approved",
-            "designer_confirmed",
-        }:
-            provenance = "DESIGNER CONFIRMED"
-        elif status:
-            provenance = status.upper()
+            val_txt = f"{float(val):g}" if isinstance(val, (int, float)) else str(val)
+            src_txt = "AI estimate"
         else:
-            provenance = "UNSOURCED"
-        if row.get("grades_suppressed"):
-            provenance = f"{provenance} · grades withheld"
-        how_status = f"{how} [{provenance}]"
-        cells = [
-            Paragraph(str(row["code"]), styles["small"]),
-            Paragraph(str(row["label"]), styles["small"]),
-            Paragraph("FULL circ" if is_circ else "length/depth", styles["small"]),
-            Paragraph(base_txt, styles["small"]),
-            Paragraph(half_txt, styles["small"]),
-            Paragraph(f"±{row['tolerance_cm']:g}", styles["small"]),
-            Paragraph(how_status, styles["small"]),
-        ]
-        grades = row.get("grades") if isinstance(row.get("grades"), dict) else {}
-        for sz in GRADE_SIZES:
-            g = grades.get(sz)
-            cells.append(Paragraph("—" if g is None else f"{g:g}", styles["small"]))
-        data.append(cells)
-    widths = [9 * mm, 22 * mm, 14 * mm, 16 * mm, 12 * mm, 10 * mm, 36 * mm] + [
-        9 * mm
-    ] * len(GRADE_SIZES)
-    story.append(_table(data, widths, styles))
+            val_txt = f"{float(val):g}" if isinstance(val, (int, float)) else str(val)
+            src_txt = status or "noted"
+        how = str(row.get("how_to") or "")[:120]
+        dim_data.append(
+            [
+                Paragraph(str(row.get("label") or key), styles["small"]),
+                Paragraph(val_txt, styles["small"]),
+                Paragraph(src_txt, styles["small"]),
+                Paragraph(how, styles["small"]),
+                Paragraph("☐ ____ cm", styles["small"]),
+            ]
+        )
+    if len(dim_data) == 1:
+        dim_data.append(
+            [
+                Paragraph("—", styles["small"]),
+                Paragraph("TO AGREE", styles["small"]),
+                Paragraph("—", styles["small"]),
+                Paragraph("Discuss neckline, slit, wrap, length with tailor.", styles["small"]),
+                Paragraph("☐", styles["small"]),
+            ]
+        )
+    story.append(_table(dim_data, [32 * mm, 22 * mm, 20 * mm, 78 * mm, 28 * mm], styles))
+
+    # Blank tailor worksheet.
+    story.append(Paragraph("Tailor measurement worksheet (fill at fitting)", styles["h3"]))
     story.append(
         Paragraph(
-            "Grade rule (proposed): full-circumference POMs ≈ ±2.0 cm per size step from sample; "
-            "length ≈ ±0.7 cm; narrow POMs ≈ ±0.35 cm. Adjust after fit sample.",
+            "Record the customer’s body measurements here. Pattern and ease are the tailor’s responsibility.",
             styles["muted"],
         )
     )
+    blank_rows = [
+        ("Date / tailor", ""),
+        ("Customer name", ""),
+        ("Height", "cm"),
+        ("Bust (body circ)", "cm"),
+        ("Waist (body circ)", "cm"),
+        ("Hip (body circ)", "cm"),
+        ("Across back", "cm"),
+        ("Shoulder width", "cm"),
+        ("Arm / sleeve length", "cm"),
+        ("Preferred finished length (HPS→hem)", "cm"),
+        ("Fitting notes", ""),
+    ]
+    ws = [
+        [
+            Paragraph("<b>Measurement</b>", styles["small"]),
+            Paragraph("<b>Value</b>", styles["small"]),
+            Paragraph("<b>Unit / notes</b>", styles["small"]),
+        ]
+    ]
+    for label, unit in blank_rows:
+        ws.append(
+            [
+                Paragraph(label, styles["small"]),
+                Paragraph("____________________", styles["small"]),
+                Paragraph(unit or "____________________", styles["small"]),
+            ]
+        )
+    story.append(_table(ws, [60 * mm, 55 * mm, 65 * mm], styles))
+    _ = sample_size  # retained for API compatibility; not used for MTM grading
     story.append(PageBreak())
     return story
 
@@ -721,64 +776,54 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     heading = _piece_heading(piece)
     cat = str(piece.get("category") or "other")
     color = str(piece.get("color_hint") or "")
-    story.append(Paragraph(f"Bill of materials — {heading}", styles["h2"]))
-    closure_family = detect_closure_family(piece)
-    if closure_family == "wrap":
-        story.append(
-            Paragraph(
-                "<b>Closure family: WRAP / TIE</b> — no invisible zipper is assumed. "
-                "Any zip row would be a designer-confirmed change, not a default.",
-                styles["warn"],
-            )
-        )
-    elif closure_family == "unknown":
-        story.append(
-            Paragraph(
-                "<b>Closure UNRESOLVED</b> — zip vs wrap/tie vs pull-on must be confirmed before sample cut.",
-                styles["warn"],
-            )
-        )
+    story.append(Paragraph(f"Fabric guidance & materials — {heading}", styles["h2"]))
     story.append(
         Paragraph(
-            "Materials marked PROPOSED / UNRESOLVED are suggestions until fibre + GSM are locked. "
-            "Color codes: Pantone TCX / lab dip — never color name alone for production.",
-            styles["muted"],
+            "These are <b>recommended fabric characteristics</b> for the look — not a locked "
+            "purchase order. The tailor should recommend and source the actual material with "
+            "the customer (drape, weight, opacity, stretch).",
+            styles["body"],
         )
     )
+    closure_family = detect_closure_family(piece)
     piece_n = normalize_shell_material(piece)
     mats = piece_n.get("materials") if isinstance(piece_n.get("materials"), dict) else {}
     shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
     lining = mats.get("lining") if isinstance(mats.get("lining"), dict) else {}
-    closures = normalize_closure_display(
-        piece_n.get("closures") if isinstance(piece_n.get("closures"), dict) else {}
-    )
-    shell_name = str(shell.get("name") or shell.get("suggestion") or "Not confirmed")
-    composition = str(shell.get("composition") or "Unknown / not confirmed")
+    analysis = _piece_analysis(piece)
+    fab = analysis.get("fabric_estimate") if isinstance(analysis.get("fabric_estimate"), dict) else {}
+    shell_name = str(shell.get("name") or shell.get("suggestion") or fab.get("likely_fiber") or "To select with tailor")
+    composition = str(shell.get("composition") or fab.get("composition") or "To agree — fibre TBD")
+    story.append(Paragraph("Recommended fabric characteristics", styles["h3"]))
     story.append(
         _kv_table(
             [
-                ("Garment color", str(piece_n.get("color_hint") or color or "—")),
-                ("Color code / Pantone", pantone_or_color_code(piece_n)),
-                ("Shell material", shell_name if shell_name.strip() not in ("", "—") else "Not confirmed"),
-                ("Composition", composition),
-                ("Weight / GSM", str(shell.get("weight_gsm") or shell.get("gsm") or "not confirmed")),
-                ("Lining", str(lining.get("name") or "—")),
-                ("Closure", str(closures.get("display_type") or "—")),
+                ("Look color (reference)", str(piece_n.get("color_hint") or color or "—")),
+                ("Suggested hand / drape", str(fab.get("hand") or fab.get("drape") or shell.get("hand") or "Fluid, soft drape preferred")),
+                ("Suggested weight", str(shell.get("weight_gsm") or shell.get("gsm") or fab.get("gsm") or "Medium — enough body for wrap edges")),
+                ("Opacity", str(fab.get("opacity") or "Check in one layer; line if sheer")),
+                ("Stretch", str(fab.get("stretch") or "Low–moderate; stretch knit changes the pattern")),
+                ("Lining", str(lining.get("name") or "Recommend if shell is sheer or clingy — tailor decides")),
+                ("Example fibres (suggestions only)", composition),
             ],
             styles,
         )
     )
-    if str(closures.get("review_status") or "") == "needs_review":
+    story.append(
+        Paragraph(
+            "<b>Care:</b> provisional until fabric is chosen. Follow the supplier care label for the "
+            "selected cloth — do not treat the icons in this pack as final care instructions.",
+            styles["muted"],
+        )
+    )
+    if closure_family == "wrap":
         story.append(
             Paragraph(
-                "<b>REVIEW:</b> Closure must be named (zipper type/length, button, elastic, etc.). "
-                "Boolean placeholders such as “True” are not manufacturing specifications.",
+                "<b>Fastening reminder:</b> wrap/tie is the working assumption. Optional hidden "
+                "snap only if customer + tailor agree. No zipper unless explicitly chosen.",
                 styles["warn"],
             )
         )
-    contrad = material_contradiction(shell_name, composition)
-    if contrad:
-        story.append(Paragraph(f"<b>REVIEW:</b> {contrad}", styles["warn"]))
     bom = piece.get("bom") if isinstance(piece.get("bom"), list) else []
     if not bom:
         bom = (
@@ -790,79 +835,52 @@ def _bom_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
             else default_bom(cat, color_hint=color)
         )
     bom = normalize_bom_rows(bom, piece=piece)
+    # Drop factory packing / mass-production rows from the tailor brief.
+    skip_tokens = (
+        "polybag",
+        "carton",
+        "hangtag",
+        "supplier",
+        "main / size / care labels",
+        "care labels",
+    )
+    slim: list[dict[str, Any]] = []
+    for row in bom:
+        if not isinstance(row, dict):
+            continue
+        item = str(row.get("item") or row.get("name") or "").lower()
+        if any(tok in item for tok in skip_tokens):
+            continue
+        slim.append(row)
+    story.append(Paragraph("Materials checklist (discuss with tailor)", styles["h3"]))
     data = [
         [
             Paragraph("<b>Item</b>", styles["small"]),
-            Paragraph("<b>Description</b>", styles["small"]),
-            Paragraph("<b>Placement</b>", styles["small"]),
-            Paragraph("<b>Color / code</b>", styles["small"]),
-            Paragraph("<b>Qty</b>", styles["small"]),
-            Paragraph("<b>Unit</b>", styles["small"]),
-            Paragraph("<b>Supplier ref</b>", styles["small"]),
-            Paragraph("<b>Notes</b>", styles["small"]),
+            Paragraph("<b>Guidance</b>", styles["small"]),
+            Paragraph("<b>Status</b>", styles["small"]),
         ]
     ]
-    for row in bom[:50]:
-        if not isinstance(row, dict):
-            continue
+    for row in slim[:20]:
         item = str(row.get("item") or row.get("name") or "—")
+        guidance = str(row.get("description") or row.get("notes") or "—")[:160]
+        status = "Proposed — confirm"
         if str(row.get("review_status") or "") == "needs_review":
-            item = f"{item} · NEEDS REVIEW"
+            status = "Needs customer / tailor decision"
         data.append(
             [
                 Paragraph(item, styles["small"]),
-                Paragraph(str(row.get("description") or row.get("notes") or "—"), styles["small"]),
-                Paragraph(str(row.get("placement") or "—"), styles["small"]),
-                Paragraph(str(row.get("color_code") or color or "—"), styles["small"]),
-                Paragraph(str(row.get("qty") or "—"), styles["small"]),
-                Paragraph(str(row.get("unit") or "—"), styles["small"]),
-                Paragraph(str(row.get("supplier_ref") or "TBD"), styles["small"]),
-                Paragraph(str(row.get("notes") or "—")[:120], styles["small"]),
+                Paragraph(guidance, styles["small"]),
+                Paragraph(status, styles["small"]),
             ]
         )
+    story.append(_table(data, [48 * mm, 100 * mm, 36 * mm], styles))
     story.append(
-        _table(
-            data,
-            [28 * mm, 36 * mm, 28 * mm, 22 * mm, 12 * mm, 12 * mm, 18 * mm, 24 * mm],
-            styles,
+        Paragraph(
+            "Stay tape / clear elastic is recommended on deep-V and wrap edges. "
+            "Trims and notions are selected with the tailor — this brief does not lock suppliers.",
+            styles["muted"],
         )
     )
-    hw = hardware_rows(piece_n)
-    story.append(Paragraph("Hardware & special trims", styles["h3"]))
-    if hw:
-        hdata = [
-            [
-                Paragraph("<b>Item</b>", styles["small"]),
-                Paragraph("<b>Spec</b>", styles["small"]),
-                Paragraph("<b>Placement</b>", styles["small"]),
-                Paragraph("<b>Color</b>", styles["small"]),
-                Paragraph("<b>Qty</b>", styles["small"]),
-                Paragraph("<b>Supplier</b>", styles["small"]),
-            ]
-        ]
-        for row in hw:
-            hdata.append(
-                [
-                    Paragraph(row["item"], styles["small"]),
-                    Paragraph(row["spec"], styles["small"]),
-                    Paragraph(row["placement"], styles["small"]),
-                    Paragraph(row["color"], styles["small"]),
-                    Paragraph(f"{row['qty']} {row['unit']}", styles["small"]),
-                    Paragraph(row["supplier"], styles["small"]),
-                ]
-            )
-        story.append(
-            _table(hdata, [28 * mm, 48 * mm, 36 * mm, 22 * mm, 16 * mm, 22 * mm], styles)
-        )
-    else:
-        empty_hw = (
-            "No hardware rows — wrap pack expects sash/tie (+ optional inner snap if approved). "
-            "Confirm stay tape on BOM before cut."
-            if detect_closure_family(piece) == "wrap"
-            else "No hardware rows detected — confirm zip / hooks / buttons / stay tape on BOM before cut."
-        )
-        story.append(Paragraph(empty_hw, styles["warn"]))
-    # No forced page break — hardware stays with BOM; construction continues on next natural page.
     return story
 
 
@@ -901,11 +919,10 @@ def _construction_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[An
     story.append(
         Paragraph(
             (
-                "AI sew-order operations for this look (ISO 4915 stitch classes). "
-                "Confirm before factory send."
+                "Suggested sew order for discussion with the tailor "
+                "(ISO stitch classes are guidance only). Adapt to the chosen fabric."
                 if ai_sourced
-                else "Operations in sew order. Quote stitch class (ISO 4915) and SPI/SPCM. "
-                "Defaults are draft aids until designer confirms."
+                else "Suggested sew order — tailor adapts stitch types and seam allowances to the fabric."
             ),
             styles["muted"],
         )
@@ -946,51 +963,12 @@ def _construction_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[An
         )
     story.append(_table(data, [10 * mm, 48 * mm, 32 * mm, 22 * mm, 14 * mm, 54 * mm], styles))
 
-    # Compact stitch + SA standards (industry tech-sheet densification).
-    spi_rows = [
-        [
-            Paragraph("<b>Stitch</b>", styles["small"]),
-            Paragraph("<b>SPI / SPCM</b>", styles["small"]),
-            Paragraph("<b>Use</b>", styles["small"]),
-        ]
-    ]
-    wrap = detect_closure_family(piece) == "wrap"
-    for name, spi, use in thread_spi_defaults():
-        if wrap and "zip" in name.lower():
-            continue
-        spi_rows.append(
-            [
-                Paragraph(name, styles["small"]),
-                Paragraph(spi, styles["small"]),
-                Paragraph(use, styles["small"]),
-            ]
-        )
-    sa_rows = [
-        [Paragraph("<b>Seam type</b>", styles["small"]), Paragraph("<b>SA</b>", styles["small"])]
-    ]
-    for name, sa in seam_allowance_standards():
-        if wrap and "zip" in name.lower():
-            continue
-        sa_rows.append([Paragraph(name, styles["small"]), Paragraph(sa, styles["small"])])
-    std = Table(
-        [
-            [
-                _table(spi_rows, [32 * mm, 22 * mm, 36 * mm], styles),
-                _table(sa_rows, [50 * mm, 28 * mm], styles),
-            ]
-        ],
-        colWidths=[96 * mm, 84 * mm],
-    )
-    std.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story.append(Paragraph("Stitch & seam allowance standards (confirm per fabric)", styles["h3"]))
-    story.append(std)
-
-    # Pattern inventory on same logical block (may spill page)
-    story.append(Paragraph("Pattern piece development (NOT TO SCALE)", styles["h3"]))
+    # Pattern inventory — illustrative only for MTM.
+    story.append(Paragraph("Illustrative pattern pieces (NOT a sewing pattern)", styles["h3"]))
     story.append(
         Paragraph(
-            "Planning inventory for the patternmaker — not a print-to-scale cutter. "
-            "An actual sewing pattern is not supplied with this pack.",
+            "The tailor drafts the real pattern from customer measurements. "
+            "The list and schematic below only communicate the design’s piece breakdown.",
             styles["warn"],
         )
     )
@@ -1045,14 +1023,11 @@ def _construction_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[An
         _table(pdata, [12 * mm, 28 * mm, 10 * mm, 16 * mm, 28 * mm, 28 * mm, 50 * mm], styles)
     )
 
-    # Fabric cutting / pattern-development schematic (AI art when present).
-    story.append(Paragraph("Cutting layout / pattern development", styles["h3"]))
+    story.append(Paragraph("Pattern-development sketch (NOT TO SCALE)", styles["h3"]))
     story.append(
         Paragraph(
-            "AI cutting schematic for sample development — <b>NOT TO SCALE</b>. "
-            "Not a print-to-cutter marker. Patternmaker must draft the sewing pattern from "
-            "confirmed POMs + this inventory before fabric cutting.",
-            styles["warn"],
+            "Visual aid for piece shapes only — the tailor drafts the cuttable pattern.",
+            styles["muted"],
         )
     )
     pattern_art = _art_path(piece, "pattern_sheet")
@@ -1318,23 +1293,12 @@ def _revision_and_readiness(
             story.append(Paragraph(f"• {text[:280]}", styles["warn"]))
     story.append(
         Paragraph(
-            "Before factory send, confirm: (1) every POM has how-to + tolerance, "
-            "(2) size grades only after sample POMs are sealed, (3) every material has supplier ref + color code, "
-            "(4) every operation has stitch type + SPI, (5) label positions measured from a fixed point, "
-            "(6) revision log matches cover revision.",
+            "This pack is complete as a <b>made-to-measure design brief</b> when the customer "
+            "and tailor have agreed fastening, fabric characteristics, and the unique design "
+            "dimensions. Industrial grading, supplier refs, and packing specs are intentionally omitted.",
             styles["body"],
         )
     )
-    story.append(Paragraph("Per-garment completeness", styles["h3"]))
-    for piece in pieces:
-        story.append(
-            Paragraph(
-                f"• {_piece_heading(piece)} — category {piece.get('category') or '—'}; "
-                f"POMs {len(finished_pom_rows(piece))}; "
-                f"BOM rows {len(piece.get('bom') or [])}",
-                styles["body"],
-            )
-        )
     return story
 
 
@@ -1358,7 +1322,6 @@ def build_story_v4_designer(
     pieces = [enrich_piece_for_designer_pdf(p) for p in raw_pieces]
 
     story: list[Any] = []
-    # Dense style sheet absorbs former cover + overview (Magic + body + fabric strip).
     story.extend(
         _cover_page(
             title=title,
@@ -1381,29 +1344,29 @@ def build_story_v4_designer(
         story.extend(_pom_page(piece, units=units, sample_size=sample_size, styles=styles))
         story.extend(_bom_page(piece, styles))
         story.extend(_construction_page(piece, styles))
-    # Factory close — one continuous section (no sparse colorways/labels-only pages).
-    story.append(Paragraph("Factory close — colorways, labels, QC, readiness", styles["h2"]))
-    story.extend(_colorways_page(pieces, styles))
-    story.extend(_labels_packing_page(styles, pieces=pieces))
-    # Sample QC checklist here (with care/labels) — never alone under cutting.
+    # Tailor consultation close — no factory packing / carton pages.
+    story.append(Paragraph("Tailor consultation checklist", styles["h2"]))
+    story.append(
+        Paragraph(
+            "Use this list at the first appointment. FashionRise provides the design brief; "
+            "the tailor owns measurements, pattern, fabric recommendation, and fittings.",
+            styles["body"],
+        )
+    )
     formal_pieces = [p for p in pieces if is_formal_dress_category(str(p.get("category") or ""))]
     if formal_pieces:
-        story.append(Paragraph("Sample QC checklist (design-specific)", styles["h3"]))
-        # Use first formal piece's closure family so wrap dresses don't get zip QC.
         qc_items = qc_for_piece(formal_pieces[0])
-        qc_left = qc_items[: (len(qc_items) + 1) // 2]
-        qc_right = qc_items[(len(qc_items) + 1) // 2 :]
-        left_tbl = Table(
-            [[Paragraph(f"☐ {item}", styles["small"])] for item in qc_left],
-            colWidths=[88 * mm],
-        )
-        right_tbl = Table(
-            [[Paragraph(f"☐ {item}", styles["small"])] for item in qc_right],
-            colWidths=[88 * mm],
-        )
-        qc_table = Table([[left_tbl, right_tbl]], colWidths=[90 * mm, 90 * mm])
-        qc_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-        story.append(qc_table)
+        for item in qc_items:
+            story.append(Paragraph(f"☐ {item}", styles["body"]))
+    for line in (
+        "☐ Confirm fastening with customer (wrap/tie vs optional snap — no zipper unless chosen).",
+        "☐ Select fabric for drape, weight, opacity, and stretch; agree lining if needed.",
+        "☐ Record customer body measurements on the worksheet and set ease.",
+        "☐ Agree design dimensions (V depth, wrap overlap, slit start, overlay / hem lengths).",
+        "☐ Review proposed back (if no Magic back) and lock rear construction.",
+        "☐ Draft pattern, cut toile, fit, then cut fashion fabric.",
+    ):
+        story.append(Paragraph(line, styles["body"]))
     story.extend(
         _revision_and_readiness(
             style_code=style_code,
