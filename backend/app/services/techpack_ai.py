@@ -1223,7 +1223,10 @@ def _persist_professional_result(
                 if isinstance(x, dict)
             ]
 
-        # Densify POMs + fabric from vision (empty cells only).
+        # Fill tailor fields the model may omit, then densify POMs + fabric.
+        from app.services.techpack_tailor_ready import enrich_tailor_analysis_fields
+
+        enrich_tailor_analysis_fields(analysis, piece)
         _apply_ai_pom_estimates(piece, analysis)
         _apply_ai_fabric_estimate(piece, analysis)
         back_proposal = str(analysis.get("back_construction_proposal") or "").strip()

@@ -78,6 +78,64 @@ HARDWARE_TOKENS = (
 )
 
 
+def enrich_tailor_analysis_fields(analysis: dict[str, Any], piece: dict[str, Any]) -> None:
+    """Ensure tailor-facing analysis keys exist even when the model omits them."""
+    if not isinstance(analysis, dict):
+        return
+    if not isinstance(analysis.get("callout_points"), list) or not analysis.get("callout_points"):
+        probe = dict(piece)
+        probe["illustrations"] = {
+            **(piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}),
+            "analysis": {**analysis, "callout_points": []},
+        }
+        analysis["callout_points"] = [
+            {"n": n, "label": label, "region": "garment"}
+            for n, label in callout_legend_for_piece(probe)
+        ]
+    if not isinstance(analysis.get("hardware"), list) or not analysis.get("hardware"):
+        hw: list[dict[str, Any]] = []
+        closure = str(analysis.get("closure_visible") or "")
+        if closure and closure.lower() not in {"none", "n/a", "—", "-", ""}:
+            hw.append(
+                {
+                    "item": "Closure",
+                    "spec": closure[:120],
+                    "placement": "As visible / proposed",
+                    "qty": "1",
+                    "unit": "pcs",
+                    "color": str(piece.get("color_hint") or "match"),
+                }
+            )
+        for feat in (analysis.get("distinctive_features") or [])[:6]:
+            text = str(feat)
+            low = text.lower()
+            if any(t in low for t in ("zip", "hook", "button", "sash", "tie", "belt", "boning", "cup")):
+                hw.append(
+                    {
+                        "item": text[:80],
+                        "spec": "From distinctive features — confirm",
+                        "placement": "As designed",
+                        "qty": "1",
+                        "unit": "pcs",
+                        "color": str(piece.get("color_hint") or "match"),
+                    }
+                )
+        if hw:
+            analysis["hardware"] = hw
+    if not isinstance(analysis.get("care_recommendation"), dict):
+        analysis["care_recommendation"] = care_recommendation(
+            {"illustrations": {"analysis": analysis}, "color_hint": piece.get("color_hint")}
+        )
+    if not analysis.get("pantone_estimate"):
+        colors = analysis.get("colors")
+        if isinstance(colors, list) and colors:
+            analysis["pantone_estimate"] = f"{colors[0]} — confirm Pantone TCX / lab dip"
+        elif piece.get("color_hint"):
+            analysis["pantone_estimate"] = (
+                f"{piece.get('color_hint')} — confirm Pantone TCX / lab dip"
+            )
+
+
 def sample_grade_index(sample_size: str) -> int:
     """Map sample size label to grade step (default M / 0)."""
     raw = str(sample_size or "").strip().upper()

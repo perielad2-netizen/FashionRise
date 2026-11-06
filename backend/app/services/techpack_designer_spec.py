@@ -424,6 +424,14 @@ def is_formal_dress_category(category: str) -> bool:
 def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
     """Non-destructive copy with formalwear defaults filled when empty."""
     out = dict(piece)
+    # Synthesize tailor analysis fields for PDF-only rebuilds of older runs.
+    illust = out.get("illustrations") if isinstance(out.get("illustrations"), dict) else {}
+    analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else None
+    if isinstance(analysis, dict):
+        from app.services.techpack_tailor_ready import enrich_tailor_analysis_fields
+
+        enrich_tailor_analysis_fields(analysis, out)
+        out["illustrations"] = {**illust, "analysis": analysis}
     cat = str(out.get("category") or "other")
     color = str(out.get("color_hint") or "")
     if is_formal_dress_category(cat):
