@@ -82,6 +82,30 @@ def _piece_analysis(piece: dict[str, Any]) -> dict[str, Any]:
     return analysis if isinstance(analysis, dict) else {}
 
 
+def _compact_kv(rows: list[tuple[str, str]], styles: dict[str, Any], *, width: float = 88 * mm) -> Table:
+    """Fixed-width key/value table that fits nested columns (avoids 120mm overflow)."""
+    col0 = 26 * mm
+    data = [
+        [Paragraph(f"<b>{k}</b>", styles["small"]), Paragraph((v or "—")[:160], styles["small"])]
+        for k, v in rows
+    ]
+    t = Table(data, colWidths=[col0, max(30 * mm, width - col0)])
+    t.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.3, RULE),
+                ("BACKGROUND", (0, 0), (0, -1), HEADER_BG),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ]
+        )
+    )
+    return t
+
+
 def _fabric_strip(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     """Compact fabric / key-spec strip like industry bodycon / MK spec sheets."""
     analysis = _piece_analysis(piece)
@@ -89,9 +113,10 @@ def _fabric_strip(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
     mats = piece.get("materials") if isinstance(piece.get("materials"), dict) else {}
     shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
     rows = [
-        ("Silhouette", str(analysis.get("silhouette") or piece.get("label") or "—")[:140]),
-        ("Neckline", str(analysis.get("neckline") or "—")[:100]),
-        ("Sleeves / length", f"{analysis.get('sleeves') or '—'} · {analysis.get('length') or '—'}"),
+        ("Silhouette", str(analysis.get("silhouette") or piece.get("label") or "—")[:110]),
+        ("Neckline", str(analysis.get("neckline") or "—")[:90]),
+        ("Sleeves", str(analysis.get("sleeves") or "—")[:70]),
+        ("Length", str(analysis.get("length") or "—")[:70]),
         (
             "Shell / fiber",
             str(
@@ -99,17 +124,17 @@ def _fabric_strip(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
                 or fab.get("likely_fiber")
                 or shell.get("name")
                 or "—"
-            )[:140],
+            )[:110],
         ),
-        ("GSM / hand", f"{shell.get('weight_gsm') or fab.get('gsm_range') or '—'} · {shell.get('hand') or fab.get('hand') or '—'}"),
-        ("Drape / opacity", f"{shell.get('drape') or fab.get('drape') or '—'} · {shell.get('opacity') or fab.get('opacity') or '—'}"),
-        ("Color", str(piece.get("color_hint") or "—")),
-        ("Fit", str(analysis.get("fit") or "—")),
+        ("GSM / hand", f"{shell.get('weight_gsm') or fab.get('gsm_range') or '—'} · {str(shell.get('hand') or fab.get('hand') or '—')[:50]}"),
+        ("Drape", str(shell.get("drape") or fab.get("drape") or "—")[:70]),
+        ("Opacity", str(shell.get("opacity") or fab.get("opacity") or "—")[:70]),
+        ("Color", str(piece.get("color_hint") or "—")[:40]),
+        ("Fit", str(analysis.get("fit") or "—")[:90]),
     ]
+    filtered = [(a, b) for a, b in rows if str(b).strip() and str(b).strip() != "—"]
     out: list[Any] = [Paragraph("Key garment / fabric specs", styles["h3"])]
-    out.append(
-        _kv_table([(a, b) for a, b in rows if str(b).strip() and str(b).strip() != "—"], styles)
-    )
+    out.append(_compact_kv(filtered, styles, width=180 * mm))
     return out
 
 
@@ -203,105 +228,116 @@ def _cover_page(
         )
     )
 
-    # Two-column metadata like industry tech sheets (left identity / right sample).
-    left_meta = _kv_table(
+    # Two-column metadata like industry tech sheets (fixed widths — no overflow).
+    left_meta = _compact_kv(
         [
             ("Brand", "FashionRise"),
-            ("Style name", title or "—"),
-            ("Style number", style_code),
+            ("Style name", (title or "—")[:48]),
+            ("Style #", style_code),
             ("Revision", str(revision)),
             ("Look ID", look_id[:18] + "…" if len(look_id) > 20 else look_id),
-            ("Components", component_list[:160]),
+            ("Components", component_list[:90]),
         ],
         styles,
+        width=88 * mm,
     )
-    right_meta = _kv_table(
+    right_meta = _compact_kv(
         [
-            ("Season / drop", str(v2.get("season") or "—")),
+            ("Season", str(v2.get("season") or "—")),
             ("Size system", str(v2.get("size_system") or "—")),
             ("Sample size", str(v2.get("sample_size") or "—")),
             ("Units", str(v2.get("units") or "cm")),
-            ("Fit preference", str(prefs.get("fit_preference") or "—")),
-            ("Generation", cover_prov["label"]),
+            ("Fit", str(prefs.get("fit_preference") or "—")),
+            ("Generation", str(cover_prov.get("label") or "—")[:42]),
         ],
         styles,
+        width=88 * mm,
     )
     meta_row = Table([[left_meta, right_meta]], colWidths=[90 * mm, 90 * mm])
     meta_row.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.append(meta_row)
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
-    # Magic refs + body side-by-side (dense overview, not a separate sparse page).
+    # Magic look + body/fabric column (fills the blank "no back" side with useful data).
     from app.services.techpack_pdf import _measurement_table
 
     body = v2.get("body") if isinstance(v2.get("body"), dict) else {}
-    looks = Table(
+    look_cell = Table(
         [
-            [
-                _side_cell("Front Magic look", front_image, styles, max_h=72 * mm),
-                _side_cell(
-                    "Back Magic look" if back_image else "Back — not provided (AI proposes)",
-                    back_image,
-                    styles,
-                    max_h=72 * mm,
-                ),
-            ]
+            [Paragraph("<b>Front Magic look</b>", styles["small"])],
+            [_look_image(front_image or back_image, 78 * mm, 88 * mm, styles)],
         ],
-        colWidths=[90 * mm, 90 * mm],
+        colWidths=[82 * mm],
     )
-    looks.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story.append(looks)
-    if not back_image:
-        story.append(
+    right_bits: list[list[Any]] = [
+        [
             Paragraph(
-                "<b>Proposed back:</b> No Magic back — pack invents a coherent rear flat "
-                "(PROPOSED / UNVERIFIED). Confirm before cutting.",
-                styles["warn"],
+                "<b>Back Magic look</b>"
+                if back_image
+                else "<b>Back — not provided (AI proposes rear)</b>",
+                styles["small"],
             )
-        )
-
-    body_and_specs: list[Any] = [
-        Paragraph("Body measurements (shared — not finished POMs)", styles["h3"]),
-        _measurement_table(
-            [
-                ("Height", body.get("height")),
-                ("Bust", body.get("bust")),
-                ("Waist", body.get("waist")),
-                ("Hip", body.get("hip")),
-                ("Inseam (body)", body.get("inseam")),
-            ],
-            styles,
-        ),
+        ],
     ]
+    if back_image:
+        right_bits.append([_look_image(back_image, 78 * mm, 55 * mm, styles)])
+    else:
+        right_bits.append(
+            [
+                Paragraph(
+                    "No Magic back image. Pack invents a coherent rear flat "
+                    "(PROPOSED / UNVERIFIED) — confirm before cutting.",
+                    styles["warn"],
+                )
+            ]
+        )
+    right_bits.append([Paragraph("Body (shared)", styles["small"])])
+    right_bits.append(
+        [
+            _measurement_table(
+                [
+                    ("Height", body.get("height")),
+                    ("Bust", body.get("bust")),
+                    ("Waist", body.get("waist")),
+                    ("Hip", body.get("hip")),
+                    ("Inseam", body.get("inseam")),
+                ],
+                styles,
+            )
+        ]
+    )
+    right_cell = Table(right_bits, colWidths=[92 * mm])
+    right_cell.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+            ]
+        )
+    )
+    hero = Table([[look_cell, right_cell]], colWidths=[84 * mm, 96 * mm])
+    hero.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(hero)
+
     if pieces:
-        body_and_specs.extend(_fabric_strip(pieces[0], styles))
-    story.extend(body_and_specs)
+        story.extend(_fabric_strip(pieces[0], styles))
 
     notes = (v2.get("look_notes") or "").strip()
     skip_notes = (not notes) or notes.lower().startswith("try on person preview")
     if not skip_notes:
-        story.append(Paragraph(f"<b>Look notes:</b> {notes[:320]}", styles["small"]))
+        story.append(Paragraph(f"<b>Look notes:</b> {notes[:240]}", styles["small"]))
     designer = (v2.get("designer_notes") or "").strip()
     if designer:
-        story.append(Paragraph(f"<b>Designer notes:</b> {designer[:280]}", styles["small"]))
+        story.append(Paragraph(f"<b>Designer notes:</b> {designer[:200]}", styles["small"]))
 
     warn_n = len(v2.get("warnings") if isinstance(v2.get("warnings"), list) else []) + len(
         collect_compatibility_warnings(v2)
     )
+    footer_bits = ["Style sheet · Flats · POM · BOM · Construction & cutting · Factory close"]
     if warn_n:
-        story.append(
-            Paragraph(
-                f"{warn_n} measurement / review note(s) → Manufacturing readiness (last page).",
-                styles["muted"],
-            )
-        )
-    story.append(
-        Paragraph(
-            "Pack: Style sheet · Flats &amp; callouts · POM · BOM · Construction &amp; cutting · "
-            "Factory close (colorways / labels / readiness).",
-            styles["muted"],
-        )
-    )
+        footer_bits.insert(0, f"{warn_n} review note(s) → readiness (last page)")
+    story.append(Paragraph(" · ".join(footer_bits), styles["muted"]))
     story.append(PageBreak())
     return story
 
@@ -381,7 +417,7 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
         )
 
     front_img = (
-        _look_image(front_art, 62 * mm, 95 * mm, styles)
+        _look_image(front_art, 58 * mm, 78 * mm, styles)
         if front_art
         else flat_for_category(cat, back=False)
     )
@@ -391,7 +427,7 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
             if arts.get("flat_back_proposed") and not arts.get("flat_back")
             else "BACK"
         )
-        back_img = _look_image(back_art, 62 * mm, 95 * mm, styles)
+        back_img = _look_image(back_art, 58 * mm, 78 * mm, styles)
     else:
         back_label = "BACK (schematic)"
         back_img = flat_for_category(cat, back=True)
@@ -484,7 +520,7 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
                     styles["warn"],
                 )
             )
-        story.append(_look_image(detail_art, 178 * mm, 78 * mm, styles))
+        story.append(_look_image(detail_art, 178 * mm, 88 * mm, styles))
     elif detail_excl:
         story.append(Paragraph(f"<b>MISSING / EXCLUDED:</b> {detail_excl}", styles["warn"]))
     else:
