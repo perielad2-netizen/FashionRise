@@ -50,7 +50,16 @@ describe('ImmersiveToolbar', () => {
     expect(onExit).toHaveBeenCalled()
   })
 
-  it('minimizes to pencil, eraser, fill, undo, redo only', () => {
+  it('shows a visible Minimize control next to Exit', () => {
+    render(<ImmersiveToolbar {...baseProps} />)
+    const minimize = screen.getByTestId('immersive-toolbar-minimize')
+    expect(minimize).toBeTruthy()
+    expect(minimize.getAttribute('aria-label')).toBe('Minimize sketch toolbar')
+    expect(screen.getByText('Minimize')).toBeTruthy()
+    expect(screen.getByTestId('immersive-exit')).toBeTruthy()
+  })
+
+  it('minimizes to pencil, eraser, fill, hand, undo, redo', () => {
     const onTool = vi.fn()
     const onUndo = vi.fn()
     const onRedo = vi.fn()
@@ -71,17 +80,19 @@ describe('ImmersiveToolbar', () => {
     expect(screen.getByRole('button', { name: 'Pencil' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Eraser' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Fill' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Hand pan' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Redo' })).toBeTruthy()
     expect(screen.getByTestId('immersive-toolbar-maximize')).toBeTruthy()
 
-    expect(screen.queryByRole('button', { name: 'Hand pan' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Eyedropper' })).toBeNull()
     expect(screen.queryByTestId('immersive-exit')).toBeNull()
     expect(screen.queryByText('125%')).toBeNull()
     expect(screen.queryByText('Materials')).toBeNull()
     expect(screen.queryByText('Models')).toBeNull()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Hand pan' }))
+    expect(onTool).toHaveBeenCalledWith('pan')
     fireEvent.click(screen.getByRole('button', { name: 'Fill' }))
     expect(onTool).toHaveBeenCalledWith('fill')
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
