@@ -837,6 +837,22 @@ def _construction_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[An
     if not steps:
         steps = default_construction_steps(cat)
     steps = filter_construction_steps(list(steps), analysis=analysis)
+    # Wrap dresses: drop zip-install steps that contradict the declared wrap closure.
+    if detect_closure_family(piece) == "wrap":
+        filtered_steps: list[Any] = []
+        for step in steps:
+            blob = (
+                " ".join(
+                    str(step.get(k) or "")
+                    for k in ("operation", "instruction", "notes", "stitch_type")
+                ).lower()
+                if isinstance(step, dict)
+                else str(step).lower()
+            )
+            if "zip" in blob or "zipper" in blob:
+                continue
+            filtered_steps.append(step)
+        steps = filtered_steps
     ai_sourced = any(
         isinstance(s, dict)
         and str(s.get("source") or "").lower() in {"ai", "ai_vision", "ai_inferred"}
@@ -898,7 +914,10 @@ def _construction_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[An
             Paragraph("<b>Use</b>", styles["small"]),
         ]
     ]
+    wrap = detect_closure_family(piece) == "wrap"
     for name, spi, use in thread_spi_defaults():
+        if wrap and "zip" in name.lower():
+            continue
         spi_rows.append(
             [
                 Paragraph(name, styles["small"]),
@@ -910,6 +929,8 @@ def _construction_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[An
         [Paragraph("<b>Seam type</b>", styles["small"]), Paragraph("<b>SA</b>", styles["small"])]
     ]
     for name, sa in seam_allowance_standards():
+        if wrap and "zip" in name.lower():
+            continue
         sa_rows.append([Paragraph(name, styles["small"]), Paragraph(sa, styles["small"])])
     std = Table(
         [

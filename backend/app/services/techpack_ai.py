@@ -437,6 +437,35 @@ def _apply_ai_pom_estimates(piece: dict[str, Any], analysis: dict[str, Any]) -> 
         "waist": "waist",
         "hip": "hip",
     }
+    # Ensure design-specific dress keys exist so AI can fill them on older drafts.
+    for ensure_key in (
+        "wrap_overlap",
+        "slit_start",
+        "overlay_length",
+        "sash_width",
+        "sash_length",
+        "hem_high",
+        "hem_low",
+        "neckline",
+        "hem",
+        "shoulder_width",
+        "armhole",
+        "sleeve_length",
+        "garment_length",
+        "chest_bust",
+        "waist",
+        "hip",
+    ):
+        if ensure_key not in finished:
+            finished[ensure_key] = {
+                "value": None,
+                "unit": "cm",
+                "source": "empty",
+                "confidence": "unknown",
+                "review_status": "open",
+                "assumptions": [],
+                "note": "",
+            }
     changed = False
     for ai_key, pom_key in key_map.items():
         if pom_key not in finished:
@@ -452,6 +481,7 @@ def _apply_ai_pom_estimates(piece: dict[str, Any], analysis: dict[str, Any]) -> 
         assumptions = [
             method or "Proportional estimate from Magic look + body measurements",
             "AI sample-room proposal — confirm on form before cutting",
+            "Circumference values are FULL circ (not flat half) unless noted as depth/length",
         ]
         finished[pom_key] = {
             **(finished[pom_key] if isinstance(finished.get(pom_key), dict) else {}),
