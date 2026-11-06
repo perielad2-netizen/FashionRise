@@ -1151,9 +1151,8 @@ def _pattern_visual_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[
         # Still deliver a dress-benchmark visual piece map from the inventory.
         story.append(
             Paragraph(
-                "AI pattern-sheet art was not generated for this garment (image budget). "
-                "The large visual piece map below is a FashionRise schematic built from the "
-                "inventory — still <b>NOT</b> a printable sewing pattern.",
+                "Large visual piece map from this garment’s inventory (FashionRise schematic). "
+                "Match each shape to the IDs above. Still <b>NOT</b> a printable sewing pattern.",
                 styles["muted"],
             )
         )
