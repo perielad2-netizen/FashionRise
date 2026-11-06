@@ -169,18 +169,23 @@ def test_cover_skips_tryon_boilerplate_notes():
         "look_notes": "Try On Person preview — stockings on",
         "ai": {},
         "disclaimer": "Sample development pack.",
+        "preferences": {"fit_preference": "fitted"},
+        "body": {"bust": {"value": 88, "unit": "cm"}},
+        "warnings": [],
     }
     pieces = [
         {
             "id": "p1",
             "category": "dress",
             "label": "Dress",
+            "color_hint": "beige",
             "illustrations": {
                 "analysis": {
                     "silhouette": "fitted mini",
                     "neckline": "deep V",
                     "sleeves": "long",
                     "length": "mini",
+                    "fabric_estimate": {"likely_fiber": "poly jersey", "gsm_range": "200"},
                 }
             },
         }
@@ -200,7 +205,8 @@ def test_cover_skips_tryon_boilerplate_notes():
     texts = [getattr(f, "text", "") for f in story if hasattr(f, "text")]
     blob = " ".join(str(t) for t in texts)
     assert "Try On Person" not in blob
-    assert "AI design read" in blob or "fitted mini" in blob
+    assert "GARMENT TECH SHEET" in blob or "fitted mini" in blob or "Key garment" in blob
+    assert "Proposed back" in blob
 
 
 def test_overview_notes_proposed_back_when_missing():
