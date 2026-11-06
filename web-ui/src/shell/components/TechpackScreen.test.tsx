@@ -382,7 +382,7 @@ describe('TechpackScreen simplified UX', () => {
     expect(fetchTechpackPdfBlob).not.toHaveBeenCalledWith('exp-basic-old')
   })
 
-  it('shows Regenerate AI PDF when a pack is ready and force_new queues a new run', async () => {
+  it('does not offer Regenerate AI PDF once a pack is ready — Download only', async () => {
     getTechpackAiStatus.mockResolvedValue({
       enabled: true,
       professional_available: true,
@@ -416,39 +416,11 @@ describe('TechpackScreen simplified UX', () => {
       progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
       result: { export_id: 'exp-pro-bound', pdf_ready: true },
     })
-    generateTechpackAiProfessionalOneTap.mockResolvedValue({
-      run_id: 'run-regen',
-      status: 'queued',
-      cost_usd_cents: 0,
-      mode: 'professional',
-      accepted: true,
-      progress: { phase: 'preparing', message: 'Regenerating AI Technical Pack…' },
-    })
-    getTechpackAiRun.mockResolvedValue({
-      id: 'run-regen',
-      draft_id: 'draft-1',
-      stage: 'professional',
-      status: 'completed',
-      cost_usd_cents: 80,
-      export_id: 'exp-pro-new',
-      pdf_ready: true,
-      pdf_filename: 'FR-5608_r1_techpack.pdf',
-      artifacts: [],
-      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
-      result: { export_id: 'exp-pro-new', pdf_ready: true },
-    })
 
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     expect(await screen.findByTestId('download-pdf-main')).toBeInTheDocument()
-    const regen = await screen.findByTestId('regenerate-ai-pdf')
-    await waitFor(() => expect(regen).toBeEnabled())
-    fireEvent.click(regen)
-    await waitFor(() =>
-      expect(generateTechpackAiProfessionalOneTap).toHaveBeenCalledWith(
-        'draft-1',
-        expect.objectContaining({ force_new: true }),
-      ),
-    )
+    expect(screen.queryByTestId('regenerate-ai-pdf')).not.toBeInTheDocument()
+    expect(generateTechpackAiProfessionalOneTap).not.toHaveBeenCalled()
   })
 
   it('reopening a completed Professional look does not block Edit behind the ready overlay', async () => {

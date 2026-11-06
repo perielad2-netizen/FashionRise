@@ -907,8 +907,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           {editorDirty
             ? 'Unsaved detail changes — save first. Your previous PDF stays available as history.'
             : showUpdatePdfNoAi
-              ? 'Details changed since your last PDF. Update PDF (No AI) refreshes tables from saved specs without regenerating illustrations. Generate AI PDF only if garments or artwork must change.'
-              : 'Details changed since your last AI Technical Pack. Previous PDF remains available as history. Generate AI PDF if illustrations need to change.'}
+              ? 'Details changed since your last PDF. Update PDF (No AI) refreshes tables from saved specs without new AI illustrations.'
+              : 'Details changed since your last AI Technical Pack. Previous PDF remains available as history.'}
         </p>
       ) : null}
 
@@ -974,18 +974,6 @@ export function TechpackScreen({ draftId, onBack }: Props) {
             {busy && progressOpen && !progressReady ? 'Working…' : 'Generate AI PDF'}
           </button>
         )}
-
-        {hasReadyPdf ? (
-          <button
-            type="button"
-            className={styles.detailsLink}
-            disabled={busy || !professionalAvailable || !selectedBodyProfileId}
-            data-testid="regenerate-ai-pdf"
-            onClick={() => void runOneTapGenerate({ forceNew: true })}
-          >
-            Regenerate AI PDF (paid — compare)
-          </button>
-        ) : null}
 
         {showUpdatePdfNoAi ? (
           <button
