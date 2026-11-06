@@ -206,17 +206,32 @@ def _cover_page(
             styles["body"],
         )
     )
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 4))
+    # Slightly shorter hero so cover metadata + notes stay on one page (avoids a near-empty page 2).
     story.append(
         Table(
-            [[_look_image(front_image or back_image, 95 * mm, 115 * mm, styles)]],
-            colWidths=[110 * mm],
+            [[_look_image(front_image or back_image, 88 * mm, 95 * mm, styles)]],
+            colWidths=[100 * mm],
         )
     )
     notes = (v2.get("look_notes") or "").strip()
-    if notes:
+    # Skip try-on boilerplate / empty notes — they created orphan nearly-blank pages.
+    skip_notes = (not notes) or notes.lower().startswith("try on person preview")
+    if not skip_notes:
         story.append(Paragraph("Look notes", styles["h3"]))
-        story.append(Paragraph(notes, styles["body"]))
+        story.append(Paragraph(notes[:500], styles["body"]))
+    # Prefer AI silhouette blurb when look notes were skipped.
+    if skip_notes and pieces:
+        illust = pieces[0].get("illustrations") if isinstance(pieces[0].get("illustrations"), dict) else {}
+        analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
+        blurb = " · ".join(
+            str(analysis.get(k) or "").strip()
+            for k in ("silhouette", "neckline", "sleeves", "length")
+            if str(analysis.get(k) or "").strip() and str(analysis.get(k) or "").strip() != "—"
+        )
+        if blurb:
+            story.append(Paragraph("AI design read", styles["h3"]))
+            story.append(Paragraph(blurb[:600], styles["body"]))
     story.append(PageBreak())
     return story
 
@@ -232,8 +247,9 @@ def _overview_page(
     story.append(Paragraph("Design overview", styles["h2"]))
     story.append(
         Paragraph(
-            "Authenticated Magic references. Missing opposite sides are not invented. "
-            "Manufacturing flats follow on component sheets.",
+            "Authenticated Magic references. When a back Magic look is missing, AI proposes a "
+            "rear flat for sampling (clearly marked proposed). Manufacturing flats follow on "
+            "component sheets.",
             styles["muted"],
         )
     )
@@ -241,13 +257,27 @@ def _overview_page(
         [
             [
                 _side_cell("Front Magic look", front_image, styles, max_h=100 * mm),
-                _side_cell("Back Magic look", back_image, styles, max_h=100 * mm),
+                _side_cell(
+                    "Back Magic look" if back_image else "Back Magic look — not provided",
+                    back_image,
+                    styles,
+                    max_h=100 * mm,
+                ),
             ]
         ],
         colWidths=[88 * mm, 88 * mm],
     )
     looks.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.append(looks)
+    if not back_image:
+        story.append(
+            Paragraph(
+                "<b>Proposed back:</b> No Magic back image — the pack invents a coherent rear "
+                "flat and construction for sampling (marked PROPOSED / UNVERIFIED). "
+                "Confirm with your patternmaker before cutting.",
+                styles["warn"],
+            )
+        )
     designer = (v2.get("designer_notes") or "").strip()
     if designer:
         story.append(Paragraph("Designer notes", styles["h3"]))
@@ -294,9 +324,16 @@ def _overview_page(
         merged.append(w)
     if merged:
         story.append(Paragraph("Measurement review warnings", styles["h3"]))
-        for w in merged[:30]:
+        # Cap on this page so warnings don't spill into a near-empty orphan page.
+        for w in merged[:6]:
+            msg = w.get("message") if isinstance(w, dict) else w
+            story.append(Paragraph(f"• {str(msg)[:220]}", styles["warn"]))
+        if len(merged) > 6:
             story.append(
-                Paragraph(f"• {w.get('message') if isinstance(w, dict) else w}", styles["warn"])
+                Paragraph(
+                    f"• …and {len(merged) - 6} more — see Manufacturing readiness at the end of this pack.",
+                    styles["muted"],
+                )
             )
     story.append(PageBreak())
     return story
@@ -333,6 +370,21 @@ def _flats_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[Any]:
                     styles["body"],
                 )
             )
+            fab = analysis.get("fabric_estimate") if isinstance(analysis.get("fabric_estimate"), dict) else {}
+            if fab:
+                story.append(
+                    Paragraph(
+                        f"Fabric estimate — {fab.get('likely_fiber') or '—'}; "
+                        f"hand {fab.get('hand') or '—'}; GSM {fab.get('gsm_range') or '—'}; "
+                        f"drape {fab.get('drape') or '—'}; opacity {fab.get('opacity') or '—'}.",
+                        styles["body"],
+                    )
+                )
+            back_prop = str(analysis.get("back_construction_proposal") or "").strip()
+            if back_prop and arts.get("flat_back_proposed") and not arts.get("flat_back"):
+                story.append(
+                    Paragraph(f"Proposed back construction: {back_prop[:420]}", styles["body"])
+                )
         front_img = _look_image(front_art, 86 * mm, 118 * mm, styles) if front_art else flat_for_category(cat, back=False)
         if back_art:
             back_label = (
@@ -977,6 +1029,15 @@ def _revision_and_readiness(
         story.append(Paragraph("Missing for SAMPLE-DEVELOPMENT READY", styles["h3"]))
         for item in missing[:40]:
             story.append(Paragraph(f"• {item}", styles["warn"]))
+    # Spillover warnings from overview (capped there to avoid empty pages).
+    overview_warnings = [
+        w for w in (v2.get("warnings") if isinstance(v2.get("warnings"), list) else [])
+    ] + collect_compatibility_warnings(v2)
+    if len(overview_warnings) > 6:
+        story.append(Paragraph("Additional measurement / review notes", styles["h3"]))
+        for w in overview_warnings[6:24]:
+            msg = w.get("message") if isinstance(w, dict) else w
+            story.append(Paragraph(f"• {str(msg)[:280]}", styles["warn"]))
     story.append(
         Paragraph(
             "Before factory send, confirm: (1) every POM has how-to + tolerance, "

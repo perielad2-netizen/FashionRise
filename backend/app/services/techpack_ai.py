@@ -315,6 +315,150 @@ def _measurement_cell_empty(cell: Any) -> bool:
     return cell.get("value") in (None, "")
 
 
+def _format_body_context(body: dict[str, Any] | None) -> str:
+    """Compact body-measurement string for vision prompts (sample-room proportional POMs)."""
+    if not isinstance(body, dict) or not body:
+        return ""
+    parts: list[str] = []
+    for key in ("height", "bust", "waist", "hip", "inseam", "shoulder_width", "arm_length"):
+        cell = body.get(key)
+        if not isinstance(cell, dict):
+            continue
+        val = cell.get("value")
+        if val in (None, ""):
+            continue
+        unit = str(cell.get("unit") or "cm")
+        parts.append(f"{key}={val}{unit}")
+    return ", ".join(parts)
+
+
+def _apply_ai_pom_estimates(piece: dict[str, Any], analysis: dict[str, Any]) -> None:
+    """Fill empty finished POM cells from vision proportional estimates (never overwrite designer)."""
+    estimates = analysis.get("finished_pom_estimates")
+    if not isinstance(estimates, dict):
+        return
+    methods_raw = estimates.get("finished_pom_methods")
+    methods: dict[str, Any] = methods_raw if isinstance(methods_raw, dict) else {}
+    finished_raw = piece.get("finished_measurements")
+    finished: dict[str, Any] = finished_raw if isinstance(finished_raw, dict) else {}
+    if not finished:
+        return
+    # Map vision keys → finished POM skeleton keys (category skeletons vary).
+    key_map = {
+        "garment_length": "garment_length",
+        "sleeve_length": "sleeve_length",
+        "shoulder_width": "shoulder_width",
+        "hem_sweep": "hem",
+        "hem": "hem",
+        "neckline_depth": "neckline",
+        "neckline": "neckline",
+        "armhole": "armhole",
+        "skirt_length": "skirt_length",
+        "inseam": "inseam",
+        "front_rise": "front_rise",
+        "back_rise": "back_rise",
+        "leg_opening": "leg_opening",
+    }
+    changed = False
+    for ai_key, pom_key in key_map.items():
+        if pom_key not in finished:
+            continue
+        if not _measurement_cell_empty(finished.get(pom_key)):
+            continue
+        val = estimates.get(ai_key)
+        if not isinstance(val, (int, float)):
+            continue
+        method = str(methods.get(ai_key) or methods.get(pom_key) or "").strip()
+        assumptions = [
+            method or "Proportional estimate from Magic look + body measurements",
+            "AI sample-room proposal — confirm on form before cutting",
+        ]
+        finished[pom_key] = {
+            **(finished[pom_key] if isinstance(finished.get(pom_key), dict) else {}),
+            "value": round(float(val), 1),
+            "unit": "cm",
+            "source": "ai",
+            "confidence": "medium",
+            "review_status": "proposed",
+            "assumptions": assumptions,
+            "note": "AI proportional POM — review before manufacturing",
+        }
+        changed = True
+    if changed:
+        piece["finished_measurements"] = finished
+
+
+def _apply_ai_fabric_estimate(piece: dict[str, Any], analysis: dict[str, Any]) -> None:
+    """Enrich empty shell material fields from vision fabric_estimate."""
+    fab = analysis.get("fabric_estimate")
+    if not isinstance(fab, dict):
+        return
+    mats = piece.get("materials") if isinstance(piece.get("materials"), dict) else {}
+    shell = mats.get("shell") if isinstance(mats.get("shell"), dict) else {}
+    fiber = str(fab.get("likely_fiber") or "").strip()
+    gsm = str(fab.get("gsm_range") or "").strip()
+    hand = str(fab.get("hand") or "").strip()
+    drape = str(fab.get("drape") or "").strip()
+    opacity = str(fab.get("opacity") or "").strip()
+    notes = str(fab.get("notes") or "").strip()
+    if fiber and not str(shell.get("composition") or "").strip():
+        shell["composition"] = fiber[:120]
+    if gsm and not str(shell.get("weight_gsm") or shell.get("gsm") or "").strip():
+        shell["weight_gsm"] = gsm[:40]
+    if hand and not str(shell.get("hand") or "").strip():
+        shell["hand"] = hand[:80]
+    if drape and not str(shell.get("drape") or "").strip():
+        shell["drape"] = drape[:80]
+    if opacity and not str(shell.get("opacity") or "").strip():
+        shell["opacity"] = opacity[:40]
+    if notes:
+        prior = str(shell.get("notes") or "").strip()
+        if not prior:
+            shell["notes"] = notes[:240]
+    if fiber or gsm or hand:
+        shell.setdefault("source", "ai")
+        shell.setdefault("suggestion", fiber or shell.get("suggestion") or "confirm fabric")
+        if not str(shell.get("name") or "").strip():
+            color = str(piece.get("color_hint") or "").strip()
+            shell["name"] = (f"{color} {fiber}" if color else fiber or "Shell fabric")[:120]
+    mats["shell"] = shell
+    if fab.get("lining_recommended") is True:
+        lining = mats.get("lining") if isinstance(mats.get("lining"), dict) else {}
+        if not str(lining.get("name") or "").strip():
+            lining = {
+                **lining,
+                "name": "Lining (recommended)",
+                "suggestion": "lightweight lining to match shell hand",
+                "source": "ai",
+                "notes": "Vision suggested lining for opacity/structure — confirm",
+            }
+            mats["lining"] = lining
+    piece["materials"] = mats
+    # Mirror into BOM shell row notes when present and empty.
+    bom = piece.get("bom") if isinstance(piece.get("bom"), list) else []
+    for row in bom:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("component") or row.get("item") or "").lower() not in {
+            "shell",
+            "self",
+            "fabric",
+            "shell fabric",
+        } and str(row.get("category") or "").lower() not in {"fabric", "shell"}:
+            # Prefer rows tagged as shell fabric / material
+            name = str(row.get("name") or row.get("description") or "").lower()
+            if "shell" not in name and "fabric" not in name:
+                continue
+        if fiber and not str(row.get("composition") or "").strip():
+            row["composition"] = fiber[:120]
+        if gsm and not str(row.get("weight") or row.get("gsm") or "").strip():
+            row["weight"] = gsm[:40]
+        if not str(row.get("notes") or "").strip() and (hand or notes):
+            row["notes"] = (notes or f"Hand: {hand}; drape: {drape}")[:200]
+        if fiber or gsm:
+            row.setdefault("source", "ai")
+
+
 def _designer_owned_meas_fingerprint(spec: dict[str, Any]) -> str:
     """Stable hash of designer-owned body + finished POM cells (not AI illustrations)."""
     payload: dict[str, Any] = {"body": {}, "pieces": {}}
@@ -1019,6 +1163,15 @@ def _persist_professional_result(
                 if isinstance(x, dict)
             ]
 
+        # Densify POMs + fabric from vision (empty cells only).
+        _apply_ai_pom_estimates(piece, analysis)
+        _apply_ai_fabric_estimate(piece, analysis)
+        back_proposal = str(analysis.get("back_construction_proposal") or "").strip()
+        if back_proposal:
+            notes_prior = str(piece.get("construction_notes_text") or "").strip()
+            if not notes_prior:
+                piece["construction_notes_text"] = f"Proposed back: {back_proposal[:400]}"
+
         illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
         art_meta: dict[str, Any] = {}
         for art in pr.get("artifacts") or []:
@@ -1083,6 +1236,10 @@ def _persist_professional_result(
                         "colors",
                         "panels_seams",
                         "distinctive_features",
+                        "construction_operations",
+                        "finished_pom_estimates",
+                        "fabric_estimate",
+                        "back_construction_proposal",
                         "confidence",
                         "assumptions",
                     )
@@ -1966,6 +2123,9 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             except Exception:  # noqa: BLE001
                 db.rollback()
 
+        body_ctx = _format_body_context(
+            spec.get("body") if isinstance(spec.get("body"), dict) else {}
+        )
         pipeline = run_professional_pipeline(
             provider=provider,
             pieces=pieces,
@@ -1976,6 +2136,7 @@ def execute_professional_run(db: Session, run_id: uuid.UUID) -> dict[str, Any]:
             max_images=max_images,
             on_progress=_on_progress,
             image_plan=image_plan,
+            body_context=body_ctx,
         )
         usage_cost = int((pipeline.get("usage") or {}).get("cost_usd_cents") or 0)
         _set_run_progress(
@@ -2634,6 +2795,9 @@ def run_generate(
                 except Exception:  # noqa: BLE001
                     db.rollback()
 
+            body_ctx = _format_body_context(
+                spec.get("body") if isinstance(spec.get("body"), dict) else {}
+            )
             pipeline = run_professional_pipeline(
                 provider=provider,
                 pieces=pieces,
@@ -2644,6 +2808,7 @@ def run_generate(
                 max_images=max_images,
                 on_progress=_on_progress,
                 image_plan=image_plan,
+                body_context=body_ctx,
             )
             _set_run_progress(
                 db,

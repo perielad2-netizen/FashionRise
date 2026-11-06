@@ -208,13 +208,22 @@ def test_professional_mock_pipeline_fr7182_features(client, db_session, monkeypa
     assert replay.json()["idempotent_replay"] is True
 
     refreshed = client.get(f"/api/v1/techpacks/{draft['id']}", headers=_auth(tokens)).json()
-    analysis = refreshed["spec"]["outfit"]["pieces"][0]["illustrations"]["analysis"]
+    piece0 = refreshed["spec"]["outfit"]["pieces"][0]
+    analysis = piece0["illustrations"]["analysis"]
     assert "deep plunging" in (analysis.get("neckline") or "").lower() or "V" in (analysis.get("neckline") or "")
     assert "long" in (analysis.get("sleeves") or "").lower()
     assert "diagonal" in (analysis.get("stripe_direction") or "").lower() or "stripe" in (
         analysis.get("fabric_pattern") or ""
     ).lower()
     assert analysis.get("silhouette")
+    # Dense AI persist: proportional POMs + fabric estimate from vision mock
+    fm = piece0.get("finished_measurements") or {}
+    assert (fm.get("garment_length") or {}).get("value") == 92.0
+    assert (fm.get("sleeve_length") or {}).get("source") == "ai"
+    assert analysis.get("fabric_estimate")
+    assert analysis.get("back_construction_proposal")
+    shell = ((piece0.get("materials") or {}).get("shell") or {})
+    assert "polyester" in (shell.get("composition") or "").lower() or shell.get("source") == "ai"
 
     exported = client.post(f"/api/v1/techpacks/{draft['id']}/export", headers=_auth(tokens))
     assert exported.status_code == 201

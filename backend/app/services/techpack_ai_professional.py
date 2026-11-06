@@ -54,6 +54,7 @@ class ProfessionalAIProvider(Protocol):
         mime: str,
         piece: dict[str, Any],
         look_notes: str,
+        body_context: str = "",
     ) -> tuple[dict[str, Any], ProviderUsage]: ...
 
     def generate_technical_flat(
@@ -203,6 +204,7 @@ class OpenAIProfessionalProvider:
         mime: str,
         piece: dict[str, Any],
         look_notes: str,
+        body_context: str = "",
     ) -> tuple[dict[str, Any], ProviderUsage]:
         from openai import OpenAI
 
@@ -215,28 +217,40 @@ class OpenAIProfessionalProvider:
         cat = str(piece.get("category") or "other")
         label = str(piece.get("label") or cat)
         system = (
-            "You are a fashion technical designer analyzing a finished fashion look photo "
-            "to write a factory-ready technical pack. "
+            "You are a senior fashion technical designer writing a SAMPLE-DEVELOPMENT "
+            "tech pack a tailor/patternmaker can work from. "
             "Return JSON only with keys: schema_version, category, silhouette, length, "
             "neckline, sleeves, fit, closure_visible, fabric_pattern, stripe_direction, "
             "colors, panels_seams, distinctive_features (array of strings), "
-            "pattern_pieces_suggested (array of {id,name,cut_qty,notes}), "
+            "pattern_pieces_suggested (array of {id,name,cut_qty,notes,grainline}), "
             "construction_notes (array of strings), "
-            "construction_operations (array of {operation,stitch_type,spi,seam_allowance_cm,notes}), "
+            "construction_operations (array of "
+            "{operation,stitch_type,spi,seam_allowance_cm,notes} — 8 to 16 sew-order steps), "
+            "finished_pom_estimates (object with optional numeric cm fields: "
+            "garment_length, sleeve_length, neckline_depth, hem_sweep, slit_start_from_waist, "
+            "shoulder_width, armhole — each value a number OR null, plus "
+            "finished_pom_methods explaining how each estimate was derived), "
+            "fabric_estimate (object: hand, likely_fiber, gsm_range, drape, opacity, "
+            "lining_recommended bool, notes), "
+            "back_construction_proposal (string — invent a coherent rear when back is unseen), "
             "confidence (low|medium|high), assumptions (array of strings). "
-            "construction_operations MUST be a sew-order list specific to THIS look "
-            "(wrap/drape/slit/zip/sash/lining as visible) — never generic dress boilerplate. "
-            "pattern_pieces_suggested MUST list every shell panel a patternmaker would cut "
-            "(front/back/sleeve/drape/sash/facing) with cut_qty. "
-            "Describe ONLY what is visually supported. Do not invent exact centimeters. "
+            "construction_operations MUST be specific to THIS look "
+            "(wrap/drape/slit/sash/zip/lining as applicable) — never generic dress boilerplate. "
+            "Use body measurements to propose proportional finished POMs when the photo "
+            "supports length/sleeve proportion; mark assumptions clearly. "
+            "Prefer useful sample-room estimates over leaving critical fields empty. "
             f"schema_version must be '{ANALYSIS_SCHEMA_VERSION}'."
         )
         user_text = (
             f"Garment tab: category={cat}, label={label}. "
+            f"Body measurements: {(body_context or 'not provided')[:400]}. "
             f"Look notes: {(look_notes or '')[:400]}. "
-            "Extract construction-relevant features AND write design-specific sewing "
-            "operations + cut-piece inventory for a professional technical pack."
+            "Write a tailor-ready analysis: design-specific sew ops, cut inventory, "
+            "fabric estimate, proportional POM estimates, and a coherent proposed back "
+            "if the rear is not visible."
         )
+        # Spend tokens for denser technical JSON — professional packs need room.
+        token_budget = max(3200, int(settings.openai_max_completion_tokens or 1400))
         kwargs = chat_completion_kwargs(
             model=settings.openai_model,
             messages=[
@@ -252,7 +266,7 @@ class OpenAIProfessionalProvider:
                     ],
                 },
             ],
-            max_completion_tokens=min(1800, int(settings.openai_max_completion_tokens or 1400)),
+            max_completion_tokens=token_budget,
             reasoning_effort=settings.openai_reasoning_effort,
         )
         # Ensure response_format json (chat_completion_kwargs already sets json_object;
@@ -567,6 +581,26 @@ def _mock_analysis_for_piece(piece: dict[str, Any], look_notes: str) -> dict[str
                 "notes": "Even hem on form; match stripe at CF if applicable.",
             },
         ],
+        "finished_pom_estimates": {
+            "garment_length": 92.0,
+            "sleeve_length": 60.0,
+            "neckline_depth": 28.0,
+            "hem_sweep": 48.0,
+            "finished_pom_methods": {
+                "garment_length": "Proportion from body height + mini silhouette",
+                "sleeve_length": "Long sleeve to wrist from shoulder proportion",
+            },
+        },
+        "fabric_estimate": {
+            "hand": "smooth light stretch knit look",
+            "likely_fiber": "polyester / elastane jersey",
+            "gsm_range": "180–220",
+            "drape": "fluid",
+            "opacity": "opaque",
+            "lining_recommended": False,
+            "notes": "Mock fabric estimate for striped mini dress",
+        },
+        "back_construction_proposal": "Center-back invisible zip with self-fabric facing; back neck sits higher than front V.",
         "confidence": "high",
         "assumptions": ["Mock analysis for FR-7182-style pink striped dress"],
     }
@@ -630,8 +664,9 @@ class MockProfessionalProvider:
         mime: str,
         piece: dict[str, Any],
         look_notes: str,
+        body_context: str = "",
     ) -> tuple[dict[str, Any], ProviderUsage]:
-        self.calls.append(f"analyze:{len(image_bytes)}:{mime}")
+        self.calls.append(f"analyze:{len(image_bytes)}:{mime}:{len(body_context or '')}")
         if self.analysis_override:
             data = dict(self.analysis_override)
             # Keep override but stamp category from piece when absent so multi-piece tests work.
@@ -721,6 +756,7 @@ def run_professional_pipeline(
     max_images: int,
     on_progress: ProgressCallback | None = None,
     image_plan: dict[str, Any] | None = None,
+    body_context: str = "",
 ) -> dict[str, Any]:
     """Analyze source Magic image and produce per-piece analysis + illustration bytes.
 
@@ -807,6 +843,7 @@ def run_professional_pipeline(
             mime=src_mime,
             piece=piece,
             look_notes=look_notes,
+            body_context=body_context or "",
         )
         total_usage.cost_usd_cents += u.cost_usd_cents
         total_usage.vision_calls += u.vision_calls
