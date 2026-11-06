@@ -401,6 +401,8 @@ export async function generateTechpackAiProfessionalOneTap(
     propose_back?: boolean
     sections?: string[]
     body_profile_id?: string | null
+    /** Skip reuse of current completed PDF — queue a new paid Professional run. */
+    force_new?: boolean
   },
 ): Promise<TechpackAiGenerateResponse> {
   return apiRequest<TechpackAiGenerateResponse>(

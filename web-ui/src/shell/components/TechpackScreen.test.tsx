@@ -174,7 +174,7 @@ describe('TechpackScreen simplified UX', () => {
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     expect(await screen.findByRole('heading', { level: 1, name: 'Create Real Design' })).toBeInTheDocument()
     expect(
-      screen.getByText(/Body measurements \+ your Magic look/i),
+      screen.getByText(/Just body measurements/i),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Generate AI PDF/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Advanced details \(optional\)/i })).toBeInTheDocument()
@@ -380,6 +380,75 @@ describe('TechpackScreen simplified UX', () => {
     fireEvent.click(await screen.findByTestId('download-pdf-main'))
     await waitFor(() => expect(fetchTechpackPdfBlob).toHaveBeenCalledWith('exp-pro-bound'))
     expect(fetchTechpackPdfBlob).not.toHaveBeenCalledWith('exp-basic-old')
+  })
+
+  it('shows Regenerate AI PDF when a pack is ready and force_new queues a new run', async () => {
+    getTechpackAiStatus.mockResolvedValue({
+      enabled: true,
+      professional_available: true,
+      max_usd_per_run: 8,
+      note: 'ok',
+    })
+    currentDraft = {
+      ...V2_DRAFT,
+      spec: {
+        ...V2_DRAFT.spec,
+        ai: {
+          last_run_id: 'run-pro',
+          last_mode: 'professional',
+          export_id: 'exp-pro-bound',
+          dirty_since_generation: false,
+          paid_sections: ['technical_flats'],
+          body_profile_id: 'profile-me',
+        },
+      },
+    }
+    getLatestTechpackAiRun.mockResolvedValue({
+      id: 'run-pro',
+      draft_id: 'draft-1',
+      stage: 'professional',
+      status: 'completed',
+      cost_usd_cents: 72,
+      export_id: 'exp-pro-bound',
+      pdf_ready: true,
+      pdf_filename: 'FR-5608_professional.pdf',
+      artifacts: [],
+      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
+      result: { export_id: 'exp-pro-bound', pdf_ready: true },
+    })
+    generateTechpackAiProfessionalOneTap.mockResolvedValue({
+      run_id: 'run-regen',
+      status: 'queued',
+      cost_usd_cents: 0,
+      mode: 'professional',
+      accepted: true,
+      progress: { phase: 'preparing', message: 'Regenerating AI Technical Pack…' },
+    })
+    getTechpackAiRun.mockResolvedValue({
+      id: 'run-regen',
+      draft_id: 'draft-1',
+      stage: 'professional',
+      status: 'completed',
+      cost_usd_cents: 80,
+      export_id: 'exp-pro-new',
+      pdf_ready: true,
+      pdf_filename: 'FR-5608_r1_techpack.pdf',
+      artifacts: [],
+      progress: { phase: 'ready', message: 'Your AI Technical Pack is ready' },
+      result: { export_id: 'exp-pro-new', pdf_ready: true },
+    })
+
+    render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
+    expect(await screen.findByTestId('download-pdf-main')).toBeInTheDocument()
+    const regen = await screen.findByTestId('regenerate-ai-pdf')
+    await waitFor(() => expect(regen).toBeEnabled())
+    fireEvent.click(regen)
+    await waitFor(() =>
+      expect(generateTechpackAiProfessionalOneTap).toHaveBeenCalledWith(
+        'draft-1',
+        expect.objectContaining({ force_new: true }),
+      ),
+    )
   })
 
   it('reopening a completed Professional look does not block Edit behind the ready overlay', async () => {

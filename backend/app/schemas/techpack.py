@@ -121,3 +121,6 @@ class TechpackAiOneTapRequest(BaseModel):
     sections: list[str] | None = None
     body_profile_id: uuid.UUID | None = None
     """Optional named body profile applied before generation (designer body POMs)."""
+    force_new: bool = False
+    """When true, skip reuse of a current completed Professional PDF and queue a new paid run
+    (comparison / testing). Prior exports remain downloadable as history."""

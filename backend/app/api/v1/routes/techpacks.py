@@ -304,6 +304,7 @@ def techpack_ai_generate_professional_one_tap(
         propose_back=data.propose_back,
         sections=data.sections,
         body_profile_id=data.body_profile_id,
+        force_new=bool(data.force_new),
     )
 
 

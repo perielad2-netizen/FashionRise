@@ -1406,6 +1406,7 @@ def enqueue_generate_one_tap_professional(
     propose_back: bool = True,
     sections: list[str] | None = None,
     body_profile_id: uuid.UUID | None = None,
+    force_new: bool = False,
 ) -> dict[str, Any]:
     """Authorize one bounded Professional run and enqueue durable work (HTTP returns promptly)."""
     challenge = create_confirm_challenge(
@@ -1654,10 +1655,11 @@ def enqueue_generate_one_tap_professional(
 
     # Reuse a completed Professional run + PDF for this draft (no second paid job)
     # only with positive evidence the run is current for the live outfit.
+    # force_new (testing / compare) skips reuse and queues a fresh paid run.
     spec_now = draft.spec if isinstance(draft.spec, dict) else {}
     ai_now = spec_now.get("ai") if isinstance(spec_now.get("ai"), dict) else {}
     dirty = bool(ai_now.get("dirty_since_generation"))
-    if not dirty:
+    if not dirty and not force_new:
         completed = db.scalars(
             select(TechpackAIRun)
             .where(
@@ -1710,6 +1712,7 @@ def enqueue_generate_one_tap_professional(
             "sections": sections or ["all"],
             "propose_back": effective_propose,
             "authorization": "user_click_one_tap",
+            "force_new": bool(force_new),
             "estimate_cents": hi,
             "max_images": max_images,
             "image_plan": image_plan,

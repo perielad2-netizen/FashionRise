@@ -488,7 +488,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     return raw
   }
 
-  const runOneTapGenerate = async () => {
+  const runOneTapGenerate = async (opts: { forceNew?: boolean } = {}) => {
     if (!professionalAvailable) {
       setError(professionalDisabledReason || 'AI Professional is not available for this account.')
       return
@@ -502,7 +502,8 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     // Manual chips are optional (Advanced details) — never block full-AI generate.
 
     // Already have a valid Professional PDF for this revision — show Download, no paid call.
-    if (hasReadyPdf && readyExportId) {
+    // forceNew (testing / compare) skips this and queues a new paid run.
+    if (!opts.forceNew && hasReadyPdf && readyExportId) {
       setProgressOpen(true)
       setProgressReady(true)
       setProgressPhase('ready')
@@ -517,17 +518,21 @@ export function TechpackScreen({ draftId, onBack }: Props) {
     setProgressReady(false)
     setProgressReconnect(false)
     setProgressPhase('preparing')
-    setGenerateProgress('Analyzing your design…')
+    setGenerateProgress(
+      opts.forceNew ? 'Regenerating AI Technical Pack…' : 'Analyzing your design…',
+    )
     try {
       await persist({ silent: true })
       const revision = draft?.revision ?? 1
-      const idem =
-        intentIdempotencyKey || `one-tap-${draftId}-r${revision}`
+      const idem = opts.forceNew
+        ? `one-tap-${draftId}-r${revision}-regen-${Date.now().toString(36)}`
+        : intentIdempotencyKey || `one-tap-${draftId}-r${revision}`
       setIntentIdempotencyKey(idem)
       const accepted = await generateTechpackAiProfessionalOneTap(draftId, {
         idempotency_key: idem,
         propose_back: true,
         body_profile_id: selectedBodyProfileId,
+        force_new: Boolean(opts.forceNew),
       })
       const runId = accepted.run_id
       setLastRunId(runId)
@@ -970,13 +975,25 @@ export function TechpackScreen({ draftId, onBack }: Props) {
           </button>
         )}
 
+        {hasReadyPdf ? (
+          <button
+            type="button"
+            className={styles.detailsLink}
+            disabled={busy || !professionalAvailable || !selectedBodyProfileId}
+            data-testid="regenerate-ai-pdf"
+            onClick={() => void runOneTapGenerate({ forceNew: true })}
+          >
+            Regenerate AI PDF (paid — compare)
+          </button>
+        ) : null}
+
         {showUpdatePdfNoAi ? (
           <button
             type="button"
             className={styles.detailsLink}
             disabled={busy || !professionalAvailable || !selectedBodyProfileId}
             data-testid="generate-ai-pdf-secondary"
-            onClick={() => void runOneTapGenerate()}
+            onClick={() => void runOneTapGenerate({ forceNew: true })}
           >
             Generate AI PDF (paid — new illustrations)
           </button>
