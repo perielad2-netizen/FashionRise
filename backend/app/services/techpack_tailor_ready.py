@@ -519,6 +519,118 @@ def _merge_label_boxes(boxes: list[tuple[int, int, int, int]], *, pad: int = 6) 
     return [(a - pad, b - pad, c + pad, d + pad) for a, b, c, d in merged]
 
 
+def _is_callout_red(rgb: tuple[int, int, int]) -> bool:
+    """True for saturated red marker ink typical of AI flat callout dots/numbers."""
+    r, g, b = rgb
+    return r >= 150 and r - g >= 55 and r - b >= 55 and g < 140 and b < 140
+
+
+def _local_fill_color(
+    px,
+    *,
+    w: int,
+    h: int,
+    left: int,
+    top: int,
+    right: int,
+    bottom: int,
+    paper: tuple[int, int, int],
+) -> tuple[int, int, int]:
+    """Sample a ring around the wipe box so fabric areas are not patched with paper white."""
+    samples: list[tuple[int, int, int]] = []
+    ring = max(4, min(18, (right - left + bottom - top) // 8))
+    for y in range(max(0, top - ring), min(h, bottom + ring)):
+        for x in range(max(0, left - ring), min(w, right + ring)):
+            inside = left <= x < right and top <= y < bottom
+            if inside:
+                continue
+            # Only the ring, not a huge neighborhood.
+            if not (
+                left - ring <= x < right + ring and top - ring <= y < bottom + ring
+            ):
+                continue
+            if left - 1 <= x < right + 1 and top - 1 <= y < bottom + 1:
+                # Skip immediate edge (often still marker ink).
+                if left <= x < right or top <= y < bottom:
+                    continue
+            c = px[x, y]
+            if isinstance(c, int):
+                c = (c, c, c)
+            if _is_callout_red(c[:3]):
+                continue
+            samples.append(c[:3])
+    if len(samples) < 8:
+        return paper
+    # Median per channel — robust against leftover ink speckles.
+    rs = sorted(s[0] for s in samples)
+    gs = sorted(s[1] for s in samples)
+    bs = sorted(s[2] for s in samples)
+    mid = len(samples) // 2
+    return (rs[mid], gs[mid], bs[mid])
+
+
+def _red_marker_boxes(px, *, w: int, h: int) -> list[tuple[int, int, int, int]]:
+    """Find compact red callout blobs (circles / digits) burned into AI flats."""
+    visited = bytearray(w * h)
+    boxes: list[tuple[int, int, int, int]] = []
+    min_area = max(12, (w * h) // 90000)
+    max_area = max(400, (w * h) // 900)
+    max_span = max(28, min(w, h) // 18)
+    for y in range(0, h, 2):
+        for x in range(0, w, 2):
+            idx = y * w + x
+            if visited[idx]:
+                continue
+            c = px[x, y]
+            if isinstance(c, int):
+                c = (c, c, c)
+            if not _is_callout_red(c[:3]):
+                continue
+            # Flood-fill compact red component.
+            stack = [(x, y)]
+            visited[idx] = 1
+            cells: list[tuple[int, int]] = []
+            while stack and len(cells) < max_area + 20:
+                cx, cy = stack.pop()
+                cells.append((cx, cy))
+                for nx, ny in (
+                    (cx - 2, cy),
+                    (cx + 2, cy),
+                    (cx, cy - 2),
+                    (cx, cy + 2),
+                    (cx - 2, cy - 2),
+                    (cx + 2, cy + 2),
+                ):
+                    if nx < 0 or ny < 0 or nx >= w or ny >= h:
+                        continue
+                    nidx = ny * w + nx
+                    if visited[nidx]:
+                        continue
+                    visited[nidx] = 1
+                    nc = px[nx, ny]
+                    if isinstance(nc, int):
+                        nc = (nc, nc, nc)
+                    if _is_callout_red(nc[:3]):
+                        stack.append((nx, ny))
+            if not cells:
+                continue
+            xs = [p[0] for p in cells]
+            ys = [p[1] for p in cells]
+            left, right = min(xs), max(xs) + 1
+            top, bottom = min(ys), max(ys) + 1
+            bw, bh = right - left, bottom - top
+            area = len(cells)
+            if area < min_area or area > max_area:
+                continue
+            if bw > max_span or bh > max_span:
+                continue
+            # Prefer roughly circular / digit-sized blobs.
+            if max(bw, bh) > 0 and min(bw, bh) / max(bw, bh) < 0.35:
+                continue
+            boxes.append((left, top, right, bottom))
+    return boxes
+
+
 def scrub_contradictory_flat_labels(
     source: Path | None,
     *,
@@ -527,12 +639,14 @@ def scrub_contradictory_flat_labels(
     always_banner: bool = False,
     wipe_all_text: bool = False,
 ) -> Path | None:
-    """Silently cover burned-in AI text that contradicts / clutters the brief.
+    """Silently cover burned-in AI text / red callout markers that clutter the brief.
 
-    Default behaviour for MTM wrap packs:
+    Default behaviour for MTM packs:
     - Cover forbidden tokens (zip…) and optionally *all* OCR text so the garment
       drawing stays clean — no \"REMOVED\" stamps and no correction banners in-image.
-    - The PDF page caption states that illustrations are unverified concepts.
+    - Also cover compact red numbered markers left after label erasure.
+    - Fill patches from local neighbourhood colour (not paper white) to avoid
+      unfinished-looking white rectangles on pattern pieces.
     Returns a temp PNG, or None if the source cannot be opened.
     """
     if source is None or not source.exists():
@@ -546,6 +660,7 @@ def scrub_contradictory_flat_labels(
             im = im0.convert("RGB")
             w, h = im.size
             draw = ImageDraw.Draw(im)
+            px = im.load()
             words = _tesseract_word_boxes(source)
             forbid = {t.lower() for t in forbidden_tokens}
             hit_idxs: set[int] = set()
@@ -579,11 +694,9 @@ def scrub_contradictory_flat_labels(
             ]
             # Slightly larger pad when wiping all text so leader lines / callout
             # numbers near labels disappear with the words.
-            pad = max(10 if wipe_all_text else 8, w // (140 if wipe_all_text else 180))
+            pad = max(12 if wipe_all_text else 8, w // (120 if wipe_all_text else 180))
             patches = _merge_label_boxes(boxes, pad=pad)
 
-            # Prefer the page paper color over sampling near labels (callout
-            # circles / white leader pads produce ugly white correction patches).
             paper = im.getpixel((min(8, w - 1), min(8, h - 1)))
             if isinstance(paper, int):
                 paper = (paper, paper, paper)
@@ -598,12 +711,22 @@ def scrub_contradictory_flat_labels(
                 bottom = min(h, bottom)
                 if right - left < 4 or bottom - top < 4:
                     return
-                draw.rectangle([left, top, right, bottom], fill=paper)
+                fill = _local_fill_color(
+                    px, w=w, h=h, left=left, top=top, right=right, bottom=bottom, paper=paper
+                )
+                draw.rectangle([left, top, right, bottom], fill=fill)
 
             redacted = 0
             for left, top, right, bottom in patches:
                 _cover(left, top, right, bottom)
                 redacted += 1
+
+            # Wipe residual red callout dots / numbers that OCR often misses.
+            if wipe_all_text:
+                for left, top, right, bottom in _red_marker_boxes(px, w=w, h=h):
+                    pad_r = max(3, min(10, (right - left + bottom - top) // 4))
+                    _cover(left - pad_r, top - pad_r, right + pad_r, bottom + pad_r)
+                    redacted += 1
 
             # Second pass for residual forbidden tokens only (not full wipe — OCR
             # after a full wipe often invents noise).
@@ -652,13 +775,70 @@ def scrub_contradictory_flat_labels(
 
 
 def prepare_mtm_flat(source: Path | None) -> Path | None:
-    """Clean garment flat for made-to-measure briefs: wipe burned-in AI text silently."""
+    """Clean garment flat for made-to-measure briefs: wipe burned-in AI text + red markers."""
     return scrub_contradictory_flat_labels(
         source,
         wipe_all_text=True,
         always_banner=False,
         replacement_note=None,
     )
+
+
+def pattern_inventory_schematic(patterns: list[dict[str, Any]], *, category: str = "") -> Drawing:
+    """Labeled piece cards matching inventory IDs — used when pattern_sheet art is missing."""
+    d = Drawing(500, 280)
+    d.add(Rect(0, 0, 500, 280, strokeColor=colors.Color(0.75, 0.72, 0.68), strokeWidth=0.6, fillColor=colors.Color(0.98, 0.96, 0.93)))
+    title = f"PATTERN PIECE MAP — {(category or 'garment').upper()} (schematic IDs only · NOT a cutting pattern)"
+    d.add(String(12, 258, title, fontName="Helvetica-Bold", fontSize=9, fillColor=colors.Color(0.15, 0.12, 0.1)))
+    d.add(
+        String(
+            12,
+            242,
+            "Each card matches an inventory ID. FashionRise did not generate a full-page piece illustration for this run.",
+            fontName="Helvetica",
+            fontSize=7,
+            fillColor=colors.Color(0.35, 0.32, 0.28),
+        )
+    )
+    rows = [p for p in patterns if isinstance(p, dict)][:12]
+    if not rows:
+        d.add(String(12, 140, "No pattern pieces listed.", fontName="Helvetica", fontSize=9, fillColor=colors.Color(0.4, 0.2, 0.15)))
+        return d
+    cols = 4 if len(rows) > 4 else max(2, len(rows))
+    card_w = 110
+    card_h = 70
+    gap_x = 12
+    gap_y = 12
+    origin_x = 16
+    origin_y = 160
+    for i, row in enumerate(rows):
+        col = i % cols
+        r = i // cols
+        x = origin_x + col * (card_w + gap_x)
+        y = origin_y - r * (card_h + gap_y) - card_h
+        pid = str(row.get("id") or chr(65 + i))
+        name = str(row.get("name") or "Piece")[:28]
+        cut = row.get("cut_qty")
+        cut_txt = "—" if cut is None else str(cut)
+        grain = str(row.get("grainline") or "straight")[:16]
+        d.add(Rect(x, y, card_w, card_h, strokeColor=colors.Color(0.25, 0.22, 0.2), strokeWidth=1.1, fillColor=colors.white))
+        d.add(Circle(x + 16, y + card_h - 16, 11, strokeColor=colors.Color(0.55, 0.15, 0.12), strokeWidth=1.2, fillColor=colors.Color(0.92, 0.88, 0.84)))
+        d.add(String(x + 12, y + card_h - 20, pid[:3], fontName="Helvetica-Bold", fontSize=9, fillColor=colors.Color(0.45, 0.1, 0.08)))
+        d.add(String(x + 32, y + card_h - 22, name, fontName="Helvetica", fontSize=7, fillColor=colors.Color(0.12, 0.1, 0.08)))
+        d.add(String(x + 10, y + 28, f"Cut qty: {cut_txt}", fontName="Helvetica", fontSize=6.5, fillColor=colors.Color(0.25, 0.22, 0.2)))
+        d.add(String(x + 10, y + 14, f"Grain: {grain}", fontName="Helvetica", fontSize=6.5, fillColor=colors.Color(0.35, 0.32, 0.28)))
+        d.add(Line(x + 10, y + 40, x + card_w - 10, y + 40, strokeColor=colors.Color(0.8, 0.78, 0.74), strokeWidth=0.5))
+    d.add(
+        String(
+            12,
+            10,
+            "NOT TO SCALE · Use Magic look + flats + this ID map until a full piece-breakdown illustration is available",
+            fontName="Helvetica",
+            fontSize=6.5,
+            fillColor=colors.Color(0.4, 0.35, 0.3),
+        )
+    )
+    return d
 
 
 def annotate_flat_callouts(

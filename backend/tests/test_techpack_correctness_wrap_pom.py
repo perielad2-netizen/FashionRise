@@ -176,7 +176,7 @@ def test_enrich_syncs_v_depth_length_and_sash_bom():
 
     assert pom_code("slit_start") == "S1"
     assert pom_code("v_depth") == "I2"
-    assert "Confirm the dress fastening" in humanize_readiness_gap("piece-aa3:closures_specified")
+    assert "fastening method" in humanize_readiness_gap("piece-aa3:closures_specified").lower()
 
 
 def test_enrich_wrap_redacts_invented_back_zip():

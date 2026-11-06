@@ -406,13 +406,14 @@ def _drop_zip_construction_steps(steps: list[Any]) -> list[Any]:
 
 
 def detect_closure_family(piece: dict[str, Any]) -> str:
-    """Return 'wrap' | 'zip' | 'unknown' from closures + AI analysis text."""
+    """Return 'wrap' | 'zip' | 'button' | 'fly' | 'unknown' from closures + AI analysis."""
     closures = piece.get("closures") if isinstance(piece.get("closures"), dict) else {}
     blob_parts = [
         str(closures.get("type") or ""),
         str(closures.get("display_type") or ""),
         str(closures.get("display") or ""),
         str(piece.get("label") or ""),
+        str(piece.get("category") or ""),
     ]
     illust = piece.get("illustrations") if isinstance(piece.get("illustrations"), dict) else {}
     analysis = illust.get("analysis") if isinstance(illust.get("analysis"), dict) else {}
@@ -424,8 +425,11 @@ def detect_closure_family(piece: dict[str, Any]) -> str:
         blob_parts.extend(str(f) for f in feats[:12])
         blob_parts.append(str(analysis.get("back_construction_proposal") or ""))
     blob = " ".join(blob_parts).lower()
+    cat = str(piece.get("category") or "").lower()
     wrap_tokens = ("wrap", "sash", "tie", "crossover", "overlap", "kimono")
     zip_tokens = ("zip", "zipper", "invisible zip", "hook and eye at zip")
+    button_tokens = ("button", "placket", "button-front", "button front", "buttons")
+    fly_tokens = ("fly", "jean fly", "trouser fly", "concealed center-front fly")
     has_wrap = any(t in blob for t in wrap_tokens)
     denies_zip = any(
         t in blob
@@ -439,10 +443,22 @@ def detect_closure_family(piece: dict[str, Any]) -> str:
             "no closure hardware",
         )
     )
-    # Zip tokens in analysis "closure_visible" only — ignore BOM boilerplate not in blob.
     has_zip = any(t in blob for t in zip_tokens) and not denies_zip
+    has_button = any(t in blob for t in button_tokens)
+    has_fly = any(t in blob for t in fly_tokens) or (
+        has_zip and cat in {"trousers", "shorts", "jeans"}
+    )
+    # Category-aware priority: don't let dress wrap tokens win on shirts/jeans.
+    if cat in {"shirt", "top", "blouse", "jacket"} and has_button and not has_wrap:
+        return "button"
+    if cat in {"trousers", "shorts", "jeans"} and (has_fly or has_zip) and not has_wrap:
+        return "fly" if has_fly or cat in {"trousers", "shorts", "jeans"} else "zip"
     if has_wrap and (denies_zip or not has_zip):
         return "wrap"
+    if has_button and not has_wrap:
+        return "button"
+    if has_fly and not has_wrap:
+        return "fly"
     if has_zip and not has_wrap:
         return "zip"
     if has_wrap:
@@ -450,6 +466,294 @@ def detect_closure_family(piece: dict[str, Any]) -> str:
     if has_zip:
         return "zip"
     return "unknown"
+
+
+# Design-dim keys shown on the MTM "starting points" table (subset of FINISHED_POM).
+_DRESS_ONLY_DIM_KEYS = (
+    "wrap_overlap",
+    "slit_start",
+    "overlay_length",
+    "sash_width",
+    "sash_length",
+    "hem_high",
+    "hem_low",
+    "v_depth",
+)
+
+
+def mtm_design_dim_keys(category: str) -> tuple[str, ...]:
+    """Category-aware design-dimension keys for the tailor brief."""
+    from app.services.techpack_garments import FINISHED_POM
+
+    cat = (category or "other").lower().strip()
+    if cat in {"jeans", "pants", "pant"}:
+        cat = "trousers"
+    if is_formal_dress_category(cat):
+        return (
+            "neckline",
+            "v_depth",
+            "wrap_overlap",
+            "slit_start",
+            "overlay_length",
+            "sash_width",
+            "sash_length",
+            "hem_high",
+            "hem_low",
+            "garment_length",
+        )
+    keys = FINISHED_POM.get(cat) or FINISHED_POM.get("other") or ()
+    # Prefer design/fit keys first; exclude pure body circ duplicates later in UI if needed.
+    return tuple(k for k in keys if k not in _DRESS_ONLY_DIM_KEYS)
+
+
+def mtm_dim_priority_note(category: str) -> str:
+    cat = (category or "other").lower().strip()
+    if cat in {"jeans", "pants", "pant"}:
+        cat = "trousers"
+    if is_formal_dress_category(cat):
+        return (
+            "Prioritise neckline depth, wrap overlap, slit start, sash size, and "
+            "asymmetric hem lengths — these define the look."
+        )
+    if cat in {"shirt", "top", "blouse"}:
+        return (
+            "Prioritise chest, shoulder width, shirt length, sleeve length, collar / neckline "
+            "depth, and cuff — these define the shirt fit."
+        )
+    if cat in {"trousers", "shorts", "jeans"}:
+        return (
+            "Prioritise waist, hip, rise, inseam, outseam, thigh, knee, and leg opening — "
+            "these define the jeans / trouser fit. Note stripe / grain direction when cutting."
+        )
+    if cat == "skirt":
+        return "Prioritise waist, hip, skirt length, waistband, and opening / slit if present."
+    if cat == "jacket":
+        return "Prioritise chest, shoulder, length, sleeve length, and neckline / collar."
+    return "Confirm the key finished measurements that define this garment’s look and fit."
+
+
+def mtm_closure_statement(piece: dict[str, Any]) -> tuple[str, str]:
+    """Return (severity, body_html) for the fastening section."""
+    family = detect_closure_family(piece)
+    cat = str(piece.get("category") or "garment").lower()
+    if family == "wrap":
+        return (
+            "warn",
+            "<b>Appears to be a WRAP / TIE dress</b> (no visible zipper in the Magic look). "
+            "Final fastening — sash/tie only, optional hidden snap, or another method — "
+            "<b>must be agreed with the tailor</b>. Do not assume an invisible zipper "
+            "unless the customer and tailor explicitly choose one.",
+        )
+    if family == "button":
+        return (
+            "body",
+            f"<b>Appears to be a BUTTON-FRONT {cat}</b> from the Magic look. "
+            "Confirm button count, placket type, collar construction, and sleeve finish "
+            "with the tailor. Closure is <b>proposed from visual evidence</b> until confirmed.",
+        )
+    if family == "fly":
+        return (
+            "body",
+            f"<b>Appears to use a FRONT FLY</b> (proposed from the Magic look). "
+            "Confirm fly zipper length, waistband, and waistband button / rivets with the tailor "
+            "before cutting. Keep this as <b>proposed</b> until the appointment confirms it.",
+        )
+    if family == "zip":
+        return (
+            "body",
+            "Design appears to use a zipper closure. Confirm type, length, and placement "
+            "with the tailor before cutting.",
+        )
+    return (
+        "warn",
+        "Closure is unresolved. Customer and tailor must agree fastening before the first toile.",
+    )
+
+
+def mtm_consultation_decisions(piece: dict[str, Any]) -> list[tuple[str, str]]:
+    """(Decision label, agreed-value prompt) rows for the consultation table."""
+    family = detect_closure_family(piece)
+    cat = str(piece.get("category") or "other").lower()
+    if cat in {"jeans", "pants", "pant"}:
+        cat = "trousers"
+    if is_formal_dress_category(cat) or family == "wrap":
+        return [
+            ("Fastening", "wrap/tie only · optional snap · other: ______"),
+            ("Back construction", "cut on fold (cut 1) · CB seam (cut 2) · other: ______"),
+            ("Sash width × length", "______ cm × ______ cm"),
+            ("Neckline / V depth", "______ cm"),
+            ("Wrap overlap / slit / hems", "notes: ________________________"),
+            ("Fabric / lining choice", "______________________________"),
+            ("Other changes this visit", "______________________________"),
+        ]
+    if cat in {"shirt", "top", "blouse"}:
+        return [
+            ("Collar", "standing · convertible · other: ______"),
+            ("Front closure", "buttons (qty ___) · placket style: ______"),
+            ("Shirt length / hem", "______ cm · curved / straight hem"),
+            ("Sleeve", "full · rolled · cuff: ______"),
+            ("Fit / ease", "slim · regular · notes: ______"),
+            ("Fabric / interfacing", "______________________________"),
+            ("Other changes this visit", "______________________________"),
+        ]
+    if cat in {"trousers", "shorts", "jeans"}:
+        return [
+            ("Waistband / rise", "______ cm rise · belt loops yes/no"),
+            ("Fly / closure", "zip fly (proposed) · button · other: ______"),
+            ("Pocket style", "5-pocket · other: ______"),
+            ("Leg shape / taper", "slim · tapered · notes: ______"),
+            ("Finished length / hem", "inseam ______ cm · hem finish ______"),
+            ("Denim / stripe direction", "match grain / stripes: ______"),
+            ("Other changes this visit", "______________________________"),
+        ]
+    if cat == "skirt":
+        return [
+            ("Waistband / facing", "______"),
+            ("Closure", "zip · buttons · other: ______"),
+            ("Length / hem", "______ cm"),
+            ("Opening / slit", "______"),
+            ("Fabric choice", "______________________________"),
+            ("Other changes this visit", "______________________________"),
+        ]
+    return [
+        ("Fastening", "confirm type / placement: ______"),
+        ("Key dimensions", "notes: ________________________"),
+        ("Fabric choice", "______________________________"),
+        ("Other changes this visit", "______________________________"),
+    ]
+
+
+def mtm_worksheet_rows(piece: dict[str, Any]) -> list[tuple[str, str]]:
+    """Blank tailor measurement worksheet rows for this garment category."""
+    cat = str(piece.get("category") or "other").lower()
+    shared = [("Date / tailor", ""), ("Customer name", "")]
+    if cat in {"jeans", "pants", "pant"}:
+        cat = "trousers"
+    if cat in {"shirt", "top", "blouse", "jacket"}:
+        return shared + [
+            ("Height", "cm"),
+            ("Chest / bust (body circ)", "cm"),
+            ("Neck / collar size", "cm"),
+            ("Shoulder width", "cm"),
+            ("Across back", "cm"),
+            ("Shirt / jacket length (HPS→hem)", "cm"),
+            ("Sleeve length (shoulder→cuff)", "cm"),
+            ("Upper arm circ", "cm"),
+            ("Wrist / cuff", "cm"),
+            ("Preferred ease / fit notes", ""),
+        ]
+    if cat in {"trousers", "shorts", "jeans"}:
+        return shared + [
+            ("Height", "cm"),
+            ("Waist (body circ)", "cm"),
+            ("Hip (body circ)", "cm"),
+            ("Front rise", "cm"),
+            ("Back rise", "cm"),
+            ("Thigh", "cm"),
+            ("Knee", "cm"),
+            ("Inseam", "cm"),
+            ("Outseam", "cm"),
+            ("Leg opening / hem", "cm"),
+            ("Preferred ease / fit notes", ""),
+        ]
+    if cat == "skirt":
+        return shared + [
+            ("Height", "cm"),
+            ("Waist (body circ)", "cm"),
+            ("Hip (body circ)", "cm"),
+            ("Skirt length (waist→hem)", "cm"),
+            ("Preferred ease / fit notes", ""),
+        ]
+    # Dress / default MTM body sheet.
+    return shared + [
+        ("Height", "cm"),
+        ("Bust (body circ)", "cm"),
+        ("Underbust (if needed)", "cm"),
+        ("Waist (body circ)", "cm"),
+        ("High hip", "cm"),
+        ("Hip (body circ)", "cm"),
+        ("Across front", "cm"),
+        ("Across back", "cm"),
+        ("Back width / back length (nape→waist)", "cm"),
+        ("Shoulder width", "cm"),
+        ("Arm length (shoulder→wrist)", "cm"),
+        ("Upper arm circ", "cm"),
+        ("Wrist / cuff", "cm"),
+        ("Waist → knee", "cm"),
+        ("Waist → floor / preferred hem", "cm"),
+        ("Preferred finished length (HPS→hem)", "cm"),
+        ("Ease / fit preference notes", ""),
+    ]
+
+
+def mtm_detail_focus(piece: dict[str, Any]) -> list[tuple[str, str]]:
+    """Close-up explanation rows that must match the garment (not a dress template)."""
+    cat = str(piece.get("category") or "other").lower()
+    if cat in {"jeans", "pants", "pant"}:
+        cat = "trousers"
+    family = detect_closure_family(piece)
+    if is_formal_dress_category(cat) or family == "wrap":
+        return [
+            ("Deep V / wrap overlap", "Neckline depth and crossover at bust/waist — stay-tape as needed."),
+            ("Sash at waist", "How the sash anchors and finishes; width × length from agreed dims."),
+            ("Asymmetric overlay", "Where the draped panel attaches and how the pointed hem falls."),
+            ("High slit", "Start height from waist, finish, and stride/sit check."),
+            ("Sleeve & hem finish", "Set-in sleeve clean finish; underlayer vs overlay hem lengths."),
+        ]
+    if cat in {"shirt", "top", "blouse"}:
+        return [
+            ("Collar / neck", "Standing or designed collar stand; roll and topstitch."),
+            ("Front placket / buttons", "Button spacing, placket width, top/bottom finish."),
+            ("Sleeve treatment", "Set-in sleeve, roll-up, cuff or clean hem as designed."),
+            ("Shirt-tail / hem", "Curved vs straight hem; side-seam vents if present."),
+            ("Fit / silhouette", "Chest ease, waist shaping, shoulder slope."),
+        ]
+    if cat in {"trousers", "shorts", "jeans"}:
+        return [
+            ("Waistband / belt loops", "Height, ease, and loop placement."),
+            ("Fly / front closure", "Fly length and finish — proposed until confirmed."),
+            ("Pockets", "Front/back pocket style and placement."),
+            ("Leg taper / stripe", "Grain and stripe/pattern direction — match both legs."),
+            ("Hem finish", "Finished inseam length and hem depth."),
+        ]
+    if cat == "skirt":
+        return [
+            ("Waistband / facing", "Finish and ease at waist."),
+            ("Closure", "Zip or other fastening placement."),
+            ("Hem / opening", "Length and any slit / vent."),
+            ("Drape / hang", "Grain and panel balance."),
+        ]
+    return [
+        ("Primary design detail", "Confirm the distinctive feature from the Magic look."),
+        ("Closure", "Confirm fastening type and placement."),
+        ("Hem / finish", "Confirm length and edge finish."),
+        ("Fabric behaviour", "Drape, stretch, and pattern direction if relevant."),
+    ]
+
+
+def mtm_checklist_rows_for_piece(piece: dict[str, Any]) -> list[tuple[str, str]]:
+    """Per-garment final checklist decision rows."""
+    cat = str(piece.get("category") or "garment")
+    label = str(piece.get("label") or cat).strip()
+    family = detect_closure_family(piece)
+    heading = f"{(piece.get('role') or cat).upper()}: {label}"
+    rows: list[tuple[str, str]] = [(heading, "Approve this garment’s interpretation")]
+    if family == "wrap":
+        rows.append(("Fastening", "Wrap/tie only, optional snap — no zipper unless chosen"))
+        rows.append(("Design dims", "Neckline/V, wrap, slit, sash, hems — one value each"))
+    elif family == "button":
+        rows.append(("Fastening", "Button count / placket / collar confirmed"))
+        rows.append(("Design dims", "Chest, shoulder, length, sleeve, collar — starting points agreed"))
+    elif family == "fly":
+        rows.append(("Fastening", "Fly zip / waistband — keep proposed until confirmed"))
+        rows.append(("Design dims", "Waist, rise, inseam, taper, hem — starting points agreed"))
+        rows.append(("Pattern / grain", "Stripe or denim direction matched across pieces"))
+    else:
+        rows.append(("Fastening", "Confirm closure type and placement"))
+        rows.append(("Design dims", "Key finished measurements agreed"))
+    rows.append(("Fabric", "Shell characteristics agreed with tailor"))
+    rows.append(("Illustrations", "Flats / details treated as unverified visual references"))
+    return rows
 
 
 def formal_dress_bom(*, color_hint: str = "", closure_family: str = "unknown") -> list[dict[str, Any]]:
@@ -955,16 +1259,7 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
         # Ensure design-specific POM skeleton keys exist (empty until AI/designer fills).
         finished = out.get("finished_measurements") if isinstance(out.get("finished_measurements"), dict) else {}
         missing_note = "MISSING — designer / AI should fill before sample cut"
-        for key in (
-            "wrap_overlap",
-            "slit_start",
-            "overlay_length",
-            "sash_width",
-            "sash_length",
-            "hem_high",
-            "hem_low",
-            "v_depth",
-        ):
+        for key in _DRESS_ONLY_DIM_KEYS:
             cell = finished.get(key) if isinstance(finished.get(key), dict) else None
             if cell is None:
                 finished[key] = {
@@ -1115,6 +1410,17 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                 out["pattern_pieces"] = synced_patterns
 
         out["finished_measurements"] = finished
+
+    # Non-dress pieces must not carry dress-only POMs (wrap/sash/slit) into the brief.
+    if not is_formal_dress_category(cat):
+        finished_nd = out.get("finished_measurements") if isinstance(out.get("finished_measurements"), dict) else {}
+        if finished_nd:
+            cleaned_fm = {
+                k: v
+                for k, v in finished_nd.items()
+                if k not in _DRESS_ONLY_DIM_KEYS
+            }
+            out["finished_measurements"] = cleaned_fm
     return out
 
 
@@ -1130,7 +1436,7 @@ def humanize_readiness_gap(item: str) -> str:
         low = raw.lower()
     mapping = {
         "designer_confirmation_checklist": "Complete the designer confirmation checklist before sample cut.",
-        "closures_specified": "Confirm the dress fastening method (wrap/tie, optional snap, or zip).",
+        "closures_specified": "Confirm the fastening method for this garment (visible design evidence first).",
         "construction_decisions": "Approve the construction / sew-order instructions for this garment.",
         "finished_poms_confirmed": "Verify and approve the final finished garment measurements.",
         "fit_ease_reviewed": "Review fit and ease against the sample size body measurements.",
@@ -1150,13 +1456,90 @@ def humanize_readiness_gap(item: str) -> str:
     return raw.replace("_", " ").strip().capitalize() + "."
 
 
+SHIRT_CALLOUTS: list[tuple[str, str]] = [
+    ("1", "Standing / designed collar + collar stand"),
+    ("2", "Front placket / button spacing"),
+    ("3", "Shoulder seam / yoke if present"),
+    ("4", "Sleeve set / armhole"),
+    ("5", "Sleeve roll-up or cuff finish"),
+    ("6", "Side seam / waist shaping"),
+    ("7", "Shirt-tail / curved hem"),
+    ("8", "Back yoke / CB seam or fold"),
+]
+
+TROUSER_CALLOUTS: list[tuple[str, str]] = [
+    ("1", "Waistband height + ease"),
+    ("2", "Belt loops placement"),
+    ("3", "Front fly / closure (proposed until confirmed)"),
+    ("4", "Front pockets"),
+    ("5", "Back pockets"),
+    ("6", "Outseam / inseam balance"),
+    ("7", "Leg taper / stripe or grain direction"),
+    ("8", "Hem finish / finished inseam"),
+]
+
+SKIRT_CALLOUTS: list[tuple[str, str]] = [
+    ("1", "Waistband / facing"),
+    ("2", "Closure placement"),
+    ("3", "Side seams / panels"),
+    ("4", "Hem finish"),
+    ("5", "Opening / slit if present"),
+    ("6", "Grain / drape hang"),
+]
+
+SHIRT_QC: list[str] = [
+    "Collar sits clean; stand height matches Magic look.",
+    "Button spacing even; placket lies flat when worn.",
+    "Sleeve set smooth; roll-up or cuff matches design.",
+    "Shirt length / curved hem matches Magic proportions.",
+    "Shoulder width and chest ease feel correct on the customer.",
+]
+
+TROUSER_QC: list[str] = [
+    "Waistband sits at agreed rise; belt loops aligned.",
+    "Fly (if used) operates cleanly — confirm before locking as approved.",
+    "Pocket placement matches Magic look left/right.",
+    "Stripe / grain direction matched across both legs.",
+    "Inseam / outseam / hem length agreed with customer.",
+]
+
+
 def callouts_for_piece(piece: dict[str, Any]) -> list[tuple[str, str]]:
-    if detect_closure_family(piece) == "wrap":
-        return list(WRAP_DRESS_CALLOUTS)
-    return list(FORMAL_DRESS_CALLOUTS)
+    """Category-aware discussion callouts — never reuse dress labels on shirts/jeans."""
+    cat = str(piece.get("category") or "other").lower()
+    family = detect_closure_family(piece)
+    if is_formal_dress_category(cat) or family == "wrap":
+        return list(WRAP_DRESS_CALLOUTS if family == "wrap" else FORMAL_DRESS_CALLOUTS)
+    if cat in {"shirt", "top", "blouse"}:
+        return list(SHIRT_CALLOUTS)
+    if cat in {"trousers", "shorts", "jeans", "pants"}:
+        return list(TROUSER_CALLOUTS)
+    if cat == "skirt":
+        return list(SKIRT_CALLOUTS)
+    if cat == "jacket":
+        return list(SHIRT_CALLOUTS)
+    # Generic — still not dress-specific zipper/train callouts.
+    return [
+        ("1", "Primary silhouette / fit"),
+        ("2", "Neckline / collar or waist finish"),
+        ("3", "Closure (confirm type)"),
+        ("4", "Sleeve or armhole if present"),
+        ("5", "Hem / length"),
+        ("6", "Distinctive design detail from Magic look"),
+    ]
 
 
 def qc_for_piece(piece: dict[str, Any]) -> list[str]:
-    if detect_closure_family(piece) == "wrap":
-        return list(WRAP_DRESS_QC)
-    return list(FORMAL_DRESS_QC)
+    cat = str(piece.get("category") or "other").lower()
+    family = detect_closure_family(piece)
+    if family == "wrap" or is_formal_dress_category(cat):
+        return list(WRAP_DRESS_QC if family == "wrap" else FORMAL_DRESS_QC)
+    if cat in {"shirt", "top", "blouse", "jacket"}:
+        return list(SHIRT_QC)
+    if cat in {"trousers", "shorts", "jeans", "pants"}:
+        return list(TROUSER_QC)
+    return [
+        "Key design details match the Magic look.",
+        "Closure type and placement confirmed with customer.",
+        "Finished length and fit ease agreed before cutting fashion fabric.",
+    ]
