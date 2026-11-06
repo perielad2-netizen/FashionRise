@@ -85,6 +85,8 @@ describe('WorkspaceHeader Magic recovery', () => {
         saveError={null}
       />,
     )
+    expect(screen.getByTestId('workspace-more')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^More$/i }).textContent).toMatch(/More/i)
     fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
     expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'My Designs' })).toBeTruthy()

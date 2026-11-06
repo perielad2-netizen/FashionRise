@@ -96,6 +96,7 @@ export function WorkspaceHeader({
         </button>
         <h1 className={styles.title}>New Design</h1>
       </div>
+      {/* Middle cluster may shrink/wrap; More stays pinned so Clear canvas never clips off-screen. */}
       <div className={styles.right}>
         <span
           className={statusClass}
@@ -112,7 +113,7 @@ export function WorkspaceHeader({
         </span>
         <button
           type="button"
-          className={styles.iconBtn}
+          className={`${styles.iconBtn} ${styles.headerHistory}`}
           aria-label="Undo"
           disabled={!canUndo}
           onClick={onUndo}
@@ -121,7 +122,7 @@ export function WorkspaceHeader({
         </button>
         <button
           type="button"
-          className={styles.iconBtn}
+          className={`${styles.iconBtn} ${styles.headerHistory}`}
           aria-label="Redo"
           disabled={!canRedo}
           onClick={onRedo}
@@ -179,97 +180,99 @@ export function WorkspaceHeader({
             <span className={styles.saveDesignLabel}>Save design</span>
           </button>
         ) : null}
-        <div className={styles.moreWrap} ref={menuRef}>
-          <button
-            type="button"
-            className={styles.iconBtn}
-            aria-label="More"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
-          >
-            <MoreHorizontal size={18} />
-          </button>
-          {menuOpen ? (
-            <div className={styles.moreMenu} role="menu">
-              {onSaveDesign ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={styles.moreItem}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onSaveDesign()
-                  }}
-                >
-                  Save as design…
-                </button>
-              ) : null}
-              {onOpenLibrary ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={styles.moreItem}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onOpenLibrary()
-                  }}
-                >
-                  My Designs
-                </button>
-              ) : null}
-              {magicEnabled && canRecoverLastMagic && onRecoverLastMagic ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={styles.moreItem}
-                  disabled={magicBusy}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onRecoverLastMagic()
-                  }}
-                >
-                  See last result
-                </button>
-              ) : null}
+      </div>
+      <div className={styles.moreWrap} ref={menuRef} data-testid="workspace-more">
+        <button
+          type="button"
+          className={styles.moreBtn}
+          aria-label="More"
+          aria-expanded={menuOpen}
+          title="More — Clear canvas, Share, My Designs"
+          onClick={() => setMenuOpen((v) => !v)}
+        >
+          <MoreHorizontal size={18} aria-hidden />
+          <span className={styles.moreBtnLabel}>More</span>
+        </button>
+        {menuOpen ? (
+          <div className={styles.moreMenu} role="menu">
+            {onSaveDesign ? (
               <button
                 type="button"
                 role="menuitem"
                 className={styles.moreItem}
                 onClick={() => {
                   setMenuOpen(false)
-                  setShareOpen(true)
+                  onSaveDesign()
                 }}
               >
-                <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />
-                Share FashionRise…
+                Save as design…
               </button>
+            ) : null}
+            {onOpenLibrary ? (
               <button
                 type="button"
                 role="menuitem"
                 className={styles.moreItem}
                 onClick={() => {
                   setMenuOpen(false)
-                  onClear()
+                  onOpenLibrary()
                 }}
               >
-                Clear canvas
+                My Designs
               </button>
-              {onRetrySave ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={styles.moreItem}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onRetrySave()
-                  }}
-                >
-                  Save now
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+            {magicEnabled && canRecoverLastMagic && onRecoverLastMagic ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.moreItem}
+                disabled={magicBusy}
+                onClick={() => {
+                  setMenuOpen(false)
+                  onRecoverLastMagic()
+                }}
+              >
+                See last result
+              </button>
+            ) : null}
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.moreItem}
+              onClick={() => {
+                setMenuOpen(false)
+                setShareOpen(true)
+              }}
+            >
+              <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />
+              Share FashionRise…
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.moreItem}
+              onClick={() => {
+                setMenuOpen(false)
+                onClear()
+              }}
+            >
+              Clear canvas
+            </button>
+            {onRetrySave ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.moreItem}
+                onClick={() => {
+                  setMenuOpen(false)
+                  onRetrySave()
+                }}
+              >
+                Save now
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
       <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} payload={{ kind: 'app' }} />

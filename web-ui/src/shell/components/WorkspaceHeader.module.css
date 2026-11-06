@@ -1,12 +1,14 @@
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
   min-height: 52px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   position: relative;
+  /* Allow the More dropdown to paint outside the header without clipping. */
+  overflow: visible;
 }
 
 /* Above the workspace BetaNotice (z-index 40) only while the More menu is open. */
@@ -18,7 +20,20 @@
 .right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.left {
+  flex: 0 1 auto;
+}
+
+.right {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  /* Shrink/wrap Magic·Stars first; never push More off-screen. */
+  overflow: visible;
 }
 
 .iconBtn {
@@ -163,6 +178,7 @@
 }
 
 .saveDesign:focus-visible,
+.moreBtn:focus-visible,
 .moreItem:focus-visible,
 .iconBtn:focus-visible {
   outline: 2px solid #f9a8d4;
@@ -176,19 +192,50 @@
 
 .moreWrap {
   position: relative;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  z-index: 46;
+}
+
+.moreBtn {
+  min-height: 34px;
+  min-width: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgba(248, 243, 238, 0.22);
+  border-radius: 10px;
+  background: rgba(248, 243, 238, 0.08);
+  color: var(--fr-text);
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.moreBtn:hover,
+.moreBtn[aria-expanded='true'] {
+  border-color: rgba(244, 114, 182, 0.55);
+  background: rgba(214, 51, 132, 0.16);
+}
+
+.moreBtnLabel {
+  letter-spacing: 0.02em;
 }
 
 .moreMenu {
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  min-width: 150px;
+  min-width: 168px;
   padding: 6px;
   border-radius: 12px;
   background: #151d30;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.4);
-  z-index: 40;
+  z-index: 50;
 }
 
 .moreItem {
@@ -234,11 +281,26 @@
 @media (max-width: 820px) {
   .header {
     padding: 8px 12px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .title {
     font-size: 17px;
+  }
+
+  /* Undo/Redo already live in the tool strip — drop header copies on phone/tablet. */
+  .headerHistory {
+    display: none;
+  }
+
+  .sessionStatus,
+  .statusBusy,
+  .statusSaved,
+  .statusError {
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -249,5 +311,22 @@
 
   .saveDesignLabel {
     display: none;
+  }
+
+  .moreBtn {
+    padding: 0 8px;
+  }
+
+  /* Keep the word "More" so Clear canvas is discoverable on phones. */
+  .moreBtnLabel {
+    display: inline;
+  }
+
+  .title {
+    font-size: 15px;
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
