@@ -7,11 +7,40 @@ from reportlab.lib.styles import getSampleStyleSheet
 from app.services.techpack_ai import (
     _apply_ai_fabric_estimate,
     _apply_ai_pom_estimates,
+    _coerce_pom_number,
     _format_body_context,
+    _normalize_finished_pom_estimates,
     enrich_spec_heuristic,
+)
+from app.services.techpack_ai_professional import (
+    PROFESSIONAL_ANALYZE_MIN_TOKENS,
+    _parse_analysis_json,
 )
 from app.services.techpack_designer_pdf import _cover_page, _overview_page
 from app.services.techpack_garments import empty_finished_measurements
+
+
+def test_parse_analysis_json_fence_and_min_tokens():
+    assert PROFESSIONAL_ANALYZE_MIN_TOKENS >= 4096
+    fenced = '```json\n{"silhouette":"mini","confidence":"high"}\n```'
+    assert _parse_analysis_json(fenced)["silhouette"] == "mini"
+    assert "JSON parse failed" in (_parse_analysis_json("{not json")["assumptions"])
+
+
+def test_coerce_and_normalize_pom_estimates():
+    assert _coerce_pom_number(60) == 60.0
+    assert _coerce_pom_number("59–61") == 60.0
+    assert _coerce_pom_number("Approx. 145-150 to floor") == 147.5
+    norm = _normalize_finished_pom_estimates(
+        {
+            "sleeve_length_cm": "59–61",
+            "center_back_length_cm": "Approx. 145–150",
+            "finished_pom_methods": "visual proportion",
+        }
+    )
+    assert norm["sleeve_length"] == 60.0
+    assert norm["garment_length"] == 147.5
+    assert norm["finished_pom_methods"]["_all"] == "visual proportion"
 
 
 def test_format_body_context_compact():

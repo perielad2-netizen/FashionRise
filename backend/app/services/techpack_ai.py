@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -332,11 +333,68 @@ def _format_body_context(body: dict[str, Any] | None) -> str:
     return ", ".join(parts)
 
 
+def _coerce_pom_number(raw: Any) -> float | None:
+    """Accept numeric POMs or short range strings like '59–61' / 'Approx. 145-150'."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip().lower().replace("cm", " ")
+    # Prefer the first number, or midpoint when a simple a-b range is present.
+    nums = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", text)]
+    if not nums:
+        return None
+    if len(nums) >= 2 and any(sep in text for sep in ("-", "–", "—", "to")):
+        return round((nums[0] + nums[1]) / 2.0, 1)
+    return nums[0]
+
+
+def _normalize_finished_pom_estimates(estimates: dict[str, Any]) -> dict[str, Any]:
+    """Map alternate vision POM keys into the canonical finished_pom_estimates shape."""
+    aliases = {
+        "garment_length": (
+            "garment_length",
+            "garment_length_cm",
+            "center_back_length_cm",
+            "center_back_length",
+            "cb_length",
+            "length_cm",
+        ),
+        "sleeve_length": ("sleeve_length", "sleeve_length_cm"),
+        "shoulder_width": ("shoulder_width", "shoulder_width_cm"),
+        "hem_sweep": ("hem_sweep", "hem", "hem_circumference_cm", "hem_cm"),
+        "neckline_depth": ("neckline_depth", "neckline", "neckline_depth_cm"),
+        "armhole": ("armhole", "armhole_cm", "armhole_circumference_cm"),
+        "skirt_length": ("skirt_length", "skirt_length_cm"),
+        "inseam": ("inseam", "inseam_cm"),
+        "slit_start_from_waist": ("slit_start_from_waist", "slit_height_cm", "slit_height"),
+    }
+    out: dict[str, Any] = {}
+    methods_raw = estimates.get("finished_pom_methods")
+    if isinstance(methods_raw, dict):
+        out["finished_pom_methods"] = methods_raw
+    elif isinstance(methods_raw, str) and methods_raw.strip():
+        out["finished_pom_methods"] = {"_all": methods_raw.strip()}
+    for canon, keys in aliases.items():
+        for key in keys:
+            if key not in estimates:
+                continue
+            num = _coerce_pom_number(estimates.get(key))
+            if num is None:
+                continue
+            out[canon] = num
+            break
+    return out
+
+
 def _apply_ai_pom_estimates(piece: dict[str, Any], analysis: dict[str, Any]) -> None:
     """Fill empty finished POM cells from vision proportional estimates (never overwrite designer)."""
-    estimates = analysis.get("finished_pom_estimates")
-    if not isinstance(estimates, dict):
+    estimates_raw = analysis.get("finished_pom_estimates")
+    if not isinstance(estimates_raw, dict):
         return
+    estimates = _normalize_finished_pom_estimates(estimates_raw)
     methods_raw = estimates.get("finished_pom_methods")
     methods: dict[str, Any] = methods_raw if isinstance(methods_raw, dict) else {}
     finished_raw = piece.get("finished_measurements")
@@ -368,7 +426,9 @@ def _apply_ai_pom_estimates(piece: dict[str, Any], analysis: dict[str, Any]) -> 
         val = estimates.get(ai_key)
         if not isinstance(val, (int, float)):
             continue
-        method = str(methods.get(ai_key) or methods.get(pom_key) or "").strip()
+        method = str(
+            methods.get(ai_key) or methods.get(pom_key) or methods.get("_all") or ""
+        ).strip()
         assumptions = [
             method or "Proportional estimate from Magic look + body measurements",
             "AI sample-room proposal — confirm on form before cutting",

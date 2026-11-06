@@ -24,6 +24,54 @@ from app.services.sketch_openai import (
 logger = logging.getLogger(__name__)
 
 ANALYSIS_SCHEMA_VERSION = "techpack_analysis_v3"
+# Dense tailor JSON regularly exceeds 3k completion tokens; under-budget truncates mid-object.
+PROFESSIONAL_ANALYZE_MIN_TOKENS = 4096
+PROFESSIONAL_ANALYZE_MAX_TOKENS = 8192
+
+
+def _parse_analysis_json(content: str) -> dict[str, Any]:
+    """Parse vision JSON; tolerate fenced markdown and leading/trailing junk."""
+    text = (content or "").strip()
+    if not text:
+        return {"confidence": "low", "assumptions": ["Empty vision analysis content"]}
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+        return {"confidence": "low", "assumptions": ["Non-object analysis"]}
+    except json.JSONDecodeError:
+        pass
+    # Strip ```json fences if present.
+    if "```" in text:
+        start = text.find("```")
+        chunk = text[start + 3 :]
+        if chunk.lstrip().lower().startswith("json"):
+            chunk = chunk.lstrip()[4:]
+        end = chunk.find("```")
+        if end >= 0:
+            chunk = chunk[:end]
+        chunk = chunk.strip()
+        try:
+            parsed = json.loads(chunk)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            text = chunk
+    # First { … last } salvage.
+    lo = text.find("{")
+    hi = text.rfind("}")
+    if lo >= 0 and hi > lo:
+        try:
+            parsed = json.loads(text[lo : hi + 1])
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return {
+        "raw": text[:4000],
+        "confidence": "low",
+        "assumptions": ["JSON parse failed"],
+    }
 
 
 @dataclass
@@ -219,21 +267,21 @@ class OpenAIProfessionalProvider:
         system = (
             "You are a senior fashion technical designer writing a SAMPLE-DEVELOPMENT "
             "tech pack a tailor/patternmaker can work from. "
-            "Return JSON only with keys: schema_version, category, silhouette, length, "
-            "neckline, sleeves, fit, closure_visible, fabric_pattern, stripe_direction, "
-            "colors, panels_seams, distinctive_features (array of strings), "
+            "Return ONE compact JSON object only (no markdown). Keys: schema_version, category, "
+            "silhouette, length, neckline, sleeves, fit, closure_visible, fabric_pattern, "
+            "stripe_direction, colors, panels_seams, distinctive_features (array of short strings), "
             "pattern_pieces_suggested (array of {id,name,cut_qty,notes,grainline}), "
-            "construction_notes (array of strings), "
+            "construction_notes (array of short strings), "
             "construction_operations (array of "
-            "{operation,stitch_type,spi,seam_allowance_cm,notes} — 8 to 16 sew-order steps), "
-            "finished_pom_estimates (object with optional numeric cm fields: "
-            "garment_length, sleeve_length, neckline_depth, hem_sweep, slit_start_from_waist, "
-            "shoulder_width, armhole — each value a number OR null, plus "
-            "finished_pom_methods explaining how each estimate was derived), "
+            "{operation,stitch_type,spi,seam_allowance_cm,notes} — 8 to 14 sew-order steps), "
+            "finished_pom_estimates (object: garment_length, sleeve_length, neckline_depth, "
+            "hem_sweep, slit_start_from_waist, shoulder_width, armhole as NUMBERS in cm or null; "
+            "finished_pom_methods as a short string), "
             "fabric_estimate (object: hand, likely_fiber, gsm_range, drape, opacity, "
             "lining_recommended bool, notes), "
             "back_construction_proposal (string — invent a coherent rear when back is unseen), "
             "confidence (low|medium|high), assumptions (array of strings). "
+            "Keep every string field under 160 characters. "
             "construction_operations MUST be specific to THIS look "
             "(wrap/drape/slit/sash/zip/lining as applicable) — never generic dress boilerplate. "
             "Use body measurements to propose proportional finished POMs when the photo "
@@ -246,45 +294,84 @@ class OpenAIProfessionalProvider:
             f"Body measurements: {(body_context or 'not provided')[:400]}. "
             f"Look notes: {(look_notes or '')[:400]}. "
             "Write a tailor-ready analysis: design-specific sew ops, cut inventory, "
-            "fabric estimate, proportional POM estimates, and a coherent proposed back "
+            "fabric estimate, numeric POM estimates (cm), and a coherent proposed back "
             "if the rear is not visible."
         )
-        # Spend tokens for denser technical JSON — professional packs need room.
-        token_budget = max(3200, int(settings.openai_max_completion_tokens or 1400))
-        kwargs = chat_completion_kwargs(
-            model=settings.openai_model,
-            messages=[
-                {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": user_text},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": _image_data_url(image_bytes, mime)},
-                        },
-                    ],
-                },
-            ],
-            max_completion_tokens=token_budget,
-            reasoning_effort=settings.openai_reasoning_effort,
+        # Dense technical JSON needs headroom — 3.2k truncated mid-object on real looks.
+        configured = int(settings.openai_max_completion_tokens or 1400)
+        token_budget = max(PROFESSIONAL_ANALYZE_MIN_TOKENS, configured)
+        token_budget = min(token_budget, PROFESSIONAL_ANALYZE_MAX_TOKENS)
+        messages = [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_text},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": _image_data_url(image_bytes, mime)},
+                    },
+                ],
+            },
+        ]
+
+        def _once(budget: int):
+            kwargs = chat_completion_kwargs(
+                model=settings.openai_model,
+                messages=messages,
+                max_completion_tokens=budget,
+                reasoning_effort=settings.openai_reasoning_effort,
+            )
+            kwargs["response_format"] = {"type": "json_object"}
+            result = client.chat.completions.create(**kwargs)
+            choice = result.choices[0] if result.choices else None
+            content = ((choice.message.content if choice else None) or "").strip()
+            finish = getattr(choice, "finish_reason", None) if choice else None
+            return result, content, finish
+
+        result, content, finish = _once(token_budget)
+        parsed = _parse_analysis_json(content)
+        # Retry once at max budget if truncated or unusable.
+        needs_retry = (
+            finish == "length"
+            or "JSON parse failed" in (parsed.get("assumptions") or [])
+            or (
+                not str(parsed.get("silhouette") or "").strip()
+                and not parsed.get("construction_operations")
+            )
         )
-        # Ensure response_format json (chat_completion_kwargs already sets json_object;
-        # keep explicit for adapter clarity / older helpers).
-        kwargs["response_format"] = {"type": "json_object"}
-        result = client.chat.completions.create(**kwargs)
-        content = (result.choices[0].message.content or "").strip() if result.choices else ""
-        try:
-            parsed = json.loads(content) if content else {}
-        except json.JSONDecodeError:
-            parsed = {"raw": content[:2000], "confidence": "low", "assumptions": ["JSON parse failed"]}
+        total_cents = _usage_cents_from_chat(result)
+        vision_calls = 1
+        if needs_retry and token_budget < PROFESSIONAL_ANALYZE_MAX_TOKENS:
+            result2, content2, finish2 = _once(PROFESSIONAL_ANALYZE_MAX_TOKENS)
+            parsed2 = _parse_analysis_json(content2)
+            total_cents += _usage_cents_from_chat(result2)
+            vision_calls += 1
+            better = (
+                "JSON parse failed" not in (parsed2.get("assumptions") or [])
+                and (
+                    str(parsed2.get("silhouette") or "").strip()
+                    or parsed2.get("construction_operations")
+                )
+            )
+            if better:
+                parsed = parsed2
+                finish = finish2
+            elif finish2:
+                parsed.setdefault("assumptions", [])
+                if isinstance(parsed["assumptions"], list):
+                    parsed["assumptions"].append(f"retry_finish={finish2}")
         if not isinstance(parsed, dict):
             parsed = {"confidence": "low", "assumptions": ["Non-object analysis"]}
+        if finish == "length":
+            parsed.setdefault("assumptions", [])
+            if isinstance(parsed["assumptions"], list):
+                parsed["assumptions"].append("Vision JSON may be truncated (finish_reason=length)")
         parsed["schema_version"] = ANALYSIS_SCHEMA_VERSION
         usage = ProviderUsage(
-            cost_usd_cents=_usage_cents_from_chat(result),
+            cost_usd_cents=total_cents,
             vision_model=settings.openai_model,
-            vision_calls=1,
+            vision_calls=vision_calls,
         )
         return parsed, usage
 
