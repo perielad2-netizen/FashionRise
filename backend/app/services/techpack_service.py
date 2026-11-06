@@ -681,7 +681,7 @@ def _pdf_only_content_fingerprint(
     spec_for_hash["ai"] = ai
     payload = {
         # Bump when V4 page composition changes so PDF-only rebuilds are not idempotent-stuck.
-        "pdf_layout_version": "v4_mtm_tailor_brief_2026_11p",
+        "pdf_layout_version": "v4_mtm_tailor_brief_2026_11q",
         "draft_id": str(draft.id),
         "revision": int(draft.revision or 1),
         "title": draft.title,
