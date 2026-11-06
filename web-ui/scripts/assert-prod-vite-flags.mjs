@@ -119,9 +119,13 @@ export function extractCompiledGates(bundleText) {
   }
   const frontBackId = fbMatch[1]
 
-  const dualMatch = bundleText.match(
-    new RegExp(`a=${frontBackId.replace(/\$/g, '\\$')}\\(\\),o=(${ID})\\(\\)`),
-  )
+  // Minifier local names drift across Rolldown builds:
+  // 1) Legacy: `a=<frontBack>(),o=<dualMagic>()`
+  // 2) Current: `o=<frontBack>(),s=<dualMagic>()`
+  const fbEsc = frontBackId.replace(/\$/g, '\\$')
+  const dualMatch =
+    bundleText.match(new RegExp(`a=${fbEsc}\\(\\),o=(${ID})\\(\\)`)) ||
+    bundleText.match(new RegExp(`o=${fbEsc}\\(\\),s=(${ID})\\(\\)`))
   if (!dualMatch) {
     throw new Error('compiled bundle missing dualMagic helper next to frontBack in Studio hook')
   }
