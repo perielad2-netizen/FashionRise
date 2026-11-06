@@ -1,0 +1,162 @@
+.wrap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.92);
+  border: 1px solid rgba(28, 28, 30, 0.1);
+  box-shadow:
+    0 6px 16px rgba(15, 22, 38, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  pointer-events: auto;
+  user-select: none;
+}
+
+.compact {
+  top: max(10px, env(safe-area-inset-top, 0px));
+  right: max(10px, env(safe-area-inset-right, 0px));
+  gap: 5px;
+  padding: 3px 3px 3px 9px;
+}
+
+.sideLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #3a3a3c;
+  line-height: 1;
+}
+
+.flipBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(214, 51, 132, 0.1);
+  color: #9d174d;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    color 160ms ease;
+}
+
+.compact .flipBtn {
+  width: 44px;
+  height: 44px;
+}
+
+.flipBtn:hover {
+  background: rgba(214, 51, 132, 0.18);
+}
+
+.flipBtn:focus-visible {
+  outline: 2px solid #d63384;
+  outline-offset: 2px;
+}
+
+.flipBtn:active {
+  transform: scale(0.96);
+}
+
+.unavailable .flipBtn {
+  background: rgba(60, 60, 67, 0.08);
+  color: #6b7280;
+}
+
+.unavailable .flipBtn:hover {
+  background: rgba(60, 60, 67, 0.12);
+}
+
+.unavailable .sideLabel {
+  color: #6b7280;
+}
+
+.paperCue {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  pointer-events: none;
+}
+
+.paperFront,
+.paperBack {
+  display: block;
+}
+
+/* Subtle control-only cue — never transforms the drawing paper or strokes. */
+.animating .flipBtn {
+  animation: flipIconSpin 420ms ease-out;
+}
+
+@keyframes flipIconSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  55% {
+    transform: rotate(160deg);
+  }
+  100% {
+    transform: rotate(180deg);
+  }
+}
+
+/* Immersive dark paper: keep the control readable over cream or dark stage. */
+:global([data-immersive='true']) .wrap {
+  background: rgba(255, 252, 247, 0.94);
+}
+
+/*
+ * Narrow paper width (actual cream frame, not viewport): compact Front/Back
+ * treatment. Keep a readable FRONT/BACK label; touch target stays ≥44×44;
+ * corner inset shrinks so Flip never crowds Full Screen opposite.
+ */
+@container studio-paper (max-width: 420px) {
+  .wrap:not(.compact) {
+    top: 7px;
+    right: 7px;
+    gap: 4px;
+    padding: 2px 2px 2px 8px;
+  }
+
+  .wrap:not(.compact) .sideLabel {
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+  }
+
+  .wrap:not(.compact) .flipBtn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Very tight paper (landscape phones): minimize chrome footprint. */
+@container studio-paper (max-width: 260px) {
+  .wrap:not(.compact) {
+    top: 4px;
+    right: 4px;
+    gap: 2px;
+    padding: 2px 2px 2px 6px;
+  }
+
+  .wrap:not(.compact) .sideLabel {
+    font-size: 0.55rem;
+    max-width: 2.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

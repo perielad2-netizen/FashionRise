@@ -1,0 +1,115 @@
+import { lazy, Suspense } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
+import { isRegistrationUiEnabled } from '@/config/registrationUi'
+import { LoginPage } from '@/pages/LoginPage'
+import { RegisterPage } from '@/pages/RegisterPage'
+import { StudioPage } from '@/pages/StudioPage'
+import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
+
+const DesignStudioLabPage = import.meta.env.DEV
+  ? lazy(() =>
+      import('@/design-lab/DesignStudioLabPage').then((m) => ({
+        default: m.DesignStudioLabPage,
+      })),
+    )
+  : null
+
+const V4fUiLabPage = import.meta.env.DEV
+  ? lazy(() =>
+      import('@/design-lab/V4fUiLabPage').then((m) => ({
+        default: m.V4fUiLabPage,
+      })),
+    )
+  : null
+
+const StudioLayoutLabPage = import.meta.env.DEV
+  ? lazy(() =>
+      import('@/design-lab/StudioLayoutLabPage').then((m) => ({
+        default: m.StudioLayoutLabPage,
+      })),
+    )
+  : null
+
+function RootRedirect() {
+  const { isAuthenticated, bootstrapping } = useAuth()
+  if (bootstrapping) return null
+  return <Navigate to={isAuthenticated ? '/studio' : '/login'} replace />
+}
+
+/** Remount Studio when the authenticated user changes so local canvas state cannot leak. */
+function UserScopedStudio() {
+  const { user } = useAuth()
+  if (!user) return null
+  return <StudioPage key={user.id} />
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <div className="app-root">
+        <Routes>
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/register"
+            element={
+              isRegistrationUiEnabled() ? <RegisterPage /> : <Navigate to="/login" replace />
+            }
+          />
+          <Route
+            path="/studio/*"
+            element={
+              <ProtectedRoute>
+                <UserScopedStudio />
+              </ProtectedRoute>
+            }
+          />
+          {import.meta.env.DEV && DesignStudioLabPage ? (
+            <Route
+              path="/_design/studio"
+              element={
+                <Suspense
+                  fallback={
+                    <div style={{ padding: 24, color: '#f8f4f0' }}>Loading design lab…</div>
+                  }
+                >
+                  <DesignStudioLabPage />
+                </Suspense>
+              }
+            />
+          ) : null}
+          {import.meta.env.DEV && V4fUiLabPage ? (
+            <Route
+              path="/_design/v4f"
+              element={
+                <Suspense
+                  fallback={
+                    <div style={{ padding: 24, color: '#f8f4f0' }}>Loading V4F lab…</div>
+                  }
+                >
+                  <V4fUiLabPage />
+                </Suspense>
+              }
+            />
+          ) : null}
+          {import.meta.env.DEV && StudioLayoutLabPage ? (
+            <Route
+              path="/_design/studio-layout"
+              element={
+                <Suspense
+                  fallback={
+                    <div style={{ padding: 24, color: '#f8f4f0' }}>Loading Studio layout lab…</div>
+                  }
+                >
+                  <StudioLayoutLabPage />
+                </Suspense>
+              }
+            />
+          ) : null}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
+    </AuthProvider>
+  )
+}

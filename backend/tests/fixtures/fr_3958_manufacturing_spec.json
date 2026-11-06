@@ -1,0 +1,551 @@
+{
+  "schema_version": "2.0",
+  "units": "cm",
+  "size_system": "EU",
+  "sample_size": "",
+  "look_notes": "Lavender-purple zip hoodie with golden-yellow mid-thigh shorts.",
+  "body": {
+    "hip": {
+      "note": null,
+      "unit": "cm",
+      "value": 110,
+      "source": "designer",
+      "confidence": null,
+      "definition": null,
+      "review_status": null
+    },
+    "bust": {
+      "note": null,
+      "unit": "cm",
+      "value": 100,
+      "source": "designer",
+      "confidence": null,
+      "definition": null,
+      "review_status": null
+    },
+    "waist": {
+      "note": null,
+      "unit": "cm",
+      "value": 90,
+      "source": "designer",
+      "confidence": null,
+      "definition": null,
+      "review_status": null
+    },
+    "height": {
+      "note": null,
+      "unit": "cm",
+      "value": 176,
+      "source": "designer",
+      "confidence": null,
+      "definition": null,
+      "review_status": null
+    },
+    "inseam": {
+      "note": null,
+      "unit": "cm",
+      "value": 80,
+      "source": "designer",
+      "confidence": null,
+      "definition": null,
+      "review_status": null
+    }
+  },
+  "preferences": {
+    "notes": "",
+    "fit_preference": "regular"
+  },
+  "warnings": [],
+  "qc_checklist": [
+    {
+      "item": "Garment categories confirmed by designer",
+      "checked": false
+    },
+    {
+      "item": "Finished measurements reviewed (body vs garment separated)",
+      "checked": false
+    },
+    {
+      "item": "Pattern schematics labeled NOT TO SCALE",
+      "checked": false
+    },
+    {
+      "item": "Patternmaker sign-off before production",
+      "checked": false
+    }
+  ],
+  "outfit": {
+    "piece_count": 2,
+    "pieces": [
+      {
+        "id": "piece-top-fixture",
+        "category": "top",
+        "label": "Top",
+        "role": "top",
+        "fit": {
+          "ease_note": "",
+          "silhouette": "Relaxed, straight-cut long-sleeved top with loose shorts ending around mid-thigh",
+          "suggestion": "Relaxed, lightly shaped fit",
+          "length_style": "Hip-length, ending around the upper hip",
+          "suggestion_provenance": "ai_inferred",
+          "length_style_provenance": "visually_supported"
+        },
+        "finished_measurements": {
+          "hem": {
+            "note": null,
+            "unit": "cm",
+            "value": null,
+            "source": "empty",
+            "confidence": "unknown",
+            "definition": "Hem circumference",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "armhole": {
+            "note": null,
+            "unit": "cm",
+            "value": null,
+            "source": "empty",
+            "confidence": "unknown",
+            "definition": "Armhole circumference",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "neckline": {
+            "note": null,
+            "unit": "cm",
+            "value": null,
+            "source": "empty",
+            "confidence": "unknown",
+            "definition": "Neckline / collar",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "chest_bust": {
+            "note": null,
+            "unit": "cm",
+            "value": 100,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Chest / bust",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "sleeve_length": {
+            "note": null,
+            "unit": "cm",
+            "value": 60,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Sleeve length",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "garment_length": {
+            "note": null,
+            "unit": "cm",
+            "value": 110,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Garment length",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "shoulder_width": {
+            "note": null,
+            "unit": "cm",
+            "value": 45,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Shoulder width",
+            "assumptions": [],
+            "review_status": "open"
+          }
+        },
+        "materials": {
+          "shell": {
+            "name": "['Lavender-purple top', 'Golden-yellow shorts'] fabric",
+            "source": "estimate",
+            "suggestion": "cotton",
+            "composition": ""
+          },
+          "lining": {
+            "name": "",
+            "source": "empty"
+          },
+          "interfacing": {
+            "name": "",
+            "source": "empty"
+          }
+        },
+        "closures": {
+          "type": "True",
+          "notes": "Visible closure inference \u2014 confirm before production.",
+          "source": "ai",
+          "provenance": "ai_inferred",
+          "suggestion": ""
+        },
+        "construction_steps": [
+          {
+            "step": 1,
+            "source": "estimate",
+            "instruction": "Staystitch neckline and fuse interfacing where required."
+          },
+          {
+            "step": 2,
+            "source": "estimate",
+            "instruction": "Join shoulder seams; finish with overlock or clean finish."
+          },
+          {
+            "step": 3,
+            "source": "estimate",
+            "instruction": "Set sleeves or finish armholes for sleeveless design."
+          },
+          {
+            "step": 4,
+            "source": "estimate",
+            "instruction": "Attach collar/neck finish; topstitch as designed."
+          },
+          {
+            "step": 5,
+            "source": "estimate",
+            "instruction": "Close side seams; finish hems and cuffs."
+          },
+          {
+            "step": 6,
+            "source": "estimate",
+            "instruction": "Install closure (buttons/placket/zipper) and press."
+          }
+        ],
+        "bom": [
+          {
+            "qty": "estimate TBD",
+            "item": "['Lavender-purple top', 'Golden-yellow shorts'] shell",
+            "unit": "m",
+            "notes": "Width/weight unknown until confirmed",
+            "source": "estimate"
+          },
+          {
+            "qty": "1",
+            "item": "Thread",
+            "unit": "cone",
+            "notes": "Match shell",
+            "source": "estimate"
+          },
+          {
+            "qty": "1",
+            "item": "Care / brand label",
+            "unit": "set",
+            "notes": "",
+            "source": "estimate"
+          }
+        ],
+        "illustrations": {
+          "mode": "professional",
+          "artifacts": {
+            "flat_front": {
+              "artifact_id": "11111111-1111-4111-8111-111111111111",
+              "review_state": "proposed",
+              "review_message": null,
+              "preview_include": true
+            },
+            "detail_callouts": {
+              "artifact_id": "22222222-2222-4222-8222-222222222222",
+              "review_state": "proposed",
+              "review_message": null,
+              "preview_include": true
+            },
+            "flat_back_proposed": {
+              "artifact_id": "33333333-3333-4333-8333-333333333333",
+              "review_state": "proposed_unverified",
+              "review_message": null,
+              "preview_include": true
+            }
+          },
+          "analysis_garment_category": "top",
+          "analysis_summary": "Long-sleeve hooded sweatshirt with a straight body and set-in sleeves",
+          "analysis_keys": [
+            "assumptions",
+            "category",
+            "closure_visible",
+            "colors",
+            "confidence",
+            "distinctive_features",
+            "fabric_pattern",
+            "fit",
+            "length",
+            "neckline",
+            "panels_seams",
+            "schema_version",
+            "silhouette",
+            "sleeves",
+            "stripe_direction"
+          ],
+          "analysis": {
+            "category": "top",
+            "colors": [
+              "Lavender/purple body and hood",
+              "Matching lavender cuffs and hem band"
+            ],
+            "silhouette": "hooded top",
+            "schema_version": "techpack_analysis_v3"
+          }
+        },
+        "color_hint": "['Lavender-purple top', 'Golden-yellow shorts']"
+      },
+      {
+        "id": "piece-shorts-fixture",
+        "category": "shorts",
+        "label": "Shorts",
+        "role": "bottom",
+        "fit": {
+          "source": "ai",
+          "ease_note": "",
+          "silhouette": "Straight-leg, relaxed shorts",
+          "suggestion": "Relaxed through hip and thigh",
+          "length_style": "Above-knee to near-knee length",
+          "silhouette_provenance": "visually_supported",
+          "suggestion_provenance": "ai_inferred",
+          "length_style_provenance": "visually_supported"
+        },
+        "finished_measurements": {
+          "hip": {
+            "note": null,
+            "unit": "cm",
+            "value": 110,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Hip",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "thigh": {
+            "note": null,
+            "unit": "cm",
+            "value": null,
+            "source": "empty",
+            "confidence": "unknown",
+            "definition": "Thigh circumference",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "waist": {
+            "note": null,
+            "unit": "cm",
+            "value": 75,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Waist",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "inseam": {
+            "note": null,
+            "unit": "cm",
+            "value": 80,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Inseam",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "outseam": {
+            "note": null,
+            "unit": "cm",
+            "value": null,
+            "source": "empty",
+            "confidence": "unknown",
+            "definition": "Outseam",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "back_rise": {
+            "note": null,
+            "unit": "cm",
+            "value": 40,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Back rise",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "waistband": {
+            "note": null,
+            "unit": "cm",
+            "value": null,
+            "source": "empty",
+            "confidence": "unknown",
+            "definition": "Waistband height",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "front_rise": {
+            "note": null,
+            "unit": "cm",
+            "value": 30,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Front rise",
+            "assumptions": [],
+            "review_status": "open"
+          },
+          "leg_opening": {
+            "note": null,
+            "unit": "cm",
+            "value": 40,
+            "source": "designer",
+            "confidence": "unknown",
+            "definition": "Leg opening",
+            "assumptions": [],
+            "review_status": "open"
+          }
+        },
+        "materials": {
+          "shell": {
+            "name": "['Lavender-purple top', 'Golden-yellow shorts'] fabric",
+            "source": "estimate",
+            "suggestion": "cotton",
+            "composition": ""
+          },
+          "lining": {
+            "name": "",
+            "source": "empty"
+          },
+          "interfacing": {
+            "name": "",
+            "source": "empty"
+          }
+        },
+        "closures": {
+          "type": "Centered front fly seam is visible; fastening details are obscured by the hoodie",
+          "notes": "Visible closure inference \u2014 confirm before production.",
+          "source": "ai",
+          "provenance": "ai_inferred",
+          "suggestion": ""
+        },
+        "construction_steps": [
+          {
+            "step": 1,
+            "source": "estimate",
+            "instruction": "Sew darts/pleats if present; assemble pocket bags."
+          },
+          {
+            "step": 2,
+            "source": "estimate",
+            "instruction": "Join front crotch; install fly/closure if designed."
+          },
+          {
+            "step": 3,
+            "source": "estimate",
+            "instruction": "Join back crotch; sew inseams then outseams (or as preferred sequence)."
+          },
+          {
+            "step": 4,
+            "source": "estimate",
+            "instruction": "Attach waistband with even ease distribution."
+          },
+          {
+            "step": 5,
+            "source": "estimate",
+            "instruction": "Hem legs; press creases only if design requires."
+          },
+          {
+            "step": 6,
+            "source": "estimate",
+            "instruction": "QC: rise balance, waistband seat, closure function."
+          }
+        ],
+        "bom": [
+          {
+            "qty": "estimate TBD",
+            "item": "['Lavender-purple top', 'Golden-yellow shorts'] shell",
+            "unit": "m",
+            "notes": "Width/weight unknown until confirmed",
+            "source": "estimate"
+          },
+          {
+            "qty": "1",
+            "item": "Zipper / elastic / closure",
+            "unit": "pcs",
+            "notes": "Confirm closure",
+            "source": "estimate"
+          },
+          {
+            "qty": "1",
+            "item": "Thread",
+            "unit": "cone",
+            "notes": "Match shell",
+            "source": "estimate"
+          },
+          {
+            "qty": "1",
+            "item": "Care / brand label",
+            "unit": "set",
+            "notes": "",
+            "source": "estimate"
+          }
+        ],
+        "illustrations": {
+          "mode": "professional",
+          "artifacts": {
+            "flat_front": {
+              "artifact_id": "44444444-4444-4444-8444-444444444444",
+              "review_state": "proposed",
+              "review_message": null,
+              "preview_include": true
+            },
+            "detail_callouts": {
+              "artifact_id": "55555555-5555-4555-8555-555555555555",
+              "review_state": "rejected_category_mismatch",
+              "review_message": "Owner QA: detail sheet linked to bottoms visually shows hoodie construction. Original preserved; exclude from corrected preview.",
+              "preview_include": false
+            },
+            "flat_back_proposed": {
+              "artifact_id": "66666666-6666-4666-8666-666666666666",
+              "review_state": "proposed_unverified",
+              "review_message": null,
+              "preview_include": true
+            }
+          },
+          "analysis_garment_category": "shorts",
+          "analysis_summary": "Straight-leg, relaxed shorts",
+          "analysis_keys": [
+            "assumptions",
+            "category",
+            "closure_visible",
+            "colors",
+            "confidence",
+            "distinctive_features",
+            "fabric_pattern",
+            "fit",
+            "length",
+            "neckline",
+            "panels_seams",
+            "schema_version",
+            "silhouette",
+            "sleeves",
+            "stripe_direction"
+          ],
+          "analysis": {
+            "category": "shorts",
+            "colors": [
+              "golden yellow"
+            ],
+            "silhouette": "relaxed shorts",
+            "schema_version": "techpack_analysis_v3"
+          }
+        },
+        "color_hint": "['Lavender-purple top', 'Golden-yellow shorts']"
+      }
+    ],
+    "detection_confidence": "fixture"
+  },
+  "ai": {
+    "export_id": "77777777-7777-4777-8777-777777777777",
+    "last_run_id": "88888888-8888-4888-8888-888888888888",
+    "dirty_since_generation": false,
+    "outdated_export_id": null,
+    "actual_cost_usd_cents": 250,
+    "last_mode": "professional"
+  }
+}
