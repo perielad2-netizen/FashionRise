@@ -1112,14 +1112,28 @@ def _pattern_visual_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[
     story.append(
         _table(pdata, [10 * mm, 26 * mm, 28 * mm, 14 * mm, 26 * mm, 24 * mm, 52 * mm], styles)
     )
+    story.append(
+        Paragraph(
+            "Full-page piece-breakdown illustration follows — examine at readable size.",
+            styles["muted"],
+        )
+    )
+    story.append(PageBreak())
 
-    story.append(Paragraph("Piece-breakdown illustration (examine at readable size)", styles["h3"]))
+    # Dedicated full page for the pattern schematic (Priority: readable cutting visuals).
+    story.append(Paragraph(f"Piece-breakdown illustration — {heading}", styles["h2"]))
+    story.append(
+        Paragraph(
+            "Visual breakdown of the pieces needed to construct the garment. "
+            "NOT TO SCALE · NOT a printable sewing pattern.",
+            styles["muted"],
+        )
+    )
     pattern_art = _art_path(piece, "pattern_sheet")
     pattern_excl = _art_exclusion_note(piece, "pattern_sheet")
     if pattern_art is not None:
         clean = prepare_mtm_flat(pattern_art) or pattern_art
-        # Full-width, tall view — may continue onto the next page; that is intentional.
-        story.append(_look_image(clean, 178 * mm, 170 * mm, styles))
+        story.append(_look_image(clean, 180 * mm, 220 * mm, styles))
     elif pattern_excl:
         story.append(
             Paragraph(
@@ -1165,7 +1179,7 @@ def _design_details_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[
         clean = prepare_mtm_flat(detail_art) or scrub_contradictory_flat_labels(
             detail_art, wipe_all_text=True, always_banner=False
         ) or detail_art
-        story.append(_look_image(clean, 178 * mm, 130 * mm, styles))
+        story.append(_look_image(clean, 180 * mm, 155 * mm, styles))
     elif detail_excl:
         story.append(Paragraph(f"<b>MISSING / EXCLUDED:</b> {detail_excl}", styles["warn"]))
     else:

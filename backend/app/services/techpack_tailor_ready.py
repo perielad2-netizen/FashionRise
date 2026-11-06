@@ -582,6 +582,15 @@ def scrub_contradictory_flat_labels(
             pad = max(10 if wipe_all_text else 8, w // (140 if wipe_all_text else 180))
             patches = _merge_label_boxes(boxes, pad=pad)
 
+            # Prefer the page paper color over sampling near labels (callout
+            # circles / white leader pads produce ugly white correction patches).
+            paper = im.getpixel((min(8, w - 1), min(8, h - 1)))
+            if isinstance(paper, int):
+                paper = (paper, paper, paper)
+            # Soft cream fallback typical of FashionRise flats.
+            if sum(paper[:3]) < 500:
+                paper = (245, 240, 232)
+
             def _cover(left: int, top: int, right: int, bottom: int) -> None:
                 left = max(0, left)
                 top = max(0, top)
@@ -589,10 +598,7 @@ def scrub_contradictory_flat_labels(
                 bottom = min(h, bottom)
                 if right - left < 4 or bottom - top < 4:
                     return
-                sx = min(w - 1, max(0, left - 4))
-                sy = min(h - 1, max(0, top - 4))
-                fill = im.getpixel((sx, sy))
-                draw.rectangle([left, top, right, bottom], fill=fill)
+                draw.rectangle([left, top, right, bottom], fill=paper)
 
             redacted = 0
             for left, top, right, bottom in patches:
