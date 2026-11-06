@@ -897,6 +897,7 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                 r = dict(row)
                 fold = str(r.get("fold") or "").lower()
                 notes = str(r.get("notes") or "")
+                name = str(r.get("name") or "").lower()
                 if closure_family == "wrap" and ("zip" in notes.lower() or "zipper" in notes.lower()):
                     r["notes"] = (
                         notes + " · CONFLICT: wrap closure — ignore zip seam notes until designer confirms."
@@ -908,6 +909,46 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                         + " · CONFLICT: CB zip cannot be cut on fold — patternmaker must draft a CB seam."
                     ).strip(" ·")
                     r["review_state"] = "needs_review"
+                # Wrap / MTM: cut-on-fold vs center-back seam is a real choice — do not
+                # present both as settled facts in the same pack.
+                if closure_family == "wrap" and (
+                    "back" in name
+                    or "back" in notes.lower()
+                ):
+                    says_fold = "cut on fold" in notes.lower() or "on fold" in fold or fold == "cb"
+                    says_cb_seam = (
+                        "center-back seam" in notes.lower()
+                        or "centre-back seam" in notes.lower()
+                        or "cb seam" in notes.lower()
+                        or "center back seam" in notes.lower()
+                    )
+                    # Also compare against the written back proposal on the piece.
+                    analysis_blob = ""
+                    illust = out.get("illustrations") if isinstance(out.get("illustrations"), dict) else {}
+                    if isinstance(illust.get("analysis"), dict):
+                        analysis_blob = str(
+                            illust["analysis"].get("back_construction_proposal") or ""
+                        ).lower()
+                    proposal_cb = any(
+                        tok in analysis_blob
+                        for tok in ("center-back seam", "centre-back seam", "cb seam", "center back seam")
+                    )
+                    if says_fold and (says_cb_seam or proposal_cb):
+                        r["fold"] = "CHOICE — fold OR CB seam"
+                        r["notes"] = (
+                            "CHOICE REQUIRED: inventory suggested cut-on-fold, while the proposed "
+                            "back describes a center-back seam. Customer + tailor must pick one "
+                            "before the toile — FashionRise does not decide. "
+                            + notes
+                        )
+                        r["review_state"] = "needs_review"
+                    elif says_fold and not says_cb_seam:
+                        # Soften absolute fold language so it is not mistaken for a lock.
+                        if "choice" not in notes.lower():
+                            r["notes"] = (
+                                "PROPOSED cut-on-fold (no CB zipper assumed) — tailor may draft a "
+                                "CB seam instead if preferred for fit/shape. " + notes
+                            )
                 flagged.append(r)
             out["pattern_pieces"] = flagged
         # Ensure design-specific POM skeleton keys exist (empty until AI/designer fills).
@@ -1027,6 +1068,50 @@ def enrich_piece_for_designer_pdf(piece: dict[str, Any]) -> dict[str, Any]:
                 else:
                     synced_bom.append(row)
             out["bom"] = synced_bom
+
+        # Same sash dimensions must appear in pattern-piece notes (no 4 cm vs 6 cm drift).
+        if isinstance(sw_v, (int, float)) or isinstance(sl_v, (int, float)):
+            import re as _re
+
+            width_txt = f"{float(sw_v):g} cm" if isinstance(sw_v, (int, float)) else "width TBD"
+            length_txt = f"{float(sl_v):g} cm" if isinstance(sl_v, (int, float)) else "length TBD"
+            status = str(sw.get("review_status") or sl.get("review_status") or "proposed")
+            synced_patterns: list[Any] = []
+            for row in out.get("pattern_pieces") or []:
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("name") or "").lower()
+                notes = str(row.get("notes") or "")
+                if "sash" in name or "tie" in name or "sash" in notes.lower():
+                    cleaned = _re.sub(
+                        r"\s*\(from sash_width POM\)",
+                        "",
+                        notes,
+                        flags=_re.I,
+                    )
+                    cleaned = _re.sub(
+                        r"approx\.?\s*\d+(?:\.\d+)?\s*cm\s*wide",
+                        f"{width_txt} wide",
+                        cleaned,
+                        flags=_re.I,
+                    )
+                    cleaned = _re.sub(
+                        r"\b\d+(?:\.\d+)?\s*cm\s*wide\b",
+                        f"{width_txt} wide",
+                        cleaned,
+                        flags=_re.I,
+                    )
+                    if width_txt not in cleaned:
+                        cleaned = (
+                            f"Finished sash {width_txt} × {length_txt} · status={status}. " + cleaned
+                        ).strip()
+                    elif "sash_width" not in cleaned.lower():
+                        cleaned = f"{cleaned} · from sash_width POM ({status})"
+                    synced_patterns.append({**row, "notes": cleaned})
+                else:
+                    synced_patterns.append(row)
+            if synced_patterns:
+                out["pattern_pieces"] = synced_patterns
 
         out["finished_measurements"] = finished
     return out

@@ -442,6 +442,231 @@ def extract_fabric_swatch(source: Path | None, *, size: int = 220) -> Path | Non
         return None
 
 
+_ZIP_LABEL_TOKENS = ("zip", "zipper", "zippers")
+_ZIP_CONTEXT_TOKENS = ("center", "back", "cb", "invisible", "concealed", "hidden")
+
+
+def _tesseract_word_boxes(source: Path) -> list[dict[str, Any]]:
+    """Return word-level OCR boxes via tesseract TSV (empty if OCR unavailable)."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("tesseract"):
+        return []
+    try:
+        proc = subprocess.run(
+            ["tesseract", str(source), "stdout", "tsv"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+    except Exception:
+        return []
+    if proc.returncode != 0 or not proc.stdout:
+        return []
+    words: list[dict[str, Any]] = []
+    lines = proc.stdout.splitlines()
+    if len(lines) < 2:
+        return []
+    for line in lines[1:]:
+        cols = line.split("\t")
+        if len(cols) < 12:
+            continue
+        try:
+            conf = float(cols[10])
+            left, top, width, height = (int(cols[6]), int(cols[7]), int(cols[8]), int(cols[9]))
+        except (TypeError, ValueError):
+            continue
+        text = str(cols[11] or "").strip()
+        if not text or conf < 40 or width <= 0 or height <= 0:
+            continue
+        words.append(
+            {
+                "text": text,
+                "low": text.lower().strip(".,;:()[]{}"),
+                "left": left,
+                "top": top,
+                "width": width,
+                "height": height,
+                "right": left + width,
+                "bottom": top + height,
+                "conf": conf,
+            }
+        )
+    return words
+
+
+def _merge_label_boxes(boxes: list[tuple[int, int, int, int]], *, pad: int = 6) -> list[tuple[int, int, int, int]]:
+    """Merge overlapping / nearby rectangles so multi-word labels become one patch."""
+    if not boxes:
+        return []
+    rects = sorted(boxes, key=lambda b: (b[1], b[0]))
+    merged: list[list[int]] = []
+    for left, top, right, bottom in rects:
+        hit = None
+        for cur in merged:
+            if left <= cur[2] + pad * 3 and right >= cur[0] - pad * 3 and top <= cur[3] + pad * 4 and bottom >= cur[1] - pad * 4:
+                hit = cur
+                break
+        if hit is None:
+            merged.append([left, top, right, bottom])
+        else:
+            hit[0] = min(hit[0], left)
+            hit[1] = min(hit[1], top)
+            hit[2] = max(hit[2], right)
+            hit[3] = max(hit[3], bottom)
+    return [(a - pad, b - pad, c + pad, d + pad) for a, b, c, d in merged]
+
+
+def scrub_contradictory_flat_labels(
+    source: Path | None,
+    *,
+    forbidden_tokens: tuple[str, ...] = _ZIP_LABEL_TOKENS,
+    replacement_note: str = "REMOVED — follow written brief (no zip)",
+    always_banner: bool = True,
+) -> Path | None:
+    """Cover burned-in construction labels that contradict the written brief.
+
+    Used for wrap MTM packs where AI flats still stamp \"CENTER BACK ZIPPER\".
+    Falls back to a non-authoritative banner when OCR finds nothing / is missing.
+    Returns a temp PNG, or None if the source cannot be opened.
+    """
+    if source is None or not source.exists():
+        return None
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        return None
+    try:
+        with Image.open(source) as im0:
+            im = im0.convert("RGB")
+            w, h = im.size
+            draw = ImageDraw.Draw(im)
+            words = _tesseract_word_boxes(source)
+            forbid = {t.lower() for t in forbidden_tokens}
+            hit_idxs: set[int] = set()
+            for i, word in enumerate(words):
+                token = word["low"]
+                if token in forbid or any(tok in token for tok in forbid):
+                    hit_idxs.add(i)
+            # Expand to same-line context tokens (CENTER BACK ZIPPER, invisible zipper…).
+            if hit_idxs:
+                expanded = set(hit_idxs)
+                for i in list(hit_idxs):
+                    base = words[i]
+                    for j, other in enumerate(words):
+                        if j in expanded:
+                            continue
+                        if other["low"] not in _ZIP_CONTEXT_TOKENS and other["low"] not in forbid:
+                            continue
+                        same_band = abs(other["top"] - base["top"]) <= max(18, int(base["height"] * 1.6))
+                        near_x = abs(other["left"] - base["left"]) <= max(220, int(w * 0.28))
+                        if same_band and near_x:
+                            expanded.add(j)
+                hit_idxs = expanded
+            boxes = [
+                (words[i]["left"], words[i]["top"], words[i]["right"], words[i]["bottom"])
+                for i in sorted(hit_idxs)
+            ]
+            patches = _merge_label_boxes(boxes, pad=max(8, w // 180))
+            try:
+                font = ImageFont.truetype(
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    max(12, min(22, w // 55)),
+                )
+                banner_font = ImageFont.truetype(
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    max(14, min(28, w // 42)),
+                )
+            except Exception:
+                font = ImageFont.load_default()
+                banner_font = font
+
+            def _cover(left: int, top: int, right: int, bottom: int, *, stamp: str | None) -> None:
+                left = max(0, left)
+                top = max(0, top)
+                right = min(w, right)
+                bottom = min(h, bottom)
+                if right - left < 4 or bottom - top < 4:
+                    return
+                # Sample nearby background for a soft cover (prefer cream/paper flats).
+                sx = min(w - 1, max(0, left - 4))
+                sy = min(h - 1, max(0, top - 4))
+                fill = im.getpixel((sx, sy))
+                draw.rectangle([left, top, right, bottom], fill=fill)
+                if not stamp:
+                    return
+                note = stamp
+                try:
+                    bbox = draw.textbbox((0, 0), note, font=font)
+                    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                except Exception:
+                    tw, th = len(note) * 6, 12
+                tx = left + 4
+                ty = top + max(0, ((bottom - top) - th) // 2)
+                if tw > (right - left - 8):
+                    note = "REMOVED — no zip"
+                    try:
+                        bbox = draw.textbbox((0, 0), note, font=font)
+                        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                    except Exception:
+                        tw, th = 80, 12
+                    ty = top + max(0, ((bottom - top) - th) // 2)
+                draw.rectangle(
+                    [tx - 2, ty - 2, min(right - 2, tx + tw + 2), min(bottom - 2, ty + th + 2)],
+                    fill=(255, 248, 230),
+                )
+                draw.text((tx, ty), note, fill=(140, 40, 30), font=font)
+
+            redacted = 0
+            for left, top, right, bottom in patches:
+                _cover(left, top, right, bottom, stamp=replacement_note)
+                redacted += 1
+
+            # Second pass on the covered image: catch residual OCR fragments.
+            if redacted:
+                tmp_pass = Path(tempfile.mkstemp(prefix="fr_flat_scrub_pass_", suffix=".png")[1])
+                im.save(tmp_pass, format="PNG")
+                try:
+                    residual = _tesseract_word_boxes(tmp_pass)
+                    residual_boxes: list[tuple[int, int, int, int]] = []
+                    for word in residual:
+                        token = word["low"]
+                        if token in forbid or any(tok in token for tok in forbid):
+                            # Ignore our own short stamp text "no zip".
+                            if token in {"zip"} and word["top"] < max(40, h // 30):
+                                continue
+                            residual_boxes.append(
+                                (word["left"], word["top"], word["right"], word["bottom"])
+                            )
+                    for left, top, right, bottom in _merge_label_boxes(residual_boxes, pad=max(10, w // 160)):
+                        # Cover only — do not re-stamp the word "zip".
+                        _cover(left, top, right, bottom, stamp=None)
+                        redacted += 1
+                finally:
+                    try:
+                        tmp_pass.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
+            if always_banner or redacted:
+                banner = (
+                    "AI art labels are NON-AUTHORITATIVE"
+                    + (f" · {redacted} conflicting label(s) removed" if redacted else "")
+                    + " · follow the written brief"
+                )
+                bh = max(28, h // 36)
+                draw.rectangle([0, 0, w, bh], fill=(255, 236, 210))
+                draw.text((max(8, w // 80), max(4, bh // 6)), banner, fill=(120, 40, 20), font=banner_font)
+
+            out = Path(tempfile.mkstemp(prefix="fr_flat_scrub_", suffix=".png")[1])
+            im.save(out, format="PNG")
+            return out
+    except Exception:
+        return None
+
+
 def annotate_flat_callouts(
     source: Path | None,
     callouts: list[tuple[str, str]],
