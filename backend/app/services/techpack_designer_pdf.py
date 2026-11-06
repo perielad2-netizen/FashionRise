@@ -1100,9 +1100,7 @@ def _pattern_visual_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[
     pattern_art = _art_path(piece, "pattern_sheet")
     pattern_excl = _art_exclusion_note(piece, "pattern_sheet")
     if pattern_art is not None:
-        clean = prepare_mtm_flat(pattern_art) or pattern_art
-        story.append(_look_image(clean, 180 * mm, 225 * mm, styles))
-        # Small ID key under the art so inventory A/B/C stay findable.
+        # ID key first so piece A/B/C stay tied to the large illustration on one page.
         id_bits = [
             f"{row.get('id') or '?'}={str(row.get('name') or '')[:24]}"
             for row in patterns[:10]
@@ -1115,6 +1113,8 @@ def _pattern_visual_page(piece: dict[str, Any], styles: dict[str, Any]) -> list[
                     styles["small"],
                 )
             )
+        clean = prepare_mtm_flat(pattern_art) or pattern_art
+        story.append(_look_image(clean, 180 * mm, 205 * mm, styles))
     elif pattern_excl:
         story.append(
             Paragraph(
