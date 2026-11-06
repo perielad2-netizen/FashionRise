@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Archive, ArrowLeft, Download, FileText, Heart, RefreshCw, Star, Trash2, X } from 'lucide-react'
+import {
+  Archive,
+  ArrowLeft,
+  Download,
+  FileText,
+  Heart,
+  RefreshCw,
+  Share2,
+  Star,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { useAuthJobImage } from '@/hooks/useAuthJobImage'
 import { fetchJobImageBlob } from '@/services/ai/magicApi'
@@ -12,6 +23,7 @@ import {
   type LookRecord,
 } from '@/services/looksApi'
 import { openOrCreateTechpackForLook } from '@/services/techpacksApi'
+import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './MyLooksScreen.module.css'
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' })
@@ -120,6 +132,7 @@ function LookDetailDialog({
   const [title, setTitle] = useState(look.title)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
   const [mobileSide, setMobileSide] = useState<'front' | 'back'>(
     look.front?.has_image ? 'front' : 'back',
   )
@@ -290,6 +303,16 @@ function LookDetailDialog({
           ) : null}
           <button
             type="button"
+            className={styles.ghostBtn}
+            disabled={busy || deleteBusy || !(mobileSide === 'front' ? frontImg.url : backImg.url)}
+            onClick={() => setShareOpen(true)}
+            data-testid="look-share"
+          >
+            <Share2 size={14} aria-hidden />
+            Share
+          </button>
+          <button
+            type="button"
             className={look.is_favorite ? styles.iconBtnActive : styles.iconBtn}
             disabled={busy}
             aria-pressed={look.is_favorite}
@@ -322,6 +345,16 @@ function LookDetailDialog({
           </button>
         </div>
       </div>
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        payload={{
+          kind: 'look',
+          title: look.title,
+          imageUrl: mobileSide === 'back' ? backImg.url : frontImg.url,
+          imageFileName: `fashionrise-${look.title || 'look'}-${mobileSide}.png`,
+        }}
+      />
     </div>
   )
 }

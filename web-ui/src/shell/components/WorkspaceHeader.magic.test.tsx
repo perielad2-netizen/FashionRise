@@ -88,6 +88,7 @@ describe('WorkspaceHeader Magic recovery', () => {
     fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
     expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'My Designs' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: /Share FashionRise/i })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Save now' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: /Export/i })).toBeNull()

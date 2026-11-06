@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, BookmarkPlus, MoreHorizontal, Redo2, Sparkles, Star, Undo2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  BookmarkPlus,
+  MoreHorizontal,
+  Redo2,
+  Share2,
+  Sparkles,
+  Star,
+  Undo2,
+} from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
 import { useAuth } from '@/services/auth/AuthProvider'
+import { ShareSheet } from '@/shell/components/ShareSheet'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './WorkspaceHeader.module.css'
 
@@ -51,6 +61,7 @@ export function WorkspaceHeader({
   const canAffordMagic = starsUnlimited || (starsBalance ?? 0) >= magicCost
   const [menuOpen, setMenuOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -226,6 +237,18 @@ export function WorkspaceHeader({
                 className={styles.moreItem}
                 onClick={() => {
                   setMenuOpen(false)
+                  setShareOpen(true)
+                }}
+              >
+                <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />
+                Share FashionRise…
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.moreItem}
+                onClick={() => {
+                  setMenuOpen(false)
                   onClear()
                 }}
               >
@@ -249,6 +272,7 @@ export function WorkspaceHeader({
         </div>
       </div>
       <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
+      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} payload={{ kind: 'app' }} />
     </div>
   )
 }

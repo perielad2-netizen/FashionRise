@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { Share2, X } from 'lucide-react'
 import type { MagicLookResult } from '@/services/ai/aiJobTypes'
 import type { TryOnExperimentVerdict } from '@/services/ai/magicApi'
+import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './MagicLookPanel.module.css'
 
 export type MagicPhase = 'idle' | 'capturing' | 'submitting' | 'polling' | 'ready' | 'failed'
@@ -91,6 +92,7 @@ export function MagicLookPanel({
   const [compareSketch, setCompareSketch] = useState(false)
   const [tryOnCompare, setTryOnCompare] = useState<TryOnCompareMode>('result')
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   if (!open) return null
 
@@ -483,6 +485,16 @@ export function MagicLookPanel({
               >
                 Download {activeSide}
               </button>
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                disabled={!activeLookUrl}
+                data-testid="magic-share-look"
+                title="Share with promo text for FashionRise"
+              >
+                <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />
+                Share
+              </button>
               {canViewInLooks ? (
                 <button type="button" onClick={onViewInMyLooks}>
                   View in My Looks
@@ -522,6 +534,15 @@ export function MagicLookPanel({
               <button type="button" className={styles.primary} onClick={onDownload}>
                 {tryOn ? 'Download preview' : 'Download look'}
               </button>
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                data-testid="magic-share-look"
+                title="Share with promo text for FashionRise"
+              >
+                <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />
+                Share
+              </button>
               {canViewInLooks ? (
                 <button type="button" onClick={onViewInMyLooks}>
                   {tryOn ? 'Save in My Looks' : 'View in My Looks'}
@@ -539,6 +560,16 @@ export function MagicLookPanel({
           </button>
         </div>
       </div>
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        payload={{
+          kind: 'look',
+          title: tryOn ? 'Try-on look' : 'Magic look',
+          imageUrl: activeLookUrl,
+          imageFileName: tryOn ? 'fashionrise-tryon.png' : 'fashionrise-look.png',
+        }}
+      />
     </div>
   )
 }
