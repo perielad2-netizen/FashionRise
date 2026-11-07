@@ -206,7 +206,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
     render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
 
     expect(screen.getByText(/Select a fully clothed fashion pose photo/i)).toBeTruthy()
-    expect(screen.getByText(/children.?s clothing/i)).toBeTruthy()
+    expect(screen.getByText(/Kidswear uses Studio templates/i)).toBeTruthy()
     expect(screen.getByRole('checkbox')).toBeDisabled()
     expect(uploadPersonalCroquisPhoto).not.toHaveBeenCalled()
 

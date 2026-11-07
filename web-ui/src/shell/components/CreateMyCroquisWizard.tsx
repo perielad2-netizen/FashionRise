@@ -323,72 +323,71 @@ export function CreateMyCroquisWizard({
         ) : null}
 
         {step === 'compose' ? (
-          <div className={styles.body}>
-            <p>
-              Select a fully clothed fashion pose photo, agree once, then upload and generate your
-              model.
-            </p>
-            <p className={styles.hint}>
-              Designing children&apos;s clothing uses Studio templates and mannequins — you do not
-              need to upload a child&apos;s photograph.
-            </p>
-
-            {localPreviewUrl ? (
-              <img src={localPreviewUrl} alt="Local photo preview" className={styles.preview} />
-            ) : null}
-            <button
-              type="button"
-              className={styles.secondary}
-              onClick={() => inputRef.current?.click()}
-              disabled={busy}
-            >
-              {localFile ? 'Change photo' : 'Select photo'}
-            </button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className={styles.file}
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) onPickLocal(file)
-                e.target.value = ''
-              }}
-            />
-
-            <label className={styles.check}>
-              <input
-                type="checkbox"
-                checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
-                disabled={busy || !localFile}
-              />
-              <span>{COMBINED_AGREEMENT_LABEL}</span>
-            </label>
-
-            <button
-              type="button"
-              className={styles.detailsToggle}
-              onClick={() => setShowDetails((v) => !v)}
-            >
-              {showDetails ? 'Hide details' : 'Show details'}
-            </button>
-            {showDetails ? (
-              <div className={styles.notice}>
-                <p>{adultsNotice}</p>
-                <p>{storageNotice}</p>
-                <p>{aiNotice}</p>
-              </div>
-            ) : null}
-
-            {error ? (
-              <p className={styles.errorInline} role="alert">
-                {error}
+          <>
+            <div className={styles.body}>
+              <p className={styles.lead}>
+                Select a fully clothed fashion pose photo, agree once, then upload and generate your
+                model.
               </p>
-            ) : null}
-            {busy && busyLabel ? <p className={styles.busyHint}>{busyLabel}</p> : null}
+              <p className={styles.hint}>Kidswear uses Studio templates — no child photos.</p>
 
-            <div className={styles.actions}>
+              {localPreviewUrl ? (
+                <img src={localPreviewUrl} alt="Local photo preview" className={styles.preview} />
+              ) : null}
+              <button
+                type="button"
+                className={styles.secondary}
+                onClick={() => inputRef.current?.click()}
+                disabled={busy}
+              >
+                {localFile ? 'Change photo' : 'Select photo'}
+              </button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className={styles.file}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) onPickLocal(file)
+                  e.target.value = ''
+                }}
+              />
+
+              <label className={styles.check}>
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  disabled={busy || !localFile}
+                />
+                <span>{COMBINED_AGREEMENT_LABEL}</span>
+              </label>
+
+              <button
+                type="button"
+                className={styles.detailsToggle}
+                onClick={() => setShowDetails((v) => !v)}
+              >
+                {showDetails ? 'Hide details' : 'Show details'}
+              </button>
+              {showDetails ? (
+                <div className={styles.notice}>
+                  <p>{adultsNotice}</p>
+                  <p>{storageNotice}</p>
+                  <p>{aiNotice}</p>
+                </div>
+              ) : null}
+
+              {error ? (
+                <p className={styles.errorInline} role="alert">
+                  {error}
+                </p>
+              ) : null}
+              {busy && busyLabel ? <p className={styles.busyHint}>{busyLabel}</p> : null}
+            </div>
+
+            <div className={styles.footer}>
               <button
                 type="button"
                 className={styles.primary}
@@ -405,7 +404,7 @@ export function CreateMyCroquisWizard({
                 )}
               </button>
             </div>
-          </div>
+          </>
         ) : null}
 
         {step === 'generating' ? (
