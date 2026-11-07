@@ -28,6 +28,11 @@ location = /api/v1/ai/sketch/polish {
     proxy_pass http://127.0.0.1:8010;
 }
 
+location = /api/v1/ai/sketch/polish-dual {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
 location = /api/v1/ai/personal-try-on {
     limit_except POST { deny all; }
     proxy_pass http://127.0.0.1:8010;
@@ -68,6 +73,11 @@ location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {
     proxy_pass http://127.0.0.1:8010;
 }
 
+location ~ "^/api/v1/ai/magic-operations/[0-9a-fA-F-]{36}/jobs$" {
+    limit_except GET { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+}
+
 # Plain prefix deny — must NOT use ^~ or regex jobs never match.
 location /api/v1/ai/ { return 403; }
 """
@@ -75,6 +85,18 @@ location /api/v1/ai/ { return 403; }
 MATRIX = [
     ("POST", "/api/v1/ai/sketch/polish", "allow_exact_polish"),
     ("GET", "/api/v1/ai/sketch/polish", "deny_method_polish"),
+    ("POST", "/api/v1/ai/sketch/polish-dual", "allow_exact_polish_dual"),
+    ("GET", "/api/v1/ai/sketch/polish-dual", "deny_method_polish_dual"),
+    (
+        "GET",
+        "/api/v1/ai/magic-operations/11111111-1111-1111-1111-111111111111/jobs",
+        "allow_regex_magic_operations_jobs",
+    ),
+    (
+        "POST",
+        "/api/v1/ai/magic-operations/11111111-1111-1111-1111-111111111111/jobs",
+        "deny_method_magic_operations_jobs",
+    ),
     ("POST", "/api/v1/ai/personal-try-on", "allow_exact_try_on"),
     ("GET", "/api/v1/ai/personal-try-on", "deny_method_try_on"),
     ("GET", "/api/v1/ai/personal-try-on/preflight", "allow_exact_try_on_preflight"),
@@ -122,6 +144,9 @@ MATRIX = [
 ]
 
 _JOB_RE = re.compile(r"^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$")
+_MAGIC_OPS_RE = re.compile(
+    r"^/api/v1/ai/magic-operations/[0-9a-fA-F-]{36}/jobs$"
+)
 _ACCEPT_RE = re.compile(
     r"^/api/v1/ai/personal-try-on/fashn/garment-realism/[0-9a-fA-F-]{36}/accept$"
 )
@@ -142,6 +167,14 @@ def _assert_snippet_precedence(text: str) -> None:
         raise SystemExit("FAIL: missing regex jobs allowlist")
     if "location = /api/v1/ai/sketch/polish" not in text:
         raise SystemExit("FAIL: missing exact polish allowlist")
+    if "location = /api/v1/ai/sketch/polish-dual" not in text:
+        raise SystemExit("FAIL: missing exact polish-dual allowlist")
+    if not re.search(
+        r'location\s+~\s+"?\^/api/v1/ai/magic-operations/'
+        r'\[0-9a-fA-F-\]\{36\}/jobs\$"?',
+        text,
+    ):
+        raise SystemExit("FAIL: missing regex magic-operations jobs allowlist")
     if "location = /api/v1/ai/personal-try-on" not in text:
         raise SystemExit("FAIL: missing exact personal-try-on allowlist")
     if "location = /api/v1/ai/personal-try-on/preflight" not in text:
@@ -184,6 +217,14 @@ def _classify(method: str, path: str) -> str:
         return "deny_static_uploads"
     if path == "/api/v1/ai/sketch/polish":
         return "allow_exact_polish" if method == "POST" else "deny_method_polish"
+    if path == "/api/v1/ai/sketch/polish-dual":
+        return "allow_exact_polish_dual" if method == "POST" else "deny_method_polish_dual"
+    if _MAGIC_OPS_RE.match(path):
+        return (
+            "allow_regex_magic_operations_jobs"
+            if method == "GET"
+            else "deny_method_magic_operations_jobs"
+        )
     if path == "/api/v1/ai/personal-try-on":
         return "allow_exact_try_on" if method == "POST" else "deny_method_try_on"
     if path == "/api/v1/ai/personal-try-on/preflight":
