@@ -71,12 +71,38 @@ def _magic_operation_already_charged(
         db.query(AIJob)
         .filter(
             AIJob.user_id == user_id,
-            AIJob.job_type == "sketch_polish",
+            AIJob.job_type.in_(("sketch_polish", "personal_try_on")),
             AIJob.input_data["magic_operation_id"].astext == op,
         )
         .all()
     )
-    return any(_job_result_stars_debited(row) for row in rows)
+    if any(_job_result_stars_debited(row) for row in rows):
+        return True
+    # Smart Try On (OpenAI → FASHN Max) stores the op under smart_pipeline.
+    smart_rows = (
+        db.query(AIJob)
+        .filter(
+            AIJob.user_id == user_id,
+            AIJob.job_type == "personal_try_on",
+            AIJob.input_data["smart_pipeline"]["smart_operation_id"].astext == op,
+        )
+        .all()
+    )
+    return any(_job_result_stars_debited(row) for row in smart_rows)
+
+
+def _smart_operation_id_from_input(input_data: dict[str, Any] | None) -> str:
+    if not isinstance(input_data, dict):
+        return ""
+    pipeline = input_data.get("smart_pipeline")
+    if isinstance(pipeline, dict):
+        raw = pipeline.get("smart_operation_id")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()[:64]
+    raw_op = input_data.get("magic_operation_id")
+    if isinstance(raw_op, str) and raw_op.strip():
+        return raw_op.strip()
+    return ""
 
 
 def _assert_magic_spend_if_needed(
@@ -85,24 +111,79 @@ def _assert_magic_spend_if_needed(
     *,
     operation_id: str | None = None,
 ) -> None:
-    """Gate enqueue on affordability. Charge happens only after AI success.
+    """Gate enqueue on affordability. Charge happens only after full-flow success.
 
-    If this Magic operation was already charged (a side completed), skip the
-    gate so a failed sibling can retry without needing another 10 Stars.
+    If this Magic / smart Try On operation was already charged, skip the gate so
+    a failed sibling (dual side or Max fallback) can continue without another
+    10 Stars hold.
     """
     if operation_id and _magic_operation_already_charged(db, user.id, operation_id):
         return
     ai_stars.assert_can_spend_magic(db, user)
 
 
-def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
-    """Charge Magic Stars once the AI job completed successfully.
+def _dual_polish_fully_succeeded(db: Session, user_id: uuid.UUID, operation_id: str) -> bool:
+    """True when every side of a Magic operation has a completed look.
 
-    Failed jobs never debit. Dual front/back share one charge per operation.
+    Linked Front/Back must both complete before Stars debit. In-flight or failed
+    siblings block the charge so a partial dual never bills the wallet.
     """
-    if job.job_type != "sketch_polish":
-        return
+    op = (operation_id or "").strip()
+    if not op:
+        return True
+    rows = (
+        db.query(AIJob)
+        .filter(
+            AIJob.user_id == user_id,
+            AIJob.job_type == "sketch_polish",
+            AIJob.input_data["magic_operation_id"].astext == op,
+        )
+        .all()
+    )
+    if not rows:
+        return False
+    linked = any(
+        _is_linked_dual_attempt(row.input_data if isinstance(row.input_data, dict) else {})
+        for row in rows
+    )
+    if not linked:
+        return all(row.status == "completed" for row in rows)
+
+    completed_sides: set[str] = set()
+    for row in rows:
+        data = row.input_data if isinstance(row.input_data, dict) else {}
+        side = data.get("studio_side")
+        side_s = side.strip() if isinstance(side, str) else ""
+        if row.status in {"queued", "running"}:
+            return False
+        if row.status == "completed" and side_s in STUDIO_SIDES:
+            completed_sides.add(side_s)
+    return "front" in completed_sides and "back" in completed_sides
+
+
+def _mark_job_stars_debited(job: AIJob) -> None:
+    result = dict(job.result_data) if isinstance(job.result_data, dict) else {}
+    result["stars_debited"] = True
+    job.result_data = result
+
+
+def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
+    """Charge Magic Stars only after the full user-visible Magic flow succeeds.
+
+    Rules:
+    - Failed jobs never debit.
+    - Fashion Magic (``sketch_polish``): dual Front/Back wait until **both** sides
+      complete; one Stars charge for the whole operation.
+    - Try On Person / FASHN (``personal_try_on``): debit only when the final look
+      job completes. Garment-realism is an intermediate stage and must not charge.
+    - Smart OpenAI → FASHN Max: one charge when the delivered attempt succeeds.
+    """
     if job.status != "completed":
+        return
+    if job.job_type == "personal_garment_realism":
+        # Intermediate FASHN prep — Stars wait for the final try-on look.
+        return
+    if job.job_type not in {"sketch_polish", "personal_try_on"}:
         return
     if _job_result_stars_debited(job):
         return
@@ -112,13 +193,22 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
         return
 
     input_data = job.input_data if isinstance(job.input_data, dict) else {}
-    op_raw = input_data.get("magic_operation_id")
-    op_str = op_raw.strip() if isinstance(op_raw, str) else ""
+    op_str = ""
+    if job.job_type == "sketch_polish":
+        op_raw = input_data.get("magic_operation_id")
+        op_str = op_raw.strip() if isinstance(op_raw, str) else ""
+    else:
+        op_str = _smart_operation_id_from_input(input_data)
 
     db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _dual_magic_lock_key(user.id)})
 
     if op_str and _magic_operation_already_charged(db, user.id, op_str):
+        _mark_job_stars_debited(job)
         return
+
+    if job.job_type == "sketch_polish" and op_str:
+        if not _dual_polish_fully_succeeded(db, user.id, op_str):
+            return
 
     try:
         ai_stars.debit_magic_stars(db, user)
@@ -127,9 +217,22 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
         # between enqueue assert and completion. Deliver the look; do not fail.
         return
 
-    result = dict(job.result_data) if isinstance(job.result_data, dict) else {}
-    result["stars_debited"] = True
-    job.result_data = result
+    _mark_job_stars_debited(job)
+    if job.job_type == "sketch_polish" and op_str:
+        siblings = (
+            db.query(AIJob)
+            .filter(
+                AIJob.user_id == user.id,
+                AIJob.job_type == "sketch_polish",
+                AIJob.input_data["magic_operation_id"].astext == op_str,
+                AIJob.status == "completed",
+            )
+            .all()
+        )
+        for sibling in siblings:
+            if sibling.id == job.id:
+                continue
+            _mark_job_stars_debited(sibling)
 
 
 def _dual_magic_lock_key(user_id: uuid.UUID) -> int:

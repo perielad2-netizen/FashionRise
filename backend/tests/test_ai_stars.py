@@ -195,3 +195,155 @@ def test_magic_success_debits_stars_once(db_session, stars_env, monkeypatch):
     db_session.commit()
     db_session.refresh(user)
     assert user.ai_stars == 0
+
+
+def test_dual_magic_waits_for_both_sides_before_debit(db_session, stars_env, monkeypatch):
+    """Front-only success must not bill; Stars drop once Front+Back both complete."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-stars-dual")
+    get_settings.cache_clear()
+
+    user = User(
+        email="magic_dual@example.com",
+        username="magic_dual",
+        hashed_password="x",
+        is_admin=False,
+        is_active=True,
+    )
+    ai_stars.apply_new_user_stars(user)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    op = str(uuid.uuid4())
+    front = AIJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        job_type="sketch_polish",
+        status="queued",
+        input_data={
+            "image_base64": _DATA_URL,
+            "magic_operation_id": op,
+            "studio_side": "front",
+            "linked_dual_attempt": True,
+            "reference_model_id": "female",
+        },
+    )
+    back = AIJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        job_type="sketch_polish",
+        status="queued",
+        input_data={
+            "image_base64": _DATA_URL,
+            "magic_operation_id": op,
+            "studio_side": "back",
+            "linked_dual_attempt": True,
+            "reference_model_id": "female",
+        },
+    )
+    db_session.add_all([front, back])
+    db_session.commit()
+
+    with patch(
+        "app.services.sketch_openai.complete_sketch_job",
+        return_value={"summary": "look ready", "image_base64": _DATA_URL},
+    ):
+        # Process only the front job first.
+        front.status = "completed"
+        front.result_data = {"summary": "front ready"}
+        db_session.commit()
+        ai_service.debit_magic_stars_on_success(db_session, front)
+        db_session.commit()
+        db_session.refresh(user)
+        assert user.ai_stars == 10
+
+        back.status = "completed"
+        back.result_data = {"summary": "back ready"}
+        db_session.commit()
+        ai_service.debit_magic_stars_on_success(db_session, back)
+        db_session.commit()
+
+    db_session.refresh(user)
+    db_session.refresh(front)
+    db_session.refresh(back)
+    assert user.ai_stars == 0
+    assert (front.result_data or {}).get("stars_debited") is True
+    assert (back.result_data or {}).get("stars_debited") is True
+
+
+def test_try_on_success_debits_magic_stars_once(db_session, stars_env):
+    """Final Try On / FASHN look success bills Magic Stars; realism must not."""
+    user = User(
+        email="tryon_stars@example.com",
+        username="tryon_stars",
+        hashed_password="x",
+        is_admin=False,
+        is_active=True,
+    )
+    ai_stars.apply_new_user_stars(user)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    smart_op = str(uuid.uuid4())
+    realism = AIJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        job_type="personal_garment_realism",
+        status="completed",
+        input_data={"mode": "garment_realism"},
+        result_data={"summary": "plate ready"},
+    )
+    try_on = AIJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        job_type="personal_try_on",
+        status="completed",
+        input_data={
+            "provider": "fashn",
+            "mode": "try_on_person",
+            "smart_pipeline": {
+                "smart_operation_id": smart_op,
+                "path": "openai->fashn_max",
+                "user_visible_charge_units": 1,
+            },
+        },
+        result_data={"summary": "try-on ready", "image_base64": _DATA_URL},
+    )
+    db_session.add_all([realism, try_on])
+    db_session.commit()
+
+    ai_service.debit_magic_stars_on_success(db_session, realism)
+    db_session.commit()
+    db_session.refresh(user)
+    assert user.ai_stars == 10
+    assert (realism.result_data or {}).get("stars_debited") is not True
+
+    ai_service.debit_magic_stars_on_success(db_session, try_on)
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(try_on)
+    assert user.ai_stars == 0
+    assert (try_on.result_data or {}).get("stars_debited") is True
+
+    # Max sibling under the same smart op must not bill again.
+    max_job = AIJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        job_type="personal_try_on",
+        status="completed",
+        input_data={
+            "provider": "fashn_max",
+            "smart_pipeline": {"smart_operation_id": smart_op, "path": "openai->fashn_max"},
+        },
+        result_data={"summary": "max ready"},
+    )
+    db_session.add(max_job)
+    db_session.commit()
+    # Restore balance to prove second debit is skipped even if Stars remain.
+    user.ai_stars = 10
+    db_session.commit()
+    ai_service.debit_magic_stars_on_success(db_session, max_job)
+    db_session.commit()
+    db_session.refresh(user)
+    assert user.ai_stars == 10

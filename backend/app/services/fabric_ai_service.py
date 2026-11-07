@@ -120,10 +120,17 @@ def create_ai_fabric_asset(
         ) from exc
 
     plan = validate_ai_fabric_prompt(prompt=prompt, color_hex=color_hex, name=name)
+    from app.core.errors import ForbiddenError
     from app.services import ai_stars
 
-    # Debit before provider call (same fail-closed style as Magic enqueue).
-    ai_stars.debit_stars(db, user, "fabric")
+    # Affordability gate only — Stars debit after a usable tile is saved.
+    try:
+        ai_stars.assert_can_spend(db, user, "fabric")
+    except ForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     # generate_png hook receives the generate prompt string for easy mocking.
     if generate_png is not None:
         png = generate_png(plan.generate_prompt)
@@ -147,4 +154,9 @@ def create_ai_fabric_asset(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Fabric file failed to save.",
         )
+    try:
+        ai_stars.debit_stars(db, user, "fabric")
+    except ForbiddenError:
+        # Tile already generated; rare race — keep the fabric, skip wallet debit.
+        logger.warning("fabric_ai stars debit skipped after success user_id=%s", user.id)
     return row
