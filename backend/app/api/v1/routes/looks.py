@@ -54,6 +54,26 @@ def update_look(
     return looks_service.update_look(db, user, look_id, data)
 
 
+@router.post("/{look_id}/publish", response_model=LookRead)
+def publish_look(
+    look_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> LookRead:
+    """Publish this look to FashionRise Runway (public community feed)."""
+    return looks_service.publish_look_to_runway(db, user, look_id)
+
+
+@router.delete("/{look_id}/publish", response_model=LookRead)
+def unpublish_look(
+    look_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> LookRead:
+    """Remove this look from FashionRise Runway."""
+    return looks_service.unpublish_look_from_runway(db, user, look_id)
+
+
 @router.delete("/{look_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_look(
     look_id: uuid.UUID,

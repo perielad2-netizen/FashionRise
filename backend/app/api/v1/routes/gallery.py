@@ -1,10 +1,12 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import CurrentUser, get_optional_user
 from app.core.errors import UnauthorizedError
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.gallery import (
@@ -24,7 +26,7 @@ def create_gallery_item(
     data: GalleryCreate, user: CurrentUser, db: Session = Depends(get_db)
 ) -> GalleryRead:
     item = gallery_service.create_gallery_item(db, user, data)
-    return GalleryRead.model_validate(item)
+    return gallery_service.to_gallery_read(item)
 
 
 @router.get("", response_model=list[GalleryRead])
@@ -41,13 +43,13 @@ def list_gallery(
         rows = gallery_service.list_following_feed(db, viewer=user, limit=limit, offset=offset)
     else:
         rows = gallery_service.list_public_gallery(db, limit=limit, offset=offset, sort=sort)
-    return [GalleryRead.model_validate(r) for r in rows]
+    return [gallery_service.to_gallery_read(r) for r in rows]
 
 
 @router.get("/user/{user_id}", response_model=list[GalleryRead])
 def list_user_gallery(user_id: uuid.UUID, db: Session = Depends(get_db)) -> list[GalleryRead]:
     rows = gallery_service.list_user_gallery(db, user_id)
-    return [GalleryRead.model_validate(r) for r in rows]
+    return [gallery_service.to_gallery_read(r) for r in rows]
 
 
 @router.get("/{gallery_item_id}/comments", response_model=list[GalleryCommentRead])
@@ -81,6 +83,33 @@ def remove_like(gallery_item_id: uuid.UUID, user: CurrentUser, db: Session = Dep
     gallery_service.remove_gallery_like(db, user, gallery_item_id)
 
 
+@router.get("/{gallery_item_id}/image")
+@limiter.limit("120/minute")
+def get_gallery_image(
+    request: Request,
+    gallery_item_id: uuid.UUID,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """Serve a published Runway look image to any signed-in FashionRise user."""
+    _ = (request.url, user.id)
+    path = gallery_service.resolve_gallery_image_file(db, gallery_item_id)
+    suffix = path.suffix.lower()
+    media = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }.get(suffix, "application/octet-stream")
+    return FileResponse(
+        path,
+        media_type=media,
+        filename=f"fashionrise-runway-{gallery_item_id.hex[:12]}{suffix or '.png'}",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
 @router.get("/{gallery_item_id}", response_model=GalleryRead)
 def get_gallery_item(
     gallery_item_id: uuid.UUID,
@@ -91,5 +120,4 @@ def get_gallery_item(
     liked: bool | None = None
     if user is not None:
         liked = gallery_service.user_has_liked(db, user.id, gallery_item_id)
-    base = GalleryRead.model_validate(item)
-    return base.model_copy(update={"liked_by_me": liked})
+    return gallery_service.to_gallery_read(item, liked_by_me=liked)

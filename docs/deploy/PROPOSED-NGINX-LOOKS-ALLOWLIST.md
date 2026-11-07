@@ -18,6 +18,11 @@
         proxy_pass http://127.0.0.1:8010;
     }
 
+    location ~ "^/api/v1/looks/[0-9a-fA-F-]{36}/publish$" {
+        limit_except POST DELETE { deny all; }
+        proxy_pass http://127.0.0.1:8010;
+    }
+
     location ~ "^/api/v1/looks/[0-9a-fA-F-]{36}$" {
         limit_except GET PATCH DELETE { deny all; }
         proxy_pass http://127.0.0.1:8010;
@@ -32,6 +37,8 @@
 | `GET /api/v1/looks/{uuid}` | Proxied |
 | `PATCH /api/v1/looks/{uuid}` | Proxied |
 | `DELETE /api/v1/looks/{uuid}` | Proxied |
+| `POST /api/v1/looks/{uuid}/publish` | Proxied (Runway) |
+| `DELETE /api/v1/looks/{uuid}/publish` | Proxied (Runway) |
 | `POST /api/v1/looks` | Denied |
 | `POST /api/v1/looks/{uuid}` | Denied |
 

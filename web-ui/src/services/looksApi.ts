@@ -20,6 +20,8 @@ export type LookRecord = {
   back: LookSide | null
   design_id: string | null
   magic_operation_id: string | null
+  /** Present when this look is live on FashionRise Runway. */
+  runway_item_id?: string | null
 }
 
 export type LookListResponse = {
@@ -173,4 +175,16 @@ export function lookThumbnailJobId(look: LookRecord): string | null {
   if (look.front?.has_image) return look.front.job_id
   if (look.back?.has_image) return look.back.job_id
   return null
+}
+
+export async function publishLookToRunway(lookId: string): Promise<LookRecord> {
+  return apiRequest<LookRecord>(`/looks/${encodeURIComponent(lookId)}/publish`, {
+    method: 'POST',
+  })
+}
+
+export async function unpublishLookFromRunway(lookId: string): Promise<LookRecord> {
+  return apiRequest<LookRecord>(`/looks/${encodeURIComponent(lookId)}/publish`, {
+    method: 'DELETE',
+  })
 }

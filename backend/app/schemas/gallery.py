@@ -2,23 +2,31 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 GallerySort = Literal["newest", "top_rated", "trending", "following"]
 
 
 class GalleryCreate(BaseModel):
-    design_id: uuid.UUID
+    design_id: uuid.UUID | None = None
+    look_id: uuid.UUID | None = None
     title: str = Field(max_length=300)
     image_url: str | None = Field(default=None, max_length=1024)
     visibility: str = "public"
+
+    @model_validator(mode="after")
+    def require_design_or_look(self) -> "GalleryCreate":
+        if self.design_id is None and self.look_id is None:
+            raise ValueError("design_id or look_id is required")
+        return self
 
 
 class GalleryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    design_id: uuid.UUID
+    design_id: uuid.UUID | None = None
+    look_id: uuid.UUID | None = None
     user_id: uuid.UUID
     title: str
     image_url: str | None
@@ -30,6 +38,8 @@ class GalleryRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     liked_by_me: bool | None = None
+    """Relative API path for authenticated Runway image bytes (look publishes)."""
+    image_path: str | None = None
 
 
 class GalleryCommentCreate(BaseModel):

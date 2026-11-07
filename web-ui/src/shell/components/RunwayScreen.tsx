@@ -13,6 +13,7 @@ import {
   type GallerySort,
 } from '@/services/galleryApi'
 import { ApiError } from '@/services/api/client'
+import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import styles from './RunwayScreen.module.css'
 
 type Props = {
@@ -180,7 +181,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             body={
               tab === 'following'
                 ? 'Follow creators from their profiles (coming next), then their public looks show up here.'
-                : 'Publish a look from My Looks to appear here. Likes, comments, and scores land in the next slices.'
+                : 'Open a look in My Looks and tap Publish to Runway. Friends and private send land in the next slices.'
             }
             actions={
               <>
@@ -196,40 +197,48 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         ) : (
           <ul className={styles.grid} aria-label="Runway feed">
             {state.items.map((item) => (
-              <li key={item.id} className={styles.card}>
-                <div className={styles.thumb}>
-                  {item.image_url ? (
-                    <img src={item.image_url} alt="" className={styles.thumbImg} draggable={false} />
-                  ) : (
-                    <span className={styles.thumbEmpty} aria-hidden>
-                      <Star size={22} />
-                    </span>
-                  )}
-                </div>
-                <div className={styles.cardBody}>
-                  <h2 className={styles.cardTitle}>{item.title || 'Untitled look'}</h2>
-                  <p className={styles.cardMeta}>
-                    <span title="Likes">
-                      <Heart size={12} aria-hidden /> {item.likes_count}
-                    </span>
-                    <span aria-hidden>·</span>
-                    <span title="Average score">
-                      <Star size={12} aria-hidden />{' '}
-                      {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
-                      {item.rating_count > 0 ? ` (${item.rating_count})` : ''}
-                    </span>
-                    <span aria-hidden>·</span>
-                    <span title="Comments coming soon">
-                      <MessageCircle size={12} aria-hidden /> soon
-                    </span>
-                  </p>
-                </div>
-              </li>
+              <RunwayCard key={item.id} item={item} />
             ))}
           </ul>
         )}
       </div>
     </section>
+  )
+}
+
+function RunwayCard({ item }: { item: GalleryItem }) {
+  const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
+  const src = authImg.url || item.image_url
+  return (
+    <li className={styles.card}>
+      <div className={styles.thumb}>
+        {src ? (
+          <img src={src} alt="" className={styles.thumbImg} draggable={false} />
+        ) : (
+          <span className={styles.thumbEmpty} aria-hidden>
+            <Star size={22} />
+          </span>
+        )}
+      </div>
+      <div className={styles.cardBody}>
+        <h2 className={styles.cardTitle}>{item.title || 'Untitled look'}</h2>
+        <p className={styles.cardMeta}>
+          <span title="Likes">
+            <Heart size={12} aria-hidden /> {item.likes_count}
+          </span>
+          <span aria-hidden>·</span>
+          <span title="Average score">
+            <Star size={12} aria-hidden />{' '}
+            {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
+            {item.rating_count > 0 ? ` (${item.rating_count})` : ''}
+          </span>
+          <span aria-hidden>·</span>
+          <span title="Comments coming soon">
+            <MessageCircle size={12} aria-hidden /> soon
+          </span>
+        </p>
+      </div>
+    </li>
   )
 }
 

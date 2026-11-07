@@ -30,6 +30,8 @@ class LookRead(BaseModel):
     # Stable refs for future technical-pack (#83) without implementing PDF here.
     design_id: uuid.UUID | None = None
     magic_operation_id: uuid.UUID | None = None
+    """When set, this look is live on FashionRise Runway."""
+    runway_item_id: uuid.UUID | None = None
 
 
 class LookListResponse(BaseModel):

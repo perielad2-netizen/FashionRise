@@ -255,7 +255,69 @@ def _to_look_read(
         back=back_ref,
         design_id=design_id,
         magic_operation_id=bucket.magic_operation_id,
+        runway_item_id=None,
     )
+
+
+def pick_look_image_job_for_owner(db: Session, user: User, look_id: uuid.UUID) -> AIJob | None:
+    """Return the preferred completed image job for a look owned by ``user``."""
+    jobs = _load_polish_jobs(db, user)
+    buckets = {b.look_id: b for b in _build_buckets(jobs)}
+    bucket = buckets.get(look_id)
+    if bucket is None:
+        return None
+    meta = db.get(MagicLookMeta, look_id)
+    if _meta_deleted(meta):
+        return None
+    storage = LocalStorageBackend()
+    read = _to_look_read(bucket, meta if meta and meta.user_id == user.id else None, storage)
+    if read is None:
+        return None
+    preferred = read.front if read.front and read.front.has_image else read.back
+    if preferred is None or not preferred.has_image:
+        return None
+    job = db.get(AIJob, preferred.job_id)
+    if job is None or job.user_id != user.id or job.status != "completed":
+        return None
+    return job
+
+
+def _attach_runway_ids(db: Session, looks: list[LookRead]) -> list[LookRead]:
+    from app.services import gallery_service
+
+    mapping = gallery_service.map_runway_ids(db, [look.id for look in looks])
+    if not mapping:
+        return looks
+    return [
+        look.model_copy(update={"runway_item_id": mapping.get(look.id)})
+        if look.id in mapping
+        else look
+        for look in looks
+    ]
+
+
+def publish_look_to_runway(db: Session, user: User, look_id: uuid.UUID) -> LookRead:
+    from app.services import gallery_service
+
+    look = get_look(db, user, look_id)
+    if look.is_archived:
+        raise ValidationAppError("Unarchive the look before publishing to Runway")
+    gallery_service.publish_look(
+        db,
+        user,
+        look_id=look.id,
+        title=look.title,
+        design_id=look.design_id,
+    )
+    return get_look(db, user, look_id)
+
+
+def unpublish_look_from_runway(db: Session, user: User, look_id: uuid.UUID) -> LookRead:
+    from app.services import gallery_service
+
+    get_look(db, user, look_id)
+    gallery_service.unpublish_look(db, user, look_id)
+    return get_look(db, user, look_id)
 
 
 def _load_polish_jobs(db: Session, user: User) -> list[AIJob]:
@@ -323,6 +385,7 @@ def list_looks(
 
     query = (q or "").strip().lower()
     filtered: list[LookRead] = []
+    looks = _attach_runway_ids(db, looks)
     for look in looks:
         if filter_name == "all" and look.is_archived:
             continue
@@ -355,7 +418,7 @@ def get_look(db: Session, user: User, look_id: uuid.UUID) -> LookRead:
     read = _to_look_read(bucket, meta if meta and meta.user_id == user.id else None, storage)
     if read is None:
         raise NotFoundError("Look not found")
-    return read
+    return _attach_runway_ids(db, [read])[0]
 
 
 def _ensure_meta(db: Session, user: User, look_id: uuid.UUID) -> MagicLookMeta:

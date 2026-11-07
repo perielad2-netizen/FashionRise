@@ -853,6 +853,11 @@ def extract_result_image_url(result_data: dict | None) -> str | None:
 def resolve_job_image_file(db: Session, user: User, job_id: uuid.UUID) -> Path:
     """Return the on-disk look image for an owned completed job (authenticated retrieval)."""
     job = get_job(db, user, job_id)
+    return resolve_completed_job_image_path(job)
+
+
+def resolve_completed_job_image_path(job: AIJob) -> Path:
+    """Map a completed AI job row to its on-disk image (no ownership check)."""
     if job.status != "completed":
         raise NotFoundError("Job image not available")
     url = extract_result_image_url(job.result_data if isinstance(job.result_data, dict) else None)

@@ -18,6 +18,8 @@ import {
   deleteLook,
   listLooks,
   lookThumbnailJobId,
+  publishLookToRunway,
+  unpublishLookFromRunway,
   updateLook,
   type LookFilter,
   type LookRecord,
@@ -165,6 +167,21 @@ function LookDetailDialog({
     }
   }
 
+  const toggleRunway = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const next = look.runway_item_id
+        ? await unpublishLookFromRunway(look.id)
+        : await publishLookToRunway(look.id)
+      onUpdated(next)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update Runway publish')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const showBothDesktop = Boolean(frontJob && backJob)
   const dualLike = look.kind === 'dual' || showBothDesktop
 
@@ -302,6 +319,23 @@ function LookDetailDialog({
               Create Real Design
             </button>
           ) : null}
+          <button
+            type="button"
+            className={look.runway_item_id ? styles.iconBtnActive : styles.primaryBtn}
+            disabled={busy || deleteBusy || look.is_archived}
+            onClick={() => void toggleRunway()}
+            data-testid="look-publish-runway"
+            title={
+              look.is_archived
+                ? 'Unarchive before publishing to Runway'
+                : look.runway_item_id
+                  ? 'Remove from FashionRise Runway'
+                  : 'Publish to FashionRise Runway'
+            }
+          >
+            <Star size={14} fill={look.runway_item_id ? 'currentColor' : 'none'} aria-hidden />
+            {look.runway_item_id ? 'On Runway' : 'Publish to Runway'}
+          </button>
           <button
             type="button"
             className={styles.ghostBtn}
