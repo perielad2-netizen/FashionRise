@@ -398,7 +398,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         >
           <p>
             Fashion Magic polishes this sketch into an illustration. Try On Person shows your design
-            on the original Create My Croquis photo — concept preview only, not a fit guarantee.
+            on the original Create Model photo — concept preview only, not a fit guarantee.
           </p>
           {editor.magicTryOnNotice ? <p>{editor.magicTryOnNotice}</p> : null}
           {editor.magicOwnerExperimentAvailable ? (
@@ -929,7 +929,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
 
       {editor.personalPinPrompt ? (
         <ConfirmDialog
-          title="Switch personal croquis?"
+          title="Switch personal model?"
           actions={[
             { label: 'Cancel', onClick: editor.cancelPersonalPinSwitch, variant: 'ghost' },
             {
@@ -946,7 +946,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         >
           <p>
             Your current sketch will stay on the canvas if you keep strokes. Clearing removes ink
-            before switching to the selected My Croquis underlay. Front and Back artwork follow the
+            before switching to the selected My Model underlay. Front and Back artwork follow the
             same choice.
           </p>
         </ConfirmDialog>
@@ -1032,7 +1032,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
       {editor.model === 'personal' && editor.personalUnavailable ? (
         <div className={styles.damagedCloudBanner} role="status">
           <p>
-            Croquis unavailable — your strokes and fills are kept. The pinned My Croquis reference
+            Model unavailable — your strokes and fills are kept. The pinned My Model reference
             could not be loaded (erased or inaccessible). Studio will not switch models
             automatically.
           </p>
@@ -1041,7 +1041,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
             className={styles.damagedCloudBannerButton}
             onClick={() => editor.reloadPersonalCroquisUnderlay()}
           >
-            Retry croquis
+            Retry model
           </button>
         </div>
       ) : null}

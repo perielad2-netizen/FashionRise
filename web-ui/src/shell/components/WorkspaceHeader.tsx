@@ -136,7 +136,7 @@ export function WorkspaceHeader({
           title={
             starsUnlimited
               ? 'Unlimited Stars (owner) — open shop'
-              : `AI Stars — Magic 10 · Croquis 10 · Fabric 5 · PDF 50. Tap for packages.`
+              : `AI Stars — Magic 10 · Model 10 · Fabric 5 · PDF 50. Tap for packages.`
           }
           aria-label={
             starsUnlimited ? 'Unlimited Stars, open shop' : `${starsBalance ?? 0} Stars, open shop`

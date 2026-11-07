@@ -227,7 +227,7 @@ export function defaultModelForGender(gender: ModelGender): SelectableBuiltinMod
 export function modelLabel(model: ModelChoice): string {
   if (model === 'custom') return 'Custom reference'
   if (model === 'blank') return 'Blank paper'
-  if (model === 'personal') return 'My Croquis'
+  if (model === 'personal') return 'My Model'
   if (model === 'female') return 'Female · Classic'
   if (model === 'male') return 'Male · Classic'
   const def = SELECTABLE_BY_ID.get(model)

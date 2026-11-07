@@ -32,7 +32,7 @@ vi.mock('@/shell/components/CreateMyCroquisWizard', () => ({
     onClose: () => void
     onPinAccepted: (id: string, version: number) => void
   }) => (
-    <div role="dialog" aria-label="Create My Croquis wizard">
+    <div role="dialog" aria-label="Create Model wizard">
       <button type="button" onClick={onClose}>
         Close wizard
       </button>
@@ -125,7 +125,7 @@ describe('MyCroquisScreen', () => {
         activeStudioPinId="croquis-a"
       />,
     )
-    expect(await screen.findByRole('heading', { name: 'My Croquis' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'My Models' })).toBeInTheDocument()
     expect(await screen.findByText('Croquis A')).toBeInTheDocument()
     expect(screen.getByText('Croquis B')).toBeInTheDocument()
     expect(screen.getByText('In Studio')).toBeInTheDocument()
@@ -161,13 +161,13 @@ describe('MyCroquisScreen', () => {
       ])
     render(<MyCroquisScreen onBackToStudio={() => undefined} onUseInStudio={onUse} />)
     await screen.findByText('Croquis A')
-    fireEvent.click(screen.getByRole('button', { name: 'Create New Croquis' }))
-    expect(screen.getByRole('dialog', { name: 'Create My Croquis wizard' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Model' }))
+    expect(screen.getByRole('dialog', { name: /Create Model/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Accept new' }))
     expect(onUse).not.toHaveBeenCalled()
-    expect(await screen.findByText(/New croquis ready/i)).toBeInTheDocument()
+    expect(await screen.findByText(/New model ready/i)).toBeInTheDocument()
     expect(await screen.findByText('New croquis')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'My Croquis' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My Models' })).toBeInTheDocument()
   })
 
   it('retries delete after an API error', async () => {
@@ -185,11 +185,11 @@ describe('MyCroquisScreen', () => {
     await screen.findByText('Croquis A')
     fireEvent.click(screen.getByRole('button', { name: 'Delete Croquis A' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
-    expect(await screen.findByRole('heading', { name: 'Could not delete croquis' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Could not delete model' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Retry delete' }))
     await waitFor(() => expect(mocks.erasePersonalCroquis).toHaveBeenCalledTimes(2))
     await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: 'Could not delete croquis' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('heading', { name: 'Could not delete model' })).not.toBeInTheDocument(),
     )
   })
 
@@ -203,9 +203,9 @@ describe('MyCroquisScreen', () => {
     )
     await screen.findByText('Croquis A')
     fireEvent.click(screen.getByRole('button', { name: 'Delete Croquis A' }))
-    expect(screen.getByRole('heading', { name: 'Delete personal croquis?' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Delete personal model?' })).toBeInTheDocument()
     expect(
-      screen.getByText(/Studio currently uses this croquis/i),
+      screen.getByText(/Studio currently uses this model/i),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
     await waitFor(() => expect(mocks.erasePersonalCroquis).toHaveBeenCalledWith('croquis-a'))

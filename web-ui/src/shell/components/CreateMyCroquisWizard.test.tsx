@@ -173,7 +173,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
     const onClose = vi.fn()
     render(<CreateMyCroquisWizard open onClose={onClose} onPinAccepted={onPin} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /My Croquis library/i }))
+    fireEvent.click(screen.getByRole('button', { name: /My Models library/i }))
     await waitFor(() => expect(listPersonalCroquis).toHaveBeenCalled())
     fireEvent.click(screen.getByRole('button', { name: /Accepted subject · v1/i }))
     expect(onPin).toHaveBeenCalledWith(libraryRow.id, 1)
@@ -239,7 +239,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
       ),
     )
     await waitFor(() => expect(generatePersonalCroquisVersion).toHaveBeenCalled())
-    await waitFor(() => expect(screen.getByAltText(/Generated croquis preview/i)).toBeTruthy())
+    await waitFor(() => expect(screen.getByAltText(/Generated model preview/i)).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: /Accept & use in Studio/i }))
     await waitFor(() => expect(acceptPersonalCroquisVersion).toHaveBeenCalled())
     expect(onPin).toHaveBeenCalledWith('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 1)

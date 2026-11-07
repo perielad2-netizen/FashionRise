@@ -124,7 +124,7 @@ export function StarsShopModal({ open, onClose }: Props) {
           {unlimited ? ' (unlimited)' : null}
         </p>
         <p className={styles.hint}>
-          Magic 10 · Croquis 10 · Fabric 5 · Professional PDF 50. Packages are listed now;
+          Magic 10 · Model 10 · Fabric 5 · Professional PDF 50. Packages are listed now;
           checkout opens later.
         </p>
 

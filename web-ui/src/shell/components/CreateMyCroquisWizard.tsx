@@ -1,5 +1,5 @@
 /**
- * Create My Croquis wizard — one agreement, then Upload & Generate.
+ * Create Model wizard — one agreement, then Upload & Generate.
  *
  * UI gate `VITE_MY_CROQUIS_UI_ENABLED` must be ON for this to mount.
  * Upload/AI backend gates remain independent and default OFF.
@@ -45,7 +45,7 @@ export type CreateMyCroquisWizardProps = {
 type Step = 'compose' | 'generating' | 'preview' | 'library' | 'reconciliation' | 'blocked'
 
 const COMBINED_AGREEMENT_LABEL =
-  'I have permission to use this photo and agree to private storage and AI processing to create my croquis.'
+  'I have permission to use this photo and agree to private storage and AI processing to create my model.'
 
 function newIdempotencyKey(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
@@ -200,7 +200,7 @@ export function CreateMyCroquisWizard({
           if (ver.status === 'failed') {
             setError(
               ver.failure_message?.trim() ||
-                'Generation failed (no croquis image was produced). You may try again with Upload & Generate.',
+                'Generation failed (no model image was produced). You may try again with Upload & Generate.',
             )
             setIdempotencyKey(newIdempotencyKey())
             setStep('compose')
@@ -225,7 +225,7 @@ export function CreateMyCroquisWizard({
           }
         }
         setError(
-          'Still generating on the server. Keep this page open a bit longer, or reopen Create My Croquis / library later — no new paid attempt was started.',
+          'Still generating on the server. Keep this page open a bit longer, or reopen Create Model / library later — no new paid attempt was started.',
         )
         setStep('library')
       } catch (err) {
@@ -251,7 +251,7 @@ export function CreateMyCroquisWizard({
       onPinAccepted(croquisId, accepted.version)
       handleClose()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not accept croquis.')
+      setError(err instanceof ApiError ? err.message : 'Could not accept model.')
     } finally {
       setBusy(false)
     }
@@ -272,7 +272,7 @@ export function CreateMyCroquisWizard({
       setAiConsentId(null)
       setStep('compose')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reject croquis.')
+      setError(err instanceof ApiError ? err.message : 'Could not reject model.')
     } finally {
       setBusy(false)
     }
@@ -286,7 +286,7 @@ export function CreateMyCroquisWizard({
       setLibrary(rows)
       setStep('library')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load My Croquis.')
+      setError(err instanceof ApiError ? err.message : 'Could not load My Models.')
     } finally {
       setBusy(false)
     }
@@ -304,7 +304,7 @@ export function CreateMyCroquisWizard({
         onClick={(e) => e.stopPropagation()}
       >
         <header className={styles.header}>
-          <h2 id="create-my-croquis-title">Create My Croquis</h2>
+          <h2 id="create-my-croquis-title">Create Model</h2>
           <button type="button" className={styles.close} onClick={handleClose} aria-label="Close">
             ×
           </button>
@@ -313,7 +313,7 @@ export function CreateMyCroquisWizard({
         {step === 'blocked' ? (
           <div className={styles.body}>
             <p>
-              Create My Croquis is not ready yet — consent notices must be configured before photo
+              Create Model is not ready yet — consent notices must be configured before photo
               upload.
             </p>
             {onUseOfflineFixture ? (
@@ -335,7 +335,7 @@ export function CreateMyCroquisWizard({
           <div className={styles.body}>
             <p>
               Select a fully clothed fashion pose photo, agree once, then upload and generate your
-              croquis.
+              model.
             </p>
             <p className={styles.hint}>
               Designing children&apos;s clothing uses Studio templates and mannequins — you do not
@@ -405,7 +405,7 @@ export function CreateMyCroquisWizard({
 
             <div className={styles.actions}>
               <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
-                My Croquis library
+                My Models library
               </button>
               <button
                 type="button"
@@ -421,7 +421,7 @@ export function CreateMyCroquisWizard({
 
         {step === 'generating' ? (
           <div className={styles.body}>
-            <p>Generating your croquis…</p>
+            <p>Generating your model…</p>
             <p className={styles.hint}>
               Status: {pendingVersion?.status ?? 'queued'}. Fashion illustration can take up to a
               few minutes — please keep this window open.
@@ -437,7 +437,7 @@ export function CreateMyCroquisWizard({
             </p>
             <div className={styles.actions}>
               <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
-                My Croquis library
+                My Models library
               </button>
               <button type="button" className={styles.primary} onClick={handleClose}>
                 Close
@@ -448,9 +448,9 @@ export function CreateMyCroquisWizard({
 
         {step === 'preview' ? (
           <div className={styles.body}>
-            <p>Preview your croquis. Accept pins it in Studio, or delete and try again.</p>
+            <p>Preview your model. Accept pins it in Studio, or delete and try again.</p>
             {previewUrl ? (
-              <img src={previewUrl} alt="Generated croquis preview" className={styles.preview} />
+              <img src={previewUrl} alt="Generated model preview" className={styles.preview} />
             ) : null}
             <div className={styles.actions}>
               <button type="button" className={styles.secondary} disabled={busy} onClick={() => void runReject()}>
@@ -465,8 +465,8 @@ export function CreateMyCroquisWizard({
 
         {step === 'library' ? (
           <div className={styles.body}>
-            <p>Select an accepted croquis to use in Studio.</p>
-            {library.length === 0 ? <p className={styles.hint}>No croquis yet.</p> : null}
+            <p>Select an accepted model to use in Studio.</p>
+            {library.length === 0 ? <p className={styles.hint}>No models yet.</p> : null}
             <ul className={styles.list}>
               {library.map((row) => {
                 const ver = acceptedVersionNumber(row)

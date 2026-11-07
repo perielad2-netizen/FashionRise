@@ -42,7 +42,7 @@ type Props = {
   customPreviewUrl: string | null
   onSelect: (choice: ModelChoice) => void
   onCustomFile: (file: File) => void
-  /** Create My Croquis wizard entry — only when UI gate is ON. */
+  /** Create Model wizard entry — only when UI gate is ON. */
   onCreateMyCroquis?: () => void
   /** Overlay gallery on tablet/immersive; sidebar on desktop. */
   variant?: 'sidebar' | 'gallery'
@@ -93,10 +93,10 @@ export function ModelLibraryPanel({
             type="button"
             className={styles.filter}
             onClick={onCreateMyCroquis}
-            aria-label="Open Create My Croquis wizard"
+            aria-label="Open Create Model wizard"
             data-testid="create-my-croquis-entry"
           >
-            Create My Croquis
+            Create Model
           </button>
           {selected === 'personal' ? (
             <span className={styles.soon} aria-live="polite">

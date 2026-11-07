@@ -12,25 +12,47 @@ describe('ShareSheet', () => {
     vi.spyOn(window, 'open').mockImplementation(() => null)
   })
 
-  it('shows promo caption and WhatsApp / Instagram / copy actions', () => {
-    render(<ShareSheet open onClose={() => undefined} payload={{ kind: 'app' }} />)
+  it('shows Created with FashionRise caption and WhatsApp / Instagram / Facebook actions', () => {
+    render(
+      <ShareSheet
+        open
+        onClose={() => undefined}
+        payload={{ kind: 'look', title: 'Evening gown', imageUrl: 'blob:look' }}
+      />,
+    )
     expect(screen.getByTestId('share-sheet')).toBeTruthy()
-    expect(screen.getByTestId('share-caption').textContent).toContain(FASHIONRISE_PUBLIC_URL)
+    expect(screen.getByRole('heading', { name: /Share your look/i })).toBeTruthy()
+    expect(screen.getByTestId('share-caption').textContent).toContain('Created with FashionRise')
+    expect(screen.getByTestId('share-caption').textContent).toContain('Search Google for FashionRise')
     expect(screen.getByTestId('share-whatsapp')).toBeTruthy()
     expect(screen.getByTestId('share-instagram')).toBeTruthy()
-    expect(screen.getByTestId('share-copy-caption')).toBeTruthy()
+    expect(screen.getByTestId('share-facebook')).toBeTruthy()
   })
 
-  it('opens WhatsApp with encoded promo text', () => {
-    render(<ShareSheet open onClose={() => undefined} />)
+  it('opens WhatsApp with encoded Created with FashionRise text', async () => {
+    render(<ShareSheet open onClose={() => undefined} payload={{ kind: 'look' }} />)
     fireEvent.click(screen.getByTestId('share-whatsapp'))
-    expect(window.open).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(window.open).toHaveBeenCalled()
+    })
     const url = String(vi.mocked(window.open).mock.calls[0][0])
     expect(url.startsWith('https://wa.me/?text=')).toBe(true)
-    expect(decodeURIComponent(url.split('text=')[1])).toContain('FashionRise')
+    expect(decodeURIComponent(url.split('text=')[1])).toContain('Created with FashionRise')
   })
 
-  it('copies caption then opens Instagram profile', async () => {
+  it('opens Facebook sharer after preparing caption', async () => {
+    render(<ShareSheet open onClose={() => undefined} payload={{ kind: 'look' }} />)
+    fireEvent.click(screen.getByTestId('share-facebook'))
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalled()
+      expect(window.open).toHaveBeenCalled()
+    })
+    const url = String(vi.mocked(window.open).mock.calls.at(-1)?.[0])
+    expect(url).toContain('facebook.com/sharer')
+    expect(url).toContain(encodeURIComponent(FASHIONRISE_PUBLIC_URL))
+  })
+
+  it('copies caption then opens Instagram', async () => {
     render(
       <ShareSheet
         open
@@ -43,20 +65,12 @@ describe('ShareSheet', () => {
       expect(navigator.clipboard.writeText).toHaveBeenCalled()
     })
     const copied = String(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0])
+    expect(copied).toContain('Created with FashionRise')
     expect(copied).toContain('Evening Gown')
     expect(window.open).toHaveBeenCalledWith(
       expect.stringContaining('instagram.com'),
       '_blank',
       expect.any(String),
     )
-  })
-
-  it('copies the public app link', async () => {
-    render(<ShareSheet open onClose={() => undefined} />)
-    fireEvent.click(screen.getByTestId('share-copy-link'))
-    await waitFor(() => {
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(FASHIONRISE_PUBLIC_URL)
-    })
-    expect(screen.getByTestId('share-flash').textContent).toMatch(/Link copied/i)
   })
 })

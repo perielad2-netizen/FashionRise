@@ -1,6 +1,9 @@
-# FashionRise social accounts (share promo)
+# FashionRise social accounts (share AI looks)
 
-The in-app **Share FashionRise** sheet promotes `https://fashionrise.app` and mentions `@fashionrise` on Instagram. Create the brand accounts below so those links and captions land on real profiles.
+The in-app **Share your look** sheet posts AI Magic results with the caption
+**“Created with FashionRise — Search Google for FashionRise…”** plus
+`https://fashionrise.app`. Create the brand accounts below so Instagram /
+Facebook / WhatsApp posts reinforce the brand.
 
 ## Recommended handles (claim early)
 

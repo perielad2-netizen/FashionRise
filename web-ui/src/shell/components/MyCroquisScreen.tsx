@@ -18,7 +18,7 @@ const DATE_FORMAT = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeSty
 type Props = {
   onBackToStudio: () => void
   onUseInStudio: (croquisId: string, version: number) => void
-  /** True when the active Studio draft pins this croquis (warn before erase). */
+  /** True when the active Studio draft pins this model (warn before erase). */
   activeStudioPinId?: string | null
   libraryVersion?: number
 }
@@ -131,7 +131,7 @@ export function MyCroquisScreen({
 
   useEffect(() => {
     if (!isMyCroquisUiEnabled()) {
-      setState({ status: 'error', message: 'My Croquis is not enabled in this build.' })
+      setState({ status: 'error', message: 'My Models is not enabled in this build.' })
       return
     }
     const controller = new AbortController()
@@ -149,7 +149,7 @@ export function MyCroquisScreen({
           message:
             err instanceof Error && err.message
               ? err.message
-              : 'Could not load My Croquis. Check your connection and try again.',
+              : 'Could not load My Models. Check your connection and try again.',
         })
       })
     return () => controller.abort()
@@ -183,8 +183,8 @@ export function MyCroquisScreen({
       setDeleteDialog(null)
       setNotice(
         referencedInStudio
-          ? `Deleted “${row.display_name || 'Untitled croquis'}”. Studio strokes were kept — the underlay may show unavailable until you pick another croquis.`
-          : `Deleted “${row.display_name || 'Untitled croquis'}”.`,
+          ? `Deleted “${row.display_name || 'Untitled model'}”. Studio strokes were kept — the underlay may show unavailable until you pick another model.`
+          : `Deleted “${row.display_name || 'Untitled model'}”.`,
       )
       reload()
     } catch (err) {
@@ -193,7 +193,7 @@ export function MyCroquisScreen({
           ? err.message
           : err instanceof Error && err.message
             ? err.message
-            : 'Could not delete this croquis. Try again.'
+            : 'Could not delete this model. Try again.'
       setDeleteDialog({
         phase: 'error',
         row,
@@ -209,10 +209,10 @@ export function MyCroquisScreen({
 
   const onPinAccepted = useCallback(
     (_croquisId: string, _version: number) => {
-      // Stay on My Croquis gallery after Create New so the owner can preview
+      // Stay on My Models gallery after Create New so the owner can preview
       // and choose Use in Studio explicitly (#154). Do not auto-navigate away.
       setWizardOpen(false)
-      setNotice('New croquis ready — preview it here, then Use in Studio when you want.')
+      setNotice('New model ready — preview it here, then Use in Studio when you want.')
       reload()
     },
     [reload],
@@ -224,9 +224,9 @@ export function MyCroquisScreen({
         <header className={styles.head}>
           <div className={styles.titleBlock}>
             <h1 id={titleId} className={styles.title}>
-              My Croquis
+              My Models
             </h1>
-            <p className={styles.subtitle}>Personal croquis library is not enabled in this build.</p>
+            <p className={styles.subtitle}>Personal model library is not enabled in this build.</p>
           </div>
           <button type="button" className={styles.ghostBtn} onClick={onBackToStudio}>
             <ArrowLeft size={14} aria-hidden />
@@ -242,10 +242,10 @@ export function MyCroquisScreen({
       <header className={styles.head}>
         <div className={styles.titleBlock}>
           <h1 id={titleId} className={styles.title}>
-            My Croquis
+            My Models
           </h1>
           <p className={styles.subtitle}>
-            Preview, create, and select your private personal croquis for Studio.
+            Preview, create, and select your private personal model for Studio.
           </p>
         </div>
         <div className={styles.headActions}>
@@ -258,7 +258,7 @@ export function MyCroquisScreen({
             className={styles.ghostBtn}
             onClick={reload}
             disabled={state.status === 'loading'}
-            aria-label="Refresh My Croquis"
+            aria-label="Refresh My Models"
           >
             <RefreshCw size={14} aria-hidden />
             Refresh
@@ -269,7 +269,7 @@ export function MyCroquisScreen({
             onClick={() => setWizardOpen(true)}
           >
             <Plus size={14} aria-hidden />
-            Create New Croquis
+            Create Model
           </button>
         </div>
       </header>
@@ -282,7 +282,7 @@ export function MyCroquisScreen({
         ) : null}
 
         {state.status === 'loading' ? (
-          <p className={styles.empty}>Loading your croquis…</p>
+          <p className={styles.empty}>Loading your models…</p>
         ) : null}
 
         {state.status === 'error' ? (
@@ -296,10 +296,10 @@ export function MyCroquisScreen({
 
         {state.status === 'ready' && state.items.length === 0 ? (
           <div className={styles.emptyBlock}>
-            <p className={styles.empty}>No accepted personal croquis yet.</p>
+            <p className={styles.empty}>No accepted personal model yet.</p>
             <button type="button" className={styles.primaryBtn} onClick={() => setWizardOpen(true)}>
               <Plus size={14} aria-hidden />
-              Create New Croquis
+              Create Model
             </button>
           </div>
         ) : null}
@@ -309,7 +309,7 @@ export function MyCroquisScreen({
             {state.items.map((row) => {
               const version = acceptedVersionNumber(row)!
               const assetId = row.latest_accepted_version?.generated_asset_id ?? null
-              const title = row.display_name?.trim() || 'Untitled croquis'
+              const title = row.display_name?.trim() || 'Untitled model'
               const active = activeStudioPinId === row.id
               return (
                 <li key={row.id} className={styles.card}>
@@ -364,8 +364,8 @@ export function MyCroquisScreen({
         <ConfirmDialog
           title={
             deleteDialog.phase === 'error'
-              ? 'Could not delete croquis'
-              : 'Delete personal croquis?'
+              ? 'Could not delete model'
+              : 'Delete personal model?'
           }
           actions={
             deleteDialog.phase === 'error'
@@ -407,19 +407,19 @@ export function MyCroquisScreen({
             <>
               <p>
                 Permanently erase{' '}
-                <strong>{deleteDialog.row.display_name || 'Untitled croquis'}</strong> and its
+                <strong>{deleteDialog.row.display_name || 'Untitled model'}</strong> and its
                 private photo assets? This cannot be undone.
               </p>
               {deleteDialog.referencedInStudio ? (
                 <p>
-                  Studio currently uses this croquis. Your drawing strokes stay on the canvas; the
-                  underlay will become unavailable until you select another croquis. Unrelated
+                  Studio currently uses this model. Your drawing strokes stay on the canvas; the
+                  underlay will become unavailable until you select another model. Unrelated
                   drawings and designs are not deleted.
                 </p>
               ) : (
                 <p>
-                  Studio drawings that pin this croquis will keep their strokes; only the private
-                  croquis media is removed. Other designs and looks are not erased.
+                  Studio drawings that pin this model will keep their strokes; only the private
+                  model media is removed. Other designs and looks are not erased.
                 </p>
               )}
             </>

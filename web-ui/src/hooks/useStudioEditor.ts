@@ -2440,7 +2440,7 @@ export function useStudioEditor() {
           inp.croquis_id !== fashnPrepCroquis.croquisId
         ) {
           setFashnRealismError(
-            'That accepted garment is bound to a different My Croquis photo. Switch croquis or regenerate.',
+            'That accepted garment is bound to a different My Model photo. Switch model or regenerate.',
           )
           return
         }
@@ -2895,7 +2895,7 @@ export function useStudioEditor() {
         tryOnPreflightRef.current = preflight
         // #178 — destination copy stays concept-only; no cost/provider text for normal users.
         setMagicTryOnNotice(
-          'Try On Person shows your design on the original Create My Croquis photo — concept preview only, not a fit guarantee.',
+          'Try On Person shows your design on the original Create Model photo — concept preview only, not a fit guarantee.',
         )
         setMagicTryOnEstimateCents(null)
         const ownerExperiment = Boolean(
@@ -2909,7 +2909,7 @@ export function useStudioEditor() {
         setMagicFashnCombinedEstimateCents(null)
       } catch {
         setMagicTryOnNotice(
-          'Try On Person shows your design on the original Create My Croquis photo — concept preview only, not a fit guarantee.',
+          'Try On Person shows your design on the original Create Model photo — concept preview only, not a fit guarantee.',
         )
         setMagicTryOnEstimateCents(null)
         setMagicFashnAvailable(false)
@@ -3571,7 +3571,7 @@ export function useStudioEditor() {
         const wantedReference = referenceUrlForDocument(doc, refSide) !== null
         publishStudioNotice(
           pinPending
-            ? 'PNG exported without My Croquis underlay — the pinned version is still loading or unavailable. Ink was not altered.'
+            ? 'PNG exported without My Model underlay — the pinned version is still loading or unavailable. Ink was not altered.'
             : wantedReference && !referenceIncluded
               ? EXPORT_NO_REFERENCE
               : 'PNG exported. Check your downloads.',

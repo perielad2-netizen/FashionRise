@@ -36,5 +36,6 @@ describe('ModelLibraryPanel Create My Croquis entry', () => {
       />,
     )
     expect(screen.getByTestId('create-my-croquis-entry')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Create Model/i })).toBeTruthy()
   })
 })

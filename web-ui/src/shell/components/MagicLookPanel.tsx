@@ -36,7 +36,7 @@ type Props = {
   result: MagicLookResult | null
   lookObjectUrl: string | null
   sketchObjectUrl: string | null
-  /** Original croquis photo for Try On Person before/after compare. */
+  /** Original model photo for Try On Person before/after compare. */
   originalPhotoUrl?: string | null
   error: string | null
   /** Optional one-click pipeline status (e.g. FASHN realism → fidelity → try-on). */
@@ -323,7 +323,7 @@ export function MagicLookPanel({
             <div className={styles.compareGrid} aria-label="Original versus try-on">
               <figure className={styles.comparePane}>
                 <figcaption>Original photo</figcaption>
-                <img src={originalPhotoUrl} alt="Original croquis photo" />
+                <img src={originalPhotoUrl} alt="Original model photo" />
               </figure>
               <figure className={styles.comparePane}>
                 <figcaption>Try-on preview</figcaption>
@@ -336,7 +336,7 @@ export function MagicLookPanel({
             <img
               className={styles.image}
               src={originalPhotoUrl}
-              alt="Original croquis photo"
+              alt="Original model photo"
             />
           ) : null}
 

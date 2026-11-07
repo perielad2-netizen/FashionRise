@@ -15,7 +15,7 @@ const BASE_ITEMS = [
   },
   {
     id: 'croquis',
-    label: 'My Croquis',
+    label: 'My Models',
     icon: UserRound,
     destination: 'croquis' as NavDestination | null,
     requiresMyCroquis: true,
