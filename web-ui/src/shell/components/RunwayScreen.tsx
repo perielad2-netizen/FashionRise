@@ -26,6 +26,7 @@ import {
   type Friendship,
 } from '@/services/friendsApi'
 import { ApiError } from '@/services/api/client'
+import { useAuth } from '@/services/auth/AuthProvider'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import styles from './RunwayScreen.module.css'
 
@@ -54,6 +55,8 @@ const TABS: Array<{ id: TabId; label: string; hint: string }> = [
 const SCORE_HINT = 'Looks earn runway scores from likes + ratings (1–10).'
 
 export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
+  const { user } = useAuth()
+  const viewerId = user?.id ?? null
   const [tab, setTab] = useState<TabId>('feed')
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
@@ -296,6 +299,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                       item={item}
                       rank={index + 1}
                       compact
+                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
                       onItemChange={patchItem}
                     />
                   ))}
@@ -333,7 +337,12 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               ) : (
                 <ul className={styles.grid} aria-label="Circle feed">
                   {state.circle.map((item) => (
-                    <RunwayCard key={item.id} item={item} onItemChange={patchItem} />
+                    <RunwayCard
+                      key={item.id}
+                      item={item}
+                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                      onItemChange={patchItem}
+                    />
                   ))}
                 </ul>
               )}
@@ -480,11 +489,13 @@ function RunwayCard({
   item,
   rank,
   compact = false,
+  isOwn = false,
   onItemChange,
 }: {
   item: GalleryItem
   rank?: number
   compact?: boolean
+  isOwn?: boolean
   onItemChange: (next: GalleryItem) => void
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
@@ -492,6 +503,7 @@ function RunwayCard({
   const [busy, setBusy] = useState<'like' | 'score' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const liked = Boolean(item.liked_by_me)
+  const canReact = !isOwn
 
   const refreshItem = useCallback(async () => {
     const fresh = await getGalleryItem(item.id)
@@ -500,7 +512,7 @@ function RunwayCard({
   }, [item.id, onItemChange])
 
   const onToggleLike = useCallback(async () => {
-    if (busy) return
+    if (!canReact || busy) return
     setBusy('like')
     setActionError(null)
     const prevLiked = liked
@@ -520,12 +532,12 @@ function RunwayCard({
     } finally {
       setBusy(null)
     }
-  }, [busy, item, liked, onItemChange, refreshItem])
+  }, [busy, canReact, item, liked, onItemChange, refreshItem])
 
   const onScore = useCallback(
     async (raw: string) => {
       const score = Number(raw)
-      if (!Number.isInteger(score) || score < 1 || score > 10 || busy) return
+      if (!canReact || !Number.isInteger(score) || score < 1 || score > 10 || busy) return
       setBusy('score')
       setActionError(null)
       try {
@@ -537,7 +549,7 @@ function RunwayCard({
         setBusy(null)
       }
     },
-    [busy, item.id, refreshItem],
+    [busy, canReact, item.id, refreshItem],
   )
 
   return (
@@ -555,45 +567,63 @@ function RunwayCard({
       <div className={styles.cardBody}>
         <h2 className={styles.cardTitle}>{item.title || 'Untitled look'}</h2>
         <div className={styles.cardActions}>
-          <button
-            type="button"
-            className={liked ? styles.likeBtnOn : styles.likeBtn}
-            aria-pressed={liked}
-            aria-label={liked ? 'Unlike look' : 'Like look'}
-            disabled={busy === 'like'}
-            onClick={() => void onToggleLike()}
-          >
-            <Heart size={13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
-            {item.likes_count}
-          </button>
-          <label className={styles.scoreLabel}>
-            <span className={styles.scoreLabelText}>
-              <Star size={12} aria-hidden />
-              {item.rating_average != null ? item.rating_average.toFixed(1) : 'Score'}
-            </span>
-            <select
-              className={styles.scoreSelect}
-              aria-label={`Score ${item.title || 'look'} from 1 to 10`}
-              value={item.my_score ?? ''}
-              disabled={busy === 'score'}
-              onChange={(event) => void onScore(event.target.value)}
+          {canReact ? (
+            <button
+              type="button"
+              className={liked ? styles.likeBtnOn : styles.likeBtn}
+              aria-pressed={liked}
+              aria-label={liked ? 'Unlike look' : 'Like look'}
+              disabled={busy === 'like'}
+              onClick={() => void onToggleLike()}
             >
-              <option value="" disabled>
-                {item.my_score ? `Yours ${item.my_score}` : 'Rate'}
-              </option>
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n}
+              <Heart size={13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
+              {item.likes_count}
+            </button>
+          ) : (
+            <span className={styles.statChip} title="Others can like your look">
+              <Heart size={12} aria-hidden />
+              {item.likes_count}
+            </span>
+          )}
+          {canReact ? (
+            <label className={styles.scoreLabel}>
+              <span className={styles.scoreLabelText}>
+                <Star size={12} aria-hidden />
+                {item.rating_average != null ? item.rating_average.toFixed(1) : 'Score'}
+              </span>
+              <select
+                className={styles.scoreSelect}
+                aria-label={`Score ${item.title || 'look'} from 1 to 10`}
+                value={item.my_score ?? ''}
+                disabled={busy === 'score'}
+                onChange={(event) => void onScore(event.target.value)}
+              >
+                <option value="" disabled>
+                  {item.my_score ? `Yours ${item.my_score}` : 'Rate'}
                 </option>
-              ))}
-            </select>
-          </label>
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span className={styles.statChip} title="Others can score your look">
+              <Star size={12} aria-hidden />
+              {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
+              {item.rating_count > 0 ? ` (${item.rating_count})` : ''}
+            </span>
+          )}
           {!compact ? (
             <span className={styles.soonChip} title="Comments coming soon">
               <MessageCircle size={12} aria-hidden /> soon
             </span>
           ) : null}
         </div>
+        {isOwn ? (
+          <p className={styles.ownHint}>Your look — likes & scores come from others</p>
+        ) : null}
         {actionError ? (
           <p className={styles.cardError} role="alert">
             {actionError}

@@ -299,6 +299,8 @@ def list_user_gallery(db: Session, user_id: uuid.UUID) -> list[GalleryItem]:
 
 def add_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> None:
     item = get_gallery_item(db, gallery_item_id)
+    if item.user_id == user.id:
+        raise ForbiddenError("You can’t like your own Runway look")
     existing = db.scalar(
         select(GalleryLike).where(
             GalleryLike.user_id == user.id,
@@ -314,6 +316,8 @@ def add_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> Non
 
 def remove_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> None:
     item = get_gallery_item(db, gallery_item_id)
+    if item.user_id == user.id:
+        raise ForbiddenError("You can’t unlike your own Runway look")
     like = db.scalar(
         select(GalleryLike).where(
             GalleryLike.user_id == user.id,

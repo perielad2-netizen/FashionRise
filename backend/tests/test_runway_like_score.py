@@ -53,3 +53,27 @@ def test_circle_feed_includes_like_and_score_flags(client, db_session):
     top_row = next(r for r in top.json() if r["id"] == item_id)
     assert top_row["liked_by_me"] is True
     assert top_row["my_score"] == 8
+
+
+def test_owner_cannot_like_or_score_own_look(client, db_session):
+    owner = register_with_invite(client, db_session, "own_score@example.com", "ownScore")
+    me = client.get("/api/v1/auth/me", headers=_auth(owner)).json()
+    job = _add_job(
+        db_session,
+        user_id=uuid.UUID(me["id"]),
+        image_url=_store_image(),
+        summary="own look",
+    )
+    published = client.post(f"/api/v1/looks/{job.id}/publish", headers=_auth(owner))
+    assert published.status_code == 200, published.text
+    item_id = published.json()["runway_item_id"]
+
+    like = client.post(f"/api/v1/gallery/{item_id}/like", headers=_auth(owner))
+    assert like.status_code == 403, like.text
+
+    rate = client.post(
+        "/api/v1/ratings",
+        headers=_auth(owner),
+        json={"gallery_item_id": item_id, "score": 10},
+    )
+    assert rate.status_code == 403, rate.text

@@ -28,12 +28,24 @@ vi.mock('@/services/friendsApi', () => ({
   removeFriend: vi.fn(),
 }))
 
+const authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
+
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: authUser,
+    refreshUser: vi.fn(),
+    logout: vi.fn(),
+    isAuthenticated: true,
+    bootstrapping: false,
+  }),
+}))
+
 const circleItem = {
   id: 'circle-1',
   design_id: null,
   look_id: 'look-circle',
-  user_id: 'u-me',
-  title: 'My circle look',
+  user_id: 'friend-1',
+  title: 'Friend circle look',
   image_url: null,
   visibility: 'public',
   rating_average: null,
@@ -93,7 +105,7 @@ describe('RunwayScreen', () => {
     expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'top10' }))
     expect(await screen.findByText('Top 10 worldwide')).toBeInTheDocument()
     expect(screen.getByText('Worldwide hit')).toBeInTheDocument()
-    expect(screen.getByText('My circle look')).toBeInTheDocument()
+    expect(screen.getByText('Friend circle look')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^Create$/i }))
     expect(onOpenCreate).toHaveBeenCalled()
@@ -134,10 +146,35 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(getGalleryItem).toHaveBeenCalledWith('circle-1'))
     expect(await within(circle).findByRole('button', { name: /Unlike look/i })).toBeInTheDocument()
 
-    const score = within(circle).getByLabelText(/Score My circle look from 1 to 10/i)
+    const score = within(circle).getByLabelText(/Score Friend circle look from 1 to 10/i)
     fireEvent.change(score, { target: { value: '9' } })
     await waitFor(() => expect(rateGalleryItem).toHaveBeenCalledWith('circle-1', 9))
     await waitFor(() => expect((score as HTMLSelectElement).value).toBe('9'))
+  })
+
+  it('does not let you like or score your own look', async () => {
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'top10') return []
+      return [
+        {
+          ...circleItem,
+          id: 'own-1',
+          user_id: 'viewer-1',
+          title: 'My published look',
+          likes_count: 4,
+          rating_average: 8.5,
+          rating_count: 2,
+        },
+      ]
+    })
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const circle = await screen.findByRole('list', { name: 'Circle feed' })
+    expect(within(circle).getByText('My published look')).toBeInTheDocument()
+    expect(within(circle).queryByRole('button', { name: /Like look/i })).toBeNull()
+    expect(within(circle).queryByLabelText(/Score My published look from 1 to 10/i)).toBeNull()
+    expect(within(circle).getByText(/Your look — likes & scores come from others/i)).toBeInTheDocument()
+    expect(likeGalleryItem).not.toHaveBeenCalled()
+    expect(rateGalleryItem).not.toHaveBeenCalled()
   })
 
   it('loads friends circle and can add by username', async () => {
