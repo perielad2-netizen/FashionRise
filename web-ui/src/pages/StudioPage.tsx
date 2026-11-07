@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-route
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import { FashionRiseAppShell } from '@/shell/components/FashionRiseAppShell'
 import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
+import { HomeScreen } from '@/shell/components/HomeScreen'
 import { MyCroquisScreen } from '@/shell/components/MyCroquisScreen'
 import { MyDesignsScreen } from '@/shell/components/MyDesignsScreen'
 import { MyLooksScreen } from '@/shell/components/MyLooksScreen'
@@ -14,6 +15,7 @@ import '@/shell/shellTokens.css'
 import styles from './StudioPage.module.css'
 
 export const STUDIO_PATH = '/studio'
+export const HOME_PATH = '/studio/home'
 export const MY_DESIGNS_PATH = '/studio/designs'
 export const MY_LOOKS_PATH = '/studio/looks'
 export const MY_CROQUIS_PATH = '/studio/croquis'
@@ -45,13 +47,16 @@ export function StudioPage() {
             ? croquisEnabled
               ? 'croquis'
               : null
-            : path === STUDIO_PATH
-              ? 'studio'
-              : null
+            : path === HOME_PATH
+              ? 'home'
+              : path === STUDIO_PATH
+                ? 'studio'
+                : null
 
   const onNavigate = useCallback(
     (destination: NavDestination) => {
-      if (destination === 'designs') navigate(MY_DESIGNS_PATH)
+      if (destination === 'home') navigate(HOME_PATH)
+      else if (destination === 'designs') navigate(MY_DESIGNS_PATH)
       else if (destination === 'looks') navigate(MY_LOOKS_PATH)
       else if (destination === 'croquis') navigate(MY_CROQUIS_PATH)
       else navigate(STUDIO_PATH)
@@ -76,13 +81,14 @@ export function StudioPage() {
   }, [searchParams, setSearchParams])
 
   const currentNav: NavDestination = useMemo(() => {
+    if (view === 'home') return 'home'
     if (view === 'library') return 'designs'
     if (view === 'looks' || view === 'techpack') return 'looks'
     if (view === 'croquis') return 'croquis'
     return 'create'
   }, [view])
 
-  if (view === null) return <Navigate to={STUDIO_PATH} replace />
+  if (view === null) return <Navigate to={HOME_PATH} replace />
 
   return (
     <div className={`${styles.page} studioShellRoot studio-chrome`}>
@@ -93,7 +99,12 @@ export function StudioPage() {
         currentNav={currentNav}
         onNavigate={onNavigate}
       >
-        {view === 'library' && editor.user?.id ? (
+        {view === 'home' ? (
+          <HomeScreen
+            username={editor.user?.username ?? 'Creator'}
+            onNavigate={onNavigate}
+          />
+        ) : view === 'library' && editor.user?.id ? (
           <MyDesignsScreen
             ownerId={editor.user.id}
             working={{

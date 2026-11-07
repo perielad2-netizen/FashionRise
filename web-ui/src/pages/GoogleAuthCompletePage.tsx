@@ -13,8 +13,8 @@ function parseHashTokens(hash: string): {
   const params = new URLSearchParams(raw)
   const access = params.get('access_token') || ''
   const refresh = params.get('refresh_token') || ''
-  const nextRaw = params.get('next') || '/studio'
-  const next = nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : '/studio'
+  const nextRaw = params.get('next') || '/studio/home'
+  const next = nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : '/studio/home'
   if (!access || !refresh) return null
   return { access_token: access, refresh_token: refresh, next }
 }

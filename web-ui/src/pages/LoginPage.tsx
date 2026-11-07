@@ -26,7 +26,7 @@ export function LoginPage() {
   }, [searchParams])
 
   if (bootstrapping) return null
-  if (isAuthenticated) return <Navigate to="/studio" replace />
+  if (isAuthenticated) return <Navigate to="/studio/home" replace />
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -43,7 +43,7 @@ export function LoginPage() {
     setBusy(true)
     try {
       await login({ email: validated.email, password: validated.password })
-      navigate('/studio', { replace: true })
+      navigate('/studio/home', { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
         setFormError(err.message)
@@ -57,7 +57,7 @@ export function LoginPage() {
 
   function onGoogle() {
     if (busy) return
-    window.location.assign(getGoogleOAuthStartUrl('/studio'))
+    window.location.assign(getGoogleOAuthStartUrl('/studio/home'))
   }
 
   return (

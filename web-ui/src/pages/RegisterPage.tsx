@@ -33,11 +33,11 @@ export function RegisterPage() {
   const [busy, setBusy] = useState(false)
 
   if (bootstrapping) return null
-  if (isAuthenticated) return <Navigate to="/studio" replace />
+  if (isAuthenticated) return <Navigate to="/studio/home" replace />
 
   function onGoogle() {
     if (busy) return
-    window.location.assign(getGoogleOAuthStartUrl('/studio'))
+    window.location.assign(getGoogleOAuthStartUrl('/studio/home'))
   }
 
   async function onSubmit(e: FormEvent) {
@@ -75,7 +75,7 @@ export function RegisterPage() {
         displayName: validated.displayName,
         invitationCode: validated.invitationCode,
       })
-      navigate('/studio', { replace: true })
+      navigate('/studio/home', { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 0 || err.status >= 500) {

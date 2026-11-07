@@ -68,9 +68,9 @@ export async function getGoogleOAuthStatus(signal?: AbortSignal): Promise<Google
 }
 
 /** Browser navigation target that begins Google Sign-In (server redirects to Google). */
-export function getGoogleOAuthStartUrl(nextPath = '/studio'): string {
+export function getGoogleOAuthStartUrl(nextPath = '/studio/home'): string {
   const base = getApiBaseUrl()
-  const next = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/studio'
+  const next = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/studio/home'
   return `${base}/auth/google/start?next=${encodeURIComponent(next)}`
 }
 

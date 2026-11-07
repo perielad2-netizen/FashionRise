@@ -92,7 +92,7 @@ export default defineConfig({
         display: 'standalone',
         display_override: ['window-controls-overlay', 'standalone'],
         orientation: 'any',
-        start_url: '/studio',
+        start_url: '/studio/home',
         scope: '/',
         icons: [
           {

@@ -1,11 +1,10 @@
-import { BookOpen, Compass, Home, Images, Sparkles } from 'lucide-react'
+import { Compass, Home, Images, Sparkles } from 'lucide-react'
 import { DESIGN_LAB_BRAND_MARK } from '@/design-lab/designLabAssets'
 import styles from './GlobalNavigation.module.css'
 
 const ITEMS = [
   { id: 'home', label: 'Home', icon: Home, active: false },
   { id: 'create', label: 'Create', icon: Sparkles, active: true },
-  { id: 'book', label: 'Design Book', icon: BookOpen, active: false },
   { id: 'discover', label: 'Discover', icon: Compass, active: false },
   { id: 'looks', label: 'My Looks', icon: Images, active: false },
 ] as const

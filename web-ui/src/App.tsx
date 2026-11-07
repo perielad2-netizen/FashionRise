@@ -35,7 +35,7 @@ const StudioLayoutLabPage = import.meta.env.DEV
 function RootRedirect() {
   const { isAuthenticated, bootstrapping } = useAuth()
   if (bootstrapping) return null
-  return <Navigate to={isAuthenticated ? '/studio' : '/login'} replace />
+  return <Navigate to={isAuthenticated ? '/studio/home' : '/login'} replace />
 }
 
 /** Remount Studio when the authenticated user changes so local canvas state cannot leak. */
