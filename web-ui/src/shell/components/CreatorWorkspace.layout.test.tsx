@@ -381,7 +381,7 @@ describe('CreatorWorkspace tablet layout controls (WEB-V4I)', () => {
     expect(within(dialog).queryByText(/two paid stages/i)).toBeNull()
   })
 
-  it('owner experiment entry stays available without public cost copy (#178)', () => {
+  it('hides owner FASHN experiment from the Magic destination dialog', () => {
     render(
       <CreatorWorkspace
         editor={mockEditor({
@@ -393,9 +393,11 @@ describe('CreatorWorkspace tablet layout controls (WEB-V4I)', () => {
     )
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByRole('button', { name: 'Try On Person' })).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: 'Owner FASHN experiment' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Fashion Magic' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Owner FASHN experiment' })).toBeNull()
+    expect(within(dialog).queryByText(/v1\.6/i)).toBeNull()
+    expect(within(dialog).queryByText(/internal testing/i)).toBeNull()
     expect(within(dialog).queryByText(/¢/)).toBeNull()
-    expect(within(dialog).getByText(/manual v1\.6 \/ Max comparison/i)).toBeTruthy()
   })
 
   it('gives model-switch confirmation precedence for focus and Escape over Models gallery', () => {

@@ -171,7 +171,7 @@ function emptyMagicSide(): MagicSidePanelState {
 }
 const AUTOSAVE_MS = 1600
 const CUSTOM_REF_BETA_NOTICE =
-  'Custom reference images stay on this device for the session only in private beta. They are not uploaded to the server (uploads are not owner-private yet).'
+  'Custom reference images stay on this device for this session only. They are not saved to your account yet — re-select after refresh if needed.'
 
 export { nearestBrushSizeId }
 
@@ -2893,10 +2893,8 @@ export function useStudioEditor() {
       try {
         const preflight = await fetchPersonalTryOnPreflight()
         tryOnPreflightRef.current = preflight
-        // #178 — destination copy stays concept-only; no cost/provider text for normal users.
-        setMagicTryOnNotice(
-          'Try On Person shows your design on the original Create Model photo — concept preview only, not a fit guarantee.',
-        )
+        // Destination dialog already explains Try On Person — no duplicate notice.
+        setMagicTryOnNotice(null)
         setMagicTryOnEstimateCents(null)
         const ownerExperiment = Boolean(
           preflight.fashn_owner_experiment_allowed ?? preflight.fashn_max_owner_allowed,
@@ -2908,9 +2906,7 @@ export function useStudioEditor() {
         setMagicFashnEstimatePerCall(null)
         setMagicFashnCombinedEstimateCents(null)
       } catch {
-        setMagicTryOnNotice(
-          'Try On Person shows your design on the original Create Model photo — concept preview only, not a fit guarantee.',
-        )
+        setMagicTryOnNotice(null)
         setMagicTryOnEstimateCents(null)
         setMagicFashnAvailable(false)
         setMagicOwnerExperimentAvailable(false)

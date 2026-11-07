@@ -130,7 +130,7 @@ export function WorkspaceHeader({
           onClick={() => setShopOpen(true)}
           title={
             starsUnlimited
-              ? 'Unlimited Stars (owner) — open shop'
+              ? 'Unlimited Stars — open shop'
               : `AI Stars — Magic 10 · Model 10 · Fabric 5 · PDF 50. Tap for packages.`
           }
           aria-label={

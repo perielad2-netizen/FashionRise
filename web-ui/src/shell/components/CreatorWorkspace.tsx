@@ -381,28 +381,12 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               onClick: editor.chooseTryOnPerson,
               variant: 'primary',
             },
-            ...(editor.magicOwnerExperimentAvailable
-              ? [
-                  {
-                    label: 'Owner FASHN experiment',
-                    onClick: editor.chooseFashnTryOn,
-                    variant: 'ghost' as const,
-                  },
-                ]
-              : []),
           ]}
         >
           <p>
             Fashion Magic polishes this sketch into an illustration. Try On Person shows your design
             on the original Create Model photo — concept preview only, not a fit guarantee.
           </p>
-          {editor.magicTryOnNotice ? <p>{editor.magicTryOnNotice}</p> : null}
-          {editor.magicOwnerExperimentAvailable ? (
-            <p>
-              Owner FASHN experiment keeps the manual v1.6 / Max comparison tools for internal
-              testing. Ordinary Try On Person stays one button with no review dialog.
-            </p>
-          ) : null}
         </ConfirmDialog>
       ) : null}
 
