@@ -6,14 +6,19 @@ import {
 } from '@/services/starsShopApi'
 
 /** Defaults match backend AI_STARS_*_COST env used in production. */
-export const DEFAULT_AI_STAR_COSTS = Object.freeze({
+export const DEFAULT_AI_STAR_COSTS: AiStarCosts = Object.freeze({
   magic: 10,
   croquis: 10,
   pdf: 50,
   fabric: 5,
 })
 
-export type AiStarCosts = typeof DEFAULT_AI_STAR_COSTS
+export type AiStarCosts = {
+  magic: number
+  croquis: number
+  pdf: number
+  fabric: number
+}
 
 /**
  * Live Stars balance from auth, plus feature costs from `/auth/stars`
