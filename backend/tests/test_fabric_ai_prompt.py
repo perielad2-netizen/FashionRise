@@ -49,6 +49,24 @@ def test_non_fabric_prompt_rejected():
     assert "Unrelated prompt" in str(ei.value.detail)
 
 
+def test_jeans_stitches_prompt_accepted_with_inferred_indigo():
+    """Natural denim wording — Yaniv's Create fabric prompt was wrongly rejected."""
+    plan = validate_ai_fabric_prompt(prompt="Pieces of jeans connected by stitches")
+    assert plan.color_hex == "#2F4A6E"
+    assert plan.color_label == "indigo"
+    assert "jeans" in plan.prompt_raw.lower()
+    assert "stitch" in plan.generate_prompt.lower()
+
+
+def test_patchwork_denim_with_palette_color():
+    plan = validate_ai_fabric_prompt(
+        prompt="patchwork denim with heavy stitching",
+        color_hex="#111111",
+    )
+    assert plan.color_hex == "#111111"
+    assert "denim" in plan.prompt_short.lower() or "stitch" in plan.prompt_short.lower()
+
+
 def test_stockings_see_through_sanitized_in_prompt_short():
     plan = validate_ai_fabric_prompt(prompt="white see through stockings fabric")
     assert "stocking" in plan.prompt_short.lower()
