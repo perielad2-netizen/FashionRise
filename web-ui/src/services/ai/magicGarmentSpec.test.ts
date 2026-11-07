@@ -72,7 +72,8 @@ describe('magicGarmentSpec palette priority', () => {
     expect(spec.notes.length).toBeLessThanOrEqual(500)
     expect(spec.details).toMatch(/render=polished_professional_enhancement/)
     expect(spec.details).toMatch(/sketch_role=strong_guidance_not_pixel_trace/)
-    expect(spec.details).toMatch(/color_authority=applied_fills_only/)
+    expect(spec.details).toMatch(/color_authority=applied_fills_and_ink_combination/)
+    expect(spec.details).toMatch(/accessory_fabric_fills=preserve_as_painted_in_sketch/)
     expect(spec.details).toMatch(/sketch_cleanup=normalize_imperfections/)
   })
 
@@ -272,11 +273,17 @@ describe('magicGarmentSpec palette priority', () => {
         },
       ],
     })
-    const { main_colors } = paletteFromDoc(doc)
+    const { colors, main_colors } = paletteFromDoc(doc)
     expect(main_colors[0]).toBe('#6B8E23')
+    // Satin sample stays in the full palette so Magic sees shoe fabric,
+    // but must not become main_colors (dress ink wins).
+    expect(colors).toContain('#BE185D')
+    expect(main_colors).not.toContain('#BE185D')
     const spec = buildSharedGarmentSpec(doc)
-    expect(spec.materials ?? []).toEqual([])
+    expect(spec.materials?.[0]).toMatch(/accessory textile: Satin/i)
+    expect(spec.materials?.[0]).toMatch(/shoes\/trims/i)
     expect(spec.main_colors?.[0]).toBe('#6B8E23')
+    expect(spec.details).toMatch(/accessory_fabric_fills=preserve_as_painted_in_sketch/)
   })
 
   it('does not invent a hex color for uploaded fabric', () => {
