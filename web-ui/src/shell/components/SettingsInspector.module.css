@@ -23,7 +23,7 @@
   color: var(--fr-muted);
   font-size: 13px;
   font-weight: 600;
-  cursor: default;
+  cursor: pointer;
   position: relative;
 }
 
@@ -180,6 +180,35 @@
 .toggle:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.help {
+  display: grid;
+  gap: 14px;
+}
+
+.helpList {
+  margin: 0;
+  padding-left: 1.1em;
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fr-muted);
+}
+
+.helpCopy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fr-muted);
+}
+
+.helpLink {
+  color: #f9a8d4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
 }
 
 /* Hidden via CreatorWorkspace settingsSlot at ≤1024; restored when dock opens. */
