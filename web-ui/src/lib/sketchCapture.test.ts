@@ -48,7 +48,7 @@ describe('captureSketchForMagic', () => {
     expect(exportMock).toHaveBeenCalledWith(
       expect.objectContaining({
         fills: expect.arrayContaining([expect.objectContaining({ id: 'f1' })]),
-        frame: 'legacy',
+        frame: 'auto',
         onReferenceError: 'skip',
         onFabricError: 'throw',
       }),
@@ -74,10 +74,32 @@ describe('captureSketchForMagic', () => {
     }
     const result = await captureSketchForMagic({ strokes: [stroke], referenceUrl: null })
     expect(exportMock).toHaveBeenCalledWith(
-      expect.objectContaining({ onReferenceError: 'skip' }),
+      expect.objectContaining({ onReferenceError: 'skip', frame: 'auto' }),
     )
     expect(result.byteLength).toBeGreaterThan(0)
     expect(result.byteLength).toBeLessThanOrEqual(MAGIC_MAX_SKETCH_BYTES)
+    expect(result.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+  })
+
+  it('does not block Magic when strokes extend past the croquis frame', async () => {
+    exportMock.mockResolvedValue({
+      blob: new Blob([new Uint8Array([9, 9, 9, 9])], { type: 'image/png' }),
+      referenceIncluded: false,
+    })
+    const oversized = {
+      id: 'out',
+      tool: 'draw' as const,
+      color: '#166534',
+      size: 6,
+      opacity: 1,
+      points: [-40, -20, 0.5, 900, 1200, 0.5],
+    }
+    const result = await captureSketchForMagic({
+      strokes: [oversized],
+      fills: [],
+      referenceUrl: null,
+    })
+    expect(exportMock).toHaveBeenCalledWith(expect.objectContaining({ frame: 'auto' }))
     expect(result.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
   })
 
