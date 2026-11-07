@@ -25,6 +25,8 @@ describe('HomeScreen', () => {
     expect(onNavigate).toHaveBeenCalledWith('designs')
     fireEvent.click(within(destinations).getByRole('button', { name: /My Looks/i }))
     expect(onNavigate).toHaveBeenCalledWith('looks')
+    fireEvent.click(within(destinations).getByRole('button', { name: /Fashion Stars/i }))
+    expect(onNavigate).toHaveBeenCalledWith('fashion-stars')
     fireEvent.click(within(destinations).getByRole('button', { name: /My Models/i }))
     expect(onNavigate).toHaveBeenCalledWith('croquis')
   })

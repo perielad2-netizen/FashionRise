@@ -1,8 +1,8 @@
-import { Compass, FolderHeart, Home, Images, Sparkles, UserRound } from 'lucide-react'
+import { FolderHeart, Home, Images, Sparkles, Star, UserRound } from 'lucide-react'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import styles from './GlobalNavigation.module.css'
 
-export type NavDestination = 'home' | 'create' | 'designs' | 'looks' | 'croquis'
+export type NavDestination = 'home' | 'create' | 'designs' | 'looks' | 'croquis' | 'fashion-stars'
 
 const BASE_ITEMS = [
   { id: 'home', label: 'Home', icon: Home, destination: 'home' as NavDestination | null },
@@ -20,7 +20,12 @@ const BASE_ITEMS = [
     destination: 'croquis' as NavDestination | null,
     requiresMyCroquis: true,
   },
-  { id: 'discover', label: 'Discover', icon: Compass, destination: null as NavDestination | null },
+  {
+    id: 'fashion-stars',
+    label: 'Fashion Stars',
+    icon: Star,
+    destination: 'fashion-stars' as NavDestination | null,
+  },
   { id: 'looks', label: 'My Looks', icon: Images, destination: 'looks' as NavDestination | null },
 ]
 

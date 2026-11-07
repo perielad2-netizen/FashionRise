@@ -1,4 +1,4 @@
-import { FolderHeart, Images, Sparkles, UserRound } from 'lucide-react'
+import { FolderHeart, Images, Sparkles, Star, UserRound } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import type { NavDestination } from '@/shell/components/GlobalNavigation'
@@ -33,6 +33,12 @@ const DESTINATIONS: Array<{
     label: 'My Looks',
     hint: 'Magic looks, try-ons, and tech packs',
     icon: Images,
+  },
+  {
+    id: 'fashion-stars',
+    label: 'Fashion Stars',
+    hint: 'Community runway — share, like, and score looks',
+    icon: Star,
   },
   {
     id: 'croquis',
