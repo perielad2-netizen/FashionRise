@@ -39,12 +39,16 @@ vi.mock('@/services/friendsApi', () => ({
 const enableRunwayPush = vi.fn()
 const disableRunwayPush = vi.fn()
 const runwayPushIsEnabled = vi.fn()
+const ensureDefaultRunwayPush = vi.fn()
 
 vi.mock('@/services/pushApi', () => ({
   pushSupported: () => true,
   runwayPushIsEnabled: (...args: unknown[]) => runwayPushIsEnabled(...args),
   enableRunwayPush: (...args: unknown[]) => enableRunwayPush(...args),
   disableRunwayPush: (...args: unknown[]) => disableRunwayPush(...args),
+  ensureDefaultRunwayPush: (...args: unknown[]) => ensureDefaultRunwayPush(...args),
+  isPushDesired: () => true,
+  setPushDesired: vi.fn(),
 }))
 
 const authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
@@ -112,9 +116,11 @@ describe('RunwayScreen', () => {
     enableRunwayPush.mockReset()
     disableRunwayPush.mockReset()
     runwayPushIsEnabled.mockReset()
+    ensureDefaultRunwayPush.mockReset()
     runwayPushIsEnabled.mockResolvedValue(false)
     enableRunwayPush.mockResolvedValue('granted')
     disableRunwayPush.mockResolvedValue(undefined)
+    ensureDefaultRunwayPush.mockResolvedValue({ on: true, result: 'granted' })
     listGallery.mockImplementation(async (opts?: { sort?: string }) => {
       if (opts?.sort === 'top10') return [{ ...topItem }]
       return [{ ...circleItem }]
@@ -136,7 +142,7 @@ describe('RunwayScreen', () => {
     expect(await screen.findByText('Top 10 worldwide')).toBeInTheDocument()
     expect(screen.getByText('Worldwide hit')).toBeInTheDocument()
     expect(screen.getByText('Friend circle look')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Push$/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Push on/i })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^Create$/i }))
     expect(onOpenCreate).toHaveBeenCalled()
@@ -314,12 +320,21 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(requestFriendByUsername).toHaveBeenCalledWith('newfriend'))
   })
 
-  it('enables Runway push from the roadmap chip', async () => {
+  it('auto-enables Runway push by default on load', async () => {
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await screen.findByRole('list', { name: 'Circle feed' })
-    fireEvent.click(screen.getByRole('button', { name: /^Push$/i }))
-    await waitFor(() => expect(enableRunwayPush).toHaveBeenCalled())
+    await waitFor(() => expect(ensureDefaultRunwayPush).toHaveBeenCalled())
     expect(await screen.findByRole('button', { name: /Push on/i })).toBeInTheDocument()
     expect(screen.getByText(/Push on — we’ll notify/i)).toBeInTheDocument()
+  })
+
+  it('can turn push off from the roadmap chip', async () => {
+    ensureDefaultRunwayPush.mockResolvedValue({ on: true, result: 'already' })
+    runwayPushIsEnabled.mockResolvedValue(true)
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const onBtn = await screen.findByRole('button', { name: /Push on/i })
+    fireEvent.click(onBtn)
+    await waitFor(() => expect(disableRunwayPush).toHaveBeenCalled())
+    expect(await screen.findByRole('button', { name: /^Push$/i })).toBeInTheDocument()
   })
 })

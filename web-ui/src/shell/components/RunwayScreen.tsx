@@ -39,6 +39,7 @@ import { useAuth } from '@/services/auth/AuthProvider'
 import {
   disableRunwayPush,
   enableRunwayPush,
+  ensureDefaultRunwayPush,
   pushSupported,
   runwayPushIsEnabled,
 } from '@/services/pushApi'
@@ -82,13 +83,57 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [pushOn, setPushOn] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushNotice, setPushNotice] = useState<string | null>(null)
+  const [pushNeedsGesture, setPushNeedsGesture] = useState(false)
+
+  const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
+    setPushBusy(true)
+    try {
+      const { on, result } = await ensureDefaultRunwayPush()
+      if (on) {
+        setPushOn(true)
+        setPushNeedsGesture(false)
+        if (result === 'granted') {
+          setPushNotice('Push on — we’ll notify likes, scores, and comments')
+        }
+        return
+      }
+      if (result === 'skipped') {
+        setPushOn(false)
+        setPushNeedsGesture(false)
+        return
+      }
+      if (result === 'denied' && !fromGesture && Notification.permission === 'default') {
+        // Browsers often block permission prompts without a tap — retry on next interaction.
+        setPushNeedsGesture(true)
+        return
+      }
+      if (result === 'denied') {
+        setPushNotice('Notifications blocked in browser settings')
+        setPushNeedsGesture(false)
+      } else if (result === 'disabled') {
+        setPushNotice('Push isn’t configured on the server yet')
+      } else if (result === 'unsupported') {
+        setPushNotice('Push needs a modern browser (or install the app to Home Screen on iPhone).')
+      }
+      setPushOn(false)
+    } catch {
+      setPushOn(false)
+    } finally {
+      setPushBusy(false)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
         const on = await runwayPushIsEnabled()
-        if (!cancelled) setPushOn(on)
+        if (cancelled) return
+        if (on) {
+          setPushOn(true)
+          return
+        }
+        await applyPushAutoEnable(false)
       } catch {
         if (!cancelled) setPushOn(false)
       }
@@ -96,11 +141,17 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [applyPushAutoEnable])
+
+  const onRunwayGestureForPush = useCallback(() => {
+    if (!pushNeedsGesture || pushBusy) return
+    void applyPushAutoEnable(true)
+  }, [applyPushAutoEnable, pushBusy, pushNeedsGesture])
 
   const onTogglePush = useCallback(async () => {
     setPushBusy(true)
     setPushNotice(null)
+    setPushNeedsGesture(false)
     try {
       if (pushOn) {
         await disableRunwayPush()
@@ -259,7 +310,11 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   }, [])
 
   return (
-    <section className={styles.screen} aria-labelledby="runway-title">
+    <section
+      className={styles.screen}
+      aria-labelledby="runway-title"
+      onPointerDown={onRunwayGestureForPush}
+    >
       <header className={styles.head}>
         <div className={styles.titleBlock}>
           <p className={styles.eyebrow}>FashionRise</p>

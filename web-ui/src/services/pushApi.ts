@@ -47,6 +47,29 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return out
 }
 
+const PUSH_DESIRED_KEY = 'fr.push.desired'
+
+/** Push is on by default unless the user explicitly turned it off on this device. */
+export function isPushDesired(): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    const raw = localStorage.getItem(PUSH_DESIRED_KEY)
+    if (raw === null) return true
+    return raw !== '0' && raw !== 'false'
+  } catch {
+    return true
+  }
+}
+
+export function setPushDesired(desired: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(PUSH_DESIRED_KEY, desired ? '1' : '0')
+  } catch {
+    /* private mode */
+  }
+}
+
 export function pushSupported(): boolean {
   return (
     typeof window !== 'undefined' &&
@@ -86,10 +109,12 @@ export async function enableRunwayPush(): Promise<'granted' | 'denied' | 'unsupp
     auth,
     user_agent: navigator.userAgent,
   })
+  setPushDesired(true)
   return 'granted'
 }
 
 export async function disableRunwayPush(): Promise<void> {
+  setPushDesired(false)
   if (!pushSupported()) return
   const reg = await navigator.serviceWorker.ready
   const sub = await reg.pushManager.getSubscription()
@@ -115,4 +140,19 @@ export async function runwayPushIsEnabled(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/**
+ * Default-on path: subscribe when the user hasn't opted out.
+ * Returns whether push is active after the attempt.
+ */
+export async function ensureDefaultRunwayPush(): Promise<{
+  on: boolean
+  result: 'granted' | 'denied' | 'unsupported' | 'disabled' | 'skipped' | 'already'
+}> {
+  if (!isPushDesired()) return { on: false, result: 'skipped' }
+  if (!pushSupported()) return { on: false, result: 'unsupported' }
+  if (await runwayPushIsEnabled()) return { on: true, result: 'already' }
+  const result = await enableRunwayPush()
+  return { on: result === 'granted', result }
 }
