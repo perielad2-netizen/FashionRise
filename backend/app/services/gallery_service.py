@@ -1,7 +1,7 @@
 import uuid
 from pathlib import Path
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
@@ -9,16 +9,60 @@ from app.models.gallery_comment import GalleryComment
 from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
+from app.models.rating import Rating
 from app.models.user import User
 from app.models.user_follow import UserFollow
+from app.models.user_friendship import FRIENDSHIP_ACCEPTED, UserFriendship
 from app.schemas.gallery import GalleryCommentCreate, GalleryCreate, GalleryRead, GallerySort
 from app.services import ai_service
 
 
-def to_gallery_read(item: GalleryItem, *, liked_by_me: bool | None = None) -> GalleryRead:
+def to_gallery_read(
+    item: GalleryItem,
+    *,
+    liked_by_me: bool | None = None,
+    my_score: int | None = None,
+) -> GalleryRead:
     base = GalleryRead.model_validate(item)
     image_path = f"/gallery/{item.id}/image" if item.look_id is not None else None
-    return base.model_copy(update={"liked_by_me": liked_by_me, "image_path": image_path})
+    return base.model_copy(
+        update={"liked_by_me": liked_by_me, "my_score": my_score, "image_path": image_path}
+    )
+
+
+def to_gallery_reads_for_viewer(
+    db: Session, items: list[GalleryItem], viewer: User | None
+) -> list[GalleryRead]:
+    """Attach liked_by_me / my_score in one pass for Runway list cards."""
+    if not items:
+        return []
+    liked_ids: set[uuid.UUID] = set()
+    my_scores: dict[uuid.UUID, int] = {}
+    if viewer is not None:
+        ids = [item.id for item in items]
+        liked_ids = set(
+            db.scalars(
+                select(GalleryLike.gallery_item_id).where(
+                    GalleryLike.user_id == viewer.id,
+                    GalleryLike.gallery_item_id.in_(ids),
+                )
+            ).all()
+        )
+        for gallery_item_id, score in db.execute(
+            select(Rating.gallery_item_id, Rating.score).where(
+                Rating.user_id == viewer.id,
+                Rating.gallery_item_id.in_(ids),
+            )
+        ):
+            my_scores[gallery_item_id] = int(score)
+    return [
+        to_gallery_read(
+            item,
+            liked_by_me=(item.id in liked_ids) if viewer is not None else None,
+            my_score=my_scores.get(item.id) if viewer is not None else None,
+        )
+        for item in items
+    ]
 
 
 def create_gallery_item(db: Session, user: User, data: GalleryCreate) -> GalleryItem:
@@ -174,6 +218,55 @@ def list_following_feed(
     return list(db.scalars(q).all())
 
 
+def _accepted_friend_ids(db: Session, viewer_id: uuid.UUID) -> list[uuid.UUID]:
+    rows = db.scalars(
+        select(UserFriendship).where(
+            UserFriendship.status == FRIENDSHIP_ACCEPTED,
+            or_(
+                UserFriendship.user_low_id == viewer_id,
+                UserFriendship.user_high_id == viewer_id,
+            ),
+        )
+    ).all()
+    out: list[uuid.UUID] = []
+    for row in rows:
+        other = row.user_high_id if row.user_low_id == viewer_id else row.user_low_id
+        out.append(other)
+    return out
+
+
+def list_circle_feed(
+    db: Session, *, viewer: User, limit: int = 50, offset: int = 0
+) -> list[GalleryItem]:
+    """Friends + own published looks only — default Runway home feed."""
+    friend_ids = _accepted_friend_ids(db, viewer.id)
+    allowed = [viewer.id, *friend_ids]
+    q = (
+        _public_gallery_base()
+        .where(GalleryItem.user_id.in_(allowed))
+        .order_by(GalleryItem.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(db.scalars(q).all())
+
+
+def list_top_worldwide(db: Session, *, limit: int = 10) -> list[GalleryItem]:
+    """Compact global highlight strip (likes, then rating)."""
+    cap = max(1, min(int(limit or 10), 25))
+    q = (
+        _public_gallery_base()
+        .order_by(
+            GalleryItem.likes_count.desc(),
+            GalleryItem.rating_average.desc().nulls_last(),
+            GalleryItem.rating_count.desc(),
+            GalleryItem.created_at.desc(),
+        )
+        .limit(cap)
+    )
+    return list(db.scalars(q).all())
+
+
 def get_gallery_item(db: Session, item_id: uuid.UUID) -> GalleryItem:
     item = db.get(GalleryItem, item_id)
     if not item:
@@ -206,6 +299,8 @@ def list_user_gallery(db: Session, user_id: uuid.UUID) -> list[GalleryItem]:
 
 def add_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> None:
     item = get_gallery_item(db, gallery_item_id)
+    if item.user_id == user.id:
+        raise ForbiddenError("You can’t like your own Runway look")
     existing = db.scalar(
         select(GalleryLike).where(
             GalleryLike.user_id == user.id,
@@ -221,6 +316,8 @@ def add_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> Non
 
 def remove_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> None:
     item = get_gallery_item(db, gallery_item_id)
+    if item.user_id == user.id:
+        raise ForbiddenError("You can’t unlike your own Runway look")
     like = db.scalar(
         select(GalleryLike).where(
             GalleryLike.user_id == user.id,

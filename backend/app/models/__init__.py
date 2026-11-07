@@ -27,6 +27,7 @@ from app.models.techpack_draft import TechpackDraft, TechpackExport
 from app.models.user import User
 from app.models.user_consent_event import UserConsentEvent
 from app.models.user_follow import UserFollow
+from app.models.user_friendship import UserFriendship
 from app.models.user_profile import UserProfile
 
 __all__ = [
@@ -61,5 +62,6 @@ __all__ = [
     "User",
     "UserConsentEvent",
     "UserFollow",
+    "UserFriendship",
     "UserProfile",
 ]

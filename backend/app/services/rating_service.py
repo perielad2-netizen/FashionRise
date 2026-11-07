@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import NotFoundError
+from app.core.errors import ForbiddenError, NotFoundError
 from app.models.gallery_item import GalleryItem
 from app.models.rating import Rating
 from app.models.user import User
@@ -14,6 +14,8 @@ def upsert_rating(db: Session, user: User, data: RatingCreate) -> Rating:
     item = db.get(GalleryItem, data.gallery_item_id)
     if not item or item.visibility != "public":
         raise NotFoundError("Gallery item not found")
+    if item.user_id == user.id:
+        raise ForbiddenError("You can’t score your own Runway look")
     existing = db.scalar(
         select(Rating).where(
             Rating.gallery_item_id == data.gallery_item_id,
