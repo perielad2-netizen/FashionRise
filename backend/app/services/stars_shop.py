@@ -38,7 +38,7 @@ STAR_PACKAGES: tuple[StarPackage, ...] = (
         stars=50,
         price_usd_cents=599,
         list_price_usd_cents=599,
-        description="50 Stars — ~11.98¢ / Star.",
+        description="",
         available=False,
     ),
     StarPackage(
@@ -47,7 +47,7 @@ STAR_PACKAGES: tuple[StarPackage, ...] = (
         stars=150,
         price_usd_cents=1699,
         list_price_usd_cents=1699,
-        description="150 Stars — ~11.33¢ / Star.",
+        description="",
         available=False,
     ),
     StarPackage(
@@ -56,7 +56,7 @@ STAR_PACKAGES: tuple[StarPackage, ...] = (
         stars=500,
         price_usd_cents=4999,
         list_price_usd_cents=4999,
-        description="500 Stars — 10.00¢ / Star.",
+        description="",
         available=False,
     ),
 )
@@ -73,7 +73,6 @@ def list_packages() -> list[dict[str, Any]]:
                 "stars": pkg.stars,
                 "price_usd_cents": pkg.price_usd_cents,
                 "list_price_usd_cents": pkg.list_price_usd_cents,
-                "cents_per_star": round(pkg.price_usd_cents / pkg.stars, 2) if pkg.stars else None,
                 "description": pkg.description,
                 "available": bool(pkg.available and checkout),
             }

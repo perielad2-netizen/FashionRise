@@ -144,11 +144,7 @@ export function StarsShopModal({ open, onClose }: Props) {
                         <s>{formatUsdCents(pkg.list_price_usd_cents)}</s>
                       </>
                     ) : null}
-                    {pkg.cents_per_star != null ? (
-                      <> · {pkg.cents_per_star.toFixed(2)}¢ / Star</>
-                    ) : null}
                   </div>
-                  <p className={styles.pkgDesc}>{pkg.description}</p>
                 </div>
                 <button
                   type="button"
