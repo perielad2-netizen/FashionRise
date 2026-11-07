@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft,
   BookmarkPlus,
   MoreHorizontal,
   Redo2,
@@ -25,7 +24,6 @@ type Props = {
   magicBusy?: boolean
   canRecoverLastMagic?: boolean
   onRecoverLastMagic?: () => void
-  onComingSoon?: (label: string) => void
   saveStatus: SaveStatus
   saveStatusLabel: string
   saveError: string | null
@@ -46,7 +44,6 @@ export function WorkspaceHeader({
   magicBusy = false,
   canRecoverLastMagic = false,
   onRecoverLastMagic,
-  onComingSoon,
   saveStatus,
   saveStatusLabel,
   saveError,
@@ -86,15 +83,6 @@ export function WorkspaceHeader({
   return (
     <div className={`${styles.header} ${menuOpen ? styles.headerMenuOpen : ''}`}>
       <div className={styles.brand}>
-        <button
-          type="button"
-          className={`${styles.iconBtn} ${styles.unavailable}`}
-          aria-label="Home, coming later"
-          title="Home is coming later"
-          onClick={() => onComingSoon?.('Home')}
-        >
-          <ArrowLeft size={18} />
-        </button>
         <h1 className={styles.title}>New Design</h1>
       </div>
 

@@ -196,31 +196,17 @@ describe('Studio beta notices stay outside Settings', () => {
   ] as const
 
   for (const viewport of viewports) {
-    it(`shows and dismisses Magic / Home notices outside Settings at ${viewport.width}×${viewport.height}`, async () => {
+    it(`shows and dismisses Magic notice outside Settings at ${viewport.width}×${viewport.height}`, async () => {
       mockViewport(viewport.width, viewport.height)
       await openStudio()
 
       expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Home, coming later' })).toBeNull()
 
       fireEvent.click(screen.getByRole('button', { name: /^Magic/i }))
       const magic = noticeFor(/later milestone/i)
       expect(magic).toBeVisible()
       expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
-      expect(screen.getAllByRole('status', { name: /later milestone/i })).toHaveLength(1)
-      fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
-      expect(screen.queryByRole('status', { name: /later milestone/i })).not.toBeInTheDocument()
-
-      // Coming-later nav destinations must surface outside Settings (Home is always disabled).
-      const homeBtn =
-        screen.queryByRole('button', { name: 'Home, coming later' }) ??
-        screen.getByRole('button', { name: /^Home$/i })
-      fireEvent.click(homeBtn)
-      const home = noticeFor(/Home — coming later/i)
-      expect(home).toBeVisible()
-      expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
-      fireEvent.click(screen.getByRole('button', { name: /^Magic/i }))
-      expect(screen.queryByRole('status', { name: /Home — coming later/i })).not.toBeInTheDocument()
-      expect(noticeFor(/later milestone/i)).toBeVisible()
       expect(screen.getAllByRole('status', { name: /later milestone/i })).toHaveLength(1)
       fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
       expect(screen.queryByRole('status', { name: /later milestone/i })).not.toBeInTheDocument()

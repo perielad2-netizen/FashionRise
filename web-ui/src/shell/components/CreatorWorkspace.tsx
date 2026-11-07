@@ -345,7 +345,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           magicBusy={editor.magicBusy}
           canRecoverLastMagic={editor.magicCanRecover}
           onRecoverLastMagic={editor.recoverLastMagic}
-          onComingSoon={editor.showComingSoon}
           saveStatus={editor.saveStatus}
           saveStatusLabel={editor.saveStatusLabel}
           saveError={editor.saveError}
