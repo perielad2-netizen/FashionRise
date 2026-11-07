@@ -63,7 +63,7 @@ def list_user_gallery(user_id: uuid.UUID, db: Session = Depends(get_db)) -> list
 @router.get("/{gallery_item_id}/comments", response_model=list[GalleryCommentRead])
 def list_comments(gallery_item_id: uuid.UUID, db: Session = Depends(get_db)) -> list[GalleryCommentRead]:
     rows = gallery_service.list_gallery_comments(db, gallery_item_id)
-    return [GalleryCommentRead.model_validate(r) for r in rows]
+    return [gallery_service.to_comment_read(r) for r in rows]
 
 
 @router.post(
@@ -78,7 +78,7 @@ def post_comment(
     db: Session = Depends(get_db),
 ) -> GalleryCommentRead:
     row = gallery_service.add_gallery_comment(db, user, gallery_item_id, data)
-    return GalleryCommentRead.model_validate(row)
+    return gallery_service.to_comment_read(row)
 
 
 @router.post("/{gallery_item_id}/like", status_code=204)

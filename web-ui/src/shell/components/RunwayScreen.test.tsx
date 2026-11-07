@@ -7,6 +7,8 @@ const getGalleryItem = vi.fn()
 const likeGalleryItem = vi.fn()
 const unlikeGalleryItem = vi.fn()
 const rateGalleryItem = vi.fn()
+const listGalleryComments = vi.fn()
+const postGalleryComment = vi.fn()
 const listFriends = vi.fn()
 const listFriendRequests = vi.fn()
 const requestFriendByUsername = vi.fn()
@@ -17,6 +19,8 @@ vi.mock('@/services/galleryApi', () => ({
   likeGalleryItem: (...args: unknown[]) => likeGalleryItem(...args),
   unlikeGalleryItem: (...args: unknown[]) => unlikeGalleryItem(...args),
   rateGalleryItem: (...args: unknown[]) => rateGalleryItem(...args),
+  listGalleryComments: (...args: unknown[]) => listGalleryComments(...args),
+  postGalleryComment: (...args: unknown[]) => postGalleryComment(...args),
   fetchGalleryImageBlob: vi.fn(async () => new Blob()),
 }))
 
@@ -83,6 +87,8 @@ describe('RunwayScreen', () => {
     likeGalleryItem.mockReset()
     unlikeGalleryItem.mockReset()
     rateGalleryItem.mockReset()
+    listGalleryComments.mockReset()
+    postGalleryComment.mockReset()
     listFriends.mockReset()
     listFriendRequests.mockReset()
     requestFriendByUsername.mockReset()
@@ -90,6 +96,7 @@ describe('RunwayScreen', () => {
       if (opts?.sort === 'top10') return [{ ...topItem }]
       return [{ ...circleItem }]
     })
+    listGalleryComments.mockResolvedValue([])
     listFriends.mockResolvedValue([])
     listFriendRequests.mockResolvedValue([])
   })
@@ -150,6 +157,46 @@ describe('RunwayScreen', () => {
     fireEvent.change(score, { target: { value: '9' } })
     await waitFor(() => expect(rateGalleryItem).toHaveBeenCalledWith('circle-1', 9))
     await waitFor(() => expect((score as HTMLSelectElement).value).toBe('9'))
+  })
+
+  it('opens comments and posts on a circle look', async () => {
+    listGalleryComments.mockResolvedValue([
+      {
+        id: 'c1',
+        gallery_item_id: 'circle-1',
+        user_id: 'friend-1',
+        body: 'Love this silhouette',
+        moderation_status: 'ok',
+        created_at: '2026-11-07T00:00:00Z',
+        username: 'friendOne',
+      },
+    ])
+    postGalleryComment.mockResolvedValue({
+      id: 'c2',
+      gallery_item_id: 'circle-1',
+      user_id: 'viewer-1',
+      body: 'The hem is perfect',
+      moderation_status: 'ok',
+      created_at: '2026-11-07T00:01:00Z',
+      username: 'viewer',
+    })
+
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const circle = await screen.findByRole('list', { name: 'Circle feed' })
+    fireEvent.click(within(circle).getByRole('button', { name: /Chat/i }))
+    await waitFor(() => expect(listGalleryComments).toHaveBeenCalledWith('circle-1'))
+    expect(await within(circle).findByText('Love this silhouette')).toBeInTheDocument()
+    expect(within(circle).getByText('@friendOne')).toBeInTheDocument()
+
+    fireEvent.change(within(circle).getByLabelText(/Add a comment/i), {
+      target: { value: 'The hem is perfect' },
+    })
+    fireEvent.click(within(circle).getByRole('button', { name: /^Post$/i }))
+    await waitFor(() =>
+      expect(postGalleryComment).toHaveBeenCalledWith('circle-1', 'The hem is perfect'),
+    )
+    expect(await within(circle).findByText('The hem is perfect')).toBeInTheDocument()
+    expect(within(circle).getByText('@viewer')).toBeInTheDocument()
   })
 
   it('does not let you like or score your own look', async () => {

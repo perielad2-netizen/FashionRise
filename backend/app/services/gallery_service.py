@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 from sqlalchemy import Select, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
 from app.models.gallery_comment import GalleryComment
@@ -13,7 +13,13 @@ from app.models.rating import Rating
 from app.models.user import User
 from app.models.user_follow import UserFollow
 from app.models.user_friendship import FRIENDSHIP_ACCEPTED, UserFriendship
-from app.schemas.gallery import GalleryCommentCreate, GalleryCreate, GalleryRead, GallerySort
+from app.schemas.gallery import (
+    GalleryCommentCreate,
+    GalleryCommentRead,
+    GalleryCreate,
+    GalleryRead,
+    GallerySort,
+)
 from app.services import ai_service
 
 
@@ -331,25 +337,44 @@ def remove_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> 
     db.commit()
 
 
+def to_comment_read(row: GalleryComment) -> GalleryCommentRead:
+    username = None
+    if getattr(row, "user", None) is not None:
+        username = row.user.username
+    return GalleryCommentRead.model_validate(row).model_copy(update={"username": username})
+
+
 def list_gallery_comments(db: Session, gallery_item_id: uuid.UUID) -> list[GalleryComment]:
     get_gallery_item(db, gallery_item_id)
     q = (
         select(GalleryComment)
+        .options(joinedload(GalleryComment.user))
         .where(
             GalleryComment.gallery_item_id == gallery_item_id,
             GalleryComment.moderation_status == "ok",
         )
         .order_by(GalleryComment.created_at.asc())
     )
-    return list(db.scalars(q).all())
+    return list(db.scalars(q).unique().all())
 
 
 def add_gallery_comment(
     db: Session, user: User, gallery_item_id: uuid.UUID, data: GalleryCommentCreate
 ) -> GalleryComment:
     item = get_gallery_item(db, gallery_item_id)
-    row = GalleryComment(gallery_item_id=item.id, user_id=user.id, body=data.body)
+    body = " ".join((data.body or "").split()).strip()
+    if not body:
+        raise ValidationAppError("Comment cannot be empty")
+    if len(body) > 4000:
+        raise ValidationAppError("Comment is too long")
+    row = GalleryComment(gallery_item_id=item.id, user_id=user.id, body=body)
     db.add(row)
     db.commit()
     db.refresh(row)
-    return row
+    # Reload with author for Runway username chip.
+    loaded = db.scalar(
+        select(GalleryComment)
+        .options(joinedload(GalleryComment.user))
+        .where(GalleryComment.id == row.id)
+    )
+    return loaded or row

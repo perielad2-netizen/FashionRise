@@ -13,8 +13,11 @@ import {
   getGalleryItem,
   likeGalleryItem,
   listGallery,
+  listGalleryComments,
+  postGalleryComment,
   rateGalleryItem,
   unlikeGalleryItem,
+  type GalleryComment,
   type GalleryItem,
 } from '@/services/galleryApi'
 import {
@@ -231,7 +234,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         <span className={styles.roadLive}>Top 10</span>
         <span className={styles.roadLive}>Friends</span>
         <span className={styles.roadLive}>Like · Score</span>
-        <span className={styles.roadNext}>Comments · Push</span>
+        <span className={styles.roadLive}>Comments</span>
+        <span className={styles.roadNext}>Push</span>
       </div>
 
       <div className={styles.tabs} role="tablist" aria-label="Runway views">
@@ -500,8 +504,12 @@ function RunwayCard({
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
-  const [busy, setBusy] = useState<'like' | 'score' | null>(null)
+  const [busy, setBusy] = useState<'like' | 'score' | 'comment' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const [comments, setComments] = useState<GalleryComment[] | null>(null)
+  const [commentsError, setCommentsError] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
   const liked = Boolean(item.liked_by_me)
   const canReact = !isOwn
 
@@ -510,6 +518,24 @@ function RunwayCard({
     onItemChange(fresh)
     return fresh
   }, [item.id, onItemChange])
+
+  const loadComments = useCallback(async () => {
+    setCommentsError(null)
+    try {
+      const rows = await listGalleryComments(item.id)
+      setComments(rows)
+    } catch (err) {
+      setCommentsError(err instanceof ApiError ? err.message : 'Could not load comments.')
+    }
+  }, [item.id])
+
+  const onToggleComments = useCallback(() => {
+    setCommentsOpen((open) => {
+      const next = !open
+      if (next) void loadComments()
+      return next
+    })
+  }, [loadComments])
 
   const onToggleLike = useCallback(async () => {
     if (!canReact || busy) return
@@ -550,6 +576,27 @@ function RunwayCard({
       }
     },
     [busy, canReact, item.id, refreshItem],
+  )
+
+  const onPostComment = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault()
+      const body = draft.trim()
+      if (!body || busy) return
+      setBusy('comment')
+      setActionError(null)
+      try {
+        const row = await postGalleryComment(item.id, body)
+        setDraft('')
+        setComments((prev) => [...(prev ?? []), row])
+        setCommentsOpen(true)
+      } catch (err) {
+        setActionError(err instanceof ApiError ? err.message : 'Could not post comment.')
+      } finally {
+        setBusy(null)
+      }
+    },
+    [busy, draft, item.id],
   )
 
   return (
@@ -616,13 +663,63 @@ function RunwayCard({
             </span>
           )}
           {!compact ? (
-            <span className={styles.soonChip} title="Comments coming soon">
-              <MessageCircle size={12} aria-hidden /> soon
-            </span>
+            <button
+              type="button"
+              className={commentsOpen ? styles.commentBtnOn : styles.commentBtn}
+              aria-expanded={commentsOpen}
+              aria-controls={`runway-comments-${item.id}`}
+              onClick={onToggleComments}
+            >
+              <MessageCircle size={12} aria-hidden />
+              {comments ? comments.length : 'Chat'}
+            </button>
           ) : null}
         </div>
         {isOwn ? (
           <p className={styles.ownHint}>Your look — likes & scores come from others</p>
+        ) : null}
+        {!compact && commentsOpen ? (
+          <div className={styles.commentsPanel} id={`runway-comments-${item.id}`}>
+            {commentsError ? (
+              <p className={styles.cardError} role="alert">
+                {commentsError}
+              </p>
+            ) : comments == null ? (
+              <p className={styles.commentsStatus}>Loading comments…</p>
+            ) : comments.length === 0 ? (
+              <p className={styles.commentsStatus}>No comments yet — say something nice.</p>
+            ) : (
+              <ul className={styles.commentList} aria-label="Comments">
+                {comments.map((row) => (
+                  <li key={row.id} className={styles.commentItem}>
+                    <span className={styles.commentAuthor}>@{row.username || 'member'}</span>
+                    <span className={styles.commentBody}>{row.body}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form className={styles.commentForm} onSubmit={(e) => void onPostComment(e)}>
+              <label className={styles.srOnly} htmlFor={`runway-comment-${item.id}`}>
+                Add a comment
+              </label>
+              <input
+                id={`runway-comment-${item.id}`}
+                className={styles.commentInput}
+                value={draft}
+                maxLength={500}
+                placeholder="Add a comment…"
+                disabled={busy === 'comment'}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              <button
+                type="submit"
+                className={styles.commentSend}
+                disabled={busy === 'comment' || !draft.trim()}
+              >
+                Post
+              </button>
+            </form>
+          </div>
         ) : null}
         {actionError ? (
           <p className={styles.cardError} role="alert">

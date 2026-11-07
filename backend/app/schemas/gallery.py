@@ -56,3 +56,4 @@ class GalleryCommentRead(BaseModel):
     body: str
     moderation_status: str
     created_at: datetime
+    username: str | None = None
