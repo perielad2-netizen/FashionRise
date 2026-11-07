@@ -1,7 +1,7 @@
 import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 
-export type GallerySort = 'newest' | 'top_rated' | 'trending' | 'following'
+export type GallerySort = 'newest' | 'top_rated' | 'trending' | 'following' | 'circle' | 'top10'
 
 export type GalleryItem = {
   id: string

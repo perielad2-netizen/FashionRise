@@ -9,6 +9,7 @@ const requestFriendByUsername = vi.fn()
 
 vi.mock('@/services/galleryApi', () => ({
   listGallery: (...args: unknown[]) => listGallery(...args),
+  fetchGalleryImageBlob: vi.fn(async () => new Blob()),
 }))
 
 vi.mock('@/services/friendsApi', () => ({
@@ -25,20 +26,60 @@ describe('RunwayScreen', () => {
     listFriends.mockReset()
     listFriendRequests.mockReset()
     requestFriendByUsername.mockReset()
-    listGallery.mockResolvedValue([])
+    listGallery.mockImplementation(async (opts?: { sort?: string }) => {
+      if (opts?.sort === 'top10') {
+        return [
+          {
+            id: 'top-1',
+            design_id: null,
+            look_id: 'look-top',
+            user_id: 'u-top',
+            title: 'Worldwide hit',
+            image_url: null,
+            visibility: 'public',
+            rating_average: 9,
+            rating_count: 3,
+            likes_count: 12,
+            moderation_status: 'ok',
+            created_at: '2026-11-07T00:00:00Z',
+            updated_at: '2026-11-07T00:00:00Z',
+          },
+        ]
+      }
+      return [
+        {
+          id: 'circle-1',
+          design_id: null,
+          look_id: 'look-circle',
+          user_id: 'u-me',
+          title: 'My circle look',
+          image_url: null,
+          visibility: 'public',
+          rating_average: null,
+          rating_count: 0,
+          likes_count: 0,
+          moderation_status: 'ok',
+          created_at: '2026-11-07T00:00:00Z',
+          updated_at: '2026-11-07T00:00:00Z',
+        },
+      ]
+    })
     listFriends.mockResolvedValue([])
     listFriendRequests.mockResolvedValue([])
   })
 
-  it('loads the community feed and routes Create / My Looks', async () => {
+  it('loads circle feed + Top 10 worldwide on the home tab', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
-    expect(screen.getByText('FashionRise')).toBeInTheDocument()
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
-    expect(await screen.findByText(/runway is waiting/i)).toBeInTheDocument()
+    expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' }))
+    expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'top10' }))
+    expect(await screen.findByText('Top 10 worldwide')).toBeInTheDocument()
+    expect(screen.getByText('Worldwide hit')).toBeInTheDocument()
+    expect(screen.getByText('My circle look')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^Create$/i }))
     expect(onOpenCreate).toHaveBeenCalled()

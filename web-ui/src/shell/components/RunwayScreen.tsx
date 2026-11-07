@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
+  Globe2,
   Heart,
   MessageCircle,
   RefreshCw,
@@ -8,11 +9,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react'
-import {
-  listGallery,
-  type GalleryItem,
-  type GallerySort,
-} from '@/services/galleryApi'
+import { listGallery, type GalleryItem } from '@/services/galleryApi'
 import {
   acceptFriendRequest,
   listFriendRequests,
@@ -33,26 +30,24 @@ type Props = {
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; items: GalleryItem[] }
+  | { status: 'ready'; circle: GalleryItem[]; top10: GalleryItem[] }
 
 type FriendsState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; friends: Friendship[]; requests: Friendship[] }
 
-type TabId = 'feed' | 'following' | 'friends'
+type TabId = 'feed' | 'friends'
 
 const TABS: Array<{ id: TabId; label: string; hint: string }> = [
-  { id: 'feed', label: 'Feed', hint: 'Newest published looks from the community' },
-  { id: 'following', label: 'Following', hint: 'Creators you follow' },
-  { id: 'friends', label: 'Friends', hint: 'Your private circle' },
+  { id: 'feed', label: 'Feed', hint: 'Your looks and your friends’ looks' },
+  { id: 'friends', label: 'Friends', hint: 'Manage your private circle' },
 ]
 
 const SCORE_HINT = 'Looks earn runway scores from likes + ratings (1–10).'
 
 export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [tab, setTab] = useState<TabId>('feed')
-  const [sort, setSort] = useState<GallerySort>('newest')
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
   const [friendUsername, setFriendUsername] = useState('')
@@ -82,12 +77,15 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       }
       return
     }
+
     setState({ status: 'loading' })
     try {
-      const effectiveSort: GallerySort = tab === 'following' ? 'following' : sort
-      const items = await listGallery({ sort: effectiveSort, limit: 24, signal })
+      const [circle, top10] = await Promise.all([
+        listGallery({ sort: 'circle', limit: 48, signal }),
+        listGallery({ sort: 'top10', limit: 10, signal }),
+      ])
       if (signal?.aborted) return
-      setState({ status: 'ready', items })
+      setState({ status: 'ready', circle, top10 })
     } catch (err) {
       if (signal?.aborted) return
       const message =
@@ -98,7 +96,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             : 'Could not load FashionRise Runway'
       setState({ status: 'error', message })
     }
-  }, [sort, tab])
+  }, [tab])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -180,7 +178,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             Runway
           </h1>
           <p className={styles.subtitle}>
-            Share looks, follow creators, like and score the community runway. {SCORE_HINT}
+            Your circle’s looks first — plus a worldwide Top 10. {SCORE_HINT}
           </p>
         </div>
         <div className={styles.headActions}>
@@ -191,15 +189,26 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             <Sparkles size={16} aria-hidden />
             Create
           </button>
+          {tab === 'feed' ? (
+            <button
+              type="button"
+              className={styles.refreshBtn}
+              onClick={() => void load()}
+              aria-label="Refresh feed"
+            >
+              <RefreshCw size={14} aria-hidden />
+              Refresh
+            </button>
+          ) : null}
         </div>
       </header>
 
       <div className={styles.roadmap} aria-label="Social phase roadmap">
-        <span className={styles.roadLive}>Feed</span>
-        <span className={styles.roadNext}>Like · Score</span>
-        <span className={styles.roadNext}>Comments</span>
-        <span className={styles.roadNext}>Profiles · Follow</span>
+        <span className={styles.roadLive}>Circle feed</span>
+        <span className={styles.roadLive}>Top 10</span>
         <span className={styles.roadLive}>Friends</span>
+        <span className={styles.roadNext}>Like · Score</span>
+        <span className={styles.roadNext}>Comments · Push</span>
       </div>
 
       <div className={styles.tabs} role="tablist" aria-label="Runway views">
@@ -215,41 +224,10 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           >
             {item.id === 'friends' ? <Users size={14} aria-hidden /> : null}
             {item.id === 'feed' ? <Star size={14} aria-hidden /> : null}
-            {item.id === 'following' ? <Heart size={14} aria-hidden /> : null}
             {item.label}
           </button>
         ))}
       </div>
-
-      {tab === 'feed' ? (
-        <div className={styles.sortRow} role="group" aria-label="Feed sort">
-          {(
-            [
-              ['newest', 'Newest'],
-              ['trending', 'Trending'],
-              ['top_rated', 'Top rated'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={sort === value ? styles.sortActive : styles.sortBtn}
-              onClick={() => setSort(value)}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={styles.refreshBtn}
-            onClick={() => void load()}
-            aria-label="Refresh feed"
-          >
-            <RefreshCw size={14} aria-hidden />
-            Refresh
-          </button>
-        </div>
-      ) : null}
 
       <div className={styles.body}>
         {tab === 'friends' ? (
@@ -278,31 +256,63 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               </button>
             }
           />
-        ) : state.items.length === 0 ? (
-          <EmptyState
-            title={tab === 'following' ? 'No posts from people you follow yet' : 'The runway is waiting'}
-            body={
-              tab === 'following'
-                ? 'Follow creators from their profiles (coming next), then their public looks show up here.'
-                : 'Open a look in My Looks and tap Publish to Runway. Add friends under the Friends tab.'
-            }
-            actions={
-              <>
-                <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
-                  Go to My Looks
-                </button>
-                <button type="button" className={styles.ghostBtn} onClick={onOpenCreate}>
-                  Start creating
-                </button>
-              </>
-            }
-          />
         ) : (
-          <ul className={styles.grid} aria-label="Runway feed">
-            {state.items.map((item) => (
-              <RunwayCard key={item.id} item={item} />
-            ))}
-          </ul>
+          <div className={styles.feedStack}>
+            <section className={styles.topSection} aria-label="Top 10 worldwide">
+              <div className={styles.sectionHead}>
+                <h2 className={styles.sectionTitle}>
+                  <Globe2 size={16} aria-hidden />
+                  Top 10 worldwide
+                </h2>
+                <p className={styles.sectionHint}>Most liked public looks across FashionRise</p>
+              </div>
+              {state.top10.length === 0 ? (
+                <p className={styles.status}>No worldwide looks yet — be the first to Publish.</p>
+              ) : (
+                <ul className={styles.topStrip}>
+                  {state.top10.map((item, index) => (
+                    <RunwayCard key={item.id} item={item} rank={index + 1} compact />
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className={styles.circleSection} aria-label="Friends circle feed">
+              <div className={styles.sectionHead}>
+                <h2 className={styles.sectionTitle}>
+                  <Users size={16} aria-hidden />
+                  Your circle
+                </h2>
+                <p className={styles.sectionHint}>Only your looks and your friends’ published looks</p>
+              </div>
+              {state.circle.length === 0 ? (
+                <EmptyState
+                  title="Your circle is quiet"
+                  body="Publish a look from My Looks, or add friends so their Runway posts show up here — not the whole app."
+                  actions={
+                    <>
+                      <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
+                        Go to My Looks
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.ghostBtn}
+                        onClick={() => setTab('friends')}
+                      >
+                        Add friends
+                      </button>
+                    </>
+                  }
+                />
+              ) : (
+                <ul className={styles.grid} aria-label="Circle feed">
+                  {state.circle.map((item) => (
+                    <RunwayCard key={item.id} item={item} />
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
         )}
       </div>
     </section>
@@ -408,7 +418,7 @@ function FriendsPanel({
             {state.friends.length === 0 ? (
               <EmptyState
                 title="No friends yet"
-                body="Add someone by FashionRise username to build your private circle. Private send of looks comes next."
+                body="Add someone by FashionRise username to build your private circle."
               />
             ) : (
               <ul className={styles.friendList}>
@@ -440,12 +450,21 @@ function FriendsPanel({
   )
 }
 
-function RunwayCard({ item }: { item: GalleryItem }) {
+function RunwayCard({
+  item,
+  rank,
+  compact = false,
+}: {
+  item: GalleryItem
+  rank?: number
+  compact?: boolean
+}) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
   return (
-    <li className={styles.card}>
+    <li className={compact ? styles.topCard : styles.card}>
       <div className={styles.thumb}>
+        {rank != null ? <span className={styles.rankBadge}>#{rank}</span> : null}
         {src ? (
           <img src={src} alt="" className={styles.thumbImg} draggable={false} />
         ) : (
@@ -466,10 +485,14 @@ function RunwayCard({ item }: { item: GalleryItem }) {
             {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
             {item.rating_count > 0 ? ` (${item.rating_count})` : ''}
           </span>
-          <span aria-hidden>·</span>
-          <span title="Comments coming soon">
-            <MessageCircle size={12} aria-hidden /> soon
-          </span>
+          {!compact ? (
+            <>
+              <span aria-hidden>·</span>
+              <span title="Comments coming soon">
+                <MessageCircle size={12} aria-hidden /> soon
+              </span>
+            </>
+          ) : null}
         </p>
       </div>
     </li>

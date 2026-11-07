@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-GallerySort = Literal["newest", "top_rated", "trending", "following"]
+GallerySort = Literal["newest", "top_rated", "trending", "following", "circle", "top10"]
 
 
 class GalleryCreate(BaseModel):

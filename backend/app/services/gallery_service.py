@@ -1,7 +1,7 @@
 import uuid
 from pathlib import Path
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
@@ -11,6 +11,7 @@ from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
 from app.models.user import User
 from app.models.user_follow import UserFollow
+from app.models.user_friendship import FRIENDSHIP_ACCEPTED, UserFriendship
 from app.schemas.gallery import GalleryCommentCreate, GalleryCreate, GalleryRead, GallerySort
 from app.services import ai_service
 
@@ -170,6 +171,55 @@ def list_following_feed(
         .order_by(GalleryItem.created_at.desc())
         .limit(limit)
         .offset(offset)
+    )
+    return list(db.scalars(q).all())
+
+
+def _accepted_friend_ids(db: Session, viewer_id: uuid.UUID) -> list[uuid.UUID]:
+    rows = db.scalars(
+        select(UserFriendship).where(
+            UserFriendship.status == FRIENDSHIP_ACCEPTED,
+            or_(
+                UserFriendship.user_low_id == viewer_id,
+                UserFriendship.user_high_id == viewer_id,
+            ),
+        )
+    ).all()
+    out: list[uuid.UUID] = []
+    for row in rows:
+        other = row.user_high_id if row.user_low_id == viewer_id else row.user_low_id
+        out.append(other)
+    return out
+
+
+def list_circle_feed(
+    db: Session, *, viewer: User, limit: int = 50, offset: int = 0
+) -> list[GalleryItem]:
+    """Friends + own published looks only — default Runway home feed."""
+    friend_ids = _accepted_friend_ids(db, viewer.id)
+    allowed = [viewer.id, *friend_ids]
+    q = (
+        _public_gallery_base()
+        .where(GalleryItem.user_id.in_(allowed))
+        .order_by(GalleryItem.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(db.scalars(q).all())
+
+
+def list_top_worldwide(db: Session, *, limit: int = 10) -> list[GalleryItem]:
+    """Compact global highlight strip (likes, then rating)."""
+    cap = max(1, min(int(limit or 10), 25))
+    q = (
+        _public_gallery_base()
+        .order_by(
+            GalleryItem.likes_count.desc(),
+            GalleryItem.rating_average.desc().nulls_last(),
+            GalleryItem.rating_count.desc(),
+            GalleryItem.created_at.desc(),
+        )
+        .limit(cap)
     )
     return list(db.scalars(q).all())
 
