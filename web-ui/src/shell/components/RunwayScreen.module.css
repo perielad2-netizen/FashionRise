@@ -130,6 +130,43 @@
   color: var(--fr-muted);
 }
 
+.roadPush,
+.roadPushOn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.roadPush {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fr-muted);
+}
+
+.roadPushOn {
+  border-color: rgba(244, 114, 182, 0.45);
+  background: rgba(190, 24, 93, 0.28);
+  color: #fecdd3;
+}
+
+.roadPush:disabled,
+.roadPushOn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.pushNotice {
+  margin: -4px 0 0;
+  font-size: 11px;
+  color: var(--fr-muted);
+}
+
 .tabs {
   display: flex;
   flex-wrap: wrap;

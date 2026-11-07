@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     palettes,
     personal_croquis,
     profiles,
+    push,
     ratings,
     shop,
     techpacks,
@@ -31,6 +32,7 @@ api_router.include_router(templates.router, prefix="/templates", tags=["template
 api_router.include_router(palettes.router, prefix="/palettes", tags=["palettes"])
 api_router.include_router(gallery.router, prefix="/gallery", tags=["gallery"])
 api_router.include_router(ratings.router, prefix="/ratings", tags=["ratings"])
+api_router.include_router(push.router, prefix="/push", tags=["push"])
 api_router.include_router(exports.router, prefix="/exports", tags=["exports"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 api_router.include_router(fabrics.router, prefix="/fabrics", tags=["fabrics"])

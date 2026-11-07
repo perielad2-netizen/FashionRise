@@ -319,6 +319,11 @@ def add_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> Non
     db.add(GalleryLike(user_id=user.id, gallery_item_id=item.id))
     item.likes_count += 1
     db.commit()
+    from app.services import push_service as push_service
+
+    push_service.notify_runway_like(
+        db, owner_id=item.user_id, actor=user, look_title=item.title
+    )
 
 
 def remove_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> None:
@@ -414,6 +419,15 @@ def add_gallery_comment(
     db.add(row)
     db.commit()
     db.refresh(row)
+    from app.services import push_service as push_service
+
+    push_service.notify_runway_comment(
+        db,
+        owner_id=item.user_id,
+        actor=user,
+        look_title=item.title,
+        snippet=body,
+    )
     # Reload with author for Runway username chip.
     loaded = db.scalar(
         select(GalleryComment)
@@ -439,6 +453,9 @@ def add_comment_like(db: Session, user: User, comment_id: uuid.UUID) -> GalleryC
     row.likes_count += 1
     db.commit()
     db.refresh(row)
+    from app.services import push_service as push_service
+
+    push_service.notify_comment_like(db, author_id=row.user_id, actor=user, snippet=row.body)
     return get_gallery_comment(db, row.id)
 
 

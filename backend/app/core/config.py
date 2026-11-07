@@ -216,6 +216,13 @@ class Settings(BaseSettings):
     # Shop checkout remains disabled until payment is wired.
     stars_shop_checkout_enabled: bool = False
 
+    # Web Push (VAPID). Empty = push subscribe/send disabled (fail closed).
+    # Generate with: python -c "from py_vapid import Vapid01; v=Vapid01(); v.generate_keys(); print(v.public_key); print(v.private_key)"
+    # Or: npx web-push generate-vapid-keys
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:ops@fashionrise.app"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_cors(cls, v: str) -> str:

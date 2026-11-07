@@ -36,6 +36,17 @@ vi.mock('@/services/friendsApi', () => ({
   removeFriend: vi.fn(),
 }))
 
+const enableRunwayPush = vi.fn()
+const disableRunwayPush = vi.fn()
+const runwayPushIsEnabled = vi.fn()
+
+vi.mock('@/services/pushApi', () => ({
+  pushSupported: () => true,
+  runwayPushIsEnabled: (...args: unknown[]) => runwayPushIsEnabled(...args),
+  enableRunwayPush: (...args: unknown[]) => enableRunwayPush(...args),
+  disableRunwayPush: (...args: unknown[]) => disableRunwayPush(...args),
+}))
+
 const authUser = { id: 'viewer-1', email: 'viewer@example.com', username: 'viewer' }
 
 vi.mock('@/services/auth/AuthProvider', () => ({
@@ -98,6 +109,12 @@ describe('RunwayScreen', () => {
     listFriends.mockReset()
     listFriendRequests.mockReset()
     requestFriendByUsername.mockReset()
+    enableRunwayPush.mockReset()
+    disableRunwayPush.mockReset()
+    runwayPushIsEnabled.mockReset()
+    runwayPushIsEnabled.mockResolvedValue(false)
+    enableRunwayPush.mockResolvedValue('granted')
+    disableRunwayPush.mockResolvedValue(undefined)
     listGallery.mockImplementation(async (opts?: { sort?: string }) => {
       if (opts?.sort === 'top10') return [{ ...topItem }]
       return [{ ...circleItem }]
@@ -119,6 +136,7 @@ describe('RunwayScreen', () => {
     expect(await screen.findByText('Top 10 worldwide')).toBeInTheDocument()
     expect(screen.getByText('Worldwide hit')).toBeInTheDocument()
     expect(screen.getByText('Friend circle look')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Push$/i })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^Create$/i }))
     expect(onOpenCreate).toHaveBeenCalled()
@@ -294,5 +312,14 @@ describe('RunwayScreen', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /^Add$/i }))
     await waitFor(() => expect(requestFriendByUsername).toHaveBeenCalledWith('newfriend'))
+  })
+
+  it('enables Runway push from the roadmap chip', async () => {
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await screen.findByRole('list', { name: 'Circle feed' })
+    fireEvent.click(screen.getByRole('button', { name: /^Push$/i }))
+    await waitFor(() => expect(enableRunwayPush).toHaveBeenCalled())
+    expect(await screen.findByRole('button', { name: /Push on/i })).toBeInTheDocument()
+    expect(screen.getByText(/Push on — we’ll notify/i)).toBeInTheDocument()
   })
 })
