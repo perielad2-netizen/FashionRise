@@ -1,6 +1,10 @@
 /**
  * Capture a high-quality textile reference swatch from the actual Studio fabric
  * tile (built-in or uploaded). Used as Magic images.edit image #2.
+ *
+ * Only the dominant *garment-scale* patterned fill is sent. Tiny accessory
+ * fills (shoes, bags, belts) must not become a global textile for Magic —
+ * otherwise ink-painted dress colors get replaced by shoe satin.
  */
 import { getCachedFabricImage, ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { getFabricPromptShort } from '@/lib/fabricPromptCache'
@@ -10,11 +14,18 @@ import {
   renderFabricTile,
   renderUploadedFabricTile,
 } from '@/lib/paintFills'
+import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
 
 /** Bounded swatch edge (px). Large enough to show repeat; small enough for edit payload. */
 export const FABRIC_SWATCH_EDGE_PX = 512
 /** Soft cap for encoded data URL length (~350KB decoded). */
 export const FABRIC_SWATCH_MAX_DATA_URL_CHARS = 480_000
+
+/**
+ * Patterned fill must cover at least this fraction of the design plane to count
+ * as the main garment textile for Magic. Shoes / trims typically sit well below.
+ */
+export const MAGIC_FABRIC_MIN_DESIGN_AREA_FRACTION = 0.06
 
 export type FabricSwatchCapture = {
   dataUrl: string
@@ -30,12 +41,49 @@ function isPatternedFill(fill: FillOp): boolean {
   return fill.style.kind === 'fabric' || fill.style.kind === 'uploaded-fabric'
 }
 
-/** Prefer the first patterned fill on the side (dominant garment textile). */
-export function dominantPatternedFill(fills: FillOp[]): FillOp | null {
-  for (const f of fills) {
-    if (isPatternedFill(f)) return f
+/** Absolute shoelace area of a closed contour in design pixels. */
+export function contourArea(contour: number[]): number {
+  const n = Math.floor(contour.length / 2)
+  if (n < 3) return 0
+  let sum = 0
+  for (let i = 0; i < n; i++) {
+    const x1 = contour[i * 2]!
+    const y1 = contour[i * 2 + 1]!
+    const j = (i + 1) % n
+    const x2 = contour[j * 2]!
+    const y2 = contour[j * 2 + 1]!
+    sum += x1 * y2 - x2 * y1
   }
-  return null
+  return Math.abs(sum) / 2
+}
+
+/**
+ * Prefer the largest patterned fill by contour area (main garment textile),
+ * not whatever fill was painted first.
+ */
+export function dominantPatternedFill(fills: FillOp[]): FillOp | null {
+  let best: FillOp | null = null
+  let bestArea = 0
+  for (const f of fills) {
+    if (!isPatternedFill(f)) continue
+    const area = contourArea(f.contour)
+    if (area > bestArea) {
+      best = f
+      bestArea = area
+    }
+  }
+  return best
+}
+
+/**
+ * True when the patterned fill is large enough to be the primary garment fabric
+ * (not a shoe / accessory island).
+ */
+export function isGarmentScalePatternedFill(fill: FillOp): boolean {
+  const area = contourArea(fill.contour)
+  const plane = DESIGN_WIDTH * DESIGN_HEIGHT
+  if (plane <= 0) return false
+  return area / plane >= MAGIC_FABRIC_MIN_DESIGN_AREA_FRACTION
 }
 
 function tileOntoSwatch(tile: HTMLCanvasElement): HTMLCanvasElement {
@@ -63,13 +111,15 @@ function canvasToPngDataUrl(canvas: HTMLCanvasElement): string {
 
 /**
  * Build a Magic textile reference from the same tile Studio uses when painting.
- * Returns null when there is no patterned fabric, or the uploaded asset is unavailable.
+ * Returns null when there is no garment-scale patterned fabric, or the uploaded
+ * asset is unavailable.
  */
 export async function captureFabricSwatchForMagic(
   fills: FillOp[],
 ): Promise<FabricSwatchCapture | null> {
   const fill = dominantPatternedFill(fills)
   if (!fill) return null
+  if (!isGarmentScalePatternedFill(fill)) return null
 
   if (fill.style.kind === 'fabric') {
     const tile = renderFabricTile(fill.style.fabricId)
