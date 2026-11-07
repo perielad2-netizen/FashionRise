@@ -12,16 +12,22 @@ _SHORT_MAX = 120
 _HEX_RE = re.compile(r"^#?[0-9A-Fa-f]{6}$")
 _CONTROL = re.compile(r"[\u0000-\u001F\u007F-\u009F\u2028\u2029]")
 
-# Must look like textile / surface / print language.
+# Must look like textile / surface / print / construction language.
+# Keep this broad enough for natural designer wording (e.g. "jeans" + "stitches").
 _FABRIC_TERMS = re.compile(
     r"\b("
     r"fabric|textile|pattern|print|weave|woven|knit|mesh|satin|silk|chiffon|"
     r"velvet|velour|lace|tulle|organza|brocade|jacquard|tweed|wool|cotton|"
-    r"linen|denim|leather|suede|sequin|sequins|glitter|sparkle|sparkles|"
+    r"linen|denim|jeans?|jean\s*material|twill|corduroy|canvas|flannel|jersey|"
+    r"fleece|nylon|polyester|rayon|viscose|cashmere|mohair|angora|ripstop|"
+    r"leather|suede|sequin|sequins|glitter|sparkle|sparkles|"
     r"diamond|diamonds|metallic|metal|foil|lam[eé]|shimmer|shiny|gloss|"
     r"sheen|pearl|pearls|bead|beads|embroidery|embroidered|floral|paisley|"
     r"stripe|stripes|polka|check|checker|plaid|animal\s*print|camouflage|"
     r"camo|houndstooth|damask|moire|moire|texture|swatch|tile|repeating|"
+    r"stitch|stitches|stitching|sewn|seam|seams|seamwork|patchwork|patched|"
+    r"patch|patches|panel|panels|quilted|quilting|herringbone|distressed|"
+    r"washed|raw\s*denim|indigo|rivet|rivets|thread|threads|yarn|woven\s*look|"
     r"gold|silver|bronze|crystal|crystals|rhinestone|rhinestones|"
     r"stocking|stockings|hosiery|tights|pantyhose|glove|gloves|sheer|knitwear"
     r")\b",
@@ -52,6 +58,7 @@ _COLOR_WORDS: list[tuple[re.Pattern[str], str, str]] = [
     (re.compile(r"\b(teal|turquoise)\b", re.I), "#0F766E", "teal"),
     (re.compile(r"\b(sky|cyan|aqua)\b", re.I), "#38BDF8", "sky"),
     (re.compile(r"\b(royal|navy|blue)\b", re.I), "#1D4ED8", "royal"),
+    (re.compile(r"\b(indigo)\b", re.I), "#2F4A6E", "indigo"),
     (re.compile(r"\b(lilac|lavender|purple|violet)\b", re.I), "#A78BFA", "lilac"),
     (re.compile(r"\b(black|onyx|ebony)\b", re.I), "#111111", "black"),
     (re.compile(r"\b(white|snow)\b", re.I), "#F8F8F8", "white"),
@@ -89,10 +96,16 @@ def normalize_hex(raw: str | None) -> str | None:
     return text.upper()
 
 
+_DENIM_IMPLIED = re.compile(r"\b(jeans?|denim)\b", re.I)
+
+
 def _extract_color_from_prompt(prompt: str) -> tuple[str, str] | None:
     for pattern, hex_color, label in _COLOR_WORDS:
         if pattern.search(prompt):
             return hex_color, label
+    # Natural denim wording with no explicit color → indigo wash.
+    if _DENIM_IMPLIED.search(prompt):
+        return "#2F4A6E", "indigo"
     return None
 
 
