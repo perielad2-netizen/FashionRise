@@ -64,8 +64,12 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
                 job.result_data = _stub_result(job)
                 job.error_message = None
                 job.status = "completed"
-            # Charge Stars only after success — failed AI never reduces the wallet.
-            if job.status == "completed" and job.job_type == "sketch_polish":
+            # Charge Stars only after the full Magic / Try On / FASHN look succeeds.
+            # Garment realism is intermediate and is skipped inside the helper.
+            if job.status == "completed" and job.job_type in {
+                "sketch_polish",
+                TRY_ON_JOB_TYPE,
+            }:
                 from app.services.ai_service import debit_magic_stars_on_success
 
                 debit_magic_stars_on_success(db, job)

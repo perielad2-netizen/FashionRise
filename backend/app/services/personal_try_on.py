@@ -1116,6 +1116,21 @@ def enqueue_personal_try_on(
     existing = _find_try_on_by_idempotency(db, user.id, key)
     if existing is not None:
         return existing
+
+    # Magic wallet gate — Stars debit only after the final look succeeds
+    # (OpenAI, FASHN, or Max). Intermediate garment-realism does not charge.
+    from app.core.errors import ForbiddenError as StarsForbidden
+    from app.services.ai_service import _assert_magic_spend_if_needed
+
+    try:
+        _assert_magic_spend_if_needed(
+            db,
+            user,
+            operation_id=(smart_operation_id or "").strip() or None,
+        )
+    except StarsForbidden as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
     # #180 — under the spend lock, re-resolve any smart Max for this operation
     # (covers races that used a pre-canonical client key before this revision).
     if smart_lane:
@@ -1876,6 +1891,16 @@ def enqueue_garment_realism(
     existing = _find_realism_by_idempotency(db, user.id, key)
     if existing is not None:
         return existing
+
+    # Affordability only — Stars wait for the final FASHN / Try On look success.
+    from app.core.errors import ForbiddenError as StarsForbidden
+    from app.services.ai_service import _assert_magic_spend_if_needed
+
+    try:
+        _assert_magic_spend_if_needed(db, user, operation_id=None)
+    except StarsForbidden as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
     existing_res = (
         db.query(PersonalCroquisSpendReservation)
         .filter(
