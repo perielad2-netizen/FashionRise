@@ -21,11 +21,11 @@ The **web app is the product**. Capacitor wraps `web-ui/dist` for native shells.
 
 Product IDs (must match both stores and code). Set **price** in each store console:
 
-| Product ID | Name | Stars | Price (USD) | Was |
-|------------|------|------:|------------:|----:|
-| `stars_50` | Starter | 50 | $4.99 | $5.99 |
-| `stars_150` | Creator | 150 | $12.99 | $16.99 |
-| `stars_500` | Studio | 500 | $34.99 | $49.99 |
+| Product ID | Name | Stars | Price (USD) |
+|------------|------|------:|------------:|
+| `stars_50` | Starter | 50 | $5.99 |
+| `stars_150` | Creator | 150 | $16.99 |
+| `stars_500` | Studio | 500 | $49.99 |
 
 ## Local / CI commands
 

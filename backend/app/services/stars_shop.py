@@ -30,12 +30,13 @@ class StarPackage:
 
 
 # Catalog aligned with App Store / Play Store IAP product IDs.
+# Launch prices (set the same amounts in App Store Connect / Play Console).
 STAR_PACKAGES: tuple[StarPackage, ...] = (
     StarPackage(
         sku="stars_50",
         name="Starter",
         stars=50,
-        price_usd_cents=499,
+        price_usd_cents=599,
         list_price_usd_cents=599,
         description="50 Stars — ~11.98¢ / Star.",
         available=False,
@@ -44,7 +45,7 @@ STAR_PACKAGES: tuple[StarPackage, ...] = (
         sku="stars_150",
         name="Creator",
         stars=150,
-        price_usd_cents=1299,
+        price_usd_cents=1699,
         list_price_usd_cents=1699,
         description="150 Stars — ~11.33¢ / Star.",
         available=False,
@@ -53,7 +54,7 @@ STAR_PACKAGES: tuple[StarPackage, ...] = (
         sku="stars_500",
         name="Studio",
         stars=500,
-        price_usd_cents=3499,
+        price_usd_cents=4999,
         list_price_usd_cents=4999,
         description="500 Stars — 10.00¢ / Star.",
         available=False,

@@ -16,8 +16,7 @@ export type StarsIapProduct = {
 
 /**
  * Product IDs — must match App Store Connect + Play Console exactly.
- * Console prices (USD): Starter $4.99 · Creator $12.99 · Studio $34.99
- * (compare-at: $5.99 / $16.99 / $49.99 — display-only on web catalog)
+ * Launch console prices (USD): Starter $5.99 · Creator $16.99 · Studio $49.99
  */
 export const STARS_IAP_PRODUCTS: Array<{ productId: string; stars: number; name: string }> = [
   { productId: 'stars_50', stars: 50, name: 'Starter' },
