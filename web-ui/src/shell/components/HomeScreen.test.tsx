@@ -7,12 +7,15 @@ vi.mock('@/config/myCroquisUi', () => ({
 }))
 
 describe('HomeScreen', () => {
-  it('shows FashionRise brand and routes destinations', () => {
+  it('shows FashionRise logo brand and routes destinations', () => {
     const onNavigate = vi.fn()
     render(<HomeScreen username="Maya Designer" onNavigate={onNavigate} />)
 
     expect(screen.getByRole('heading', { level: 1, name: /FashionRise/i })).toBeInTheDocument()
     expect(screen.getByText(/Welcome back, Maya/i)).toBeInTheDocument()
+    const logo = document.querySelector('img') as HTMLImageElement | null
+    expect(logo?.getAttribute('src')).toContain('fashion_rise_login')
+    expect(logo?.getAttribute('src') ?? '').not.toMatch(/model|croquis|female/i)
 
     fireEvent.click(screen.getByRole('button', { name: /Start creating/i }))
     expect(onNavigate).toHaveBeenCalledWith('create')

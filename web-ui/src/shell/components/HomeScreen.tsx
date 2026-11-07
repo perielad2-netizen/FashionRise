@@ -52,7 +52,15 @@ export function HomeScreen({ username, onNavigate }: Props) {
 
   return (
     <section className={styles.screen} aria-labelledby="home-brand">
-      <div className={styles.stage}>
+      <header className={styles.hero}>
+        <div className={styles.logoPlate}>
+          <img
+            src={UI_ASSETS.brand.login}
+            alt=""
+            className={styles.logo}
+            draggable={false}
+          />
+        </div>
         <div className={styles.copy}>
           <p className={styles.greeting}>Welcome back, {firstName}</p>
           <h1 id="home-brand" className={styles.brand}>
@@ -62,28 +70,16 @@ export function HomeScreen({ username, onNavigate }: Props) {
           <p className={styles.lead}>
             Your studio hub — jump into a blank page, or pick up designs, looks, and models.
           </p>
-          <div className={styles.ctaRow}>
-            <button
-              type="button"
-              className={styles.primaryCta}
-              onClick={() => onNavigate('create')}
-            >
-              <Sparkles size={18} aria-hidden />
-              Start creating
-            </button>
-          </div>
+          <button
+            type="button"
+            className={styles.primaryCta}
+            onClick={() => onNavigate('create')}
+          >
+            <Sparkles size={18} aria-hidden />
+            Start creating
+          </button>
         </div>
-
-        <div className={styles.visual} aria-hidden>
-          <div className={styles.visualGlow} />
-          <img
-            src={UI_ASSETS.model.female}
-            alt=""
-            className={styles.visualImg}
-            draggable={false}
-          />
-        </div>
-      </div>
+      </header>
 
       <nav className={styles.destinations} aria-label="Studio destinations">
         {destinations.map((item) => {
