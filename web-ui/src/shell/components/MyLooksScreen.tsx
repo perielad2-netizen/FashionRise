@@ -398,15 +398,6 @@ function LookDetailDialog({
               Delete
             </button>
           </div>
-
-          <button
-            type="button"
-            className={`${styles.ghostBtn} ${styles.actionFull}`}
-            onClick={onClose}
-            disabled={deleteBusy}
-          >
-            Done
-          </button>
         </div>
       </div>
       <ShareSheet

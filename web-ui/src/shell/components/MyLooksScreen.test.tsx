@@ -124,7 +124,8 @@ describe('MyLooksScreen', () => {
     expect(within(dialog).getByRole('button', { name: 'Favorited' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Delete Dual runway' })).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Done' })).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Done' })).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Close look details' })).toBeInTheDocument()
   })
 
   it('downloads the active look side from the detail dialog', async () => {
