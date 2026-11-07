@@ -228,7 +228,8 @@ describe('magicGarmentSpec palette priority', () => {
       fills: [
         {
           id: 'satin-pink',
-          contour: [100, 100, 200, 100, 200, 200, 100, 200],
+          // Garment-scale fill (~8% of design plane) — shoe-sized satin is ignored.
+          contour: [100, 100, 350, 100, 350, 350, 100, 350],
           style: { kind: 'fabric', fabricId: 'satin' },
           seedX: 150,
           seedY: 150,
@@ -245,6 +246,37 @@ describe('magicGarmentSpec palette priority', () => {
     expect(spec.main_colors?.[0]).toBe('#BE185D')
     expect(spec.materials?.[0]).toMatch(/Satin repeating textile/i)
     expect(spec.materials?.[0]).toMatch(/exact Studio tile/i)
+  })
+
+  it('ignores shoe-scale satin fabric so ink stroke colors remain main', () => {
+    let doc = createEmptyDraftDocument()
+    doc = bumpDraftDocument(doc, {
+      brush: { sizeId: 'thin', sizePx: 1.75, opacity: 1, color: '#6B8E23' },
+      strokes: [
+        {
+          id: 'ink',
+          tool: 'draw',
+          points: [10, 20, 0.5, 30, 40, 0.5],
+          color: '#6B8E23',
+          size: 3,
+          opacity: 1,
+        },
+      ],
+      fills: [
+        {
+          id: 'shoe-satin',
+          contour: [400, 900, 440, 900, 440, 940, 400, 940],
+          style: { kind: 'fabric', fabricId: 'satin' },
+          seedX: 420,
+          seedY: 920,
+        },
+      ],
+    })
+    const { main_colors } = paletteFromDoc(doc)
+    expect(main_colors[0]).toBe('#6B8E23')
+    const spec = buildSharedGarmentSpec(doc)
+    expect(spec.materials ?? []).toEqual([])
+    expect(spec.main_colors?.[0]).toBe('#6B8E23')
   })
 
   it('does not invent a hex color for uploaded fabric', () => {
@@ -264,7 +296,7 @@ describe('magicGarmentSpec palette priority', () => {
       fills: [
         {
           id: 'up',
-          contour: [100, 100, 200, 100, 200, 200, 100, 200],
+          contour: [100, 100, 350, 100, 350, 350, 100, 350],
           style: {
             kind: 'uploaded-fabric',
             assetId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',

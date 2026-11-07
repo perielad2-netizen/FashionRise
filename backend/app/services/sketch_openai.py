@@ -76,10 +76,12 @@ COLOR_FIDELITY_CONTRACT = _COLOR_FIDELITY_CONTRACT
 _FABRIC_SWATCH_EDIT_CONTRACT = (
     "TEXTILE REFERENCE: Image 1 is the garment sketch (silhouette, pose, coverage, painted "
     "regions). Image 2 is the EXACT textile swatch from the Studio canvas — reproduce this "
-    "repeating motif, spacing, scale, and colors on painted garment regions only. Do NOT "
-    "replace the motif with plain glossy satin, a solid fill, or an invented pattern. "
-    "Natural draping and folds are allowed; motif geometry must remain recognizable. "
-    "Do not alter silhouette, pose, or skin/coverage boundaries."
+    "repeating motif, spacing, scale, and colors ONLY on sketch regions that already show "
+    "that same textile/pattern fill. Do NOT spread Image 2 across hand-inked or solid-color "
+    "regions (those keep their sketch pigments). Do NOT replace the motif with plain glossy "
+    "satin, a solid fill, or an invented pattern. Natural draping and folds are allowed; "
+    "motif geometry must remain recognizable. Do not alter silhouette, pose, or "
+    "skin/coverage boundaries."
 )
 
 # Front + Back: elevate the design; do not pixel-trace sketch mistakes.

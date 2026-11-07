@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FillOp } from '@/lib/fills'
 import { BUILTIN_FABRIC_TILE_PX, renderFabricTile } from '@/lib/paintFills'
+import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
 
 vi.mock('@/lib/fabricAssetCache', () => ({
   ensureFabricAssetsForFills: vi.fn(async () => undefined),
@@ -9,12 +10,24 @@ vi.mock('@/lib/fabricAssetCache', () => ({
   clearFabricAssetCache: vi.fn(),
 }))
 
+/** Garment-scale rectangle (~8% of design plane) for Magic textile eligibility. */
+function garmentScaleContour(): number[] {
+  const w = Math.ceil(Math.sqrt(DESIGN_WIDTH * DESIGN_HEIGHT * 0.08))
+  return [0, 0, w, 0, w, w, 0, w]
+}
+
+/** Shoe-scale rectangle (~1% of design plane) — must not drive Magic textile. */
+function shoeScaleContour(): number[] {
+  const w = Math.ceil(Math.sqrt(DESIGN_WIDTH * DESIGN_HEIGHT * 0.01))
+  return [0, 0, w, 0, w, w, 0, w]
+}
+
 describe('fabricSwatchCapture', () => {
   beforeEach(() => {
     vi.resetModules()
   })
 
-  it('dominantPatternedFill prefers fabric over solid', async () => {
+  it('dominantPatternedFill prefers largest fabric over solid / smaller fabric', async () => {
     const { dominantPatternedFill } = await import('@/lib/fabricSwatchCapture')
     const fills: FillOp[] = [
       {
@@ -25,15 +38,45 @@ describe('fabricSwatchCapture', () => {
         seedY: 5,
       },
       {
-        id: 'f',
-        contour: [0, 0, 20, 0, 20, 20, 0, 20],
+        id: 'shoe',
+        contour: shoeScaleContour(),
         style: { kind: 'fabric', fabricId: 'satin' },
         seedX: 10,
         seedY: 10,
       },
+      {
+        id: 'dress',
+        contour: garmentScaleContour(),
+        style: { kind: 'fabric', fabricId: 'denim' },
+        seedX: 100,
+        seedY: 100,
+      },
     ]
-    expect(dominantPatternedFill(fills)?.style).toEqual({ kind: 'fabric', fabricId: 'satin' })
+    expect(dominantPatternedFill(fills)?.style).toEqual({ kind: 'fabric', fabricId: 'denim' })
     expect(dominantPatternedFill([])).toBeNull()
+  })
+
+  it('isGarmentScalePatternedFill rejects shoe-sized fills', async () => {
+    const { isGarmentScalePatternedFill, contourArea } = await import(
+      '@/lib/fabricSwatchCapture'
+    )
+    const shoe: FillOp = {
+      id: 'shoe',
+      contour: shoeScaleContour(),
+      style: { kind: 'fabric', fabricId: 'satin' },
+      seedX: 5,
+      seedY: 5,
+    }
+    const dress: FillOp = {
+      id: 'dress',
+      contour: garmentScaleContour(),
+      style: { kind: 'fabric', fabricId: 'satin' },
+      seedX: 50,
+      seedY: 50,
+    }
+    expect(contourArea(shoe.contour)).toBeLessThan(DESIGN_WIDTH * DESIGN_HEIGHT * 0.06)
+    expect(isGarmentScalePatternedFill(shoe)).toBe(false)
+    expect(isGarmentScalePatternedFill(dress)).toBe(true)
   })
 
   it('renderFabricTile satin matches Studio tile size and pink geometric bands', () => {
@@ -51,6 +94,20 @@ describe('fabricSwatchCapture', () => {
         style: { kind: 'solid', color: '#FF2D95' },
         seedX: 5,
         seedY: 5,
+      },
+    ]
+    await expect(captureFabricSwatchForMagic(fills)).resolves.toBeNull()
+  })
+
+  it('captureFabricSwatchForMagic skips shoe-scale satin so ink dress colors win', async () => {
+    const { captureFabricSwatchForMagic } = await import('@/lib/fabricSwatchCapture')
+    const fills: FillOp[] = [
+      {
+        id: 'shoe-satin',
+        contour: shoeScaleContour(),
+        style: { kind: 'fabric', fabricId: 'satin' },
+        seedX: 20,
+        seedY: 20,
       },
     ]
     await expect(captureFabricSwatchForMagic(fills)).resolves.toBeNull()
@@ -93,7 +150,7 @@ describe('fabricSwatchCapture', () => {
     const fills: FillOp[] = [
       {
         id: 'satin',
-        contour: [0, 0, 40, 0, 40, 40, 0, 40],
+        contour: garmentScaleContour(),
         style: { kind: 'fabric', fabricId: 'satin' },
         seedX: 20,
         seedY: 20,

@@ -5,6 +5,7 @@ import {
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
 import { getFabricPromptShort } from '@/lib/fabricPromptCache'
+import { isGarmentScalePatternedFill } from '@/lib/fabricSwatchCapture'
 import { FABRIC_PRESETS, type FillOp } from '@/lib/fills'
 import { sampleColorFromStyle } from '@/lib/paintFills'
 import {
@@ -58,19 +59,27 @@ function fillMaterialColors(fill: FillOp): string[] {
   if (style.kind === 'gradient') {
     return style.colors.filter((c) => !isOutlineInk(c))
   }
-  if (style.kind === 'fabric') return [sampleColorFromStyle(style)]
+  // Tiny accessory fabric fills (shoes) must not set main garment color.
+  if (style.kind === 'fabric') {
+    if (!isGarmentScalePatternedFill(fill)) return []
+    return [sampleColorFromStyle(style)]
+  }
   return []
 }
 
 function fillMaterialLabels(fill: FillOp): string[] {
   const style = fill.style
+  // Only garment-scale patterned fills become Magic "materials" — shoe satin
+  // must not replace ink-painted dress colors in the garment spec.
   if (style.kind === 'fabric') {
+    if (!isGarmentScalePatternedFill(fill)) return []
     const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
     const name = preset ? preset.label : style.fabricId
     // Emphasize repeating tile identity — Magic receives the exact swatch separately.
     return [`${name} repeating textile (exact Studio tile reference)`]
   }
   if (style.kind === 'uploaded-fabric') {
+    if (!isGarmentScalePatternedFill(fill)) return []
     const promptShort = getFabricPromptShort(style.assetId)
     if (promptShort) {
       return [`${promptShort} repeating textile (exact Studio tile reference)`]

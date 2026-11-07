@@ -82,10 +82,10 @@ describe('MagicLookPanel', () => {
     expect(screen.getByRole('button', { name: 'Download preview' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Save in My Looks' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Compare original' }))
-    expect(screen.getByAltText('Original croquis photo')).toBeTruthy()
+    expect(screen.getByAltText('Original model photo')).toBeTruthy()
     expect(screen.getByLabelText('Original versus try-on')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Show original only' }))
-    expect(screen.getByAltText('Original croquis photo')).toBeTruthy()
+    expect(screen.getByAltText('Original model photo')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Compare garment' }))
     expect(screen.getByAltText('Garment artwork')).toBeTruthy()
   })
@@ -259,8 +259,33 @@ describe('MagicLookPanel', () => {
     expect(screen.getByText('Generating your try-on preview...')).toBeTruthy()
     expect(screen.queryByText(/FASHN/i)).toBeNull()
     expect(screen.queryByText(/credit/i)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Stop waiting' })).toBeTruthy()
+    // Busy/start: no Stop waiting / Back to sketch — Close dismisses only.
+    expect(screen.queryByRole('button', { name: 'Stop waiting' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Back to sketch' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Cancel wait' })).toBeNull()
+  })
+
+  it('hides Stop waiting and Back to sketch while Fashion Magic is creating', () => {
+    render(
+      <MagicLookPanel
+        open
+        phase="polling"
+        result={null}
+        lookObjectUrl={null}
+        sketchObjectUrl={null}
+        error={null}
+        canRecover={false}
+        onClose={() => undefined}
+        onCancel={() => undefined}
+        onDownload={() => undefined}
+        onRecover={() => undefined}
+        onBackToSketch={() => undefined}
+      />,
+    )
+    expect(screen.getByText('Creating your look…')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Stop waiting' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Back to sketch' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Close Magic' })).toBeTruthy()
   })
 
   it('hides experiment metadata on normal smart try-on results (#179)', () => {
