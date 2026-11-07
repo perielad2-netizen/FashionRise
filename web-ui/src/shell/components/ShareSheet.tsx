@@ -1,20 +1,8 @@
 import { useEffect, useId, useState } from 'react'
+import { Check, Copy, Download, MessageCircle, Share2, X } from 'lucide-react'
 import {
-  AtSign,
-  Check,
-  Copy,
-  Download,
-  MessageCircle,
-  Share2,
-  X,
-} from 'lucide-react'
-import {
-  FASHIONRISE_PUBLIC_URL,
-  buildFacebookShareUrl,
-  buildInstagramCreateUrl,
   buildShareCaption,
   buildWhatsAppShareUrl,
-  canNativeShareFiles,
   canUseNativeShare,
   copyText,
   downloadImageFromUrl,
@@ -29,14 +17,13 @@ type Props = {
   payload?: SharePayload
 }
 
-type Flash =
-  | 'copied-caption'
-  | 'saved-instagram'
-  | 'saved-facebook'
-  | 'whatsapp'
-  | 'shared'
-  | null
+type Flash = 'copied-caption' | 'saved-image' | 'shared' | 'whatsapp' | null
 
+/**
+ * Fallback share UI for browsers without the Web Share API (mostly desktop).
+ * On phones, callers should call `requestShare` first and only open this sheet
+ * when that returns `needs-fallback`.
+ */
 export function ShareSheet({ open, onClose, payload }: Props) {
   const titleId = useId()
   const [flash, setFlash] = useState<Flash>(null)
@@ -47,7 +34,6 @@ export function ShareSheet({ open, onClose, payload }: Props) {
   const caption = buildShareCaption(effective)
   const hasImage = Boolean(effective.imageUrl)
   const nativeOk = canUseNativeShare()
-  const nativeFilesOk = hasImage && canNativeShareFiles()
   const sheetTitle =
     effective.kind === 'look' && hasImage ? 'Share your look' : 'Share FashionRise'
 
@@ -76,33 +62,19 @@ export function ShareSheet({ open, onClose, payload }: Props) {
   const flashLabel =
     flash === 'copied-caption'
       ? 'Caption copied'
-      : flash === 'saved-instagram'
-        ? 'Image saved + caption copied — paste into your Instagram post'
-        : flash === 'saved-facebook'
-          ? 'Image saved + caption copied — paste into your Facebook post'
+      : flash === 'saved-image'
+        ? 'Image saved — attach it when you post'
+        : flash === 'shared'
+          ? 'Opened share options — pick an app'
           : flash === 'whatsapp'
             ? 'Opening WhatsApp with your caption'
-            : flash === 'shared'
-              ? 'Opened share sheet — pick WhatsApp, Instagram, or Facebook'
-              : null
+            : null
 
-  async function prepareCaptionAndImage(channel: 'instagram' | 'facebook') {
-    await copyText(caption)
-    if (effective.imageUrl) {
-      await downloadImageFromUrl(
-        effective.imageUrl,
-        effective.imageFileName ?? 'fashionrise-look.png',
-      )
-    }
-    setFlash(channel === 'instagram' ? 'saved-instagram' : 'saved-facebook')
-  }
-
-  async function onWhatsApp() {
+  async function onShare() {
     setBusy(true)
     setError(null)
     try {
-      // Prefer OS share with the look image when available (mobile WhatsApp target).
-      if (nativeFilesOk) {
+      if (nativeOk) {
         const result = await shareNative(effective)
         if (result === 'shared') {
           setFlash('shared')
@@ -117,72 +89,29 @@ export function ShareSheet({ open, onClose, payload }: Props) {
             effective.imageUrl,
             effective.imageFileName ?? 'fashionrise-look.png',
           )
+          setFlash('saved-image')
         } catch {
-          // Text-only WhatsApp is still useful.
+          setFlash('copied-caption')
         }
+      } else {
+        setFlash('copied-caption')
       }
+    } catch {
+      setError('Could not prepare share. Copy the caption and save the image instead.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onWhatsApp() {
+    setBusy(true)
+    setError(null)
+    try {
+      await copyText(caption)
       setFlash('whatsapp')
       window.open(buildWhatsAppShareUrl(caption), '_blank', 'noopener,noreferrer')
     } catch {
-      setError('Could not open WhatsApp. Copy the caption and share the saved image instead.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onInstagram() {
-    setBusy(true)
-    setError(null)
-    try {
-      if (nativeFilesOk) {
-        const result = await shareNative(effective)
-        if (result === 'shared') {
-          setFlash('shared')
-          return
-        }
-        if (result === 'cancelled') return
-      }
-      await prepareCaptionAndImage('instagram')
-      window.open(buildInstagramCreateUrl(), '_blank', 'noopener,noreferrer')
-    } catch {
-      setError('Caption copied if possible — open Instagram and paste when you post.')
-      window.open(buildInstagramCreateUrl(), '_blank', 'noopener,noreferrer')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onFacebook() {
-    setBusy(true)
-    setError(null)
-    try {
-      if (nativeFilesOk) {
-        const result = await shareNative(effective)
-        if (result === 'shared') {
-          setFlash('shared')
-          return
-        }
-        if (result === 'cancelled') return
-      }
-      await prepareCaptionAndImage('facebook')
-      window.open(buildFacebookShareUrl(FASHIONRISE_PUBLIC_URL), '_blank', 'noopener,noreferrer')
-    } catch {
-      setError('Open Facebook and paste the caption with your saved look image.')
-      window.open(buildFacebookShareUrl(FASHIONRISE_PUBLIC_URL), '_blank', 'noopener,noreferrer')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onSystemShare() {
-    setBusy(true)
-    setError(null)
-    try {
-      const result = await shareNative(effective)
-      if (result === 'shared') setFlash('shared')
-      if (result === 'unavailable') setError('System share is not available on this device.')
-    } catch {
-      setError('Could not open the system share sheet.')
+      setError('Could not open WhatsApp. Copy the caption instead.')
     } finally {
       setBusy(false)
     }
@@ -196,6 +125,23 @@ export function ShareSheet({ open, onClose, payload }: Props) {
       setFlash('copied-caption')
     } catch {
       setError('Could not copy caption.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onSaveImage() {
+    if (!effective.imageUrl) return
+    setBusy(true)
+    setError(null)
+    try {
+      await downloadImageFromUrl(
+        effective.imageUrl,
+        effective.imageFileName ?? 'fashionrise-look.png',
+      )
+      setFlash('saved-image')
+    } catch {
+      setError('Could not download the look image.')
     } finally {
       setBusy(false)
     }
@@ -233,65 +179,45 @@ export function ShareSheet({ open, onClose, payload }: Props) {
         ) : null}
 
         <p className={styles.hint}>
-          Post your AI look with a FashionRise caption. WhatsApp can take the text (and the image
-          on phones). Instagram and Facebook need you to paste the caption onto a new post after we
-          save the image.
+          {nativeOk
+            ? 'Share opens your device’s share menu so you can pick WhatsApp, Instagram, Facebook, or any other app.'
+            : 'Copy the FashionRise caption, save the look image, then paste both into the app you want to post with.'}
         </p>
 
         <pre className={styles.caption} data-testid="share-caption" aria-label="Share caption">
           {caption}
         </pre>
 
-        <div className={styles.channels} role="group" aria-label="Share to">
+        <div className={styles.actions} role="group" aria-label="Share actions">
           <button
             type="button"
-            className={`${styles.channel} ${styles.channelPrimary}`}
+            className={`${styles.action} ${styles.actionPrimary}`}
+            disabled={busy}
+            onClick={() => void onShare()}
+            data-testid="share-primary"
+          >
+            <Share2 size={18} aria-hidden />
+            <span>{nativeOk ? 'Share…' : 'Copy caption & save image'}</span>
+            <small>
+              {nativeOk
+                ? 'Choose WhatsApp, Instagram, Facebook…'
+                : 'Created with FashionRise'}
+            </small>
+          </button>
+          <button
+            type="button"
+            className={styles.action}
             disabled={busy}
             onClick={() => void onWhatsApp()}
             data-testid="share-whatsapp"
           >
             <MessageCircle size={18} aria-hidden />
-            <span>WhatsApp</span>
-            <small>{nativeFilesOk ? 'Look + caption' : 'Caption ready to send'}</small>
+            <span>WhatsApp text</span>
+            <small>Opens chat with caption</small>
           </button>
           <button
             type="button"
-            className={`${styles.channel} ${styles.channelPrimary}`}
-            disabled={busy}
-            onClick={() => void onInstagram()}
-            data-testid="share-instagram"
-          >
-            <AtSign size={18} aria-hidden />
-            <span>Instagram post</span>
-            <small>{hasImage ? 'Save image + copy caption' : 'Copy caption + open'}</small>
-          </button>
-          <button
-            type="button"
-            className={`${styles.channel} ${styles.channelPrimary}`}
-            disabled={busy}
-            onClick={() => void onFacebook()}
-            data-testid="share-facebook"
-          >
-            <Share2 size={18} aria-hidden />
-            <span>Facebook post</span>
-            <small>{hasImage ? 'Save image + copy caption' : 'Share FashionRise link'}</small>
-          </button>
-          {nativeOk ? (
-            <button
-              type="button"
-              className={styles.channel}
-              disabled={busy}
-              onClick={() => void onSystemShare()}
-              data-testid="share-system"
-            >
-              <Share2 size={18} aria-hidden />
-              <span>More apps</span>
-              <small>Device share sheet</small>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={styles.channel}
+            className={styles.action}
             disabled={busy}
             onClick={() => void onCopyCaption()}
             data-testid="share-copy-caption"
@@ -303,25 +229,9 @@ export function ShareSheet({ open, onClose, payload }: Props) {
           {hasImage ? (
             <button
               type="button"
-              className={styles.channel}
+              className={styles.action}
               disabled={busy}
-              onClick={() => {
-                void (async () => {
-                  setBusy(true)
-                  setError(null)
-                  try {
-                    await downloadImageFromUrl(
-                      effective.imageUrl!,
-                      effective.imageFileName ?? 'fashionrise-look.png',
-                    )
-                    setFlash('saved-instagram')
-                  } catch {
-                    setError('Could not download the look image.')
-                  } finally {
-                    setBusy(false)
-                  }
-                })()
-              }}
+              onClick={() => void onSaveImage()}
               data-testid="share-save-image"
             >
               <Download size={18} aria-hidden />

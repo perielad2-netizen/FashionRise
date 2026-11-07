@@ -1,12 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   FASHIONRISE_PUBLIC_URL,
-  buildFacebookShareUrl,
   buildShareCaption,
   buildWhatsAppShareUrl,
+  requestShare,
 } from '@/lib/sharePromo'
 
 describe('sharePromo', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (navigator as any).share
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (navigator as any).canShare
+  })
+
   it('builds a Created with FashionRise caption that points people to Google search', () => {
     const caption = buildShareCaption({ kind: 'look' })
     expect(caption).toContain('Created with FashionRise')
@@ -27,8 +35,19 @@ describe('sharePromo', () => {
     expect(decodeURIComponent(url.split('text=')[1])).toContain('Created with FashionRise')
   })
 
-  it('builds a Facebook sharer URL for the FashionRise app page', () => {
-    expect(buildFacebookShareUrl()).toContain('facebook.com/sharer')
-    expect(buildFacebookShareUrl()).toContain(encodeURIComponent(FASHIONRISE_PUBLIC_URL))
+  it('requestShare opens the OS share sheet when available', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { share, canShare: undefined })
+    const result = await requestShare({ kind: 'look', title: 'Gown' })
+    expect(result).toBe('shared')
+    expect(share).toHaveBeenCalledTimes(1)
+    const data = share.mock.calls[0][0] as ShareData
+    expect(data.text).toContain('Created with FashionRise')
+    expect(data.text).toContain('Search Google for FashionRise')
+  })
+
+  it('requestShare asks for fallback when Web Share is missing', async () => {
+    const result = await requestShare({ kind: 'look' })
+    expect(result).toBe('needs-fallback')
   })
 })

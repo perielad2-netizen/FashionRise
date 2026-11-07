@@ -19,6 +19,7 @@ import {
 import type { BrushKind } from '@/lib/professionalBrushes'
 import type { ToolKind } from '@/lib/strokes'
 import { formatBrushSizePx } from '@/lib/strokes'
+import { requestShare } from '@/lib/sharePromo'
 import {
   BrushKindStrip,
   brushKindShortLabel,
@@ -117,7 +118,10 @@ export function ImmersiveToolbar({
         className={styles.moreItem}
         onClick={() => {
           setMoreOpen(false)
-          setShareOpen(true)
+          void (async () => {
+            const result = await requestShare({ kind: 'app' })
+            if (result === 'needs-fallback') setShareOpen(true)
+          })()
         }}
       >
         <Share2 size={14} aria-hidden />

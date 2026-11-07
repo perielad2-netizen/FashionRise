@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Share2, X } from 'lucide-react'
+import { requestShare, type SharePayload } from '@/lib/sharePromo'
 import type { MagicLookResult } from '@/services/ai/aiJobTypes'
 import type { TryOnExperimentVerdict } from '@/services/ai/magicApi'
 import { ShareSheet } from '@/shell/components/ShareSheet'
@@ -136,6 +137,22 @@ export function MagicLookPanel({
       ? Boolean(dual?.front.lookObjectUrl || dual?.back.lookObjectUrl)
       : Boolean(lookObjectUrl))
   const compareLabel = comparing ? 'Show look' : 'Compare sketch'
+  const lookSharePayload: SharePayload = {
+    kind: 'look',
+    title: tryOn ? 'Try-on look' : dualActive ? `Magic look (${activeSide})` : 'Magic look',
+    imageUrl: activeLookUrl,
+    imageFileName: tryOn
+      ? 'fashionrise-tryon.png'
+      : dualActive
+        ? `fashionrise-look-${activeSide}.png`
+        : 'fashionrise-look.png',
+  }
+  const onShareLook = () => {
+    void (async () => {
+      const result = await requestShare(lookSharePayload)
+      if (result === 'needs-fallback') setShareOpen(true)
+    })()
+  }
   const cycleTryOnCompare = () => {
     const order: TryOnCompareMode[] = originalPhotoUrl
       ? ['result', 'side_by_side', 'original', 'garment']
@@ -487,10 +504,10 @@ export function MagicLookPanel({
               </button>
               <button
                 type="button"
-                onClick={() => setShareOpen(true)}
+                onClick={onShareLook}
                 disabled={!activeLookUrl}
                 data-testid="magic-share-look"
-                title="Share with promo text for FashionRise"
+                title="Share look — pick WhatsApp, Instagram, Facebook, or another app"
               >
                 <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />
                 Share
@@ -536,9 +553,9 @@ export function MagicLookPanel({
               </button>
               <button
                 type="button"
-                onClick={() => setShareOpen(true)}
+                onClick={onShareLook}
                 data-testid="magic-share-look"
-                title="Share with promo text for FashionRise"
+                title="Share look — pick WhatsApp, Instagram, Facebook, or another app"
               >
                 <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />
                 Share
@@ -563,12 +580,7 @@ export function MagicLookPanel({
       <ShareSheet
         open={shareOpen}
         onClose={() => setShareOpen(false)}
-        payload={{
-          kind: 'look',
-          title: tryOn ? 'Try-on look' : 'Magic look',
-          imageUrl: activeLookUrl,
-          imageFileName: tryOn ? 'fashionrise-tryon.png' : 'fashionrise-look.png',
-        }}
+        payload={lookSharePayload}
       />
     </div>
   )

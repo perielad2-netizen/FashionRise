@@ -2,10 +2,9 @@
  * Share AI look results with attribution.
  *
  * Caption always includes “Created with FashionRise” and tells people to
- * search Google for FashionRise. WhatsApp gets a deep-link (+ native file share
- * when the OS allows). Instagram / Facebook have no reliable web compose-photo
- * API — we copy the caption, save the look image, and open the app/site so the
- * designer can paste into a new post.
+ * search Google for FashionRise. On phones we prefer the OS share sheet so the
+ * user picks WhatsApp / Instagram / Facebook themselves. There is no reliable
+ * web API to open those apps straight into a photo compose screen.
  */
 
 export const FASHIONRISE_PUBLIC_URL = (
@@ -24,7 +23,7 @@ export type SharePayload = {
   title?: string | null
   /** Object URL or same-origin image URL to attach when the OS supports files. */
   imageUrl?: string | null
-  /** Suggested download filename when saving for Instagram / Facebook. */
+  /** Suggested download filename when saving for a post. */
   imageFileName?: string | null
 }
 
@@ -44,16 +43,6 @@ export function buildShareCaption(payload: SharePayload = { kind: 'look' }): str
 
 export function buildWhatsAppShareUrl(caption: string): string {
   return `https://wa.me/?text=${encodeURIComponent(caption)}`
-}
-
-/** Facebook link share dialog (photo posts still need the saved image + paste). */
-export function buildFacebookShareUrl(pageUrl: string = FASHIONRISE_PUBLIC_URL): string {
-  return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(pageUrl)}`
-}
-
-export function buildInstagramCreateUrl(): string {
-  // Opens Instagram; there is no public web “new post with image” URL.
-  return 'https://www.instagram.com/'
 }
 
 export function canUseNativeShare(): boolean {
@@ -151,5 +140,24 @@ export async function shareNative(payload: SharePayload): Promise<NativeShareRes
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled'
     throw err
+  }
+}
+
+export type RequestShareResult = 'shared' | 'cancelled' | 'needs-fallback'
+
+/**
+ * One-tap share: open the OS picker when available so the user chooses
+ * WhatsApp / Instagram / Facebook / etc. Otherwise callers should show a
+ * simple fallback sheet (copy caption + save image).
+ */
+export async function requestShare(payload: SharePayload): Promise<RequestShareResult> {
+  if (!canUseNativeShare()) return 'needs-fallback'
+  try {
+    const result = await shareNative(payload)
+    if (result === 'shared') return 'shared'
+    if (result === 'cancelled') return 'cancelled'
+    return 'needs-fallback'
+  } catch {
+    return 'needs-fallback'
   }
 }

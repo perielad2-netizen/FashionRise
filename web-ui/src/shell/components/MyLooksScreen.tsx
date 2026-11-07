@@ -23,6 +23,7 @@ import {
   type LookRecord,
 } from '@/services/looksApi'
 import { openOrCreateTechpackForLook } from '@/services/techpacksApi'
+import { requestShare } from '@/lib/sharePromo'
 import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './MyLooksScreen.module.css'
 
@@ -305,7 +306,18 @@ function LookDetailDialog({
             type="button"
             className={styles.ghostBtn}
             disabled={busy || deleteBusy || !(mobileSide === 'front' ? frontImg.url : backImg.url)}
-            onClick={() => setShareOpen(true)}
+            onClick={() => {
+              void (async () => {
+                const imageUrl = mobileSide === 'back' ? backImg.url : frontImg.url
+                const result = await requestShare({
+                  kind: 'look',
+                  title: look.title,
+                  imageUrl,
+                  imageFileName: `fashionrise-${look.title || 'look'}-${mobileSide}.png`,
+                })
+                if (result === 'needs-fallback') setShareOpen(true)
+              })()
+            }}
             data-testid="look-share"
           >
             <Share2 size={14} aria-hidden />

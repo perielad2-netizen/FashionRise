@@ -9,7 +9,7 @@
 }
 
 .modal {
-  width: min(440px, 100%);
+  width: min(420px, 100%);
   max-height: min(88vh, 720px);
   overflow: auto;
   border-radius: 18px;
@@ -74,11 +74,6 @@
   line-height: 1.45;
 }
 
-.channelPrimary {
-  border-color: rgba(244, 114, 182, 0.35);
-  background: rgba(214, 51, 132, 0.14);
-}
-
 .caption {
   margin: 0 0 16px;
   padding: 12px 14px;
@@ -93,18 +88,23 @@
   word-break: break-word;
 }
 
-.channels {
+.actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
-.channel {
+.actionPrimary {
+  border-color: rgba(244, 114, 182, 0.35);
+  background: rgba(214, 51, 132, 0.14);
+}
+
+.action {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  min-height: 76px;
+  min-height: 68px;
   padding: 12px 12px 10px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -114,22 +114,22 @@
   cursor: pointer;
 }
 
-.channel:hover:not(:disabled) {
+.action:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(253, 230, 138, 0.35);
 }
 
-.channel:disabled {
+.action:disabled {
   opacity: 0.55;
   cursor: wait;
 }
 
-.channel span {
+.action span {
   font-size: 0.9rem;
   font-weight: 600;
 }
 
-.channel small {
+.action small {
   color: rgba(248, 244, 240, 0.55);
   font-size: 0.72rem;
   line-height: 1.3;
@@ -148,10 +148,4 @@
   margin: 12px 0 0;
   color: #fecaca;
   font-size: 0.84rem;
-}
-
-@media (max-width: 420px) {
-  .channels {
-    grid-template-columns: 1fr;
-  }
 }

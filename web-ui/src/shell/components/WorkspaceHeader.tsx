@@ -10,6 +10,7 @@ import {
   Undo2,
 } from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
+import { requestShare } from '@/lib/sharePromo'
 import { useAuth } from '@/services/auth/AuthProvider'
 import { ShareSheet } from '@/shell/components/ShareSheet'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
@@ -245,7 +246,10 @@ export function WorkspaceHeader({
               className={styles.moreItem}
               onClick={() => {
                 setMenuOpen(false)
-                setShareOpen(true)
+                void (async () => {
+                  const result = await requestShare({ kind: 'app' })
+                  if (result === 'needs-fallback') setShareOpen(true)
+                })()
               }}
             >
               <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />

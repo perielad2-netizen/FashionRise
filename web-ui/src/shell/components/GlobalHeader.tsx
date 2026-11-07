@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronDown, LogOut, Settings, Share2, UserRound, X } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
+import { requestShare } from '@/lib/sharePromo'
 import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './GlobalHeader.module.css'
 
@@ -58,7 +59,10 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
                 className={styles.menuItem}
                 onClick={() => {
                   setMenuOpen(false)
-                  setShareOpen(true)
+                  void (async () => {
+                    const result = await requestShare({ kind: 'app' })
+                    if (result === 'needs-fallback') setShareOpen(true)
+                  })()
                 }}
               >
                 <Share2 size={14} />
@@ -130,7 +134,10 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
               style={{ marginTop: 12 }}
               onClick={() => {
                 setAboutOpen(false)
-                setShareOpen(true)
+                void (async () => {
+                  const result = await requestShare({ kind: 'app' })
+                  if (result === 'needs-fallback') setShareOpen(true)
+                })()
               }}
             >
               <Share2 size={14} />
