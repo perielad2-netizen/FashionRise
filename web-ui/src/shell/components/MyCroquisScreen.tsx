@@ -3,10 +3,14 @@ import { ArrowLeft, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import {
+  acceptPersonalCroquisVersion,
   acceptedVersionNumber,
   erasePersonalCroquis,
   fetchCroquisAssetBlob,
+  isMyModelsVisible,
   listPersonalCroquis,
+  openVersionSummary,
+  rejectPersonalCroquisVersion,
   type PersonalCroquisRead,
 } from '@/services/personalCroquisApi'
 import { ApiError } from '@/services/api/client'
@@ -48,9 +52,11 @@ function formatDate(iso: string): string {
 function CroquisThumb({
   assetId,
   label,
+  pendingLabel,
 }: {
   assetId: string | null
   label: string
+  pendingLabel?: string
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [visible, setVisible] = useState(false)
@@ -104,7 +110,11 @@ function CroquisThumb({
         <img className={styles.previewImg} src={url} alt={label} loading="lazy" draggable={false} />
       ) : (
         <div className={styles.previewPending} aria-hidden>
-          {!assetId || failed ? 'Preview unavailable' : visible ? 'Loading…' : ' '}
+          {!assetId || failed
+            ? pendingLabel || 'Preview unavailable'
+            : visible
+              ? 'Loading…'
+              : ' '}
         </div>
       )}
     </div>
@@ -123,6 +133,7 @@ export function MyCroquisScreen({
   const [wizardOpen, setWizardOpen] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [reviewBusyId, setReviewBusyId] = useState<string | null>(null)
   const deleteInFlightRef = useRef(false)
 
   const reload = useCallback(() => {
@@ -139,7 +150,7 @@ export function MyCroquisScreen({
     listPersonalCroquis(controller.signal)
       .then((rows) => {
         if (controller.signal.aborted) return
-        const usable = rows.filter((row) => !row.erased && acceptedVersionNumber(row) != null)
+        const usable = rows.filter(isMyModelsVisible)
         setState({ status: 'ready', items: usable })
       })
       .catch((err: unknown) => {
@@ -155,9 +166,22 @@ export function MyCroquisScreen({
     return () => controller.abort()
   }, [reloadToken, libraryVersion])
 
+  // Soft-poll while any model is still generating so Refresh is not required.
+  useEffect(() => {
+    if (state.status !== 'ready') return
+    const generating = state.items.some((row) => {
+      const open = openVersionSummary(row)
+      const status = (open?.status || '').toLowerCase()
+      return status === 'generating' || status === 'queued'
+    })
+    if (!generating) return
+    const timer = window.setTimeout(() => reload(), 4000)
+    return () => window.clearTimeout(timer)
+  }, [state, reload])
+
   const beginDelete = useCallback(
     (row: PersonalCroquisRead) => {
-      const version = acceptedVersionNumber(row)
+      const version = acceptedVersionNumber(row) ?? openVersionSummary(row)?.version
       if (version == null) return
       setNotice(null)
       setDeleteDialog({
@@ -218,6 +242,56 @@ export function MyCroquisScreen({
     [reload],
   )
 
+  const runAcceptOpen = useCallback(
+    async (row: PersonalCroquisRead) => {
+      const open = openVersionSummary(row)
+      if (!open || open.status !== 'awaiting_review') return
+      setReviewBusyId(row.id)
+      setNotice(null)
+      try {
+        await acceptPersonalCroquisVersion(row.id, open.version)
+        setNotice('Model accepted — Use in Studio when you want.')
+        reload()
+      } catch (err) {
+        setNotice(
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error && err.message
+              ? err.message
+              : 'Could not accept this model. Try again.',
+        )
+      } finally {
+        setReviewBusyId(null)
+      }
+    },
+    [reload],
+  )
+
+  const runRejectOpen = useCallback(
+    async (row: PersonalCroquisRead) => {
+      const open = openVersionSummary(row)
+      if (!open || open.status !== 'awaiting_review') return
+      setReviewBusyId(row.id)
+      setNotice(null)
+      try {
+        await rejectPersonalCroquisVersion(row.id, open.version)
+        setNotice('Generation discarded. You can Create Model again.')
+        reload()
+      } catch (err) {
+        setNotice(
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error && err.message
+              ? err.message
+              : 'Could not discard this model. Try again.',
+        )
+      } finally {
+        setReviewBusyId(null)
+      }
+    },
+    [reload],
+  )
+
   if (!isMyCroquisUiEnabled()) {
     return (
       <section className={styles.screen} aria-labelledby={titleId}>
@@ -236,6 +310,8 @@ export function MyCroquisScreen({
       </section>
     )
   }
+
+  const refreshing = state.status === 'loading'
 
   return (
     <section className={styles.screen} aria-labelledby={titleId}>
@@ -257,11 +333,16 @@ export function MyCroquisScreen({
             type="button"
             className={styles.ghostBtn}
             onClick={reload}
-            disabled={state.status === 'loading'}
+            disabled={refreshing}
             aria-label="Refresh My Models"
+            aria-busy={refreshing}
           >
-            <RefreshCw size={14} aria-hidden />
-            Refresh
+            <RefreshCw
+              size={14}
+              aria-hidden
+              className={refreshing ? styles.refreshSpin : undefined}
+            />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
           <button
             type="button"
@@ -282,7 +363,9 @@ export function MyCroquisScreen({
         ) : null}
 
         {state.status === 'loading' ? (
-          <p className={styles.empty}>Loading your models…</p>
+          <p className={styles.empty} role="status" aria-live="polite">
+            Loading your models…
+          </p>
         ) : null}
 
         {state.status === 'error' ? (
@@ -296,7 +379,7 @@ export function MyCroquisScreen({
 
         {state.status === 'ready' && state.items.length === 0 ? (
           <div className={styles.emptyBlock}>
-            <p className={styles.empty}>No accepted personal model yet.</p>
+            <p className={styles.empty}>No personal model yet.</p>
             <button type="button" className={styles.primaryBtn} onClick={() => setWizardOpen(true)}>
               <Plus size={14} aria-hidden />
               Create Model
@@ -307,10 +390,118 @@ export function MyCroquisScreen({
         {state.status === 'ready' && state.items.length > 0 ? (
           <ul className={styles.grid}>
             {state.items.map((row) => {
-              const version = acceptedVersionNumber(row)!
-              const assetId = row.latest_accepted_version?.generated_asset_id ?? null
+              const open = openVersionSummary(row)
+              const openStatus = (open?.status || '').toLowerCase()
+              const accepted = acceptedVersionNumber(row)
               const title = row.display_name?.trim() || 'Untitled model'
               const active = activeStudioPinId === row.id
+              const reviewBusy = reviewBusyId === row.id
+
+              if (openStatus === 'generating' || openStatus === 'queued') {
+                return (
+                  <li key={row.id} className={styles.card}>
+                    <CroquisThumb
+                      assetId={null}
+                      label={`Generating ${title}`}
+                      pendingLabel="Generating…"
+                    />
+                    <div className={styles.cardBody}>
+                      <h2 className={styles.cardTitle} title={title}>
+                        {title}
+                        <span className={`${styles.statusBadge} ${styles.statusBadgeGenerating}`}>
+                          Generating
+                        </span>
+                      </h2>
+                      <p className={styles.cardMeta}>
+                        <span>v{open!.version}</span>
+                        <span aria-hidden="true"> · </span>
+                        <span>Working in the background — this page refreshes automatically.</span>
+                      </p>
+                      <div className={styles.cardActions}>
+                        <button
+                          type="button"
+                          className={styles.ghostBtn}
+                          onClick={reload}
+                          aria-label={`Refresh status for ${title}`}
+                        >
+                          <RefreshCw size={14} aria-hidden className={styles.refreshSpin} />
+                          Check status
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                )
+              }
+
+              if (openStatus === 'awaiting_review') {
+                return (
+                  <li key={row.id} className={styles.card}>
+                    <CroquisThumb
+                      assetId={open?.generated_asset_id ?? null}
+                      label={`Review preview of ${title}`}
+                    />
+                    <div className={styles.cardBody}>
+                      <h2 className={styles.cardTitle} title={title}>
+                        {title}
+                        <span className={`${styles.statusBadge} ${styles.statusBadgeReview}`}>
+                          Ready to review
+                        </span>
+                      </h2>
+                      <p className={styles.cardMeta}>
+                        <span>v{open!.version}</span>
+                        <span aria-hidden="true"> · </span>
+                        <span>{formatDate(row.updated_at || row.created_at)}</span>
+                      </p>
+                      <div className={styles.cardActions}>
+                        <button
+                          type="button"
+                          className={styles.openBtn}
+                          disabled={reviewBusy}
+                          onClick={() => void runAcceptOpen(row)}
+                          aria-label={`Accept ${title}`}
+                        >
+                          <Sparkles size={14} aria-hidden />
+                          {reviewBusy ? 'Saving…' : 'Accept'}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.deleteBtn}
+                          disabled={reviewBusy}
+                          onClick={() => void runRejectOpen(row)}
+                          aria-label={`Discard ${title}`}
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                )
+              }
+
+              if (openStatus === 'reconciliation_required') {
+                return (
+                  <li key={row.id} className={styles.card}>
+                    <CroquisThumb
+                      assetId={null}
+                      label={`Held review for ${title}`}
+                      pendingLabel="Held for review"
+                    />
+                    <div className={styles.cardBody}>
+                      <h2 className={styles.cardTitle} title={title}>
+                        {title}
+                        <span className={styles.statusBadge}>Held</span>
+                      </h2>
+                      <p className={styles.cardMeta}>
+                        Provider outcome is unknown. This attempt is held — no extra Stars were
+                        charged for a retry.
+                      </p>
+                    </div>
+                  </li>
+                )
+              }
+
+              if (accepted == null) return null
+              const assetId = row.latest_accepted_version?.generated_asset_id ?? null
               return (
                 <li key={row.id} className={styles.card}>
                   <CroquisThumb assetId={assetId} label={`Preview of ${title}`} />
@@ -320,7 +511,7 @@ export function MyCroquisScreen({
                       {active ? <span className={styles.activeBadge}>In Studio</span> : null}
                     </h2>
                     <p className={styles.cardMeta}>
-                      <span>v{version}</span>
+                      <span>v{accepted}</span>
                       <span aria-hidden="true"> · </span>
                       <span>{formatDate(row.updated_at || row.created_at)}</span>
                     </p>
@@ -328,7 +519,7 @@ export function MyCroquisScreen({
                       <button
                         type="button"
                         className={styles.openBtn}
-                        onClick={() => onUseInStudio(row.id, version)}
+                        onClick={() => onUseInStudio(row.id, accepted)}
                         aria-label={`Use ${title} in Studio`}
                       >
                         <Sparkles size={14} aria-hidden />
@@ -355,7 +546,10 @@ export function MyCroquisScreen({
       {wizardOpen ? (
         <CreateMyCroquisWizard
           open
-          onClose={() => setWizardOpen(false)}
+          onClose={() => {
+            setWizardOpen(false)
+            reload()
+          }}
           onPinAccepted={onPinAccepted}
         />
       ) : null}

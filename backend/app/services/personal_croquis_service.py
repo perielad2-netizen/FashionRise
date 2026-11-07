@@ -25,8 +25,10 @@ from app.models.personal_croquis import (
     STATUS_ERASED,
     STATUS_UPLOADED,
     VERSION_STATUS_ACCEPTED,
+    VERSION_STATUS_AWAITING_REVIEW,
     VERSION_STATUS_FAILED,
     VERSION_STATUS_GENERATING,
+    VERSION_STATUS_RECONCILIATION,
     PersonalCroquis,
     PersonalCroquisVersion,
 )
@@ -555,6 +557,32 @@ def latest_accepted_version(
             PersonalCroquisVersion.croquis_id == croquis_id,
             PersonalCroquisVersion.owner_id == user.id,
             PersonalCroquisVersion.status == VERSION_STATUS_ACCEPTED,
+        )
+        .order_by(PersonalCroquisVersion.version.desc())
+        .first()
+    )
+
+
+def latest_open_version(
+    db: Session, user: User, croquis_id: uuid.UUID
+) -> PersonalCroquisVersion | None:
+    """Most recent version still in flight or waiting for owner review.
+
+    Used by My Models so Refresh shows generating / awaiting_review work instead
+    of an empty gallery after the wizard closes.
+    """
+    return (
+        db.query(PersonalCroquisVersion)
+        .filter(
+            PersonalCroquisVersion.croquis_id == croquis_id,
+            PersonalCroquisVersion.owner_id == user.id,
+            PersonalCroquisVersion.status.in_(
+                (
+                    VERSION_STATUS_GENERATING,
+                    VERSION_STATUS_AWAITING_REVIEW,
+                    VERSION_STATUS_RECONCILIATION,
+                )
+            ),
         )
         .order_by(PersonalCroquisVersion.version.desc())
         .first()

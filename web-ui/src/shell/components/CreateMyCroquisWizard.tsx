@@ -229,7 +229,7 @@ export function CreateMyCroquisWizard({
           }
         }
         setError(
-          'Still generating on the server. Keep this page open a bit longer, or check My Models later — no new paid attempt was started.',
+          'Still generating on the server. Close this dialog and open My Models — Refresh shows progress, and you can Accept when ready. No new paid attempt was started.',
         )
         setStep('compose')
       } catch (err) {
@@ -412,7 +412,8 @@ export function CreateMyCroquisWizard({
             <p>Generating your model…</p>
             <p className={styles.hint}>
               Status: {pendingVersion?.status ?? 'queued'}. Fashion illustration can take up to a
-              few minutes — please keep this window open.
+              few minutes. Work continues on the server if you close — open My Models and Refresh
+              to review when it is ready (Stars are only charged after a successful generate).
             </p>
           </div>
         ) : null}

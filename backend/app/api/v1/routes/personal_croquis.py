@@ -126,7 +126,8 @@ def upload_photo(
         display_name=display_name,
     )
     latest = pcs.latest_accepted_version(db, user, croquis.id)
-    return croquis_to_read(croquis, latest=latest)
+    open_version = pcs.latest_open_version(db, user, croquis.id)
+    return croquis_to_read(croquis, latest=latest, open_version=open_version)
 
 
 @router.get("", response_model=list[PersonalCroquisRead])
@@ -141,7 +142,8 @@ def list_croquis(
     out: list[PersonalCroquisRead] = []
     for row in rows:
         latest = pcs.latest_accepted_version(db, user, row.id)
-        out.append(croquis_to_read(row, latest=latest))
+        open_version = pcs.latest_open_version(db, user, row.id)
+        out.append(croquis_to_read(row, latest=latest, open_version=open_version))
     return out
 
 
@@ -176,7 +178,8 @@ def get_croquis(
     _ = request.url
     row = pcs.get_owned_croquis(db, user, croquis_id, include_archived=True)
     latest = pcs.latest_accepted_version(db, user, row.id)
-    return croquis_to_read(row, latest=latest)
+    open_version = pcs.latest_open_version(db, user, row.id)
+    return croquis_to_read(row, latest=latest, open_version=open_version)
 
 
 @router.post(
@@ -272,7 +275,8 @@ def archive_croquis(
     _ = request.url
     row = pcs.archive_croquis(db, user, croquis_id)
     latest = pcs.latest_accepted_version(db, user, row.id)
-    return croquis_to_read(row, latest=latest)
+    open_version = pcs.latest_open_version(db, user, row.id)
+    return croquis_to_read(row, latest=latest, open_version=open_version)
 
 
 @router.delete("/{croquis_id}", response_model=PersonalCroquisRead)

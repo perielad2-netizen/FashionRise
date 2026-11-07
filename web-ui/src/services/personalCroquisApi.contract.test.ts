@@ -5,6 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   acceptedVersionNumber,
+  isMyModelsVisible,
+  openVersionSummary,
   type PersonalCroquisRead,
   type PersonalCroquisVersionRead,
 } from '@/services/personalCroquisApi'
@@ -28,6 +30,7 @@ const STAGE_A_CROQUIS_WITH_ACCEPTED: PersonalCroquisRead = {
     geometry_profile: 'fit_contain_768x1024_v1',
     accepted_at: '2026-10-31T12:05:00+00:00',
   },
+  latest_open_version: null,
 }
 
 const STAGE_A_CROQUIS_NO_VERSION: PersonalCroquisRead = {
@@ -71,8 +74,25 @@ describe('Stage A PersonalCroquisRead contract', () => {
   it('handles null source, no version, archived, and erased rows', () => {
     expect(acceptedVersionNumber(STAGE_A_CROQUIS_NO_VERSION)).toBeNull()
     expect(acceptedVersionNumber(STAGE_A_CROQUIS_ERASED)).toBeNull()
+    expect(isMyModelsVisible(STAGE_A_CROQUIS_NO_VERSION)).toBe(false)
     expect(STAGE_A_CROQUIS_NO_VERSION.source_asset_id).toBeTruthy()
     expect(STAGE_A_CROQUIS_ERASED.archived).toBe(true)
+  })
+
+  it('surfaces awaiting_review via latest_open_version for My Models', () => {
+    const pending: PersonalCroquisRead = {
+      ...STAGE_A_CROQUIS_NO_VERSION,
+      latest_open_version: {
+        version: 1,
+        status: 'awaiting_review',
+        generated_asset_id: '77777777-7777-4777-8777-777777777777',
+        geometry_profile: 'fit_contain_768x1024_v1',
+        accepted_at: null,
+      },
+    }
+    expect(openVersionSummary(pending)?.status).toBe('awaiting_review')
+    expect(isMyModelsVisible(pending)).toBe(true)
+    expect(acceptedVersionNumber(pending)).toBeNull()
   })
 
   it('version read exposes generated_asset_id for underlay resolve', () => {

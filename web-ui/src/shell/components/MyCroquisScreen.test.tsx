@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   listPersonalCroquis: vi.fn(),
   erasePersonalCroquis: vi.fn(),
   fetchCroquisAssetBlob: vi.fn(),
+  acceptPersonalCroquisVersion: vi.fn(),
+  rejectPersonalCroquisVersion: vi.fn(),
   isMyCroquisUiEnabled: vi.fn(() => true),
 }))
 
@@ -20,6 +22,8 @@ vi.mock('@/services/personalCroquisApi', async (importOriginal) => {
     listPersonalCroquis: mocks.listPersonalCroquis,
     erasePersonalCroquis: mocks.erasePersonalCroquis,
     fetchCroquisAssetBlob: mocks.fetchCroquisAssetBlob,
+    acceptPersonalCroquisVersion: mocks.acceptPersonalCroquisVersion,
+    rejectPersonalCroquisVersion: mocks.rejectPersonalCroquisVersion,
   }
 })
 
@@ -62,6 +66,7 @@ const sampleRows = [
       geometry_profile: null,
       accepted_at: '2026-11-01T00:00:00Z',
     },
+    latest_open_version: null,
   },
   {
     id: 'croquis-b',
@@ -81,6 +86,7 @@ const sampleRows = [
       geometry_profile: null,
       accepted_at: '2026-11-01T01:00:00Z',
     },
+    latest_open_version: null,
   },
 ]
 
@@ -90,9 +96,22 @@ describe('MyCroquisScreen', () => {
     mocks.listPersonalCroquis.mockReset()
     mocks.erasePersonalCroquis.mockReset()
     mocks.fetchCroquisAssetBlob.mockReset()
+    mocks.acceptPersonalCroquisVersion.mockReset()
+    mocks.rejectPersonalCroquisVersion.mockReset()
     mocks.listPersonalCroquis.mockResolvedValue(sampleRows)
     mocks.fetchCroquisAssetBlob.mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
     mocks.erasePersonalCroquis.mockResolvedValue({ ...sampleRows[0], erased: true })
+    mocks.acceptPersonalCroquisVersion.mockResolvedValue({
+      id: 'ver-pending',
+      croquis_id: 'croquis-pending',
+      version: 1,
+      status: 'accepted',
+      generated_asset_id: 'asset-pending',
+      geometry_profile: null,
+      prompt_version: null,
+      created_at: '2026-11-02T00:00:00Z',
+      accepted_at: '2026-11-02T00:01:00Z',
+    })
     // jsdom lacks IntersectionObserver — treat thumbs as immediately visible.
     window.IntersectionObserver = class {
       private cb: IntersectionObserverCallback
@@ -157,6 +176,7 @@ describe('MyCroquisScreen', () => {
             geometry_profile: null,
             accepted_at: '2026-11-02T00:00:00Z',
           },
+          latest_open_version: null,
         },
       ])
     render(<MyCroquisScreen onBackToStudio={() => undefined} onUseInStudio={onUse} />)
@@ -191,6 +211,57 @@ describe('MyCroquisScreen', () => {
     await waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'Could not delete model' })).not.toBeInTheDocument(),
     )
+  })
+
+  it('shows awaiting_review models with Accept after Refresh', async () => {
+    mocks.listPersonalCroquis.mockResolvedValue([
+      {
+        id: 'croquis-pending',
+        display_name: 'Partner upload',
+        status: 'ready',
+        source_asset_id: 'src-p',
+        storage_consent_id: 'consent-p',
+        adults_attestation_at: '2026-11-02T00:00:00Z',
+        archived: false,
+        erased: false,
+        created_at: '2026-11-02T00:00:00Z',
+        updated_at: '2026-11-02T00:00:00Z',
+        latest_accepted_version: null,
+        latest_open_version: {
+          version: 1,
+          status: 'awaiting_review',
+          generated_asset_id: 'asset-pending',
+          geometry_profile: null,
+          accepted_at: null,
+        },
+      },
+    ])
+    render(<MyCroquisScreen onBackToStudio={() => undefined} onUseInStudio={() => undefined} />)
+    expect(await screen.findByText('Partner upload')).toBeInTheDocument()
+    expect(screen.getByText('Ready to review')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Partner upload' }))
+    await waitFor(() =>
+      expect(mocks.acceptPersonalCroquisVersion).toHaveBeenCalledWith('croquis-pending', 1),
+    )
+  })
+
+  it('shows Refresh spinner label while loading', async () => {
+    let resolveList: (value: typeof sampleRows) => void = () => undefined
+    mocks.listPersonalCroquis.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveList = resolve
+        }),
+    )
+    render(<MyCroquisScreen onBackToStudio={() => undefined} onUseInStudio={() => undefined} />)
+    expect(screen.getByRole('button', { name: 'Refresh My Models' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.getByText('Refreshing…')).toBeInTheDocument()
+    resolveList(sampleRows)
+    expect(await screen.findByText('Croquis A')).toBeInTheDocument()
+    expect(screen.getByText('Refresh')).toBeInTheDocument()
   })
 
   it('confirms delete and warns when croquis is pinned in Studio', async () => {

@@ -180,7 +180,8 @@
   min-width: 0;
 }
 
-.activeBadge {
+.activeBadge,
+.statusBadge {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -190,6 +191,28 @@
   background: rgba(214, 51, 132, 0.22);
   color: #fce7f3;
   border: 1px solid rgba(244, 114, 182, 0.35);
+}
+
+.statusBadgeGenerating {
+  background: rgba(56, 189, 248, 0.16);
+  color: #bae6fd;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.statusBadgeReview {
+  background: rgba(250, 204, 21, 0.16);
+  color: #fef08a;
+  border-color: rgba(250, 204, 21, 0.35);
+}
+
+.refreshSpin {
+  animation: myModelsSpin 0.85s linear infinite;
+}
+
+@keyframes myModelsSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .cardMeta {

@@ -45,6 +45,8 @@ export type PersonalCroquisRead = {
   created_at: string
   updated_at: string
   latest_accepted_version: PersonalCroquisVersionSummary | null
+  /** In-flight generate or awaiting owner review (My Models). */
+  latest_open_version?: PersonalCroquisVersionSummary | null
 }
 
 /** Mirrors Stage A `PersonalCroquisVersionRead`. */
@@ -287,4 +289,29 @@ export function acceptedVersionNumber(row: PersonalCroquisRead): number | null {
   if (row.erased) return null
   const ver = row.latest_accepted_version?.version
   return typeof ver === 'number' && ver > 0 ? ver : null
+}
+
+/** Open generate/review version for My Models (null when none / erased). */
+export function openVersionSummary(
+  row: PersonalCroquisRead,
+): PersonalCroquisVersionSummary | null {
+  if (row.erased) return null
+  const open = row.latest_open_version
+  if (!open || typeof open.version !== 'number' || open.version <= 0) return null
+  const status = (open.status || '').toLowerCase()
+  if (
+    status !== 'generating' &&
+    status !== 'awaiting_review' &&
+    status !== 'reconciliation_required' &&
+    status !== 'queued'
+  ) {
+    return null
+  }
+  return open
+}
+
+/** True when My Models should list this croquis (accepted pin and/or open work). */
+export function isMyModelsVisible(row: PersonalCroquisRead): boolean {
+  if (row.erased) return false
+  return acceptedVersionNumber(row) != null || openVersionSummary(row) != null
 }

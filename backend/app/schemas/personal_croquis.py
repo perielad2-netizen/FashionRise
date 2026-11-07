@@ -81,7 +81,9 @@ class PersonalCroquisRead(BaseModel):
     erased: bool = False
     created_at: datetime
     updated_at: datetime
+    # Accepted pin for Studio. latest_open_version is separate generate/review work.
     latest_accepted_version: PersonalCroquisVersionSummary | None = None
+    latest_open_version: PersonalCroquisVersionSummary | None = None
 
 
 class PersonalCroquisVersionRead(BaseModel):
@@ -111,16 +113,19 @@ def consent_to_read(row) -> ConsentEventRead:
     )
 
 
-def croquis_to_read(row, *, latest=None) -> PersonalCroquisRead:
-    latest_summary = None
-    if latest is not None:
-        latest_summary = PersonalCroquisVersionSummary(
-            version=latest.version,
-            status=latest.status,
-            generated_asset_id=latest.generated_asset_id,
-            geometry_profile=latest.geometry_profile,
-            accepted_at=latest.accepted_at,
-        )
+def _version_summary(row) -> PersonalCroquisVersionSummary | None:
+    if row is None:
+        return None
+    return PersonalCroquisVersionSummary(
+        version=row.version,
+        status=row.status,
+        generated_asset_id=row.generated_asset_id,
+        geometry_profile=row.geometry_profile,
+        accepted_at=row.accepted_at,
+    )
+
+
+def croquis_to_read(row, *, latest=None, open_version=None) -> PersonalCroquisRead:
     return PersonalCroquisRead(
         id=row.id,
         display_name=row.display_name,
@@ -132,7 +137,8 @@ def croquis_to_read(row, *, latest=None) -> PersonalCroquisRead:
         erased=row.erase_requested_at is not None or row.deleted_at is not None,
         created_at=row.created_at,
         updated_at=row.updated_at,
-        latest_accepted_version=latest_summary,
+        latest_accepted_version=_version_summary(latest),
+        latest_open_version=_version_summary(open_version),
     )
 
 

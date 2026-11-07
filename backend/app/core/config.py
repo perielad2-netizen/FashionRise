@@ -212,7 +212,9 @@ class Settings(BaseSettings):
     ai_stars_pdf_cost: int = 50
     ai_stars_fabric_cost: int = 5
     # Comma-separated emails with endless Stars (never debit).
-    ai_stars_unlimited_emails: str = "perielad@gmail.com,perielad2@gmail.com"
+    ai_stars_unlimited_emails: str = (
+        "perielad@gmail.com,perielad2@gmail.com,yanivprbk@gmail.com"
+    )
     # Shop checkout remains disabled until payment is wired.
     stars_shop_checkout_enabled: bool = False
 
