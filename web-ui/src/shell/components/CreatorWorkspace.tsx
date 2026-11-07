@@ -266,18 +266,12 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
     return () => window.removeEventListener('keydown', onKey, true)
   }, [dock, overlayPanels])
 
-  const toolLabel =
-    editor.tool === 'erase'
-      ? 'Eraser'
-      : editor.tool === 'fill'
-        ? 'Fill'
-        : editor.tool === 'eyedropper'
-          ? 'Eyedropper'
-          : 'Pencil'
-  // Phone + tablet + immersive all use the brush sheet (not desktop settings column).
-  const brushOverlay = dock === 'brush' && overlayPanels
+  // Brush sheet opens from the dock (phone/tablet) or More → Brush (desktop).
+  const brushOverlay = dock === 'brush'
+  // Settings is always a sheet/drawer (More menu) — never a permanent desktop column.
   const panelScrim =
-    (dock === 'materials' || dock === 'settings' || dock === 'models') && overlayPanels
+    dock === 'settings' ||
+    ((dock === 'materials' || dock === 'models') && overlayPanels)
   const betaNotice = editor.magicNotice
     ? { message: editor.magicNotice, dismiss: () => editor.setMagicNotice(null) }
     : editor.comingSoon
@@ -358,6 +352,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           onRetrySave={editor.retrySave}
           onSaveDesign={editor.beginSaveDesign}
           onOpenLibrary={onOpenLibrary}
+          onOpenBrush={() => setDock('brush')}
+          onOpenSettings={() => setDock('settings')}
         />
       ) : null}
 
@@ -621,22 +617,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
         >
           Materials
         </button>
-        <button
-          type="button"
-          className={dock === 'settings' ? styles.dockActive : styles.dockBtn}
-          onClick={() => setDock(dock === 'settings' ? null : 'settings')}
-        >
-          Settings
-        </button>
-        <button
-          type="button"
-          className={styles.dockBtn}
-          onClick={() => {
-            void enterImmersive()
-          }}
-        >
-          Full screen
-        </button>
       </div>
 
       {panelScrim ? (
@@ -832,8 +812,11 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           </div>
         </div>
 
-        <div className={`${styles.settingsSlot} ${dock === 'settings' ? styles.slotOpen : ''}`}>
-          {overlayPanels && dock === 'settings' ? (
+        <div
+          className={`${styles.settingsSlot} ${dock === 'settings' ? styles.slotOpen : ''}`}
+          data-testid="settings-slot"
+        >
+          {dock === 'settings' ? (
             <>
               <div className={styles.sheetHead}>
                 <strong>Settings</strong>
@@ -843,35 +826,12 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               </div>
               <div className={styles.sheetBody}>
                 <SettingsInspector
-                  tool={editor.tool}
-                  brushSize={editor.brushSize}
-                  opacity={editor.opacity}
-                  brushEngine={editor.brushEngine}
                   dimmed={editor.dimmed}
-                  toolLabel={toolLabel}
-                  onBrushSize={editor.setBrushSizePx}
-                  onOpacity={editor.setBrushOpacity}
-                  onBrushKind={editor.setBrushKind}
-                  onBrushEnginePatch={editor.patchBrushEngine}
                   onToggleDim={() => editor.setDimmed((v) => !v)}
                 />
               </div>
             </>
-          ) : (
-            <SettingsInspector
-              tool={editor.tool}
-              brushSize={editor.brushSize}
-              opacity={editor.opacity}
-              brushEngine={editor.brushEngine}
-              dimmed={editor.dimmed}
-              toolLabel={toolLabel}
-              onBrushSize={editor.setBrushSizePx}
-              onOpacity={editor.setBrushOpacity}
-              onBrushKind={editor.setBrushKind}
-              onBrushEnginePatch={editor.patchBrushEngine}
-              onToggleDim={() => editor.setDimmed((v) => !v)}
-            />
-          )}
+          ) : null}
         </div>
       </div>
 

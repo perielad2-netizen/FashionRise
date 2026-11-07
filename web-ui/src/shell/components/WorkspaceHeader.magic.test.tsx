@@ -79,6 +79,8 @@ describe('WorkspaceHeader Magic recovery', () => {
         magicEnabled
         onSaveDesign={vi.fn()}
         onOpenLibrary={vi.fn()}
+        onOpenBrush={vi.fn()}
+        onOpenSettings={vi.fn()}
         onRetrySave={vi.fn()}
         saveStatus="idle"
         saveStatusLabel="Ready"
@@ -89,6 +91,8 @@ describe('WorkspaceHeader Magic recovery', () => {
     expect(screen.getByRole('button', { name: /^More$/i }).textContent).toMatch(/More/i)
     fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
     expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Brush' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'My Designs' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /Share FashionRise/i })).toBeNull()
     expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeTruthy()

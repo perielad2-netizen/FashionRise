@@ -116,8 +116,8 @@ describe('StudioPage WEB-V2 shell', () => {
     expect(screen.getByRole('heading', { name: /new design/i })).toBeInTheDocument()
     expect(await screen.findByText(/ready|saved|restoring/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/creator workspace/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/model library/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/settings inspector/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Studio panels')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/settings inspector/i)).not.toBeInTheDocument()
     expect(screen.getByTestId('drawing-canvas')).toBeInTheDocument()
     expect(screen.queryByText(/auto save/i)).not.toBeInTheDocument()
   })
@@ -196,17 +196,16 @@ describe('Studio beta notices stay outside Settings', () => {
   ] as const
 
   for (const viewport of viewports) {
-    it(`shows and dismisses Magic, Settings, and Back at ${viewport.width}×${viewport.height}`, async () => {
+    it(`shows and dismisses Magic / Home notices outside Settings at ${viewport.width}×${viewport.height}`, async () => {
       mockViewport(viewport.width, viewport.height)
       await openStudio()
 
-      const settingsDock = dockButton('Settings')
-      expect(settingsDock.className).not.toMatch(/dockActive/)
+      expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
 
       fireEvent.click(screen.getByRole('button', { name: /^Magic/i }))
       const magic = noticeFor(/later milestone/i)
       expect(magic).toBeVisible()
-      expect(screen.getByLabelText(/settings inspector/i).contains(magic)).toBe(false)
+      expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
       expect(screen.getAllByRole('status', { name: /later milestone/i })).toHaveLength(1)
       fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
       expect(screen.queryByRole('status', { name: /later milestone/i })).not.toBeInTheDocument()
@@ -218,8 +217,7 @@ describe('Studio beta notices stay outside Settings', () => {
       fireEvent.click(homeBtn)
       const home = noticeFor(/Home — coming later/i)
       expect(home).toBeVisible()
-      expect(screen.getByLabelText(/settings inspector/i).contains(home)).toBe(false)
-      expect(settingsDock.className).not.toMatch(/dockActive/)
+      expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: /^Magic/i }))
       expect(screen.queryByRole('status', { name: /Home — coming later/i })).not.toBeInTheDocument()
       expect(noticeFor(/later milestone/i)).toBeVisible()
@@ -239,31 +237,33 @@ function brushSheet() {
 }
 
 describe('WEB-V2.3 brush controls and landscape layout', () => {
-  it('has no floating brush window on desktop; Settings keeps size and opacity', async () => {
+  it('opens Brush from More on desktop (no permanent Settings brush column)', async () => {
     mockViewport(1440, 900)
     await openStudio()
 
-    expect(screen.queryByLabelText('Brush settings')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
     expect(brushSheet()).not.toBeInTheDocument()
-    expect(screen.getAllByRole('slider', { name: 'Brush size' })).toHaveLength(1)
-    expect(screen.getAllByRole('slider', { name: 'Brush opacity' })).toHaveLength(1)
-    const size = within(settingsInspector()).getByRole('slider', { name: 'Brush size' })
+    fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Brush' }))
+    const sheet = brushSheet()!
+    expect(sheet).toBeVisible()
+    const size = within(sheet).getByRole('slider', { name: 'Brush size' })
     fireEvent.change(size, { target: { value: '6.5' } })
-    expect(
-      within(settingsInspector()).getByLabelText('Brush size in pixels'),
-    ).toHaveValue('6.5')
-    const opacity = within(settingsInspector()).getByRole('slider', { name: 'Brush opacity' })
+    expect(within(sheet).getByLabelText('Brush size in pixels')).toHaveValue('6.5')
+    const opacity = within(sheet).getByRole('slider', { name: 'Brush opacity' })
     fireEvent.change(opacity, { target: { value: '40' } })
-    expect(within(settingsInspector()).getByText('40%')).toBeInTheDocument()
+    expect(within(sheet).getByText('40%')).toBeInTheDocument()
   })
 
-  it('keeps brush size and opacity in the Settings column at 1180×600', async () => {
+  it('opens Brush from More at 1180×600', async () => {
     mockViewport(1180, 600)
     await openStudio()
 
-    expect(screen.queryByLabelText('Brush settings')).not.toBeInTheDocument()
-    expect(within(settingsInspector()).getByRole('slider', { name: 'Brush size' })).toBeInTheDocument()
-    expect(within(settingsInspector()).getByRole('slider', { name: 'Brush opacity' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Brush' }))
+    const sheet = brushSheet()!
+    expect(within(sheet).getByRole('slider', { name: 'Brush size' })).toBeInTheDocument()
+    expect(within(sheet).getByRole('slider', { name: 'Brush opacity' })).toBeInTheDocument()
   })
 
   it('opens a dismissible Brush sheet from the dock at 1024×550', async () => {
@@ -280,10 +280,8 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     fireEvent.change(within(sheet).getByRole('slider', { name: 'Brush opacity' }), {
       target: { value: '55' },
     })
-    expect(
-      within(settingsInspector()).getByLabelText('Brush size in pixels'),
-    ).toHaveValue('6.5')
-    expect(within(settingsInspector()).getByText('55%')).toBeInTheDocument()
+    expect(within(sheet).getByLabelText('Brush size in pixels')).toHaveValue('6.5')
+    expect(within(sheet).getByText('55%')).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(brushSheet()).not.toBeInTheDocument()
@@ -302,17 +300,21 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     [1180, 600],
     [1440, 900],
   ] as const) {
-    it(`Settings has no Generate with AI footer; header Magic Soon still works at ${width}×${height}`, async () => {
+    it(`Settings from More has no Generate with AI footer; header Magic Soon still works at ${width}×${height}`, async () => {
       mockViewport(width, height)
       await openStudio()
 
-      // WEB-V4I: obsolete Settings "Generate with AI — Soon" footer removed.
+      fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }))
+      const settings = settingsInspector()
       expect(
-        within(settingsInspector()).queryByRole('button', {
+        within(settings).queryByRole('button', {
           name: /Generate with AI/i,
           hidden: true,
         }),
       ).toBeNull()
+      expect(within(settings).queryByText('Brush settings')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }))
 
       // Real Magic entry remains in the Studio header (Soon when magic UI is disabled).
       const magic = screen.getByRole('button', { name: /^Magic/i })
@@ -320,7 +322,7 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
       fireEvent.click(magic)
       const notice = noticeFor(/later milestone/i)
       expect(notice).toBeVisible()
-      expect(settingsInspector().contains(notice)).toBe(false)
+      expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
       expect(screen.queryByRole('status', { name: /later milestone/i })).not.toBeInTheDocument()
     })
@@ -344,19 +346,16 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
 
     rotateTo(1024, 700)
     rotateTo(1180, 600)
-    expect(brushSheet()).not.toBeInTheDocument()
+    // Brush sheet stays open across desktop widths (More/dock share the same dock state).
+    expect(brushSheet()).toBeVisible()
     expect(screen.getByTestId('drawing-canvas')).toBe(canvas)
-    expect(
-      within(settingsInspector()).getByLabelText('Brush size in pixels'),
-    ).toHaveValue('6.5')
+    expect(within(brushSheet()!).getByLabelText('Brush size in pixels')).toHaveValue('6.5')
 
     rotateTo(1440, 900)
     rotateTo(768, 1024)
     expect(screen.getByTestId('drawing-canvas')).toBe(canvas)
     for (const undo of screen.getAllByRole('button', { name: 'Undo' })) expect(undo).toBeEnabled()
-    expect(
-      within(settingsInspector()).getByLabelText('Brush size in pixels'),
-    ).toHaveValue('6.5')
+    expect(within(brushSheet()!).getByLabelText('Brush size in pixels')).toHaveValue('6.5')
     expect(screen.queryByText(/save failed/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Undo' })[0]!)

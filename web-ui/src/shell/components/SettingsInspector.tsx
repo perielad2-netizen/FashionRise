@@ -1,35 +1,11 @@
-import type { BrushEngineState, BrushKind } from '@/lib/professionalBrushes'
-import type { ToolKind } from '@/lib/strokes'
-import { BrushControls } from '@/shell/components/BrushControls'
 import styles from './SettingsInspector.module.css'
 
 type Props = {
-  tool: ToolKind
-  brushSize: number
-  opacity: number
-  brushEngine?: BrushEngineState
   dimmed: boolean
-  toolLabel: string
-  onBrushSize: (px: number) => void
-  onOpacity: (value: number) => void
-  onBrushKind?: (kind: BrushKind) => void
-  onBrushEnginePatch?: (patch: Partial<BrushEngineState>) => void
   onToggleDim: () => void
 }
 
-export function SettingsInspector({
-  tool,
-  brushSize,
-  opacity,
-  brushEngine,
-  dimmed,
-  toolLabel,
-  onBrushSize,
-  onOpacity,
-  onBrushKind,
-  onBrushEnginePatch,
-  onToggleDim,
-}: Props) {
+export function SettingsInspector({ dimmed, onToggleDim }: Props) {
   return (
     <aside className={styles.panel} aria-label="Settings inspector">
       <div className={styles.tabs}>
@@ -61,25 +37,6 @@ export function SettingsInspector({
             onClick={onToggleDim}
           />
         </div>
-      </section>
-
-      <section className={styles.section}>
-        <h3>Brush settings</h3>
-        <div className={styles.row}>
-          <span>Tool</span>
-          <strong>{toolLabel}</strong>
-        </div>
-        <BrushControls
-          tool={tool === 'erase' ? 'erase' : 'draw'}
-          brushSize={brushSize}
-          opacity={opacity}
-          brushEngine={brushEngine}
-          variant="flat"
-          onBrushSize={onBrushSize}
-          onOpacity={onOpacity}
-          onBrushKind={onBrushKind}
-          onBrushEnginePatch={onBrushEnginePatch}
-        />
       </section>
 
       <section className={styles.section}>

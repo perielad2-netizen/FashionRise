@@ -15,7 +15,8 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: var(--fr-models-w) minmax(0, 1fr) var(--fr-inspector-w);
+  /* Models + canvas only — Settings opens from More as a drawer, not a permanent column. */
+  grid-template-columns: var(--fr-models-w) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
 }
@@ -142,9 +143,30 @@
   min-width: 0;
 }
 
-.modelsSlot,
-.settingsSlot {
+.modelsSlot {
   display: contents;
+}
+
+/* Settings is drawer-only on every breakpoint (opened from More). */
+.settingsSlot {
+  display: none;
+}
+
+.settingsSlot.slotOpen {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(300px, 92vw);
+  z-index: 24;
+  background: #101827;
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  border-radius: 0;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .materialsSlot {
@@ -212,8 +234,8 @@
 
 .mobileDock {
   display: none;
-  /* 6-col grid: 3 equal on row 1, 2 equal on row 2 (no orphan gap). */
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  /* Models · Brush · Materials — one equal row (Settings lives in More). */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   padding: 8px 12px 4px;
   flex-shrink: 0;
@@ -225,7 +247,6 @@
 
 .dockBtn,
 .dockActive {
-  grid-column: span 2;
   width: 100%;
   box-sizing: border-box;
   min-height: 36px;
@@ -243,13 +264,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.dockBtn:nth-child(4),
-.dockBtn:nth-child(5),
-.dockActive:nth-child(4),
-.dockActive:nth-child(5) {
-  grid-column: span 3;
 }
 
 .dockActive {
@@ -323,7 +337,7 @@
 
 @media (max-width: 1200px) {
   .body {
-    grid-template-columns: 200px minmax(0, 1fr) 210px;
+    grid-template-columns: 200px minmax(0, 1fr);
   }
 
   .center {
@@ -387,25 +401,9 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  .settingsSlot {
-    display: none;
-  }
-
   .settingsSlot.slotOpen {
-    display: flex;
-    flex-direction: column;
-    position: absolute;
-    right: 0;
     top: 48px;
-    bottom: 0;
     width: min(280px, 90vw);
-    z-index: 24;
-    background: #101827;
-    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
-    overflow: hidden;
-    border-radius: 0;
-    border: 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
   }
 }
 
@@ -448,6 +446,7 @@
 
   .settingsSlot.slotOpen {
     top: 42px;
+    width: min(280px, 90vw);
   }
 
   .brushSheet {

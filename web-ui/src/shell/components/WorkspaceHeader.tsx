@@ -31,6 +31,8 @@ type Props = {
   onRetrySave?: () => void
   onSaveDesign?: () => void
   onOpenLibrary?: () => void
+  onOpenSettings?: () => void
+  onOpenBrush?: () => void
 }
 
 export function WorkspaceHeader({
@@ -51,6 +53,8 @@ export function WorkspaceHeader({
   onRetrySave,
   onSaveDesign,
   onOpenLibrary: _onOpenLibrary,
+  onOpenSettings,
+  onOpenBrush,
 }: Props) {
   void _onOpenLibrary
   const { user } = useAuth()
@@ -189,7 +193,7 @@ export function WorkspaceHeader({
           className={styles.moreBtn}
           aria-label="More"
           aria-expanded={menuOpen}
-          title="More — Clear canvas"
+          title="More — Brush, Settings, Clear canvas"
           onClick={() => setMenuOpen((v) => !v)}
         >
           <MoreHorizontal size={18} aria-hidden />
@@ -208,6 +212,32 @@ export function WorkspaceHeader({
                 }}
               >
                 Save as design…
+              </button>
+            ) : null}
+            {onOpenBrush ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.moreItem}
+                onClick={() => {
+                  setMenuOpen(false)
+                  onOpenBrush()
+                }}
+              >
+                Brush
+              </button>
+            ) : null}
+            {onOpenSettings ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.moreItem}
+                onClick={() => {
+                  setMenuOpen(false)
+                  onOpenSettings()
+                }}
+              >
+                Settings
               </button>
             ) : null}
             {magicEnabled && canRecoverLastMagic && onRecoverLastMagic ? (
