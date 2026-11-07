@@ -188,19 +188,22 @@
   letter-spacing: 0.02em;
 }
 
-/* Keep Minimize / Max labels readable; never hide the control itself. */
+/* Keep Minimize / Max / Exit labels readable; never hide the control itself. */
 @media (max-width: 360px) {
   .minimizeBtn .btnText,
   .expandBtn .btnText,
-  .moreBtn .btnText {
+  .moreBtn .btnText,
+  .barMinimized .exitBtn span {
     display: none;
   }
 
   .minimizeBtn,
   .expandBtn,
-  .moreBtn {
+  .moreBtn,
+  .barMinimized .exitBtn {
     width: 44px;
     padding: 0;
+    justify-content: center;
   }
 }
 

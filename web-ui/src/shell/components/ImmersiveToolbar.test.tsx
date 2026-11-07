@@ -69,10 +69,11 @@ describe('ImmersiveToolbar', () => {
     expect(onClear).toHaveBeenCalled()
   })
 
-  it('minimizes to pencil, eraser, fill, hand, undo, redo', () => {
+  it('minimizes to pencil, eraser, fill, hand, undo, redo, and Exit', () => {
     const onTool = vi.fn()
     const onUndo = vi.fn()
     const onRedo = vi.fn()
+    const onExit = vi.fn()
     render(
       <ImmersiveToolbar
         {...baseProps}
@@ -80,6 +81,7 @@ describe('ImmersiveToolbar', () => {
         onTool={onTool}
         onUndo={onUndo}
         onRedo={onRedo}
+        onExit={onExit}
       />,
     )
 
@@ -94,9 +96,9 @@ describe('ImmersiveToolbar', () => {
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Redo' })).toBeTruthy()
     expect(screen.getByTestId('immersive-toolbar-maximize')).toBeTruthy()
+    expect(screen.getByTestId('immersive-exit')).toBeTruthy()
 
     expect(screen.queryByRole('button', { name: 'Eyedropper' })).toBeNull()
-    expect(screen.queryByTestId('immersive-exit')).toBeNull()
     expect(screen.queryByText('125%')).toBeNull()
     expect(screen.queryByText('Materials')).toBeNull()
     expect(screen.queryByText('Models')).toBeNull()
@@ -109,6 +111,8 @@ describe('ImmersiveToolbar', () => {
     expect(onUndo).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Redo' }))
     expect(onRedo).toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('immersive-exit'))
+    expect(onExit).toHaveBeenCalled()
 
     fireEvent.click(screen.getByTestId('immersive-toolbar-maximize'))
     expect(screen.getByTestId('immersive-toolbar').getAttribute('data-minimized')).toBe('false')

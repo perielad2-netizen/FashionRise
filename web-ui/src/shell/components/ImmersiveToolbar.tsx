@@ -185,6 +185,16 @@ export function ImmersiveToolbar({
                 <ChevronUp size={18} strokeWidth={2} aria-hidden />
                 <span className={styles.btnText}>Max</span>
               </button>
+              <button
+                type="button"
+                className={styles.exitBtn}
+                onClick={onExit}
+                aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
+                data-testid="immersive-exit"
+              >
+                {nativeFullscreen ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
+                <span>Exit</span>
+              </button>
             </div>
           </div>
         </div>
