@@ -325,6 +325,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
       onSelect={editor.setModel}
       onCustomFile={editor.onCustomFile}
       onCreateMyCroquis={editor.openCroquisWizard}
+      onSelectPersonal={editor.requestPersonalCroquisPin}
+      personalCroquisId={editor.personalCroquisId}
       variant={overlayPanels ? 'gallery' : 'sidebar'}
     />
   )
@@ -731,6 +733,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               onSideChange={editor.changeActiveSide}
               onUnavailableFlip={(reason) => editor.publishStudioNotice(reason)}
               onEnterFullscreen={immersive ? undefined : () => void enterImmersive()}
+              noticeOpen={Boolean(betaNotice)}
             />
             {immersive ? (
               <ImmersiveToolbar

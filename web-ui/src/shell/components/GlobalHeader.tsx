@@ -1,8 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronDown, LogOut, Settings, Share2, UserRound, X } from 'lucide-react'
+import { ChevronDown, LogOut, Settings, UserRound, X } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
-import { requestShare } from '@/lib/sharePromo'
-import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './GlobalHeader.module.css'
 
 const APP_VERSION =
@@ -20,7 +18,6 @@ type Props = {
 export function GlobalHeader({ leading, username, onLogout }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
-  const [shareOpen, setShareOpen] = useState(false)
 
   return (
     <header className={styles.header}>
@@ -53,21 +50,6 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
           {menuOpen ? (
             <div className={styles.menu} role="menu">
               <p className={styles.menuUser}>{username}</p>
-              <button
-                type="button"
-                role="menuitem"
-                className={styles.menuItem}
-                onClick={() => {
-                  setMenuOpen(false)
-                  void (async () => {
-                    const result = await requestShare({ kind: 'app' })
-                    if (result === 'needs-fallback') setShareOpen(true)
-                  })()
-                }}
-              >
-                <Share2 size={14} />
-                Share FashionRise…
-              </button>
               <button
                 type="button"
                 role="menuitem"
@@ -128,25 +110,9 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
                 <dd>/api/v1 (same origin)</dd>
               </div>
             </dl>
-            <button
-              type="button"
-              className={styles.menuItem}
-              style={{ marginTop: 12 }}
-              onClick={() => {
-                setAboutOpen(false)
-                void (async () => {
-                  const result = await requestShare({ kind: 'app' })
-                  if (result === 'needs-fallback') setShareOpen(true)
-                })()
-              }}
-            >
-              <Share2 size={14} />
-              Share FashionRise…
-            </button>
           </div>
         </div>
       ) : null}
-      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} payload={{ kind: 'app' }} />
     </header>
   )
 }

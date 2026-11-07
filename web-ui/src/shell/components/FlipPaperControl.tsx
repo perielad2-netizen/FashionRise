@@ -16,6 +16,8 @@ type Props = {
   onUnavailableFlip?: (reason: string) => void
   /** Visual density for immersive paper chrome. */
   compact?: boolean
+  /** Sit in a toolbar row instead of absolute paper-corner overlay. */
+  embedded?: boolean
 }
 
 /**
@@ -29,6 +31,7 @@ export function FlipPaperControl({
   unavailableReason = DEFAULT_UNAVAILABLE,
   onUnavailableFlip,
   compact = false,
+  embedded = false,
 }: Props) {
   const [animating, setAnimating] = useState(false)
   const labelId = useId()
@@ -56,12 +59,13 @@ export function FlipPaperControl({
 
   return (
     <div
-      className={`${styles.wrap} ${compact ? styles.compact : ''} ${animating ? styles.animating : ''} ${
-        !rearAvailable ? styles.unavailable : ''
-      }`}
+      className={`${styles.wrap} ${compact ? styles.compact : ''} ${embedded ? styles.embedded : ''} ${
+        animating ? styles.animating : ''
+      } ${!rearAvailable ? styles.unavailable : ''}`}
       data-testid="flip-paper-control"
       data-side={activeSide}
       data-rear-available={rearAvailable ? 'true' : 'false'}
+      data-embedded={embedded ? 'true' : 'false'}
     >
       <span className={styles.sideLabel} id={labelId} aria-live="polite">
         {sideLabel}

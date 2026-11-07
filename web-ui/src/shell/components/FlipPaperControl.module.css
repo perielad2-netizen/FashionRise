@@ -24,6 +24,13 @@
   padding: 3px 3px 3px 9px;
 }
 
+.embedded {
+  position: relative;
+  top: auto;
+  right: auto;
+  flex: 0 0 auto;
+}
+
 .sideLabel {
   font-size: 0.68rem;
   font-weight: 700;

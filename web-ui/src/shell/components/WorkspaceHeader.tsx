@@ -4,15 +4,12 @@ import {
   BookmarkPlus,
   MoreHorizontal,
   Redo2,
-  Share2,
   Sparkles,
   Star,
   Undo2,
 } from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
-import { requestShare } from '@/lib/sharePromo'
 import { useAuth } from '@/services/auth/AuthProvider'
-import { ShareSheet } from '@/shell/components/ShareSheet'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './WorkspaceHeader.module.css'
 
@@ -62,7 +59,6 @@ export function WorkspaceHeader({
   const canAffordMagic = starsUnlimited || (starsBalance ?? 0) >= magicCost
   const [menuOpen, setMenuOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
-  const [shareOpen, setShareOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -192,7 +188,7 @@ export function WorkspaceHeader({
           className={styles.moreBtn}
           aria-label="More"
           aria-expanded={menuOpen}
-          title="More — Clear canvas, Share, My Designs"
+          title="More — Clear canvas, My Designs"
           onClick={() => setMenuOpen((v) => !v)}
         >
           <MoreHorizontal size={18} aria-hidden />
@@ -246,21 +242,6 @@ export function WorkspaceHeader({
               className={styles.moreItem}
               onClick={() => {
                 setMenuOpen(false)
-                void (async () => {
-                  const result = await requestShare({ kind: 'app' })
-                  if (result === 'needs-fallback') setShareOpen(true)
-                })()
-              }}
-            >
-              <Share2 size={14} aria-hidden style={{ marginInlineEnd: 6, verticalAlign: '-2px' }} />
-              Share FashionRise…
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.moreItem}
-              onClick={() => {
-                setMenuOpen(false)
                 onClear()
               }}
             >
@@ -284,7 +265,6 @@ export function WorkspaceHeader({
       </div>
 
       <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
-      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} payload={{ kind: 'app' }} />
     </div>
   )
 }

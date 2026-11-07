@@ -11,7 +11,6 @@ import {
   Pencil,
   Pipette,
   Redo2,
-  Share2,
   Undo2,
   ZoomIn,
   ZoomOut,
@@ -19,12 +18,10 @@ import {
 import type { BrushKind } from '@/lib/professionalBrushes'
 import type { ToolKind } from '@/lib/strokes'
 import { formatBrushSizePx } from '@/lib/strokes'
-import { requestShare } from '@/lib/sharePromo'
 import {
   BrushKindStrip,
   brushKindShortLabel,
 } from '@/shell/components/BrushKindStrip'
-import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './ImmersiveToolbar.module.css'
 
 export type ImmersiveTool = ToolKind | 'pan'
@@ -90,7 +87,6 @@ export function ImmersiveToolbar({
 }: Props) {
   const [minimizedInternal, setMinimizedInternal] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const [shareOpen, setShareOpen] = useState(false)
   const moreRef = useRef<HTMLDivElement>(null)
   const minimized = minimizedProp ?? minimizedInternal
   const setMinimized = (next: boolean) => {
@@ -118,21 +114,6 @@ export function ImmersiveToolbar({
         className={styles.moreItem}
         onClick={() => {
           setMoreOpen(false)
-          void (async () => {
-            const result = await requestShare({ kind: 'app' })
-            if (result === 'needs-fallback') setShareOpen(true)
-          })()
-        }}
-      >
-        <Share2 size={14} aria-hidden />
-        Share FashionRise…
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        className={styles.moreItem}
-        onClick={() => {
-          setMoreOpen(false)
           onClear()
         }}
       >
@@ -149,7 +130,7 @@ export function ImmersiveToolbar({
         aria-label="More"
         aria-expanded={moreOpen}
         data-testid="immersive-toolbar-more"
-        title="More — Clear canvas, Share"
+        title="More — Clear canvas"
         onClick={() => setMoreOpen((v) => !v)}
       >
         <MoreHorizontal size={18} strokeWidth={1.75} aria-hidden />
@@ -207,7 +188,6 @@ export function ImmersiveToolbar({
             </div>
           </div>
         </div>
-        <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} payload={{ kind: 'app' }} />
       </>
     )
   }
@@ -323,7 +303,6 @@ export function ImmersiveToolbar({
           </div>
         </div>
       </div>
-      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} payload={{ kind: 'app' }} />
     </>
   )
 }
