@@ -395,7 +395,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           title={
             editor.fashnRealisticPieces?.length
               ? 'Accept realistic garment'
-              : 'Review garment for FASHN'
+              : 'Review garment for Try On'
           }
           busy={editor.fashnPrepBusy || editor.fashnRealismBusy}
           scrollable

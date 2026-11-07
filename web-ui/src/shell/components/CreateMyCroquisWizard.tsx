@@ -213,7 +213,7 @@ export function CreateMyCroquisWizard({
           if (ver.status === 'reconciliation_required') {
             setError(
               ver.failure_message?.trim() ||
-                'Provider outcome unknown — this attempt is held for review. No automatic paid retry is available.',
+                'This attempt needs a short review before it can finish. No automatic retry was started.',
             )
             setStep('reconciliation')
             return
@@ -420,8 +420,8 @@ export function CreateMyCroquisWizard({
         {step === 'reconciliation' ? (
           <div className={styles.body}>
             <p role="alert">
-              Provider outcome is unknown. This attempt is held for review. FashionRise will not
-              start another paid generate for this photo until that review completes.
+              This attempt needs a short review before it can finish. FashionRise will not start
+              another paid generate for this photo until that review completes.
             </p>
             <div className={styles.actions}>
               <button type="button" className={styles.primary} onClick={handleClose}>

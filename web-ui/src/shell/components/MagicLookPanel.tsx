@@ -418,60 +418,24 @@ export function MagicLookPanel({
 
         {tryOn &&
         phase === 'ready' &&
-        activeResult?.experimentMeta?.experiment === true ? (
+        activeResult?.experimentMeta?.experiment === true &&
+        onExperimentVerdict ? (
           <div className={styles.details} data-testid="try-on-experiment-meta">
-            <p className={styles.summary}>
-              Experiment · {activeResult.experimentMeta.provider || 'fashn'} · prompt{' '}
-              {activeResult.experimentMeta.promptVersion || '—'}
-              {activeResult.experimentMeta.costCents != null
-                ? ` · ${activeResult.experimentMeta.costCents}¢`
-                : ''}
-              {activeResult.experimentMeta.predictionIds?.length
-                ? ` · pred ${activeResult.experimentMeta.predictionIds[0].slice(0, 8)}`
-                : ''}
-            </p>
-            {activeResult.experimentMeta.approvedGarmentShas?.length ? (
-              <p className={styles.summary}>
-                Approved garment SHA {activeResult.experimentMeta.approvedGarmentShas[0].slice(0, 12)}
-                {activeResult.experimentMeta.croquisId
-                  ? ` · croquis ${activeResult.experimentMeta.croquisId.slice(0, 8)}@v${
-                      activeResult.experimentMeta.croquisVersion ?? '?'
-                    }`
-                  : ''}
-              </p>
-            ) : null}
-            {activeResult.experimentMeta.v16Settings ? (
-              <p className={styles.summary}>
-                v1.6 settings {JSON.stringify(activeResult.experimentMeta.v16Settings)}
-              </p>
-            ) : null}
-            {activeResult.experimentMeta.fashnMaxExperiment ? (
-              <p className={styles.summary}>
-                Max settings{' '}
-                {JSON.stringify({
-                  mode: activeResult.experimentMeta.fashnMaxExperiment.generation_mode,
-                  resolution: activeResult.experimentMeta.fashnMaxExperiment.resolution,
-                  seed: activeResult.experimentMeta.fashnMaxExperiment.seed,
-                })}
-              </p>
-            ) : null}
-            {onExperimentVerdict ? (
-              <div className={styles.actions} data-testid="try-on-experiment-verdict">
-                <span className={styles.summary}>
-                  Verdict: {activeResult.experimentMeta.verdict || 'unreviewed'}
-                </span>
-                {(['accepted', 'rejected', 'unreviewed'] as const).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    disabled={experimentVerdictBusy || activeResult.experimentMeta?.verdict === v}
-                    onClick={() => onExperimentVerdict(v)}
-                  >
-                    {v === 'accepted' ? 'Accepted' : v === 'rejected' ? 'Rejected' : 'Unreviewed'}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            <div className={styles.actions} data-testid="try-on-experiment-verdict">
+              <span className={styles.summary}>
+                Verdict: {activeResult.experimentMeta.verdict || 'unreviewed'}
+              </span>
+              {(['accepted', 'rejected', 'unreviewed'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  disabled={experimentVerdictBusy || activeResult.experimentMeta?.verdict === v}
+                  onClick={() => onExperimentVerdict(v)}
+                >
+                  {v === 'accepted' ? 'Accepted' : v === 'rejected' ? 'Rejected' : 'Unreviewed'}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
         </div>

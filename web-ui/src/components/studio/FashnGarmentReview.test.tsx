@@ -86,8 +86,9 @@ describe('FashnGarmentReview (#169)', () => {
     expect(screen.getByTestId('fashn-fidelity-hard-fail')).toHaveTextContent(
       'Bottoms coverage expanded.',
     )
-    expect(screen.getByTestId('fashn-cost-summary').textContent).toMatch(/OpenAI/)
-    expect(screen.getByTestId('fashn-cost-summary').textContent).toMatch(/FASHN/)
+    expect(screen.getByTestId('fashn-cost-summary').textContent).toMatch(/Realistic garment/)
+    expect(screen.getByTestId('fashn-cost-summary').textContent).toMatch(/Try On/)
+    expect(screen.getByTestId('fashn-cost-summary').textContent).not.toMatch(/FASHN|OpenAI/i)
   })
 
   it('one-piece layout labels a single garment', () => {
@@ -254,10 +255,7 @@ describe('FASHN owner experiment panel (#176/#177)', () => {
     expect(screen.getByTestId('fashn-max-experiment')).toBeInTheDocument()
     expect(screen.getByTestId('fashn-v16-controls')).toBeInTheDocument()
     expect(screen.getByTestId('fashn-reuse-accepted')).toBeInTheDocument()
-    const maxRadio = screen
-      .getByText(/FASHN Try-On Max/)
-      .closest('label')!
-      .querySelector('input') as HTMLInputElement
+    const maxRadio = screen.getByRole('radio', { name: /Enhanced/ })
     expect(maxRadio).not.toBeDisabled()
     fireEvent.click(maxRadio)
     expect(onProviderChange).toHaveBeenCalledWith('fashn_max')
@@ -297,7 +295,7 @@ describe('FASHN owner experiment panel (#176/#177)', () => {
           ownerAllowed: true,
           maxSelectable: false,
           maxUnavailableReason:
-            'Try-On Max is configured but not live-armed (FASHN_TRY_ON_MAX_LIVE_HTTP).',
+            'Enhanced Try On is not available yet.',
           provider: 'fashn',
           onProviderChange,
         }}
@@ -305,11 +303,8 @@ describe('FASHN owner experiment panel (#176/#177)', () => {
     )
     expect(screen.getByTestId('fashn-max-experiment')).toBeInTheDocument()
     expect(screen.getByTestId('fashn-v16-controls')).toBeInTheDocument()
-    expect(screen.getByTestId('fashn-max-unavailable')).toHaveTextContent(/not live-armed/)
-    const maxRadio = screen
-      .getByText(/FASHN Try-On Max/)
-      .closest('label')!
-      .querySelector('input') as HTMLInputElement
+    expect(screen.getByTestId('fashn-max-unavailable')).toHaveTextContent(/not available/)
+    const maxRadio = screen.getByRole('radio', { name: /Enhanced/ })
     expect(maxRadio).toBeDisabled()
     fireEvent.click(maxRadio)
     expect(onProviderChange).not.toHaveBeenCalled()

@@ -3,11 +3,6 @@ import { ChevronDown, LogOut, Settings, UserRound, X } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import styles from './GlobalHeader.module.css'
 
-const APP_VERSION =
-  (import.meta.env.VITE_BUILD_SHA as string | undefined)?.slice(0, 8) ||
-  (import.meta.env.VITE_APP_VERSION as string | undefined) ||
-  'unknown'
-
 type Props = {
   leading?: ReactNode
   username: string
@@ -99,17 +94,9 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
                 <X size={16} />
               </button>
             </div>
-            <p className={styles.aboutBody}>Private family-beta studio.</p>
-            <dl className={styles.aboutMeta}>
-              <div>
-                <dt>Build</dt>
-                <dd data-testid="global-app-version">{APP_VERSION}</dd>
-              </div>
-              <div>
-                <dt>API</dt>
-                <dd>/api/v1 (same origin)</dd>
-              </div>
-            </dl>
+            <p className={styles.aboutBody}>
+              Dream, sketch, and create looks in your personal FashionRise studio.
+            </p>
           </div>
         </div>
       ) : null}
