@@ -428,6 +428,252 @@
   opacity: 0.85;
 }
 
+.commentBtn,
+.commentBtnOn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.commentBtnOn {
+  border-color: rgba(125, 211, 252, 0.45);
+  background: rgba(14, 116, 144, 0.22);
+  color: #bae6fd;
+}
+
+.chatScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  align-items: end;
+  justify-items: stretch;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: rgba(8, 10, 18, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.chatDialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(100%, 520px);
+  max-height: min(88dvh, 720px);
+  margin: 0 auto;
+  border-radius: 20px 20px 16px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, #171b29 0%, #10141f 100%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.chatHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chatHeadText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chatEyebrow {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fda4af;
+}
+
+.chatTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fr-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatClose {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-text);
+  cursor: pointer;
+}
+
+.chatBody {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+}
+
+.chatForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.chatError {
+  margin: 0;
+  padding: 0 14px 12px;
+  font-size: 11px;
+  color: #fecaca;
+}
+
+.commentsStatus {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fr-muted);
+}
+
+.commentList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+@media (min-width: 720px) {
+  .chatScrim {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .chatDialog {
+    border-radius: 20px;
+    max-height: min(80vh, 680px);
+  }
+}
+
+.commentItem {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.commentMain {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.commentAuthor {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fda4af;
+}
+
+.commentBody {
+  font-size: 12px;
+  color: var(--fr-text);
+  word-break: break-word;
+}
+
+.commentLikeBtn,
+.commentLikeBtnOn,
+.commentLikeStat {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fr-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.commentLikeBtn,
+.commentLikeBtnOn {
+  cursor: pointer;
+}
+
+.commentLikeBtnOn {
+  border-color: rgba(244, 114, 182, 0.5);
+  background: rgba(190, 24, 93, 0.22);
+  color: #fecdd3;
+}
+
+.commentInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-text);
+  font-size: 14px;
+}
+
+.commentInput:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.commentSend {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 0;
+  background: #db2777;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.commentSend:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .cardError {
   margin: 0;
   font-size: 11px;

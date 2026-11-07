@@ -7,6 +7,10 @@ const getGalleryItem = vi.fn()
 const likeGalleryItem = vi.fn()
 const unlikeGalleryItem = vi.fn()
 const rateGalleryItem = vi.fn()
+const listGalleryComments = vi.fn()
+const postGalleryComment = vi.fn()
+const likeGalleryComment = vi.fn()
+const unlikeGalleryComment = vi.fn()
 const listFriends = vi.fn()
 const listFriendRequests = vi.fn()
 const requestFriendByUsername = vi.fn()
@@ -17,6 +21,10 @@ vi.mock('@/services/galleryApi', () => ({
   likeGalleryItem: (...args: unknown[]) => likeGalleryItem(...args),
   unlikeGalleryItem: (...args: unknown[]) => unlikeGalleryItem(...args),
   rateGalleryItem: (...args: unknown[]) => rateGalleryItem(...args),
+  listGalleryComments: (...args: unknown[]) => listGalleryComments(...args),
+  postGalleryComment: (...args: unknown[]) => postGalleryComment(...args),
+  likeGalleryComment: (...args: unknown[]) => likeGalleryComment(...args),
+  unlikeGalleryComment: (...args: unknown[]) => unlikeGalleryComment(...args),
   fetchGalleryImageBlob: vi.fn(async () => new Blob()),
 }))
 
@@ -83,6 +91,10 @@ describe('RunwayScreen', () => {
     likeGalleryItem.mockReset()
     unlikeGalleryItem.mockReset()
     rateGalleryItem.mockReset()
+    listGalleryComments.mockReset()
+    postGalleryComment.mockReset()
+    likeGalleryComment.mockReset()
+    unlikeGalleryComment.mockReset()
     listFriends.mockReset()
     listFriendRequests.mockReset()
     requestFriendByUsername.mockReset()
@@ -90,6 +102,7 @@ describe('RunwayScreen', () => {
       if (opts?.sort === 'top10') return [{ ...topItem }]
       return [{ ...circleItem }]
     })
+    listGalleryComments.mockResolvedValue([])
     listFriends.mockResolvedValue([])
     listFriendRequests.mockResolvedValue([])
   })
@@ -150,6 +163,65 @@ describe('RunwayScreen', () => {
     fireEvent.change(score, { target: { value: '9' } })
     await waitFor(() => expect(rateGalleryItem).toHaveBeenCalledWith('circle-1', 9))
     await waitFor(() => expect((score as HTMLSelectElement).value).toBe('9'))
+  })
+
+  it('opens chat popup, posts, and likes on a circle look', async () => {
+    listGalleryComments.mockResolvedValue([
+      {
+        id: 'c1',
+        gallery_item_id: 'circle-1',
+        user_id: 'friend-1',
+        body: 'Love this silhouette',
+        moderation_status: 'ok',
+        likes_count: 0,
+        created_at: '2026-11-07T00:00:00Z',
+        username: 'friendOne',
+        liked_by_me: false,
+      },
+    ])
+    postGalleryComment.mockResolvedValue({
+      id: 'c2',
+      gallery_item_id: 'circle-1',
+      user_id: 'viewer-1',
+      body: 'The hem is perfect',
+      moderation_status: 'ok',
+      likes_count: 0,
+      created_at: '2026-11-07T00:01:00Z',
+      username: 'viewer',
+      liked_by_me: false,
+    })
+    likeGalleryComment.mockResolvedValue(undefined)
+
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const circle = await screen.findByRole('list', { name: 'Circle feed' })
+    fireEvent.click(within(circle).getByRole('button', { name: /Chat/i }))
+    await waitFor(() => expect(listGalleryComments).toHaveBeenCalledWith('circle-1'))
+
+    const dialog = await screen.findByRole('dialog', { name: /Friend circle look/i })
+    expect(within(dialog).getByText('Love this silhouette')).toBeInTheDocument()
+    expect(within(dialog).getByText('@friendOne')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Runway chat/i)).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Like comment/i }))
+    await waitFor(() => expect(likeGalleryComment).toHaveBeenCalledWith('c1'))
+    expect(await within(dialog).findByRole('button', { name: /Unlike comment/i })).toBeInTheDocument()
+
+    fireEvent.change(within(dialog).getByLabelText(/Add a comment/i), {
+      target: { value: 'The hem is perfect' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Post$/i }))
+    await waitFor(() =>
+      expect(postGalleryComment).toHaveBeenCalledWith('circle-1', 'The hem is perfect'),
+    )
+    expect(await within(dialog).findByText('The hem is perfect')).toBeInTheDocument()
+    expect(within(dialog).getByText('@viewer')).toBeInTheDocument()
+    // Own comment has no like button
+    expect(within(dialog).getAllByRole('button', { name: /Unlike comment|Like comment/i })).toHaveLength(
+      1,
+    )
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Close chat/i }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('does not let you like or score your own look', async () => {

@@ -76,6 +76,47 @@ export async function rateGalleryItem(id: string, score: number): Promise<Galler
   })
 }
 
+export type GalleryComment = {
+  id: string
+  gallery_item_id: string
+  user_id: string
+  body: string
+  moderation_status: string
+  likes_count: number
+  created_at: string
+  username?: string | null
+  liked_by_me?: boolean | null
+}
+
+export async function listGalleryComments(
+  id: string,
+  signal?: AbortSignal,
+): Promise<GalleryComment[]> {
+  return apiRequest<GalleryComment[]>(`/gallery/${encodeURIComponent(id)}/comments`, {
+    method: 'GET',
+    signal,
+  })
+}
+
+export async function postGalleryComment(id: string, body: string): Promise<GalleryComment> {
+  return apiRequest<GalleryComment>(`/gallery/${encodeURIComponent(id)}/comments`, {
+    method: 'POST',
+    body: { body },
+  })
+}
+
+export async function likeGalleryComment(commentId: string): Promise<void> {
+  await apiRequest<void>(`/gallery/comments/${encodeURIComponent(commentId)}/like`, {
+    method: 'POST',
+  })
+}
+
+export async function unlikeGalleryComment(commentId: string): Promise<void> {
+  await apiRequest<void>(`/gallery/comments/${encodeURIComponent(commentId)}/like`, {
+    method: 'DELETE',
+  })
+}
+
 /** Authenticated Runway thumbnail bytes for a published gallery item. */
 export async function fetchGalleryImageBlob(
   galleryItemId: string,

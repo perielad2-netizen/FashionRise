@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Globe2,
   Heart,
@@ -8,13 +9,19 @@ import {
   Star,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react'
 import {
   getGalleryItem,
   likeGalleryItem,
   listGallery,
+  likeGalleryComment,
+  listGalleryComments,
+  postGalleryComment,
   rateGalleryItem,
+  unlikeGalleryComment,
   unlikeGalleryItem,
+  type GalleryComment,
   type GalleryItem,
 } from '@/services/galleryApi'
 import {
@@ -57,6 +64,7 @@ const SCORE_HINT = 'Looks earn runway scores from likes + ratings (1–10).'
 export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
+  const viewerUsername = user?.username ?? null
   const [tab, setTab] = useState<TabId>('feed')
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
@@ -231,7 +239,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         <span className={styles.roadLive}>Top 10</span>
         <span className={styles.roadLive}>Friends</span>
         <span className={styles.roadLive}>Like · Score</span>
-        <span className={styles.roadNext}>Comments · Push</span>
+        <span className={styles.roadLive}>Comments</span>
+        <span className={styles.roadNext}>Push</span>
       </div>
 
       <div className={styles.tabs} role="tablist" aria-label="Runway views">
@@ -300,6 +309,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                       rank={index + 1}
                       compact
                       isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                      viewerId={viewerId}
+                      viewerUsername={viewerUsername}
                       onItemChange={patchItem}
                     />
                   ))}
@@ -341,6 +352,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                       key={item.id}
                       item={item}
                       isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                      viewerId={viewerId}
+                      viewerUsername={viewerUsername}
                       onItemChange={patchItem}
                     />
                   ))}
@@ -490,26 +503,70 @@ function RunwayCard({
   rank,
   compact = false,
   isOwn = false,
+  viewerId,
+  viewerUsername,
   onItemChange,
 }: {
   item: GalleryItem
   rank?: number
   compact?: boolean
   isOwn?: boolean
+  viewerId: string | null
+  viewerUsername: string | null
   onItemChange: (next: GalleryItem) => void
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
-  const [busy, setBusy] = useState<'like' | 'score' | null>(null)
+  const [busy, setBusy] = useState<'like' | 'score' | 'comment' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const [comments, setComments] = useState<GalleryComment[] | null>(null)
+  const [commentsError, setCommentsError] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
   const liked = Boolean(item.liked_by_me)
   const canReact = !isOwn
+  const chatTitleId = useId()
+  const chatInputId = useId()
 
   const refreshItem = useCallback(async () => {
     const fresh = await getGalleryItem(item.id)
     onItemChange(fresh)
     return fresh
   }, [item.id, onItemChange])
+
+  const loadComments = useCallback(async () => {
+    setCommentsError(null)
+    try {
+      const rows = await listGalleryComments(item.id)
+      setComments(rows)
+    } catch (err) {
+      setCommentsError(err instanceof ApiError ? err.message : 'Could not load comments.')
+    }
+  }, [item.id])
+
+  const openComments = useCallback(() => {
+    setCommentsOpen(true)
+    void loadComments()
+  }, [loadComments])
+
+  const closeComments = useCallback(() => {
+    setCommentsOpen(false)
+    setActionError(null)
+  }, [])
+
+  useEffect(() => {
+    if (!commentsOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeComments()
+    }
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [closeComments, commentsOpen])
 
   const onToggleLike = useCallback(async () => {
     if (!canReact || busy) return
@@ -550,6 +607,68 @@ function RunwayCard({
       }
     },
     [busy, canReact, item.id, refreshItem],
+  )
+
+  const onPostComment = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault()
+      const body = draft.trim()
+      if (!body || busy) return
+      setBusy('comment')
+      setActionError(null)
+      try {
+        const row = await postGalleryComment(item.id, body)
+        setDraft('')
+        setComments((prev) => [
+          ...(prev ?? []),
+          {
+            ...row,
+            likes_count: row.likes_count ?? 0,
+            liked_by_me: false,
+            username: row.username || viewerUsername,
+          },
+        ])
+        setCommentsOpen(true)
+      } catch (err) {
+        setActionError(err instanceof ApiError ? err.message : 'Could not post comment.')
+      } finally {
+        setBusy(null)
+      }
+    },
+    [busy, draft, item.id, viewerUsername],
+  )
+
+  const onToggleCommentLike = useCallback(
+    async (comment: GalleryComment) => {
+      if (!viewerId || comment.user_id === viewerId || busy) return
+      const liked = Boolean(comment.liked_by_me)
+      const prevCount = comment.likes_count ?? 0
+      setComments((prev) =>
+        (prev ?? []).map((row) =>
+          row.id === comment.id
+            ? {
+                ...row,
+                liked_by_me: !liked,
+                likes_count: Math.max(0, prevCount + (liked ? -1 : 1)),
+              }
+            : row,
+        ),
+      )
+      try {
+        if (liked) await unlikeGalleryComment(comment.id)
+        else await likeGalleryComment(comment.id)
+      } catch (err) {
+        setComments((prev) =>
+          (prev ?? []).map((row) =>
+            row.id === comment.id
+              ? { ...row, liked_by_me: liked, likes_count: prevCount }
+              : row,
+          ),
+        )
+        setActionError(err instanceof ApiError ? err.message : 'Could not update comment like.')
+      }
+    },
+    [busy, viewerId],
   )
 
   return (
@@ -616,20 +735,146 @@ function RunwayCard({
             </span>
           )}
           {!compact ? (
-            <span className={styles.soonChip} title="Comments coming soon">
-              <MessageCircle size={12} aria-hidden /> soon
-            </span>
+            <button
+              type="button"
+              className={commentsOpen ? styles.commentBtnOn : styles.commentBtn}
+              aria-haspopup="dialog"
+              aria-expanded={commentsOpen}
+              onClick={openComments}
+            >
+              <MessageCircle size={12} aria-hidden />
+              {comments ? comments.length : 'Chat'}
+            </button>
           ) : null}
         </div>
         {isOwn ? (
           <p className={styles.ownHint}>Your look — likes & scores come from others</p>
         ) : null}
-        {actionError ? (
+        {actionError && !commentsOpen ? (
           <p className={styles.cardError} role="alert">
             {actionError}
           </p>
         ) : null}
       </div>
+      {!compact && commentsOpen
+        ? createPortal(
+            <div
+              className={styles.chatScrim}
+              role="presentation"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) closeComments()
+              }}
+            >
+              <div
+                className={styles.chatDialog}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={chatTitleId}
+              >
+                <header className={styles.chatHead}>
+                  <div className={styles.chatHeadText}>
+                    <p className={styles.chatEyebrow}>Runway chat</p>
+                    <h3 id={chatTitleId} className={styles.chatTitle}>
+                      {item.title || 'Untitled look'}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.chatClose}
+                    aria-label="Close chat"
+                    onClick={closeComments}
+                  >
+                    <X size={18} aria-hidden />
+                  </button>
+                </header>
+
+                <div className={styles.chatBody}>
+                  {commentsError ? (
+                    <p className={styles.cardError} role="alert">
+                      {commentsError}
+                    </p>
+                  ) : comments == null ? (
+                    <p className={styles.commentsStatus}>Loading comments…</p>
+                  ) : comments.length === 0 ? (
+                    <p className={styles.commentsStatus}>No comments yet — say something nice.</p>
+                  ) : (
+                    <ul className={styles.commentList} aria-label="Comments">
+                      {comments.map((row) => {
+                        const ownComment = Boolean(viewerId && row.user_id === viewerId)
+                        const commentLiked = Boolean(row.liked_by_me)
+                        return (
+                          <li key={row.id} className={styles.commentItem}>
+                            <div className={styles.commentMain}>
+                              <span className={styles.commentAuthor}>
+                                @{row.username || 'member'}
+                              </span>
+                              <span className={styles.commentBody}>{row.body}</span>
+                            </div>
+                            {ownComment ? (
+                              <span
+                                className={styles.commentLikeStat}
+                                title="Others can like your comment"
+                              >
+                                <Heart size={11} aria-hidden />
+                                {row.likes_count ?? 0}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className={
+                                  commentLiked ? styles.commentLikeBtnOn : styles.commentLikeBtn
+                                }
+                                aria-pressed={commentLiked}
+                                aria-label={commentLiked ? 'Unlike comment' : 'Like comment'}
+                                onClick={() => void onToggleCommentLike(row)}
+                              >
+                                <Heart
+                                  size={11}
+                                  aria-hidden
+                                  fill={commentLiked ? 'currentColor' : 'none'}
+                                />
+                                {row.likes_count ?? 0}
+                              </button>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                <form className={styles.chatForm} onSubmit={(e) => void onPostComment(e)}>
+                  <label className={styles.srOnly} htmlFor={chatInputId}>
+                    Add a comment
+                  </label>
+                  <input
+                    id={chatInputId}
+                    className={styles.commentInput}
+                    value={draft}
+                    maxLength={500}
+                    placeholder="Add a comment…"
+                    disabled={busy === 'comment'}
+                    autoFocus
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    className={styles.commentSend}
+                    disabled={busy === 'comment' || !draft.trim()}
+                  >
+                    Post
+                  </button>
+                </form>
+                {actionError ? (
+                  <p className={styles.chatError} role="alert">
+                    {actionError}
+                  </p>
+                ) : null}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </li>
   )
 }
