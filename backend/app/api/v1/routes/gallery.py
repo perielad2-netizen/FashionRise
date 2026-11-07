@@ -51,7 +51,7 @@ def list_gallery(
         # Full public newest/trending/top_rated stays available for Top 10 tooling,
         # but the web Runway home uses circle + top10 only.
         rows = gallery_service.list_public_gallery(db, limit=limit, offset=offset, sort=sort)
-    return [gallery_service.to_gallery_read(r) for r in rows]
+    return gallery_service.to_gallery_reads_for_viewer(db, rows, user)
 
 
 @router.get("/user/{user_id}", response_model=list[GalleryRead])
@@ -125,7 +125,4 @@ def get_gallery_item(
     user: User | None = Depends(get_optional_user),
 ) -> GalleryRead:
     item = gallery_service.get_gallery_item(db, gallery_item_id)
-    liked: bool | None = None
-    if user is not None:
-        liked = gallery_service.user_has_liked(db, user.id, gallery_item_id)
-    return gallery_service.to_gallery_read(item, liked_by_me=liked)
+    return gallery_service.to_gallery_reads_for_viewer(db, [item], user)[0]

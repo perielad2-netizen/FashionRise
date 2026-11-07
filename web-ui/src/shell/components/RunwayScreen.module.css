@@ -332,6 +332,87 @@
   gap: 3px;
 }
 
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.likeBtn,
+.likeBtnOn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.likeBtnOn {
+  border-color: rgba(244, 114, 182, 0.55);
+  background: rgba(190, 24, 93, 0.22);
+  color: #fecdd3;
+}
+
+.likeBtn:disabled,
+.likeBtnOn:disabled,
+.scoreSelect:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.scoreLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 4px 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-muted);
+  font-size: 11px;
+}
+
+.scoreLabelText {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 650;
+}
+
+.scoreSelect {
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--fr-text);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.soonChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--fr-muted);
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.cardError {
+  margin: 0;
+  font-size: 11px;
+  color: #fecaca;
+}
+
 .friendsPanel {
   display: grid;
   gap: 16px;

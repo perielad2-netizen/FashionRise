@@ -19,6 +19,16 @@ export type GalleryItem = {
   created_at: string
   updated_at: string
   liked_by_me?: boolean | null
+  my_score?: number | null
+}
+
+export type GalleryRating = {
+  id: string
+  gallery_item_id: string
+  user_id: string
+  score: number
+  created_at: string
+  updated_at: string
 }
 
 export async function listGallery(opts?: {
@@ -41,12 +51,29 @@ export async function listGallery(opts?: {
   })
 }
 
+export async function getGalleryItem(
+  id: string,
+  signal?: AbortSignal,
+): Promise<GalleryItem> {
+  return apiRequest<GalleryItem>(`/gallery/${encodeURIComponent(id)}`, {
+    method: 'GET',
+    signal,
+  })
+}
+
 export async function likeGalleryItem(id: string): Promise<void> {
   await apiRequest<void>(`/gallery/${encodeURIComponent(id)}/like`, { method: 'POST' })
 }
 
 export async function unlikeGalleryItem(id: string): Promise<void> {
   await apiRequest<void>(`/gallery/${encodeURIComponent(id)}/like`, { method: 'DELETE' })
+}
+
+export async function rateGalleryItem(id: string, score: number): Promise<GalleryRating> {
+  return apiRequest<GalleryRating>('/ratings', {
+    method: 'POST',
+    body: { gallery_item_id: id, score },
+  })
 }
 
 /** Authenticated Runway thumbnail bytes for a published gallery item. */

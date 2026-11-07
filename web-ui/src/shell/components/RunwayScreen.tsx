@@ -9,7 +9,14 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react'
-import { listGallery, type GalleryItem } from '@/services/galleryApi'
+import {
+  getGalleryItem,
+  likeGalleryItem,
+  listGallery,
+  rateGalleryItem,
+  unlikeGalleryItem,
+  type GalleryItem,
+} from '@/services/galleryApi'
 import {
   acceptFriendRequest,
   listFriendRequests,
@@ -169,6 +176,19 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     [load],
   )
 
+  const patchItem = useCallback((next: GalleryItem) => {
+    setState((prev) => {
+      if (prev.status !== 'ready') return prev
+      const rewrite = (rows: GalleryItem[]) =>
+        rows.map((row) => (row.id === next.id ? { ...row, ...next } : row))
+      return {
+        status: 'ready',
+        circle: rewrite(prev.circle),
+        top10: rewrite(prev.top10),
+      }
+    })
+  }, [])
+
   return (
     <section className={styles.screen} aria-labelledby="runway-title">
       <header className={styles.head}>
@@ -207,7 +227,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         <span className={styles.roadLive}>Circle feed</span>
         <span className={styles.roadLive}>Top 10</span>
         <span className={styles.roadLive}>Friends</span>
-        <span className={styles.roadNext}>Like · Score</span>
+        <span className={styles.roadLive}>Like · Score</span>
         <span className={styles.roadNext}>Comments · Push</span>
       </div>
 
@@ -271,7 +291,13 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               ) : (
                 <ul className={styles.topStrip}>
                   {state.top10.map((item, index) => (
-                    <RunwayCard key={item.id} item={item} rank={index + 1} compact />
+                    <RunwayCard
+                      key={item.id}
+                      item={item}
+                      rank={index + 1}
+                      compact
+                      onItemChange={patchItem}
+                    />
                   ))}
                 </ul>
               )}
@@ -307,7 +333,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               ) : (
                 <ul className={styles.grid} aria-label="Circle feed">
                   {state.circle.map((item) => (
-                    <RunwayCard key={item.id} item={item} />
+                    <RunwayCard key={item.id} item={item} onItemChange={patchItem} />
                   ))}
                 </ul>
               )}
@@ -454,13 +480,66 @@ function RunwayCard({
   item,
   rank,
   compact = false,
+  onItemChange,
 }: {
   item: GalleryItem
   rank?: number
   compact?: boolean
+  onItemChange: (next: GalleryItem) => void
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
   const src = authImg.url || item.image_url
+  const [busy, setBusy] = useState<'like' | 'score' | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const liked = Boolean(item.liked_by_me)
+
+  const refreshItem = useCallback(async () => {
+    const fresh = await getGalleryItem(item.id)
+    onItemChange(fresh)
+    return fresh
+  }, [item.id, onItemChange])
+
+  const onToggleLike = useCallback(async () => {
+    if (busy) return
+    setBusy('like')
+    setActionError(null)
+    const prevLiked = liked
+    const prevCount = item.likes_count
+    onItemChange({
+      ...item,
+      liked_by_me: !prevLiked,
+      likes_count: Math.max(0, prevCount + (prevLiked ? -1 : 1)),
+    })
+    try {
+      if (prevLiked) await unlikeGalleryItem(item.id)
+      else await likeGalleryItem(item.id)
+      await refreshItem()
+    } catch (err) {
+      onItemChange({ ...item, liked_by_me: prevLiked, likes_count: prevCount })
+      setActionError(err instanceof ApiError ? err.message : 'Could not update like.')
+    } finally {
+      setBusy(null)
+    }
+  }, [busy, item, liked, onItemChange, refreshItem])
+
+  const onScore = useCallback(
+    async (raw: string) => {
+      const score = Number(raw)
+      if (!Number.isInteger(score) || score < 1 || score > 10 || busy) return
+      setBusy('score')
+      setActionError(null)
+      try {
+        await rateGalleryItem(item.id, score)
+        await refreshItem()
+      } catch (err) {
+        setActionError(err instanceof ApiError ? err.message : 'Could not save score.')
+      } finally {
+        setBusy(null)
+      }
+    },
+    [busy, item.id, refreshItem],
+  )
+
   return (
     <li className={compact ? styles.topCard : styles.card}>
       <div className={styles.thumb}>
@@ -475,25 +554,51 @@ function RunwayCard({
       </div>
       <div className={styles.cardBody}>
         <h2 className={styles.cardTitle}>{item.title || 'Untitled look'}</h2>
-        <p className={styles.cardMeta}>
-          <span title="Likes">
-            <Heart size={12} aria-hidden /> {item.likes_count}
-          </span>
-          <span aria-hidden>·</span>
-          <span title="Average score">
-            <Star size={12} aria-hidden />{' '}
-            {item.rating_average != null ? item.rating_average.toFixed(1) : '—'}
-            {item.rating_count > 0 ? ` (${item.rating_count})` : ''}
-          </span>
+        <div className={styles.cardActions}>
+          <button
+            type="button"
+            className={liked ? styles.likeBtnOn : styles.likeBtn}
+            aria-pressed={liked}
+            aria-label={liked ? 'Unlike look' : 'Like look'}
+            disabled={busy === 'like'}
+            onClick={() => void onToggleLike()}
+          >
+            <Heart size={13} aria-hidden fill={liked ? 'currentColor' : 'none'} />
+            {item.likes_count}
+          </button>
+          <label className={styles.scoreLabel}>
+            <span className={styles.scoreLabelText}>
+              <Star size={12} aria-hidden />
+              {item.rating_average != null ? item.rating_average.toFixed(1) : 'Score'}
+            </span>
+            <select
+              className={styles.scoreSelect}
+              aria-label={`Score ${item.title || 'look'} from 1 to 10`}
+              value={item.my_score ?? ''}
+              disabled={busy === 'score'}
+              onChange={(event) => void onScore(event.target.value)}
+            >
+              <option value="" disabled>
+                {item.my_score ? `Yours ${item.my_score}` : 'Rate'}
+              </option>
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
           {!compact ? (
-            <>
-              <span aria-hidden>·</span>
-              <span title="Comments coming soon">
-                <MessageCircle size={12} aria-hidden /> soon
-              </span>
-            </>
+            <span className={styles.soonChip} title="Comments coming soon">
+              <MessageCircle size={12} aria-hidden /> soon
+            </span>
           ) : null}
-        </p>
+        </div>
+        {actionError ? (
+          <p className={styles.cardError} role="alert">
+            {actionError}
+          </p>
+        ) : null}
       </div>
     </li>
   )

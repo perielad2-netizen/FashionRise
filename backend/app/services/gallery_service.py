@@ -9,6 +9,7 @@ from app.models.gallery_comment import GalleryComment
 from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
+from app.models.rating import Rating
 from app.models.user import User
 from app.models.user_follow import UserFollow
 from app.models.user_friendship import FRIENDSHIP_ACCEPTED, UserFriendship
@@ -16,10 +17,52 @@ from app.schemas.gallery import GalleryCommentCreate, GalleryCreate, GalleryRead
 from app.services import ai_service
 
 
-def to_gallery_read(item: GalleryItem, *, liked_by_me: bool | None = None) -> GalleryRead:
+def to_gallery_read(
+    item: GalleryItem,
+    *,
+    liked_by_me: bool | None = None,
+    my_score: int | None = None,
+) -> GalleryRead:
     base = GalleryRead.model_validate(item)
     image_path = f"/gallery/{item.id}/image" if item.look_id is not None else None
-    return base.model_copy(update={"liked_by_me": liked_by_me, "image_path": image_path})
+    return base.model_copy(
+        update={"liked_by_me": liked_by_me, "my_score": my_score, "image_path": image_path}
+    )
+
+
+def to_gallery_reads_for_viewer(
+    db: Session, items: list[GalleryItem], viewer: User | None
+) -> list[GalleryRead]:
+    """Attach liked_by_me / my_score in one pass for Runway list cards."""
+    if not items:
+        return []
+    liked_ids: set[uuid.UUID] = set()
+    my_scores: dict[uuid.UUID, int] = {}
+    if viewer is not None:
+        ids = [item.id for item in items]
+        liked_ids = set(
+            db.scalars(
+                select(GalleryLike.gallery_item_id).where(
+                    GalleryLike.user_id == viewer.id,
+                    GalleryLike.gallery_item_id.in_(ids),
+                )
+            ).all()
+        )
+        for gallery_item_id, score in db.execute(
+            select(Rating.gallery_item_id, Rating.score).where(
+                Rating.user_id == viewer.id,
+                Rating.gallery_item_id.in_(ids),
+            )
+        ):
+            my_scores[gallery_item_id] = int(score)
+    return [
+        to_gallery_read(
+            item,
+            liked_by_me=(item.id in liked_ids) if viewer is not None else None,
+            my_score=my_scores.get(item.id) if viewer is not None else None,
+        )
+        for item in items
+    ]
 
 
 def create_gallery_item(db: Session, user: User, data: GalleryCreate) -> GalleryItem:
