@@ -112,6 +112,28 @@ def assert_can_spend(db: Session, user: User, feature: Feature | str) -> None:
         )
 
 
+def credit_stars(db: Session, user: User, amount: int, *, reason: str = "iap") -> int:
+    """Credit Stars (e.g. after verified App Store / Play Store purchase). Returns new balance."""
+    add = max(0, int(amount))
+    if add <= 0:
+        return int(getattr(user, "ai_stars", 0) or 0)
+    locked = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if locked is None:
+        raise ForbiddenError("Account not found")
+    new_balance = int(locked.ai_stars or 0) + add
+    db.execute(update(User).where(User.id == locked.id).values(ai_stars=new_balance))
+    locked.ai_stars = new_balance
+    user.ai_stars = new_balance
+    _log.info(
+        "ai_stars_credited user_id=%s amount=%s remaining=%s reason=%s",
+        user.id,
+        add,
+        new_balance,
+        reason,
+    )
+    return new_balance
+
+
 def debit_stars(db: Session, user: User, feature: Feature | str) -> int:
     """Debit feature cost. Returns remaining balance. Skip unlimited owners.
 

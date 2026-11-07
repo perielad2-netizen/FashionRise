@@ -30,9 +30,17 @@ Backend must be reachable at `VITE_API_BASE_URL` (default `http://127.0.0.1:8001
 |---------|---------|
 | `npm run dev` | Local Vite server |
 | `npm test` | Vitest |
-| `npm run build` | Production build |
+| `npm run build` | Production web/PWA build |
+| `npm run build:native` | Store shell build (absolute API URL) |
+| `npm run cap:sync` | Native build + sync into `android/` + `ios/` |
+| `npm run cap:android` | Sync + open Android Studio |
+| `npm run cap:ios` | Sync + open Xcode (macOS) |
 | `npm run lint` | oxlint |
 | `npm run preview` | Preview production build |
+
+## App Store / Play Store
+
+See **[docs/STORE-DEPLOY.md](../docs/STORE-DEPLOY.md)**. Capacitor app id: `app.fashionrise.studio`. Apple/Google own IAP; no custom card checkout in the store apps.
 
 ## PWA install (operator)
 

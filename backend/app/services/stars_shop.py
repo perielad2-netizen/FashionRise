@@ -21,35 +21,42 @@ class StarPackage:
     name: str
     stars: int
     price_usd_cents: int
+    """Current sell price (cents). Store IAP price is set in Apple/Google consoles to match."""
+    list_price_usd_cents: int
+    """Compare-at / was price for UI (cents)."""
     description: str
-    # Purchases are listed but not sellable until checkout is enabled.
+    # Purchases are listed but not sellable until store IAP / checkout is enabled.
     available: bool = False
 
 
-# Static catalog — infrastructure only; available=False until payment is wired.
+# Catalog aligned with App Store / Play Store IAP product IDs.
+# Launch prices (set the same amounts in App Store Connect / Play Console).
 STAR_PACKAGES: tuple[StarPackage, ...] = (
     StarPackage(
         sku="stars_50",
-        name="Starter Pack",
+        name="Starter",
         stars=50,
-        price_usd_cents=499,
-        description="50 Stars — a few Magics or one Professional PDF.",
+        price_usd_cents=599,
+        list_price_usd_cents=599,
+        description="50 Stars — ~11.98¢ / Star.",
         available=False,
     ),
     StarPackage(
         sku="stars_150",
-        name="Creator Pack",
+        name="Creator",
         stars=150,
-        price_usd_cents=1299,
-        description="150 Stars — Magics, croquis, fabrics, and PDFs.",
+        price_usd_cents=1699,
+        list_price_usd_cents=1699,
+        description="150 Stars — ~11.33¢ / Star.",
         available=False,
     ),
     StarPackage(
         sku="stars_500",
-        name="Studio Pack",
+        name="Studio",
         stars=500,
-        price_usd_cents=3499,
-        description="500 Stars — heavy Studio use.",
+        price_usd_cents=4999,
+        list_price_usd_cents=4999,
+        description="500 Stars — 10.00¢ / Star.",
         available=False,
     ),
 )
@@ -65,6 +72,8 @@ def list_packages() -> list[dict[str, Any]]:
                 "name": pkg.name,
                 "stars": pkg.stars,
                 "price_usd_cents": pkg.price_usd_cents,
+                "list_price_usd_cents": pkg.list_price_usd_cents,
+                "cents_per_star": round(pkg.price_usd_cents / pkg.stars, 2) if pkg.stars else None,
                 "description": pkg.description,
                 "available": bool(pkg.available and checkout),
             }
