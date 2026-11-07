@@ -25,7 +25,7 @@ const baseProps = {
 }
 
 describe('DrawingWorkspace paper corner controls', () => {
-  it('keeps Full Screen and Flip in a chrome bar above the cream paper', () => {
+  it('anchors Full Screen and Flip inside the paper frame (not stage chrome)', () => {
     render(
       <DrawingWorkspace
         {...baseProps}
@@ -36,14 +36,11 @@ describe('DrawingWorkspace paper corner controls', () => {
         onEnterFullscreen={() => undefined}
       />,
     )
-    const chrome = screen.getByTestId('paper-chrome-bar')
     const paper = screen.getByTestId('paper-frame')
-    expect(within(chrome).getByTestId('paper-fullscreen-button')).toBeTruthy()
-    expect(within(chrome).getByTestId('flip-paper-control')).toBeTruthy()
-    expect(within(paper).queryByTestId('paper-fullscreen-button')).toBeNull()
-    expect(within(paper).queryByTestId('flip-paper-control')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Enter full screen drawing' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Flip to Back' })).toBeTruthy()
+    expect(within(paper).getByTestId('paper-fullscreen-button')).toBeTruthy()
+    expect(within(paper).getByTestId('flip-paper-control')).toBeTruthy()
+    expect(within(paper).getByRole('button', { name: 'Enter full screen drawing' })).toBeTruthy()
+    expect(within(paper).getByRole('button', { name: 'Flip to Back' })).toBeTruthy()
   })
 
   it('hides paper Full Screen in immersive mode (toolbar owns exit/fullscreen)', () => {
@@ -59,7 +56,6 @@ describe('DrawingWorkspace paper corner controls', () => {
       />,
     )
     expect(screen.queryByTestId('paper-fullscreen-button')).toBeNull()
-    expect(screen.queryByTestId('paper-chrome-bar')).toBeNull()
     expect(screen.getByTestId('flip-paper-control')).toBeTruthy()
   })
 

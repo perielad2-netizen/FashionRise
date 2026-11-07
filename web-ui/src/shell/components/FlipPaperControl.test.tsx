@@ -5,11 +5,13 @@ import { FlipPaperControl } from '@/shell/components/FlipPaperControl'
 import { rearUnavailableReasonForModel } from '@/shell/rearUnavailableReason'
 
 describe('FlipPaperControl', () => {
-  it('shows FRONT label and Flip to Back tooltip on the front side', () => {
+  it('shows an icon-only flip control with Flip to Back tooltip on the front side', () => {
     render(
       <FlipPaperControl activeSide="front" rearAvailable onSideChange={() => undefined} />,
     )
-    expect(screen.getByText('FRONT')).toBeInTheDocument()
+    expect(screen.queryByText('FRONT')).toBeNull()
+    expect(screen.queryByText('BACK')).toBeNull()
+    expect(screen.getByTestId('flip-paper-control')).toHaveAttribute('data-side', 'front')
     expect(screen.getByTestId('flip-paper-button')).toHaveAttribute('title', 'Flip to Back')
     expect(screen.getByTestId('flip-paper-button')).toHaveAttribute('aria-label', 'Flip to Back')
   })

@@ -22,10 +22,15 @@ describe('sharePromo', () => {
     expect(caption).toContain(FASHIONRISE_PUBLIC_URL)
   })
 
-  it('includes the look title when provided', () => {
+  it('omits the look title from the public caption', () => {
     const caption = buildShareCaption({ kind: 'look', title: 'Silk Wrap Dress' })
-    expect(caption).toContain('Silk Wrap Dress')
+    expect(caption).not.toContain('Silk Wrap Dress')
     expect(caption.startsWith('Created with FashionRise')).toBe(true)
+    expect(caption.split('\n')).toEqual([
+      'Created with FashionRise',
+      'Search Google for FashionRise to design your own looks',
+      FASHIONRISE_PUBLIC_URL,
+    ])
   })
 
   it('builds a WhatsApp deep link with the attribution caption', () => {

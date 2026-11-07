@@ -50,8 +50,9 @@ export function WorkspaceHeader({
   saveError,
   onRetrySave,
   onSaveDesign,
-  onOpenLibrary,
+  onOpenLibrary: _onOpenLibrary,
 }: Props) {
+  void _onOpenLibrary
   const { user } = useAuth()
   const starsUnlimited = Boolean(user?.ai_stars_unlimited)
   const starsBalance = starsUnlimited ? null : Number(user?.ai_stars ?? 0)
@@ -188,7 +189,7 @@ export function WorkspaceHeader({
           className={styles.moreBtn}
           aria-label="More"
           aria-expanded={menuOpen}
-          title="More — Clear canvas, My Designs"
+          title="More — Clear canvas"
           onClick={() => setMenuOpen((v) => !v)}
         >
           <MoreHorizontal size={18} aria-hidden />
@@ -207,19 +208,6 @@ export function WorkspaceHeader({
                 }}
               >
                 Save as design…
-              </button>
-            ) : null}
-            {onOpenLibrary ? (
-              <button
-                type="button"
-                role="menuitem"
-                className={styles.moreItem}
-                onClick={() => {
-                  setMenuOpen(false)
-                  onOpenLibrary()
-                }}
-              >
-                My Designs
               </button>
             ) : null}
             {magicEnabled && canRecoverLastMagic && onRecoverLastMagic ? (
@@ -247,19 +235,6 @@ export function WorkspaceHeader({
             >
               Clear canvas
             </button>
-            {onRetrySave ? (
-              <button
-                type="button"
-                role="menuitem"
-                className={styles.moreItem}
-                onClick={() => {
-                  setMenuOpen(false)
-                  onRetrySave()
-                }}
-              >
-                Save now
-              </button>
-            ) : null}
           </div>
         ) : null}
       </div>

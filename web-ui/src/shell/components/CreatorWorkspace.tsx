@@ -733,7 +733,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               onSideChange={editor.changeActiveSide}
               onUnavailableFlip={(reason) => editor.publishStudioNotice(reason)}
               onEnterFullscreen={immersive ? undefined : () => void enterImmersive()}
-              noticeOpen={Boolean(betaNotice)}
             />
             {immersive ? (
               <ImmersiveToolbar

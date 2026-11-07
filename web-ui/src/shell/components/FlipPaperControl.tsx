@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { RotateCw } from 'lucide-react'
 import type { StudioPaperSide } from '@/lib/studioSideArtwork'
 import styles from './FlipPaperControl.module.css'
@@ -16,13 +16,11 @@ type Props = {
   onUnavailableFlip?: (reason: string) => void
   /** Visual density for immersive paper chrome. */
   compact?: boolean
-  /** Sit in a toolbar row instead of absolute paper-corner overlay. */
-  embedded?: boolean
 }
 
 /**
- * Paper-corner Front/Back control. One model tile stays in the library; this
- * toggles the drawing paper side without mirroring artwork or strokes.
+ * Paper-corner Front/Back control. Icon-only on the cream paper; side is
+ * exposed via aria-label / data-side (no visible FRONT/BACK text).
  */
 export function FlipPaperControl({
   activeSide,
@@ -31,11 +29,8 @@ export function FlipPaperControl({
   unavailableReason = DEFAULT_UNAVAILABLE,
   onUnavailableFlip,
   compact = false,
-  embedded = false,
 }: Props) {
   const [animating, setAnimating] = useState(false)
-  const labelId = useId()
-  const sideLabel = activeSide === 'front' ? 'FRONT' : 'BACK'
   const tooltip = !rearAvailable
     ? unavailableReason
     : activeSide === 'front'
@@ -59,24 +54,19 @@ export function FlipPaperControl({
 
   return (
     <div
-      className={`${styles.wrap} ${compact ? styles.compact : ''} ${embedded ? styles.embedded : ''} ${
-        animating ? styles.animating : ''
-      } ${!rearAvailable ? styles.unavailable : ''}`}
+      className={`${styles.wrap} ${compact ? styles.compact : ''} ${animating ? styles.animating : ''} ${
+        !rearAvailable ? styles.unavailable : ''
+      }`}
       data-testid="flip-paper-control"
       data-side={activeSide}
       data-rear-available={rearAvailable ? 'true' : 'false'}
-      data-embedded={embedded ? 'true' : 'false'}
     >
-      <span className={styles.sideLabel} id={labelId} aria-live="polite">
-        {sideLabel}
-      </span>
       <button
         type="button"
         className={styles.flipBtn}
         onClick={flip}
         title={tooltip}
         aria-label={ariaLabel}
-        aria-describedby={labelId}
         data-testid="flip-paper-button"
       >
         <RotateCw size={compact ? 16 : 18} strokeWidth={1.85} aria-hidden="true" />

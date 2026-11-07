@@ -5,8 +5,8 @@
   z-index: 6;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 4px 4px 10px;
+  justify-content: center;
+  padding: 3px;
   border-radius: 999px;
   background: rgba(255, 252, 247, 0.92);
   border: 1px solid rgba(28, 28, 30, 0.1);
@@ -20,23 +20,7 @@
 .compact {
   top: max(10px, env(safe-area-inset-top, 0px));
   right: max(10px, env(safe-area-inset-right, 0px));
-  gap: 5px;
-  padding: 3px 3px 3px 9px;
-}
-
-.embedded {
-  position: relative;
-  top: auto;
-  right: auto;
-  flex: 0 0 auto;
-}
-
-.sideLabel {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #3a3a3c;
-  line-height: 1;
+  padding: 2px;
 }
 
 .flipBtn {
@@ -87,10 +71,6 @@
   background: rgba(60, 60, 67, 0.12);
 }
 
-.unavailable .sideLabel {
-  color: #6b7280;
-}
-
 .paperCue {
   position: absolute;
   width: 1px;
@@ -128,21 +108,14 @@
 }
 
 /*
- * Narrow paper width (actual cream frame, not viewport): compact Front/Back
- * treatment. Keep a readable FRONT/BACK label; touch target stays ≥44×44;
- * corner inset shrinks so Flip never crowds Full Screen opposite.
+ * Narrow paper width (actual cream frame, not viewport): tuck the icon-only
+ * flip control; touch target stays ≥44×44 so Flip never crowds Full Screen.
  */
 @container studio-paper (max-width: 420px) {
   .wrap:not(.compact) {
     top: 7px;
     right: 7px;
-    gap: 4px;
-    padding: 2px 2px 2px 8px;
-  }
-
-  .wrap:not(.compact) .sideLabel {
-    font-size: 0.6rem;
-    letter-spacing: 0.06em;
+    padding: 2px;
   }
 
   .wrap:not(.compact) .flipBtn {
@@ -151,19 +124,10 @@
   }
 }
 
-/* Very tight paper (landscape phones): minimize chrome footprint. */
 @container studio-paper (max-width: 260px) {
   .wrap:not(.compact) {
     top: 4px;
     right: 4px;
-    gap: 2px;
-    padding: 2px 2px 2px 6px;
-  }
-
-  .wrap:not(.compact) .sideLabel {
-    font-size: 0.55rem;
-    max-width: 2.8rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 2px;
   }
 }

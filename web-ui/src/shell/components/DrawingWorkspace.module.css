@@ -11,50 +11,6 @@
   padding: 6px 4px;
   container-type: size;
   overflow: hidden;
-  gap: 0;
-}
-
-/*
- * Phone / tablet Studio: keep Full screen + FRONT/BACK above the cream paper
- * so banners (coming soon / notices) never shove those controls into the croquis.
- */
-.paperChrome {
-  width: min(100%, var(--paper-max-w), calc(100cqh * 768 / 1024));
-  max-width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex: 0 0 auto;
-  margin: 0 0 6px;
-  padding: 0 2px;
-  z-index: 6;
-}
-
-.paperChromeSpacer {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.paperChrome .fullscreenCorner {
-  position: relative;
-  top: auto;
-  left: auto;
-}
-
-.paperChromeOverlay {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  pointer-events: none;
-}
-
-.paperChromeOverlay > * {
-  pointer-events: auto;
-}
-
-.wrapNotice .paperChrome {
-  margin-bottom: 4px;
 }
 
 .wrapImmersive {

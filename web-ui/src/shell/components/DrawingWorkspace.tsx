@@ -47,11 +47,6 @@ type Props = {
   rearUnavailableReason?: string
   onSideChange?: (side: StudioPaperSide) => void
   onUnavailableFlip?: (reason: string) => void
-  /**
-   * When a workspace banner/notice is open on phone, lift Front/Fullscreen out of
-   * the cream paper so they do not crowd the croquis head.
-   */
-  noticeOpen?: boolean
 }
 
 export function DrawingWorkspace({
@@ -84,60 +79,39 @@ export function DrawingWorkspace({
   rearUnavailableReason,
   onSideChange,
   onUnavailableFlip,
-  noticeOpen = false,
 }: Props) {
-  const showFlip = Boolean(frontBackEnabled && rearAvailable && onSideChange)
-  const showFullscreen = Boolean(!immersive && onEnterFullscreen)
-  const showBarChrome = Boolean(!immersive && (showFlip || showFullscreen))
-
-  const flipControl = showFlip ? (
-    <FlipPaperControl
-      compact={immersive}
-      embedded={!immersive}
-      activeSide={activeSide}
-      rearAvailable={rearAvailable}
-      unavailableReason={rearUnavailableReason}
-      onSideChange={onSideChange!}
-      onUnavailableFlip={onUnavailableFlip}
-    />
-  ) : null
-
-  const fullscreenBtn = showFullscreen ? (
-    <button
-      type="button"
-      className={styles.fullscreenCorner}
-      aria-label="Enter full screen drawing"
-      title="Full screen drawing — nearly the whole device, with zoom and pan"
-      data-testid="paper-fullscreen-button"
-      onClick={() => onEnterFullscreen?.()}
-    >
-      <Expand size={16} strokeWidth={1.85} aria-hidden="true" />
-      <span className={styles.fullscreenLabel}>Full screen</span>
-    </button>
-  ) : null
-
   return (
     <div
-      className={`${styles.wrap}${immersive ? ` ${styles.wrapImmersive}` : ''}${
-        noticeOpen ? ` ${styles.wrapNotice}` : ''
-      }`}
+      className={`${styles.wrap}${immersive ? ` ${styles.wrapImmersive}` : ''}`}
       data-studio-paper="true"
       data-immersive={immersive ? 'true' : 'false'}
-      data-notice-open={noticeOpen ? 'true' : 'false'}
     >
-      {showBarChrome ? (
-        <div className={styles.paperChrome} data-testid="paper-chrome-bar">
-          {fullscreenBtn}
-          <span className={styles.paperChromeSpacer} aria-hidden="true" />
-          {flipControl}
-        </div>
-      ) : null}
       <div
         className={`${styles.canvasFrame}${immersive ? ` ${styles.canvasFrameImmersive}` : ''}`}
         data-testid="paper-frame"
       >
-        {immersive && showFlip ? (
-          <div className={styles.paperChromeOverlay}>{flipControl}</div>
+        {!immersive && onEnterFullscreen ? (
+          <button
+            type="button"
+            className={styles.fullscreenCorner}
+            aria-label="Enter full screen drawing"
+            title="Full screen drawing — nearly the whole device, with zoom and pan"
+            data-testid="paper-fullscreen-button"
+            onClick={() => onEnterFullscreen()}
+          >
+            <Expand size={16} strokeWidth={1.85} aria-hidden="true" />
+            <span className={styles.fullscreenLabel}>Full screen</span>
+          </button>
+        ) : null}
+        {frontBackEnabled && rearAvailable && onSideChange ? (
+          <FlipPaperControl
+            compact={immersive}
+            activeSide={activeSide}
+            rearAvailable={rearAvailable}
+            unavailableReason={rearUnavailableReason}
+            onSideChange={onSideChange}
+            onUnavailableFlip={onUnavailableFlip}
+          />
         ) : null}
         <DrawingCanvas
           strokes={strokes}

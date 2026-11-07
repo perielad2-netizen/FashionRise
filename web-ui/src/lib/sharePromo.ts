@@ -19,7 +19,10 @@ export type ShareKind = 'app' | 'look'
 
 export type SharePayload = {
   kind: ShareKind
-  /** Optional look / design title for richer captions. */
+  /**
+   * Optional look title kept for callers / filenames — never included in the
+   * public share caption (attribution only).
+   */
   title?: string | null
   /** Object URL or same-origin image URL to attach when the OS supports files. */
   imageUrl?: string | null
@@ -28,17 +31,12 @@ export type SharePayload = {
 }
 
 /** Attribution caption for WhatsApp / Instagram / Facebook posts. */
-export function buildShareCaption(payload: SharePayload = { kind: 'look' }): string {
-  const url = FASHIONRISE_PUBLIC_URL
-  const title = payload.title?.trim()
-
-  const lines: string[] = ['Created with FashionRise']
-  if (payload.kind === 'look' && title) {
-    lines.push(title)
-  }
-  lines.push('Search Google for FashionRise to design your own looks')
-  lines.push(url)
-  return lines.join('\n')
+export function buildShareCaption(_payload: SharePayload = { kind: 'look' }): string {
+  return [
+    'Created with FashionRise',
+    'Search Google for FashionRise to design your own looks',
+    FASHIONRISE_PUBLIC_URL,
+  ].join('\n')
 }
 
 export function buildWhatsAppShareUrl(caption: string): string {

@@ -299,15 +299,15 @@ describe('Save as design', () => {
 })
 
 describe('Studio More menu sketch export removal', () => {
-  it('keeps Save / My Designs / Clear / Save now and omits raw sketch export actions', async () => {
+  it('keeps Save as design / Clear and omits My Designs, Save now, and raw sketch export', async () => {
     cleanRestore(workingDoc({ dimmed: true }))
     renderAt('/studio')
     await ready()
     fireEvent.click(screen.getByRole('button', { name: 'More' }))
     expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'My Designs' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Save now' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'My Designs' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Save now' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /Export visible side/i })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /^Export front$/i })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /^Export back$/i })).toBeNull()
@@ -348,8 +348,11 @@ describe('My Designs navigation and library', () => {
     renderAt('/studio')
     await ready()
     fireEvent.click(screen.getByRole('button', { name: 'Mock stroke' }))
-    fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'My Designs' }))
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'FashionRise' })).getByRole('button', {
+        name: 'My Designs',
+      }),
+    )
     expect(await screen.findByText('2 strokes')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Back to Studio' }))
     expect(strokeIds()).toBe('restored-1,new-1')
@@ -431,14 +434,21 @@ describe('Reopen a saved design', () => {
     renderAt('/studio')
     await ready()
     fireEvent.click(screen.getByRole('button', { name: 'Mock stroke' }))
+    // Wait for local write then debounced cloud autosave (replaces removed More → Save now).
     await screen.findByText('Saved on this device')
-    fireEvent.click(screen.getByRole('button', { name: 'More' }))
-    await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Save now' }))
-    })
-    await screen.findByText('Saved')
+    await waitFor(
+      () => {
+        expect(screen.getByText(/^Saved$/)).toBeInTheDocument()
+      },
+      { timeout: 5000 },
+    )
     for (const undo of screen.getAllByRole('button', { name: 'Undo' })) expect(undo).toBeEnabled()
-    fireEvent.click(within(screen.getByRole('navigation', { name: 'FashionRise' })).getByRole('button', { name: 'My Designs' }))
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'FashionRise' })).getByRole('button', {
+        name: 'My Designs',
+      }),
+    )
+    await screen.findByRole('heading', { level: 1, name: 'My Designs' })
     await openFromLibrary()
     const dialog = await screen.findByRole('dialog', { name: 'Open “Evening gown”?' })
     await act(async () => {
@@ -448,7 +458,8 @@ describe('Reopen a saved design', () => {
     expect(strokeIds()).toBe('snap-1,snap-2')
     for (const undo of screen.getAllByRole('button', { name: 'Undo' })) expect(undo).toBeDisabled()
     const openCall = mocks.persistStudioDraft.mock.calls.find((c) => c[0].document.strokes[0]?.id === 'snap-1')
-    expect(openCall![0].expectedRevision).toBe(4)
+    // Cloud autosave may land once or twice before open; require at least the post-stroke bump.
+    expect(openCall![0].expectedRevision).toBeGreaterThanOrEqual(4)
   })
 
   it('cancel leaves everything untouched', async () => {
