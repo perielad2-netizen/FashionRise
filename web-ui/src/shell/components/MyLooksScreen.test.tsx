@@ -116,9 +116,25 @@ describe('MyLooksScreen', () => {
     expect(within(dualCard as HTMLElement).getByText('Back')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'View details for Dual runway' }))
-    expect(await screen.findByRole('dialog', { name: 'Dual runway' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Download front' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Download back' })).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', { name: 'Dual runway' })
+    expect(within(dialog).getByRole('button', { name: 'Download' })).toBeInTheDocument()
+    expect(within(dialog).getByTestId('look-download')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Share' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Publish' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Favorited' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Delete Dual runway' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Done' })).toBeInTheDocument()
+  })
+
+  it('downloads the active look side from the detail dialog', async () => {
+    listLooks.mockResolvedValue({ items: [LOOK_A], total: 1, limit: 24, offset: 0 })
+    render(<MyLooksScreen onBackToStudio={() => undefined} />)
+    await screen.findByText('Blush gown')
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Blush gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Blush gown' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Download' }))
+    await waitFor(() => expect(fetchJobImageBlob).toHaveBeenCalledWith('job-a'))
   })
 
   it('favorites and archives from the detail dialog', async () => {

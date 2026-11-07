@@ -474,12 +474,16 @@ describe('Saved-design preview fit-contain proportions (P1)', () => {
   })
 })
 
-describe('Magic fail-closed (preserved)', () => {
-  it('rejects oversized Front and Back captures (0 paid AI)', async () => {
+describe('Magic extended paper (allowed)', () => {
+  it('captures oversized Front artwork on the full paper frame', async () => {
     const oversized = oversizedOutline(FRONT_INK)
-    await expect(
-      captureSketchForMagic({ strokes: oversized, fills: [], referenceUrl: null }),
-    ).rejects.toThrow(/extends beyond the standard Magic frame|Magic was not started/i)
+    const captured = await captureSketchForMagic({
+      strokes: oversized,
+      fills: [],
+      referenceUrl: null,
+    })
+    expect(captured.byteLength).toBeGreaterThan(0)
+    expect(captured.dataUrl.startsWith('data:image/')).toBe(true)
   })
 })
 

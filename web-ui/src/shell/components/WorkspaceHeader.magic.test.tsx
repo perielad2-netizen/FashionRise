@@ -67,6 +67,26 @@ describe('WorkspaceHeader Magic recovery', () => {
     expect(screen.getByRole('button', { name: /^Magic/i })).toBeDisabled()
   })
 
+  it('hides the More menu while Magic is running', () => {
+    render(
+      <WorkspaceHeader
+        canUndo={false}
+        canRedo={false}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        onClear={vi.fn()}
+        onMagic={vi.fn()}
+        magicEnabled
+        magicBusy
+        saveStatus="idle"
+        saveStatusLabel="Ready"
+        saveError={null}
+      />,
+    )
+    expect(screen.queryByTestId('workspace-more')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^More$/i })).toBeNull()
+  })
+
   it('does not expose raw sketch export actions in More', () => {
     render(
       <WorkspaceHeader

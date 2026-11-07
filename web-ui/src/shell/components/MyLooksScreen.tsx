@@ -243,15 +243,6 @@ function LookDetailDialog({
                     <span>{frontImg.loading ? 'Loading…' : 'Unavailable'}</span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className={styles.ghostBtn}
-                  disabled={!frontImg.url || busy}
-                  onClick={() => void downloadJobImage(frontJob, `${look.title}-front.png`)}
-                >
-                  <Download size={14} aria-hidden />
-                  Download front
-                </button>
               </div>
             ) : null}
             {backJob ? (
@@ -268,15 +259,6 @@ function LookDetailDialog({
                     <span>{backImg.loading ? 'Loading…' : 'Unavailable'}</span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className={styles.ghostBtn}
-                  disabled={!backImg.url || busy}
-                  onClick={() => void downloadJobImage(backJob, `${look.title}-back.png`)}
-                >
-                  <Download size={14} aria-hidden />
-                  Download back
-                </button>
               </div>
             ) : null}
           </div>
@@ -311,7 +293,7 @@ function LookDetailDialog({
           {onCreateRealDesign ? (
             <button
               type="button"
-              className={styles.primaryBtn}
+              className={`${styles.primaryBtn} ${styles.actionFull}`}
               disabled={busy || deleteBusy}
               onClick={() => onCreateRealDesign(look)}
             >
@@ -319,74 +301,110 @@ function LookDetailDialog({
               Create Real Design
             </button>
           ) : null}
-          <button
-            type="button"
-            className={look.runway_item_id ? styles.iconBtnActive : styles.primaryBtn}
-            disabled={busy || deleteBusy || look.is_archived}
-            onClick={() => void toggleRunway()}
-            data-testid="look-publish-runway"
-            title={
-              look.is_archived
-                ? 'Unarchive before publishing to Runway'
-                : look.runway_item_id
-                  ? 'Remove from FashionRise Runway'
-                  : 'Publish to FashionRise Runway'
-            }
-          >
-            <Star size={14} fill={look.runway_item_id ? 'currentColor' : 'none'} aria-hidden />
-            {look.runway_item_id ? 'On Runway' : 'Publish to Runway'}
-          </button>
-          <button
-            type="button"
-            className={styles.ghostBtn}
-            disabled={busy || deleteBusy || !(mobileSide === 'front' ? frontImg.url : backImg.url)}
-            onClick={() => {
-              void (async () => {
-                const imageUrl = mobileSide === 'back' ? backImg.url : frontImg.url
-                const result = await requestShare({
-                  kind: 'look',
-                  title: look.title,
-                  imageUrl,
-                  imageFileName: `fashionrise-${look.title || 'look'}-${mobileSide}.png`,
+
+          <div className={styles.actionRow}>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              disabled={
+                busy ||
+                deleteBusy ||
+                !(mobileSide === 'back' ? backJob && backImg.url : frontJob && frontImg.url)
+              }
+              data-testid="look-download"
+              onClick={() => {
+                const side = mobileSide === 'back' && backJob ? 'back' : 'front'
+                const jobId = side === 'back' ? backJob : frontJob
+                if (!jobId) return
+                void downloadJobImage(jobId, `${look.title}-${side}.png`).catch((err) => {
+                  setError(err instanceof Error ? err.message : 'Could not download look')
                 })
-                if (result === 'needs-fallback') setShareOpen(true)
-              })()
-            }}
-            data-testid="look-share"
-          >
-            <Share2 size={14} aria-hidden />
-            Share
-          </button>
+              }}
+            >
+              <Download size={14} aria-hidden />
+              Download
+            </button>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              disabled={busy || deleteBusy || !(mobileSide === 'front' ? frontImg.url : backImg.url)}
+              onClick={() => {
+                void (async () => {
+                  const imageUrl = mobileSide === 'back' ? backImg.url : frontImg.url
+                  const result = await requestShare({
+                    kind: 'look',
+                    title: look.title,
+                    imageUrl,
+                    imageFileName: `fashionrise-${look.title || 'look'}-${mobileSide}.png`,
+                  })
+                  if (result === 'needs-fallback') setShareOpen(true)
+                })()
+              }}
+              data-testid="look-share"
+            >
+              <Share2 size={14} aria-hidden />
+              Share
+            </button>
+          </div>
+
+          <div className={styles.actionRow}>
+            <button
+              type="button"
+              className={look.runway_item_id ? styles.actionOn : styles.primaryBtn}
+              disabled={busy || deleteBusy || look.is_archived}
+              onClick={() => void toggleRunway()}
+              data-testid="look-publish-runway"
+              title={
+                look.is_archived
+                  ? 'Unarchive before publishing to Runway'
+                  : look.runway_item_id
+                    ? 'Remove from FashionRise Runway'
+                    : 'Publish to FashionRise Runway'
+              }
+            >
+              <Star size={14} fill={look.runway_item_id ? 'currentColor' : 'none'} aria-hidden />
+              {look.runway_item_id ? 'On Runway' : 'Publish'}
+            </button>
+            <button
+              type="button"
+              className={look.is_favorite ? styles.actionOn : styles.ghostBtn}
+              disabled={busy}
+              aria-pressed={look.is_favorite}
+              onClick={() => void patch({ is_favorite: !look.is_favorite })}
+            >
+              <Heart size={14} fill={look.is_favorite ? 'currentColor' : 'none'} aria-hidden />
+              {look.is_favorite ? 'Favorited' : 'Favorite'}
+            </button>
+          </div>
+
+          <div className={styles.actionRow}>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              disabled={busy || deleteBusy}
+              onClick={() => void patch({ is_archived: !look.is_archived })}
+            >
+              <Archive size={14} aria-hidden />
+              {look.is_archived ? 'Restore' : 'Archive'}
+            </button>
+            <button
+              type="button"
+              className={styles.deleteBtn}
+              disabled={busy || deleteBusy}
+              aria-label={`Delete ${look.title}`}
+              onClick={() => onAskDelete(look)}
+            >
+              <Trash2 size={14} aria-hidden />
+              Delete
+            </button>
+          </div>
+
           <button
             type="button"
-            className={look.is_favorite ? styles.iconBtnActive : styles.iconBtn}
-            disabled={busy}
-            aria-pressed={look.is_favorite}
-            onClick={() => void patch({ is_favorite: !look.is_favorite })}
+            className={`${styles.ghostBtn} ${styles.actionFull}`}
+            onClick={onClose}
+            disabled={deleteBusy}
           >
-            <Heart size={14} fill={look.is_favorite ? 'currentColor' : 'none'} aria-hidden />
-            {look.is_favorite ? 'Favorited' : 'Favorite'}
-          </button>
-          <button
-            type="button"
-            className={styles.ghostBtn}
-            disabled={busy || deleteBusy}
-            onClick={() => void patch({ is_archived: !look.is_archived })}
-          >
-            <Archive size={14} aria-hidden />
-            {look.is_archived ? 'Restore' : 'Archive'}
-          </button>
-          <button
-            type="button"
-            className={styles.deleteBtn}
-            disabled={busy || deleteBusy}
-            aria-label={`Delete ${look.title}`}
-            onClick={() => onAskDelete(look)}
-          >
-            <Trash2 size={14} aria-hidden />
-            Delete
-          </button>
-          <button type="button" className={styles.ghostBtn} onClick={onClose} disabled={deleteBusy}>
             Done
           </button>
         </div>

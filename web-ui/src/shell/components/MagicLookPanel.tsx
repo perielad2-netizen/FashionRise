@@ -84,12 +84,13 @@ export function MagicLookPanel({
   onExperimentVerdict,
   experimentVerdictBusy = false,
   onClose,
-  onCancel,
+  onCancel: _onCancel,
   onDownload,
   onRecover,
   onBackToSketch,
   onViewInMyLooks,
 }: Props) {
+  void _onCancel
   const [compareSketch, setCompareSketch] = useState(false)
   const [tryOnCompare, setTryOnCompare] = useState<TryOnCompareMode>('result')
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -476,15 +477,6 @@ export function MagicLookPanel({
         </div>
 
         <div className={styles.actions}>
-          {busy ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              title="Stops local waiting only. Jobs already started keep running — use Recover result later."
-            >
-              Stop waiting
-            </button>
-          ) : null}
           {phase === 'ready' && dualActive && dual ? (
             <>
               <button
@@ -572,9 +564,12 @@ export function MagicLookPanel({
               Recover result
             </button>
           ) : null}
-          <button type="button" onClick={onBackToSketch}>
-            Back to sketch
-          </button>
+          {/* Busy/start: no Stop waiting / Back to sketch — Close (X) dismisses; recover later if needed. */}
+          {!busy ? (
+            <button type="button" onClick={onBackToSketch}>
+              Back to sketch
+            </button>
+          ) : null}
         </div>
       </div>
       <ShareSheet

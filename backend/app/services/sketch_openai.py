@@ -61,10 +61,13 @@ _COVERAGE_PRESERVATION_CONTRACT = (
 # Applied-fill color authority — outlines must not become fabric; never invent accents.
 _COLOR_FIDELITY_CONTRACT = (
     "COLOR FIDELITY: Use ONLY colors/gradients/fabrics actually applied on the garment and "
-    "shared garment-spec main_colors/materials. Black or dark outline strokes are linework, "
-    "not fabric fill. Do NOT invent extra accent colors, contrast panels, trims, overlays, "
-    "or materials (e.g. pink/blue accents on a gray-only dress). Keep Front/Back color story "
-    "consistent with the applied fills."
+    "shared garment-spec main_colors/materials. Honor the combination of hand-ink pigments "
+    "AND bucket fabric fills as painted in Image 1 — including small shoe/trim fabric islands "
+    "(e.g. satin shoes under green ink outlines). Do NOT recolor accessory fabric fills from "
+    "nearby dress ink. Black or dark outline strokes are linework, not fabric fill. Do NOT "
+    "invent extra accent colors, contrast panels, trims, overlays, or materials (e.g. pink/"
+    "blue accents on a gray-only dress). Keep Front/Back color story consistent with the "
+    "applied fills."
 )
 
 # Public aliases for garment-realism reuse (#167). Coverage + color only —
@@ -76,10 +79,12 @@ COLOR_FIDELITY_CONTRACT = _COLOR_FIDELITY_CONTRACT
 _FABRIC_SWATCH_EDIT_CONTRACT = (
     "TEXTILE REFERENCE: Image 1 is the garment sketch (silhouette, pose, coverage, painted "
     "regions). Image 2 is the EXACT textile swatch from the Studio canvas — reproduce this "
-    "repeating motif, spacing, scale, and colors on painted garment regions only. Do NOT "
-    "replace the motif with plain glossy satin, a solid fill, or an invented pattern. "
-    "Natural draping and folds are allowed; motif geometry must remain recognizable. "
-    "Do not alter silhouette, pose, or skin/coverage boundaries."
+    "repeating motif, spacing, scale, and colors ONLY on sketch regions that already show "
+    "that same textile/pattern fill. Do NOT spread Image 2 across hand-inked or solid-color "
+    "regions (those keep their sketch pigments). Do NOT replace the motif with plain glossy "
+    "satin, a solid fill, or an invented pattern. Natural draping and folds are allowed; "
+    "motif geometry must remain recognizable. Do not alter silhouette, pose, or "
+    "skin/coverage boundaries."
 )
 
 # Front + Back: elevate the design; do not pixel-trace sketch mistakes.
@@ -88,10 +93,12 @@ _DESIGN_ENHANCEMENT_CONTRACT = (
     "DESIGN ENHANCEMENT (Front and Back): Sketch guides concept, silhouette, cut, strap/"
     "sleeve placement, openings, and applied colors/fabrics — NOT a pixel-perfect trace. "
     "Polish into a beautiful professional fashion rendering (clean lines, smooth seams, "
-    "refined proportions). Normalize sketch glitches (accidental asymmetry, uneven strap/"
-    "sleeve widths, crooked edges, wobble); keep intentional design asymmetry. Do NOT "
-    "redesign or invent decorative panels. Same design elevated — not traced/cartoonish; "
-    "keep applied fabric/pattern/color theme."
+    "refined proportions). Preserve every distinct bucket fabric fill visible in Image 1 "
+    "(shoes, bags, belts) as that textile — do not flatten them into dress ink color. "
+    "Normalize sketch glitches (accidental asymmetry, uneven strap/sleeve widths, crooked "
+    "edges, wobble); keep intentional design asymmetry. Do NOT redesign or invent "
+    "decorative panels. Same design elevated — not traced/cartoonish; keep applied "
+    "fabric/pattern/color theme as a combination of all painted media."
 )
 
 # Illustration-style restriction — equal priority with coverage; must not be truncated

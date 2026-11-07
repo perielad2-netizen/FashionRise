@@ -71,6 +71,12 @@ export function WorkspaceHeader({
     return () => document.removeEventListener('mousedown', onDoc)
   }, [menuOpen])
 
+  useEffect(() => {
+    if (!magicBusy) return
+    setMenuOpen(false)
+    setMagicSpendOpen(false)
+  }, [magicBusy])
+
   const statusClass =
     saveStatus === 'error'
       ? styles.statusError
@@ -178,6 +184,8 @@ export function WorkspaceHeader({
         ) : null}
       </div>
 
+      {/* Hide More while Magic is creating — z-index sat above the Magic overlay. */}
+      {!magicBusy ? (
       <div className={styles.moreWrap} ref={menuRef} data-testid="workspace-more">
         <button
           type="button"
@@ -223,7 +231,6 @@ export function WorkspaceHeader({
                 type="button"
                 role="menuitem"
                 className={styles.moreItem}
-                disabled={magicBusy}
                 onClick={() => {
                   setMenuOpen(false)
                   onRecoverLastMagic()
@@ -246,6 +253,7 @@ export function WorkspaceHeader({
           </div>
         ) : null}
       </div>
+      ) : null}
 
       <AiSpendConfirmDialog
         open={magicSpendOpen}

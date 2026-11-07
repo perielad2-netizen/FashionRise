@@ -5,6 +5,7 @@ import {
   type StudioDraftDocument,
 } from '@/lib/draftDocument'
 import { getFabricPromptShort } from '@/lib/fabricPromptCache'
+import { isGarmentScalePatternedFill } from '@/lib/fabricSwatchCapture'
 import { FABRIC_PRESETS, type FillOp } from '@/lib/fills'
 import { sampleColorFromStyle } from '@/lib/paintFills'
 import {
@@ -47,7 +48,7 @@ function isPaleFabric(hex: string): boolean {
   return (c.r + c.g + c.b) / 3 >= 185
 }
 
-function fillMaterialColors(fill: FillOp): string[] {
+function fillMaterialColors(fill: FillOp, opts: { forMain: boolean }): string[] {
   const style = fill.style
   // Applied solid/gradient pigment and built-in fabric presets.
   // Uploaded fabric has no client hex — never invent one.
@@ -58,32 +59,53 @@ function fillMaterialColors(fill: FillOp): string[] {
   if (style.kind === 'gradient') {
     return style.colors.filter((c) => !isOutlineInk(c))
   }
-  if (style.kind === 'fabric') return [sampleColorFromStyle(style)]
+  // Accessory fabric (shoes) belongs in the full palette so Magic sees satin,
+  // but must not become main_colors (that would recolor the dress).
+  if (style.kind === 'fabric') {
+    if (opts.forMain && !isGarmentScalePatternedFill(fill)) return []
+    return [sampleColorFromStyle(style)]
+  }
   return []
+}
+
+function patternedFillName(fill: FillOp): string | null {
+  const style = fill.style
+  if (style.kind === 'fabric') {
+    const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
+    return preset ? preset.label : style.fabricId
+  }
+  if (style.kind === 'uploaded-fabric') {
+    return getFabricPromptShort(style.assetId) || 'uploaded fabric'
+  }
+  return null
 }
 
 function fillMaterialLabels(fill: FillOp): string[] {
   const style = fill.style
-  if (style.kind === 'fabric') {
-    const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
-    const name = preset ? preset.label : style.fabricId
-    // Emphasize repeating tile identity — Magic receives the exact swatch separately.
-    return [`${name} repeating textile (exact Studio tile reference)`]
-  }
-  if (style.kind === 'uploaded-fabric') {
-    const promptShort = getFabricPromptShort(style.assetId)
-    if (promptShort) {
-      return [`${promptShort} repeating textile (exact Studio tile reference)`]
+  // Garment-scale patterned fills = primary textile (Image 2 when present).
+  // Accessory-scale fills (shoes) stay in materials with an explicit accessory
+  // label so Magic keeps satin shoes without spreading that textile on the dress.
+  if (style.kind === 'fabric' || style.kind === 'uploaded-fabric') {
+    const name = patternedFillName(fill)
+    if (!name) return []
+    if (isGarmentScalePatternedFill(fill)) {
+      return [`${name} repeating textile (exact Studio tile reference)`]
     }
-    return ['uploaded fabric repeating textile (exact Studio tile reference)']
+    return [
+      `accessory textile: ${name} as painted in sketch Image 1 on shoes/trims — keep this fabric; do not recolor from dress ink outlines`,
+    ]
   }
   if (style.kind === 'gradient') return ['gradient fabric']
   return []
 }
 
-function collectFillColors(bag: SideBag, add: (c: string) => void): void {
+function collectFillColors(
+  bag: SideBag,
+  add: (c: string) => void,
+  opts: { forMain: boolean },
+): void {
   for (const f of bag.fills) {
-    for (const c of fillMaterialColors(f)) add(c)
+    for (const c of fillMaterialColors(f, opts)) add(c)
   }
 }
 
@@ -101,17 +123,23 @@ function collectMaterials(bag: SideBag, add: (m: string) => void): void {
  * Palette priority for Magic:
  * 1) Applied fill/gradient/built-in-fabric garment colors (main fabric)
  * 2) Drawn stroke/outline colors (linework only)
+ * Accessory fabric colors appear in `colors` but not `main_colors`.
  * Never promote an unused selected brush swatch.
  */
 export function paletteFromDoc(doc: StudioDraftDocument, max = 12): {
   colors: string[]
   main_colors: string[]
 } {
-  const fillSeen = new Set<string>()
+  const allFillSeen = new Set<string>()
+  const mainFillSeen = new Set<string>()
   const strokeSeen = new Set<string>()
-  const addFill = (c: string) => {
+  const addAllFill = (c: string) => {
     const hex = c.toUpperCase()
-    if (fillSeen.size < max) fillSeen.add(hex)
+    if (allFillSeen.size < max) allFillSeen.add(hex)
+  }
+  const addMainFill = (c: string) => {
+    const hex = c.toUpperCase()
+    if (mainFillSeen.size < max) mainFillSeen.add(hex)
   }
   const addStroke = (c: string) => {
     const hex = c.toUpperCase()
@@ -120,16 +148,19 @@ export function paletteFromDoc(doc: StudioDraftDocument, max = 12): {
 
   const front = frontArtworkFromDoc(doc)
   const back = backArtworkFromDoc(doc)
-  collectFillColors(front, addFill)
-  collectFillColors(back, addFill)
+  collectFillColors(front, addAllFill, { forMain: false })
+  collectFillColors(back, addAllFill, { forMain: false })
+  collectFillColors(front, addMainFill, { forMain: true })
+  collectFillColors(back, addMainFill, { forMain: true })
   collectStrokeColors(front, addStroke)
   collectStrokeColors(back, addStroke)
 
-  const fillColors = [...fillSeen]
-  const strokeColors = [...strokeSeen].filter((c) => !fillSeen.has(c))
-  const colors = [...fillColors, ...strokeColors].slice(0, max)
-  // main_colors = applied garment material when present; otherwise drawn stroke ink.
-  const main_colors = (fillColors.length ? fillColors : strokeColors).slice(0, 4)
+  const allFillColors = [...allFillSeen]
+  const mainFillColors = [...mainFillSeen]
+  const strokeColors = [...strokeSeen].filter((c) => !allFillSeen.has(c))
+  const colors = [...allFillColors, ...strokeColors].slice(0, max)
+  // main_colors = garment-scale fills/solids; else drawn stroke ink (not shoe satin).
+  const main_colors = (mainFillColors.length ? mainFillColors : strokeColors).slice(0, 4)
   return { colors, main_colors }
 }
 
@@ -149,6 +180,8 @@ function materialsFromDoc(doc: StudioDraftDocument, max = 8): string[] {
 const MAGIC_ENHANCEMENT_NOTES =
   'Polished professional fashion concept: keep silhouette/cut and Front/Back coherence; ' +
   'ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; ' +
+  'honor every bucket fabric fill painted in the sketch (including small shoe/trim regions) ' +
+  'together with hand-inked garment colors — combination of all applied media; ' +
   'normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble); no traced/cartoon look.'
 
 /** #183 — pale bridal / open neckline / both sleeves (same contract as Try On). */
@@ -197,7 +230,8 @@ export function buildSharedGarmentSpec(
     `back_fills=${back.fills.length}`,
     'render=polished_professional_enhancement',
     'sketch_role=strong_guidance_not_pixel_trace',
-    'color_authority=applied_fills_only',
+    'color_authority=applied_fills_and_ink_combination',
+    'accessory_fabric_fills=preserve_as_painted_in_sketch',
     'sketch_cleanup=normalize_imperfections',
     ...(bridal.length ? ['pale_bridal_fidelity=1'] : []),
     `fingerprint=${fingerprint.slice(0, 64)}`,
