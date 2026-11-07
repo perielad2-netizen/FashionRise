@@ -79,7 +79,6 @@ describe('WorkspaceHeader Magic recovery', () => {
         magicEnabled
         onSaveDesign={vi.fn()}
         onOpenLibrary={vi.fn()}
-        onOpenBrush={vi.fn()}
         onOpenSettings={vi.fn()}
         onRetrySave={vi.fn()}
         saveStatus="idle"
@@ -91,12 +90,34 @@ describe('WorkspaceHeader Magic recovery', () => {
     expect(screen.getByRole('button', { name: /^More$/i }).textContent).toMatch(/More/i)
     fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
     expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: 'Brush' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Brush' })).toBeNull()
     expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'My Designs' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /Share FashionRise/i })).toBeNull()
     expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'Save now' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /Export/i })).toBeNull()
+  })
+
+  it('Magic opens a Stars approval dialog before starting', () => {
+    const onMagic = vi.fn()
+    render(
+      <WorkspaceHeader
+        canUndo={false}
+        canRedo={false}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        onClear={vi.fn()}
+        onMagic={onMagic}
+        magicEnabled
+        saveStatus="idle"
+        saveStatusLabel="Ready"
+        saveError={null}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Magic/i }))
+    expect(onMagic).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /Approve −10/i }))
+    expect(onMagic).toHaveBeenCalledTimes(1)
   })
 })

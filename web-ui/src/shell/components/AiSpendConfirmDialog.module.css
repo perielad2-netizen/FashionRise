@@ -1,0 +1,28 @@
+.costRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0;
+  color: var(--fr-text, #f5f0ea);
+}
+
+.star {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #f5c542;
+}
+
+.warn {
+  margin: 0.65rem 0 0;
+  font-size: 0.85rem;
+  color: #f0b4c8;
+}
+
+.shopHint {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  color: var(--fr-muted, #9aa3b5);
+}

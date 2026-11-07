@@ -25,8 +25,11 @@ import {
 import { ApiError } from '@/services/api/client'
 import { loadFabricAssetImage } from '@/lib/fabricAssetCache'
 import { rememberFabricAssets, rememberFabricPromptShort } from '@/lib/fabricPromptCache'
+import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
+import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
 import { CustomGradientDesigner } from '@/shell/components/CustomGradientDesigner'
 import { ProfessionalColorPicker } from '@/shell/components/ProfessionalColorPicker'
+import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './ColorAndMaterialsPanel.module.css'
 
 type Props = {
@@ -52,6 +55,10 @@ export function ColorAndMaterialsPanel({
   onToggleEyedropper,
   onNotice,
 }: Props) {
+  const { balance, unlimited, costs } = useAiStarsWallet()
+  const fabricCost = costs.fabric
+  const [spendOpen, setSpendOpen] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
   const [hexDraft, setHexDraft] = useState(color)
   const [myFabrics, setMyFabrics] = useState<FabricAsset[]>([])
   const [previews, setPreviews] = useState<PreviewMap>({})
@@ -682,15 +689,36 @@ export function ColorAndMaterialsPanel({
               <button
                 type="button"
                 className={styles.uploadPrimary}
-                onClick={() => void confirmAiFabric()}
+                onClick={() => setSpendOpen(true)}
                 disabled={aiBusy || !aiPrompt.trim()}
               >
-                {aiBusy ? 'Creating…' : 'Generate fabric'}
+                {aiBusy
+                  ? 'Creating…'
+                  : unlimited
+                    ? 'Generate fabric'
+                    : `Generate fabric −${fabricCost}`}
               </button>
             </div>
           </div>
         </div>
       ) : null}
+
+      <AiSpendConfirmDialog
+        open={spendOpen}
+        feature="fabric"
+        cost={fabricCost}
+        balance={balance}
+        unlimited={unlimited}
+        busy={aiBusy}
+        description="AI creates a fabric/pattern swatch saved to My Fabrics."
+        onCancel={() => setSpendOpen(false)}
+        onApproved={() => {
+          setSpendOpen(false)
+          void confirmAiFabric()
+        }}
+        onOpenShop={() => setShopOpen(true)}
+      />
+      <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
 
       <ProfessionalColorPicker
         open={colorPickerOpen}

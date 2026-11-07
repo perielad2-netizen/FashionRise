@@ -20,10 +20,8 @@ import {
   fetchCroquisAssetBlob,
   generatePersonalCroquisVersion,
   getPersonalCroquisVersion,
-  listPersonalCroquis,
   rejectPersonalCroquisVersion,
   uploadPersonalCroquisPhoto,
-  type PersonalCroquisRead,
   type PersonalCroquisVersionRead,
 } from '@/services/personalCroquisApi'
 import {
@@ -33,6 +31,9 @@ import {
   sha256Hex,
 } from '@/lib/personalCroquisNotices'
 import { prepareCroquisUpload } from '@/lib/prepareCroquisUpload'
+import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
+import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
+import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './CreateMyCroquisWizard.module.css'
 
 export type CreateMyCroquisWizardProps = {
@@ -42,7 +43,7 @@ export type CreateMyCroquisWizardProps = {
   onUseOfflineFixture?: (croquisId: string, version: number) => void
 }
 
-type Step = 'compose' | 'generating' | 'preview' | 'library' | 'reconciliation' | 'blocked'
+type Step = 'compose' | 'generating' | 'preview' | 'reconciliation' | 'blocked'
 
 const COMBINED_AGREEMENT_LABEL =
   'I have permission to use this photo and agree to private storage and AI processing to create my model.'
@@ -72,12 +73,15 @@ export function CreateMyCroquisWizard({
   const [busy, setBusy] = useState(false)
   const [busyLabel, setBusyLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [library, setLibrary] = useState<PersonalCroquisRead[]>([])
   const [aiConsentId, setAiConsentId] = useState<string | null>(null)
   const [croquisId, setCroquisId] = useState<string | null>(null)
   const [pendingVersion, setPendingVersion] = useState<PersonalCroquisVersionRead | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey)
+  const [spendOpen, setSpendOpen] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
+  const { balance, unlimited, costs } = useAiStarsWallet()
+  const croquisCost = costs.croquis
 
   const handleClose = useCallback(() => {
     setLocalPreviewUrl((prev) => {
@@ -225,9 +229,9 @@ export function CreateMyCroquisWizard({
           }
         }
         setError(
-          'Still generating on the server. Keep this page open a bit longer, or reopen Create Model / library later — no new paid attempt was started.',
+          'Still generating on the server. Keep this page open a bit longer, or check My Models later — no new paid attempt was started.',
         )
-        setStep('library')
+        setStep('compose')
       } catch (err) {
         if (cancelled) return
         setError(err instanceof ApiError ? err.message : 'Generate could not start.')
@@ -278,23 +282,10 @@ export function CreateMyCroquisWizard({
     }
   }, [croquisId, pendingVersion])
 
-  const loadLibrary = useCallback(async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const rows = await listPersonalCroquis()
-      setLibrary(rows)
-      setStep('library')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load My Models.')
-    } finally {
-      setBusy(false)
-    }
-  }, [])
-
   if (!open) return null
 
   return (
+    <>
     <div className={styles.backdrop} role="presentation" onClick={handleClose}>
       <div
         className={styles.dialog}
@@ -390,12 +381,6 @@ export function CreateMyCroquisWizard({
               </div>
             ) : null}
 
-            <p className={styles.hint}>
-              Upload &amp; Generate sends your photo to the AI provider and may incur usage cost
-              under your account limits. Preview stays on this device until you agree. Large phone
-              photos are compressed on this device before upload.
-            </p>
-
             {error ? (
               <p className={styles.errorInline} role="alert">
                 {error}
@@ -404,16 +389,20 @@ export function CreateMyCroquisWizard({
             {busy && busyLabel ? <p className={styles.busyHint}>{busyLabel}</p> : null}
 
             <div className={styles.actions}>
-              <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
-                My Models library
-              </button>
               <button
                 type="button"
                 className={styles.primary}
                 disabled={!localFile || !agreed || busy || !aiNotice}
-                onClick={() => void runUploadAndGenerate()}
+                onClick={() => setSpendOpen(true)}
               >
-                {busy ? busyLabel || 'Working…' : 'Upload & Generate'}
+                {busy ? (
+                  busyLabel || 'Working…'
+                ) : (
+                  <>
+                    Upload &amp; Generate
+                    {!unlimited ? <span className={styles.costBadge}>−{croquisCost}</span> : null}
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -436,9 +425,6 @@ export function CreateMyCroquisWizard({
               start another paid generate for this photo until that review completes.
             </p>
             <div className={styles.actions}>
-              <button type="button" className={styles.secondary} onClick={loadLibrary} disabled={busy}>
-                My Models library
-              </button>
               <button type="button" className={styles.primary} onClick={handleClose}>
                 Close
               </button>
@@ -463,47 +449,6 @@ export function CreateMyCroquisWizard({
           </div>
         ) : null}
 
-        {step === 'library' ? (
-          <div className={styles.body}>
-            <p>Select an accepted model to use in Studio.</p>
-            {library.length === 0 ? <p className={styles.hint}>No models yet.</p> : null}
-            <ul className={styles.list}>
-              {library.map((row) => {
-                const ver = acceptedVersionNumber(row)
-                const label = row.display_name || 'Untitled'
-                const statusBits = [
-                  ver ? `v${ver}` : 'no accepted version',
-                  row.archived ? 'archived' : null,
-                  row.erased ? 'erased' : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')
-                return (
-                  <li key={row.id}>
-                    <button
-                      type="button"
-                      className={styles.secondary}
-                      disabled={!ver}
-                      onClick={() => {
-                        if (!ver) return
-                        onPinAccepted(row.id, ver)
-                        handleClose()
-                      }}
-                    >
-                      {label} · {statusBits}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-            <div className={styles.actions}>
-              <button type="button" className={styles.secondary} onClick={() => setStep('compose')}>
-                Back
-              </button>
-            </div>
-          </div>
-        ) : null}
-
         {error && step !== 'compose' ? (
           <p className={styles.error} role="alert">
             {error}
@@ -511,5 +456,23 @@ export function CreateMyCroquisWizard({
         ) : null}
       </div>
     </div>
+
+    <AiSpendConfirmDialog
+      open={spendOpen}
+      feature="croquis"
+      cost={croquisCost}
+      balance={balance}
+      unlimited={unlimited}
+      busy={busy}
+      description="Creates a private fashion model from your photo for Studio try-on and Magic."
+      onCancel={() => setSpendOpen(false)}
+      onApproved={() => {
+        setSpendOpen(false)
+        void runUploadAndGenerate()
+      }}
+      onOpenShop={() => setShopOpen(true)}
+    />
+    <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
+    </>
   )
 }

@@ -51,6 +51,53 @@ vi.mock('@/lib/personalCroquisNotices', async () => {
   }
 })
 
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: {
+      id: 'u1',
+      email: 't@example.com',
+      username: 't',
+      is_active: true,
+      is_admin: false,
+      ai_stars: 100,
+      ai_stars_unlimited: false,
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    bootstrapping: false,
+    isAuthenticated: true,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+    googleOAuthAvailable: false,
+  }),
+}))
+
+vi.mock('@/services/starsShopApi', async () => {
+  const actual = await vi.importActual<typeof import('@/services/starsShopApi')>(
+    '@/services/starsShopApi',
+  )
+  return {
+    ...actual,
+    fetchStarsWallet: vi.fn(async () => ({
+      ai_stars: 100,
+      ai_stars_unlimited: false,
+      ai_stars_magic_cost: 10,
+      ai_stars_costs: { magic: 10, croquis: 10, pdf: 50, fabric: 5 },
+    })),
+    fetchStarPackages: vi.fn(async () => []),
+    fetchStarCart: vi.fn(async () => ({
+      id: 'cart',
+      status: 'open',
+      items: [],
+      stars_total: 0,
+      price_usd_cents_total: 0,
+      checkout_enabled: false,
+      checkout_note: null,
+    })),
+  }
+})
+
 const libraryRow: PersonalCroquisRead = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   display_name: 'Accepted subject',
@@ -76,6 +123,11 @@ async function selectPhotoAndAgree() {
   const input = document.querySelector('input[type="file"]') as HTMLInputElement
   fireEvent.change(input, { target: { files: [file] } })
   fireEvent.click(screen.getByRole('checkbox'))
+}
+
+async function approveUploadAndGenerate() {
+  fireEvent.click(screen.getByRole('button', { name: /Upload & Generate/i }))
+  fireEvent.click(await screen.findByRole('button', { name: /Approve/i }))
 }
 
 describe('CreateMyCroquisWizard offline harness', () => {
@@ -167,17 +219,12 @@ describe('CreateMyCroquisWizard offline harness', () => {
     expect(screen.getByRole('button', { name: /Upload & Generate/i })).toBeDisabled()
   })
 
-  it('pins from library using latest_accepted_version', async () => {
+  it('compose has no My Models library button; star cost is on Upload & Generate', async () => {
     const { CreateMyCroquisWizard } = await import('./CreateMyCroquisWizard')
-    const onPin = vi.fn()
-    const onClose = vi.fn()
-    render(<CreateMyCroquisWizard open onClose={onClose} onPinAccepted={onPin} />)
-
-    fireEvent.click(screen.getByRole('button', { name: /My Models library/i }))
-    await waitFor(() => expect(listPersonalCroquis).toHaveBeenCalled())
-    fireEvent.click(screen.getByRole('button', { name: /Accepted subject · v1/i }))
-    expect(onPin).toHaveBeenCalledWith(libraryRow.id, 1)
-    expect(onClose).toHaveBeenCalled()
+    render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
+    expect(screen.queryByRole('button', { name: /My Models library/i })).toBeNull()
+    expect(screen.queryByText(/may incur usage cost/i)).toBeNull()
+    expect(screen.getByRole('button', { name: /Upload & Generate/i })).toHaveTextContent(/−10/)
   })
 
   it('surfaces upload-disabled 403 without inventing a generated pin', async () => {
@@ -190,7 +237,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
     render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={onPin} />)
 
     await selectPhotoAndAgree()
-    fireEvent.click(screen.getByRole('button', { name: /Upload & Generate/i }))
+    await approveUploadAndGenerate()
     await waitFor(() => expect(attestAdults).toHaveBeenCalled())
     await waitFor(() => expect(acknowledgeStorageConsent).toHaveBeenCalled())
     await waitFor(() => expect(uploadPersonalCroquisPhoto).toHaveBeenCalled())
@@ -212,7 +259,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
     )
     render(<CreateMyCroquisWizard open onClose={() => undefined} onPinAccepted={() => undefined} />)
     await selectPhotoAndAgree()
-    fireEvent.click(screen.getByRole('button', { name: /Upload & Generate/i }))
+    await approveUploadAndGenerate()
     expect(await screen.findByRole('alert')).toHaveTextContent(/too large to upload/i)
     expect(generatePersonalCroquisVersion).not.toHaveBeenCalled()
   })
@@ -225,7 +272,7 @@ describe('CreateMyCroquisWizard offline harness', () => {
 
     expect(screen.getAllByRole('checkbox')).toHaveLength(1)
     await selectPhotoAndAgree()
-    fireEvent.click(screen.getByRole('button', { name: /Upload & Generate/i }))
+    await approveUploadAndGenerate()
 
     await waitFor(() => expect(attestAdults).toHaveBeenCalled())
     await waitFor(() => expect(acknowledgeStorageConsent).toHaveBeenCalled())

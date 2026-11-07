@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import type { SaveStatus } from '@/lib/draftDocument'
 import { useAuth } from '@/services/auth/AuthProvider'
+import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
 import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './WorkspaceHeader.module.css'
 
@@ -32,7 +33,6 @@ type Props = {
   onSaveDesign?: () => void
   onOpenLibrary?: () => void
   onOpenSettings?: () => void
-  onOpenBrush?: () => void
 }
 
 export function WorkspaceHeader({
@@ -54,16 +54,15 @@ export function WorkspaceHeader({
   onSaveDesign,
   onOpenLibrary: _onOpenLibrary,
   onOpenSettings,
-  onOpenBrush,
 }: Props) {
   void _onOpenLibrary
   const { user } = useAuth()
   const starsUnlimited = Boolean(user?.ai_stars_unlimited)
   const starsBalance = starsUnlimited ? null : Number(user?.ai_stars ?? 0)
   const magicCost = 10
-  const canAffordMagic = starsUnlimited || (starsBalance ?? 0) >= magicCost
   const [menuOpen, setMenuOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
+  const [magicSpendOpen, setMagicSpendOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -153,17 +152,21 @@ export function WorkspaceHeader({
         <button
           type="button"
           className={magicEnabled ? styles.magicReady : styles.magicSoon}
-          onClick={onMagic}
-          disabled={magicEnabled && (magicBusy || !canAffordMagic)}
+          onClick={() => {
+            if (!magicEnabled) {
+              onMagic()
+              return
+            }
+            setMagicSpendOpen(true)
+          }}
+          disabled={magicEnabled && magicBusy}
           aria-busy={magicEnabled && magicBusy}
           title={
             !magicEnabled
               ? 'Magic is not available in this beta'
               : magicBusy
                 ? 'Magic is already running'
-                : !canAffordMagic
-                  ? `Not enough Stars (need ${magicCost})`
-                  : `Turn your sketch into a finished fashion look (−${magicCost} Stars)`
+                : `Turn your sketch into a finished fashion look (−${magicCost} Stars)`
           }
         >
           <Sparkles size={15} />
@@ -193,7 +196,7 @@ export function WorkspaceHeader({
           className={styles.moreBtn}
           aria-label="More"
           aria-expanded={menuOpen}
-          title="More — Brush, Settings, Clear canvas"
+          title="More — Settings, Clear canvas"
           onClick={() => setMenuOpen((v) => !v)}
         >
           <MoreHorizontal size={18} aria-hidden />
@@ -212,19 +215,6 @@ export function WorkspaceHeader({
                 }}
               >
                 Save as design…
-              </button>
-            ) : null}
-            {onOpenBrush ? (
-              <button
-                type="button"
-                role="menuitem"
-                className={styles.moreItem}
-                onClick={() => {
-                  setMenuOpen(false)
-                  onOpenBrush()
-                }}
-              >
-                Brush
               </button>
             ) : null}
             {onOpenSettings ? (
@@ -269,6 +259,21 @@ export function WorkspaceHeader({
         ) : null}
       </div>
 
+      <AiSpendConfirmDialog
+        open={magicSpendOpen}
+        feature="magic"
+        cost={magicCost}
+        balance={starsBalance}
+        unlimited={starsUnlimited}
+        busy={magicBusy}
+        description="Fashion Magic and Try On Person use Stars from your wallet."
+        onCancel={() => setMagicSpendOpen(false)}
+        onApproved={() => {
+          setMagicSpendOpen(false)
+          onMagic()
+        }}
+        onOpenShop={() => setShopOpen(true)}
+      />
       <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
     </div>
   )

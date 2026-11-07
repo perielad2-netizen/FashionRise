@@ -352,7 +352,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           onRetrySave={editor.retrySave}
           onSaveDesign={editor.beginSaveDesign}
           onOpenLibrary={onOpenLibrary}
-          onOpenBrush={() => setDock('brush')}
           onOpenSettings={() => setDock('settings')}
         />
       ) : null}
@@ -592,7 +591,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
       />
 
       <div
-        className={`${styles.mobileDock} ${tablet && !immersive ? styles.mobileDockVisible : ''}`}
+        className={`${styles.mobileDock} ${!immersive ? styles.mobileDockVisible : ''}`}
         aria-label="Studio panels"
       >
         <button

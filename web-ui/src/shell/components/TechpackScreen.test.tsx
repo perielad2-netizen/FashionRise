@@ -37,6 +37,68 @@ vi.mock('@/hooks/useAuthJobImage', () => ({
   useAuthJobImage: () => ({ url: 'blob:magic-look', loading: false }),
 }))
 
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: {
+      id: 'u1',
+      email: 't@example.com',
+      username: 't',
+      is_active: true,
+      is_admin: false,
+      ai_stars: 200,
+      ai_stars_unlimited: false,
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    bootstrapping: false,
+    isAuthenticated: true,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+    googleOAuthAvailable: false,
+  }),
+}))
+
+vi.mock('@/services/starsShopApi', () => ({
+  fetchStarsWallet: vi.fn(async () => ({
+    ai_stars: 200,
+    ai_stars_unlimited: false,
+    ai_stars_magic_cost: 10,
+    ai_stars_costs: { magic: 10, croquis: 10, pdf: 50, fabric: 5 },
+  })),
+  fetchStarPackages: vi.fn(async () => []),
+  fetchStarCart: vi.fn(async () => ({
+    id: 'cart',
+    status: 'open',
+    items: [],
+    stars_total: 0,
+    price_usd_cents_total: 0,
+    checkout_enabled: false,
+    checkout_note: null,
+  })),
+  setStarCartItem: vi.fn(),
+  clearStarCart: vi.fn(),
+  checkoutStarCart: vi.fn(),
+  formatUsdCents: (cents: number) => `$${(cents / 100).toFixed(2)}`,
+}))
+
+vi.mock('@/hooks/useAiStarsWallet', () => ({
+  DEFAULT_AI_STAR_COSTS: { magic: 10, croquis: 10, pdf: 50, fabric: 5 },
+  useAiStarsWallet: () => ({
+    balance: 200,
+    unlimited: false,
+    costs: { magic: 10, croquis: 10, pdf: 50, fabric: 5 },
+    loaded: true,
+    reload: vi.fn(),
+    refreshUser: vi.fn(),
+  }),
+}))
+
+async function clickGenerateAiPdf() {
+  fireEvent.click(await screen.findByRole('button', { name: /Generate AI PDF/i }))
+  fireEvent.click(await screen.findByRole('button', { name: /Approve −50/i }))
+}
+
 const V2_DRAFT = {
   id: 'draft-1',
   user_id: 'u1',
@@ -296,7 +358,7 @@ describe('TechpackScreen simplified UX', () => {
 
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     await screen.findByText('Create Real Design')
-    fireEvent.click(await screen.findByRole('button', { name: /Generate AI PDF/i }))
+    await clickGenerateAiPdf()
     expect(
       await screen.findByRole('dialog', {
         name: /Creating Your AI Technical Pack|Your AI Technical Pack Is Ready/i,
@@ -484,6 +546,9 @@ describe('TechpackScreen simplified UX', () => {
     const btn = await screen.findByRole('button', { name: /Generate AI PDF/i })
     fireEvent.click(btn)
     fireEvent.click(btn)
+    const approve = await screen.findByRole('button', { name: /Approve −50/i })
+    fireEvent.click(approve)
+    fireEvent.click(approve)
     await waitFor(() => expect(generateTechpackAiProfessionalOneTap).toHaveBeenCalledTimes(1))
     const key = generateTechpackAiProfessionalOneTap.mock.calls[0][1].idempotency_key as string
     expect(key).toMatch(/^one-tap-draft-1-r/)
@@ -524,7 +589,7 @@ describe('TechpackScreen simplified UX', () => {
     )
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
     expect(await screen.findByTestId('app-version')).toHaveTextContent(/App /i)
-    fireEvent.click(await screen.findByRole('button', { name: /Generate AI PDF/i }))
+    await clickGenerateAiPdf()
     expect(await screen.findByRole('alert')).toHaveTextContent(/server configuration problem/i)
     expect(screen.queryByText(/OPENAI_REASONING_EFFORT/i)).not.toBeInTheDocument()
   })

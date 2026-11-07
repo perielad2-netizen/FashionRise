@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Sparkles } from 'lucide-react'
 import { useAuthJobImage } from '@/hooks/useAuthJobImage'
+import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
+import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
+import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import {
   exportTechpackPdfOnlyUpdate,
   fetchTechpackPdfBlob,
@@ -44,6 +47,11 @@ type Props = {
 type WorkflowStage = 'understand' | 'customize' | 'measurements' | 'generate'
 
 export function TechpackScreen({ draftId, onBack }: Props) {
+  const { balance, unlimited, costs } = useAiStarsWallet()
+  const pdfCost = costs.pdf
+  const [spendOpen, setSpendOpen] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
+  const [pendingForceNew, setPendingForceNew] = useState(false)
   const [draft, setDraft] = useState<TechpackDraft | null>(null)
   const [title, setTitle] = useState('')
   const [styleCode, setStyleCode] = useState('')
@@ -968,10 +976,17 @@ export function TechpackScreen({ draftId, onBack }: Props) {
             type="button"
             className={styles.primaryCta}
             disabled={busy || !professionalAvailable || !selectedBodyProfileId}
-            onClick={() => void runOneTapGenerate()}
+            onClick={() => {
+              setPendingForceNew(false)
+              setSpendOpen(true)
+            }}
           >
             <Sparkles size={18} aria-hidden />
-            {busy && progressOpen && !progressReady ? 'Working…' : 'Generate AI PDF'}
+            {busy && progressOpen && !progressReady
+              ? 'Working…'
+              : unlimited
+                ? 'Generate AI PDF'
+                : `Generate AI PDF −${pdfCost}`}
           </button>
         )}
 
@@ -981,9 +996,14 @@ export function TechpackScreen({ draftId, onBack }: Props) {
             className={styles.detailsLink}
             disabled={busy || !professionalAvailable || !selectedBodyProfileId}
             data-testid="generate-ai-pdf-secondary"
-            onClick={() => void runOneTapGenerate({ forceNew: true })}
+            onClick={() => {
+              setPendingForceNew(true)
+              setSpendOpen(true)
+            }}
           >
-            Generate AI PDF (paid — new illustrations)
+            {unlimited
+              ? 'Generate AI PDF (new illustrations)'
+              : `Generate AI PDF −${pdfCost} (new illustrations)`}
           </button>
         ) : null}
 
@@ -1037,6 +1057,23 @@ export function TechpackScreen({ draftId, onBack }: Props) {
         onRetrySave={retrySave}
         onClose={closeDetails}
       />
+
+      <AiSpendConfirmDialog
+        open={spendOpen}
+        feature="pdf"
+        cost={pdfCost}
+        balance={balance}
+        unlimited={unlimited}
+        busy={busy}
+        description="AI builds a factory-ready technical pack with garment analysis and illustrations."
+        onCancel={() => setSpendOpen(false)}
+        onApproved={() => {
+          setSpendOpen(false)
+          void runOneTapGenerate({ forceNew: pendingForceNew })
+        }}
+        onOpenShop={() => setShopOpen(true)}
+      />
+      <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
     </div>
   )
 }

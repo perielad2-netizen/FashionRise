@@ -237,14 +237,19 @@ function brushSheet() {
 }
 
 describe('WEB-V2.3 brush controls and landscape layout', () => {
-  it('opens Brush from More on desktop (no permanent Settings brush column)', async () => {
+  it('opens Brush from the dock on desktop (More has Settings only)', async () => {
     mockViewport(1440, 900)
     await openStudio()
 
     expect(screen.queryByLabelText(/settings inspector/i)).toBeNull()
     expect(brushSheet()).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Brush' }))
+    expect(screen.queryByRole('menuitem', { name: 'Brush' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    fireEvent.click(dockButton('Brush panel'))
     const sheet = brushSheet()!
     expect(sheet).toBeVisible()
     const size = within(sheet).getByRole('slider', { name: 'Brush size' })
@@ -255,12 +260,11 @@ describe('WEB-V2.3 brush controls and landscape layout', () => {
     expect(within(sheet).getByText('40%')).toBeInTheDocument()
   })
 
-  it('opens Brush from More at 1180×600', async () => {
+  it('opens Brush from the dock at 1180×600', async () => {
     mockViewport(1180, 600)
     await openStudio()
 
-    fireEvent.click(screen.getByRole('button', { name: /^More$/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Brush' }))
+    fireEvent.click(dockButton('Brush panel'))
     const sheet = brushSheet()!
     expect(within(sheet).getByRole('slider', { name: 'Brush size' })).toBeInTheDocument()
     expect(within(sheet).getByRole('slider', { name: 'Brush opacity' })).toBeInTheDocument()
