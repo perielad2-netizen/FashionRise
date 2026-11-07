@@ -55,16 +55,81 @@ def _magic_operation_already_has_job(
     return row is not None
 
 
-def _debit_magic_if_needed(
+def _job_result_stars_debited(job: AIJob) -> bool:
+    result = job.result_data if isinstance(job.result_data, dict) else None
+    return bool(result and result.get("stars_debited") is True)
+
+
+def _magic_operation_already_charged(
+    db: Session, user_id: uuid.UUID, operation_id: str
+) -> bool:
+    """True when Stars were already taken for a successful job in this Magic op."""
+    op = (operation_id or "").strip()
+    if not op:
+        return False
+    rows = (
+        db.query(AIJob)
+        .filter(
+            AIJob.user_id == user_id,
+            AIJob.job_type == "sketch_polish",
+            AIJob.input_data["magic_operation_id"].astext == op,
+        )
+        .all()
+    )
+    return any(_job_result_stars_debited(row) for row in rows)
+
+
+def _assert_magic_spend_if_needed(
     db: Session,
     user: User,
     *,
     operation_id: str | None = None,
 ) -> None:
-    """Debit Stars once per Magic operation (linked front/back share one charge)."""
-    if operation_id and _magic_operation_already_has_job(db, user.id, operation_id):
+    """Gate enqueue on affordability. Charge happens only after AI success.
+
+    If this Magic operation was already charged (a side completed), skip the
+    gate so a failed sibling can retry without needing another 10 Stars.
+    """
+    if operation_id and _magic_operation_already_charged(db, user.id, operation_id):
         return
-    ai_stars.debit_magic_stars(db, user)
+    ai_stars.assert_can_spend_magic(db, user)
+
+
+def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
+    """Charge Magic Stars once the AI job completed successfully.
+
+    Failed jobs never debit. Dual front/back share one charge per operation.
+    """
+    if job.job_type != "sketch_polish":
+        return
+    if job.status != "completed":
+        return
+    if _job_result_stars_debited(job):
+        return
+
+    user = db.get(User, job.user_id)
+    if user is None:
+        return
+
+    input_data = job.input_data if isinstance(job.input_data, dict) else {}
+    op_raw = input_data.get("magic_operation_id")
+    op_str = op_raw.strip() if isinstance(op_raw, str) else ""
+
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _dual_magic_lock_key(user.id)})
+
+    if op_str and _magic_operation_already_charged(db, user.id, op_str):
+        return
+
+    try:
+        ai_stars.debit_magic_stars(db, user)
+    except ForbiddenError:
+        # AI already produced the look; rare race if Stars were spent elsewhere
+        # between enqueue assert and completion. Deliver the look; do not fail.
+        return
+
+    result = dict(job.result_data) if isinstance(job.result_data, dict) else {}
+    result["stars_debited"] = True
+    job.result_data = result
 
 
 def _dual_magic_lock_key(user_id: uuid.UUID) -> int:
@@ -498,7 +563,7 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
                 operation_id=op_str,
             )
             if is_new:
-                _debit_magic_if_needed(db, user, operation_id=op_str)
+                _assert_magic_spend_if_needed(db, user, operation_id=op_str)
                 db.add(job)
                 db.commit()
                 db.refresh(job)
@@ -531,7 +596,7 @@ def enqueue_job(db: Session, user: User, data: AIJobCreate) -> AIJob:
         )
         op_single = input_data.get("magic_operation_id")
         op_single_str = op_single.strip() if isinstance(op_single, str) else None
-        _debit_magic_if_needed(db, user, operation_id=op_single_str)
+        _assert_magic_spend_if_needed(db, user, operation_id=op_single_str)
     job = AIJob(
         user_id=user.id,
         design_id=data.design_id,
@@ -731,8 +796,8 @@ def enqueue_dual_sketch_polish(
     )
 
     if front_is_new or back_is_new:
-        # One Magic operation = one Stars debit (front+back share the cost).
-        _debit_magic_if_needed(db, user, operation_id=op_str)
+        # Affordability gate only — Stars debit on first successful side.
+        _assert_magic_spend_if_needed(db, user, operation_id=op_str)
     if front_is_new:
         db.add(front_job)
     if back_is_new:

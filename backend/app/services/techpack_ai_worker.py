@@ -55,7 +55,10 @@ def process_claimed_techpack_run(db: Session, run_id: uuid.UUID) -> str:
     """Execute a previously claimed run. Returns terminal status string."""
     try:
         result = techpack_ai.execute_professional_run(db, run_id)
-        return str(result.get("status") or "unknown")
+        status = str(result.get("status") or "unknown")
+        if status == "completed":
+            techpack_ai.debit_pdf_stars_on_success(db, run_id)
+        return status
     except Exception:
         logger.exception("Techpack AI run %s failed in worker", run_id)
         row = db.get(TechpackAIRun, run_id)

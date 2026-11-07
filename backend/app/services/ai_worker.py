@@ -64,6 +64,11 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
                 job.result_data = _stub_result(job)
                 job.error_message = None
                 job.status = "completed"
+            # Charge Stars only after success — failed AI never reduces the wallet.
+            if job.status == "completed" and job.job_type == "sketch_polish":
+                from app.services.ai_service import debit_magic_stars_on_success
+
+                debit_magic_stars_on_success(db, job)
         except Exception as e:  # pragma: no cover — defensive
             logger.exception("AI job %s failed in worker", job.id)
             job.status = "failed"

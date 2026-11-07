@@ -1970,7 +1970,8 @@ def enqueue_generate_one_tap_professional(
     _assert_professional_allowed(db, user, estimate_cents=hi)
     from app.services import ai_stars
 
-    ai_stars.debit_stars(db, user, "pdf")
+    # Affordability gate only — Stars debit after Professional AI succeeds.
+    ai_stars.assert_can_spend(db, user, "pdf")
 
     run = TechpackAIRun(
         id=uuid.uuid4(),
@@ -2042,6 +2043,29 @@ def run_generate_one_tap_professional(
         propose_back=propose_back,
         sections=sections,
     )
+
+
+def debit_pdf_stars_on_success(db: Session, run_id: uuid.UUID) -> None:
+    """Charge PDF Stars once a Professional run completes. Failures never debit."""
+    run = db.get(TechpackAIRun, run_id)
+    if run is None or run.status != "completed":
+        return
+    req = dict(run.request) if isinstance(run.request, dict) else {}
+    if req.get("stars_debited") is True:
+        return
+    user = db.get(User, run.user_id)
+    if user is None:
+        return
+    from app.services import ai_stars
+
+    try:
+        ai_stars.debit_stars(db, user, "pdf")
+    except ForbiddenError:
+        return
+    req["stars_debited"] = True
+    run.request = req
+    db.add(run)
+    db.commit()
 
 
 def _fail_run_preserve_cost(

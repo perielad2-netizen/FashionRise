@@ -418,7 +418,8 @@ def enqueue_personal_croquis_generate(
     _assert_spend_allowed(db, user, max_exposure_cents=max_exposure)
     from app.services import ai_stars
 
-    ai_stars.debit_stars(db, user, "croquis")
+    # Affordability gate only — Stars debit after croquis AI succeeds.
+    ai_stars.assert_can_spend(db, user, "croquis")
 
     max_ver = (
         db.query(func.max(PersonalCroquisVersion.version))
