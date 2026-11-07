@@ -45,10 +45,23 @@ if (!indexJs) {
   process.exit(1)
 }
 const text = fs.readFileSync(path.join(assets, indexJs), 'utf8')
-if (!text.includes('`/api/v1`') && !text.includes('"/api/v1"') && !text.includes("'/api/v1'")) {
-  // Accept relative /api/v1 only for same-origin production.
-  console.error('assert-prod-api-base: expected relative /api/v1 in bundle')
-  process.exit(1)
+const nativeShell = String(process.env.VITE_NATIVE_SHELL || '') === 'true'
+const hasRelative = text.includes('`/api/v1`') || text.includes('"/api/v1"') || text.includes("'/api/v1'")
+const hasAbsoluteProd =
+  text.includes('https://fashionrise.app/api/v1') || text.includes('https://www.fashionrise.app/api/v1')
+if (nativeShell) {
+  if (!hasAbsoluteProd) {
+    console.error(
+      'assert-prod-api-base: native shell requires absolute https://fashionrise.app/api/v1 in bundle',
+    )
+    process.exit(1)
+  }
+  console.log('assert-prod-api-base: ok (native absolute fashionrise.app/api/v1)')
+} else {
+  if (!hasRelative) {
+    // Accept relative /api/v1 only for same-origin production.
+    console.error('assert-prod-api-base: expected relative /api/v1 in bundle')
+    process.exit(1)
+  }
+  console.log('assert-prod-api-base: ok (/api/v1, no localhost)')
 }
-
-console.log('assert-prod-api-base: ok (/api/v1, no localhost)')

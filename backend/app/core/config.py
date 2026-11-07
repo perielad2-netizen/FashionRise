@@ -223,6 +223,14 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:ops@fashionrise.app"
 
+    # Store IAP verification (App Store / Play Store). Empty = confirm endpoint fail-closed.
+    # Never commit real secrets. Apple shared secret or App Store Server API key later.
+    iap_apple_shared_secret: str = ""
+    # Path or inline JSON for Google Play Developer API service account.
+    iap_google_service_account_json: str = ""
+    # Dev-only: credit Stars without store verification. Forced off in production.
+    iap_allow_unverified_sandbox: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_cors(cls, v: str) -> str:

@@ -192,14 +192,22 @@ export function assertCompiledGatesMatchAllowlist(gates, expected = EXPECTED_PRO
   return failures
 }
 
-/** Fail-closed: compiled bundle must embed relative /api/v1 and must not embed localhost API bases. */
-export function assertCompiledApiBase(bundleText) {
+/** Fail-closed: compiled bundle must embed relative /api/v1 (web) or absolute fashionrise.app (native). */
+export function assertCompiledApiBase(bundleText, env = process.env) {
   const failures = []
+  const nativeShell = String(env.VITE_NATIVE_SHELL || '') === 'true'
   const hasRelative =
     bundleText.includes('`/api/v1`') ||
     bundleText.includes('"/api/v1"') ||
     bundleText.includes("'/api/v1'")
-  if (!hasRelative) {
+  const hasAbsoluteProd =
+    bundleText.includes('https://fashionrise.app/api/v1') ||
+    bundleText.includes('https://www.fashionrise.app/api/v1')
+  if (nativeShell) {
+    if (!hasAbsoluteProd) {
+      failures.push('compiled native bundle missing https://fashionrise.app/api/v1')
+    }
+  } else if (!hasRelative) {
     failures.push('compiled bundle missing relative /api/v1')
   }
   if (/https?:\/\/127\.0\.0\.1(?::\d+)?\/api\/v1/.test(bundleText)) {
@@ -214,9 +222,15 @@ export function assertCompiledApiBase(bundleText) {
 export function assertNodeEnvAllowlist(env = process.env, expected = EXPECTED_PROD_VITE_FLAGS) {
   const failures = []
   const apiBase = (env.VITE_API_BASE_URL ?? '').trim()
-  if (apiBase !== expected.VITE_API_BASE_URL) {
+  const nativeShell = String(env.VITE_NATIVE_SHELL || '') === 'true'
+  const apiOk = nativeShell
+    ? apiBase === 'https://fashionrise.app/api/v1' || apiBase === 'https://www.fashionrise.app/api/v1'
+    : apiBase === expected.VITE_API_BASE_URL
+  if (!apiOk) {
     failures.push(
-      `VITE_API_BASE_URL expected ${expected.VITE_API_BASE_URL}, got ${JSON.stringify(apiBase) || '(empty)'}`,
+      nativeShell
+        ? `VITE_API_BASE_URL expected https://fashionrise.app/api/v1 for native, got ${JSON.stringify(apiBase) || '(empty)'}`
+        : `VITE_API_BASE_URL expected ${expected.VITE_API_BASE_URL}, got ${JSON.stringify(apiBase) || '(empty)'}`,
     )
   }
   for (const name of [
@@ -313,7 +327,7 @@ function main() {
   const compiledFailures = assertCompiledGatesMatchAllowlist(gates)
   if (compiledFailures.length) fail(compiledFailures.join('; '))
 
-  const apiFailures = assertCompiledApiBase(text)
+  const apiFailures = assertCompiledApiBase(text, process.env)
   if (apiFailures.length) fail(apiFailures.join('; '))
 
   const noticeBundleFailures = assertCompiledNoticesPresent(text, notices)

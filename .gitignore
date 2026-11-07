@@ -2,9 +2,21 @@
 .env
 .env.*
 !.env.example
+!web-ui/.env.native
 backend/.env
 *.pem
 *.key
+
+# Capacitor / Android local noise (keep android/ + ios/ projects)
+web-ui/android/.gradle/
+web-ui/android/app/build/
+web-ui/android/build/
+web-ui/android/local.properties
+web-ui/android/captures/
+web-ui/ios/App/Pods/
+web-ui/ios/DerivedData/
+*.keystore
+!web-ui/android/app/debug.keystore
 
 # --- OS ---
 Thumbs.db
