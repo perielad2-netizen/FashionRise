@@ -269,15 +269,16 @@ describe('Issue #127 extended paper bounds', () => {
     expect(PAPER_HEIGHT * fitted.scale).toBeGreaterThan(DESIGN_HEIGHT * fitted.scale)
   })
 
-  it('fail-closes Magic capture when artwork uses extended margins (no crop, 0 paid AI)', async () => {
+  it('allows Magic capture when artwork uses extended margins (full paper frame)', async () => {
     const strokes = oversizedPuffyDress()
-    await expect(
-      captureSketchForMagic({
-        strokes,
-        fills: [],
-        referenceUrl: null,
-      }),
-    ).rejects.toThrow(/extends beyond the standard Magic frame/i)
+    expect(resolveExportFrame(strokes, []).mode).toBe('paper')
+    const captured = await captureSketchForMagic({
+      strokes,
+      fills: [],
+      referenceUrl: null,
+    })
+    expect(captured.byteLength).toBeGreaterThan(0)
+    expect(captured.dataUrl.startsWith('data:image/')).toBe(true)
   })
 
   it('handles hundreds of strokes without unbounded allocation', () => {

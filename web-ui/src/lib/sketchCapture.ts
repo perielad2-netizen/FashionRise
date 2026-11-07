@@ -1,10 +1,5 @@
 import { exportSketchPng, type ExportOptions } from '@/lib/exportCanvas'
 import { FabricAssetLoadError } from '@/lib/fabricAssetCache'
-import {
-  artworkExceedsLegacyBounds,
-  LEGACY_FRAME_SOFT_PAD_PX,
-  strokesForLegacyFrameGate,
-} from '@/lib/paperBounds'
 import type { FillOp } from '@/lib/fills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type Stroke } from '@/lib/strokes'
 import { liveArtworkYSpan } from '@/lib/tryOnDesignHints'
@@ -51,30 +46,16 @@ export async function captureSketchForMagic(options: ExportOptions): Promise<Cap
   if (!hasArtwork) {
     throw new Error('Draw a sketch before using Magic.')
   }
-  // Fail closed when garment ink/fills use extended paper margins — do not silently
-  // crop oversized garments into the legacy Magic input frame (0 paid AI).
-  // Shade/highlight Sketch Engine strokes are ignored (incidental eraser overshoot).
-  // Soft pad: fill-under-ink / shoe fills at the croquis feet may sit a few px past
-  // 1024 without being true extended-paper artwork.
-  if (
-    artworkExceedsLegacyBounds(
-      strokesForLegacyFrameGate(options.strokes),
-      options.fills ?? [],
-      LEGACY_FRAME_SOFT_PAD_PX,
-    )
-  ) {
-    throw new Error(
-      'This sketch extends beyond the standard Magic frame. Pull oversized strokes inside the croquis area, or export a PNG instead — Magic was not started.',
-    )
-  }
+  // Allow strokes/fills outside the croquis box — designers often sketch into the
+  // paper margins on purpose. `frame: 'auto'` keeps legacy 768×1024 when artwork
+  // fits, otherwise exports the full extended paper so outside ink is included
+  // (never block Magic / never silently crop). Eraser residue past the frame
+  // also used to false-trip the old hard gate after the mark looked erased.
   const expectsReference = Boolean(options.referenceUrl)
   try {
     const { blob, referenceIncluded } = await exportSketchPng({
       ...options,
-      // Gate above already verified ink/fills fit 768×1024. Force legacy so
-      // shade/highlight eraser overshoot cannot flip export to paper frame and
-      // letterbox/crop the Magic input.
-      frame: 'legacy',
+      frame: 'auto',
       onReferenceError: expectsReference ? 'throw' : 'skip',
       onFabricError: 'throw',
     })
