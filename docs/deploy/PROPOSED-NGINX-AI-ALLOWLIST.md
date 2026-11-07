@@ -1,6 +1,6 @@
 # Proposed Nginx allowlist — Magic AI routes (NOT applied)
 
-**Status:** documentation only. Do **not** edit production Nginx until Technical PM / operator authorization for WEB-V4A Magic activation.
+**Status:** `polish-dual` + `magic-operations/.../jobs` applied live 2026-11-07 (Yaniv Dual Magic 403 hotfix). Keep this doc in sync with production allowlist.
 
 **Companion:** `docs/deploy/REGISTRATION-ACTIVATION.md` (registration already live); this note is FashionRise-only AI routing.
 
@@ -9,6 +9,8 @@
 Allow authenticated Cloudflare Access clients (with FashionRise AOP) to call **only**:
 
 - `POST /api/v1/ai/sketch/polish`
+- `POST /api/v1/ai/sketch/polish-dual`
+- `GET /api/v1/ai/magic-operations/{uuid}/jobs`
 - `POST /api/v1/ai/personal-try-on`
 - `GET /api/v1/ai/personal-try-on/preflight`
 - `POST /api/v1/ai/personal-try-on/fashn/prepare`
@@ -57,6 +59,20 @@ location ^~ /static/uploads/ { return 403; }
 location = /api/v1/ai { return 403; }
 
 location = /api/v1/ai/sketch/polish {
+    limit_except POST { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 120s;
+    client_max_body_size 12m;
+    add_header Cache-Control "no-store" always;
+}
+
+location = /api/v1/ai/sketch/polish-dual {
     limit_except POST { deny all; }
     proxy_pass http://127.0.0.1:8010;
     proxy_http_version 1.1;
@@ -184,9 +200,23 @@ location ~ ^/api/v1/ai/jobs/[0-9a-fA-F-]{36}(/image)?$ {
     add_header Cache-Control "no-store" always;
 }
 
+location ~ "^/api/v1/ai/magic-operations/[0-9a-fA-F-]{36}/jobs$" {
+    limit_except GET { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 60s;
+    add_header Cache-Control "no-store" always;
+}
+
 # Sibling AI routes stay closed. Plain prefix (no ^~) so regex jobs still match.
 location /api/v1/ai/ { return 403; }
 ```
+
 
 Do **not** enable `CF_ACCESS_JWT_VALIDATION` or `TRUST_PROXY_HEADERS` as part of Magic activation unless separately authorized.
 
@@ -198,6 +228,10 @@ Run against an isolated candidate config (never production) with `nginx -t`, the
 |---|---|
 | `POST /api/v1/ai/sketch/polish` | Proxied (allowlist) |
 | `GET /api/v1/ai/sketch/polish` | Denied (`limit_except`) |
+| `POST /api/v1/ai/sketch/polish-dual` | Proxied (allowlist) |
+| `GET /api/v1/ai/sketch/polish-dual` | Denied (`limit_except`) |
+| `GET /api/v1/ai/magic-operations/{uuid}/jobs` | Proxied (regex) |
+| `POST /api/v1/ai/magic-operations/{uuid}/jobs` | Denied (`limit_except`) |
 | `POST /api/v1/ai/personal-try-on` | Proxied (allowlist) |
 | `GET /api/v1/ai/personal-try-on/preflight` | Proxied (allowlist) |
 | `POST /api/v1/ai/personal-try-on/fashn/prepare` | Proxied (allowlist) |
