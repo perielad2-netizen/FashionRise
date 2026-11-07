@@ -84,12 +84,13 @@ export function MagicLookPanel({
   onExperimentVerdict,
   experimentVerdictBusy = false,
   onClose,
-  onCancel,
+  onCancel: _onCancel,
   onDownload,
   onRecover,
   onBackToSketch,
   onViewInMyLooks,
 }: Props) {
+  void _onCancel
   const [compareSketch, setCompareSketch] = useState(false)
   const [tryOnCompare, setTryOnCompare] = useState<TryOnCompareMode>('result')
   const [detailsOpen, setDetailsOpen] = useState(false)
