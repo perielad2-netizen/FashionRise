@@ -165,7 +165,7 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect((score as HTMLSelectElement).value).toBe('9'))
   })
 
-  it('opens comments, posts, and likes on a circle look', async () => {
+  it('opens chat popup, posts, and likes on a circle look', async () => {
     listGalleryComments.mockResolvedValue([
       {
         id: 'c1',
@@ -196,26 +196,32 @@ describe('RunwayScreen', () => {
     const circle = await screen.findByRole('list', { name: 'Circle feed' })
     fireEvent.click(within(circle).getByRole('button', { name: /Chat/i }))
     await waitFor(() => expect(listGalleryComments).toHaveBeenCalledWith('circle-1'))
-    expect(await within(circle).findByText('Love this silhouette')).toBeInTheDocument()
-    expect(within(circle).getByText('@friendOne')).toBeInTheDocument()
 
-    fireEvent.click(within(circle).getByRole('button', { name: /Like comment/i }))
+    const dialog = await screen.findByRole('dialog', { name: /Friend circle look/i })
+    expect(within(dialog).getByText('Love this silhouette')).toBeInTheDocument()
+    expect(within(dialog).getByText('@friendOne')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Runway chat/i)).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Like comment/i }))
     await waitFor(() => expect(likeGalleryComment).toHaveBeenCalledWith('c1'))
-    expect(await within(circle).findByRole('button', { name: /Unlike comment/i })).toBeInTheDocument()
+    expect(await within(dialog).findByRole('button', { name: /Unlike comment/i })).toBeInTheDocument()
 
-    fireEvent.change(within(circle).getByLabelText(/Add a comment/i), {
+    fireEvent.change(within(dialog).getByLabelText(/Add a comment/i), {
       target: { value: 'The hem is perfect' },
     })
-    fireEvent.click(within(circle).getByRole('button', { name: /^Post$/i }))
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Post$/i }))
     await waitFor(() =>
       expect(postGalleryComment).toHaveBeenCalledWith('circle-1', 'The hem is perfect'),
     )
-    expect(await within(circle).findByText('The hem is perfect')).toBeInTheDocument()
-    expect(within(circle).getByText('@viewer')).toBeInTheDocument()
+    expect(await within(dialog).findByText('The hem is perfect')).toBeInTheDocument()
+    expect(within(dialog).getByText('@viewer')).toBeInTheDocument()
     // Own comment has no like button
-    expect(within(circle).getAllByRole('button', { name: /Unlike comment|Like comment/i })).toHaveLength(
+    expect(within(dialog).getAllByRole('button', { name: /Unlike comment|Like comment/i })).toHaveLength(
       1,
     )
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Close chat/i }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('does not let you like or score your own look', async () => {

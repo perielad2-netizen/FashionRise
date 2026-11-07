@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Globe2,
   Heart,
@@ -8,6 +9,7 @@ import {
   Star,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react'
 import {
   getGalleryItem,
@@ -523,6 +525,8 @@ function RunwayCard({
   const [draft, setDraft] = useState('')
   const liked = Boolean(item.liked_by_me)
   const canReact = !isOwn
+  const chatTitleId = useId()
+  const chatInputId = useId()
 
   const refreshItem = useCallback(async () => {
     const fresh = await getGalleryItem(item.id)
@@ -540,13 +544,29 @@ function RunwayCard({
     }
   }, [item.id])
 
-  const onToggleComments = useCallback(() => {
-    setCommentsOpen((open) => {
-      const next = !open
-      if (next) void loadComments()
-      return next
-    })
+  const openComments = useCallback(() => {
+    setCommentsOpen(true)
+    void loadComments()
   }, [loadComments])
+
+  const closeComments = useCallback(() => {
+    setCommentsOpen(false)
+    setActionError(null)
+  }, [])
+
+  useEffect(() => {
+    if (!commentsOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeComments()
+    }
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [closeComments, commentsOpen])
 
   const onToggleLike = useCallback(async () => {
     if (!canReact || busy) return
@@ -718,9 +738,9 @@ function RunwayCard({
             <button
               type="button"
               className={commentsOpen ? styles.commentBtnOn : styles.commentBtn}
+              aria-haspopup="dialog"
               aria-expanded={commentsOpen}
-              aria-controls={`runway-comments-${item.id}`}
-              onClick={onToggleComments}
+              onClick={openComments}
             >
               <MessageCircle size={12} aria-hidden />
               {comments ? comments.length : 'Chat'}
@@ -730,87 +750,131 @@ function RunwayCard({
         {isOwn ? (
           <p className={styles.ownHint}>Your look — likes & scores come from others</p>
         ) : null}
-        {!compact && commentsOpen ? (
-          <div className={styles.commentsPanel} id={`runway-comments-${item.id}`}>
-            {commentsError ? (
-              <p className={styles.cardError} role="alert">
-                {commentsError}
-              </p>
-            ) : comments == null ? (
-              <p className={styles.commentsStatus}>Loading comments…</p>
-            ) : comments.length === 0 ? (
-              <p className={styles.commentsStatus}>No comments yet — say something nice.</p>
-            ) : (
-              <ul className={styles.commentList} aria-label="Comments">
-                {comments.map((row) => {
-                  const ownComment = Boolean(viewerId && row.user_id === viewerId)
-                  const commentLiked = Boolean(row.liked_by_me)
-                  return (
-                    <li key={row.id} className={styles.commentItem}>
-                      <div className={styles.commentMain}>
-                        <span className={styles.commentAuthor}>@{row.username || 'member'}</span>
-                        <span className={styles.commentBody}>{row.body}</span>
-                      </div>
-                      {ownComment ? (
-                        <span
-                          className={styles.commentLikeStat}
-                          title="Others can like your comment"
-                        >
-                          <Heart size={11} aria-hidden />
-                          {row.likes_count ?? 0}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          className={
-                            commentLiked ? styles.commentLikeBtnOn : styles.commentLikeBtn
-                          }
-                          aria-pressed={commentLiked}
-                          aria-label={commentLiked ? 'Unlike comment' : 'Like comment'}
-                          onClick={() => void onToggleCommentLike(row)}
-                        >
-                          <Heart
-                            size={11}
-                            aria-hidden
-                            fill={commentLiked ? 'currentColor' : 'none'}
-                          />
-                          {row.likes_count ?? 0}
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-            <form className={styles.commentForm} onSubmit={(e) => void onPostComment(e)}>
-              <label className={styles.srOnly} htmlFor={`runway-comment-${item.id}`}>
-                Add a comment
-              </label>
-              <input
-                id={`runway-comment-${item.id}`}
-                className={styles.commentInput}
-                value={draft}
-                maxLength={500}
-                placeholder="Add a comment…"
-                disabled={busy === 'comment'}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-              <button
-                type="submit"
-                className={styles.commentSend}
-                disabled={busy === 'comment' || !draft.trim()}
-              >
-                Post
-              </button>
-            </form>
-          </div>
-        ) : null}
-        {actionError ? (
+        {actionError && !commentsOpen ? (
           <p className={styles.cardError} role="alert">
             {actionError}
           </p>
         ) : null}
       </div>
+      {!compact && commentsOpen
+        ? createPortal(
+            <div
+              className={styles.chatScrim}
+              role="presentation"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) closeComments()
+              }}
+            >
+              <div
+                className={styles.chatDialog}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={chatTitleId}
+              >
+                <header className={styles.chatHead}>
+                  <div className={styles.chatHeadText}>
+                    <p className={styles.chatEyebrow}>Runway chat</p>
+                    <h3 id={chatTitleId} className={styles.chatTitle}>
+                      {item.title || 'Untitled look'}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.chatClose}
+                    aria-label="Close chat"
+                    onClick={closeComments}
+                  >
+                    <X size={18} aria-hidden />
+                  </button>
+                </header>
+
+                <div className={styles.chatBody}>
+                  {commentsError ? (
+                    <p className={styles.cardError} role="alert">
+                      {commentsError}
+                    </p>
+                  ) : comments == null ? (
+                    <p className={styles.commentsStatus}>Loading comments…</p>
+                  ) : comments.length === 0 ? (
+                    <p className={styles.commentsStatus}>No comments yet — say something nice.</p>
+                  ) : (
+                    <ul className={styles.commentList} aria-label="Comments">
+                      {comments.map((row) => {
+                        const ownComment = Boolean(viewerId && row.user_id === viewerId)
+                        const commentLiked = Boolean(row.liked_by_me)
+                        return (
+                          <li key={row.id} className={styles.commentItem}>
+                            <div className={styles.commentMain}>
+                              <span className={styles.commentAuthor}>
+                                @{row.username || 'member'}
+                              </span>
+                              <span className={styles.commentBody}>{row.body}</span>
+                            </div>
+                            {ownComment ? (
+                              <span
+                                className={styles.commentLikeStat}
+                                title="Others can like your comment"
+                              >
+                                <Heart size={11} aria-hidden />
+                                {row.likes_count ?? 0}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className={
+                                  commentLiked ? styles.commentLikeBtnOn : styles.commentLikeBtn
+                                }
+                                aria-pressed={commentLiked}
+                                aria-label={commentLiked ? 'Unlike comment' : 'Like comment'}
+                                onClick={() => void onToggleCommentLike(row)}
+                              >
+                                <Heart
+                                  size={11}
+                                  aria-hidden
+                                  fill={commentLiked ? 'currentColor' : 'none'}
+                                />
+                                {row.likes_count ?? 0}
+                              </button>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                <form className={styles.chatForm} onSubmit={(e) => void onPostComment(e)}>
+                  <label className={styles.srOnly} htmlFor={chatInputId}>
+                    Add a comment
+                  </label>
+                  <input
+                    id={chatInputId}
+                    className={styles.commentInput}
+                    value={draft}
+                    maxLength={500}
+                    placeholder="Add a comment…"
+                    disabled={busy === 'comment'}
+                    autoFocus
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    className={styles.commentSend}
+                    disabled={busy === 'comment' || !draft.trim()}
+                  >
+                    Post
+                  </button>
+                </form>
+                {actionError ? (
+                  <p className={styles.chatError} role="alert">
+                    {actionError}
+                  </p>
+                ) : null}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </li>
   )
 }
