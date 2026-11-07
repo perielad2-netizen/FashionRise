@@ -38,6 +38,11 @@ class ValidationAppError(AppError):
         super().__init__("validation_error", message, status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
+class ServiceUnavailableError(AppError):
+    def __init__(self, message: str = "Service unavailable"):
+        super().__init__("service_unavailable", message, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:

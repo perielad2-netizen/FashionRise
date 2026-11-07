@@ -34,6 +34,15 @@ def upsert_rating(db: Session, user: User, data: RatingCreate) -> Rating:
     db.commit()
     db.refresh(r)
     _recompute_item_rating(db, data.gallery_item_id)
+    from app.services import push_service as push_service
+
+    push_service.notify_runway_score(
+        db,
+        owner_id=item.user_id,
+        actor=user,
+        score=int(data.score),
+        look_title=item.title,
+    )
     return r
 
 

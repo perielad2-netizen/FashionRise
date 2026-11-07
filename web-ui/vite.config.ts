@@ -24,6 +24,8 @@ const pwaWorkbox = {
   // vite-plugin-pwa defaults navigateFallback to 'index.html'. Explicit null
   // disables NavigationRoute generation (workbox-build accepts null).
   navigateFallback: null,
+  // Web Push listeners (public/push-sw-handlers.js → dist root). No HTML fallback.
+  importScripts: ['./push-sw-handlers.js'],
 } as const
 
 function resolveBuildSha(): string {
