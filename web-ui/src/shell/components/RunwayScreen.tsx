@@ -13,9 +13,11 @@ import {
   getGalleryItem,
   likeGalleryItem,
   listGallery,
+  likeGalleryComment,
   listGalleryComments,
   postGalleryComment,
   rateGalleryItem,
+  unlikeGalleryComment,
   unlikeGalleryItem,
   type GalleryComment,
   type GalleryItem,
@@ -60,6 +62,7 @@ const SCORE_HINT = 'Looks earn runway scores from likes + ratings (1–10).'
 export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
+  const viewerUsername = user?.username ?? null
   const [tab, setTab] = useState<TabId>('feed')
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
@@ -304,6 +307,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                       rank={index + 1}
                       compact
                       isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                      viewerId={viewerId}
+                      viewerUsername={viewerUsername}
                       onItemChange={patchItem}
                     />
                   ))}
@@ -345,6 +350,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                       key={item.id}
                       item={item}
                       isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                      viewerId={viewerId}
+                      viewerUsername={viewerUsername}
                       onItemChange={patchItem}
                     />
                   ))}
@@ -494,12 +501,16 @@ function RunwayCard({
   rank,
   compact = false,
   isOwn = false,
+  viewerId,
+  viewerUsername,
   onItemChange,
 }: {
   item: GalleryItem
   rank?: number
   compact?: boolean
   isOwn?: boolean
+  viewerId: string | null
+  viewerUsername: string | null
   onItemChange: (next: GalleryItem) => void
 }) {
   const authImg = useAuthGalleryImage(item.look_id ? item.id : null, Boolean(item.look_id))
@@ -588,7 +599,15 @@ function RunwayCard({
       try {
         const row = await postGalleryComment(item.id, body)
         setDraft('')
-        setComments((prev) => [...(prev ?? []), row])
+        setComments((prev) => [
+          ...(prev ?? []),
+          {
+            ...row,
+            likes_count: row.likes_count ?? 0,
+            liked_by_me: false,
+            username: row.username || viewerUsername,
+          },
+        ])
         setCommentsOpen(true)
       } catch (err) {
         setActionError(err instanceof ApiError ? err.message : 'Could not post comment.')
@@ -596,7 +615,40 @@ function RunwayCard({
         setBusy(null)
       }
     },
-    [busy, draft, item.id],
+    [busy, draft, item.id, viewerUsername],
+  )
+
+  const onToggleCommentLike = useCallback(
+    async (comment: GalleryComment) => {
+      if (!viewerId || comment.user_id === viewerId || busy) return
+      const liked = Boolean(comment.liked_by_me)
+      const prevCount = comment.likes_count ?? 0
+      setComments((prev) =>
+        (prev ?? []).map((row) =>
+          row.id === comment.id
+            ? {
+                ...row,
+                liked_by_me: !liked,
+                likes_count: Math.max(0, prevCount + (liked ? -1 : 1)),
+              }
+            : row,
+        ),
+      )
+      try {
+        if (liked) await unlikeGalleryComment(comment.id)
+        else await likeGalleryComment(comment.id)
+      } catch (err) {
+        setComments((prev) =>
+          (prev ?? []).map((row) =>
+            row.id === comment.id
+              ? { ...row, liked_by_me: liked, likes_count: prevCount }
+              : row,
+          ),
+        )
+        setActionError(err instanceof ApiError ? err.message : 'Could not update comment like.')
+      }
+    },
+    [busy, viewerId],
   )
 
   return (
@@ -690,12 +742,44 @@ function RunwayCard({
               <p className={styles.commentsStatus}>No comments yet — say something nice.</p>
             ) : (
               <ul className={styles.commentList} aria-label="Comments">
-                {comments.map((row) => (
-                  <li key={row.id} className={styles.commentItem}>
-                    <span className={styles.commentAuthor}>@{row.username || 'member'}</span>
-                    <span className={styles.commentBody}>{row.body}</span>
-                  </li>
-                ))}
+                {comments.map((row) => {
+                  const ownComment = Boolean(viewerId && row.user_id === viewerId)
+                  const commentLiked = Boolean(row.liked_by_me)
+                  return (
+                    <li key={row.id} className={styles.commentItem}>
+                      <div className={styles.commentMain}>
+                        <span className={styles.commentAuthor}>@{row.username || 'member'}</span>
+                        <span className={styles.commentBody}>{row.body}</span>
+                      </div>
+                      {ownComment ? (
+                        <span
+                          className={styles.commentLikeStat}
+                          title="Others can like your comment"
+                        >
+                          <Heart size={11} aria-hidden />
+                          {row.likes_count ?? 0}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className={
+                            commentLiked ? styles.commentLikeBtnOn : styles.commentLikeBtn
+                          }
+                          aria-pressed={commentLiked}
+                          aria-label={commentLiked ? 'Unlike comment' : 'Like comment'}
+                          onClick={() => void onToggleCommentLike(row)}
+                        >
+                          <Heart
+                            size={11}
+                            aria-hidden
+                            fill={commentLiked ? 'currentColor' : 'none'}
+                          />
+                          {row.likes_count ?? 0}
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
             <form className={styles.commentForm} onSubmit={(e) => void onPostComment(e)}>

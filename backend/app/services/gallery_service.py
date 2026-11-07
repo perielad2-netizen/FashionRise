@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError
 from app.models.gallery_comment import GalleryComment
+from app.models.gallery_comment_like import GalleryCommentLike
 from app.models.gallery_item import GalleryItem
 from app.models.gallery_like import GalleryLike
 from app.models.garment_design import GarmentDesign
@@ -337,11 +338,40 @@ def remove_gallery_like(db: Session, user: User, gallery_item_id: uuid.UUID) -> 
     db.commit()
 
 
-def to_comment_read(row: GalleryComment) -> GalleryCommentRead:
+def to_comment_read(
+    row: GalleryComment, *, liked_by_me: bool | None = None
+) -> GalleryCommentRead:
     username = None
     if getattr(row, "user", None) is not None:
         username = row.user.username
-    return GalleryCommentRead.model_validate(row).model_copy(update={"username": username})
+    return GalleryCommentRead.model_validate(row).model_copy(
+        update={"username": username, "liked_by_me": liked_by_me}
+    )
+
+
+def to_comment_reads_for_viewer(
+    db: Session, rows: list[GalleryComment], viewer: User | None
+) -> list[GalleryCommentRead]:
+    if not rows:
+        return []
+    liked_ids: set[uuid.UUID] = set()
+    if viewer is not None:
+        ids = [row.id for row in rows]
+        liked_ids = set(
+            db.scalars(
+                select(GalleryCommentLike.comment_id).where(
+                    GalleryCommentLike.user_id == viewer.id,
+                    GalleryCommentLike.comment_id.in_(ids),
+                )
+            ).all()
+        )
+    return [
+        to_comment_read(
+            row,
+            liked_by_me=(row.id in liked_ids) if viewer is not None else None,
+        )
+        for row in rows
+    ]
 
 
 def list_gallery_comments(db: Session, gallery_item_id: uuid.UUID) -> list[GalleryComment]:
@@ -358,6 +388,19 @@ def list_gallery_comments(db: Session, gallery_item_id: uuid.UUID) -> list[Galle
     return list(db.scalars(q).unique().all())
 
 
+def get_gallery_comment(db: Session, comment_id: uuid.UUID) -> GalleryComment:
+    row = db.scalar(
+        select(GalleryComment)
+        .options(joinedload(GalleryComment.user))
+        .where(GalleryComment.id == comment_id)
+    )
+    if row is None or row.moderation_status != "ok":
+        raise NotFoundError("Comment not found")
+    # Parent look must still be public.
+    get_gallery_item(db, row.gallery_item_id)
+    return row
+
+
 def add_gallery_comment(
     db: Session, user: User, gallery_item_id: uuid.UUID, data: GalleryCommentCreate
 ) -> GalleryComment:
@@ -367,7 +410,7 @@ def add_gallery_comment(
         raise ValidationAppError("Comment cannot be empty")
     if len(body) > 4000:
         raise ValidationAppError("Comment is too long")
-    row = GalleryComment(gallery_item_id=item.id, user_id=user.id, body=body)
+    row = GalleryComment(gallery_item_id=item.id, user_id=user.id, body=body, likes_count=0)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -378,3 +421,39 @@ def add_gallery_comment(
         .where(GalleryComment.id == row.id)
     )
     return loaded or row
+
+
+def add_comment_like(db: Session, user: User, comment_id: uuid.UUID) -> GalleryComment:
+    row = get_gallery_comment(db, comment_id)
+    if row.user_id == user.id:
+        raise ForbiddenError("You can’t like your own comment")
+    existing = db.scalar(
+        select(GalleryCommentLike).where(
+            GalleryCommentLike.user_id == user.id,
+            GalleryCommentLike.comment_id == row.id,
+        )
+    )
+    if existing:
+        raise ConflictError("Already liked")
+    db.add(GalleryCommentLike(user_id=user.id, comment_id=row.id))
+    row.likes_count += 1
+    db.commit()
+    db.refresh(row)
+    return get_gallery_comment(db, row.id)
+
+
+def remove_comment_like(db: Session, user: User, comment_id: uuid.UUID) -> GalleryComment:
+    row = get_gallery_comment(db, comment_id)
+    like = db.scalar(
+        select(GalleryCommentLike).where(
+            GalleryCommentLike.user_id == user.id,
+            GalleryCommentLike.comment_id == row.id,
+        )
+    )
+    if not like:
+        raise NotFoundError("Like not found")
+    db.delete(like)
+    row.likes_count = max(0, row.likes_count - 1)
+    db.commit()
+    db.refresh(row)
+    return get_gallery_comment(db, row.id)

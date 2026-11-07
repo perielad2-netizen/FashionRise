@@ -60,10 +60,28 @@ def list_user_gallery(user_id: uuid.UUID, db: Session = Depends(get_db)) -> list
     return [gallery_service.to_gallery_read(r) for r in rows]
 
 
+@router.post("/comments/{comment_id}/like", status_code=204)
+def add_comment_like(
+    comment_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)
+) -> None:
+    gallery_service.add_comment_like(db, user, comment_id)
+
+
+@router.delete("/comments/{comment_id}/like", status_code=204)
+def remove_comment_like(
+    comment_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)
+) -> None:
+    gallery_service.remove_comment_like(db, user, comment_id)
+
+
 @router.get("/{gallery_item_id}/comments", response_model=list[GalleryCommentRead])
-def list_comments(gallery_item_id: uuid.UUID, db: Session = Depends(get_db)) -> list[GalleryCommentRead]:
+def list_comments(
+    gallery_item_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+) -> list[GalleryCommentRead]:
     rows = gallery_service.list_gallery_comments(db, gallery_item_id)
-    return [gallery_service.to_comment_read(r) for r in rows]
+    return gallery_service.to_comment_reads_for_viewer(db, rows, user)
 
 
 @router.post(
@@ -78,7 +96,7 @@ def post_comment(
     db: Session = Depends(get_db),
 ) -> GalleryCommentRead:
     row = gallery_service.add_gallery_comment(db, user, gallery_item_id, data)
-    return gallery_service.to_comment_read(row)
+    return gallery_service.to_comment_read(row, liked_by_me=False)
 
 
 @router.post("/{gallery_item_id}/like", status_code=204)

@@ -82,8 +82,10 @@ export type GalleryComment = {
   user_id: string
   body: string
   moderation_status: string
+  likes_count: number
   created_at: string
   username?: string | null
+  liked_by_me?: boolean | null
 }
 
 export async function listGalleryComments(
@@ -100,6 +102,18 @@ export async function postGalleryComment(id: string, body: string): Promise<Gall
   return apiRequest<GalleryComment>(`/gallery/${encodeURIComponent(id)}/comments`, {
     method: 'POST',
     body: { body },
+  })
+}
+
+export async function likeGalleryComment(commentId: string): Promise<void> {
+  await apiRequest<void>(`/gallery/comments/${encodeURIComponent(commentId)}/like`, {
+    method: 'POST',
+  })
+}
+
+export async function unlikeGalleryComment(commentId: string): Promise<void> {
+  await apiRequest<void>(`/gallery/comments/${encodeURIComponent(commentId)}/like`, {
+    method: 'DELETE',
   })
 }
 

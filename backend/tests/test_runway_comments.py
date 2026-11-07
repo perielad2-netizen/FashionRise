@@ -50,3 +50,24 @@ def test_circle_look_comments_include_username(client, db_session):
     assert len(rows) == 1
     assert rows[0]["username"] == "cmtPeri"
     assert rows[0]["body"] == "Love the drape"
+    assert rows[0]["likes_count"] == 0
+    assert rows[0]["liked_by_me"] is False
+
+    comment_id = rows[0]["id"]
+    like = client.post(f"/api/v1/gallery/comments/{comment_id}/like", headers=_auth(yaniv))
+    assert like.status_code == 204, like.text
+
+    self_like = client.post(f"/api/v1/gallery/comments/{comment_id}/like", headers=_auth(peri))
+    assert self_like.status_code == 403, self_like.text
+
+    after = client.get(f"/api/v1/gallery/{item_id}/comments", headers=_auth(yaniv))
+    assert after.status_code == 200, after.text
+    liked_row = after.json()[0]
+    assert liked_row["likes_count"] == 1
+    assert liked_row["liked_by_me"] is True
+
+    unlike = client.delete(f"/api/v1/gallery/comments/{comment_id}/like", headers=_auth(yaniv))
+    assert unlike.status_code == 204, unlike.text
+    final = client.get(f"/api/v1/gallery/{item_id}/comments", headers=_auth(yaniv)).json()[0]
+    assert final["likes_count"] == 0
+    assert final["liked_by_me"] is False

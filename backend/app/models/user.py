@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.design_revision import DesignRevision
     from app.models.fabric_asset import FabricAsset
     from app.models.gallery_comment import GalleryComment
+    from app.models.gallery_comment_like import GalleryCommentLike
     from app.models.gallery_item import GalleryItem
     from app.models.gallery_like import GalleryLike
     from app.models.garment_design import GarmentDesign
@@ -54,6 +55,9 @@ class User(Base):
     ai_jobs: Mapped[list["AIJob"]] = relationship(back_populates="user")
     revisions: Mapped[list["DesignRevision"]] = relationship(back_populates="user")
     gallery_likes: Mapped[list["GalleryLike"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    gallery_comment_likes: Mapped[list["GalleryCommentLike"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     gallery_comments: Mapped[list["GalleryComment"]] = relationship(

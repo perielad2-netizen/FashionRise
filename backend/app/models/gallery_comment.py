@@ -2,13 +2,14 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func, text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.gallery_comment_like import GalleryCommentLike
     from app.models.gallery_item import GalleryItem
     from app.models.user import User
 
@@ -25,7 +26,11 @@ class GalleryComment(Base):
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
     moderation_status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'ok'"))
+    likes_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     gallery_item: Mapped["GalleryItem"] = relationship(back_populates="comments")
     user: Mapped["User"] = relationship(back_populates="gallery_comments")
+    likes: Mapped[list["GalleryCommentLike"]] = relationship(
+        back_populates="comment", cascade="all, delete-orphan"
+    )

@@ -9,6 +9,8 @@ const unlikeGalleryItem = vi.fn()
 const rateGalleryItem = vi.fn()
 const listGalleryComments = vi.fn()
 const postGalleryComment = vi.fn()
+const likeGalleryComment = vi.fn()
+const unlikeGalleryComment = vi.fn()
 const listFriends = vi.fn()
 const listFriendRequests = vi.fn()
 const requestFriendByUsername = vi.fn()
@@ -21,6 +23,8 @@ vi.mock('@/services/galleryApi', () => ({
   rateGalleryItem: (...args: unknown[]) => rateGalleryItem(...args),
   listGalleryComments: (...args: unknown[]) => listGalleryComments(...args),
   postGalleryComment: (...args: unknown[]) => postGalleryComment(...args),
+  likeGalleryComment: (...args: unknown[]) => likeGalleryComment(...args),
+  unlikeGalleryComment: (...args: unknown[]) => unlikeGalleryComment(...args),
   fetchGalleryImageBlob: vi.fn(async () => new Blob()),
 }))
 
@@ -89,6 +93,8 @@ describe('RunwayScreen', () => {
     rateGalleryItem.mockReset()
     listGalleryComments.mockReset()
     postGalleryComment.mockReset()
+    likeGalleryComment.mockReset()
+    unlikeGalleryComment.mockReset()
     listFriends.mockReset()
     listFriendRequests.mockReset()
     requestFriendByUsername.mockReset()
@@ -159,7 +165,7 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect((score as HTMLSelectElement).value).toBe('9'))
   })
 
-  it('opens comments and posts on a circle look', async () => {
+  it('opens comments, posts, and likes on a circle look', async () => {
     listGalleryComments.mockResolvedValue([
       {
         id: 'c1',
@@ -167,8 +173,10 @@ describe('RunwayScreen', () => {
         user_id: 'friend-1',
         body: 'Love this silhouette',
         moderation_status: 'ok',
+        likes_count: 0,
         created_at: '2026-11-07T00:00:00Z',
         username: 'friendOne',
+        liked_by_me: false,
       },
     ])
     postGalleryComment.mockResolvedValue({
@@ -177,9 +185,12 @@ describe('RunwayScreen', () => {
       user_id: 'viewer-1',
       body: 'The hem is perfect',
       moderation_status: 'ok',
+      likes_count: 0,
       created_at: '2026-11-07T00:01:00Z',
       username: 'viewer',
+      liked_by_me: false,
     })
+    likeGalleryComment.mockResolvedValue(undefined)
 
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     const circle = await screen.findByRole('list', { name: 'Circle feed' })
@@ -187,6 +198,10 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(listGalleryComments).toHaveBeenCalledWith('circle-1'))
     expect(await within(circle).findByText('Love this silhouette')).toBeInTheDocument()
     expect(within(circle).getByText('@friendOne')).toBeInTheDocument()
+
+    fireEvent.click(within(circle).getByRole('button', { name: /Like comment/i }))
+    await waitFor(() => expect(likeGalleryComment).toHaveBeenCalledWith('c1'))
+    expect(await within(circle).findByRole('button', { name: /Unlike comment/i })).toBeInTheDocument()
 
     fireEvent.change(within(circle).getByLabelText(/Add a comment/i), {
       target: { value: 'The hem is perfect' },
@@ -197,6 +212,10 @@ describe('RunwayScreen', () => {
     )
     expect(await within(circle).findByText('The hem is perfect')).toBeInTheDocument()
     expect(within(circle).getByText('@viewer')).toBeInTheDocument()
+    // Own comment has no like button
+    expect(within(circle).getAllByRole('button', { name: /Unlike comment|Like comment/i })).toHaveLength(
+      1,
+    )
   })
 
   it('does not let you like or score your own look', async () => {

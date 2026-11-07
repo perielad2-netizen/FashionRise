@@ -55,5 +55,7 @@ class GalleryCommentRead(BaseModel):
     user_id: uuid.UUID
     body: str
     moderation_status: str
+    likes_count: int = 0
     created_at: datetime
     username: str | None = None
+    liked_by_me: bool | None = None
