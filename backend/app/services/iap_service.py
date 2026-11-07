@@ -23,10 +23,11 @@ _log = logging.getLogger(__name__)
 Platform = Literal["ios", "android"]
 
 # Must match web-ui/src/services/native/iap.ts and store console product IDs.
+# Prices are set in App Store Connect / Play Console (Starter $4.99, Creator $12.99, Studio $34.99).
 STARS_PRODUCTS: dict[str, int] = {
-    "stars_50": 50,
-    "stars_120": 120,
-    "stars_300": 300,
+    "stars_50": 50,  # Starter
+    "stars_150": 150,  # Creator
+    "stars_500": 500,  # Studio
 }
 
 

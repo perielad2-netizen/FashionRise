@@ -14,11 +14,15 @@ export type StarsIapProduct = {
   stars: number
 }
 
-/** Product IDs — must match App Store Connect + Play Console exactly. */
-export const STARS_IAP_PRODUCTS: Array<{ productId: string; stars: number }> = [
-  { productId: 'stars_50', stars: 50 },
-  { productId: 'stars_120', stars: 120 },
-  { productId: 'stars_300', stars: 300 },
+/**
+ * Product IDs — must match App Store Connect + Play Console exactly.
+ * Console prices (USD): Starter $4.99 · Creator $12.99 · Studio $34.99
+ * (compare-at: $5.99 / $16.99 / $49.99 — display-only on web catalog)
+ */
+export const STARS_IAP_PRODUCTS: Array<{ productId: string; stars: number; name: string }> = [
+  { productId: 'stars_50', stars: 50, name: 'Starter' },
+  { productId: 'stars_150', stars: 150, name: 'Creator' },
+  { productId: 'stars_500', stars: 500, name: 'Studio' },
 ]
 
 export function iapAvailable(): boolean {
@@ -36,7 +40,7 @@ export async function listStarsIapProducts(): Promise<StarsIapProduct[]> {
     const meta = STARS_IAP_PRODUCTS.find((x) => x.productId === p.identifier)
     return {
       productId: p.identifier,
-      title: p.title || p.identifier,
+      title: p.title || meta?.name || p.identifier,
       description: p.description || '',
       priceString: p.priceString || '',
       stars: meta?.stars ?? 0,

@@ -5,6 +5,8 @@ export type StarPackage = {
   name: string
   stars: number
   price_usd_cents: number
+  list_price_usd_cents?: number
+  cents_per_star?: number | null
   description: string
   available: boolean
 }

@@ -137,6 +137,16 @@ export function StarsShopModal({ open, onClose }: Props) {
                   <div className={styles.pkgName}>{pkg.name}</div>
                   <div className={styles.pkgMeta}>
                     {pkg.stars} Stars · {formatUsdCents(pkg.price_usd_cents)}
+                    {pkg.list_price_usd_cents != null &&
+                    pkg.list_price_usd_cents > pkg.price_usd_cents ? (
+                      <>
+                        {' '}
+                        <s>{formatUsdCents(pkg.list_price_usd_cents)}</s>
+                      </>
+                    ) : null}
+                    {pkg.cents_per_star != null ? (
+                      <> · {pkg.cents_per_star.toFixed(2)}¢ / Star</>
+                    ) : null}
                   </div>
                   <p className={styles.pkgDesc}>{pkg.description}</p>
                 </div>

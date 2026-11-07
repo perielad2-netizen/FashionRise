@@ -19,11 +19,13 @@ The **web app is the product**. Capacitor wraps `web-ui/dist` for native shells.
 2. **Google Play Console** ($25 one-time) → app + in-app products  
 3. Signing: Apple certificates/profiles · Android upload keystore  
 
-Product IDs (must match both stores and code):
+Product IDs (must match both stores and code). Set **price** in each store console:
 
-- `stars_50` → 50 Stars  
-- `stars_120` → 120 Stars  
-- `stars_300` → 300 Stars  
+| Product ID | Name | Stars | Price (USD) | Was |
+|------------|------|------:|------------:|----:|
+| `stars_50` | Starter | 50 | $4.99 | $5.99 |
+| `stars_150` | Creator | 150 | $12.99 | $16.99 |
+| `stars_500` | Studio | 500 | $34.99 | $49.99 |
 
 ## Local / CI commands
 
