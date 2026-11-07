@@ -13,7 +13,7 @@ import {
   type GallerySort,
 } from '@/services/galleryApi'
 import { ApiError } from '@/services/api/client'
-import styles from './FashionStarsScreen.module.css'
+import styles from './RunwayScreen.module.css'
 
 type Props = {
   onOpenCreate: () => void
@@ -33,9 +33,9 @@ const TABS: Array<{ id: TabId; label: string; hint: string }> = [
   { id: 'friends', label: 'Friends', hint: 'Private circle — coming next' },
 ]
 
-const SCORE_HINT = 'Looks earn Fashion Stars from likes + scores (1–10).'
+const SCORE_HINT = 'Looks earn runway scores from likes + ratings (1–10).'
 
-export function FashionStarsScreen({ onOpenCreate, onOpenLooks }: Props) {
+export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [tab, setTab] = useState<TabId>('feed')
   const [sort, setSort] = useState<GallerySort>('newest')
   const [state, setState] = useState<LoadState>({ status: 'loading' })
@@ -58,7 +58,7 @@ export function FashionStarsScreen({ onOpenCreate, onOpenLooks }: Props) {
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'Could not load Fashion Stars'
+            : 'Could not load FashionRise Runway'
       setState({ status: 'error', message })
     }
   }, [sort, tab])
@@ -70,15 +70,15 @@ export function FashionStarsScreen({ onOpenCreate, onOpenLooks }: Props) {
   }, [load])
 
   return (
-    <section className={styles.screen} aria-labelledby="fashion-stars-title">
+    <section className={styles.screen} aria-labelledby="runway-title">
       <header className={styles.head}>
         <div className={styles.titleBlock}>
-          <p className={styles.eyebrow}>Social fashion</p>
-          <h1 id="fashion-stars-title" className={styles.title}>
-            Fashion Stars
+          <p className={styles.eyebrow}>FashionRise</p>
+          <h1 id="runway-title" className={styles.title}>
+            Runway
           </h1>
           <p className={styles.subtitle}>
-            Share looks, follow creators, like and score the runway. {SCORE_HINT}
+            Share looks, follow creators, like and score the community runway. {SCORE_HINT}
           </p>
         </div>
         <div className={styles.headActions}>
@@ -100,7 +100,7 @@ export function FashionStarsScreen({ onOpenCreate, onOpenLooks }: Props) {
         <span className={styles.roadNext}>Friends · Send</span>
       </div>
 
-      <div className={styles.tabs} role="tablist" aria-label="Fashion Stars views">
+      <div className={styles.tabs} role="tablist" aria-label="Runway views">
         {TABS.map((item) => (
           <button
             key={item.id}
@@ -153,7 +153,7 @@ export function FashionStarsScreen({ onOpenCreate, onOpenLooks }: Props) {
         {tab === 'friends' ? (
           <EmptyState
             title="Friends circle is next"
-            body="Soon you’ll add friends, manage your profile, and send designs or looks privately — before or instead of publishing to the public feed."
+            body="Soon you’ll add friends, manage your profile, and send designs or looks privately — before or instead of publishing to the Runway."
             actions={
               <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
                 Open My Looks
@@ -162,7 +162,7 @@ export function FashionStarsScreen({ onOpenCreate, onOpenLooks }: Props) {
           />
         ) : state.status === 'loading' ? (
           <p className={styles.status} role="status">
-            Loading Fashion Stars…
+            Loading Runway…
           </p>
         ) : state.status === 'error' ? (
           <EmptyState
@@ -194,7 +194,7 @@ export function FashionStarsScreen({ onOpenCreate, onOpenLooks }: Props) {
             }
           />
         ) : (
-          <ul className={styles.grid} aria-label="Fashion Stars feed">
+          <ul className={styles.grid} aria-label="Runway feed">
             {state.items.map((item) => (
               <li key={item.id} className={styles.card}>
                 <div className={styles.thumb}>

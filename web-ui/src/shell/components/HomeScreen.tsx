@@ -35,9 +35,9 @@ const DESTINATIONS: Array<{
     icon: Images,
   },
   {
-    id: 'fashion-stars',
-    label: 'Fashion Stars',
-    hint: 'Community runway — share, like, and score looks',
+    id: 'runway',
+    label: 'Runway',
+    hint: 'FashionRise Runway — share, like, and score looks',
     icon: Star,
   },
   {

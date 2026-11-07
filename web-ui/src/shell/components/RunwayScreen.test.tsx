@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { FashionStarsScreen } from './FashionStarsScreen'
+import { RunwayScreen } from './RunwayScreen'
 
 const listGallery = vi.fn()
 
@@ -8,7 +8,7 @@ vi.mock('@/services/galleryApi', () => ({
   listGallery: (...args: unknown[]) => listGallery(...args),
 }))
 
-describe('FashionStarsScreen', () => {
+describe('RunwayScreen', () => {
   beforeEach(() => {
     listGallery.mockReset()
     listGallery.mockResolvedValue([])
@@ -17,9 +17,10 @@ describe('FashionStarsScreen', () => {
   it('loads the community feed and routes Create / My Looks', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
-    render(<FashionStarsScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
+    render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Fashion Stars' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
+    expect(screen.getByText('FashionRise')).toBeInTheDocument()
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
     expect(await screen.findByText(/runway is waiting/i)).toBeInTheDocument()
 
@@ -30,7 +31,7 @@ describe('FashionStarsScreen', () => {
   })
 
   it('shows friends coming-soon without hitting the feed API', async () => {
-    render(<FashionStarsScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
     listGallery.mockClear()
 

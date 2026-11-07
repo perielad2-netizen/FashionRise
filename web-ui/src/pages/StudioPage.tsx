@@ -3,8 +3,8 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-route
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import { FashionRiseAppShell } from '@/shell/components/FashionRiseAppShell'
 import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
-import { FashionStarsScreen } from '@/shell/components/FashionStarsScreen'
 import { HomeScreen } from '@/shell/components/HomeScreen'
+import { RunwayScreen } from '@/shell/components/RunwayScreen'
 import { MyCroquisScreen } from '@/shell/components/MyCroquisScreen'
 import { MyDesignsScreen } from '@/shell/components/MyDesignsScreen'
 import { MyLooksScreen } from '@/shell/components/MyLooksScreen'
@@ -20,6 +20,8 @@ export const HOME_PATH = '/studio/home'
 export const MY_DESIGNS_PATH = '/studio/designs'
 export const MY_LOOKS_PATH = '/studio/looks'
 export const MY_CROQUIS_PATH = '/studio/croquis'
+export const RUNWAY_PATH = '/studio/runway'
+/** @deprecated legacy Fashion Stars path — redirects to Runway */
 export const FASHION_STARS_PATH = '/studio/fashion-stars'
 export const TECHPACK_PATH_PREFIX = '/studio/techpacks'
 
@@ -51,8 +53,8 @@ export function StudioPage() {
               : null
             : path === HOME_PATH
               ? 'home'
-              : path === FASHION_STARS_PATH
-                ? 'fashion-stars'
+              : path === RUNWAY_PATH || path === FASHION_STARS_PATH
+                ? 'runway'
                 : path === STUDIO_PATH
                   ? 'studio'
                   : null
@@ -63,7 +65,7 @@ export function StudioPage() {
       else if (destination === 'designs') navigate(MY_DESIGNS_PATH)
       else if (destination === 'looks') navigate(MY_LOOKS_PATH)
       else if (destination === 'croquis') navigate(MY_CROQUIS_PATH)
-      else if (destination === 'fashion-stars') navigate(FASHION_STARS_PATH)
+      else if (destination === 'runway') navigate(RUNWAY_PATH)
       else navigate(STUDIO_PATH)
     },
     [navigate],
@@ -90,11 +92,12 @@ export function StudioPage() {
     if (view === 'library') return 'designs'
     if (view === 'looks' || view === 'techpack') return 'looks'
     if (view === 'croquis') return 'croquis'
-    if (view === 'fashion-stars') return 'fashion-stars'
+    if (view === 'runway') return 'runway'
     return 'create'
   }, [view])
 
   if (view === null) return <Navigate to={HOME_PATH} replace />
+  if (path === FASHION_STARS_PATH) return <Navigate to={RUNWAY_PATH} replace />
 
   return (
     <div className={`${styles.page} studioShellRoot studio-chrome`}>
@@ -110,8 +113,8 @@ export function StudioPage() {
             username={editor.user?.username ?? 'Creator'}
             onNavigate={onNavigate}
           />
-        ) : view === 'fashion-stars' ? (
-          <FashionStarsScreen
+        ) : view === 'runway' ? (
+          <RunwayScreen
             onOpenCreate={() => onNavigate('create')}
             onOpenLooks={() => onNavigate('looks')}
           />

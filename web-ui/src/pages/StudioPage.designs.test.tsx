@@ -327,19 +327,19 @@ describe('My Designs navigation and library', () => {
     expect(within(nav).getByRole('button', { name: 'Home' })).not.toBeDisabled()
     expect(within(nav).queryByRole('button', { name: 'Design Book' })).toBeNull()
     expect(within(nav).queryByRole('button', { name: 'Discover' })).toBeNull()
-    expect(within(nav).getByRole('button', { name: 'Fashion Stars' })).not.toBeDisabled()
+    expect(within(nav).getByRole('button', { name: 'Runway' })).not.toBeDisabled()
     expect(within(nav).getByRole('button', { name: 'My Looks' })).not.toBeDisabled()
     fireEvent.click(within(nav).getByRole('button', { name: 'Create' }))
     expect(screen.getByRole('heading', { name: 'New Design' })).toBeInTheDocument()
   })
 
-  it('opens Fashion Stars from the sidebar', async () => {
+  it('opens Runway from the sidebar', async () => {
     renderAt('/studio')
     await ready()
     const nav = screen.getByRole('navigation', { name: 'FashionRise' })
-    fireEvent.click(within(nav).getByRole('button', { name: 'Fashion Stars' }))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Fashion Stars' })).toBeInTheDocument()
-    expect(within(nav).getByRole('button', { name: 'Fashion Stars' })).toHaveAttribute(
+    fireEvent.click(within(nav).getByRole('button', { name: 'Runway' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Runway' })).toHaveAttribute(
       'aria-current',
       'page',
     )

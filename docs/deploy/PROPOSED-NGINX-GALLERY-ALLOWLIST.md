@@ -1,6 +1,6 @@
-# Proposed Nginx allowlist — Fashion Stars (gallery / social)
+# Proposed Nginx allowlist — FashionRise Runway (gallery / social)
 
-**Status:** required for web Fashion Stars feed (`GET /api/v1/gallery`).
+**Status:** required for web Runway feed (`GET /api/v1/gallery`).
 
 ## Intent
 
@@ -11,7 +11,7 @@
 ## Smallest FashionRise-only change
 
 ```nginx
-    # Fashion Stars — public gallery feed + social actions
+    # FashionRise Runway — public gallery feed + social actions
     location = /api/v1/gallery {
         limit_except GET POST { deny all; }
         proxy_pass http://127.0.0.1:8010;
