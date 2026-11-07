@@ -115,8 +115,8 @@ def assert_can_spend(db: Session, user: User, feature: Feature | str) -> None:
 def debit_stars(db: Session, user: User, feature: Feature | str) -> int:
     """Debit feature cost. Returns remaining balance. Skip unlimited owners.
 
-    Call only when creating **new** paid work (not idempotent replays).
-    Must run inside the same transaction as the job/run/asset insert when possible.
+    Call only after AI work **succeeds** (not at enqueue, not on failure).
+    Must run inside the same transaction as marking the job/run completed when possible.
     """
     if user_has_unlimited_stars(user):
         return int(getattr(user, "ai_stars", 0) or 0)

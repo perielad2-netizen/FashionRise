@@ -873,7 +873,7 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             db.add(reservation)
         job.status = "completed"
         job.claim_token = None
-        job.result_data = {
+        result_data = {
             "version_id": str(version_id),
             "version": int(payload.get("version") or 0) or None,
             "status": VERSION_STATUS_AWAITING_REVIEW,
@@ -885,6 +885,19 @@ def process_claimed_croquis_job(db: Session, job: AIJob) -> None:
             "max_exposure_cents": int(payload.get("max_exposure_cents") or 0),
             "geometry_profile": result.geometry_profile or GEOMETRY_PROFILE_V1,
         }
+        # Charge Stars only after success — failed croquis AI never reduces the wallet.
+        from app.core.errors import ForbiddenError
+        from app.models.user import User as StarUser
+        from app.services import ai_stars
+
+        owner = db.get(StarUser, job.user_id)
+        if owner is not None:
+            try:
+                ai_stars.debit_stars(db, owner, "croquis")
+                result_data["stars_debited"] = True
+            except ForbiddenError:
+                pass
+        job.result_data = result_data
         db.add(job)
         db.commit()
     except ProviderNotAvailableError as exc:
