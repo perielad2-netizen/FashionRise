@@ -17,6 +17,7 @@ import {
 import {
   createStudioDraft,
   documentForCloud,
+  alignExtractedDraftToOcc,
   extractStudioDraft,
   getDesign,
   isStudioWorkingDraftClaim,
@@ -547,8 +548,14 @@ export async function persistStudioDraft(args: {
   } catch (err) {
     const conflictPayload = parseDraftConflict(err)
     if (conflictPayload) {
-      const serverDoc =
+      const extracted =
         extractStudioDraft(conflictPayload.design) ?? createEmptyDraftDocument()
+      // OCC floor must match BE current_revision (metadata-first), not design_data alone.
+      const serverDoc = alignExtractedDraftToOcc(
+        extracted,
+        conflictPayload.design,
+        conflictPayload.currentRevision,
+      )
       // Lost-response / same-content 409: treat as ACK — never open a false conflict.
       if (sameCloudContent(serverDoc, cloudDoc)) {
         writeStoredDesignId(args.userId, conflictPayload.design.id)

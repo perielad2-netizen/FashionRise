@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-08 (**Runway** chip UI returned on prod because cleanup PRs **#239/#240** never merged; restore clean hub — Top 10 / My circle popups + push switch, no roadmap chips.)
+**Last updated:** 2026-11-08 (**TestFlight** Keep-this-device draft save **409** — FE OCC revision now matches BE metadata-first; Capacitor CORS+OPTIONS already fixed on nginx.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
