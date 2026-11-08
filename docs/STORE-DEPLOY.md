@@ -52,7 +52,7 @@ npm run cap:ios           # opens Xcode (macOS only)
 | Scheme / target | `App` |
 | Bundle ID | `app.fashionrise.studio` |
 | ASC Apple ID | `6832116469` |
-| Signing | Codemagic `ios_signing` `app_store` + ASC API key integration `FashionRise_ASC` (credentials in Codemagic UI, not GitHub) |
+| Signing | Codemagic `ios_signing` `app_store` + ASC API key integration `codemagic access` (credentials in Codemagic UI, not GitHub) |
 | Trigger | Manual only (no `triggering:` block) |
 | Publish | None — download IPA from the build page |
 

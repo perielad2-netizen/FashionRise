@@ -17,7 +17,7 @@ Repo ready for a **manual** Codemagic iOS IPA. **Not** started as a paid cloud b
 | Paths | `working_directory: web-ui` · workspace `ios/App/App.xcworkspace` · scheme **`App`** |
 | Bundle / ASC | `app.fashionrise.studio` · Apple ID **`6832116469`** |
 | Build steps | `npm ci` → `npm run build:native` → `npx cap sync ios` → `pod install` → `use-profiles` → `build-ipa` |
-| Signing | Codemagic Team integrations (`FashionRise_ASC`) + Code signing identities — **not** GitHub secrets |
+| Signing | Codemagic Team integrations (`codemagic access`) + Code signing identities — **not** GitHub secrets |
 | Trigger / publish | Manual only · no `publishing:` block |
 | Native fixes | Shared `App.xcscheme` + `App.xcworkspace/contents.xcworkspacedata` (workspace was incomplete) |
 | Operator TODO | See **Signing prerequisites** in the Codemagic PR / `docs/STORE-DEPLOY.md` (ASC API key, distribution cert, App Store profile, `fashionrise_native` croquis notice env group) |

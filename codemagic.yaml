@@ -19,10 +19,10 @@ workflows:
     instance_type: mac_mini_m2
     working_directory: web-ui
 
-    # Reference name of the App Store Connect API key in Codemagic
-    # Team settings → Team integrations → Developer Portal.
+    # Must match the Apple Developer Portal integration name in Codemagic
+    # (Team settings → Team integrations → Developer Portal).
     integrations:
-      app_store_connect: FashionRise_ASC
+      app_store_connect: "codemagic access"
 
     environment:
       ios_signing:
