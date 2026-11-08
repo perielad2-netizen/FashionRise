@@ -25,6 +25,12 @@ import {
   type LookRecord,
 } from '@/services/looksApi'
 import { openOrCreateTechpackForLook } from '@/services/techpacksApi'
+import { sha256Hex } from '@/lib/personalCroquisNotices'
+import {
+  RUNWAY_SHARE_CHECKBOX_LABEL,
+  RUNWAY_SHARE_NOTICE_TEXT,
+  RUNWAY_SHARE_NOTICE_VERSION,
+} from '@/lib/runwayShareConsent'
 import { requestShare } from '@/lib/sharePromo'
 import { ShareSheet } from '@/shell/components/ShareSheet'
 import styles from './MyLooksScreen.module.css'
@@ -136,6 +142,8 @@ function LookDetailDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false)
+  const [runwayShareAgreed, setRunwayShareAgreed] = useState(false)
   const [mobileSide, setMobileSide] = useState<'front' | 'back'>(
     look.front?.has_image ? 'front' : 'back',
   )
@@ -168,13 +176,37 @@ function LookDetailDialog({
   }
 
   const toggleRunway = async () => {
+    if (look.runway_item_id) {
+      setBusy(true)
+      setError(null)
+      try {
+        const next = await unpublishLookFromRunway(look.id)
+        onUpdated(next)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not update Runway publish')
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+    setRunwayShareAgreed(false)
+    setPublishConfirmOpen(true)
+  }
+
+  const confirmPublishToRunway = async () => {
+    if (!runwayShareAgreed || busy) return
     setBusy(true)
     setError(null)
     try {
-      const next = look.runway_item_id
-        ? await unpublishLookFromRunway(look.id)
-        : await publishLookToRunway(look.id)
+      const notice_text_hash = await sha256Hex(RUNWAY_SHARE_NOTICE_TEXT)
+      const next = await publishLookToRunway(look.id, {
+        runway_share_attested: true,
+        notice_version: RUNWAY_SHARE_NOTICE_VERSION,
+        notice_text_hash,
+      })
       onUpdated(next)
+      setPublishConfirmOpen(false)
+      setRunwayShareAgreed(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update Runway publish')
     } finally {
@@ -410,6 +442,57 @@ function LookDetailDialog({
           imageFileName: `fashionrise-${look.title || 'look'}-${mobileSide}.png`,
         }}
       />
+      {publishConfirmOpen ? (
+        <ConfirmDialog
+          title="Publish to Runway"
+          busy={busy}
+          scrollable
+          onEscape={() => {
+            if (!busy) {
+              setPublishConfirmOpen(false)
+              setRunwayShareAgreed(false)
+            }
+          }}
+          actions={[
+            {
+              label: 'Cancel',
+              variant: 'ghost',
+              onClick: () => {
+                setPublishConfirmOpen(false)
+                setRunwayShareAgreed(false)
+              },
+            },
+            {
+              label: 'Publish',
+              variant: 'primary',
+              disabled: !runwayShareAgreed || busy,
+              onClick: () => {
+                void confirmPublishToRunway()
+              },
+            },
+          ]}
+        >
+          <p>
+            Publishing makes this look visible to other FashionRise users on the Runway community
+            feed.
+          </p>
+          <label className={styles.runwayCheck}>
+            <input
+              type="checkbox"
+              checked={runwayShareAgreed}
+              disabled={busy}
+              onChange={(e) => setRunwayShareAgreed(e.target.checked)}
+              data-testid="runway-share-consent"
+            />
+            <span>{RUNWAY_SHARE_CHECKBOX_LABEL}</span>
+          </label>
+          {error ? (
+            <p className={styles.errorInline} role="alert">
+              {error}
+            </p>
+          ) : null}
+        </ConfirmDialog>
+      ) : null}
     </div>
   )
 }

@@ -588,7 +588,8 @@ describe('TechpackScreen simplified UX', () => {
       new Error('Technical generation failed: OPENAI_REASONING_EFFORT is empty'),
     )
     render(<TechpackScreen draftId="draft-1" onBack={() => undefined} />)
-    expect(await screen.findByTestId('app-version')).toHaveTextContent(/App /i)
+    expect(await screen.findByRole('heading', { name: /Create Real Design/i })).toBeTruthy()
+    expect(screen.queryByTestId('app-version')).toBeNull()
     await clickGenerateAiPdf()
     expect(await screen.findByRole('alert')).toHaveTextContent(/server configuration problem/i)
     expect(screen.queryByText(/OPENAI_REASONING_EFFORT/i)).not.toBeInTheDocument()

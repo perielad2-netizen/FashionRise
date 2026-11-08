@@ -4,6 +4,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { isRegistrationUiEnabled } from '@/config/registrationUi'
 import { GoogleAuthCompletePage } from '@/pages/GoogleAuthCompletePage'
 import { LoginPage } from '@/pages/LoginPage'
+import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { StudioPage } from '@/pages/StudioPage'
 import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
@@ -52,6 +53,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
           <Route path="/auth/google/complete" element={<GoogleAuthCompletePage />} />
           <Route
             path="/register"

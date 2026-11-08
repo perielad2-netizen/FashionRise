@@ -19,12 +19,14 @@ PURPOSE_ADULTS_BETA = "adults_beta"
 PURPOSE_CROQUIS_STORAGE = "croquis_storage"
 PURPOSE_CROQUIS_AI_PROVIDER = "croquis_ai_provider"
 PURPOSE_TRY_ON_PERSON = "try_on_person"
+PURPOSE_RUNWAY_SHARE = "runway_share"
 ALLOWED_CONSENT_PURPOSES = frozenset(
     {
         PURPOSE_ADULTS_BETA,
         PURPOSE_CROQUIS_STORAGE,
         PURPOSE_CROQUIS_AI_PROVIDER,
         PURPOSE_TRY_ON_PERSON,
+        PURPOSE_RUNWAY_SHARE,
     }
 )
 

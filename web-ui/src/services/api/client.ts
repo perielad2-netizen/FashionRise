@@ -95,11 +95,7 @@ function extractErrorMessage(parsed: unknown, status: number): string {
 function friendlyStatus(status: number): string {
   if (status === 401) return 'Invalid email or password.'
   if (status === 403) {
-    // #170 — bare nginx 403 on Accept (and other AI routes) had no JSON detail.
-    return (
-      'This action was blocked by the FashionRise edge allowlist (HTTP 403). ' +
-      'Your sketch is unchanged and no FASHN try-on was started. Please retry after an operator updates routing, or contact support.'
-    )
+    return 'This action isn’t available right now. Your sketch is unchanged — please try again shortly.'
   }
   if (status === 409) return 'Draft was updated elsewhere. Resolve the conflict before saving again.'
   // Auth forms historically used 422 for bad credentials; elsewhere it means invalid input.

@@ -129,7 +129,7 @@ export type PersistResult =
     }
 
 const CUSTOM_REF_BETA_NOTICE =
-  'Custom reference images are session-only in private beta (not stored privately on the server). Re-select the image after refresh.'
+  'Custom reference images stay on this device for this session only. Re-select the image after refresh if needed.'
 
 function withCustomRefNotice(doc: StudioDraftDocument, notice: string | null): string | null {
   if (doc.model === 'custom' && !doc.customReferenceUrl && !doc.customReferenceKey) {

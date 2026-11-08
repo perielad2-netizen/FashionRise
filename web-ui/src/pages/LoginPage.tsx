@@ -174,6 +174,9 @@ export function LoginPage() {
             No account yet? Continue with Google to create one automatically.
           </p>
         ) : null}
+        <p className={styles.footerLinks}>
+          <Link to="/privacy">Privacy Policy</Link>
+        </p>
       </div>
     </div>
   )

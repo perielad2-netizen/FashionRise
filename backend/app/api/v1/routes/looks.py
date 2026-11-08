@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import CurrentUser
 from app.db.session import get_db
-from app.schemas.look import LookListResponse, LookRead, LookUpdate
+from app.schemas.look import LookListResponse, LookPublishRequest, LookRead, LookUpdate
 from app.services import looks_service
 
 router = APIRouter()
@@ -57,11 +57,19 @@ def update_look(
 @router.post("/{look_id}/publish", response_model=LookRead)
 def publish_look(
     look_id: uuid.UUID,
+    body: LookPublishRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> LookRead:
     """Publish this look to FashionRise Runway (public community feed)."""
-    return looks_service.publish_look_to_runway(db, user, look_id)
+    return looks_service.publish_look_to_runway(
+        db,
+        user,
+        look_id,
+        runway_share_attested=body.runway_share_attested,
+        notice_version=body.notice_version,
+        notice_text_hash=body.notice_text_hash,
+    )
 
 
 @router.delete("/{look_id}/publish", response_model=LookRead)

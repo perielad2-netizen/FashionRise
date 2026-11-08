@@ -115,12 +115,12 @@ export function FashnGarmentReview({
     <>
       <div className={styles.costRow} data-testid="fashn-cost-summary">
         <div>
-          <strong>1. Realistic garment (OpenAI)</strong> — about {costSummary.realism}¢
+          <strong>1. Realistic garment</strong> — about {costSummary.realism}¢
           {prep.realism_calls && prep.realism_calls > 1 ? ` · ${prep.realism_calls} images` : ''}
           {hasRealistic ? ' · already generated for this review' : ''}
         </div>
         <div>
-          <strong>2. FASHN try-on</strong> — about{' '}
+          <strong>2. Try On</strong> — about{' '}
           {showExperiment && experiment?.provider === 'fashn_max'
             ? `${maxEstimate}¢ · ~${maxCredits * prep.fashn_calls} Max credit${
                 maxCredits * prep.fashn_calls === 1 ? '' : 's'
@@ -138,8 +138,8 @@ export function FashnGarmentReview({
               : costSummary.combined}
             ¢
           </strong>{' '}
-          if you run both stages. Reusing an accepted garment skips OpenAI. Cancel never starts
-          FASHN.
+          if you run both stages. Reusing an accepted garment skips the first stage. Cancel never
+          starts Try On.
         </div>
       </div>
 
@@ -154,14 +154,14 @@ export function FashnGarmentReview({
           }}
         >
           <p className={styles.hint} style={{ marginBottom: 8 }}>
-            <strong>Owner experiment</strong> — compare FASHN v1.6 vs Try-On Max on the same
-            accepted garment. Soft budget ~{experiment.softBudgetCredits ?? 90} Max credits.
-            Results stay private (not My Looks).
+            <strong>Advanced Try On</strong> — compare Standard vs Enhanced on the same accepted
+            garment. Soft budget ~{experiment.softBudgetCredits ?? 90} Max credits. Results stay
+            private (not My Looks).
           </p>
 
           {experiment.acceptedOptions.length > 0 ? (
             <fieldset style={{ border: 0, padding: 0, margin: '0 0 10px' }} data-testid="fashn-reuse-accepted">
-              <legend className={styles.hint}>Reuse accepted garment (no OpenAI regen)</legend>
+              <legend className={styles.hint}>Reuse accepted garment (skip regenerate)</legend>
               <select
                 aria-label="Accepted realistic garment"
                 value={experiment.selectedAcceptedJobId ?? ''}
@@ -193,7 +193,7 @@ export function FashnGarmentReview({
           ) : null}
 
           <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
-            <legend className={styles.hint}>Provider</legend>
+            <legend className={styles.hint}>Mode</legend>
             <label style={{ display: 'block', marginBottom: 4 }}>
               <input
                 type="radio"
@@ -201,7 +201,7 @@ export function FashnGarmentReview({
                 checked={experiment.provider === 'fashn'}
                 onChange={() => experiment.onProviderChange('fashn')}
               />{' '}
-              FASHN v1.6
+              Standard
             </label>
             <label style={{ display: 'block', opacity: experiment.maxSelectable ? 1 : 0.7 }}>
               <input
@@ -213,13 +213,13 @@ export function FashnGarmentReview({
                   if (experiment.maxSelectable) experiment.onProviderChange('fashn_max')
                 }}
               />{' '}
-              FASHN Try-On Max
+              Enhanced
               {!experiment.maxSelectable ? ' (unavailable)' : ''}
             </label>
             {!experiment.maxSelectable ? (
               <p className={styles.hint} data-testid="fashn-max-unavailable" style={{ marginTop: 4 }}>
                 {experiment.maxUnavailableReason ||
-                  'Try-On Max is not live-armed on this server yet. v1.6 experiment controls stay available.'}
+                  'Enhanced Try On is not available yet. Standard controls stay available.'}
               </p>
             ) : null}
           </fieldset>
@@ -227,7 +227,7 @@ export function FashnGarmentReview({
           {experiment.provider === 'fashn' ? (
             <div data-testid="fashn-v16-controls">
               <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
-                <legend className={styles.hint}>v1.6 category</legend>
+                <legend className={styles.hint}>Garment category</legend>
                 <label style={{ display: 'inline-block', marginRight: 12 }}>
                   <input
                     type="radio"
@@ -248,7 +248,7 @@ export function FashnGarmentReview({
                 </label>
               </fieldset>
               <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
-                <legend className={styles.hint}>segmentation_free</legend>
+                <legend className={styles.hint}>Free segmentation</legend>
                 <label style={{ display: 'inline-block', marginRight: 12 }}>
                   <input
                     type="radio"
@@ -256,7 +256,7 @@ export function FashnGarmentReview({
                     checked={experiment.v16SegmentationFree === true}
                     onChange={() => experiment.onV16SegmentationFreeChange(true)}
                   />{' '}
-                  true (default)
+                  On (default)
                 </label>
                 <label style={{ display: 'inline-block' }}>
                   <input
@@ -265,11 +265,11 @@ export function FashnGarmentReview({
                     checked={experiment.v16SegmentationFree === false}
                     onChange={() => experiment.onV16SegmentationFreeChange(false)}
                   />{' '}
-                  false
+                  Off
                 </label>
               </fieldset>
               <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }}>
-                <legend className={styles.hint}>v1.6 mode</legend>
+                <legend className={styles.hint}>Quality</legend>
                 <label style={{ display: 'inline-block', marginRight: 12 }}>
                   <input
                     type="radio"
@@ -303,10 +303,10 @@ export function FashnGarmentReview({
                     )
                   }}
                   style={{ display: 'block', width: '100%', marginTop: 4 }}
-                  aria-label="FASHN v1.6 seed"
+                  aria-label="Try On seed"
                 />
               </label>
-              <p className={styles.hint}>Outputs: 1 (fixed for this experiment).</p>
+              <p className={styles.hint}>Outputs: 1 (fixed for this comparison).</p>
             </div>
           ) : null}
 
@@ -392,12 +392,12 @@ export function FashnGarmentReview({
       <p className={styles.hint} style={{ marginBottom: 8 }}>
         Layout: <strong>{prep.layout === 'two_piece' ? 'two-piece' : 'one-piece'}</strong>.{' '}
         {hasRealistic
-          ? 'Compare your sketch with the realistic product image, then Accept before FASHN.'
+          ? 'Compare your sketch with the realistic product image, then Accept before Try On.'
           : 'Review the sketch plates, then generate a realistic product garment.'}
       </p>
 
       <button type="button" className={styles.detailsToggle} onClick={onToggleDetails}>
-        {detailsOpen ? 'Hide provider details' : 'Show provider details'}
+        {detailsOpen ? 'Hide details' : 'Show details'}
       </button>
       {detailsOpen ? (
         <p className={styles.hint} style={{ marginBottom: 10 }}>
@@ -497,11 +497,11 @@ export function FashnGarmentReview({
       ) : null}
 
       {!prep.live_http ? (
-        <p className={styles.error}>FASHN is not live-armed yet. Confirm stay disabled.</p>
+        <p className={styles.error}>Try On is not available yet. Confirm stays disabled.</p>
       ) : null}
       {prep.openai_live_http === false ? (
         <p className={styles.error}>
-          OpenAI live HTTP is off — realistic garment generation cannot run on this server yet.
+          Realistic garment generation is not available on this server yet.
         </p>
       ) : null}
 

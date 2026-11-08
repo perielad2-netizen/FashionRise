@@ -5,8 +5,28 @@ from __future__ import annotations
 import uuid
 
 from app.models.gallery_item import GalleryItem
+from app.models.user_consent_event import PURPOSE_RUNWAY_SHARE, UserConsentEvent
 from tests.auth_test_helpers import register_with_invite
+from tests.runway_publish_helpers import runway_publish_body
 from tests.test_looks_api import _add_job, _auth, _store_image
+
+
+def test_publish_look_requires_share_consent_checkbox(client, db_session):
+    tokens = register_with_invite(client, db_session, "runway_ack@example.com", "runway_ack")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    uid = uuid.UUID(me["id"])
+    job = _add_job(db_session, user_id=uid, image_url=_store_image(), summary="needs ack")
+    look_id = str(job.id)
+
+    missing = client.post(f"/api/v1/looks/{look_id}/publish", headers=_auth(tokens))
+    assert missing.status_code == 422, missing.text
+
+    denied = client.post(
+        f"/api/v1/looks/{look_id}/publish",
+        headers=_auth(tokens),
+        json={**runway_publish_body(), "runway_share_attested": False},
+    )
+    assert denied.status_code == 422, denied.text
 
 
 def test_publish_look_appears_on_runway_feed(client, db_session):
@@ -15,14 +35,28 @@ def test_publish_look_appears_on_runway_feed(client, db_session):
     uid = uuid.UUID(me["id"])
     job = _add_job(db_session, user_id=uid, image_url=_store_image(), summary="runway look")
     look_id = str(job.id)
+    body_json = runway_publish_body()
 
-    published = client.post(f"/api/v1/looks/{look_id}/publish", headers=_auth(tokens))
+    published = client.post(
+        f"/api/v1/looks/{look_id}/publish", headers=_auth(tokens), json=body_json
+    )
     assert published.status_code == 200, published.text
     body = published.json()
     assert body["runway_item_id"]
     runway_id = body["runway_item_id"]
+    assert (
+        db_session.query(UserConsentEvent)
+        .filter(
+            UserConsentEvent.owner_id == uid,
+            UserConsentEvent.purpose == PURPOSE_RUNWAY_SHARE,
+        )
+        .count()
+        == 1
+    )
 
-    again = client.post(f"/api/v1/looks/{look_id}/publish", headers=_auth(tokens))
+    again = client.post(
+        f"/api/v1/looks/{look_id}/publish", headers=_auth(tokens), json=body_json
+    )
     assert again.status_code == 200
     assert again.json()["runway_item_id"] == runway_id
 

@@ -16,7 +16,7 @@ export const SMART_TRY_ON_INPUT_MODERATION =
   'The photo or sketch was blocked by image safety checks before a try-on could start. Try a different personal croquis photo, or simplify the sketch, then try again. Your sketch is unchanged.'
 
 export const SMART_TRY_ON_STOP_WAITING =
-  'Stopped waiting. Any job already started on the server keeps running — use Recover result to resume. This does not refund or cancel provider charges.'
+  'Stopped waiting. Any job already started on the server keeps running — use Recover result to resume. Stars already spent are not refunded automatically.'
 
 /** Technical failures that may authorize Max fallback. */
 const ELIGIBLE_FALLBACK_ERROR_CODES = new Set([

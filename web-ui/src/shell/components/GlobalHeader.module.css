@@ -305,3 +305,88 @@
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
+
+.contactCard {
+  width: min(420px, 100%);
+}
+
+.contactLink {
+  color: #f9a8d4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.contactForm {
+  display: grid;
+  gap: 8px;
+}
+
+.contactLabel {
+  font-size: 12px;
+  color: rgba(248, 243, 238, 0.7);
+}
+
+.contactInput,
+.contactTextarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8f3ee;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.contactTextarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.contactInput::placeholder,
+.contactTextarea::placeholder {
+  color: rgba(248, 243, 238, 0.38);
+}
+
+.contactHint {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(248, 243, 238, 0.72);
+}
+
+.contactActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.contactPrimary,
+.contactGhost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.contactPrimary {
+  border: 0;
+  background: linear-gradient(135deg, #ec4899, #db2777);
+  color: #fff7fb;
+}
+
+.contactPrimary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.contactGhost {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(248, 243, 238, 0.85);
+}

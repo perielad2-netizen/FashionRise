@@ -34,11 +34,6 @@ import {
 } from '@/shell/components/techpack/pieceHelpers'
 import styles from './TechpackScreen.module.css'
 
-const BUILD_VERSION =
-  (import.meta.env.VITE_BUILD_SHA as string | undefined)?.slice(0, 8) ||
-  (import.meta.env.VITE_APP_VERSION as string | undefined) ||
-  'unknown'
-
 type Props = {
   draftId: string
   onBack: () => void
@@ -252,7 +247,7 @@ export function TechpackScreen({ draftId, onBack }: Props) {
   useEffect(() => {
     if (typeof document === 'undefined') return
     const prev = document.title
-    document.title = `FashionRise · App ${BUILD_VERSION}`
+    document.title = 'FashionRise · Create Real Design'
     return () => {
       document.title = prev
     }
@@ -899,9 +894,6 @@ export function TechpackScreen({ draftId, onBack }: Props) {
             technical pack — pieces, flats, and factory details.
           </p>
         </div>
-        <span className={styles.pill} data-testid="app-version" title={`App ${BUILD_VERSION}`}>
-          App {BUILD_VERSION}
-        </span>
       </div>
 
       {error ? (

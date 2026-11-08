@@ -11,7 +11,7 @@ describe('ConfirmDialog scrollable viewport footer (#161)', () => {
   it('marks dialog as scrollable and keeps actions in the sticky footer region', () => {
     render(
       <ConfirmDialog
-        title="Review garment for FASHN"
+        title="Review garment for Try On"
         scrollable
         onEscape={() => undefined}
         actions={[

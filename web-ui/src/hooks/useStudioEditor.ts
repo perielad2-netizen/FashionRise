@@ -171,7 +171,7 @@ function emptyMagicSide(): MagicSidePanelState {
 }
 const AUTOSAVE_MS = 1600
 const CUSTOM_REF_BETA_NOTICE =
-  'Custom reference images stay on this device for the session only in private beta. They are not uploaded to the server (uploads are not owner-private yet).'
+  'Custom reference images stay on this device for this session only. They are not saved to your account yet — re-select after refresh if needed.'
 
 export { nearestBrushSizeId }
 
@@ -1641,7 +1641,7 @@ export function useStudioEditor() {
           setMagicPhase('failed')
           setMagicError(
             safetyFail
-              ? 'Magic could not finish under the image provider safety rules. Edit the sketch, then start a new Front/Back Magic.'
+              ? 'Magic could not finish under content safety rules. Edit the sketch, then start a new Front/Back Magic.'
               : 'Front and Back Magic did not finish. Retry the failed side.',
           )
           return
@@ -1649,7 +1649,7 @@ export function useStudioEditor() {
         if (nextFront.phase === 'failed' || nextBack.phase === 'failed') {
           setMagicError(
             safetyFail
-              ? 'One side was refused by the image provider safety rules. Edit that side, then start a new Magic operation.'
+              ? 'One side was refused by content safety rules. Edit that side, then start a new Magic operation.'
               : 'One side needs a retry — use Retry front/back below.',
           )
         }
@@ -1859,13 +1859,13 @@ export function useStudioEditor() {
         if (provider === 'fashn') {
           if (!preflight.fashn_enabled || !preflight.fashn_configured) {
             setMagicPhase('failed')
-            setMagicError('FASHN Try On is not configured on this server yet.')
+            setMagicError('Try On is not available on this server yet.')
             return
           }
           if (!preflight.fashn_live_http) {
             setMagicPhase('failed')
             setMagicError(
-              'FASHN Try On is configured but not live-armed yet. Ask an operator to enable FASHN_TRY_ON_LIVE_HTTP.',
+              'Try On is not available yet. Please try again later.',
             )
             return
           }
@@ -1878,12 +1878,12 @@ export function useStudioEditor() {
           setFashnMaxUnavailableReason(
             ownerExperiment && !maxSelectable
               ? !preflight.fashn_max_enabled
-                ? 'Try-On Max is disabled on this server (FASHN_TRY_ON_MAX_ENABLED).'
+                ? 'Enhanced Try On is disabled on this server.'
                 : !preflight.fashn_max_configured
-                  ? 'Try-On Max is not fully configured yet.'
+                  ? 'Enhanced Try On is not fully configured yet.'
                   : !preflight.fashn_max_live_http
-                    ? 'Try-On Max is configured but not live-armed (FASHN_TRY_ON_MAX_LIVE_HTTP).'
-                    : 'Try-On Max is not available for this session.'
+                    ? 'Enhanced Try On is not available yet.'
+                    : 'Enhanced Try On is not available for this session.'
               : null,
           )
           setFashnMaxSoftBudgetCredits(preflight.fashn_max_soft_budget_credits ?? null)
@@ -1913,7 +1913,7 @@ export function useStudioEditor() {
           // OpenAI realism is always required before FASHN (#166 — local plate skip looked sketchy).
           if (prep.openai_live_http === false) {
             setMagicPhase('failed')
-            setMagicError('Realistic garment generation is not live-armed on this server yet.')
+            setMagicError('Realistic garment generation is not available on this server yet.')
             setMagicStatusHint(null)
             return
           }
@@ -2004,7 +2004,7 @@ export function useStudioEditor() {
             setMagicError(
               realismData.summary ||
                 realismSettled.error_message ||
-                'Realistic garment generation failed. FASHN was not started.',
+                'Realistic garment generation failed. Try On was not started.',
             )
             setMagicStatusHint(null)
             return
@@ -2420,7 +2420,7 @@ export function useStudioEditor() {
         }
         if (data.fidelity_ok === false || data.block_fashn) {
           setFashnRealismError(
-            data.summary || 'That accepted garment failed fidelity checks and cannot drive FASHN.',
+            data.summary || 'That accepted garment failed fidelity checks and cannot start Try On.',
           )
           return
         }
@@ -2524,8 +2524,8 @@ export function useStudioEditor() {
     setFashnDetailsOpen(false)
     setMagicNotice(
       croquisChanged
-        ? 'Personal croquis changed — FASHN garment approval was cleared. Start FASHN Try On again.'
-        : 'Studio design changed — FASHN garment approval was cleared. Start FASHN Try On again.',
+        ? 'Personal model changed — garment approval was cleared. Start Try On again.'
+        : 'Studio design changed — garment approval was cleared. Start Try On again.',
     )
   }, [
     fashnPrepOpen,
@@ -2556,7 +2556,7 @@ export function useStudioEditor() {
       return
     }
     if (fashnPrep.openai_live_http === false) {
-      setFashnRealismError('OpenAI live HTTP is not armed — cannot generate a realistic garment yet.')
+      setFashnRealismError('Realistic garment generation is not available yet.')
       return
     }
 
@@ -2574,7 +2574,7 @@ export function useStudioEditor() {
       const liveFp = draftContentFingerprint(live)
       if (liveFp !== fashnPrepCroquis.contentFingerprint) {
         setFashnRealismError(
-          'The Studio design changed. Cancel and start FASHN Try On again from Magic.',
+          'The Studio design changed. Cancel and start Try On again from Magic.',
         )
         return
       }
@@ -2621,7 +2621,7 @@ export function useStudioEditor() {
         setFashnRealismError(
           realismData.summary ||
             settled.error_message ||
-            'Realistic garment generation failed. FASHN stays blocked.',
+            'Realistic garment generation failed. Try On stays blocked.',
         )
         return
       }
@@ -2664,16 +2664,16 @@ export function useStudioEditor() {
     if (!user?.id || !fashnPrep || !fashnPrepGarmentDataUrl || !fashnPrepCroquis) return
     if (magicInFlightRef.current || fashnPrepBusy || fashnRealismBusy) return
     if (!fashnPrep.configured || !fashnPrep.live_http) {
-      setMagicNotice('FASHN Try On is configured but not live-armed yet. Ask an operator to enable FASHN_TRY_ON_LIVE_HTTP.')
+      setMagicNotice('Try On is not available yet. Please try again later.')
       return
     }
     if (!fashnRealisticPieces?.length || !fashnRealismJobId) {
-      setFashnRealismError('Generate and accept a realistic garment before running FASHN.')
+      setFashnRealismError('Generate and accept a realistic garment before starting Try On.')
       return
     }
     if (fashnPrep.quality_ok === false) {
       setFashnRealismError(
-        fashnPrep.quality_notes || 'Sketch plates are not acceptable for FASHN.',
+        fashnPrep.quality_notes || 'Sketch plates are not acceptable for Try On.',
       )
       return
     }
@@ -2688,7 +2688,7 @@ export function useStudioEditor() {
     if (useMax && !fashnMaxOwnerAllowed) {
       setFashnRealismError(
         fashnMaxUnavailableReason ||
-          'Try-On Max is not live-armed for this owner yet. Use FASHN v1.6, or ask an operator to enable Max live HTTP.',
+          'Enhanced Try On is not available yet. Use Standard mode, or try again later.',
       )
       return
     }
@@ -2706,8 +2706,8 @@ export function useStudioEditor() {
     setMagicPhase('submitting')
     setMagicStatusHint(
       useMax
-        ? `Running Try-On Max (${fashnMaxMode} · ${fashnMaxResolution}) — reusing accepted garment…`
-        : `Running FASHN v1.6 (${fashnV16Mode} · cat ${fashnV16Category} · seg ${fashnV16SegmentationFree ? 'free' : 'on'} · seed ${fashnV16Seed}) — reusing accepted garment…`,
+        ? `Running Enhanced Try On (${fashnMaxMode} · ${fashnMaxResolution}) — reusing accepted garment…`
+        : `Running Standard Try On (${fashnV16Mode}) — reusing accepted garment…`,
     )
 
     magicAbortRef.current?.abort()
@@ -2725,7 +2725,7 @@ export function useStudioEditor() {
       ) {
         setMagicPhase('failed')
         setMagicError(
-          'The personal croquis or design changed before FASHN Try On was confirmed. Your sketch is unchanged.',
+          'The personal model or design changed before Try On was confirmed. Your sketch is unchanged.',
         )
         return
       }
@@ -2803,7 +2803,7 @@ export function useStudioEditor() {
       if (controller.signal.aborted) {
         setMagicPhase('failed')
         setMagicError(
-          'FASHN Try On wait cancelled. Your sketch and photo are unchanged — recover if the job already finished.',
+          'Try On wait cancelled. Your sketch and photo are unchanged — recover if the job already finished.',
         )
         return
       }
@@ -2812,7 +2812,7 @@ export function useStudioEditor() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'FASHN Try On could not complete.'
+            : 'Try On could not complete.'
       setMagicPhase('failed')
       setMagicError(message)
     } finally {
@@ -2893,10 +2893,8 @@ export function useStudioEditor() {
       try {
         const preflight = await fetchPersonalTryOnPreflight()
         tryOnPreflightRef.current = preflight
-        // #178 — destination copy stays concept-only; no cost/provider text for normal users.
-        setMagicTryOnNotice(
-          'Try On Person shows your design on the original Create Model photo — concept preview only, not a fit guarantee.',
-        )
+        // Destination dialog already explains Try On Person — no duplicate notice.
+        setMagicTryOnNotice(null)
         setMagicTryOnEstimateCents(null)
         const ownerExperiment = Boolean(
           preflight.fashn_owner_experiment_allowed ?? preflight.fashn_max_owner_allowed,
@@ -2908,9 +2906,7 @@ export function useStudioEditor() {
         setMagicFashnEstimatePerCall(null)
         setMagicFashnCombinedEstimateCents(null)
       } catch {
-        setMagicTryOnNotice(
-          'Try On Person shows your design on the original Create Model photo — concept preview only, not a fit guarantee.',
-        )
+        setMagicTryOnNotice(null)
         setMagicTryOnEstimateCents(null)
         setMagicFashnAvailable(false)
         setMagicOwnerExperimentAvailable(false)
@@ -3063,7 +3059,7 @@ export function useStudioEditor() {
       return null
     }
     if (magicResult?.experimentMeta?.experiment) {
-      setMagicError('Owner experiment results stay private and are not saved to My Looks.')
+      setMagicError('These comparison results stay private and are not saved to My Looks.')
       return null
     }
     if (magicResult?.structureRejected) {

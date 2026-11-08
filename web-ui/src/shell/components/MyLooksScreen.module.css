@@ -454,6 +454,28 @@
   line-height: 1.45;
 }
 
+.runwayCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #e8edf7;
+  cursor: pointer;
+}
+
+.runwayCheck input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.errorInline {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #fda4af;
+}
+
 .renameRow {
   display: flex;
   flex-wrap: wrap;

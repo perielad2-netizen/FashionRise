@@ -114,7 +114,7 @@ export function AiSpendConfirmDialog({
         <span>
           This uses <strong>−{cost} Stars</strong>
           {unlimited ? (
-            <> (unlimited owner wallet).</>
+            <> (unlimited Stars).</>
           ) : balance != null ? (
             <>
               . Balance: <strong>{balance}</strong>.
