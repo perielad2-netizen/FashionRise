@@ -349,56 +349,30 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         </div>
       </header>
 
-      <div className={styles.roadmap} aria-label="Runway shortcuts">
+      <div className={styles.pushRow}>
+        <div className={styles.pushCopy}>
+          <span className={styles.pushLabel}>
+            {pushOn ? <Bell size={14} aria-hidden /> : <BellOff size={14} aria-hidden />}
+            Push notifications
+          </span>
+          <span className={styles.pushHint}>
+            {pushNotice ||
+              (pushOn
+                ? 'On — likes, scores, and comments'
+                : 'Off until you turn it on (stores later)')}
+          </span>
+        </div>
         <button
           type="button"
-          className={browseSheet === 'circle' ? styles.roadLiveActive : styles.roadLiveBtn}
-          aria-pressed={browseSheet === 'circle'}
-          disabled={state.status !== 'ready'}
-          onClick={() => {
-            setTab('feed')
-            setBrowseSheet('circle')
-          }}
-        >
-          <Users size={12} aria-hidden />
-          My circle
-        </button>
-        <button
-          type="button"
-          className={browseSheet === 'top10' ? styles.roadLiveActive : styles.roadLiveBtn}
-          aria-pressed={browseSheet === 'top10'}
-          disabled={state.status !== 'ready'}
-          onClick={() => {
-            setTab('feed')
-            setBrowseSheet('top10')
-          }}
-        >
-          <Globe2 size={12} aria-hidden />
-          Show Top 10
-        </button>
-        <span className={styles.roadLive}>Like · Score</span>
-        <span className={styles.roadLive}>Comments</span>
-        <button
-          type="button"
-          className={pushOn ? styles.roadPushOn : styles.roadPush}
-          aria-pressed={pushOn}
+          role="switch"
+          className={pushOn ? styles.pushToggleOn : styles.pushToggle}
+          aria-checked={pushOn}
+          aria-label="Push notifications"
           disabled={pushBusy}
+          data-testid="runway-push-toggle"
           onClick={() => void onTogglePush()}
-          title={
-            pushOn
-              ? 'Turn off Runway push on this device'
-              : 'Get notified for likes, scores, and comments'
-          }
-        >
-          {pushOn ? <Bell size={12} aria-hidden /> : <BellOff size={12} aria-hidden />}
-          {pushOn ? 'Push on' : 'Push'}
-        </button>
+        />
       </div>
-      {pushNotice ? (
-        <p className={styles.pushNotice} role="status">
-          {pushNotice}
-        </p>
-      ) : null}
 
       <div className={styles.tabs} role="tablist" aria-label="Runway views">
         {TABS.map((item) => (
