@@ -186,6 +186,13 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* End padding so Runway card footers (Chat / own-look notes) clear PWA chrome. */
+  padding-bottom: calc(
+    24px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px)
+  );
+  scroll-padding-bottom: calc(
+    24px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px)
+  );
 }
 
 .status {
@@ -237,7 +244,7 @@
 .grid {
   list-style: none;
   margin: 0;
-  padding: 0 0 8px;
+  padding: 0 0 16px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;

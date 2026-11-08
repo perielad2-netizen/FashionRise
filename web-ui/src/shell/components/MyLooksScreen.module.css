@@ -183,7 +183,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  /* Extra end padding so Delete / last-row actions clear PWA bottom chrome. */
+  padding: 16px 16px
+    calc(28px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px));
+  scroll-padding-bottom: calc(
+    28px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px)
+  );
 }
 
 .grid {
