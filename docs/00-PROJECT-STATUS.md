@@ -3,26 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-08 (**Codemagic iOS build #3** failed on CocoaPods deployment target; bump App/Podfile to **iOS 15.0** for `@capgo/native-purchases`; no new cloud build started from this agent.)
+**Last updated:** 2026-11-08 (**Codemagic iOS build #4** Archive/Export **succeeded** but **App.ipa missing** from downloadable Artifacts; fix artifact globs + IPA verify step; no new cloud build started from this agent.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
-## Codemagic iOS — build #3 deployment target fix (2026-11-08)
+## Codemagic iOS — build #4 missing IPA artifact (2026-11-08)
 
 | Status | Detail |
 |---|---|
-| Build #1 | Had been **WAITING** (Xcode capacity); superseded by later runs |
-| Build #2 | **Canceled** (duplicate) |
-| Build #3 | Reached **Sync Capacitor iOS project** / CocoaPods; failed: *CapgoNativePurchases requires a higher minimum deployment target* |
-| Root cause | App `Podfile` + `IPHONEOS_DEPLOYMENT_TARGET` were **14.0**; installed `@capgo/native-purchases` `CapgoNativePurchases.podspec` sets `s.ios.deployment_target = '15.0'` (also `Package.swift` `.iOS(.v15)`) |
-| Fix | `platform :ios, '15.0'` in `web-ui/ios/App/Podfile`; all four `IPHONEOS_DEPLOYMENT_TARGET` entries in `App.xcodeproj/project.pbxproj` → **15.0** |
-| Verified | Podspec min **15.0**; other Capacitor pods still declare **14.0** (OK under app min 15); Capgo plugin / Stars–IAP logic **untouched**; `codemagic.yaml` still `xcode: 26.5`, integration `codemagic access`, App Store signing, bundle `app.fashionrise.studio`, env group `fashionrise_native`, manual-only |
-| Note (Android, not this failure) | Capgo Android Gradle defaults `minSdkVersion` **24** when unset; FashionRise `variables.gradle` is **23** — follow up only if Play/local Android sync complains |
-| Next action | Merge this iOS **15.0** PR, then **manually** start one Codemagic IPA build — no TestFlight / App Store submit yet |
+| Build #4 | Commit **`adebaca`** · Xcode **26.5** · Archive **Succeeded** · Export **Succeeded** · IPA written to `$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa` |
+| Artifact UI | Showed dSYM ZIPs + small artifacts ZIP — **no `.ipa` download** |
+| Root cause | `artifacts` used clone-relative `web-ui/ios/App/build/ios/ipa/*.ipa` while workflow has `working_directory: web-ui`; that pattern did not surface the IPA on the build page |
+| Fix | Absolute globs `$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/*.ipa` + stage copies into `$CM_EXPORT_DIR` and `$CM_BUILD_DIR/codemagic-artifacts/`; post-build script verifies file exists, nonzero size, logs path/size (fails hard if missing) |
+| Verified (local) | YAML parse; artifacts include absolute IPA paths + `CM_EXPORT_DIR`; verify step present after `build-ipa`; `xcode: 26.5`, `codemagic access`, App Store signing, bundle `app.fashionrise.studio`, `fashionrise_native`, manual-only preserved; no app/Stars/IAP/backend edits |
+| Next action | Merge this artifact-fix PR, then **manually** start one Codemagic build and confirm **App.ipa** appears under Artifacts — still no TestFlight / App Store submit |
 
-Prep baseline: PRs **#242** (Codemagic YAML) · **#243** (Xcode 26.5). Workspace `ios/App/App.xcworkspace` · scheme **`App`** · ASC Apple ID **`6832116469`**.
+Prior: #3 CocoaPods iOS **15.0** (merged) · #243 Xcode **26.5** · #242 Codemagic YAML. Workspace `App.xcworkspace` · scheme **`App`** · ASC **`6832116469`**.
 
-Production web/BE tips above are **unchanged** by this native deployment bump.
+Production web/BE tips above are **unchanged** by this Codemagic artifact fix.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
