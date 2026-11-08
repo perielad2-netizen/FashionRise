@@ -3,9 +3,26 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-06 (**Create Real Design body profiles** **LIVE** FE/BE · **`3a01c179`** · Alembic **`017`** · Techpack V4 PDF preserved.)
+**Last updated:** 2026-11-08 (**Codemagic iOS first-build prep** — root `codemagic.yaml` + shared `App` scheme/workspace; **no** cloud build / TestFlight / App Store submit yet.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
+
+## Codemagic iOS — first App Store IPA prep (2026-11-08)
+
+Repo ready for a **manual** Codemagic iOS IPA. **Not** started as a paid cloud build. **Not** publishing to TestFlight / App Store.
+
+| Item | Detail |
+|---|---|
+| Config | Root `codemagic.yaml` · workflow `fashionrise-ios-app-store` |
+| Paths | `working_directory: web-ui` · workspace `ios/App/App.xcworkspace` · scheme **`App`** |
+| Bundle / ASC | `app.fashionrise.studio` · Apple ID **`6832116469`** |
+| Build steps | `npm ci` → `npm run build:native` → `npx cap sync ios` → `pod install` → `use-profiles` → `build-ipa` |
+| Signing | Codemagic Team integrations (`FashionRise_ASC`) + Code signing identities — **not** GitHub secrets |
+| Trigger / publish | Manual only · no `publishing:` block |
+| Native fixes | Shared `App.xcscheme` + `App.xcworkspace/contents.xcworkspacedata` (workspace was incomplete) |
+| Operator TODO | See **Signing prerequisites** in the Codemagic PR / `docs/STORE-DEPLOY.md` (ASC API key, distribution cert, App Store profile, `fashionrise_native` croquis notice env group) |
+
+Production web/BE tips above are **unchanged** by this prep.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
