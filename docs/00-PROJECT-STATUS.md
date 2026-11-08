@@ -3,26 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-08 (**Codemagic iOS first-build prep** — root `codemagic.yaml` + shared `App` scheme/workspace; **no** cloud build / TestFlight / App Store submit yet.)
+**Last updated:** 2026-11-08 (**Codemagic iOS** — first build stuck **WAITING**; pin Xcode **`26.5`** as queue workaround; no new cloud build started from this agent.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
-## Codemagic iOS — first App Store IPA prep (2026-11-08)
+## Codemagic iOS — queue workaround (Xcode 26.5) (2026-11-08)
 
-Repo ready for a **manual** Codemagic iOS IPA. **Not** started as a paid cloud build. **Not** publishing to TestFlight / App Store.
-
-| Item | Detail |
+| Status | Detail |
 |---|---|
-| Config | Root `codemagic.yaml` · workflow `fashionrise-ios-app-store` |
-| Paths | `working_directory: web-ui` · workspace `ios/App/App.xcworkspace` · scheme **`App`** |
-| Bundle / ASC | `app.fashionrise.studio` · Apple ID **`6832116469`** |
-| Build steps | `npm ci` → `npm run build:native` → `npx cap sync ios` → `pod install` → `use-profiles` → `build-ipa` |
-| Signing | Codemagic Team integrations (`codemagic access`) + Code signing identities — **not** GitHub secrets |
-| Trigger / publish | Manual only · no `publishing:` block |
-| Native fixes | Shared `App.xcscheme` + `App.xcworkspace/contents.xcworkspacedata` (workspace was incomplete) |
-| Operator TODO | See **Signing prerequisites** in the Codemagic PR / `docs/STORE-DEPLOY.md` (ASC API key, distribution cert, App Store profile, `fashionrise_native` croquis notice env group) |
+| First IPA build | Remains **WAITING** on Codemagic (macOS / Xcode capacity) |
+| Duplicate build #2 | **Canceled** (do not re-queue duplicates) |
+| Config change | Root `codemagic.yaml`: `environment.xcode` **`latest` → `26.5`** (queue workaround only) |
+| Unchanged | Workflow `fashionrise-ios-app-store`, integration `codemagic access`, App Store signing, `fashionrise_native` env group, manual-only (no `triggering:` / no `publishing:`) |
+| Next action | Merge the Xcode **26.5** pin PR, then **manually** start one Codemagic build when a `26.5` / free macOS instance is available — do not auto-submit TestFlight / App Store |
 
-Production web/BE tips above are **unchanged** by this prep.
+Prep baseline (merged PR **#242**): workspace `ios/App/App.xcworkspace` · scheme **`App`** · bundle `app.fashionrise.studio` · ASC Apple ID **`6832116469`**.
+
+Production web/BE tips above are **unchanged** by this Codemagic pin.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 

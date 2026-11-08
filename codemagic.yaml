@@ -43,7 +43,7 @@ workflows:
         APP_STORE_APPLE_ID: "6832116469"
         BUNDLE_ID: app.fashionrise.studio
       node: 22
-      xcode: latest
+      xcode: 26.5
       cocoapods: default
 
     scripts:
