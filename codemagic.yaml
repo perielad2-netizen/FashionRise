@@ -1,9 +1,12 @@
-# FashionRise — first Codemagic iOS IPA workflow (Capacitor)
+# FashionRise — Codemagic iOS IPA workflow (Capacitor)
 # Docs: https://docs.codemagic.io/yaml-quick-start/building-an-ionic-app/
+#       https://docs.codemagic.io/yaml-publishing/app-store-connect/
 #
-# Manual start only (no triggering:). Does NOT submit to TestFlight / App Store.
-# Signing materials live in Codemagic (Team integrations + Code signing identities),
-# not in GitHub secrets.
+# Manual start only (no triggering:). Uploads the IPA to App Store Connect
+# via the "codemagic access" integration. Does NOT submit TestFlight beta
+# review, App Store review, or auto-distribute to beta groups.
+# Signing materials live in Codemagic (Team integrations + Code signing
+# identities), not in GitHub secrets.
 #
 # Verified from this repo (do not rename casually):
 #   working_directory: web-ui
@@ -42,6 +45,9 @@ workflows:
         # App Store Connect → App → General → App Information → Apple ID
         APP_STORE_APPLE_ID: "6832116469"
         BUNDLE_ID: app.fashionrise.studio
+        # Build #5 shipped CFBundleVersion from Codemagic BUILD_NUMBER (5).
+        # ASC rejects reuse; floor guarantees the next upload is > 5.
+        MIN_IOS_BUILD_NUMBER: "6"
       node: 22
       xcode: 26.5
       cocoapods: default
@@ -74,9 +80,15 @@ workflows:
       - name: Set build number
         script: |
           cd "$CM_BUILD_DIR/web-ui/ios/App"
-          # Codemagic BUILD_NUMBER is the workflow run counter — safe for a first IPA.
-          # After ASC integration works, you may switch to get-latest-app-store-build-number.
-          agvtool new-version -all "$BUILD_NUMBER"
+          # Prefer Codemagic's workflow BUILD_NUMBER, but never go at or below
+          # build #5's CFBundleVersion (ASC uniqueness).
+          CANDIDATE="${BUILD_NUMBER:-0}"
+          FLOOR="${MIN_IOS_BUILD_NUMBER:-6}"
+          if [ "$CANDIDATE" -lt "$FLOOR" ]; then
+            CANDIDATE="$FLOOR"
+          fi
+          echo "CFBundleVersion candidate=$CANDIDATE (BUILD_NUMBER=${BUILD_NUMBER:-unset} floor=$FLOOR)"
+          agvtool new-version -all "$CANDIDATE"
 
       - name: Build App Store IPA
         script: |
@@ -122,5 +134,11 @@ workflows:
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
 
-    # Intentionally no app_store_connect / TestFlight publishing block.
-    # Download the IPA from the Codemagic build page for manual testing.
+    # Upload IPA to App Store Connect only (TestFlight processing). No beta review,
+    # no App Store review, no beta_groups — distribute manually in ASC if needed.
+    # Docs: https://docs.codemagic.io/yaml-publishing/app-store-connect/
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false

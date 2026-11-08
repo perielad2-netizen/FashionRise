@@ -3,24 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-08 (**Codemagic iOS build #4** Archive/Export **succeeded** but **App.ipa missing** from downloadable Artifacts; fix artifact globs + IPA verify step; no new cloud build started from this agent.)
+**Last updated:** 2026-11-08 (**Codemagic iOS build #5** IPA **succeeded** · **16.52 MB** App.ipa downloaded; next step = **upload to App Store Connect** only — no beta/App Store review; no new cloud build started from this agent.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
-## Codemagic iOS — build #4 missing IPA artifact (2026-11-08)
+## Codemagic iOS — first ASC / TestFlight upload prep (2026-11-08)
 
 | Status | Detail |
 |---|---|
-| Build #4 | Commit **`adebaca`** · Xcode **26.5** · Archive **Succeeded** · Export **Succeeded** · IPA written to `$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa` |
-| Artifact UI | Showed dSYM ZIPs + small artifacts ZIP — **no `.ipa` download** |
-| Root cause | `artifacts` used clone-relative `web-ui/ios/App/build/ios/ipa/*.ipa` while workflow has `working_directory: web-ui`; that pattern did not surface the IPA on the build page |
-| Fix | Absolute globs `$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/*.ipa` + stage copies into `$CM_EXPORT_DIR` and `$CM_BUILD_DIR/codemagic-artifacts/`; post-build script verifies file exists, nonzero size, logs path/size (fails hard if missing) |
-| Verified (local) | YAML parse; artifacts include absolute IPA paths + `CM_EXPORT_DIR`; verify step present after `build-ipa`; `xcode: 26.5`, `codemagic access`, App Store signing, bundle `app.fashionrise.studio`, `fashionrise_native`, manual-only preserved; no app/Stars/IAP/backend edits |
-| Next action | Merge this artifact-fix PR, then **manually** start one Codemagic build and confirm **App.ipa** appears under Artifacts — still no TestFlight / App Store submit |
+| Build #5 | **Succeeded** — signed **App.ipa** (~**16.52 MB**) generated, verified in Artifacts, and downloaded (artifact-path fix from #245) |
+| Planned | Enable `publishing.app_store_connect` with `auth: integration` → existing **`codemagic access`** key; **upload IPA only** |
+| Explicitly off | `submit_to_testflight: false` · `submit_to_app_store: false` · **no** `beta_groups` · **no** `triggering:` (manual builds only) |
+| Build number | Floor **`MIN_IOS_BUILD_NUMBER=6`** so CFBundleVersion is **> build #5** (uses `max(BUILD_NUMBER, 6)`) |
+| Preserved | `xcode: 26.5` · App Store signing · bundle `app.fashionrise.studio` · env group `fashionrise_native` · IPA verify + absolute artifact globs |
+| Verified (local) | YAML parse; publishing block present with integration auth and both submit flags false; no beta_groups; no triggering; verify/artifacts/signing unchanged; no app/Stars/IAP/backend edits |
+| Next action | Merge this PR, then **manually** start **one** Codemagic build; confirm IPA appears in App Store Connect / TestFlight processing. Do **not** submit beta review or App Store review from Codemagic; assign testers manually in ASC if needed |
 
-Prior: #3 CocoaPods iOS **15.0** (merged) · #243 Xcode **26.5** · #242 Codemagic YAML. Workspace `App.xcworkspace` · scheme **`App`** · ASC **`6832116469`**.
+Prior: #5 IPA download OK · #4 artifact miss → #245 · #3 iOS **15.0** · #243 Xcode **26.5** · #242 YAML. Workspace `App.xcworkspace` · scheme **`App`** · ASC Apple ID **`6832116469`**.
 
-Production web/BE tips above are **unchanged** by this Codemagic artifact fix.
+Production web/BE tips above are **unchanged** by this ASC upload-prep change.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
