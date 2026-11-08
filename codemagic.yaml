@@ -1,0 +1,95 @@
+# FashionRise — first Codemagic iOS IPA workflow (Capacitor)
+# Docs: https://docs.codemagic.io/yaml-quick-start/building-an-ionic-app/
+#
+# Manual start only (no triggering:). Does NOT submit to TestFlight / App Store.
+# Signing materials live in Codemagic (Team integrations + Code signing identities),
+# not in GitHub secrets.
+#
+# Verified from this repo (do not rename casually):
+#   working_directory: web-ui
+#   Xcode workspace:  web-ui/ios/App/App.xcworkspace
+#   Xcode scheme:     App  (PBXNativeTarget "App")
+#   Bundle ID:        app.fashionrise.studio
+#   Native web build: npm run build:native  (.env.native absolute API)
+
+workflows:
+  fashionrise-ios-app-store:
+    name: FashionRise iOS (App Store IPA)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    working_directory: web-ui
+
+    # Must match the Apple Developer Portal integration name in Codemagic
+    # (Team settings → Team integrations → Developer Portal).
+    integrations:
+      app_store_connect: "codemagic access"
+
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: app.fashionrise.studio
+      groups:
+        # Create in Codemagic → Environment variables (group).
+        # Required for production-gated web build asserts:
+        #   VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT
+        #   VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT
+        #   VITE_MY_CROQUIS_AI_NOTICE_TEXT
+        # (same approved copy / SHA256 as production web builds)
+        - fashionrise_native
+      vars:
+        XCODE_WORKSPACE: App.xcworkspace
+        XCODE_SCHEME: App
+        # App Store Connect → App → General → App Information → Apple ID
+        APP_STORE_APPLE_ID: "6832116469"
+        BUNDLE_ID: app.fashionrise.studio
+      node: 22
+      xcode: latest
+      cocoapods: default
+
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm ci
+
+      - name: Build native web bundle (Capacitor dist/)
+        script: |
+          # Uses committed .env.native (absolute https://fashionrise.app/api/v1).
+          # Croquis notice texts must come from the fashionrise_native env group.
+          export VITE_BUILD_SHA="${CM_COMMIT:0:8}"
+          npm run build:native
+
+      - name: Sync Capacitor iOS project
+        script: |
+          npx cap sync ios
+
+      - name: Install CocoaPods
+        script: |
+          cd ios/App
+          pod install
+
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+
+      - name: Set build number
+        script: |
+          cd "$CM_BUILD_DIR/web-ui/ios/App"
+          # Codemagic BUILD_NUMBER is the workflow run counter — safe for a first IPA.
+          # After ASC integration works, you may switch to get-latest-app-store-build-number.
+          agvtool new-version -all "$BUILD_NUMBER"
+
+      - name: Build App Store IPA
+        script: |
+          cd "$CM_BUILD_DIR/web-ui/ios/App"
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - web-ui/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    # Intentionally no app_store_connect / TestFlight publishing block.
+    # Download the IPA from the Codemagic build page for manual testing.

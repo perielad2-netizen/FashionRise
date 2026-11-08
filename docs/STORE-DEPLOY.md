@@ -38,7 +38,31 @@ npm run cap:ios           # opens Xcode (macOS only)
 ```
 
 - **Android AAB:** Android Studio → Build → Generate Signed Bundle  
-- **iOS IPA:** Xcode → Product → Archive → Distribute (requires Mac)
+- **iOS IPA (local):** Xcode → Product → Archive → Distribute (requires Mac)  
+- **iOS IPA (Codemagic):** root `codemagic.yaml` → workflow **FashionRise iOS (App Store IPA)** — manual start only; no TestFlight / App Store submit
+
+### Codemagic iOS (first App Store IPA)
+
+| Item | Value (from repo — do not guess) |
+|------|----------------------------------|
+| Config | `/codemagic.yaml` |
+| Workflow | `fashionrise-ios-app-store` |
+| Working dir | `web-ui` |
+| Workspace | `web-ui/ios/App/App.xcworkspace` |
+| Scheme / target | `App` |
+| Bundle ID | `app.fashionrise.studio` |
+| ASC Apple ID | `6832116469` |
+| Signing | Codemagic `ios_signing` `app_store` + ASC API key integration `codemagic access` (credentials in Codemagic UI, not GitHub) |
+| Trigger | Manual only (no `triggering:` block) |
+| Publish | None — download IPA from the build page |
+
+**Codemagic env group `fashionrise_native` (required):** production-approved croquis notice texts that `assert-prod-vite-flags` hashes:
+
+- `VITE_MY_CROQUIS_ADULTS_NOTICE_TEXT`
+- `VITE_MY_CROQUIS_STORAGE_NOTICE_TEXT`
+- `VITE_MY_CROQUIS_AI_NOTICE_TEXT`
+
+(same copy / SHA256 as live web production builds; see `web-ui/scripts/assert-prod-vite-flags.mjs`)
 
 ## Server config before live IAP credits
 
