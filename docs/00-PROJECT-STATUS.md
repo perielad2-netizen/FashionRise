@@ -14,8 +14,9 @@
 | Symptom | Live Runway showed old roadmap chips (Circle feed / Top 10 / Friends / Like · Score / Comments / Push on) + inline Top 10 strip |
 | Cause | Cleanup lived only on `cursor/web-runway-top10-circle-popup-77c6` + `cursor/web-runway-clean-push-toggle-77c6` (PRs **#239** / **#240**, unmerged). Later FE tip from **main** restored the chip hub |
 | Fix | Re-apply clean `RunwayScreen.tsx` / `.module.css` / tests from tip `032c56d8` onto current main — Feed hub CTAs open scrollable Top 10 / My circle sheets; push is `role="switch"`; roadmap chip row removed |
-| Verified | `vitest` `RunwayScreen.test.tsx` **7/7 pass** |
-| Next action | Merge restore PR and deploy FE tip so fashionrise.app Runway matches the clean hub |
+| Verified | `vitest` `RunwayScreen.test.tsx` **7/7 pass**; live bundle has `runway-push-toggle` / `runway-open-top10` / Show Top 10 |
+| FE tip LIVE | `/var/www/fashionrise/releases/bfe510b6-runway-restore-clean` · prior `6d3e30b6-default-ai-fabrics` · rollback `/var/backups/fashionrise/runway-restore-clean-20261108T1848Z/ROLLBACK.sh` |
+| Next action | Merge restore PR **#247** so `main` matches the live clean hub (PRs **#239/#240** can close as superseded) |
 
 Codemagic iOS (separate track): build **#5** IPA OK (~16.52 MB); ASC upload-prep PR may still be open — no TestFlight review from Codemagic yet.
 
