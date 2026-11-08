@@ -3,23 +3,26 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-08 (**Codemagic iOS** — first build stuck **WAITING**; pin Xcode **`26.5`** as queue workaround; no new cloud build started from this agent.)
+**Last updated:** 2026-11-08 (**Codemagic iOS build #3** failed on CocoaPods deployment target; bump App/Podfile to **iOS 15.0** for `@capgo/native-purchases`; no new cloud build started from this agent.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
-## Codemagic iOS — queue workaround (Xcode 26.5) (2026-11-08)
+## Codemagic iOS — build #3 deployment target fix (2026-11-08)
 
 | Status | Detail |
 |---|---|
-| First IPA build | Remains **WAITING** on Codemagic (macOS / Xcode capacity) |
-| Duplicate build #2 | **Canceled** (do not re-queue duplicates) |
-| Config change | Root `codemagic.yaml`: `environment.xcode` **`latest` → `26.5`** (queue workaround only) |
-| Unchanged | Workflow `fashionrise-ios-app-store`, integration `codemagic access`, App Store signing, `fashionrise_native` env group, manual-only (no `triggering:` / no `publishing:`) |
-| Next action | Merge the Xcode **26.5** pin PR, then **manually** start one Codemagic build when a `26.5` / free macOS instance is available — do not auto-submit TestFlight / App Store |
+| Build #1 | Had been **WAITING** (Xcode capacity); superseded by later runs |
+| Build #2 | **Canceled** (duplicate) |
+| Build #3 | Reached **Sync Capacitor iOS project** / CocoaPods; failed: *CapgoNativePurchases requires a higher minimum deployment target* |
+| Root cause | App `Podfile` + `IPHONEOS_DEPLOYMENT_TARGET` were **14.0**; installed `@capgo/native-purchases` `CapgoNativePurchases.podspec` sets `s.ios.deployment_target = '15.0'` (also `Package.swift` `.iOS(.v15)`) |
+| Fix | `platform :ios, '15.0'` in `web-ui/ios/App/Podfile`; all four `IPHONEOS_DEPLOYMENT_TARGET` entries in `App.xcodeproj/project.pbxproj` → **15.0** |
+| Verified | Podspec min **15.0**; other Capacitor pods still declare **14.0** (OK under app min 15); Capgo plugin / Stars–IAP logic **untouched**; `codemagic.yaml` still `xcode: 26.5`, integration `codemagic access`, App Store signing, bundle `app.fashionrise.studio`, env group `fashionrise_native`, manual-only |
+| Note (Android, not this failure) | Capgo Android Gradle defaults `minSdkVersion` **24** when unset; FashionRise `variables.gradle` is **23** — follow up only if Play/local Android sync complains |
+| Next action | Merge this iOS **15.0** PR, then **manually** start one Codemagic IPA build — no TestFlight / App Store submit yet |
 
-Prep baseline (merged PR **#242**): workspace `ios/App/App.xcworkspace` · scheme **`App`** · bundle `app.fashionrise.studio` · ASC Apple ID **`6832116469`**.
+Prep baseline: PRs **#242** (Codemagic YAML) · **#243** (Xcode 26.5). Workspace `ios/App/App.xcworkspace` · scheme **`App`** · ASC Apple ID **`6832116469`**.
 
-Production web/BE tips above are **unchanged** by this Codemagic pin.
+Production web/BE tips above are **unchanged** by this native deployment bump.
 
 **Production (`https://fashionrise.app`, behind Cloudflare Access + Authenticated Origin Pulls):**
 
