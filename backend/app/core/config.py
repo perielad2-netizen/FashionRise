@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     # Adults-only account attestation: 0 = durable for this notice version (no daily re-check).
     # Bump my_croquis_adults_attestation_version / notice text when the legal copy changes.
     my_croquis_adults_attestation_max_age_seconds: int = 0
+    # FashionRise Runway publish — rights to share with users + display license.
+    runway_share_consent_version: str = "runway-share-2026-11-08"
+    runway_share_notice_text: str = (
+        "I confirm I have the rights to share this design and its images with other "
+        "FashionRise users, and I grant FashionRise permission to display this content "
+        "on the Runway."
+    )
     # Upload bounds (source photos). Separate from fabric limits.
     max_croquis_upload_size_mb: int = 10
     max_croquis_dimension_px: int = 4096

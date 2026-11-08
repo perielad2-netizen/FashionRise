@@ -296,12 +296,70 @@ def _attach_runway_ids(db: Session, looks: list[LookRead]) -> list[LookRead]:
     ]
 
 
-def publish_look_to_runway(db: Session, user: User, look_id: uuid.UUID) -> LookRead:
+def _record_runway_share_consent(
+    db: Session,
+    user: User,
+    *,
+    runway_share_attested: bool,
+    notice_version: str,
+    notice_text_hash: str,
+) -> None:
+    """Persist explicit Runway share + display rights acknowledgment."""
+    import hashlib
+
+    from app.core.config import get_settings
+    from app.models.user_consent_event import PURPOSE_RUNWAY_SHARE, UserConsentEvent
+
+    settings = get_settings()
+    if not runway_share_attested:
+        raise ValidationAppError(
+            "Confirm you have the rights to share this look and grant FashionRise "
+            "permission to display it on the Runway."
+        )
+    expected_version = (settings.runway_share_consent_version or "").strip()
+    notice = (settings.runway_share_notice_text or "").strip()
+    if not expected_version or not notice:
+        raise ValidationAppError("Runway share consent is not configured on this server yet.")
+    if notice_version != expected_version:
+        raise ValidationAppError("Runway share notice version is not current.")
+    expected_hash = hashlib.sha256(notice.encode("utf-8")).hexdigest()
+    if notice_text_hash.lower() != expected_hash.lower():
+        raise ValidationAppError("Runway share notice text does not match the approved copy.")
+
+    db.add(
+        UserConsentEvent(
+            id=uuid.uuid4(),
+            owner_id=user.id,
+            purpose=PURPOSE_RUNWAY_SHARE,
+            consent_version=expected_version,
+            adults_attested=False,
+            text_hash=expected_hash,
+        )
+    )
+    db.commit()
+
+
+def publish_look_to_runway(
+    db: Session,
+    user: User,
+    look_id: uuid.UUID,
+    *,
+    runway_share_attested: bool,
+    notice_version: str,
+    notice_text_hash: str,
+) -> LookRead:
     from app.services import gallery_service
 
     look = get_look(db, user, look_id)
     if look.is_archived:
         raise ValidationAppError("Unarchive the look before publishing to Runway")
+    _record_runway_share_consent(
+        db,
+        user,
+        runway_share_attested=runway_share_attested,
+        notice_version=notice_version,
+        notice_text_hash=notice_text_hash,
+    )
     gallery_service.publish_look(
         db,
         user,

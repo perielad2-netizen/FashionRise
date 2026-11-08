@@ -7,6 +7,7 @@ import uuid
 from app.models.user import User
 from app.services.friendship_service import ensure_accepted_friends
 from tests.auth_test_helpers import register_with_invite
+from tests.runway_publish_helpers import runway_publish_body
 from tests.test_looks_api import _add_job, _auth, _store_image
 
 
@@ -25,7 +26,11 @@ def test_circle_look_comments_include_username(client, db_session):
         image_url=_store_image(),
         summary="comment look",
     )
-    published = client.post(f"/api/v1/looks/{job.id}/publish", headers=_auth(yaniv))
+    published = client.post(
+        f"/api/v1/looks/{job.id}/publish",
+        headers=_auth(yaniv),
+        json=runway_publish_body(),
+    )
     assert published.status_code == 200, published.text
     item_id = published.json()["runway_item_id"]
 

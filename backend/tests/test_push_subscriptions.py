@@ -126,7 +126,13 @@ def test_like_triggers_push_to_owner(client, db_session, monkeypatch):
         image_url=_store_image(),
         summary="push look",
     )
-    published = client.post(f"/api/v1/looks/{job.id}/publish", headers=_auth(yaniv))
+    from tests.runway_publish_helpers import runway_publish_body
+
+    published = client.post(
+        f"/api/v1/looks/{job.id}/publish",
+        headers=_auth(yaniv),
+        json=runway_publish_body(),
+    )
     assert published.status_code == 200, published.text
     item_id = published.json()["runway_item_id"]
 

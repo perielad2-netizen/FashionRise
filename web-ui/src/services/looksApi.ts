@@ -177,9 +177,19 @@ export function lookThumbnailJobId(look: LookRecord): string | null {
   return null
 }
 
-export async function publishLookToRunway(lookId: string): Promise<LookRecord> {
+export type RunwayPublishConsent = {
+  runway_share_attested: true
+  notice_version: string
+  notice_text_hash: string
+}
+
+export async function publishLookToRunway(
+  lookId: string,
+  consent: RunwayPublishConsent,
+): Promise<LookRecord> {
   return apiRequest<LookRecord>(`/looks/${encodeURIComponent(lookId)}/publish`, {
     method: 'POST',
+    body: consent,
   })
 }
 

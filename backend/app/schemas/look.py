@@ -45,3 +45,11 @@ class LookUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=120)
     is_favorite: bool | None = None
     is_archived: bool | None = None
+
+
+class LookPublishRequest(BaseModel):
+    """Required attestation before a look may appear on FashionRise Runway."""
+
+    runway_share_attested: bool = False
+    notice_version: str = Field(min_length=1, max_length=64)
+    notice_text_hash: str = Field(min_length=64, max_length=64)
