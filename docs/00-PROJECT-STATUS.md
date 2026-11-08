@@ -3,9 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-08 (**Codemagic iOS build #5** IPA **succeeded** · **16.52 MB** App.ipa downloaded; next step = **upload to App Store Connect** only — no beta/App Store review; no new cloud build started from this agent.)
+**Last updated:** 2026-11-08 (**Runway** chip UI returned on prod because cleanup PRs **#239/#240** never merged; restore clean hub — Top 10 / My circle popups + push switch, no roadmap chips.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
+
+## Runway clean look restore (2026-11-08)
+
+| Status | Detail |
+|---|---|
+| Symptom | Live Runway showed old roadmap chips (Circle feed / Top 10 / Friends / Like · Score / Comments / Push on) + inline Top 10 strip |
+| Cause | Cleanup lived only on `cursor/web-runway-top10-circle-popup-77c6` + `cursor/web-runway-clean-push-toggle-77c6` (PRs **#239** / **#240**, unmerged). Later FE tip from **main** restored the chip hub |
+| Fix | Re-apply clean `RunwayScreen.tsx` / `.module.css` / tests from tip `032c56d8` onto current main — Feed hub CTAs open scrollable Top 10 / My circle sheets; push is `role="switch"`; roadmap chip row removed |
+| Verified | `vitest` `RunwayScreen.test.tsx` **7/7 pass** |
+| Next action | Merge restore PR and deploy FE tip so fashionrise.app Runway matches the clean hub |
+
+Codemagic iOS (separate track): build **#5** IPA OK (~16.52 MB); ASC upload-prep PR may still be open — no TestFlight review from Codemagic yet.
 
 ## Codemagic iOS — first ASC / TestFlight upload prep (2026-11-08)
 
