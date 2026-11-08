@@ -85,10 +85,41 @@ workflows:
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME"
 
+      - name: Verify App.ipa exists for artifacts
+        script: |
+          # build-ipa writes next to the Xcode project (not under working_directory alone).
+          IPA_PATH="$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa"
+          if [ ! -f "$IPA_PATH" ]; then
+            echo "ERROR: App.ipa missing after build-ipa"
+            echo "expected=$IPA_PATH"
+            ls -la "$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa" 2>/dev/null || true
+            find "$CM_BUILD_DIR/web-ui/ios/App" -name '*.ipa' 2>/dev/null || true
+            exit 1
+          fi
+          # macOS builders use BSD stat; GNU stat is the Linux fallback.
+          SIZE="$(stat -f%z "$IPA_PATH" 2>/dev/null || stat -c%s "$IPA_PATH")"
+          if [ -z "$SIZE" ] || [ "$SIZE" -le 0 ]; then
+            echo "ERROR: App.ipa is empty (size=${SIZE:-unknown}) at $IPA_PATH"
+            exit 1
+          fi
+          echo "OK: App.ipa ready for Codemagic artifacts"
+          echo "IPA_PATH=$IPA_PATH"
+          echo "IPA_SIZE_BYTES=$SIZE"
+          ls -lh "$IPA_PATH"
+          # CM_EXPORT_DIR is always collected; also stage a clone-root copy for globs.
+          mkdir -p "$CM_EXPORT_DIR" "$CM_BUILD_DIR/codemagic-artifacts"
+          cp -f "$IPA_PATH" "$CM_EXPORT_DIR/App.ipa"
+          cp -f "$IPA_PATH" "$CM_BUILD_DIR/codemagic-artifacts/App.ipa"
+
     artifacts:
-      - web-ui/ios/App/build/ios/ipa/*.ipa
+      # Artifact patterns are relative to the clone directory ($CM_BUILD_DIR), but
+      # with working_directory: web-ui the clone-relative "web-ui/..." glob failed to
+      # surface App.ipa on build #4 even though Export Succeeded. Prefer absolute
+      # paths + CM_EXPORT_DIR / clone-root staging from the verify step.
+      - $CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/*.ipa
+      - $CM_BUILD_DIR/codemagic-artifacts/*.ipa
+      - $CM_EXPORT_DIR/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
 
     # Intentionally no app_store_connect / TestFlight publishing block.
