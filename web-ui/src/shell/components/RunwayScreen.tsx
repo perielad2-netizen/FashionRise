@@ -62,9 +62,10 @@ type FriendsState =
   | { status: 'ready'; friends: Friendship[]; requests: Friendship[] }
 
 type TabId = 'feed' | 'friends'
+type BrowseSheet = 'top10' | 'circle'
 
 const TABS: Array<{ id: TabId; label: string; hint: string }> = [
-  { id: 'feed', label: 'Feed', hint: 'Your looks and your friends’ looks' },
+  { id: 'feed', label: 'Feed', hint: 'Open Top 10 or your circle as a scrollable list' },
   { id: 'friends', label: 'Friends', hint: 'Manage your private circle' },
 ]
 
@@ -75,6 +76,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const viewerId = user?.id ?? null
   const viewerUsername = user?.username ?? null
   const [tab, setTab] = useState<TabId>('feed')
+  const [browseSheet, setBrowseSheet] = useState<BrowseSheet | null>(null)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
   const [friendUsername, setFriendUsername] = useState('')
@@ -347,10 +349,33 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         </div>
       </header>
 
-      <div className={styles.roadmap} aria-label="Social phase roadmap">
-        <span className={styles.roadLive}>Circle feed</span>
-        <span className={styles.roadLive}>Top 10</span>
-        <span className={styles.roadLive}>Friends</span>
+      <div className={styles.roadmap} aria-label="Runway shortcuts">
+        <button
+          type="button"
+          className={browseSheet === 'circle' ? styles.roadLiveActive : styles.roadLiveBtn}
+          aria-pressed={browseSheet === 'circle'}
+          disabled={state.status !== 'ready'}
+          onClick={() => {
+            setTab('feed')
+            setBrowseSheet('circle')
+          }}
+        >
+          <Users size={12} aria-hidden />
+          My circle
+        </button>
+        <button
+          type="button"
+          className={browseSheet === 'top10' ? styles.roadLiveActive : styles.roadLiveBtn}
+          aria-pressed={browseSheet === 'top10'}
+          disabled={state.status !== 'ready'}
+          onClick={() => {
+            setTab('feed')
+            setBrowseSheet('top10')
+          }}
+        >
+          <Globe2 size={12} aria-hidden />
+          Show Top 10
+        </button>
         <span className={styles.roadLive}>Like · Score</span>
         <span className={styles.roadLive}>Comments</span>
         <button
@@ -421,81 +446,192 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             }
           />
         ) : (
-          <div className={styles.feedStack}>
-            <section className={styles.topSection} aria-label="Top 10 worldwide">
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>
-                  <Globe2 size={16} aria-hidden />
-                  Top 10 worldwide
-                </h2>
-                <p className={styles.sectionHint}>Most liked public looks across FashionRise</p>
+          <div className={styles.feedHub}>
+            <p className={styles.feedHubLead}>
+              Open a list to scroll looks — Top 10 worldwide, or only your friends’ circle.
+            </p>
+            <div className={styles.feedHubActions}>
+              <button
+                type="button"
+                className={styles.hubPrimary}
+                onClick={() => setBrowseSheet('top10')}
+                data-testid="runway-open-top10"
+              >
+                <Globe2 size={18} aria-hidden />
+                <span className={styles.hubBtnText}>
+                  <strong>Show Top 10</strong>
+                  <small>
+                    {state.top10.length === 0
+                      ? 'No worldwide looks yet'
+                      : `${state.top10.length} worldwide look${state.top10.length === 1 ? '' : 's'}`}
+                  </small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className={styles.hubSecondary}
+                onClick={() => setBrowseSheet('circle')}
+                data-testid="runway-open-circle"
+              >
+                <Users size={18} aria-hidden />
+                <span className={styles.hubBtnText}>
+                  <strong>My circle</strong>
+                  <small>
+                    {state.circle.length === 0
+                      ? 'Quiet for now — publish or add friends'
+                      : `${state.circle.length} look${state.circle.length === 1 ? '' : 's'} from you & friends`}
+                  </small>
+                </span>
+              </button>
+            </div>
+            {state.circle.length === 0 ? (
+              <div className={styles.feedHubHints}>
+                <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
+                  Go to My Looks
+                </button>
+                <button type="button" className={styles.ghostBtn} onClick={() => setTab('friends')}>
+                  Add friends
+                </button>
               </div>
-              {state.top10.length === 0 ? (
-                <p className={styles.status}>No worldwide looks yet — be the first to Publish.</p>
-              ) : (
-                <ul className={styles.topStrip}>
-                  {state.top10.map((item, index) => (
-                    <RunwayCard
-                      key={item.id}
-                      item={item}
-                      rank={index + 1}
-                      compact
-                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
-                      viewerId={viewerId}
-                      viewerUsername={viewerUsername}
-                      onItemChange={patchItem}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className={styles.circleSection} aria-label="Friends circle feed">
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>
-                  <Users size={16} aria-hidden />
-                  Your circle
-                </h2>
-                <p className={styles.sectionHint}>Only your looks and your friends’ published looks</p>
-              </div>
-              {state.circle.length === 0 ? (
-                <EmptyState
-                  title="Your circle is quiet"
-                  body="Publish a look from My Looks, or add friends so their Runway posts show up here — not the whole app."
-                  actions={
-                    <>
-                      <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
-                        Go to My Looks
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.ghostBtn}
-                        onClick={() => setTab('friends')}
-                      >
-                        Add friends
-                      </button>
-                    </>
-                  }
-                />
-              ) : (
-                <ul className={styles.grid} aria-label="Circle feed">
-                  {state.circle.map((item) => (
-                    <RunwayCard
-                      key={item.id}
-                      item={item}
-                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
-                      viewerId={viewerId}
-                      viewerUsername={viewerUsername}
-                      onItemChange={patchItem}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
+            ) : null}
           </div>
         )}
       </div>
+
+      {browseSheet && state.status === 'ready' ? (
+        <RunwayBrowseSheet
+          kind={browseSheet}
+          items={browseSheet === 'top10' ? state.top10 : state.circle}
+          viewerId={viewerId}
+          viewerUsername={viewerUsername}
+          onItemChange={patchItem}
+          onClose={() => setBrowseSheet(null)}
+          onOpenLooks={onOpenLooks}
+          onOpenFriends={() => {
+            setBrowseSheet(null)
+            setTab('friends')
+          }}
+        />
+      ) : null}
     </section>
+  )
+}
+
+function RunwayBrowseSheet({
+  kind,
+  items,
+  viewerId,
+  viewerUsername,
+  onItemChange,
+  onClose,
+  onOpenLooks,
+  onOpenFriends,
+}: {
+  kind: BrowseSheet
+  items: GalleryItem[]
+  viewerId: string | null
+  viewerUsername: string | null
+  onItemChange: (next: GalleryItem) => void
+  onClose: () => void
+  onOpenLooks: () => void
+  onOpenFriends: () => void
+}) {
+  const titleId = useId()
+  const isTop10 = kind === 'top10'
+  const title = isTop10 ? 'Top 10 worldwide' : 'My circle'
+  const hint = isTop10
+    ? 'Most liked public looks across FashionRise — scroll down to see more.'
+    : 'Only your looks and your friends’ published looks — scroll down to see more.'
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return createPortal(
+    <div
+      className={styles.sheetScrim}
+      role="presentation"
+      onClick={onClose}
+      data-testid="runway-browse-scrim"
+    >
+      <div
+        className={styles.sheet}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className={styles.sheetHead}>
+          <div className={styles.sheetTitleBlock}>
+            <h2 id={titleId} className={styles.sheetTitle}>
+              {isTop10 ? <Globe2 size={18} aria-hidden /> : <Users size={18} aria-hidden />}
+              {title}
+            </h2>
+            <p className={styles.sheetHint}>{hint}</p>
+          </div>
+          <button
+            type="button"
+            className={styles.sheetClose}
+            aria-label={`Close ${title}`}
+            onClick={onClose}
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </div>
+
+        <div className={styles.sheetBody}>
+          {items.length === 0 ? (
+            <EmptyState
+              title={isTop10 ? 'No Top 10 yet' : 'Your circle is quiet'}
+              body={
+                isTop10
+                  ? 'Publish a look from My Looks to appear on the worldwide board.'
+                  : 'Publish a look from My Looks, or add friends so their Runway posts show up here.'
+              }
+              actions={
+                <>
+                  <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
+                    Go to My Looks
+                  </button>
+                  {!isTop10 ? (
+                    <button type="button" className={styles.ghostBtn} onClick={onOpenFriends}>
+                      Add friends
+                    </button>
+                  ) : null}
+                </>
+              }
+            />
+          ) : (
+            <ul
+              className={styles.sheetList}
+              aria-label={isTop10 ? 'Top 10 worldwide' : 'Circle feed'}
+            >
+              {items.map((item, index) => (
+                <RunwayCard
+                  key={item.id}
+                  item={item}
+                  rank={isTop10 ? index + 1 : undefined}
+                  isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                  viewerId={viewerId}
+                  viewerUsername={viewerUsername}
+                  onItemChange={onItemChange}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 

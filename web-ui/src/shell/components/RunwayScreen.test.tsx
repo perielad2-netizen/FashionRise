@@ -130,7 +130,17 @@ describe('RunwayScreen', () => {
     listFriendRequests.mockResolvedValue([])
   })
 
-  it('loads circle feed + Top 10 worldwide on the home tab', async () => {
+  async function openCircleSheet() {
+    fireEvent.click(await screen.findByTestId('runway-open-circle'))
+    return screen.findByRole('list', { name: 'Circle feed' })
+  }
+
+  async function openTop10Sheet() {
+    fireEvent.click(await screen.findByTestId('runway-open-top10'))
+    return screen.findByRole('dialog', { name: /Top 10 worldwide/i })
+  }
+
+  it('loads circle + Top 10 data and opens scrollable popups from hub buttons', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
@@ -139,10 +149,17 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
     expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' }))
     expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'top10' }))
-    expect(await screen.findByText('Top 10 worldwide')).toBeInTheDocument()
-    expect(screen.getByText('Worldwide hit')).toBeInTheDocument()
-    expect(screen.getByText('Friend circle look')).toBeInTheDocument()
+    expect(await screen.findByTestId('runway-open-top10')).toBeInTheDocument()
+    expect(screen.getByTestId('runway-open-circle')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /Push on/i })).toBeInTheDocument()
+
+    const topDialog = await openTop10Sheet()
+    expect(within(topDialog).getByText('Worldwide hit')).toBeInTheDocument()
+    fireEvent.click(within(topDialog).getByRole('button', { name: /Close Top 10 worldwide/i }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Top 10 worldwide/i })).toBeNull())
+
+    const circle = await openCircleSheet()
+    expect(within(circle).getByText('Friend circle look')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^Create$/i }))
     expect(onOpenCreate).toHaveBeenCalled()
@@ -150,7 +167,7 @@ describe('RunwayScreen', () => {
     expect(onOpenLooks).toHaveBeenCalled()
   })
 
-  it('likes and scores a circle look', async () => {
+  it('likes and scores a circle look inside the My circle popup', async () => {
     likeGalleryItem.mockResolvedValue(undefined)
     rateGalleryItem.mockResolvedValue({
       id: 'rating-1',
@@ -176,7 +193,7 @@ describe('RunwayScreen', () => {
       })
 
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    const circle = await screen.findByRole('list', { name: 'Circle feed' })
+    const circle = await openCircleSheet()
     const likeBtn = within(circle).getByRole('button', { name: /Like look/i })
     fireEvent.click(likeBtn)
     await waitFor(() => expect(likeGalleryItem).toHaveBeenCalledWith('circle-1'))
@@ -217,7 +234,7 @@ describe('RunwayScreen', () => {
     likeGalleryComment.mockResolvedValue(undefined)
 
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    const circle = await screen.findByRole('list', { name: 'Circle feed' })
+    const circle = await openCircleSheet()
     fireEvent.click(within(circle).getByRole('button', { name: /Chat/i }))
     await waitFor(() => expect(listGalleryComments).toHaveBeenCalledWith('circle-1'))
 
@@ -245,7 +262,7 @@ describe('RunwayScreen', () => {
     )
 
     fireEvent.click(within(dialog).getByRole('button', { name: /Close chat/i }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Friend circle look/i })).toBeNull())
   })
 
   it('does not let you like or score your own look', async () => {
@@ -264,7 +281,7 @@ describe('RunwayScreen', () => {
       ]
     })
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    const circle = await screen.findByRole('list', { name: 'Circle feed' })
+    const circle = await openCircleSheet()
     expect(within(circle).getByText('My published look')).toBeInTheDocument()
     expect(within(circle).queryByRole('button', { name: /Like look/i })).toBeNull()
     expect(within(circle).queryByLabelText(/Score My published look from 1 to 10/i)).toBeNull()
@@ -322,7 +339,7 @@ describe('RunwayScreen', () => {
 
   it('auto-enables Runway push by default on load', async () => {
     render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
-    await screen.findByRole('list', { name: 'Circle feed' })
+    await screen.findByTestId('runway-open-circle')
     await waitFor(() => expect(ensureDefaultRunwayPush).toHaveBeenCalled())
     expect(await screen.findByRole('button', { name: /Push on/i })).toBeInTheDocument()
     expect(screen.getByText(/Push on — we’ll notify/i)).toBeInTheDocument()
