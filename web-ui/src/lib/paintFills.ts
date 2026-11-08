@@ -99,7 +99,10 @@ function makeGradient(
 
 const fabricTileCache = new Map<string, HTMLCanvasElement>()
 
-function makeFabricPattern(ctx: FillPaintContext, style: FabricFillStyle): CanvasPattern | null {
+function makeFabricPattern(
+  ctx: FillPaintContext,
+  style: FabricFillStyle,
+): CanvasPattern | string | null {
   const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
   if (preset?.tileUrl) {
     const img = getCachedDefaultFabricImage(style.fabricId)
