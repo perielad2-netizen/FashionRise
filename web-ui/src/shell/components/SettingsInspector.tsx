@@ -122,6 +122,11 @@ export function SettingsInspector({ dimmed, onToggleDim }: Props) {
               </a>
               , or open <strong>My Studio → Contact us</strong>.
             </p>
+            <p className={styles.helpCopy}>
+              <a className={styles.helpLink} href="/privacy">
+                Privacy Policy
+              </a>
+            </p>
           </section>
         </div>
       )}

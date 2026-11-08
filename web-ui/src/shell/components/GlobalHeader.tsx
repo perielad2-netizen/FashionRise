@@ -147,6 +147,11 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
               </a>
               .
             </p>
+            <p className={styles.aboutBody}>
+              <a className={styles.contactLink} href="/privacy">
+                Privacy Policy
+              </a>
+            </p>
             <button type="button" className={styles.contactPrimary} onClick={openContact}>
               <Mail size={14} aria-hidden />
               Contact us
