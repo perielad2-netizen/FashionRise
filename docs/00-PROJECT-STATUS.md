@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-09 (**Codemagic** recurring ASC **90189** — duplicate IPA artifact upload + sticky build floor; fix pending review PR, not merged/triggered yet.)
+**Last updated:** 2026-11-09 (**Codemagic** ASC **90189** fix squash-merged via **#255** → `main` **`8e3d2981`**. No Codemagic build triggered from merge.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
 
@@ -18,7 +18,8 @@
 | Scripts | `scripts/codemagic-set-ios-build-number.sh` · `scripts/ios_cfbundle_version.py` · `scripts/codemagic-verify-ios-ipa.sh` · `scripts/assert-codemagic-ios-yaml.py` |
 | Preserved | `xcode: 26.5` · bundle `app.fashionrise.studio` · `codemagic access` · `fashionrise_native` · manual builds · ASC upload without beta/App Store review · no FE/BE/Stars/IAP edits |
 | Verified (local) | YAML assert + CFBundleVersion unit tests |
-| Next action | **Review/merge PR only when ready**; then **one** manual Codemagic build. Do **not** auto-trigger from this change |
+| Merged | Squash **#255** → `main` **`8e3d2981`** (2026-11-09) |
+| Next action | When ready, **manually** start **one** Codemagic iOS build on `main`. Do **not** auto-trigger; confirm single IPA + `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` in logs |
 
 ## Runway clean look restore (2026-11-08)
 
