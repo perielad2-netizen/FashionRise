@@ -8,7 +8,6 @@ import {
   draftContentFingerprint,
   normalizeActiveSide,
   prepareKeepDeviceDocument,
-  rebaseChosenLocalDraft,
   StudioDraftSerializeError,
   type SaveStatus,
   type StudioDraftDocument,
