@@ -14,7 +14,7 @@
 | Symptom | Codemagic reported **Redundant Binary Upload (90189)** for `1.0 (20)` while App Store Connect still accepted **1.0 (20)** into internal Testing |
 | Root cause A | **Duplicate IPA publish**: `codemagic.yaml` staged/collected the same `App.ipa` from **3** paths; `app-store-connect publish` defaults to `**/*.ipa`, so one run uploaded the same CFBundleVersion twice (1st OK → 2nd 90189) |
 | Root cause B | **Sticky floor** (`MIN_IOS_BUILD_NUMBER`) is not a unique id; ASC latest+1 alone can lag and reuse |
-| Fix | Exactly **one** IPA artifact (`$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa`); no staging copies. Stamp `CFBundleVersion = max(PROJECT_BUILD_NUMBER + 100, ASC_latest+1)`. Verify IPA embeds that build + marketing **1.0**. Remove main-merge floor auto-bump workflow/script |
+| Fix | Exactly **one** IPA artifact (`$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa`); no staging copies. Stamp `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` (require positive `PROJECT_BUILD_NUMBER`; **fail closed** if ASC ≥ stamp — raise offset). Verify via exact `Payload/*.app/Info.plist` (version + marketing **1.0** + bundle id). Remove main-merge floor auto-bump workflow/script |
 | Scripts | `scripts/codemagic-set-ios-build-number.sh` · `scripts/ios_cfbundle_version.py` · `scripts/codemagic-verify-ios-ipa.sh` · `scripts/assert-codemagic-ios-yaml.py` |
 | Preserved | `xcode: 26.5` · bundle `app.fashionrise.studio` · `codemagic access` · `fashionrise_native` · manual builds · ASC upload without beta/App Store review · no FE/BE/Stars/IAP edits |
 | Verified (local) | YAML assert + CFBundleVersion unit tests |
@@ -40,7 +40,7 @@ Codemagic iOS (separate track): build **#5** IPA OK (~16.52 MB); ASC upload-prep
 | Build #5 | **Succeeded** — signed **App.ipa** (~**16.52 MB**) generated, verified in Artifacts, and downloaded (artifact-path fix from #245) |
 | Planned | Enable `publishing.app_store_connect` with `auth: integration` → existing **`codemagic access`** key; **upload IPA only** |
 | Explicitly off | `submit_to_testflight: false` · `submit_to_app_store: false` · **no** `beta_groups` · **no** `triggering:` (manual builds only) |
-| Build number | **Superseded 2026-11-09** — see **Codemagic iOS — permanent 90189 / unique build fix** (`PROJECT_BUILD_NUMBER + 100`, raised by ASC latest+1 when higher; single IPA artifact) |
+| Build number | **Superseded 2026-11-09** — see **Codemagic iOS — permanent 90189 / unique build fix** (`PROJECT_BUILD_NUMBER + 100`, ASC fail-closed; single IPA artifact) |
 | Preserved | `xcode: 26.5` · App Store signing · bundle `app.fashionrise.studio` · env group `fashionrise_native` · IPA verify |
 | Verified (local) | YAML parse; publishing block present with integration auth and both submit flags false; no beta_groups; no triggering |
 | Next action | Use the 2026-11-09 90189 fix PR; do not raise sticky floors again |

@@ -8,10 +8,25 @@ APP_DIR="${CM_BUILD_DIR:-$ROOT}/web-ui/ios/App"
 cd "$APP_DIR"
 
 OFFSET="${IOS_BUILD_NUMBER_OFFSET:-100}"
-# Prefer project-wide counter (monotonic across workflows). Fall back to workflow BUILD_NUMBER.
-PROJECT_BN="${PROJECT_BUILD_NUMBER:-${BUILD_NUMBER:-0}}"
 APP_ID="${APP_STORE_APPLE_ID:?APP_STORE_APPLE_ID is required}"
 MARKETING_VERSION_STRING="${IOS_MARKETING_VERSION:-1.0}"
+
+# Fail closed: require Codemagic's project-wide counter. Do not fall back to 0
+# or BUILD_NUMBER (workflow-local) — that breaks uniqueness / monotonicity.
+if [ -z "${PROJECT_BUILD_NUMBER:-}" ]; then
+  echo "ERROR: PROJECT_BUILD_NUMBER is unset. Codemagic must export a positive project build number."
+  exit 1
+fi
+if ! [[ "${PROJECT_BUILD_NUMBER}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: PROJECT_BUILD_NUMBER must be a positive integer (got '${PROJECT_BUILD_NUMBER}')"
+  exit 1
+fi
+if ! [[ "${OFFSET}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: IOS_BUILD_NUMBER_OFFSET must be a positive integer (got '${OFFSET}')"
+  exit 1
+fi
+
+PROJECT_BN="${PROJECT_BUILD_NUMBER}"
 
 latest_or_0() {
   local line token
@@ -40,17 +55,27 @@ for n in "$TF" "$TF_ALL" "$AS" "$AS_ALL" "$GB"; do
   ASC_LATEST="$(max_num "$ASC_LATEST" "$n")"
 done
 
+set +e
 DECISION_JSON="$(
   python3 "$ROOT/scripts/ios_cfbundle_version.py" \
     --project-build-number "$PROJECT_BN" \
     --offset "$OFFSET" \
     --asc-latest "$ASC_LATEST" \
-    --json
+    --json 2>/tmp/fr-ios-cfbundle-version.err
 )"
+STATUS=$?
+set -e
+if [ "$STATUS" -ne 0 ]; then
+  echo "ERROR: refused to assign CFBundleVersion (exit=$STATUS)"
+  cat /tmp/fr-ios-cfbundle-version.err >&2 || true
+  echo "CFBundleVersion inputs: PROJECT_BUILD_NUMBER=$PROJECT_BN BUILD_NUMBER=${BUILD_NUMBER:-unset} offset=$OFFSET asc_latest=$ASC_LATEST tf=$TF/$TF_ALL appstore=$AS/$AS_ALL combined=$GB marketing=$MARKETING_VERSION_STRING"
+  exit "$STATUS"
+fi
+
 CANDIDATE="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["selected"])' <<<"$DECISION_JSON")"
 
 echo "CFBundleVersion decision: $DECISION_JSON"
-echo "CFBundleVersion inputs: PROJECT_BUILD_NUMBER=${PROJECT_BUILD_NUMBER:-unset} BUILD_NUMBER=${BUILD_NUMBER:-unset} offset=$OFFSET asc_latest=$ASC_LATEST tf=$TF/$TF_ALL appstore=$AS/$AS_ALL combined=$GB marketing=$MARKETING_VERSION_STRING"
+echo "CFBundleVersion inputs: PROJECT_BUILD_NUMBER=$PROJECT_BN BUILD_NUMBER=${BUILD_NUMBER:-unset} offset=$OFFSET asc_latest=$ASC_LATEST tf=$TF/$TF_ALL appstore=$AS/$AS_ALL combined=$GB marketing=$MARKETING_VERSION_STRING"
 echo "CFBundleVersion selected=$CANDIDATE"
 echo "CM_COMMIT=${CM_COMMIT:-unset}"
 

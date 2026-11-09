@@ -14,18 +14,19 @@ product explicitly bumps it.
 Root `codemagic.yaml` stamps:
 
 ```text
-CFBundleVersion = max(PROJECT_BUILD_NUMBER + IOS_BUILD_NUMBER_OFFSET, ASC_latest + 1)
+CFBundleVersion = PROJECT_BUILD_NUMBER + IOS_BUILD_NUMBER_OFFSET
 ```
 
-- `PROJECT_BUILD_NUMBER` is Codemagic’s project-wide monotonic counter
-- `IOS_BUILD_NUMBER_OFFSET` (default **100**) keeps early counters above already-used ASC builds
-- ASC/TestFlight latest is only used to **raise** the stamp when higher — never as the sole source
+- `PROJECT_BUILD_NUMBER` is **required** (positive). Never fall back to `0` / `BUILD_NUMBER`.
+- `IOS_BUILD_NUMBER_OFFSET` (default **100**) keeps the rail above historically used ASC builds.
+- If ASC/TestFlight latest is **≥** that planned stamp, **fail closed** and ask to raise the offset.
+  Do **not** stamp `ASC_latest+1` alone (stale ASC replies can repeat across sequential builds).
 
 Scripts:
 
 - `scripts/codemagic-set-ios-build-number.sh`
 - `scripts/ios_cfbundle_version.py`
-- `scripts/codemagic-verify-ios-ipa.sh` (also asserts **exactly one** `.ipa` on disk)
+- `scripts/codemagic-verify-ios-ipa.sh` (exactly one `.ipa`; reads `Payload/*.app/Info.plist` only)
 
 ## Single IPA artifact (critical for 90189)
 

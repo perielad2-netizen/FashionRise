@@ -21,8 +21,9 @@
 #   1) app-store-connect publish defaults to **/*.ipa — multiple staged App.ipa
 #      copies caused the same CFBundleVersion to upload twice in one run
 #      (first OK in ASC, second → 90189). Collect exactly ONE IPA artifact.
-#   2) CFBundleVersion = max(PROJECT_BUILD_NUMBER + offset, ASC_latest+1).
-#      Do not reuse a sticky MIN floor as the stamp.
+#   2) CFBundleVersion = PROJECT_BUILD_NUMBER + offset (monotonic).
+#      If ASC_latest >= that stamp, fail closed and raise the offset — do not
+#      stamp ASC_latest+1 alone (stale API can repeat). No sticky MIN floor.
 
 workflows:
   fashionrise-ios-app-store:
@@ -54,7 +55,7 @@ workflows:
         # App Store Connect → App → General → App Information → Apple ID
         APP_STORE_APPLE_ID: "6832116469"
         BUNDLE_ID: app.fashionrise.studio
-        # CFBundleVersion = max(PROJECT_BUILD_NUMBER + OFFSET, ASC_latest+1).
+        # CFBundleVersion = PROJECT_BUILD_NUMBER + OFFSET (fail closed if ASC is ahead).
         # Offset keeps early Codemagic counters above already-used ASC builds
         # (1.0 has used through ~20). Marketing version stays 1.0.
         IOS_BUILD_NUMBER_OFFSET: "100"

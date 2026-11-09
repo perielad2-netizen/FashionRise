@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Verify the single FashionRise App.ipa exists, is non-empty, and embeds the
-# expected CFBundleVersion. Does NOT copy the IPA elsewhere (duplicate copies
-# caused Codemagic ASC publish to upload the same binary twice → 90189).
+# expected CFBundleVersion / marketing version / bundle id from the app plist.
+# Does NOT copy the IPA elsewhere (duplicate copies caused Codemagic ASC
+# publish to upload the same binary twice → 90189).
 set -euo pipefail
 
 IPA_PATH="${1:-${CM_BUILD_DIR:-}/web-ui/ios/App/build/ios/ipa/App.ipa}"
 EXPECTED_FILE="${2:-/tmp/fr-ios-cfbundle-version.txt}"
+EXPECTED_BUNDLE_ID="${EXPECTED_IOS_BUNDLE_ID:-app.fashionrise.studio}"
+EXPECTED_MARKETING="${EXPECTED_IOS_MARKETING_VERSION:-1.0}"
 
 if [ ! -f "$IPA_PATH" ]; then
   echo "ERROR: App.ipa missing after build-ipa"
@@ -64,32 +67,69 @@ TMP="$(mktemp -d)"
 # shellcheck disable=SC2064
 trap "rm -rf '$TMP'" EXIT
 unzip -q "$IPA_PATH" -d "$TMP"
-PLIST="$(find "$TMP/Payload" -name Info.plist -print 2>/dev/null | head -n 1)"
-if [ -z "$PLIST" ]; then
-  echo "ERROR: Info.plist not found inside IPA"
-  exit 1
-fi
 
-if [ -x /usr/libexec/PlistBuddy ]; then
-  ACTUAL="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")"
-  MARKETING="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")"
-elif command -v plutil >/dev/null 2>&1; then
-  ACTUAL="$(plutil -extract CFBundleVersion raw "$PLIST")"
-  MARKETING="$(plutil -extract CFBundleShortVersionString raw "$PLIST")"
-else
-  echo "ERROR: neither PlistBuddy nor plutil available to read IPA Info.plist"
+# Resolve exactly one app Info.plist: Payload/<Name>.app/Info.plist
+# (depth 2). Nested framework plists are deeper and must not be selected.
+PLIST_LIST_FILE="$(mktemp)"
+find "$TMP/Payload" -mindepth 2 -maxdepth 2 -name Info.plist 2>/dev/null | sort >"$PLIST_LIST_FILE"
+PLIST_COUNT="$(wc -l <"$PLIST_LIST_FILE" | tr -d ' ')"
+echo "APP_INFO_PLIST_COUNT=$PLIST_COUNT"
+while IFS= read -r found_plist; do
+  echo "APP_INFO_PLIST_CANDIDATE=$found_plist"
+done <"$PLIST_LIST_FILE"
+if [ "$PLIST_COUNT" = "0" ]; then
+  echo "ERROR: missing Payload/*.app/Info.plist inside IPA"
+  find "$TMP/Payload" -name Info.plist 2>/dev/null | sed 's/^/FOUND_NESTED_PLIST=/' || true
+  rm -f "$PLIST_LIST_FILE"
   exit 1
 fi
+if [ "$PLIST_COUNT" != "1" ]; then
+  echo "ERROR: ambiguous Payload/*.app/Info.plist count=$PLIST_COUNT (expected exactly one app bundle)"
+  rm -f "$PLIST_LIST_FILE"
+  exit 1
+fi
+PLIST="$(head -n 1 "$PLIST_LIST_FILE")"
+rm -f "$PLIST_LIST_FILE"
+case "$PLIST" in
+  */Payload/*.app/Info.plist) ;;
+  *)
+    echo "ERROR: resolved Info.plist is not Payload/*.app/Info.plist: $PLIST"
+    exit 1
+    ;;
+esac
+echo "APP_INFO_PLIST=$PLIST"
+
+read_plist_key() {
+  local key="$1"
+  if [ -x /usr/libexec/PlistBuddy ]; then
+    /usr/libexec/PlistBuddy -c "Print :${key}" "$PLIST"
+  elif command -v plutil >/dev/null 2>&1; then
+    plutil -extract "$key" raw "$PLIST"
+  else
+    echo "ERROR: neither PlistBuddy nor plutil available to read IPA Info.plist" >&2
+    return 1
+  fi
+}
+
+ACTUAL="$(read_plist_key CFBundleVersion)"
+MARKETING="$(read_plist_key CFBundleShortVersionString)"
+BUNDLE_ID="$(read_plist_key CFBundleIdentifier)"
 
 echo "IPA CFBundleVersion=$ACTUAL (expected=$EXPECTED)"
-echo "IPA CFBundleShortVersionString=$MARKETING"
+echo "IPA CFBundleShortVersionString=$MARKETING (expected=$EXPECTED_MARKETING)"
+echo "IPA CFBundleIdentifier=$BUNDLE_ID (expected=$EXPECTED_BUNDLE_ID)"
+
 if [ "$ACTUAL" != "$EXPECTED" ]; then
   echo "ERROR: IPA CFBundleVersion mismatch"
   exit 1
 fi
-if [ "$MARKETING" != "1.0" ]; then
-  echo "ERROR: marketing version changed unexpectedly (got $MARKETING, want 1.0)"
+if [ "$MARKETING" != "$EXPECTED_MARKETING" ]; then
+  echo "ERROR: marketing version mismatch (got $MARKETING, want $EXPECTED_MARKETING)"
+  exit 1
+fi
+if [ "$BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
+  echo "ERROR: bundle identifier mismatch (got $BUNDLE_ID, want $EXPECTED_BUNDLE_ID)"
   exit 1
 fi
 
-echo "OK: single IPA verified with CFBundleVersion=$ACTUAL marketing=$MARKETING"
+echo "OK: single IPA verified with CFBundleVersion=$ACTUAL marketing=$MARKETING bundleId=$BUNDLE_ID"
