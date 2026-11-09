@@ -1,0 +1,40 @@
+---
+description: Bump MIN_IOS_BUILD_NUMBER by 1 on every merge to main
+alwaysApply: true
+---
+
+# MIN_IOS_BUILD_NUMBER — bump on every `main` merge
+
+App Store Connect rejects reused `CFBundleVersion` values. Codemagic uses
+`max(BUILD_NUMBER, MIN_IOS_BUILD_NUMBER)` from root `codemagic.yaml`.
+
+## Hard rule
+
+**Every time work is merged into `main`, increase `MIN_IOS_BUILD_NUMBER` by exactly 1.**
+
+Do this **in the same PR** (or as the last commit on the branch) **before** merging, using the value currently on `origin/main` as the baseline:
+
+1. `git fetch origin main`
+2. Read the floor from `origin/main`'s `codemagic.yaml`
+3. Set it to `N+1` in this branch
+4. Then merge
+
+## How to bump
+
+Prefer:
+
+```bash
+./scripts/bump-min-ios-build-number.sh
+```
+
+That script updates:
+
+- `codemagic.yaml` — `MIN_IOS_BUILD_NUMBER` and the script fallback default
+- `docs/00-PROJECT-STATUS.md` / `docs/STORE-DEPLOY.md` when they quote the floor
+
+## Do not
+
+- Skip the bump because the PR is “docs only”, “web only”, or unrelated to iOS
+- Bump by more than 1 for a single merge (unless recovering from a known ASC collision)
+- Merge to `main` and leave the floor unchanged
+- Double-bump inside one merge if this PR already raised the floor for that merge

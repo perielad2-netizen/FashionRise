@@ -46,7 +46,7 @@ workflows:
         APP_STORE_APPLE_ID: "6832116469"
         BUNDLE_ID: app.fashionrise.studio
         # ASC rejects CFBundleVersion reuse; floor keeps uploads above prior builds.
-        MIN_IOS_BUILD_NUMBER: "8"
+        MIN_IOS_BUILD_NUMBER: "9"
       node: 22
       xcode: 26.5
       cocoapods: default
@@ -82,7 +82,7 @@ workflows:
           # Prefer Codemagic's workflow BUILD_NUMBER, but never go below the floor
           # (ASC uniqueness for CFBundleVersion).
           CANDIDATE="${BUILD_NUMBER:-0}"
-          FLOOR="${MIN_IOS_BUILD_NUMBER:-8}"
+          FLOOR="${MIN_IOS_BUILD_NUMBER:-9}"
           if [ "$CANDIDATE" -lt "$FLOOR" ]; then
             CANDIDATE="$FLOOR"
           fi
