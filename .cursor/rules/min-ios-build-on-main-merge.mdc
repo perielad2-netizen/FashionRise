@@ -1,25 +1,24 @@
 ---
-description: Bump MIN_IOS_BUILD_NUMBER by 1 on every merge to main
+description: Keep iOS CFBundleVersion unique on every main merge / Codemagic upload
 alwaysApply: true
 ---
 
-# MIN_IOS_BUILD_NUMBER — bump on every `main` merge
+# iOS build numbers — never reuse an ASC build string
 
-App Store Connect rejects reused `CFBundleVersion` values. Codemagic uses
-`max(BUILD_NUMBER, MIN_IOS_BUILD_NUMBER)` from root `codemagic.yaml`.
+App Store Connect rejects reused `CFBundleVersion` values (`Redundant Binary Upload` / 90189).
+Marketing version (`CFBundleShortVersionString` / `MARKETING_VERSION`) stays at `1.0` unless
+product explicitly bumps it — that is **not** the number ASC complained about.
 
-## Hard rule
+## What actually makes every Codemagic upload work
 
-**Every time work is merged into `main`, increase `MIN_IOS_BUILD_NUMBER` by exactly 1.**
+Root `codemagic.yaml` **Set build number** asks App Store Connect for the latest build
+(TestFlight + App Store), then stamps **`latest + 1`**. That is the primary guarantee.
 
-Do this **in the same PR** (or as the last commit on the branch) **before** merging, using the value currently on `origin/main` as the baseline:
+`MIN_IOS_BUILD_NUMBER` is only a **safety floor / fallback** if ASC lookup fails.
 
-1. `git fetch origin main`
-2. Read the floor from `origin/main`'s `codemagic.yaml`
-3. Set it to `N+1` in this branch
-4. Then merge
+## Merge-to-main rule
 
-## How to bump
+**Every merge into `main` must still raise `MIN_IOS_BUILD_NUMBER` by 1** (watermark).
 
 Prefer:
 
@@ -27,18 +26,15 @@ Prefer:
 ./scripts/bump-min-ios-build-number.sh
 ```
 
-That script updates:
-
-- `codemagic.yaml` — `MIN_IOS_BUILD_NUMBER` and the script fallback default
-- `docs/00-PROJECT-STATUS.md` / `docs/STORE-DEPLOY.md` when they quote the floor
+There is also `.github/workflows/bump-min-ios-on-main.yml` which auto-bumps after a push
+to `main`. If that workflow is enabled, agents should still bump in the PR when practical
+so the floor is correct even before the bot commit lands — but **do not double-bump** in
+the same merge if the PR already raised the floor for that merge.
 
 ## Do not
 
 - Skip the bump because the PR is “docs only”, “web only”, or unrelated to iOS
-- Bump by more than 1 for a single merge (unless recovering from a known ASC collision /
-  `Redundant Binary Upload` — then jump the floor above the highest build ASC already has)
-- Merge to `main` and leave the floor unchanged
-- Double-bump inside one merge if this PR already raised the floor for that merge
-- Confuse **marketing version** (`CFBundleShortVersionString`, e.g. `1.0`) with the
-  **build string** (`CFBundleVersion` / `MIN_IOS_BUILD_NUMBER`). ASC uniqueness is the
-  `(version, build)` pair; redundant-upload errors mean the **build string** was reused.
+- Confuse marketing **`1.0`** with the build string (`CFBundleVersion`)
+- Rely on `max(BUILD_NUMBER, FLOOR)` alone — that collides when FLOOR > BUILD_NUMBER and
+  you rebuild without ASC advancing (the old failure mode)
+- Stamp the same floor onto two Codemagic runs
