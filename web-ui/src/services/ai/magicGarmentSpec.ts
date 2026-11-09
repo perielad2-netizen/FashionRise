@@ -181,7 +181,8 @@ const MAGIC_ENHANCEMENT_NOTES =
   'Polished professional fashion concept: keep silhouette/cut and Front/Back coherence; ' +
   'ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; ' +
   'fix accidental L/R mistakes (hands/legs/shoes/hem/belly)—match the better side; ' +
-  'finish unfinished full-cover pieces only — keep intentional crops/midriff/cut-outs; ' +
+  'restore missing fabric patches/bare holes in continuous sleeves/torso; ' +
+  'finish unfinished full-cover only — keep intentional crops/midriff/cut-outs; ' +
   'honor painted fabric fills + ink; no traced/cartoon look.'
 
 /** #183 — pale bridal / open neckline / both sleeves (same contract as Try On). */

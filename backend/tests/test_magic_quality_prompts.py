@@ -422,7 +422,9 @@ def test_design_enhancement_normalizes_sketch_glitches_not_literal_mistakes():
     assert "uneven strap" in lower
     assert "match the better side" in lower
     assert "full-cover" in lower
-    assert "hand/leg/shoe" in lower and "hem/belly" in lower
+    assert "hand" in lower and "leg" in lower and "hem/belly" in lower
+    assert "missing" in lower and ("fabric" in lower or "patch" in lower or "hole" in lower)
+    assert "restore matching fabric" in lower
     assert "intentional design asymmetry" in lower
     assert "balance accidental uneven straps/sleeves" in lower
     assert "pixel-perfect trace" in lower or "not a pixel-perfect" in lower
