@@ -75,10 +75,15 @@ vi.mock('@/lib/draftPersistence', async (importOriginal) => {
     commitKeepDeviceChoice: async (args: {
       designId: string
       local: StudioDraftDocument
+      server: StudioDraftDocument
       serverRevision: number
     }) => {
       persistence.keepCalls += 1
-      const rebased = actual.rebaseChosenLocalDraft(args.local, args.serverRevision)
+      const rebased = actual.prepareKeepDeviceDocument(
+        args.local,
+        args.server,
+        args.serverRevision,
+      )
       const { documentForCloud } = await import('@/services/designsApi')
       const { draftContentFingerprint } = await import('@/lib/draftDocument')
       return {

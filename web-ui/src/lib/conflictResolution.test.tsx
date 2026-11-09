@@ -402,6 +402,7 @@ describe('WEB-V2.1C conflict resolution', () => {
       userId: 'u1',
       designId: 'd1',
       local,
+      server,
       serverRevision: server.clientRevision,
     })
     expect(kept.ok).toBe(true)

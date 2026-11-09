@@ -2,6 +2,7 @@ import {
   createEmptyDraftDocument,
   draftContentFingerprint,
   documentFromEditorState,
+  prepareKeepDeviceDocument,
   rebaseChosenLocalDraft,
   resolveDraftConflict,
   type StudioDraftDocument,
@@ -30,7 +31,7 @@ import {
 } from '@/services/designsApi'
 import { ApiError } from '@/services/api/client'
 
-export { documentFromEditorState, rebaseChosenLocalDraft }
+export { documentFromEditorState, prepareKeepDeviceDocument, rebaseChosenLocalDraft }
 
 /** Present cloud Studio row that claims draft schema but fails strict parse. */
 export type DamagedCloudDraft = {
@@ -608,15 +609,17 @@ export async function commitKeepDeviceChoice(args: {
   userId: string
   designId: string
   local: StudioDraftDocument
+  server: StudioDraftDocument
   serverRevision: number
 }): Promise<PersistResult> {
   let serverRevision = args.serverRevision
+  let serverDoc = args.server
   let attempt = 0
   // Bounded rebase retry: one concurrent cloud advance during Keep is recoverable
   // without endless Save failed; a second divergent advance renews the conflict.
-  while (attempt < 2) {
+  while (attempt < 3) {
     attempt += 1
-    const rebased = rebaseChosenLocalDraft(args.local, serverRevision)
+    const rebased = prepareKeepDeviceDocument(args.local, serverDoc, serverRevision)
     const result = await persistStudioDraft({
       userId: args.userId,
       designId: args.designId,
@@ -626,7 +629,7 @@ export async function commitKeepDeviceChoice(args: {
       expectedRevision: serverRevision,
     })
     if (result.ok) return result
-    if (!result.conflict || attempt >= 2) return result
+    if (!result.conflict || attempt >= 3) return result
     const nextRev = result.conflict.server.clientRevision
     if (nextRev <= serverRevision) return result
     // Same-content after normalize (e.g. stray-pin strip) — treat as ACK.
@@ -644,9 +647,10 @@ export async function commitKeepDeviceChoice(args: {
       }
     }
     serverRevision = nextRev
+    serverDoc = result.conflict.server
   }
   // Unreachable — loop returns — keep TypeScript satisfied.
-  const rebased = rebaseChosenLocalDraft(args.local, args.serverRevision)
+  const rebased = prepareKeepDeviceDocument(args.local, args.server, args.serverRevision)
   return persistStudioDraft({
     userId: args.userId,
     designId: args.designId,

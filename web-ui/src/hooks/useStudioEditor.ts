@@ -7,6 +7,7 @@ import {
   createEmptyDraftDocument,
   draftContentFingerprint,
   normalizeActiveSide,
+  prepareKeepDeviceDocument,
   rebaseChosenLocalDraft,
   StudioDraftSerializeError,
   type SaveStatus,
@@ -3379,9 +3380,14 @@ export function useStudioEditor() {
         userId: user.id,
         designId: prompt.designId,
         local: localToKeep,
+        server: prompt.server,
         serverRevision: prompt.server.clientRevision,
       })
-      const rebased = rebaseChosenLocalDraft(localToKeep, prompt.server.clientRevision)
+      const rebased = prepareKeepDeviceDocument(
+        localToKeep,
+        prompt.server,
+        prompt.server.clientRevision,
+      )
       if (result.ok) {
         const expectedFp = draftContentFingerprint(documentForCloud(rebased))
         const ackFp = draftContentFingerprint(documentForCloud(result.document))

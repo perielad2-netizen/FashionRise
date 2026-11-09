@@ -585,6 +585,33 @@ export function rebaseChosenLocalDraft(
   return rebased
 }
 
+/**
+ * Keep-this-device payload that survives backend two-sided OCC guards.
+ * Cloud v2 drafts with Back artwork reject Keep when the device copy is still v1
+ * or has an empty/missing back (409 schema_downgrade / back_stripped /
+ * back_clear_requires_intent). Preserve cloud Back when the device has no Back ink.
+ */
+export function prepareKeepDeviceDocument(
+  local: StudioDraftDocument,
+  server: StudioDraftDocument,
+  serverRevision: number,
+  now = new Date(),
+): StudioDraftDocument {
+  const rebased = rebaseChosenLocalDraft(local, serverRevision, now)
+  const serverIsV2 = isStudioDraftV2(server) || Boolean(server.back)
+  if (!serverIsV2) return rebased
+
+  const localBack = rebased.back ? cloneSideBag(rebased.back) : null
+  const serverBack = server.back ? cloneSideBag(server.back) : emptySideBag()
+  const keepLocalBack = Boolean(localBack && sideHasInk(localBack))
+  return {
+    ...rebased,
+    schema: STUDIO_DRAFT_SCHEMA_V2,
+    activeSide: normalizeActiveSide(rebased),
+    back: keepLocalBack ? localBack! : serverBack,
+  }
+}
+
 export function documentFromEditorState(input: {
   prev: StudioDraftDocument
   strokes: StudioDraftDocument['strokes']

@@ -212,4 +212,48 @@ describe('draftDocument', () => {
       needsUserChoice: false,
     })
   })
+
+  it('Keep-this-device preserves cloud Back when device has no Back ink', async () => {
+    vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
+    const { prepareKeepDeviceDocument: prepare, STUDIO_DRAFT_SCHEMA_V2: v2 } =
+      await import('@/lib/draftDocument')
+    const server = bumpDraftDocument(createEmptyDraftDocument(), {
+      schema: v2,
+      activeSide: 'back',
+      back: {
+        strokes: [
+          {
+            id: 'back-1',
+            tool: 'draw',
+            points: [1, 2, 1],
+            color: '#000',
+            size: 2,
+            opacity: 1,
+          },
+        ],
+        fills: [],
+      },
+      clientRevision: 10,
+    } as never)
+    // Force server revision field
+    ;(server as { clientRevision: number }).clientRevision = 10
+    const local = bumpDraftDocument(createEmptyDraftDocument(), {
+      model: 'female-hand-hip',
+      strokes: [
+        {
+          id: 'front-1',
+          tool: 'draw',
+          points: [3, 4, 1],
+          color: '#111',
+          size: 2,
+          opacity: 1,
+        },
+      ],
+    })
+    const kept = prepare(local, server, 10)
+    expect(kept.schema).toBe(v2)
+    expect(kept.back?.strokes[0]?.id).toBe('back-1')
+    expect(kept.strokes[0]?.id).toBe('front-1')
+    expect(kept.clientRevision).toBeGreaterThan(10)
+  })
 })
