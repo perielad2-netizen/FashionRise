@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   Bell,
   BellOff,
+  ChevronLeft,
   Globe2,
   Heart,
   MessageCircle,
@@ -545,6 +546,16 @@ function RunwayBrowseSheet({
         onClick={(event) => event.stopPropagation()}
       >
         <div className={styles.sheetHead}>
+          <button
+            type="button"
+            className={styles.sheetBack}
+            aria-label={`Close ${title}`}
+            data-testid="runway-browse-back"
+            onClick={onClose}
+          >
+            <ChevronLeft size={18} aria-hidden />
+            <span>Back</span>
+          </button>
           <div className={styles.sheetTitleBlock}>
             <h2 id={titleId} className={styles.sheetTitle}>
               {isTop10 ? <Globe2 size={18} aria-hidden /> : <Users size={18} aria-hidden />}
@@ -552,14 +563,6 @@ function RunwayBrowseSheet({
             </h2>
             <p className={styles.sheetHint}>{hint}</p>
           </div>
-          <button
-            type="button"
-            className={styles.sheetClose}
-            aria-label={`Close ${title}`}
-            onClick={onClose}
-          >
-            <X size={16} aria-hidden />
-          </button>
         </div>
 
         <div className={styles.sheetBody}>

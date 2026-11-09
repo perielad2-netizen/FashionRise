@@ -158,6 +158,7 @@ describe('RunwayScreen', () => {
 
     const topDialog = await openTop10Sheet()
     expect(within(topDialog).getByText('Worldwide hit')).toBeInTheDocument()
+    expect(within(topDialog).getByTestId('runway-browse-back')).toHaveTextContent('Back')
     fireEvent.click(within(topDialog).getByRole('button', { name: /Close Top 10 worldwide/i }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /Top 10 worldwide/i })).toBeNull())
 
