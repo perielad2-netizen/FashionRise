@@ -3,9 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-08 (**TestFlight** Keep-this-device draft save **409** — FE OCC revision now matches BE metadata-first; Capacitor CORS+OPTIONS already fixed on nginx.)
+**Last updated:** 2026-11-09 (**Codemagic** recurring ASC **90189** — duplicate IPA artifact upload + sticky build floor; fix pending review PR, not merged/triggered yet.)
 
 **Phase:** Protected family beta. Create My Croquis V5 unchanged. Studio drawing includes Professional Sketch Engine V1 with **Charcoal continuous ribbon V2** (Ink/Airbrush unchanged). Try On Person smart flow + pale bridal / footwear fixes unchanged on BE **`900bda6b`**.
+
+## Codemagic iOS — permanent 90189 / unique build fix (2026-11-09)
+
+| Status | Detail |
+|---|---|
+| Symptom | Codemagic reported **Redundant Binary Upload (90189)** for `1.0 (20)` while App Store Connect still accepted **1.0 (20)** into internal Testing |
+| Root cause A | **Duplicate IPA publish**: `codemagic.yaml` staged/collected the same `App.ipa` from **3** paths; `app-store-connect publish` defaults to `**/*.ipa`, so one run uploaded the same CFBundleVersion twice (1st OK → 2nd 90189) |
+| Root cause B | **Sticky floor** (`MIN_IOS_BUILD_NUMBER`) is not a unique id; ASC latest+1 alone can lag and reuse |
+| Fix | Exactly **one** IPA artifact (`$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa`); no staging copies. Stamp `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` (require positive `PROJECT_BUILD_NUMBER`; **fail closed** if ASC ≥ stamp — raise offset). Verify via exact `Payload/*.app/Info.plist` (version + marketing **1.0** + bundle id). Remove main-merge floor auto-bump workflow/script |
+| Scripts | `scripts/codemagic-set-ios-build-number.sh` · `scripts/ios_cfbundle_version.py` · `scripts/codemagic-verify-ios-ipa.sh` · `scripts/assert-codemagic-ios-yaml.py` |
+| Preserved | `xcode: 26.5` · bundle `app.fashionrise.studio` · `codemagic access` · `fashionrise_native` · manual builds · ASC upload without beta/App Store review · no FE/BE/Stars/IAP edits |
+| Verified (local) | YAML assert + CFBundleVersion unit tests |
+| Next action | **Review/merge PR only when ready**; then **one** manual Codemagic build. Do **not** auto-trigger from this change |
 
 ## Runway clean look restore (2026-11-08)
 
@@ -27,10 +40,10 @@ Codemagic iOS (separate track): build **#5** IPA OK (~16.52 MB); ASC upload-prep
 | Build #5 | **Succeeded** — signed **App.ipa** (~**16.52 MB**) generated, verified in Artifacts, and downloaded (artifact-path fix from #245) |
 | Planned | Enable `publishing.app_store_connect` with `auth: integration` → existing **`codemagic access`** key; **upload IPA only** |
 | Explicitly off | `submit_to_testflight: false` · `submit_to_app_store: false` · **no** `beta_groups` · **no** `triggering:` (manual builds only) |
-| Build number | Codemagic uses **ASC/TestFlight latest+1**; safety floor **`MIN_IOS_BUILD_NUMBER=20`**. Auto-bump on `main` (`.github/workflows/bump-min-ios-on-main.yml`, `.cursor/rules/min-ios-build-on-main-merge.mdc`) |
-| Preserved | `xcode: 26.5` · App Store signing · bundle `app.fashionrise.studio` · env group `fashionrise_native` · IPA verify + absolute artifact globs |
-| Verified (local) | YAML parse; publishing block present with integration auth and both submit flags false; no beta_groups; no triggering; verify/artifacts/signing unchanged; no app/Stars/IAP/backend edits |
-| Next action | Merge this PR, then **manually** start **one** Codemagic build; confirm IPA appears in App Store Connect / TestFlight processing. Do **not** submit beta review or App Store review from Codemagic; assign testers manually in ASC if needed |
+| Build number | **Superseded 2026-11-09** — see **Codemagic iOS — permanent 90189 / unique build fix** (`PROJECT_BUILD_NUMBER + 100`, ASC fail-closed; single IPA artifact) |
+| Preserved | `xcode: 26.5` · App Store signing · bundle `app.fashionrise.studio` · env group `fashionrise_native` · IPA verify |
+| Verified (local) | YAML parse; publishing block present with integration auth and both submit flags false; no beta_groups; no triggering |
+| Next action | Use the 2026-11-09 90189 fix PR; do not raise sticky floors again |
 
 Prior: #5 IPA download OK · #4 artifact miss → #245 · #3 iOS **15.0** · #243 Xcode **26.5** · #242 YAML. Workspace `App.xcworkspace` · scheme **`App`** · ASC Apple ID **`6832116469`**.
 
