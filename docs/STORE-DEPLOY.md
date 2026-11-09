@@ -55,6 +55,7 @@ npm run cap:ios           # opens Xcode (macOS only)
 | Signing | Codemagic `ios_signing` `app_store` + ASC API key integration `codemagic access` (credentials in Codemagic UI, not GitHub) |
 | Trigger | Manual only (no `triggering:` block) |
 | Publish | None — download IPA from the build page |
+| Build number floor | `MIN_IOS_BUILD_NUMBER=9` in `codemagic.yaml` (`max(BUILD_NUMBER, floor)`). **Bump by +1 on every merge to `main`** — see `.cursor/rules/min-ios-build-on-main-merge.mdc` and `./scripts/bump-min-ios-build-number.sh` |
 
 **Codemagic env group `fashionrise_native` (required):** production-approved croquis notice texts that `assert-prod-vite-flags` hashes:
 
