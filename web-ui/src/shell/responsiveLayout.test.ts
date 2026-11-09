@@ -54,8 +54,11 @@ describe('WEB-V2.3 responsive layout contract', () => {
   })
 
   it('tracks the visible viewport and safe areas', () => {
-    expect(globalCss).toContain('height: 100dvh')
+    expect(globalCss).toContain('100dvh')
+    expect(globalCss).toContain('--fr-vv-height')
     expect(rule(appShellCss, '.shell')).toContain('env(safe-area-inset-top, 0px)')
+    expect(rule(appShellCss, '.shell')).toContain('--fr-browser-chrome-bottom')
+    expect(appShellCss).toContain('@media (display-mode: standalone)')
   })
 
   it('compacts chrome on short landscape viewports only', () => {

@@ -4,8 +4,14 @@
   display: grid;
   grid-template-rows: var(--fr-header-h) minmax(0, 1fr);
   min-height: 0;
+  /* Floor bottom inset: Android 3-button / gesture bars often report safe-area 0
+     in standalone PWA while still covering the last card actions. */
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
-    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    max(
+      env(safe-area-inset-bottom, 0px),
+      var(--fr-browser-chrome-bottom, 0px)
+    )
+    env(safe-area-inset-left, 0px);
 }
 
 .body {
@@ -62,6 +68,18 @@
   }
 }
 
+/* Installed PWA: many Androids report safe-area 0 while the system bar still
+   covers the last row of actions — keep a real bottom floor. */
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  .shell {
+    padding-bottom: max(
+      28px,
+      env(safe-area-inset-bottom, 0px),
+      var(--fr-browser-chrome-bottom, 0px)
+    );
+  }
+}
+
 @media (max-width: 820px) {
   .body {
     grid-template-columns: 1fr;
@@ -69,6 +87,14 @@
 
   .main {
     padding: 0;
+  }
+
+  .shell {
+    padding-bottom: max(
+      24px,
+      env(safe-area-inset-bottom, 0px),
+      var(--fr-browser-chrome-bottom, 0px)
+    );
   }
 
   .menuBtn {

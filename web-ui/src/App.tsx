@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { isRegistrationUiEnabled } from '@/config/registrationUi'
+import { useVisibleViewport } from '@/lib/useVisibleViewport'
 import { GoogleAuthCompletePage } from '@/pages/GoogleAuthCompletePage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
@@ -46,11 +47,13 @@ function UserScopedStudio() {
   return <StudioPage key={user.id} />
 }
 
-export default function App() {
+function AppRoutes() {
+  // Keep #root height inside the visible viewport on Android PWA / Chrome.
+  useVisibleViewport()
+
   return (
-    <AuthProvider>
-      <div className="app-root">
-        <Routes>
+    <div className="app-root">
+      <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
@@ -112,8 +115,15 @@ export default function App() {
             />
           ) : null}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </div>
+      </Routes>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
     </AuthProvider>
   )
 }
