@@ -70,6 +70,7 @@ describe('magicGarmentSpec palette priority', () => {
     expect(spec.notes).toMatch(/accidental L\/R mistakes/i)
     expect(spec.notes).toMatch(/hands\/legs\/shoes\/hem\/belly/i)
     expect(spec.notes).toMatch(/match the better side/i)
+    expect(spec.notes).toMatch(/missing fabric patches|bare holes/i)
     expect(spec.notes).toMatch(/full-cover/i)
     expect(spec.notes).toMatch(/crops\/midriff\/cut-outs/i)
     expect(spec.notes.length).toBeLessThanOrEqual(500)

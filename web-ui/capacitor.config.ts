@@ -36,7 +36,9 @@ const config: CapacitorConfig = {
     backgroundColor: '#090F1F',
   },
   ios: {
-    contentInset: 'automatic',
+    // 'automatic' insets the WKWebView AND CSS safe-area pads again → empty gap
+    // under the status bar. 'never' + overlay status bar; CSS handles insets once.
+    contentInset: 'never',
     backgroundColor: '#090F1F',
     preferredContentMode: 'mobile',
   },
