@@ -180,10 +180,9 @@ function materialsFromDoc(doc: StudioDraftDocument, max = 8): string[] {
 const MAGIC_ENHANCEMENT_NOTES =
   'Polished professional fashion concept: keep silhouette/cut and Front/Back coherence; ' +
   'ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; ' +
-  'honor every bucket fabric fill painted in the sketch (including small shoe/trim regions) ' +
-  'together with hand-inked garment colors — combination of all applied media; ' +
-  'normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble, missing hands); ' +
-  'complete natural hands at sleeve ends — keep the garment; no stump arms; no traced/cartoon look.'
+  'fix accidental L/R mistakes (hands/legs/shoes/hem/belly)—match the better side; ' +
+  'finish unfinished full-cover pieces only — keep intentional crops/midriff/cut-outs; ' +
+  'honor painted fabric fills + ink; no traced/cartoon look.'
 
 /** #183 — pale bridal / open neckline / both sleeves (same contract as Try On). */
 function paleBridalNotes(front: SideBag, back: SideBag, mainColors: string[]): string[] {
@@ -233,7 +232,7 @@ export function buildSharedGarmentSpec(
     'sketch_role=strong_guidance_not_pixel_trace',
     'color_authority=applied_fills_and_ink_combination',
     'accessory_fabric_fills=preserve_as_painted_in_sketch',
-    'sketch_cleanup=normalize_imperfections',
+    'sketch_cleanup=smart_normalize_accidental_gaps',
     ...(bridal.length ? ['pale_bridal_fidelity=1'] : []),
     `fingerprint=${fingerprint.slice(0, 64)}`,
   ].join('; ')
