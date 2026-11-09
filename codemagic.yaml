@@ -45,9 +45,10 @@ workflows:
         # App Store Connect → App → General → App Information → Apple ID
         APP_STORE_APPLE_ID: "6832116469"
         BUNDLE_ID: app.fashionrise.studio
-        # ASC CFBundleVersion floor (not marketing version 1.0).
-        # IPA stamp = max(Codemagic BUILD_NUMBER, this floor). Never reuse an ASC build.
-        MIN_IOS_BUILD_NUMBER: "12"
+        # Safety floor only (not marketing version 1.0). Each Codemagic build asks
+        # App Store Connect for the latest CFBundleVersion and stamps latest+1
+        # (see "Set build number"). Merge-to-main still bumps this floor as a fallback.
+        MIN_IOS_BUILD_NUMBER: "13"
       node: 22
       xcode: 26.5
       cocoapods: default
@@ -79,15 +80,47 @@ workflows:
 
       - name: Set build number
         script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
           cd "$CM_BUILD_DIR/web-ui/ios/App"
-          # Prefer Codemagic's workflow BUILD_NUMBER, but never go below the floor
-          # (ASC uniqueness for CFBundleVersion).
-          CANDIDATE="${BUILD_NUMBER:-0}"
-          FLOOR="${MIN_IOS_BUILD_NUMBER:-12}"
-          if [ "$CANDIDATE" -lt "$FLOOR" ]; then
-            CANDIDATE="$FLOOR"
+          # Marketing version stays 1.0 (MARKETING_VERSION). This stamps CFBundleVersion.
+          # Official Codemagic pattern: read the highest build already on ASC/TestFlight,
+          # then +1 so every upload is unique (avoids Redundant Binary Upload 90189).
+          FLOOR="${MIN_IOS_BUILD_NUMBER:-13}"
+          CM="${BUILD_NUMBER:-0}"
+
+          latest_or_0() {
+            local out
+            out="$("$@" 2>/dev/null | tail -n 1 | tr -cd '0-9' || true)"
+            if [[ "${out}" =~ ^[0-9]+$ ]]; then
+              echo "${out}"
+            else
+              echo 0
+            fi
+          }
+
+          ASC_OK=0
+          TF="$(latest_or_0 app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform IOS)"
+          AS="$(latest_or_0 app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" --platform IOS)"
+          GB="$(latest_or_0 app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --platform IOS --all-versions)"
+          LATEST="$TF"
+          if [ "$AS" -gt "$LATEST" ]; then LATEST="$AS"; fi
+          if [ "$GB" -gt "$LATEST" ]; then LATEST="$GB"; fi
+          if [ "$TF" -gt 0 ] || [ "$AS" -gt 0 ] || [ "$GB" -gt 0 ]; then
+            ASC_OK=1
           fi
-          echo "CFBundleVersion candidate=$CANDIDATE (BUILD_NUMBER=${BUILD_NUMBER:-unset} floor=$FLOOR)"
+
+          if [ "$ASC_OK" -eq 1 ]; then
+            CANDIDATE=$((LATEST + 1))
+          else
+            # ASC lookup failed (empty app / API blip): stay unique per Codemagic run.
+            echo "WARN: ASC build-number lookup returned empty; using floor+BUILD_NUMBER"
+            CANDIDATE=$((FLOOR + CM))
+          fi
+          if [ "$CANDIDATE" -lt "$FLOOR" ]; then CANDIDATE="$FLOOR"; fi
+          if [ "$CANDIDATE" -lt "$CM" ]; then CANDIDATE="$CM"; fi
+
+          echo "CFBundleVersion=$CANDIDATE (asc_latest=$LATEST tf=$TF appstore=$AS combined=$GB floor=$FLOOR BUILD_NUMBER=$CM)"
           agvtool new-version -all "$CANDIDATE"
 
       - name: Build App Store IPA
