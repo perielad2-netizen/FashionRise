@@ -35,6 +35,10 @@ That script updates:
 ## Do not
 
 - Skip the bump because the PR is “docs only”, “web only”, or unrelated to iOS
-- Bump by more than 1 for a single merge (unless recovering from a known ASC collision)
+- Bump by more than 1 for a single merge (unless recovering from a known ASC collision /
+  `Redundant Binary Upload` — then jump the floor above the highest build ASC already has)
 - Merge to `main` and leave the floor unchanged
 - Double-bump inside one merge if this PR already raised the floor for that merge
+- Confuse **marketing version** (`CFBundleShortVersionString`, e.g. `1.0`) with the
+  **build string** (`CFBundleVersion` / `MIN_IOS_BUILD_NUMBER`). ASC uniqueness is the
+  `(version, build)` pair; redundant-upload errors mean the **build string** was reused.
