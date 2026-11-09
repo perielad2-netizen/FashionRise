@@ -1,6 +1,8 @@
 # FashionRise — Codemagic iOS IPA workflow (Capacitor)
 # Docs: https://docs.codemagic.io/yaml-quick-start/building-an-ionic-app/
 #       https://docs.codemagic.io/yaml-publishing/app-store-connect/
+#       https://docs.codemagic.io/knowledge-codemagic/build-versioning/
+#       https://docs.codemagic.io/yaml-basic-configuration/environment-variables/
 #
 # Manual start only (no triggering:). Uploads the IPA to App Store Connect
 # via the "codemagic access" integration. Does NOT submit TestFlight beta
@@ -14,6 +16,13 @@
 #   Xcode scheme:     App  (PBXNativeTarget "App")
 #   Bundle ID:        app.fashionrise.studio
 #   Native web build: npm run build:native  (.env.native absolute API)
+#
+# 90189 / Redundant Binary Upload lessons:
+#   1) app-store-connect publish defaults to **/*.ipa — multiple staged App.ipa
+#      copies caused the same CFBundleVersion to upload twice in one run
+#      (first OK in ASC, second → 90189). Collect exactly ONE IPA artifact.
+#   2) CFBundleVersion = max(PROJECT_BUILD_NUMBER + offset, ASC_latest+1).
+#      Do not reuse a sticky MIN floor as the stamp.
 
 workflows:
   fashionrise-ios-app-store:
@@ -45,11 +54,10 @@ workflows:
         # App Store Connect → App → General → App Information → Apple ID
         APP_STORE_APPLE_ID: "6832116469"
         BUNDLE_ID: app.fashionrise.studio
-        # Safety floor only (not marketing version 1.0). Each Codemagic build asks
-        # App Store Connect for the latest CFBundleVersion and stamps latest+1
-        # (see "Set build number"). Merge-to-main still bumps this floor as a fallback.
-        # Raised to 20 after ASC already consumed 11/12 (redundant upload 90189).
-        MIN_IOS_BUILD_NUMBER: "20"
+        # CFBundleVersion = max(PROJECT_BUILD_NUMBER + OFFSET, ASC_latest+1).
+        # Offset keeps early Codemagic counters above already-used ASC builds
+        # (1.0 has used through ~20). Marketing version stays 1.0.
+        IOS_BUILD_NUMBER_OFFSET: "100"
       node: 22
       xcode: 26.5
       cocoapods: default
@@ -81,57 +89,8 @@ workflows:
 
       - name: Set build number
         script: |
-          #!/usr/bin/env bash
-          set -euo pipefail
-          cd "$CM_BUILD_DIR/web-ui/ios/App"
-          # Marketing version stays 1.0 (MARKETING_VERSION). This stamps CFBundleVersion.
-          # Read the highest build already on ASC/TestFlight for 1.0, then +1.
-          # Also enforce MIN_IOS_BUILD_NUMBER floor so stale ASC API answers cannot
-          # reuse a build string Apple already accepted (90189).
-          FLOOR="${MIN_IOS_BUILD_NUMBER:-20}"
-          CM="${BUILD_NUMBER:-0}"
-          MARKETING_VERSION_STRING="${IOS_MARKETING_VERSION:-1.0}"
-
-          latest_or_0() {
-            # Take the last integer token on the last output line (never concatenate).
-            local line token
-            line="$("$@" 2>/dev/null | tail -n 1 || true)"
-            token="$(printf '%s\n' "$line" | awk '{print $NF}')"
-            if [[ "${token}" =~ ^[0-9]+$ ]]; then
-              echo "${token}"
-            else
-              echo 0
-            fi
-          }
-
-          max_num() {
-            local a="$1" b="$2"
-            if [ "$a" -gt "$b" ]; then echo "$a"; else echo "$b"; fi
-          }
-
-          TF="$(latest_or_0 app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform IOS --version-string "$MARKETING_VERSION_STRING")"
-          TF_ALL="$(latest_or_0 app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform IOS)"
-          AS="$(latest_or_0 app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" --platform IOS --version-string "$MARKETING_VERSION_STRING")"
-          AS_ALL="$(latest_or_0 app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" --platform IOS)"
-          GB="$(latest_or_0 app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --platform IOS --all-versions)"
-
-          LATEST=0
-          for n in "$TF" "$TF_ALL" "$AS" "$AS_ALL" "$GB"; do
-            LATEST="$(max_num "$LATEST" "$n")"
-          done
-
-          if [ "$LATEST" -gt 0 ]; then
-            CANDIDATE=$((LATEST + 1))
-          else
-            echo "WARN: ASC build-number lookup returned empty; using floor"
-            CANDIDATE="$FLOOR"
-          fi
-          CANDIDATE="$(max_num "$CANDIDATE" "$FLOOR")"
-          CANDIDATE="$(max_num "$CANDIDATE" "$CM")"
-
-          echo "CFBundleVersion=$CANDIDATE (asc_latest=$LATEST tf=$TF/$TF_ALL appstore=$AS/$AS_ALL combined=$GB floor=$FLOOR BUILD_NUMBER=$CM marketing=$MARKETING_VERSION_STRING)"
-          echo "CM_COMMIT=${CM_COMMIT:-unset}"
-          agvtool new-version -all "$CANDIDATE"
+          chmod +x "$CM_BUILD_DIR/scripts/codemagic-set-ios-build-number.sh"
+          "$CM_BUILD_DIR/scripts/codemagic-set-ios-build-number.sh"
 
       - name: Build App Store IPA
         script: |
@@ -140,46 +99,25 @@ workflows:
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME"
 
-      - name: Verify App.ipa exists for artifacts
+      - name: Verify single App.ipa + CFBundleVersion
         script: |
-          # build-ipa writes next to the Xcode project (not under working_directory alone).
-          IPA_PATH="$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa"
-          if [ ! -f "$IPA_PATH" ]; then
-            echo "ERROR: App.ipa missing after build-ipa"
-            echo "expected=$IPA_PATH"
-            ls -la "$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa" 2>/dev/null || true
-            find "$CM_BUILD_DIR/web-ui/ios/App" -name '*.ipa' 2>/dev/null || true
-            exit 1
-          fi
-          # macOS builders use BSD stat; GNU stat is the Linux fallback.
-          SIZE="$(stat -f%z "$IPA_PATH" 2>/dev/null || stat -c%s "$IPA_PATH")"
-          if [ -z "$SIZE" ] || [ "$SIZE" -le 0 ]; then
-            echo "ERROR: App.ipa is empty (size=${SIZE:-unknown}) at $IPA_PATH"
-            exit 1
-          fi
-          echo "OK: App.ipa ready for Codemagic artifacts"
-          echo "IPA_PATH=$IPA_PATH"
-          echo "IPA_SIZE_BYTES=$SIZE"
-          ls -lh "$IPA_PATH"
-          # CM_EXPORT_DIR is always collected; also stage a clone-root copy for globs.
-          mkdir -p "$CM_EXPORT_DIR" "$CM_BUILD_DIR/codemagic-artifacts"
-          cp -f "$IPA_PATH" "$CM_EXPORT_DIR/App.ipa"
-          cp -f "$IPA_PATH" "$CM_BUILD_DIR/codemagic-artifacts/App.ipa"
+          chmod +x "$CM_BUILD_DIR/scripts/codemagic-verify-ios-ipa.sh"
+          # Do NOT copy App.ipa into CM_EXPORT_DIR or other staging dirs —
+          # ASC publish discovers **/*.ipa and would upload duplicates (90189).
+          "$CM_BUILD_DIR/scripts/codemagic-verify-ios-ipa.sh" \
+            "$CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa"
 
     artifacts:
-      # Artifact patterns are relative to the clone directory ($CM_BUILD_DIR), but
-      # with working_directory: web-ui the clone-relative "web-ui/..." glob failed to
-      # surface App.ipa on build #4 even though Export Succeeded. Prefer absolute
-      # paths + CM_EXPORT_DIR / clone-root staging from the verify step.
-      - $CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/*.ipa
-      - $CM_BUILD_DIR/codemagic-artifacts/*.ipa
-      - $CM_EXPORT_DIR/*.ipa
+      # Exactly ONE publishable IPA. Prefer the verified absolute original path.
+      # Do not also list CM_EXPORT_DIR / staging copies (duplicate → 90189).
+      - $CM_BUILD_DIR/web-ui/ios/App/build/ios/ipa/App.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
 
     # Upload IPA to App Store Connect only (TestFlight processing). No beta review,
     # no App Store review, no beta_groups — distribute manually in ASC if needed.
     # Docs: https://docs.codemagic.io/yaml-publishing/app-store-connect/
+    # CLI publish default path is **/*.ipa — keep a single App.ipa on disk.
     publishing:
       app_store_connect:
         auth: integration

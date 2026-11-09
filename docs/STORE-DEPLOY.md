@@ -54,8 +54,9 @@ npm run cap:ios           # opens Xcode (macOS only)
 | ASC Apple ID | `6832116469` |
 | Signing | Codemagic `ios_signing` `app_store` + ASC API key integration `codemagic access` (credentials in Codemagic UI, not GitHub) |
 | Trigger | Manual only (no `triggering:` block) |
-| Publish | None — download IPA from the build page |
-| Build number floor | Codemagic stamps **ASC/TestFlight latest + 1** (primary). Repo `MIN_IOS_BUILD_NUMBER=20` is a safety floor, auto-bumped on each `main` merge (workflow + `./scripts/bump-min-ios-build-number.sh`) |
+| Publish | ASC upload via `publishing.app_store_connect` (`auth: integration`, **`codemagic access`**) — **no** beta review / App Store review / `beta_groups` |
+| Build number | `CFBundleVersion = max(PROJECT_BUILD_NUMBER + IOS_BUILD_NUMBER_OFFSET(100), ASC_latest+1)`; marketing version stays **1.0**. Exactly **one** IPA artifact (no staging copies — avoids 90189 duplicate upload) |
+| Helpers | `scripts/codemagic-set-ios-build-number.sh` · `scripts/codemagic-verify-ios-ipa.sh` · `scripts/assert-codemagic-ios-yaml.py` |
 
 **Codemagic env group `fashionrise_native` (required):** production-approved croquis notice texts that `assert-prod-vite-flags` hashes:
 
