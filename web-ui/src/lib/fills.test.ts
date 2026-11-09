@@ -132,8 +132,16 @@ describe('fills schema', () => {
       'lace',
       'floral',
       'sequins',
+      'gold-glitter',
+      'blue-velvet',
+      'wedding-lace',
+      'offwhite-satin',
+      'stockings',
+      'stitch-jeans',
     ])
     expect(fabricStyle('lace')?.fabricId).toBe('lace')
+    expect(fabricStyle('stitch-jeans')?.fabricId).toBe('stitch-jeans')
+    expect(FABRIC_PRESETS.find((f) => f.id === 'gold-glitter')?.tileUrl).toMatch(/\/fabrics\/defaults\//)
     expect(gradientStyleFromPreset('champagne')?.colors[0]).toBe('#F8F4F0')
     expect(contourToSvgPath([0, 0, 10, 0, 10, 10])).toMatch(/^M 0 0 L 10 0 L 10 10 Z$/)
   })

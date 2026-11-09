@@ -14,6 +14,7 @@ import {
   type GradientFillStyle,
   uploadedFabricStyle,
 } from '@/lib/fills'
+import { preloadDefaultFabricTiles } from '@/lib/defaultFabricTiles'
 import { INK_SWATCHES } from '@/lib/strokes'
 import {
   createAiFabric,
@@ -98,6 +99,10 @@ export function ColorAndMaterialsPanel({
   useEffect(() => {
     setTab(inferredTab)
   }, [inferredTab])
+
+  useEffect(() => {
+    void preloadDefaultFabricTiles()
+  }, [])
 
   useEffect(() => {
     let cancelled = false

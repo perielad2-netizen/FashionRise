@@ -218,7 +218,16 @@ function LookDetailDialog({
   const dualLike = look.kind === 'dual' || showBothDesktop
 
   return (
-    <div className={styles.overlay} role="presentation" onClick={onClose}>
+    <div
+      className={styles.overlay}
+      role="presentation"
+      onClick={() => {
+        // Ignore dismiss while the nested Publish confirm is open — otherwise a
+        // checkbox / button tap that reaches this overlay closes the whole look.
+        if (publishConfirmOpen) return
+        onClose()
+      }}
+    >
       <div
         className={styles.dialog}
         role="dialog"

@@ -1,7 +1,8 @@
 .scrim {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  /* Above look-detail / sheet overlays (80) so nested confirms stay interactive. */
+  z-index: 95;
   background: rgba(4, 6, 12, 0.62);
   display: grid;
   place-items: center;

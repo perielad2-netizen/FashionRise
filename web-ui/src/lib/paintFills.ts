@@ -1,6 +1,8 @@
+import { getCachedDefaultFabricImage } from '@/lib/defaultFabricTiles'
 import { getCachedFabricImage, registerFabricCacheClearHook } from '@/lib/fabricAssetCache'
 import {
   contourToSvgPath,
+  FABRIC_PRESETS,
   type FabricFillStyle,
   type FillOp,
   type FillStyle,
@@ -97,7 +99,16 @@ function makeGradient(
 
 const fabricTileCache = new Map<string, HTMLCanvasElement>()
 
-function makeFabricPattern(ctx: FillPaintContext, style: FabricFillStyle): CanvasPattern | null {
+function makeFabricPattern(
+  ctx: FillPaintContext,
+  style: FabricFillStyle,
+): CanvasPattern | string | null {
+  const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
+  if (preset?.tileUrl) {
+    const img = getCachedDefaultFabricImage(style.fabricId)
+    if (img) return ctx.createPattern(img, 'repeat')
+    return preset.fallbackColor ?? '#CCCCCC'
+  }
   let tile = fabricTileCache.get(style.fabricId)
   if (!tile) {
     tile = renderFabricTile(style.fabricId)
@@ -166,6 +177,24 @@ export const BUILTIN_FABRIC_TILE_PX = 64
 
 /** Render the exact built-in fabric tile shown on the Studio canvas (source of truth). */
 export function renderFabricTile(fabricId: string): HTMLCanvasElement {
+  const preset = FABRIC_PRESETS.find((p) => p.id === fabricId)
+  if (preset?.tileUrl) {
+    const img = getCachedDefaultFabricImage(fabricId)
+    const size = img ? Math.max(img.naturalWidth, img.naturalHeight, BUILTIN_FABRIC_TILE_PX) : BUILTIN_FABRIC_TILE_PX
+    const c = document.createElement('canvas')
+    c.width = size
+    c.height = size
+    const ctx = c.getContext('2d')
+    if (!ctx) return c
+    if (img) {
+      ctx.drawImage(img, 0, 0, size, size)
+    } else {
+      ctx.fillStyle = preset.fallbackColor ?? '#CCCCCC'
+      ctx.fillRect(0, 0, size, size)
+    }
+    return c
+  }
+
   const size = BUILTIN_FABRIC_TILE_PX
   const c = document.createElement('canvas')
   c.width = size
@@ -297,6 +326,8 @@ export function sampleColorFromStyle(style: FillStyle): string {
   if (style.kind === 'solid') return style.color
   if (style.kind === 'gradient') return style.colors[0]
   if (style.kind === 'uploaded-fabric') return '#BE185D'
+  const preset = FABRIC_PRESETS.find((p) => p.id === style.fabricId)
+  if (preset?.fallbackColor) return preset.fallbackColor
   switch (style.fabricId) {
     case 'satin':
       return '#BE185D'

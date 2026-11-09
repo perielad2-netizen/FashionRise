@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode, type SyntheticEvent } from 'react'
 import styles from './ConfirmDialog.module.css'
 
 type Action = {
@@ -88,8 +88,22 @@ export function ConfirmDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [onEscape])
 
+  // Nested under another dismissible overlay (e.g. My Looks detail), clicks must not
+  // bubble — otherwise checkbox / Cancel / Publish taps close the parent sheet.
+  const stopOverlayDismiss = (event: SyntheticEvent) => {
+    event.stopPropagation()
+  }
+
   return (
-    <div className={styles.scrim} role="presentation">
+    <div
+      className={styles.scrim}
+      role="presentation"
+      data-testid="confirm-dialog-scrim"
+      onPointerDown={stopOverlayDismiss}
+      onMouseDown={stopOverlayDismiss}
+      onClick={stopOverlayDismiss}
+      onTouchStart={stopOverlayDismiss}
+    >
       <div
         ref={dialogRef}
         className={scrollable ? `${styles.dialog} ${styles.dialogScrollable}` : styles.dialog}
@@ -99,6 +113,8 @@ export function ConfirmDialog({
         aria-busy={busy || undefined}
         tabIndex={-1}
         data-scrollable={scrollable || undefined}
+        onPointerDown={stopOverlayDismiss}
+        onClick={stopOverlayDismiss}
       >
         <h2 id={titleId} className={styles.title}>
           {title}

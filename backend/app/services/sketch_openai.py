@@ -95,8 +95,8 @@ _DESIGN_ENHANCEMENT_CONTRACT = (
     "Polish into a beautiful professional fashion rendering (clean lines, smooth seams, "
     "refined proportions). Preserve every distinct bucket fabric fill visible in Image 1 "
     "(shoes, bags, belts) as that textile — do not flatten them into dress ink color. "
-    "Normalize sketch glitches (accidental asymmetry, uneven strap/sleeve widths, crooked "
-    "edges, wobble); keep intentional design asymmetry. Do NOT redesign or invent "
+    "Normalize sketch glitches (uneven straps/sleeves, crooked edges, missing hands — "
+    "complete them); keep intentional design asymmetry. Do NOT redesign or invent "
     "decorative panels. Same design elevated — not traced/cartoonish; keep applied "
     "fabric/pattern/color theme as a combination of all painted media."
 )
@@ -367,7 +367,7 @@ def _system_prompt(job_type: str) -> str:
             "Front/Back coherence), versus (B) drawing imperfections that MUST be professionally "
             "normalized away (wobbly/crooked lines, accidental left/right asymmetry, uneven strap "
             "or sleeve widths, rough fill edges, crude shading, awkward hand-drawn proportions, "
-            "traced-sketch look). "
+            "missing/cut-off hands at sleeve ends, traced-sketch look). "
             "When the user message includes SELECTED STUDIO REFERENCE metadata, that selection is authoritative "
             "over any conflicting impression of the figure's fashion-croquis family (male vs female presentation). "
             "Respond ONLY with valid JSON using keys: "
@@ -385,9 +385,10 @@ def _system_prompt(job_type: str) -> str:
             "Never invent accent colors, contrast panels, trims, bodysuits, linings, or modesty panels; "
             "do not treat blank/light croquis body or paper as garment fabric; explicitly call for polished "
             "professional fashion rendering that normalizes accidental sketch imperfections (uneven straps/"
-            "sleeves, crooked edges, wobble) into a clean balanced design; do not describe amateur line "
-            "quality or ask to keep a traced/cartoon sketch look; do not request a different croquis family "
-            "than the SELECTED STUDIO REFERENCE)."
+            "sleeves, crooked edges, wobble, missing hands) into a clean balanced design; complete natural "
+            "hands at sleeve ends without changing the garment; do not describe amateur line quality or ask "
+            "to keep a traced/cartoon sketch look; do not request a different croquis family than the "
+            "SELECTED STUDIO REFERENCE)."
         )
     return (
         "You are a fashion stylist AI. Respond ONLY with valid JSON using keys: "
