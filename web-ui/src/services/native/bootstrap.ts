@@ -9,6 +9,8 @@ export async function bootstrapNativeShell(): Promise<void> {
   try {
     await StatusBar.setStyle({ style: Style.Dark })
     await StatusBar.setBackgroundColor({ color: '#090F1F' })
+    // Keep fixed portals (Runway sheets) below the status bar on iOS.
+    await StatusBar.setOverlaysWebView({ overlay: false })
   } catch {
     /* web / unsupported */
   }

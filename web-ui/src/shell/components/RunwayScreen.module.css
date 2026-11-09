@@ -352,10 +352,12 @@
   inset: 0;
   z-index: 92;
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   justify-content: center;
-  padding: max(8px, env(safe-area-inset-top, 0px)) 10px
-    max(10px, env(safe-area-inset-bottom, 0px), var(--fr-browser-chrome-bottom, 0px));
+  /* Keep the sheet clear of the iOS status bar / home indicator (Capacitor portals
+     escape the app shell safe-area padding). */
+  padding: max(10px, env(safe-area-inset-top, 0px)) 0
+    max(0px, env(safe-area-inset-bottom, 0px), var(--fr-browser-chrome-bottom, 0px));
   background: rgba(4, 7, 14, 0.72);
   backdrop-filter: blur(6px);
   box-sizing: border-box;
@@ -363,11 +365,18 @@
 
 .sheet {
   width: min(560px, 100%);
-  max-height: min(92dvh, calc(100dvh - 20px - env(safe-area-inset-top, 0px)));
-  max-height: min(92svh, calc(100svh - 20px - env(safe-area-inset-top, 0px)));
+  height: 100%;
+  max-height: min(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px),
+    calc(100dvh - 10px - env(safe-area-inset-top, 0px))
+  );
+  max-height: min(
+    100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px),
+    calc(100svh - 10px - env(safe-area-inset-top, 0px))
+  );
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border-radius: 20px 20px 16px 16px;
+  border-radius: 20px 20px 0 0;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(180deg, #171f33 0%, #10182a 100%);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
@@ -376,12 +385,32 @@
 }
 
 .sheetHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 14px 12px;
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, #1a243a 0%, #171f33 100%);
+}
+
+.sheetBack {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 40px;
+  padding: 0 12px 0 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fr-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sheetBack:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .sheetTitleBlock {
@@ -404,24 +433,6 @@
   font-size: 12px;
   line-height: 1.4;
   color: var(--fr-muted);
-}
-
-.sheetClose {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--fr-text);
-  cursor: pointer;
-}
-
-.sheetClose:focus-visible {
-  outline: 2px solid #f9a8d4;
-  outline-offset: 2px;
 }
 
 .sheetBody {
@@ -452,6 +463,7 @@
   }
 
   .sheet {
+    height: auto;
     border-radius: 20px;
     max-height: min(860px, calc(100dvh - 48px));
   }
@@ -528,12 +540,20 @@
   background: linear-gradient(165deg, #f8f3ee, #efe6dc);
   display: grid;
   place-items: center;
+  overflow: hidden;
 }
 
 .thumbImg {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* Full croquis must stay visible — cover was cropping heads/feet on iPhone. */
+  object-fit: contain;
+  object-position: center center;
+}
+
+.sheetList .thumb {
+  aspect-ratio: 3 / 4.35;
+  min-height: 280px;
 }
 
 .thumbEmpty {
