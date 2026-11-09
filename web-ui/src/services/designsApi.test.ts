@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { bumpDraftDocument, createEmptyDraftDocument, STUDIO_DRAFT_KIND } from '@/lib/draftDocument'
 import { ApiError } from '@/services/api/client'
 import {
+  alignExtractedDraftToOcc,
   documentForCloud,
   extractStudioDraft,
   parseDraftConflict,
   pickLatestStudioDraft,
+  studioDraftRevisionHint,
   type DesignRead,
 } from '@/services/designsApi'
 
@@ -86,5 +88,22 @@ describe('designsApi helpers', () => {
     expect(parsed?.expectedRevision).toBe(2)
     expect(parsed?.currentRevision).toBe(4)
     expect(parsed?.design.id).toBe('d9')
+  })
+
+  it('uses metadata clientRevision first for OCC (matches backend)', () => {
+    const row = design({
+      id: 'occ',
+      design_data: {
+        ...(createEmptyDraftDocument() as unknown as Record<string, unknown>),
+        clientRevision: 3,
+      },
+      metadata: { draftKind: STUDIO_DRAFT_KIND, clientRevision: 7 },
+    })
+    expect(studioDraftRevisionHint(row)).toBe(7)
+    const extracted = extractStudioDraft(row)
+    expect(extracted?.clientRevision).toBe(7)
+    expect(
+      alignExtractedDraftToOcc(createEmptyDraftDocument(), row, 9).clientRevision,
+    ).toBe(9)
   })
 })

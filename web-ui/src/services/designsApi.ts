@@ -119,29 +119,56 @@ export function isStudioWorkingDraftClaim(
   )
 }
 
-/** Best-effort revision token from an unreadable Studio row (OCC / recovery). */
+/**
+ * OCC revision authority for a designs row.
+ * Must match backend `design_service._studio_client_revision`: metadata first, then design_data.
+ * Preferring design_data alone caused Keep-this-device PUT 409 loops when the two drifted.
+ */
 export function studioDraftRevisionHint(design: DesignRead): number | null {
-  const dataRev = design.design_data?.['clientRevision']
-  if (typeof dataRev === 'number' && Number.isFinite(dataRev) && dataRev > 0) {
-    return Math.floor(dataRev)
-  }
-  const metaRev = design.metadata?.['clientRevision']
-  if (typeof metaRev === 'number' && Number.isFinite(metaRev) && metaRev > 0) {
-    return Math.floor(metaRev)
+  for (const raw of [design.metadata?.['clientRevision'], design.design_data?.['clientRevision']]) {
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
+      return Math.floor(raw)
+    }
+    if (typeof raw === 'string' && /^\d+$/.test(raw)) {
+      return Number.parseInt(raw, 10)
+    }
   }
   return null
 }
 
+/**
+ * Align an extracted Studio document's clientRevision to the BE OCC token.
+ * Optional `currentRevisionFromConflict` comes from a 409 payload.current_revision.
+ */
+export function alignExtractedDraftToOcc(
+  doc: StudioDraftDocument,
+  design: DesignRead,
+  currentRevisionFromConflict?: number,
+): StudioDraftDocument {
+  const occ = Math.max(
+    doc.clientRevision,
+    studioDraftRevisionHint(design) ?? 0,
+    typeof currentRevisionFromConflict === 'number' &&
+      Number.isFinite(currentRevisionFromConflict) &&
+      currentRevisionFromConflict >= 0
+      ? Math.floor(currentRevisionFromConflict)
+      : 0,
+  )
+  if (occ === doc.clientRevision) return doc
+  return { ...doc, clientRevision: occ }
+}
+
 export function extractStudioDraft(design: DesignRead): StudioDraftDocument | null {
   const fromData = parseStudioDraftDocument(design.design_data)
-  if (fromData) return fromData
+  if (fromData) return alignExtractedDraftToOcc(fromData, design)
   const meta = design.metadata ?? {}
   if (
     meta.draftKind === STUDIO_DRAFT_KIND ||
     meta.schema === STUDIO_DRAFT_SCHEMA ||
     meta.schema === STUDIO_DRAFT_SCHEMA_V2
   ) {
-    return parseStudioDraftDocument(design.design_data)
+    const parsed = parseStudioDraftDocument(design.design_data)
+    return parsed ? alignExtractedDraftToOcc(parsed, design) : null
   }
   return null
 }
