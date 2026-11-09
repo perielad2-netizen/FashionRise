@@ -45,8 +45,9 @@ workflows:
         # App Store Connect → App → General → App Information → Apple ID
         APP_STORE_APPLE_ID: "6832116469"
         BUNDLE_ID: app.fashionrise.studio
-        # ASC rejects CFBundleVersion reuse; floor keeps uploads above prior builds.
-        MIN_IOS_BUILD_NUMBER: "11"
+        # ASC CFBundleVersion floor (not marketing version 1.0).
+        # IPA stamp = max(Codemagic BUILD_NUMBER, this floor). Never reuse an ASC build.
+        MIN_IOS_BUILD_NUMBER: "12"
       node: 22
       xcode: 26.5
       cocoapods: default
@@ -82,7 +83,7 @@ workflows:
           # Prefer Codemagic's workflow BUILD_NUMBER, but never go below the floor
           # (ASC uniqueness for CFBundleVersion).
           CANDIDATE="${BUILD_NUMBER:-0}"
-          FLOOR="${MIN_IOS_BUILD_NUMBER:-11}"
+          FLOOR="${MIN_IOS_BUILD_NUMBER:-12}"
           if [ "$CANDIDATE" -lt "$FLOOR" ]; then
             CANDIDATE="$FLOOR"
           fi
