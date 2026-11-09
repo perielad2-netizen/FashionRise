@@ -69,6 +69,8 @@ describe('magicGarmentSpec palette priority', () => {
     expect(spec.notes).toMatch(/invent no accent colors/i)
     expect(spec.notes).toMatch(/uneven straps\/sleeves/i)
     expect(spec.notes).toMatch(/normalize sketch glitches/i)
+    expect(spec.notes).toMatch(/missing hands/i)
+    expect(spec.notes).toMatch(/complete natural hands/i)
     expect(spec.notes.length).toBeLessThanOrEqual(500)
     expect(spec.details).toMatch(/render=polished_professional_enhancement/)
     expect(spec.details).toMatch(/sketch_role=strong_guidance_not_pixel_trace/)

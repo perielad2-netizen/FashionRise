@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { preloadDefaultFabricTiles } from '@/lib/defaultFabricTiles'
 import { bindFabricCacheToUser } from '@/lib/fabricAssetCache'
 import {
   fetchMe,
@@ -98,6 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     bindFabricCacheToUser(user?.id ?? null)
+    // Shared AI default tiles are public; warm them once a session is alive.
+    if (user?.id) void preloadDefaultFabricTiles()
   }, [user?.id])
 
   const value = useMemo<AuthState>(

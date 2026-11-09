@@ -182,7 +182,8 @@ const MAGIC_ENHANCEMENT_NOTES =
   'ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; ' +
   'honor every bucket fabric fill painted in the sketch (including small shoe/trim regions) ' +
   'together with hand-inked garment colors — combination of all applied media; ' +
-  'normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble); no traced/cartoon look.'
+  'normalize sketch glitches (uneven straps/sleeves, crooked edges, wobble, missing hands); ' +
+  'complete natural hands at sleeve ends — keep the garment; no stump arms; no traced/cartoon look.'
 
 /** #183 — pale bridal / open neckline / both sleeves (same contract as Try On). */
 function paleBridalNotes(front: SideBag, back: SideBag, mainColors: string[]): string[] {

@@ -91,6 +91,13 @@ export type FabricPreset = {
   label: string
   /** CSS preview for the panel swatch. */
   preview: string
+  /**
+   * Optional public tile URL (shared AI / studio defaults under /fabrics/defaults/).
+   * When set, Studio paints the image as a repeating pattern instead of a procedural tile.
+   */
+  tileUrl?: string
+  /** Solid fallback / eyedropper sample while the tile loads. */
+  fallbackColor?: string
 }
 
 export const FABRIC_PRESETS: FabricPreset[] = [
@@ -123,6 +130,49 @@ export const FABRIC_PRESETS: FabricPreset[] = [
     id: 'sequins',
     label: 'Sequins',
     preview: 'radial-gradient(circle at 40% 40%,#fde68a 0 3px,#b45309 4px,transparent 5px),#7c2d12',
+  },
+  // Shared AI studio defaults (Peri + Yaniv) — available to every account.
+  {
+    id: 'gold-glitter',
+    label: 'Gold glitter',
+    preview: 'url(/fabrics/defaults/gold.png) center / cover',
+    tileUrl: '/fabrics/defaults/gold.png',
+    fallbackColor: '#D4A017',
+  },
+  {
+    id: 'blue-velvet',
+    label: 'Blue velvet',
+    preview: 'url(/fabrics/defaults/blue-velvet.png) center / cover',
+    tileUrl: '/fabrics/defaults/blue-velvet.png',
+    fallbackColor: '#1D4ED8',
+  },
+  {
+    id: 'wedding-lace',
+    label: 'White lace',
+    preview: 'url(/fabrics/defaults/white-lace.png) center / cover',
+    tileUrl: '/fabrics/defaults/white-lace.png',
+    fallbackColor: '#F8F8F8',
+  },
+  {
+    id: 'offwhite-satin',
+    label: 'Offwhite satin',
+    preview: 'url(/fabrics/defaults/offwhite-satin.png) center / cover',
+    tileUrl: '/fabrics/defaults/offwhite-satin.png',
+    fallbackColor: '#F5F0E6',
+  },
+  {
+    id: 'stockings',
+    label: 'Stockings',
+    preview: 'url(/fabrics/defaults/stockings.png) center / cover',
+    tileUrl: '/fabrics/defaults/stockings.png',
+    fallbackColor: '#F8F8F8',
+  },
+  {
+    id: 'stitch-jeans',
+    label: 'Stitch jeans',
+    preview: 'url(/fabrics/defaults/stitch-jeans.png) center / cover',
+    tileUrl: '/fabrics/defaults/stitch-jeans.png',
+    fallbackColor: '#2F4A6E',
   },
 ]
 
