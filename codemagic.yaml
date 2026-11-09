@@ -48,7 +48,8 @@ workflows:
         # Safety floor only (not marketing version 1.0). Each Codemagic build asks
         # App Store Connect for the latest CFBundleVersion and stamps latest+1
         # (see "Set build number"). Merge-to-main still bumps this floor as a fallback.
-        MIN_IOS_BUILD_NUMBER: "13"
+        # Raised to 20 after ASC already consumed 11/12 (redundant upload 90189).
+        MIN_IOS_BUILD_NUMBER: "20"
       node: 22
       xcode: 26.5
       cocoapods: default
@@ -84,43 +85,52 @@ workflows:
           set -euo pipefail
           cd "$CM_BUILD_DIR/web-ui/ios/App"
           # Marketing version stays 1.0 (MARKETING_VERSION). This stamps CFBundleVersion.
-          # Official Codemagic pattern: read the highest build already on ASC/TestFlight,
-          # then +1 so every upload is unique (avoids Redundant Binary Upload 90189).
-          FLOOR="${MIN_IOS_BUILD_NUMBER:-13}"
+          # Read the highest build already on ASC/TestFlight for 1.0, then +1.
+          # Also enforce MIN_IOS_BUILD_NUMBER floor so stale ASC API answers cannot
+          # reuse a build string Apple already accepted (90189).
+          FLOOR="${MIN_IOS_BUILD_NUMBER:-20}"
           CM="${BUILD_NUMBER:-0}"
+          MARKETING_VERSION_STRING="${IOS_MARKETING_VERSION:-1.0}"
 
           latest_or_0() {
-            local out
-            out="$("$@" 2>/dev/null | tail -n 1 | tr -cd '0-9' || true)"
-            if [[ "${out}" =~ ^[0-9]+$ ]]; then
-              echo "${out}"
+            # Take the last integer token on the last output line (never concatenate).
+            local line token
+            line="$("$@" 2>/dev/null | tail -n 1 || true)"
+            token="$(printf '%s\n' "$line" | awk '{print $NF}')"
+            if [[ "${token}" =~ ^[0-9]+$ ]]; then
+              echo "${token}"
             else
               echo 0
             fi
           }
 
-          ASC_OK=0
-          TF="$(latest_or_0 app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform IOS)"
-          AS="$(latest_or_0 app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" --platform IOS)"
-          GB="$(latest_or_0 app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --platform IOS --all-versions)"
-          LATEST="$TF"
-          if [ "$AS" -gt "$LATEST" ]; then LATEST="$AS"; fi
-          if [ "$GB" -gt "$LATEST" ]; then LATEST="$GB"; fi
-          if [ "$TF" -gt 0 ] || [ "$AS" -gt 0 ] || [ "$GB" -gt 0 ]; then
-            ASC_OK=1
-          fi
+          max_num() {
+            local a="$1" b="$2"
+            if [ "$a" -gt "$b" ]; then echo "$a"; else echo "$b"; fi
+          }
 
-          if [ "$ASC_OK" -eq 1 ]; then
+          TF="$(latest_or_0 app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform IOS --version-string "$MARKETING_VERSION_STRING")"
+          TF_ALL="$(latest_or_0 app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform IOS)"
+          AS="$(latest_or_0 app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" --platform IOS --version-string "$MARKETING_VERSION_STRING")"
+          AS_ALL="$(latest_or_0 app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" --platform IOS)"
+          GB="$(latest_or_0 app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --platform IOS --all-versions)"
+
+          LATEST=0
+          for n in "$TF" "$TF_ALL" "$AS" "$AS_ALL" "$GB"; do
+            LATEST="$(max_num "$LATEST" "$n")"
+          done
+
+          if [ "$LATEST" -gt 0 ]; then
             CANDIDATE=$((LATEST + 1))
           else
-            # ASC lookup failed (empty app / API blip): stay unique per Codemagic run.
-            echo "WARN: ASC build-number lookup returned empty; using floor+BUILD_NUMBER"
-            CANDIDATE=$((FLOOR + CM))
+            echo "WARN: ASC build-number lookup returned empty; using floor"
+            CANDIDATE="$FLOOR"
           fi
-          if [ "$CANDIDATE" -lt "$FLOOR" ]; then CANDIDATE="$FLOOR"; fi
-          if [ "$CANDIDATE" -lt "$CM" ]; then CANDIDATE="$CM"; fi
+          CANDIDATE="$(max_num "$CANDIDATE" "$FLOOR")"
+          CANDIDATE="$(max_num "$CANDIDATE" "$CM")"
 
-          echo "CFBundleVersion=$CANDIDATE (asc_latest=$LATEST tf=$TF appstore=$AS combined=$GB floor=$FLOOR BUILD_NUMBER=$CM)"
+          echo "CFBundleVersion=$CANDIDATE (asc_latest=$LATEST tf=$TF/$TF_ALL appstore=$AS/$AS_ALL combined=$GB floor=$FLOOR BUILD_NUMBER=$CM marketing=$MARKETING_VERSION_STRING)"
+          echo "CM_COMMIT=${CM_COMMIT:-unset}"
           agvtool new-version -all "$CANDIDATE"
 
       - name: Build App Store IPA
