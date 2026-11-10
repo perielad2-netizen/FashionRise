@@ -51,7 +51,7 @@ describe('native iap Phase B', () => {
       products: [
         {
           identifier: 'stars_50',
-          title: 'Starter',
+          title: 'FashionRise - 50 Stars',
           description: '50 Stars',
           priceString: '₪22.90',
         },
@@ -68,6 +68,52 @@ describe('native iap Phase B', () => {
         stars: 50,
       },
     ])
+  })
+
+  it('orders packages Starter→Creator→Studio regardless of StoreKit order', async () => {
+    getProducts.mockResolvedValue({
+      products: [
+        {
+          identifier: 'stars_500',
+          title: 'FashionRise - 500 Stars',
+          description: 'ASC studio',
+          priceString: '$49.99',
+        },
+        {
+          identifier: 'stars_50',
+          title: 'FashionRise - 50 Stars',
+          description: 'ASC starter',
+          priceString: '$5.99',
+        },
+        {
+          identifier: 'stars_150',
+          title: 'FashionRise - 150 Stars',
+          description: 'ASC creator',
+          priceString: '$16.99',
+        },
+        {
+          identifier: 'unknown_sku',
+          title: 'Ignore me',
+          description: 'nope',
+          priceString: '$1.00',
+        },
+      ],
+    })
+    const { listStarsIapProducts } = await import('./iap')
+    const products = await listStarsIapProducts()
+    expect(products.map((p) => p.productId)).toEqual(['stars_50', 'stars_150', 'stars_500'])
+    expect(products.map((p) => p.title)).toEqual(['Starter', 'Creator', 'Studio'])
+    expect(products.map((p) => p.stars)).toEqual([50, 150, 500])
+    expect(products.map((p) => p.priceString)).toEqual(['$5.99', '$16.99', '$49.99'])
+  })
+
+  it('sortStarsIapProducts is stable for partial StoreKit catalogs', async () => {
+    const { sortStarsIapProducts } = await import('./iap')
+    const sorted = sortStarsIapProducts([
+      { productId: 'stars_500', title: 'Studio', description: '', priceString: '$49.99', stars: 500 },
+      { productId: 'stars_50', title: 'Starter', description: '', priceString: '$5.99', stars: 50 },
+    ])
+    expect(sorted.map((p) => p.productId)).toEqual(['stars_50', 'stars_500'])
   })
 
   it('purchases with appAccountToken and confirms JWS before finish', async () => {

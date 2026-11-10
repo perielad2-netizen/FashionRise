@@ -3,9 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**PR #274 MERGED + DEPLOYED** — Sandbox-only tester credit harden live; public IAP gates **OFF**; Alembic **027**; Codemagic ready to start on `main` @ `d7a3cfcd`.)
+**Last updated:** 2026-11-10 (**Stars shop polish PR** — clearer shop copy; Starter→Creator→Studio order; finite Stars override for `perielad2@gmail.com` purchase testing. Public IAP gates stay **OFF**. Awaiting PM review before merge/deploy/TF>117.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## Stars shop polish before App Store (2026-11-10) — PR READY (do not merge yet)
+
+| Status | Detail |
+|---|---|
+| Branch | `cursor/web-stars-shop-polish-77c6` |
+| Shop copy | “Stars power your AI fashion creations…” + costs **Magic 10 · Model 10 · Fabric 5 · PDF 50** (matches `AI_STARS_*_COST` / croquis=Model) |
+| Package order | Canonical `stars_50` → `stars_150` → `stars_500` with friendly **Starter / Creator / Studio**; StoreKit localized `priceString` only |
+| Finite tester | `AI_STARS_FINITE_OVERRIDE_EMAILS=perielad2@gmail.com` forces a real wallet (wins over unlimited list + DB flag). **Does not** change `is_admin`. |
+| Restore unlimited | Clear that email from `AI_STARS_FINITE_OVERRIDE_EMAILS` (or set empty) and restart API |
+| Gates | Public purchasing/credit **OFF**; sandbox tester allowlist unchanged |
+| Next | PM approve → merge/deploy → **one** Codemagic TF build **> 117** → sandbox 50-Star purchase |
 
 ## Paid-Stars iOS release build (2026-11-10) — DEPLOYED · CODEMAGIC READY
 

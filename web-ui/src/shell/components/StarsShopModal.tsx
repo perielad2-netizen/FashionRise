@@ -242,8 +242,10 @@ export function StarsShopModal({ open, onClose }: Props) {
         {nativeIos ? (
           <>
             <p className={styles.hint}>
-              Buy Stars securely through the App Store. Magic 10 · Model 10 · Fabric 5 ·
-              Professional PDF 50.
+              Stars power your AI fashion creations. Choose a package below to get started.
+            </p>
+            <p className={styles.costs}>
+              Magic: 10 Stars · Model: 10 Stars · Fabric: 5 Stars · PDF: 50 Stars
             </p>
             {flowState === 'loading_products' ? (
               <p className={styles.empty}>Loading App Store products…</p>
@@ -298,10 +300,13 @@ export function StarsShopModal({ open, onClose }: Props) {
         ) : (
           <>
             <p className={styles.hint}>
-              Magic 10 · Model 10 · Fabric 5 · Professional PDF 50.
+              Stars power your AI fashion creations. Choose a package below to get started.
               {nativeAndroid
                 ? ' Google Play Stars purchasing is not available yet.'
                 : ' Packages are listed now; web checkout opens later. On iOS, buy Stars in the App Store app.'}
+            </p>
+            <p className={styles.costs}>
+              Magic: 10 Stars · Model: 10 Stars · Fabric: 5 Stars · PDF: 50 Stars
             </p>
 
             <section className={styles.section}>

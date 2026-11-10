@@ -220,6 +220,10 @@ class Settings(BaseSettings):
     ai_stars_fabric_cost: int = 5
     # Comma-separated emails with endless Stars (never debit).
     ai_stars_unlimited_emails: str = "perielad@gmail.com,perielad2@gmail.com"
+    # Temporary finite-wallet override for purchase testing. Wins over both the
+    # unlimited email list and User.ai_stars_unlimited. Does not touch is_admin.
+    # Clear / remove an email here to restore that account's unlimited Stars.
+    ai_stars_finite_override_emails: str = "perielad2@gmail.com"
     # Shop checkout remains disabled until payment is wired.
     stars_shop_checkout_enabled: bool = False
 

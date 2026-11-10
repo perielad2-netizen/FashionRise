@@ -125,9 +125,10 @@ def refresh_token(request: Request, data: RefreshRequest, db: Session = Depends(
 @router.get("/me", response_model=UserRead)
 def me(user: CurrentUser) -> UserRead:
     data = UserRead.model_validate(user)
-    if ai_stars.user_has_unlimited_stars(user):
-        return data.model_copy(update={"ai_stars_unlimited": True})
-    return data
+    # Always publish the *effective* unlimited flag (finite override wins over DB).
+    return data.model_copy(
+        update={"ai_stars_unlimited": ai_stars.user_has_unlimited_stars(user)}
+    )
 
 
 @router.get("/stars")
