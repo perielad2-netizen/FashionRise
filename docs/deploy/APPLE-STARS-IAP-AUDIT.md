@@ -1,7 +1,7 @@
 # Apple Stars IAP — App Store readiness audit (2026-11-10)
 
-**Status:** Audit only — **stop for PM review**.  
-**Out of scope until approved:** implement, merge, deploy, Codemagic, real purchases.
+**Status:** Audit approved (PR **#266** squash-merged 2026-11-10).  
+**Follow-on:** Phase A implementation (JWS verify) — see project status / Phase A PR. Phase B requirements: `APPLE-STARS-IAP-PHASE-B.md`.
 
 ## Verdict
 

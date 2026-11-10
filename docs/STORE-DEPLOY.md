@@ -70,24 +70,34 @@ npm run cap:ios           # opens Xcode (macOS only)
 
 ```env
 # backend/.env — do not commit secrets
+# Phase A: StoreKit 2 JWS via App Store Server Library (legacy shared secret unused).
+IAP_APPLE_BUNDLE_ID=app.fashionrise.studio
+IAP_APPLE_APP_APPLE_ID=6832116469
+IAP_APPLE_ONLINE_CHECKS=true
+# Default OFF until Phase B refunds / App Store Server Notifications.
+IAP_APPLE_PURCHASING_ENABLED=false
 IAP_APPLE_SHARED_SECRET=
 IAP_GOOGLE_SERVICE_ACCOUNT_JSON=
-# Dev only (never production):
+# Forced off in production. Phase A also refuses unverified Apple credits in non-prod.
 IAP_ALLOW_UNVERIFIED_SANDBOX=false
 ```
 
 Also add Capacitor origins to production `CORS_ORIGINS` if the WebView origin is not already covered (e.g. `capacitor://localhost`, `https://localhost`).
 
-Nginx: allowlist `POST /api/v1/shop/iap/confirm` and `POST /api/v1/shop/iap/restore` (same pattern as other `/shop` routes).
+Nginx: allowlist `POST /api/v1/shop/iap/confirm`, `POST /api/v1/shop/iap/restore`, and `GET /api/v1/shop/iap/app-account-token` (same pattern as other `/shop` routes).
+
+Apple root CAs for chain verify ship in-repo at `backend/app/certs/apple/*.cer` (public PKI — not secrets).
 
 ## Submission checklist (first release)
 
 - [ ] Privacy policy URL (required by both stores)  
 - [ ] Screenshots (phone + tablet)  
 - [ ] Age rating / content questionnaire  
-- [ ] IAP products created & approved  
+- [ ] IAP products created & approved as **Consumable** (`stars_50` / `stars_150` / `stars_500`)  
 - [ ] Test on TestFlight + Play internal testing  
-- [ ] Wire Apple/Google receipt verification (currently staged fail-closed)  
+- [x] Phase A: Apple JWS verification foundation (purchasing gate still **OFF**)  
+- [ ] Phase B: ASN refunds + native shop UI + enable `IAP_APPLE_PURCHASING_ENABLED`  
+
 
 ## What we are not doing
 

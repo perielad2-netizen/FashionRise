@@ -20,8 +20,11 @@ reportlab>=4.0.0,<5.0.0
 openai>=1.109.1,<2.0.0
 # Web Push (Runway notifications). Optional at runtime when VAPID keys unset.
 pywebpush>=2.0.0,<3.0.0
+# Apple StoreKit 2 / App Store Server API v2 signed transaction verification.
+app-store-server-library>=3.1.2,<4.0.0
 
 # Dev / test
 pytest>=7.4.0,<9.0.0
 pytest-asyncio>=0.23.0,<0.25.0
 pypdf>=4.0.0,<6.0.0
+
