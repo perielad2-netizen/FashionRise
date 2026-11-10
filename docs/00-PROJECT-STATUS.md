@@ -3,24 +3,31 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple Stars IAP Phase B lock-order correction** on PR **#268** — ASN takes shared txn advisory **before** notification `FOR UPDATE`. Gates remain **OFF**. No merge / deploy / enable / Codemagic / paid txns until PM authorizes.)
+**Last updated:** 2026-11-10 (**Apple Stars IAP Phase B deployed gates-OFF** — PR **#268** squash-merged → `main` **`b6c614d2`**, production BE/FE on that tip, Alembic **027**. Purchasing + credit still **OFF**. No Codemagic / App Store submit / live buys.)
 
-**Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Audit docs **#266** squash-merged. Phase A **#267** squash-merged → `main` **`bd94f8b4`**.
+**Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Audit docs **#266** squash-merged. Phase A **#267** squash-merged → `main` **`bd94f8b4`**. Phase B **#268** squash-merged + production deploy (gates OFF).
 
-## Apple Stars IAP — Phase B end-to-end (2026-11-10) — PM REVIEW
+## Apple Stars IAP — Phase B end-to-end (2026-11-10) — DEPLOYED GATES OFF
 
 | Status | Detail |
 |---|---|
-| Baseline `main` | **`bd94f8b4`** (Phase A #267 merged; **not** deployed to production as of 2026-11-10 preflight) |
-| Branch / PR | `cursor/apple-iap-phase-b-complete-77c6` · **#268** (do **not** merge until PM approves) |
-| Scope | ASN V2 webhook, refund/revoke/refund-reversed accounting, `ai_stars_iap_debt`, native iOS Stars shop, unfinished-txn recovery, Alembic **026+027**, nginx docs |
-| Hardening (PM) | Failed ASN UUID retry (non-2xx); `pg_advisory_xact_lock` confirm↔refund; multi-cycle REFUND after REVERSED; unmatched attach; Capgo `Transaction.updates` auto-finish documented + pending-txn hint + listener confirm |
-| Lock order (final) | Shared `pg_advisory_xact_lock(iap:ios:<txn>)` **first**, then notification / purchase / user row locks. ASN Phase 2 + failure remount take advisory **before** notification `FOR UPDATE` (avoids deadlock vs confirm attach). Receipt insert commits without cross-path locks. HEAD **`e5685377`**. Deterministic PG: inverted order → `40P01`; fixed confirm∥ASN → no deadlock / no active credited grant after prior refund. Focused suite **40 passed** (Phase A/B + harden + concurrency + lock-order) |
-| Gates | `IAP_APPLE_PURCHASING_ENABLED` + `IAP_APPLE_CREDIT_ENABLED` — **both still default OFF** (not persisted ON) |
-| Migration head (repo) | **027** (revises 026). Production still on **025** until authorized migrate |
-| Prod preflight | FE tip **`b1dc83a7`** (fill cutouts); BE tip **`65239732`** (#264) — Phase A/B code **not** live; nginx missing `app-account-token` + ASN routes; `IAP_*` env vars **MISSING** |
+| Merged | Squash **#268** → `main` **`b6c614d2dd601f61b4f28934126613fddbbada63`** (approved HEAD `7be029a9`; Asia/Jerusalem ~17:48) |
+| Production BE | **`b6c614d2`** · `/opt/fashionrise/src` · `fashionrise-api` + `fashionrise-ai-worker` **active** · `/health` ok · `/ready` database ok |
+| Production FE | **`b6c614d2`** · `/var/www/fashionrise/releases/b6c614d2-apple-iap-phase-b` · public `/version.json` matches · Vite flags: Front/Back+Magic+Dual ON, registration OFF |
+| Alembic | **`027` (head)** — upgrade `025 → 026 → 027` applied; `users.ai_stars_iap_debt`, `iap_apple_notifications`, `iap_stars_adjustments` verified |
+| Gates (prod `.env` + runtime) | `IAP_APPLE_PURCHASING_ENABLED=false` · `IAP_APPLE_CREDIT_ENABLED=false` · `IAP_ALLOW_UNVERIFIED_SANDBOX=false` (explicitly set, not missing) |
+| Status endpoint | `GET /api/v1/shop/iap/apple/status` → `purchasing_enabled=false`, `credit_enabled=false`, `verification_configured=true` (local + public) |
+| Nginx | Added exact locations: `app-account-token`, `apple/status`, `apple/notifications` (kept `confirm`/`restore`). Auth `/stars` already present |
+| Cloudflare | Public POST to ASN path returns **app** 422 for unsigned payloads (route not CF-blocked for this probe). Path-exact Access/WAF exception for Apple still recommended before ASN production URL cutover — **not** proven via Apple signed test notification |
+| Unsigned ASN | Rejected (422 validation / parse failure); **0** notification/purchase/adjustment rows; **0** bad debt rows |
+| Account-token | Unauthenticated → **401** (auth required). Authenticated smoke deferred (no paid/session exercise) |
+| Backup / rollback | `/var/backups/fashionrise/apple-iap-phase-b-268-20261110T154937Z/` · `fashionrise_beta.sql.gz` (~153MB, gzip -t ok) + custom format dump + `ROLLBACK.sh` (code/nginx/FE; **do not** auto-downgrade 027 with payment data) |
+| Prior prod tip | BE `65239732` · FE `b1dc83a7-fill-cutout-holes` |
+| Hotfixes | FE `npm ci` needed `chown` on `web-ui` after root checkout (permission); no payment-logic changes |
+| Native iOS | TestFlight IPA **not** rebuilt — Capgo/native shop UI **not** validated on device by this web deploy |
+| Outstanding App Store Connect | Paid Apps Agreement / products / ASN V2 URLs / sandbox testers / Server API key as needed |
+| Next (pending PM) | Authorize Apple notification infrastructure validation (ASC ASN URL + signed test) → controlled StoreKit sandbox with credit gate still OFF or PM-gated ON → then purchasing gate · **no** Codemagic/submit yet |
 | Docs | `docs/deploy/APPLE-STARS-IAP-PHASE-B.md` · `docs/deploy/PROPOSED-NGINX-SHOP-ALLOWLIST.md` |
-| Next (pending PM) | Review lock-order-corrected **#268** → authorize merge/deploy with gates OFF → nginx/ASN → sandbox → then credit gate → purchasing gate |
 
 ## Apple Stars IAP — Phase A (merged 2026-11-10)
 
