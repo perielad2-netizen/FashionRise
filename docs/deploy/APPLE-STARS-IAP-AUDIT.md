@@ -1,11 +1,11 @@
 # Apple Stars IAP — App Store readiness audit (2026-11-10)
 
 **Status:** Audit approved (PR **#266** squash-merged 2026-11-10).  
-**Follow-on:** Phase A implementation (JWS verify) — see project status / Phase A PR. Phase B requirements: `APPLE-STARS-IAP-PHASE-B.md`.
+**Follow-on:** Phase A (**#267**) merged to `main` `bd94f8b4` (gates OFF, not deployed). Phase B implementation: `APPLE-STARS-IAP-PHASE-B.md` + branch `cursor/apple-iap-phase-b-complete-77c6` (PM review; gates OFF).
 
-## Verdict
+## Verdict (audit-time — historical)
 
-FashionRise is **not** ready to credit Stars from Apple IAP in production. The native purchase adapter and confirm endpoint are scaffolded and fail-closed, but **Apple-signed transactions are not verified**, the **Stars shop UI does not call StoreKit**, and **refund / interrupted-confirm recovery** are missing.
+At audit time FashionRise was **not** ready to credit Stars from Apple IAP in production. Phase A/B closed the code gaps behind default-OFF gates; production enablement still requires deploy, nginx/ASN, ASC config, and PM-authorized gate activation.
 
 ## Verified findings
 

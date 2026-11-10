@@ -85,9 +85,11 @@ def apply_new_user_stars(user: User) -> None:
 
 def public_balance(user: User) -> dict[str, Any]:
     unlimited = user_has_unlimited_stars(user)
+    debt = int(getattr(user, "ai_stars_iap_debt", 0) or 0)
     return {
         "ai_stars": int(getattr(user, "ai_stars", 0) or 0),
         "ai_stars_unlimited": unlimited,
+        "ai_stars_iap_debt": debt,
         "ai_stars_magic_cost": feature_cost("magic"),
         "ai_stars_costs": cost_catalog(),
     }
@@ -113,25 +115,129 @@ def assert_can_spend(db: Session, user: User, feature: Feature | str) -> None:
 
 
 def credit_stars(db: Session, user: User, amount: int, *, reason: str = "iap") -> int:
-    """Credit Stars (e.g. after verified App Store / Play Store purchase). Returns new balance."""
+    """Credit Stars after verified purchase. Settles outstanding IAP refund debt first.
+
+    Policy: ``ai_stars`` never goes negative. ``ai_stars_iap_debt`` tracks Stars Apple
+    refunded that were already spent. New credits offset debt before increasing balance.
+    Returns the new spendable balance (not including debt).
+    """
     add = max(0, int(amount))
     if add <= 0:
         return int(getattr(user, "ai_stars", 0) or 0)
     locked = db.scalar(select(User).where(User.id == user.id).with_for_update())
     if locked is None:
         raise ForbiddenError("Account not found")
-    new_balance = int(locked.ai_stars or 0) + add
-    db.execute(update(User).where(User.id == locked.id).values(ai_stars=new_balance))
+    debt = max(0, int(getattr(locked, "ai_stars_iap_debt", 0) or 0))
+    settle = min(debt, add)
+    new_debt = debt - settle
+    remainder = add - settle
+    new_balance = int(locked.ai_stars or 0) + remainder
+    db.execute(
+        update(User)
+        .where(User.id == locked.id)
+        .values(ai_stars=new_balance, ai_stars_iap_debt=new_debt)
+    )
     locked.ai_stars = new_balance
+    locked.ai_stars_iap_debt = new_debt
     user.ai_stars = new_balance
+    user.ai_stars_iap_debt = new_debt
     _log.info(
-        "ai_stars_credited user_id=%s amount=%s remaining=%s reason=%s",
+        "ai_stars_credited user_id=%s amount=%s settle_debt=%s remaining=%s debt=%s reason=%s",
         user.id,
         add,
+        settle,
         new_balance,
+        new_debt,
         reason,
     )
     return new_balance
+
+
+def apply_iap_clawback(
+    db: Session,
+    user: User,
+    *,
+    stars_to_recover: int,
+) -> tuple[int, int, int, int]:
+    """Claw back Stars for a verified Apple refund/revoke without negative balances.
+
+    Returns ``(from_balance, added_to_debt, balance_after, debt_after)``.
+
+    Example: bought 500, spent 450, refund → claw 50 from balance, add 450 debt.
+    Future credits settle debt before becoming spendable again.
+    """
+    need = max(0, int(stars_to_recover))
+    locked = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if locked is None:
+        raise ForbiddenError("Account not found")
+    balance = int(locked.ai_stars or 0)
+    debt = max(0, int(getattr(locked, "ai_stars_iap_debt", 0) or 0))
+    from_balance = min(balance, need)
+    added_debt = need - from_balance
+    new_balance = balance - from_balance
+    new_debt = debt + added_debt
+    db.execute(
+        update(User)
+        .where(User.id == locked.id)
+        .values(ai_stars=new_balance, ai_stars_iap_debt=new_debt)
+    )
+    locked.ai_stars = new_balance
+    locked.ai_stars_iap_debt = new_debt
+    user.ai_stars = new_balance
+    user.ai_stars_iap_debt = new_debt
+    _log.info(
+        "ai_stars_iap_clawback user_id=%s need=%s from_balance=%s debt_add=%s remaining=%s debt=%s",
+        user.id,
+        need,
+        from_balance,
+        added_debt,
+        new_balance,
+        new_debt,
+    )
+    return from_balance, added_debt, new_balance, new_debt
+
+
+def restore_iap_clawback(
+    db: Session,
+    user: User,
+    *,
+    stars_to_restore: int,
+) -> tuple[int, int, int, int]:
+    """Restore Stars after verified REFUND_REVERSED (Apple reversed a prior refund).
+
+    Settles outstanding debt first, then credits remainder to balance.
+    Returns ``(debt_reduced, balance_added, balance_after, debt_after)``.
+    Never invents Stars beyond ``stars_to_restore``.
+    """
+    restore = max(0, int(stars_to_restore))
+    locked = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if locked is None:
+        raise ForbiddenError("Account not found")
+    balance = int(locked.ai_stars or 0)
+    debt = max(0, int(getattr(locked, "ai_stars_iap_debt", 0) or 0))
+    debt_reduced = min(debt, restore)
+    remainder = restore - debt_reduced
+    new_debt = debt - debt_reduced
+    new_balance = balance + remainder
+    db.execute(
+        update(User)
+        .where(User.id == locked.id)
+        .values(ai_stars=new_balance, ai_stars_iap_debt=new_debt)
+    )
+    locked.ai_stars = new_balance
+    locked.ai_stars_iap_debt = new_debt
+    user.ai_stars = new_balance
+    user.ai_stars_iap_debt = new_debt
+    _log.info(
+        "ai_stars_iap_restore user_id=%s restore=%s debt_reduced=%s balance_add=%s remaining=%s debt=%s",
+        user.id,
+        restore,
+        debt_reduced,
+        remainder,
+        new_balance,
+        new_debt,
+    )
+    return debt_reduced, remainder, new_balance, new_debt
 
 
 def debit_stars(db: Session, user: User, feature: Feature | str) -> int:

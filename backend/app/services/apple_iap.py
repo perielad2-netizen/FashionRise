@@ -1,11 +1,12 @@
-"""Apple StoreKit 2 / App Store Server API v2 transaction verification.
+"""Apple StoreKit 2 / App Store Server API v2 transaction + ASN V2 verification.
 
 Uses Apple's official ``app-store-server-library`` ``SignedDataVerifier`` to
-cryptographically verify device ``jwsRepresentation`` payloads. Stars amounts are
-never taken from the client — only from a verified ``productId``.
+cryptographically verify device ``jwsRepresentation`` payloads and App Store
+Server Notification V2 ``signedPayload`` envelopes. Stars amounts are never taken
+from the client — only from a verified ``productId``.
 
-Phase A does **not** implement App Store Server Notifications (refunds). Public
-purchasing stays behind ``IAP_APPLE_PURCHASING_ENABLED`` (default off).
+Public purchasing stays behind ``IAP_APPLE_PURCHASING_ENABLED`` (default off).
+Credit/recovery stays behind ``IAP_APPLE_CREDIT_ENABLED`` (default off).
 """
 
 from __future__ import annotations
@@ -57,6 +58,19 @@ class VerifiedAppleTransaction:
     quantity: int
     revocation_date: int | None
     in_app_ownership_type: str | None
+    raw: Any
+
+
+@dataclass(frozen=True)
+class VerifiedAppleNotification:
+    """Fields we trust after ASN V2 signedPayload verification."""
+
+    notification_uuid: str
+    notification_type: str
+    subtype: str | None
+    environment: str
+    signed_date: int | None
+    transaction: VerifiedAppleTransaction | None
     raw: Any
 
 
@@ -224,6 +238,156 @@ def _validated_payload(decoded: Any, *, expected_env: Environment) -> VerifiedAp
         in_app_ownership_type=ownership_name,
         raw=decoded,
     )
+
+
+def verify_signed_notification_payload(signed_payload: str) -> VerifiedAppleNotification:
+    """Cryptographically verify App Store Server Notification V2 signedPayload.
+
+    Nested ``signedTransactionInfo`` (when present) is verified with the same
+    root-trust path. Notification type is taken only from the verified payload.
+    """
+    token = (signed_payload or "").strip()
+    if not token or token.count(".") != 2:
+        raise ValidationAppError("Apple notification signedPayload is required")
+
+    if not apple_iap_configured():
+        raise ServiceUnavailableError("Apple IAP verification is not configured")
+
+    # Outer ASN envelope uses the same environment peek as transactions.
+    env = _environment_from_unverified_jws(token)
+    if env not in (Environment.PRODUCTION, Environment.SANDBOX):
+        raise ForbiddenError("Unsupported Apple notification environment")
+
+    verifier = _build_verifier(env)
+    try:
+        decoded = verifier.verify_and_decode_notification(token)
+    except VerificationException as exc:
+        status = getattr(exc, "status", None)
+        _log.warning("apple_asn_verify_failed status=%s", status)
+        if status == VerificationStatus.INVALID_APP_IDENTIFIER:
+            raise ForbiddenError("Apple notification app identifier mismatch") from exc
+        if status == VerificationStatus.INVALID_ENVIRONMENT:
+            raise ForbiddenError("Apple notification environment mismatch") from exc
+        raise ForbiddenError("Apple notification signature verification failed") from exc
+    except Exception as exc:  # noqa: BLE001
+        _log.exception("apple_asn_verify_unexpected")
+        raise ForbiddenError("Apple notification verification failed") from exc
+
+    n_uuid = str(getattr(decoded, "notificationUUID", None) or "").strip()
+    if not n_uuid:
+        raise ForbiddenError("Apple notification missing notificationUUID")
+
+    type_obj = getattr(decoded, "notificationType", None)
+    type_name = getattr(type_obj, "value", None) or str(
+        getattr(decoded, "rawNotificationType", None) or type_obj or ""
+    ).strip()
+    if not type_name:
+        raise ForbiddenError("Apple notification missing notificationType")
+
+    subtype_obj = getattr(decoded, "subtype", None)
+    subtype_name = None
+    if subtype_obj is not None:
+        subtype_name = getattr(subtype_obj, "value", None) or str(
+            getattr(decoded, "rawSubtype", None) or subtype_obj or ""
+        ).strip() or None
+
+    data = getattr(decoded, "data", None)
+    env_name = env.value
+    if data is not None:
+        data_env = getattr(data, "environment", None)
+        if data_env is not None:
+            env_name = getattr(data_env, "value", None) or str(data_env)
+
+    nested_txn: VerifiedAppleTransaction | None = None
+    signed_txn = getattr(data, "signedTransactionInfo", None) if data is not None else None
+    if signed_txn:
+        # Nested JWS must also pass full transaction verification (bundle/env/type).
+        # For refund notifications the nested payload may include revocationDate —
+        # allow that path via dedicated helper used only for ASN context.
+        nested_txn = verify_signed_transaction_jws_for_notification(str(signed_txn))
+
+    return VerifiedAppleNotification(
+        notification_uuid=n_uuid,
+        notification_type=type_name,
+        subtype=subtype_name,
+        environment=str(env_name),
+        signed_date=getattr(decoded, "signedDate", None),
+        transaction=nested_txn,
+        raw=decoded,
+    )
+
+
+def verify_signed_transaction_jws_for_notification(jws: str) -> VerifiedAppleTransaction:
+    """Verify nested ASN transaction JWS; revocationDate is allowed (unlike confirm)."""
+    token = (jws or "").strip()
+    if not token or token.count(".") != 2:
+        raise ValidationAppError("Apple nested transaction JWS is required")
+
+    env = _environment_from_unverified_jws(token)
+    if env not in (Environment.PRODUCTION, Environment.SANDBOX):
+        raise ForbiddenError("Unsupported Apple IAP environment")
+
+    verifier = _build_verifier(env)
+    try:
+        decoded = verifier.verify_and_decode_signed_transaction(token)
+    except VerificationException as exc:
+        status = getattr(exc, "status", None)
+        _log.warning("apple_asn_nested_jws_verify_failed status=%s", status)
+        raise ForbiddenError("Apple nested transaction signature verification failed") from exc
+    except Exception as exc:  # noqa: BLE001
+        _log.exception("apple_asn_nested_jws_unexpected")
+        raise ForbiddenError("Apple nested transaction verification failed") from exc
+
+    # Reuse field extraction but skip the revocationDate hard-fail used on confirm.
+    bundle_id = (getattr(decoded, "bundleId", None) or "").strip()
+    settings = get_settings()
+    expected_bundle = (settings.iap_apple_bundle_id or IOS_BUNDLE_ID_DEFAULT).strip()
+    if bundle_id != expected_bundle:
+        raise ForbiddenError("Apple transaction bundle id mismatch")
+
+    env_obj = getattr(decoded, "environment", None)
+    env_name = getattr(env_obj, "value", None) or str(env_obj or "")
+    if expected_env_mismatch(env, env_name):
+        raise ForbiddenError("Apple transaction environment mismatch")
+
+    txn_id = str(getattr(decoded, "transactionId", None) or "").strip()
+    original_txn = str(getattr(decoded, "originalTransactionId", None) or txn_id).strip()
+    product_id = str(getattr(decoded, "productId", None) or "").strip()
+    if not txn_id or not product_id:
+        raise ForbiddenError("Apple transaction missing id or product")
+
+    type_obj = getattr(decoded, "type", None)
+    type_name = getattr(type_obj, "value", None) or str(type_obj or "")
+    # Consumables + one-time charges are expected for Stars; ignore subscription types
+    # at the ASN handler layer rather than failing verification of nested data.
+    ownership = getattr(decoded, "inAppOwnershipType", None)
+    ownership_name = getattr(ownership, "value", None) or (str(ownership) if ownership else None)
+    revocation_date = getattr(decoded, "revocationDate", None)
+    qty = int(getattr(decoded, "quantity", None) or 1)
+    app_token = getattr(decoded, "appAccountToken", None)
+    app_token_s = str(app_token).strip() if app_token else None
+
+    return VerifiedAppleTransaction(
+        transaction_id=txn_id,
+        original_transaction_id=original_txn,
+        product_id=product_id,
+        bundle_id=bundle_id,
+        environment=env_name,
+        type=type_name,
+        app_account_token=app_token_s,
+        quantity=max(1, qty),
+        revocation_date=int(revocation_date) if revocation_date is not None else None,
+        in_app_ownership_type=ownership_name,
+        raw=decoded,
+    )
+
+
+def expected_env_mismatch(expected: Environment, env_name: str) -> bool:
+    if expected == Environment.PRODUCTION and env_name != Environment.PRODUCTION.value:
+        return True
+    if expected == Environment.SANDBOX and env_name != Environment.SANDBOX.value:
+        return True
+    return False
 
 
 def clear_apple_iap_caches() -> None:

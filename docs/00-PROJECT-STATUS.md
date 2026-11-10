@@ -3,23 +3,35 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple Stars IAP Phase A hardening** on PR **#267** — required `appAccountToken`, split purchase/credit gates, Postgres concurrency. **STOP for PM review.** No merge / deploy / enable / Codemagic / paid txns.)
+**Last updated:** 2026-11-10 (**Apple Stars IAP Phase B lock-order correction** on PR **#268** — ASN takes shared txn advisory **before** notification `FOR UPDATE`. Gates remain **OFF**. No merge / deploy / enable / Codemagic / paid txns until PM authorizes.)
 
-**Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Audit docs **#266** squash-merged → `main` **`eca770b3`**.
+**Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Audit docs **#266** squash-merged. Phase A **#267** squash-merged → `main` **`bd94f8b4`**.
 
-## Apple Stars IAP — Phase A backend verification (2026-11-10) — PM REVIEW
+## Apple Stars IAP — Phase B end-to-end (2026-11-10) — PM REVIEW
 
 | Status | Detail |
 |---|---|
-| Scope | Production-grade Apple StoreKit 2 / App Store Server Library JWS verification + idempotent Stars credit (backend only) |
-| PR | **#267** `cursor/web-iap-apple-verify-a-77c6` (do **not** merge until PM approves) |
+| Baseline `main` | **`bd94f8b4`** (Phase A #267 merged; **not** deployed to production as of 2026-11-10 preflight) |
+| Branch / PR | `cursor/apple-iap-phase-b-complete-77c6` · **#268** (do **not** merge until PM approves) |
+| Scope | ASN V2 webhook, refund/revoke/refund-reversed accounting, `ai_stars_iap_debt`, native iOS Stars shop, unfinished-txn recovery, Alembic **026+027**, nginx docs |
+| Hardening (PM) | Failed ASN UUID retry (non-2xx); `pg_advisory_xact_lock` confirm↔refund; multi-cycle REFUND after REVERSED; unmatched attach; Capgo `Transaction.updates` auto-finish documented + pending-txn hint + listener confirm |
+| Lock order (final) | Shared `pg_advisory_xact_lock(iap:ios:<txn>)` **first**, then notification / purchase / user row locks. ASN Phase 2 + failure remount take advisory **before** notification `FOR UPDATE` (avoids deadlock vs confirm attach). Receipt insert commits without cross-path locks. HEAD **`e5685377`**. Deterministic PG: inverted order → `40P01`; fixed confirm∥ASN → no deadlock / no active credited grant after prior refund. Focused suite **40 passed** (Phase A/B + harden + concurrency + lock-order) |
+| Gates | `IAP_APPLE_PURCHASING_ENABLED` + `IAP_APPLE_CREDIT_ENABLED` — **both still default OFF** (not persisted ON) |
+| Migration head (repo) | **027** (revises 026). Production still on **025** until authorized migrate |
+| Prod preflight | FE tip **`b1dc83a7`** (fill cutouts); BE tip **`65239732`** (#264) — Phase A/B code **not** live; nginx missing `app-account-token` + ASN routes; `IAP_*` env vars **MISSING** |
+| Docs | `docs/deploy/APPLE-STARS-IAP-PHASE-B.md` · `docs/deploy/PROPOSED-NGINX-SHOP-ALLOWLIST.md` |
+| Next (pending PM) | Review lock-order-corrected **#268** → authorize merge/deploy with gates OFF → nginx/ASN → sandbox → then credit gate → purchasing gate |
+
+## Apple Stars IAP — Phase A (merged 2026-11-10)
+
+| Status | Detail |
+|---|---|
+| Scope | Apple StoreKit 2 / App Store Server Library JWS verification + idempotent Stars credit |
+| Merged | Squash **#267** → `main` **`bd94f8b4`** (PM authorized merge; **no production deploy/enable**) |
 | Verify | Official `SignedDataVerifier`; Stars from **verified** `productId` only (`stars_50/150/500`) |
-| Ownership | Verified `appAccountToken` **required** and must match account — missing token rejected (no legacy bypass) |
-| Gates | `IAP_APPLE_PURCHASING_ENABLED` (new buys) and `IAP_APPLE_CREDIT_ENABLED` (confirm/reconcile) — **both default OFF**; not a production recovery bypass |
-| Safety | Production coerces `IAP_ALLOW_UNVERIFIED_SANDBOX=false`; legacy shared-secret refused; Android/web/UI unchanged |
-| Idempotency | Unique `(platform, transaction_id)` + `IntegrityError` recovery; Postgres concurrent confirm test |
-| Refunds | **Not in Phase A** — `docs/deploy/APPLE-STARS-IAP-PHASE-B.md` |
-| Next (pending PM) | Approve **#267** → Phase B ASN + shop UI → enable credit then purchasing |
+| Ownership | Verified `appAccountToken` **required** and must match account |
+| Gates | Split purchasing vs credit — both default OFF |
+| Idempotency | Unique `(platform, transaction_id)` + Postgres concurrent confirm test |
 
 Audit archive: `docs/deploy/APPLE-STARS-IAP-AUDIT.md` (merged via **#266**).
 

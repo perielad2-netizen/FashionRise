@@ -1,4 +1,4 @@
-"""Stars shop — packages catalog + cart + store IAP confirm."""
+"""Stars shop — packages catalog + cart + store IAP confirm + Apple ASN V2."""
 
 from typing import Any, Literal
 
@@ -7,9 +7,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import CurrentUser
+from app.core.errors import ForbiddenError, ServiceUnavailableError, ValidationAppError
 from app.core.rate_limit import limiter
 from app.db.session import get_db
-from app.services import iap_service, stars_shop
+from app.services import apple_asn, iap_service, stars_shop
 
 router = APIRouter()
 
@@ -26,6 +27,12 @@ class IapConfirmBody(BaseModel):
     purchase_token: str | None = None
     receipt: str | None = None
     jws: str | None = None
+
+
+class AppleAsnBody(BaseModel):
+    """App Store Server Notifications V2 envelope (Apple field name: signedPayload)."""
+
+    signedPayload: str = Field(min_length=1, max_length=apple_asn.MAX_SIGNED_PAYLOAD_CHARS)
 
 
 @router.get("/packages")
@@ -93,9 +100,17 @@ def get_iap_app_account_token(
     request: Request,
     user: CurrentUser,
 ) -> dict[str, Any]:
-    """Opaque StoreKit appAccountToken UUID for the signed-in account (Phase A)."""
+    """Opaque StoreKit appAccountToken UUID for the signed-in account."""
     _ = request.url
     return iap_service.app_account_token_payload(user)
+
+
+@router.get("/iap/apple/status")
+@limiter.limit("60/minute")
+def get_apple_iap_status(request: Request) -> dict[str, Any]:
+    """Native shop gate/config status (no auth; no secrets)."""
+    _ = request.url
+    return iap_service.apple_shop_status()
 
 
 @router.post("/iap/confirm")
@@ -129,3 +144,25 @@ def restore_iap_purchases(
     _ = request.url
     _ = user
     return iap_service.restore_placeholder()
+
+
+@router.post("/iap/apple/notifications")
+@limiter.limit("120/minute")
+def apple_iap_notifications(
+    request: Request,
+    body: AppleAsnBody,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """App Store Server Notifications V2 webhook.
+
+    No FashionRise user session. Authenticated solely by Apple JWS verification.
+    Invalid signatures → 403. Transient processing errors → 503 so Apple retries.
+    """
+    _ = request.url
+    try:
+        return apple_asn.process_apple_notification(db, signed_payload=body.signedPayload)
+    except (ValidationAppError, ForbiddenError, ServiceUnavailableError):
+        raise
+    except Exception:
+        # Transient — Apple retries on non-2xx.
+        raise ServiceUnavailableError("Apple notification processing temporarily unavailable")

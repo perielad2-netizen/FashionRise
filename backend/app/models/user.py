@@ -38,6 +38,11 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # AI Stars wallet — spend gate for Magic / future AI features.
     ai_stars: Mapped[int] = mapped_column(Integer, default=10, nullable=False, server_default="10")
+    # Outstanding Apple IAP refund liability (Stars already spent that Apple refunded).
+    # Balance never goes negative; future credits settle debt first. Default 0.
+    ai_stars_iap_debt: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0"
+    )
     ai_stars_unlimited: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default="false"
     )

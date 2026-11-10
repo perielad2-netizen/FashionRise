@@ -21,6 +21,7 @@ import {
   type User,
 } from '@/services/auth/authApi'
 import { tokenStore } from '@/services/auth/tokenStore'
+import { isNativeIosStarsShop, recoverPendingStarsPurchases } from '@/services/native/iap'
 
 type AuthState = {
   user: User | null
@@ -102,6 +103,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Shared AI default tiles are public; warm them once a session is alive.
     if (user?.id) void preloadDefaultFabricTiles()
   }, [user?.id])
+
+  // After sign-in, attempt bounded Apple unfinished-txn recovery for this account only.
+  // Account switches clear user first (login/register), so prior recovery cannot credit the new session.
+  useEffect(() => {
+    if (!user?.id || bootstrapping || !isNativeIosStarsShop()) return
+    let cancelled = false
+    void recoverPendingStarsPurchases()
+      .then((out) => {
+        if (cancelled || out.recovered <= 0) return
+        return fetchMe().then((me) => {
+          if (!cancelled) setUser(me)
+        })
+      })
+      .catch(() => {
+        /* recovery is best-effort */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, bootstrapping])
 
   const value = useMemo<AuthState>(
     () => ({
