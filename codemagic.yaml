@@ -78,6 +78,9 @@ workflows:
       - name: Sync Capacitor iOS project
         script: |
           npx cap sync ios
+          # Fail closed: committed Cap gitignore means native JSON is generated at sync.
+          # Rewrite/assert contentInset never so TestFlight never double-pads under status bar.
+          node scripts/assert-ios-capacitor-content-inset.mjs
 
       - name: Install CocoaPods
         script: |

@@ -16,6 +16,13 @@
   overflow: hidden;
 }
 
+/* Native iOS: sheet is edge-to-edge (no dark band under status bar).
+   Safe-area is applied as panel padding so the gradient fills the notch. */
+:global(html.fr-native-shell) .overlay {
+  place-items: stretch;
+  padding: 0;
+}
+
 .panel {
   width: min(920px, 100%);
   /* Prefer small viewport height so expanding mobile chrome cannot bury the footer */
@@ -195,28 +202,29 @@
 .stage {
   position: relative;
   flex: 1 1 auto;
-  /* Bound height inside the flex panel so object-fit can shrink the preview
-     instead of overflowing and clipping the head/hem (#180 owner report). */
-  min-height: 160px;
-  max-height: min(64dvh, 640px);
+  /* Definite height (not only max-height): absolute + contain needs a real box.
+     Intrinsic-height <img> + overflow:hidden was cropping head/feet on iOS. */
+  min-height: min(42dvh, 360px);
+  height: min(58dvh, 640px);
+  max-height: min(58dvh, 640px);
   border-radius: 14px;
   overflow: hidden;
   background:
     radial-gradient(ellipse 70% 50% at 30% 20%, rgba(236, 72, 153, 0.12), transparent 60%),
     #0b1220;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
 }
 
 .image,
 .sketchPreview {
-  /* Fill the stage box; contain keeps the full person visible (no CSS crop). */
+  /* Absolute fill + contain: full figure visible (letterbox if needed). */
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  max-width: 100%;
-  max-height: 100%;
+  max-width: none;
+  max-height: none;
   object-fit: contain;
   object-position: center center;
   display: block;
@@ -448,8 +456,27 @@
     border-radius: 14px;
   }
 
+  :global(html.fr-native-shell) .panel {
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    width: 100%;
+    /* Paint under the status bar; keep title/actions clear of the notch. */
+    padding-top: max(10px, env(safe-area-inset-top, 0px));
+  }
+
+  :global(html.fr-native-shell) .stage {
+    /* Use remaining flex space on the full-height native sheet. */
+    height: auto;
+    max-height: none;
+    min-height: min(40dvh, 280px);
+    flex: 1 1 auto;
+  }
+
   .stage {
-    min-height: 120px;
+    min-height: min(36dvh, 280px);
+    height: min(52dvh, 560px);
+    max-height: min(52dvh, 560px);
   }
 
   .details {
