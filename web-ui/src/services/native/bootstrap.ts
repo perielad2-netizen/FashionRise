@@ -1,7 +1,11 @@
 import { App } from '@capacitor/app'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { SplashScreen } from '@capacitor/splash-screen'
-import { isNativeIosStarsShop, recoverPendingStarsPurchases } from './iap'
+import {
+  isNativeIosStarsShop,
+  recoverPendingStarsPurchases,
+  startIapTransactionUpdateRecovery,
+} from './iap'
 import { isNativeShell } from './platform'
 
 /** Soften native chrome once the SPA mounts. Safe no-op on web. */
@@ -29,6 +33,7 @@ export async function bootstrapNativeShell(): Promise<void> {
 
   // Bounded Apple Stars recovery on resume (cooldown + credit gate inside recover).
   if (isNativeIosStarsShop()) {
+    void startIapTransactionUpdateRecovery()
     void App.addListener('appStateChange', ({ isActive }) => {
       if (!isActive) return
       void recoverPendingStarsPurchases().catch(() => {

@@ -63,16 +63,50 @@ On `REFUND_REVERSED`: restore previously clawed amount only (debt first, then ba
 
 Localized prices come from StoreKit only — never hardcode as the displayed App Store price.
 
-## Database (Alembic **026**)
+## Database (Alembic **026** + **027**)
 
-Revises **025**. Adds:
+**026** revises **025**. Adds:
 
 - `users.ai_stars_iap_debt`
 - `iap_purchases`: `original_transaction_id`, `environment`, `status`, `stars_clawed_back`, `stars_restored`, `updated_at`
 - `iap_apple_notifications`
 - `iap_stars_adjustments`
 
+**027** (hardening): unique adjustment per `notification_id` (allows REFUND after REFUND_REVERSED); `signed_date_ms` on notifications.
+
 Downgrade drops Phase B structures. If production has live refund rows, prefer **backup + forward-fix** over downgrade.
+
+## Concurrency strategy
+
+Confirm and ASN both take PostgreSQL `pg_advisory_xact_lock(ns, crc32(iap:ios:<txn>))` **before** mutating purchases/wallets.
+
+Lock order (deadlock-safe):
+
+1. advisory(transaction_id)
+2. `iap_purchases` `FOR UPDATE`
+3. `users` `FOR UPDATE`
+
+After any conflict, reload authoritative rows — never trust pre-lock ORM state.
+
+## ASN retry guarantees
+
+| State | Apple redelivery |
+|---|---|
+| `applied` / `ignored` | Idempotent 2xx |
+| `unmatched` / `needs_reconciliation` | Re-evaluate under lock; 2xx when parked |
+| `failed` / stale `processing` | Retry apply; success → 2xx; still failing → **503** |
+| Receipt insert | Committed **before** apply so crashes cannot erase the UUID |
+
+## Capgo / StoreKit recovery (plugin 7.19.3)
+
+Verified in plugin sources:
+
+- `purchaseProduct({ autoAcknowledgePurchases: false })` skips finish in the purchase path.
+- Capgo’s `Transaction.updates` listener **still auto-finishes** verified updates before `transactionUpdated`.
+- `getPurchases()` uses StoreKit `Transaction.all` (+ entitlements) and supports `appAccountToken` filter; includes `jwsRepresentation`.
+- `acknowledgePurchase` finishes by transaction id; “already finished” is treated as success.
+
+Client mitigations: session pending transaction-id hint (no raw JWS), `transactionUpdated` confirm, resume/login recovery. If history + hint both miss a charged consumable, support reconciliation via ASN / App Store Server API (gated; not enabled here).
 
 ## Nginx / Cloudflare
 

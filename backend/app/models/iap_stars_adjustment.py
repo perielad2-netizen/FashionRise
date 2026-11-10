@@ -6,15 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import (
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-    func,
-)
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,24 +19,14 @@ if TYPE_CHECKING:
 
 
 class IapStarsAdjustment(Base):
-    """One financial adjustment per (purchase, kind) — replay-safe clawback / restore."""
+    """Financial adjustment for one Apple notification (or internal reconcile).
+
+    Uniqueness is enforced on ``notification_id`` (partial unique index) so a
+    single ASN UUID can never adjust the wallet twice, while a later REFUND
+    after REFUND_REVERSED may create a new row under a new notification.
+    """
 
     __tablename__ = "iap_stars_adjustments"
-    __table_args__ = (
-        # Same refund/revoke/restore cannot apply twice for one purchase, even under
-        # distinct Apple notification UUIDs.
-        UniqueConstraint(
-            "iap_purchase_id",
-            "adjustment_kind",
-            name="uq_iap_stars_adjustments_purchase_kind",
-        ),
-        UniqueConstraint(
-            "platform",
-            "transaction_id",
-            "adjustment_kind",
-            name="uq_iap_stars_adjustments_platform_txn_kind",
-        ),
-    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -73,6 +55,6 @@ class IapStarsAdjustment(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    user: Mapped[User] = relationship()
-    purchase: Mapped[IapPurchase] = relationship()
-    notification: Mapped[IapAppleNotification | None] = relationship()
+    user: Mapped["User"] = relationship()
+    purchase: Mapped["IapPurchase"] = relationship()
+    notification: Mapped["IapAppleNotification | None"] = relationship()

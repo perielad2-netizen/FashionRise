@@ -1,12 +1,21 @@
 /**
  * Stars In-App Purchase adapter (Apple StoreKit / Google Play Billing).
  *
- * iOS (Capacitor native shell):
+ * iOS (Capacitor + @capgo/native-purchases 7.19.3):
  * - Load localized products from StoreKit
  * - Purchase with server-issued appAccountToken
  * - Confirm with StoreKit 2 jwsRepresentation (server verifies + credits)
- * - Finish/acknowledge only after durable backend acceptance
- * - Bounded unfinished-txn recovery via getPurchases({ appAccountToken })
+ * - Prefer autoAcknowledgePurchases:false and acknowledge after backend accept
+ *
+ * Capgo limitation (verified in plugin sources):
+ * - `Transaction.updates` listener **auto-finishes** verified transactions before
+ *   emitting `transactionUpdated`. Consumables may therefore leave the unfinished
+ *   queue even when purchaseProduct used autoAcknowledgePurchases:false.
+ * - Recovery still uses `getPurchases()` → StoreKit `Transaction.all` (includes
+ *   history with jwsRepresentation) filtered by appAccountToken, plus a
+ *   session-scoped pending transaction-id hint (never stores raw JWS).
+ * - If Apple history omits a finished consumable and our pending hint is gone,
+ *   support reconciliation via ASN + App Store Server API is required (gated).
  *
  * Android: adapter present but purchasing stays gated off (Play verification staged).
  * Web: this module is a no-op; StarsShopModal keeps the web cart UX.
@@ -14,6 +23,8 @@
 import { NativePurchases, PURCHASE_TYPE, type Transaction } from '@capgo/native-purchases'
 import { ApiError, apiRequest } from '@/services/api/client'
 import { isNativeShell, nativePlatform } from './platform'
+
+const PENDING_TXN_KEY = 'fr.iap.pendingTxn.v1'
 
 export type StarsIapProduct = {
   productId: string
@@ -153,14 +164,51 @@ async function confirmTransaction(transaction: Transaction, productId: string): 
 
 async function finishTransaction(transaction: Transaction): Promise<void> {
   // Capgo: acknowledgePurchase finishes StoreKit 2 transactions when
-  // autoAcknowledgePurchases was false. Safe no-op if already finished.
+  // autoAcknowledgePurchases was false. Capgo Transaction.updates may already
+  // have finished it — treat "not found / already finished" as success.
   try {
     const token = String(transaction.purchaseToken || transaction.transactionId || '')
     if (!token) return
     await NativePurchases.acknowledgePurchase({ purchaseToken: token })
   } catch {
-    /* already finished / unsupported — recovery path handles leftovers */
+    /* already finished by Capgo updates listener — confirm already durable */
   }
+}
+
+type PendingTxnHint = {
+  transactionId: string
+  productId: string
+  appAccountToken: string
+  at: number
+}
+
+function readPendingHints(): PendingTxnHint[] {
+  try {
+    const raw = sessionStorage.getItem(PENDING_TXN_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as PendingTxnHint[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writePendingHints(hints: PendingTxnHint[]): void {
+  try {
+    sessionStorage.setItem(PENDING_TXN_KEY, JSON.stringify(hints.slice(-8)))
+  } catch {
+    /* private mode / unavailable */
+  }
+}
+
+function rememberPendingTxn(hint: PendingTxnHint): void {
+  const rest = readPendingHints().filter((h) => h.transactionId !== hint.transactionId)
+  rest.push(hint)
+  writePendingHints(rest)
+}
+
+function clearPendingTxn(transactionId: string): void {
+  writePendingHints(readPendingHints().filter((h) => h.transactionId !== transactionId))
 }
 
 /**
@@ -217,9 +265,18 @@ export async function purchaseStarsPack(productId: string): Promise<{
       productIdentifier: productId,
       productType: PURCHASE_TYPE.INAPP,
       appAccountToken,
-      // Finish only after durable backend credit (or explicit blocked/already_processed).
+      // Prefer manual finish; Capgo Transaction.updates may still auto-finish.
       autoAcknowledgePurchases: false,
     })
+
+    if (transaction.transactionId) {
+      rememberPendingTxn({
+        transactionId: String(transaction.transactionId),
+        productId,
+        appAccountToken,
+        at: Date.now(),
+      })
+    }
 
     if (!transaction.jwsRepresentation) {
       return {
@@ -234,6 +291,7 @@ export async function purchaseStarsPack(productId: string): Promise<{
       const result = await confirmTransaction(transaction, productId)
       // Finish after durable acceptance (credit, already processed, or blocked refund).
       await finishTransaction(transaction)
+      if (transaction.transactionId) clearPendingTxn(String(transaction.transactionId))
       if (result.blocked) {
         return {
           result,
@@ -316,6 +374,14 @@ export async function recoverPendingStarsPurchases(): Promise<{
     }
 
     const appAccountToken = await fetchAppAccountToken()
+    // Drop pending hints that belong to a different signed-in account.
+    writePendingHints(
+      readPendingHints().filter(
+        (h) => h.appAccountToken.toLowerCase() === appAccountToken.toLowerCase(),
+      ),
+    )
+    const pendingIds = new Set(readPendingHints().map((h) => h.transactionId))
+
     const { purchases } = await NativePurchases.getPurchases({
       productType: PURCHASE_TYPE.INAPP,
       appAccountToken,
@@ -323,41 +389,54 @@ export async function recoverPendingStarsPurchases(): Promise<{
 
     let recovered = 0
     let attempted = 0
+    let pendingStillMissing = 0
+    const seen = new Set<string>()
+
     for (const purchase of purchases || []) {
       const productId = purchase.productIdentifier || ''
       if (!STARS_IAP_PRODUCTS.some((p) => p.productId === productId)) continue
       if (!purchase.jwsRepresentation) continue
-      // Skip transactions bound to a different account token when present.
       const txnToken = (purchase.appAccountToken || '').trim()
       if (txnToken && txnToken.toLowerCase() !== appAccountToken.toLowerCase()) continue
 
+      const txnId = String(purchase.transactionId || '')
+      seen.add(txnId)
       attempted += 1
       try {
         const result = await confirmTransaction(purchase, productId)
         await finishTransaction(purchase)
+        if (txnId) clearPendingTxn(txnId)
         if (!result.blocked && (result.stars_credited > 0 || result.already_processed)) {
           recovered += 1
         }
       } catch {
-        /* leave unfinished for a later bounded retry */
+        /* leave for a later bounded retry / support */
       }
     }
 
-    // Handshake with backend restore endpoint (does not credit).
+    for (const id of pendingIds) {
+      if (!seen.has(id)) pendingStillMissing += 1
+    }
+
     try {
       await apiRequest<{ restored: number }>('/shop/iap/restore', { method: 'POST', body: {} })
     } catch {
       /* ignore */
     }
 
+    const supportNote =
+      pendingStillMissing > 0 && recovered === 0
+        ? ' A recent App Store purchase may need support reconciliation if Stars do not appear.'
+        : ''
+
     return {
       recovered,
       attempted,
-      state: recovered > 0 ? 'success' : 'idle',
+      state: recovered > 0 ? 'success' : pendingStillMissing > 0 ? 'recovery_required' : 'idle',
       message:
         recovered > 0
           ? `Recovered ${recovered} Stars purchase${recovered === 1 ? '' : 's'}.`
-          : undefined,
+          : supportNote.trim() || undefined,
     }
   } catch (err) {
     return {
@@ -368,6 +447,49 @@ export async function recoverPendingStarsPurchases(): Promise<{
     }
   } finally {
     recoveryInFlight = false
+  }
+}
+
+let updatesListenerStarted = false
+
+/**
+ * Listen for Capgo transactionUpdated (fired after Capgo auto-finish).
+ * Confirms with backend when credit gate is on and token matches.
+ */
+export async function startIapTransactionUpdateRecovery(): Promise<void> {
+  if (!isNativeIosStarsShop() || updatesListenerStarted) return
+  updatesListenerStarted = true
+  try {
+    await NativePurchases.addListener('transactionUpdated', (transaction) => {
+      void (async () => {
+        try {
+          const status = await fetchAppleIapStatus()
+          if (!status.credit_enabled) return
+          const productId = transaction.productIdentifier || ''
+          if (!STARS_IAP_PRODUCTS.some((p) => p.productId === productId)) return
+          if (!transaction.jwsRepresentation) return
+          const appAccountToken = await fetchAppAccountToken()
+          const txnToken = (transaction.appAccountToken || '').trim()
+          if (txnToken && txnToken.toLowerCase() !== appAccountToken.toLowerCase()) {
+            return
+          }
+          if (transaction.transactionId) {
+            rememberPendingTxn({
+              transactionId: String(transaction.transactionId),
+              productId,
+              appAccountToken,
+              at: Date.now(),
+            })
+          }
+          await confirmTransaction(transaction, productId)
+          if (transaction.transactionId) clearPendingTxn(String(transaction.transactionId))
+        } catch {
+          /* recovery loop / shop open will retry */
+        }
+      })()
+    })
+  } catch {
+    updatesListenerStarted = false
   }
 }
 

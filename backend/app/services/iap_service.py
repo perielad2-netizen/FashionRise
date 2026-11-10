@@ -192,7 +192,17 @@ def _confirm_apple(
 
     _assert_app_account_token_owns_transaction(user, verified)
 
-    # ASN takeback arrived before confirm → never credit; record blocked purchase.
+    # Shared with ASN: serialize confirm vs refund before any wallet mutation.
+    apple_asn.lock_apple_transaction(db, verified.transaction_id)
+
+    # Reload authoritative purchase after the lock (never trust pre-lock state).
+    existing = _find_purchase(
+        db, platform="ios", transaction_id=verified.transaction_id
+    )
+    if existing is not None:
+        return _idempotent_or_conflict(db, user, existing)
+
+    # Any durable REFUND/REVOKE for this txn blocks first-time credit.
     pending_takeback = apple_asn.pending_takeback_for_transaction(
         db, transaction_id=verified.transaction_id
     )
@@ -269,7 +279,11 @@ def _persist_blocked_after_prior_refund(
     verified: apple_iap.VerifiedAppleTransaction,
     notification: Any,
 ) -> dict[str, Any]:
-    """Refund/revoke ASN beat confirm — create blocked row, zero Stars credit."""
+    """Refund/revoke ASN beat confirm — create blocked row, zero Stars credit.
+
+    Caller holds ``lock_apple_transaction``. Uses a savepoint so an IntegrityError
+    does not release the advisory lock via full rollback.
+    """
     existing = _find_purchase(db, platform="ios", transaction_id=verified.transaction_id)
     if existing is not None:
         return _idempotent_or_conflict(db, user, existing)
@@ -287,27 +301,41 @@ def _persist_blocked_after_prior_refund(
         stars_clawed_back=0,
         stars_restored=0,
     )
-    db.add(row)
     try:
-        db.flush()
+        _flush_purchase_row(db, row)
     except IntegrityError:
-        db.rollback()
-        existing = _find_purchase(db, platform="ios", transaction_id=verified.transaction_id)
+        if not hasattr(db, "begin_nested"):
+            db.rollback()
+        existing = _find_purchase(
+            db, platform="ios", transaction_id=verified.transaction_id
+        )
         if existing is None:
             raise
         return _idempotent_or_conflict(db, user, existing)
 
-    # Attach unmatched notification to this purchase for audit.
+    # Lock user after purchase insert (lock order: advisory → purchase → user).
+    locked_user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if locked_user is None:
+        raise ForbiddenError("Account not found")
+
     try:
         notification.iap_purchase_id = row.id
         notification.user_id = user.id
-        if notification.processing_state == "unmatched":
+        if notification.processing_state in (
+            "unmatched",
+            "failed",
+            "processing",
+            "needs_reconciliation",
+        ):
             notification.processing_state = "applied"
         notification.audit_meta = {
             **(notification.audit_meta or {}),
             "policy": "blocked_on_confirm_after_prior_takeback",
             "would_have_credited": stars,
         }
+        apple_asn.attach_unmatched_takebacks_to_purchase(
+            db, purchase=row, user=locked_user
+        )
     except Exception:  # noqa: BLE001
         _log.exception("apple_asn_attach_blocked_failed")
 
@@ -341,6 +369,10 @@ def _persist_credit(
     original_transaction_id: str | None = None,
     environment: str | None = None,
 ) -> dict[str, Any]:
+    """Insert purchase + credit under caller's advisory lock (iOS) / uniqueness.
+
+    Uses savepoints so IntegrityError recovery does not drop advisory locks.
+    """
     existing = _find_purchase(db, platform=platform, transaction_id=transaction_id)
     if existing is not None:
         return _idempotent_or_conflict(db, user, existing)
@@ -357,19 +389,27 @@ def _persist_credit(
         stars_clawed_back=0,
         stars_restored=0,
     )
-    db.add(row)
     try:
-        # Flush to surface unique violations before wallet credit when possible.
-        db.flush()
+        _flush_purchase_row(db, row)
     except IntegrityError:
-        db.rollback()
+        if not hasattr(db, "begin_nested"):
+            db.rollback()
         existing = _find_purchase(db, platform=platform, transaction_id=transaction_id)
         if existing is None:
             raise
         return _idempotent_or_conflict(db, user, existing)
 
     try:
-        balance = ai_stars.credit_stars(db, user, stars, reason=f"iap:{platform}:{product_id}")
+        balance = ai_stars.credit_stars(
+            db, user, stars, reason=f"iap:{platform}:{product_id}"
+        )
+        if platform == "ios":
+            apple_asn.attach_unmatched_takebacks_to_purchase(
+                db, purchase=row, user=user
+            )
+            db.refresh(row)
+            if row.status in _TAKEBACK_STATUSES and int(row.stars_credited or 0) > 0:
+                balance = int(getattr(user, "ai_stars", 0) or 0)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -378,7 +418,6 @@ def _persist_credit(
             raise
         return _idempotent_or_conflict(db, user, existing)
 
-    # Refresh user balance after commit
     db.refresh(user)
     _log.info(
         "iap_confirmed user_id=%s platform=%s product=%s stars=%s txn_suffix=%s",
@@ -389,13 +428,29 @@ def _persist_credit(
         transaction_id[-12:],
     )
     return {
-        "stars_credited": stars,
+        "stars_credited": stars if row.status == STATUS_ACTIVE else 0,
         "already_processed": False,
-        "ai_stars": balance,
+        "blocked": row.status in _TAKEBACK_STATUSES,
+        "status": row.status,
+        "ai_stars": int(getattr(user, "ai_stars", 0) or balance),
         "ai_stars_iap_debt": int(getattr(user, "ai_stars_iap_debt", 0) or 0),
         "product_id": product_id,
         "transaction_id": transaction_id,
     }
+
+
+def _flush_purchase_row(db: Session, row: IapPurchase) -> None:
+    """Flush a new purchase row; prefer savepoint when the session supports it."""
+    if hasattr(db, "begin_nested"):
+        try:
+            with db.begin_nested():
+                db.add(row)
+                db.flush()
+            return
+        except AttributeError:
+            pass
+    db.add(row)
+    db.flush()
 
 
 def _find_purchase(db: Session, *, platform: str, transaction_id: str) -> IapPurchase | None:

@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    BigInteger,
     DateTime,
     ForeignKey,
     Integer,
@@ -38,12 +39,13 @@ class IapAppleNotification(Base):
     notification_type: Mapped[str] = mapped_column(String(64), nullable=False)
     subtype: Mapped[str | None] = mapped_column(String(64), nullable=True)
     environment: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    signed_date_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # Verified nested transaction fields (never trust client claims).
     transaction_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     original_transaction_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     product_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     app_account_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # processing | applied | ignored | unmatched | failed
+    # processing | applied | ignored | unmatched | failed | needs_reconciliation
     processing_state: Mapped[str] = mapped_column(String(32), nullable=False, default="processing")
     processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)

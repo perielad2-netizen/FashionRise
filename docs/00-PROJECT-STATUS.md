@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple Stars IAP Phase B** complete for PM review — ASN V2, refund liability, native iOS shop + recovery. Gates remain **OFF**. No merge / deploy / enable / Codemagic / paid txns until PM authorizes.)
+**Last updated:** 2026-11-10 (**Apple Stars IAP Phase B hardening** on PR **#268** — ASN failed-UUID retry, confirm↔refund advisory locks, refund cycles, Capgo recovery limits. Gates remain **OFF**. No merge / deploy / enable / Codemagic / paid txns until PM authorizes.)
 
 **Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Audit docs **#266** squash-merged. Phase A **#267** squash-merged → `main` **`bd94f8b4`**.
 
@@ -13,12 +13,13 @@
 |---|---|
 | Baseline `main` | **`bd94f8b4`** (Phase A #267 merged; **not** deployed to production as of 2026-11-10 preflight) |
 | Branch / PR | `cursor/apple-iap-phase-b-complete-77c6` · **#268** (do **not** merge until PM approves) |
-| Scope | ASN V2 webhook, refund/revoke/refund-reversed accounting, `ai_stars_iap_debt`, native iOS Stars shop, unfinished-txn recovery, Alembic **026**, nginx docs |
+| Scope | ASN V2 webhook, refund/revoke/refund-reversed accounting, `ai_stars_iap_debt`, native iOS Stars shop, unfinished-txn recovery, Alembic **026+027**, nginx docs |
+| Hardening (PM) | Failed ASN UUID retry (non-2xx); `pg_advisory_xact_lock` confirm↔refund; multi-cycle REFUND after REVERSED; unmatched attach; Capgo `Transaction.updates` auto-finish documented + pending-txn hint + listener confirm |
 | Gates | `IAP_APPLE_PURCHASING_ENABLED` + `IAP_APPLE_CREDIT_ENABLED` — **both still default OFF** (not persisted ON) |
-| Migration head (repo) | **026** (revises 025). Production still on **025** until authorized migrate |
+| Migration head (repo) | **027** (revises 026). Production still on **025** until authorized migrate |
 | Prod preflight | FE tip **`b1dc83a7`** (fill cutouts); BE tip **`65239732`** (#264) — Phase A/B code **not** live; nginx missing `app-account-token` + ASN routes; `IAP_*` env vars **MISSING** |
 | Docs | `docs/deploy/APPLE-STARS-IAP-PHASE-B.md` · `docs/deploy/PROPOSED-NGINX-SHOP-ALLOWLIST.md` |
-| Next (pending PM) | Review PR → authorize merge/deploy with gates OFF → nginx/ASN → sandbox → then credit gate → purchasing gate |
+| Next (pending PM) | Review hardened **#268** → authorize merge/deploy with gates OFF → nginx/ASN → sandbox → then credit gate → purchasing gate |
 
 ## Apple Stars IAP — Phase A (merged 2026-11-10)
 
