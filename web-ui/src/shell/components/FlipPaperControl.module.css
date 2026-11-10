@@ -4,9 +4,9 @@
   right: 10px;
   z-index: 6;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
   padding: 3px;
+  gap: 2px;
   border-radius: 999px;
   background: rgba(255, 252, 247, 0.92);
   border: 1px solid rgba(28, 28, 30, 0.1);
@@ -23,94 +23,79 @@
   padding: 2px;
 }
 
-.flipBtn {
+.seg,
+.segActive {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
   min-width: 44px;
-  min-height: 44px;
+  min-height: 36px;
   margin: 0;
-  padding: 0;
+  padding: 0 12px;
   border: none;
   border-radius: 999px;
-  background: rgba(214, 51, 132, 0.1);
-  color: #9d174d;
+  background: transparent;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   cursor: pointer;
   transition:
     background 160ms ease,
-    transform 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    transform 120ms ease;
 }
 
-.compact .flipBtn {
-  width: 44px;
-  height: 44px;
+.compact .seg,
+.compact .segActive {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 10px;
 }
 
-.flipBtn:hover {
-  background: rgba(214, 51, 132, 0.18);
+.seg:hover {
+  background: rgba(214, 51, 132, 0.08);
+  color: #9d174d;
 }
 
-.flipBtn:focus-visible {
+.seg:focus-visible,
+.segActive:focus-visible {
   outline: 2px solid #d63384;
   outline-offset: 2px;
 }
 
-.flipBtn:active {
-  transform: scale(0.96);
+.seg:active {
+  transform: scale(0.97);
 }
 
-.unavailable .flipBtn {
+.segActive {
+  background: rgba(214, 51, 132, 0.16);
+  color: #9d174d;
+  box-shadow: inset 0 0 0 1px rgba(214, 51, 132, 0.28);
+}
+
+.segDisabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.segDisabled:hover {
   background: rgba(60, 60, 67, 0.08);
-  color: #6b7280;
+  color: #9ca3af;
 }
 
-.unavailable .flipBtn:hover {
-  background: rgba(60, 60, 67, 0.12);
+.unavailable .segActive {
+  background: rgba(60, 60, 67, 0.1);
+  color: #4b5563;
+  box-shadow: none;
 }
 
-.paperCue {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  pointer-events: none;
-}
-
-.paperFront,
-.paperBack {
-  display: block;
-}
-
-/* Subtle control-only cue — never transforms the drawing paper or strokes. */
-.animating .flipBtn {
-  animation: flipIconSpin 420ms ease-out;
-}
-
-@keyframes flipIconSpin {
-  0% {
-    transform: rotate(0deg);
-  }
-  55% {
-    transform: rotate(160deg);
-  }
-  100% {
-    transform: rotate(180deg);
-  }
-}
-
-/* Immersive dark paper: keep the control readable over cream or dark stage. */
 :global([data-immersive='true']) .wrap {
   background: rgba(255, 252, 247, 0.94);
 }
 
-/*
- * Narrow paper width (actual cream frame, not viewport): tuck the icon-only
- * flip control; touch target stays ≥44×44 so Flip never crowds Full Screen.
- */
 @container studio-paper (max-width: 420px) {
   .wrap:not(.compact) {
     top: 7px;
@@ -118,9 +103,11 @@
     padding: 2px;
   }
 
-  .wrap:not(.compact) .flipBtn {
-    width: 44px;
-    height: 44px;
+  .wrap:not(.compact) .seg,
+  .wrap:not(.compact) .segActive {
+    min-width: 40px;
+    padding: 0 10px;
+    font-size: 10px;
   }
 }
 
@@ -128,6 +115,5 @@
   .wrap:not(.compact) {
     top: 4px;
     right: 4px;
-    padding: 2px;
   }
 }

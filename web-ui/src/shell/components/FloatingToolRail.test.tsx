@@ -20,5 +20,24 @@ describe('FloatingToolRail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Eyedropper' }))
     expect(onTool).toHaveBeenCalledWith('eyedropper')
     expect(screen.queryByText(/coming/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Clear canvas' })).toBeNull()
+  })
+
+  it('exposes Clear canvas when onClear is provided', () => {
+    const onClear = vi.fn()
+    render(
+      <FloatingToolRail
+        tool="draw"
+        canUndo
+        canRedo
+        onTool={vi.fn()}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        onClear={onClear}
+        canClear
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Clear canvas' }))
+    expect(onClear).toHaveBeenCalledTimes(1)
   })
 })

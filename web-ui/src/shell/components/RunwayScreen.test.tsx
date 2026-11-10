@@ -269,6 +269,18 @@ describe('RunwayScreen', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /Friend circle look/i })).toBeNull())
   })
 
+  it('Escape closes chat first while My circle sheet stays open', async () => {
+    listGalleryComments.mockResolvedValue([])
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const circle = await openCircleSheet()
+    fireEvent.click(within(circle).getByRole('button', { name: /Chat/i }))
+    const dialog = await screen.findByRole('dialog', { name: /Friend circle look/i })
+    expect(dialog).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Friend circle look/i })).toBeNull())
+    expect(screen.getByRole('dialog', { name: /My circle/i })).toBeInTheDocument()
+  })
+
   it('does not let you like or score your own look', async () => {
     listGallery.mockImplementation(async (opts?: { sort?: string }) => {
       if (opts?.sort === 'top10') return []

@@ -802,14 +802,17 @@ function RunwayCard({
   useEffect(() => {
     if (!commentsOpen) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeComments()
+      if (event.key !== 'Escape') return
+      // Capture phase + stop so the browse sheet Escape handler does not also close.
+      event.stopImmediatePropagation()
+      closeComments()
     }
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
     return () => {
       document.body.style.overflow = prevOverflow
-      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onKey, true)
     }
   }, [closeComments, commentsOpen])
 

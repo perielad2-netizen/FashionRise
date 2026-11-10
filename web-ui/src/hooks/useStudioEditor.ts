@@ -1482,12 +1482,20 @@ export function useStudioEditor() {
       const doc = authoritativeDocRef.current
       const frontBag = { strokes: doc.strokes, fills: doc.fills ?? [] }
       const backBag = doc.back ?? { strokes: [], fills: [] }
+      const rearOk = rearReferenceAvailable(doc.model)
       const dual =
         frontBackEnabled &&
         dualMagicEnabled &&
         sideHasInk(frontBag) &&
         sideHasInk(backBag) &&
-        rearReferenceAvailable(doc.model)
+        rearOk
+      // Front drawn + empty Back → Dual Magic invents a coherent rear view.
+      const smartBack =
+        frontBackEnabled &&
+        dualMagicEnabled &&
+        sideHasInk(frontBag) &&
+        !sideHasInk(backBag) &&
+        rearOk
 
       const designId = designIdRef.current
       const modelId = doc.model
@@ -1506,7 +1514,7 @@ export function useStudioEditor() {
         })
       }
 
-      if (dual) {
+      if (dual || smartBack) {
         const [frontCap, backCap, frontSwatch, backSwatch] = await Promise.all([
           captureSide('front'),
           captureSide('back'),
@@ -1541,11 +1549,16 @@ export function useStudioEditor() {
 
         setMagicPhase('submitting')
         publishStudioNotice(
-          'Magic will polish Front and Back. Two renders may cost more when billing is enabled.',
+          smartBack
+            ? 'Magic will polish Front and invent a smart Back from your Front sketch. Two renders may cost more when billing is enabled.'
+            : 'Magic will polish Front and Back. Two renders may cost more when billing is enabled.',
         )
         const frontIdempotencyKey = `${operationId}:front`
         const backIdempotencyKey = `${operationId}:back`
-        const garmentSpec = buildSharedGarmentSpec(doc, 'polish concept')
+        const garmentNotes = smartBack
+          ? 'polish concept with smart back completion'
+          : 'polish concept'
+        const garmentSpec = buildSharedGarmentSpec(doc, garmentNotes)
         const contentFingerprint = draftContentFingerprint(doc)
         const sourceRevision = doc.clientRevision
         persistMagicOperation(user.id, {
@@ -1559,24 +1572,33 @@ export function useStudioEditor() {
           sharedGarmentSpec: garmentSpec,
           updatedAt: new Date().toISOString(),
         })
+        const smartBackNotes =
+          'Smart back completion: designer left Back empty. Invent a coherent rear fashion illustration matching the Front garment silhouette, materials, proportions, and construction. Propose a professional Back view on the rear croquis — do not leave Back blank.'
         const enqueued = await enqueueDualPolish({
           design_id: designId,
           magic_operation_id: operationId,
           reference_model_id: modelId,
-          notes: 'polish concept',
+          notes: garmentNotes,
           shared_garment_spec: garmentSpec,
           source_revision: sourceRevision,
           content_fingerprint: contentFingerprint,
           front: {
             image_base64: frontCap.dataUrl,
             ...(frontSwatch ? { fabric_swatch_base64: frontSwatch.dataUrl } : {}),
-            notes: 'polish concept (front)',
+            notes: smartBack
+              ? 'polish concept (front); Back will be inventively completed from this design'
+              : 'polish concept (front)',
             idempotency_key: frontIdempotencyKey,
           },
           back: {
-            image_base64: backCap.dataUrl,
-            ...(backSwatch ? { fabric_swatch_base64: backSwatch.dataUrl } : {}),
-            notes: 'polish concept (back)',
+            // Empty-back capture is rear croquis only — AI invents matching rear artwork.
+            image_base64: smartBack ? frontCap.dataUrl : backCap.dataUrl,
+            ...(backSwatch
+              ? { fabric_swatch_base64: backSwatch.dataUrl }
+              : frontSwatch && smartBack
+                ? { fabric_swatch_base64: frontSwatch.dataUrl }
+                : {}),
+            notes: smartBack ? smartBackNotes : 'polish concept (back)',
             idempotency_key: backIdempotencyKey,
           },
           signal: controller.signal,
