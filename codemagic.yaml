@@ -96,6 +96,12 @@ workflows:
           chmod +x "$CM_BUILD_DIR/scripts/codemagic-set-ios-build-number.sh"
           "$CM_BUILD_DIR/scripts/codemagic-set-ios-build-number.sh"
 
+      - name: Assert iOS AppIcon is real (not blank white)
+        script: |
+          # Purchase sheet uses the compiled AppIcon. A solid-white 1024 PNG
+          # still "builds" but Apple shows a placeholder bag icon.
+          node scripts/assert-ios-appicon.mjs
+
       - name: Build App Store IPA
         script: |
           cd "$CM_BUILD_DIR/web-ui/ios/App"

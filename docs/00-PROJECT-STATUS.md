@@ -3,11 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**C1 Sandbox first purchase PASS** — `stars_50` credited once for `perielad2@gmail.com`; public IAP gates still **OFF**; UI polish proposals for PM; **no App Review submit**.)
+**Last updated:** 2026-11-11 (**PR #280 MERGED + FE DEPLOYED** · blank AppIcon root-caused/fixed · currency = Sandbox storefront split · public gate activation checklist ready · **gates still OFF** · **no IPA / no App Review**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS · PM STOP
+## App Store release prep (2026-11-11) — #280 LIVE · PM STOP BEFORE PUBLIC GATES
+
+| Status | Detail |
+|---|---|
+| Merge | Squash **#280** → `main` **`03cd74acd20e8fce57827c918a89837d8eb66bd9`** (approved HEAD `87909365`) |
+| Production FE | **`03cd74ac`** · `/var/www/fashionrise/releases/03cd74ac-buying-ui-c1-280` · public `/version.json` matches · Buying… polish live |
+| Production BE | gates unchanged · `/health` 200 · purchasing **false** · credit **false** · unverified **false** |
+| Studio on main | **#278** `90d30bfd` · **#279** `5c71e30e` present |
+| Currency USD↔ILS | **Not an FE hardcode bug** — Capgo `priceString`=`Product.displayPrice`; Sandbox Apple ID storefront (ILS) can differ from product-query storefront (USD). Doc: `docs/deploy/APPLE-STARS-CURRENCY-STOREFRONT.md` |
+| App Icon | **Root cause:** committed `AppIcon-512@2x.png` was solid white → Apple purchase-sheet placeholder. **Fixed** with FashionRise emblem RGB 1024 + Codemagic `assert-ios-appicon` + IPA `Assets.car` check. **Needs next TF IPA** to appear on device |
+| Public activation | Checklist `docs/deploy/APPLE-STARS-PUBLIC-GATE-ACTIVATION.md` — credit ON then purchasing ON; no reviewer allowlist; no unverified credit |
+| App Store blockers | (1) public gates still OFF (2) new TF IPA with real AppIcon not built (3) ASC DSA/metadata/screenshots owner confirm (4) PM authorize gate flip + submit |
+| Stop line | No public gate enable · no Codemagic IPA this turn · no App Review submit |
+
+## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 
 | Status | Detail |
 |---|---|
@@ -15,12 +29,8 @@
 | Purchase | **Sandbox** `stars_50` · txn `2000001264125176` · **50** Stars credited exactly once · status `active` |
 | Ownership | ASN `app_account_token` matches server token for user · bundle `app.fashionrise.studio` |
 | Idempotency | Second confirm ~3s later · **no** second credit · unique `(ios, transaction_id)` |
-| Wallet | Live `ai_stars=1000039` · debt **0** (matches credit log remaining) |
-| Public gates | purchasing **false** · credit **false** · unverified sandbox **false** (allowlist-only path used) |
+| Wallet | Live `ai_stars=1000039` · debt **0** |
 | Audit doc | `docs/deploy/APPLE-STARS-IAP-C1-SANDBOX-RESULTS.md` |
-| UI follow-ups | (1) “Buying…” on all packs — **code fix in this PR** (2) USD vs ILS — ASC/storefront, keep StoreKit `priceString` (3) placeholder sheet icon — ASC/TF App Store icon |
-| App Store submit | **Not ready** — polish + PM gate plan still required; ledger/security **not** a blocker |
-| Stop line | No public gate enable · no new purchases · no App Review |
 
 ## Studio UX fixes (2026-11-10) — PR #278/#279 MERGED · FE LIVE
 
