@@ -14,8 +14,10 @@ from tests.auth_test_helpers import register_with_invite
 from tests.test_looks_api import _auth
 
 
-def _enable_apple_purchasing(monkeypatch):
-    monkeypatch.setenv("IAP_APPLE_PURCHASING_ENABLED", "true")
+def _enable_apple_credit(monkeypatch):
+    """Enable server confirm/reconcile only — purchasing (new buys) stays OFF."""
+    monkeypatch.setenv("IAP_APPLE_PURCHASING_ENABLED", "false")
+    monkeypatch.setenv("IAP_APPLE_CREDIT_ENABLED", "true")
     monkeypatch.setenv("IAP_ALLOW_UNVERIFIED_SANDBOX", "false")
     monkeypatch.setenv("IAP_APPLE_ONLINE_CHECKS", "false")
     monkeypatch.setenv("IAP_APPLE_BUNDLE_ID", "app.fashionrise.studio")
@@ -23,6 +25,10 @@ def _enable_apple_purchasing(monkeypatch):
     monkeypatch.setenv("IAP_GOOGLE_SERVICE_ACCOUNT_JSON", "")
     get_settings.cache_clear()
     apple_iap.clear_apple_iap_caches()
+
+
+# Back-compat alias used in older test names during Phase A hardening.
+_enable_apple_purchasing = _enable_apple_credit
 
 
 def _verified(
@@ -63,7 +69,6 @@ def test_app_account_token_stable_opaque_uuid():
 
 
 def test_production_coerces_unverified_sandbox_off():
-    s = get_settings.__wrapped__ if False else None  # placate linters
     from app.core.config import Settings
 
     cfg = Settings(
@@ -77,8 +82,9 @@ def test_production_coerces_unverified_sandbox_off():
     assert cfg.iap_allow_unverified_sandbox is False
 
 
-def test_confirm_disabled_while_purchasing_gate_off(client, db_session, monkeypatch):
+def test_confirm_disabled_while_credit_gate_off(client, db_session, monkeypatch):
     monkeypatch.setenv("IAP_APPLE_PURCHASING_ENABLED", "false")
+    monkeypatch.setenv("IAP_APPLE_CREDIT_ENABLED", "false")
     monkeypatch.setenv("IAP_ALLOW_UNVERIFIED_SANDBOX", "false")
     get_settings.cache_clear()
     tokens = register_with_invite(client, db_session, "iap.gate@example.com", "iapGate")
@@ -93,7 +99,22 @@ def test_confirm_disabled_while_purchasing_gate_off(client, db_session, monkeypa
         },
     )
     assert res.status_code == 503, res.text
-    assert "not enabled" in res.json()["detail"]["message"].lower()
+    msg = res.json()["detail"]["message"].lower()
+    assert "not enabled" in msg
+    assert "credit" in msg or "recovery" in msg
+
+
+def test_purchasing_gate_off_does_not_imply_credit_on(monkeypatch):
+    """New-purchase availability must stay independent of credit/reconcile."""
+    monkeypatch.setenv("IAP_APPLE_PURCHASING_ENABLED", "false")
+    monkeypatch.setenv("IAP_APPLE_CREDIT_ENABLED", "false")
+    get_settings.cache_clear()
+    assert apple_iap.apple_purchasing_enabled() is False
+    assert apple_iap.apple_credit_enabled() is False
+    monkeypatch.setenv("IAP_APPLE_CREDIT_ENABLED", "true")
+    get_settings.cache_clear()
+    assert apple_iap.apple_purchasing_enabled() is False
+    assert apple_iap.apple_credit_enabled() is True
 
 
 def test_confirm_requires_jws_when_enabled(client, db_session, monkeypatch):
@@ -198,8 +219,32 @@ def test_confirm_rejects_refunded_verified_transaction(client, db_session, monke
     assert "revoked" in res.json()["detail"]["message"].lower()
 
 
+def test_confirm_rejects_missing_app_account_token(client, db_session, monkeypatch):
+    _enable_apple_credit(monkeypatch)
+    tokens = register_with_invite(client, db_session, "iap.miss@example.com", "iapMiss")
+    monkeypatch.setattr(
+        apple_iap,
+        "verify_signed_transaction_jws",
+        lambda jws: _verified(txn="txn-miss", token=None),
+    )
+    res = client.post(
+        "/api/v1/shop/iap/confirm",
+        headers=_auth(tokens),
+        json={
+            "platform": "ios",
+            "product_id": "stars_50",
+            "transaction_id": "txn-miss",
+            "jws": "header.payload.sig",
+        },
+    )
+    assert res.status_code == 403, res.text
+    msg = res.json()["detail"]["message"].lower()
+    assert "appaccounttoken" in msg
+    assert "required" in msg
+
+
 def test_confirm_rejects_app_account_token_mismatch(client, db_session, monkeypatch):
-    _enable_apple_purchasing(monkeypatch)
+    _enable_apple_credit(monkeypatch)
     tokens = register_with_invite(client, db_session, "iap.tok@example.com", "iapTok")
     monkeypatch.setattr(
         apple_iap,
@@ -220,16 +265,42 @@ def test_confirm_rejects_app_account_token_mismatch(client, db_session, monkeypa
     assert "appaccounttoken" in res.json()["detail"]["message"].lower()
 
 
-def test_confirm_cross_account_conflict(client, db_session, monkeypatch):
-    _enable_apple_purchasing(monkeypatch)
-    a = register_with_invite(client, db_session, "iap.a@example.com", "iapA")
-    b = register_with_invite(client, db_session, "iap.b@example.com", "iapB")
-    me = client.get("/api/v1/auth/me", headers=_auth(a))
+def test_confirm_accepts_matching_app_account_token(client, db_session, monkeypatch):
+    _enable_apple_credit(monkeypatch)
+    tokens = register_with_invite(client, db_session, "iap.match@example.com", "iapMatch")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens))
     token = apple_iap.app_account_token_for_user(uuid.UUID(me.json()["id"]))
     monkeypatch.setattr(
         apple_iap,
         "verify_signed_transaction_jws",
-        lambda jws: _verified(txn="shared-txn", product="stars_50", token=token),
+        lambda jws: _verified(txn="txn-match", product="stars_50", token=token),
+    )
+    res = client.post(
+        "/api/v1/shop/iap/confirm",
+        headers=_auth(tokens),
+        json={
+            "platform": "ios",
+            "product_id": "stars_50",
+            "transaction_id": "txn-match",
+            "jws": "header.payload.sig",
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["stars_credited"] == 50
+
+
+def test_confirm_cross_account_rejected_by_token_then_conflict(client, db_session, monkeypatch):
+    _enable_apple_credit(monkeypatch)
+    a = register_with_invite(client, db_session, "iap.a@example.com", "iapA")
+    b = register_with_invite(client, db_session, "iap.b@example.com", "iapB")
+    me_a = client.get("/api/v1/auth/me", headers=_auth(a))
+    me_b = client.get("/api/v1/auth/me", headers=_auth(b))
+    token_a = apple_iap.app_account_token_for_user(uuid.UUID(me_a.json()["id"]))
+    token_b = apple_iap.app_account_token_for_user(uuid.UUID(me_b.json()["id"]))
+    monkeypatch.setattr(
+        apple_iap,
+        "verify_signed_transaction_jws",
+        lambda jws: _verified(txn="shared-txn", product="stars_50", token=token_a),
     )
     first = client.post(
         "/api/v1/shop/iap/confirm",
@@ -243,11 +314,24 @@ def test_confirm_cross_account_conflict(client, db_session, monkeypatch):
     )
     assert first.status_code == 200, first.text
 
-    # Second account presents same verified txn (token omitted so ownership check skipped)
+    # Other account presenting the same Apple JWS (still bound to A's token) → ownership 403
+    stolen = client.post(
+        "/api/v1/shop/iap/confirm",
+        headers=_auth(b),
+        json={
+            "platform": "ios",
+            "product_id": "stars_50",
+            "transaction_id": "shared-txn",
+            "jws": "header.payload.sig",
+        },
+    )
+    assert stolen.status_code == 403, stolen.text
+
+    # If verification somehow claimed B's token on an already-credited txn id → 409
     monkeypatch.setattr(
         apple_iap,
         "verify_signed_transaction_jws",
-        lambda jws: _verified(txn="shared-txn", product="stars_50", token=None),
+        lambda jws: _verified(txn="shared-txn", product="stars_50", token=token_b),
     )
     second = client.post(
         "/api/v1/shop/iap/confirm",
@@ -275,6 +359,7 @@ def test_get_app_account_token(client, db_session, monkeypatch):
 
 def test_android_path_unchanged_staged(client, db_session, monkeypatch):
     monkeypatch.setenv("IAP_APPLE_PURCHASING_ENABLED", "false")
+    monkeypatch.setenv("IAP_APPLE_CREDIT_ENABLED", "false")
     monkeypatch.setenv("IAP_ALLOW_UNVERIFIED_SANDBOX", "false")
     monkeypatch.setenv("IAP_GOOGLE_SERVICE_ACCOUNT_JSON", "")
     get_settings.cache_clear()

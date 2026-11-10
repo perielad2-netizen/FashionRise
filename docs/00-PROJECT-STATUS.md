@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple Stars IAP Phase A** — secure Apple JWS verification foundation. **STOP for PM review.** No merge of implementation / deploy / enable purchasing / Codemagic / real purchases.)
+**Last updated:** 2026-11-10 (**Apple Stars IAP Phase A hardening** on PR **#267** — required `appAccountToken`, split purchase/credit gates, Postgres concurrency. **STOP for PM review.** No merge / deploy / enable / Codemagic / paid txns.)
 
 **Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Audit docs **#266** squash-merged → `main` **`eca770b3`**.
 
@@ -12,15 +12,14 @@
 | Status | Detail |
 |---|---|
 | Scope | Production-grade Apple StoreKit 2 / App Store Server Library JWS verification + idempotent Stars credit (backend only) |
-| PR | Phase A implementation branch `cursor/web-iap-apple-verify-a-77c6` (do **not** merge until PM approves) |
-| Verify | `app/services/apple_iap.py` uses official `app-store-server-library` `SignedDataVerifier`; Stars from **verified** `productId` only (`stars_50/150/500`) |
-| Gate | `IAP_APPLE_PURCHASING_ENABLED=false` by default — incomplete refunds must not allow public purchasing |
-| Safety | Production coerces `IAP_ALLOW_UNVERIFIED_SANDBOX=false`; legacy shared-secret verifyReceipt path refused; Android staged unchanged; web checkout unchanged; no native shop UI wiring |
-| Token | Opaque UUID `appAccountToken` via `GET /shop/iap/app-account-token` (`uuid5`, not internal numeric ids) |
-| Idempotency | Unique `(platform, transaction_id)` + `IntegrityError` → `already_processed`; cross-account → 409 |
-| Refunds | **Not in Phase A** — see `docs/deploy/APPLE-STARS-IAP-PHASE-B.md` |
-| Tests | `pytest tests/test_iap_confirm.py tests/test_apple_iap_phase_a.py` — **16 passed** |
-| Next (pending PM) | Approve Phase A PR → then Phase B (ASN refunds + native shop UI + nginx `app-account-token` allowlist) → only then enable purchasing |
+| PR | **#267** `cursor/web-iap-apple-verify-a-77c6` (do **not** merge until PM approves) |
+| Verify | Official `SignedDataVerifier`; Stars from **verified** `productId` only (`stars_50/150/500`) |
+| Ownership | Verified `appAccountToken` **required** and must match account — missing token rejected (no legacy bypass) |
+| Gates | `IAP_APPLE_PURCHASING_ENABLED` (new buys) and `IAP_APPLE_CREDIT_ENABLED` (confirm/reconcile) — **both default OFF**; not a production recovery bypass |
+| Safety | Production coerces `IAP_ALLOW_UNVERIFIED_SANDBOX=false`; legacy shared-secret refused; Android/web/UI unchanged |
+| Idempotency | Unique `(platform, transaction_id)` + `IntegrityError` recovery; Postgres concurrent confirm test |
+| Refunds | **Not in Phase A** — `docs/deploy/APPLE-STARS-IAP-PHASE-B.md` |
+| Next (pending PM) | Approve **#267** → Phase B ASN + shop UI → enable credit then purchasing |
 
 Audit archive: `docs/deploy/APPLE-STARS-IAP-AUDIT.md` (merged via **#266**).
 

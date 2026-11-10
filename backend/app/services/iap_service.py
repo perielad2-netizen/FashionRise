@@ -9,7 +9,6 @@ Android verification remains staged and unchanged.
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any, Literal
 
 from sqlalchemy import select
@@ -100,8 +99,9 @@ def restore_placeholder() -> dict[str, Any]:
     return {
         "restored": 0,
         "note": (
-            "Phase A: restore is a no-op. Client must re-POST /shop/iap/confirm with each "
-            "signed transaction JWS. Phase B will cover unfinished-txn recovery UX."
+            "Phase A: restore is a no-op. Phase B unfinished-txn recovery re-POSTs "
+            "/shop/iap/confirm with each signed JWS when IAP_APPLE_CREDIT_ENABLED is on "
+            "(distinct from IAP_APPLE_PURCHASING_ENABLED for starting new buys)."
         ),
     }
 
@@ -120,9 +120,11 @@ def _confirm_apple(
         # Belt-and-suspenders (also coerced off in Settings).
         raise ServiceUnavailableError("Unverified IAP sandbox credit is forbidden in production")
 
-    if not apple_iap.apple_purchasing_enabled():
+    # Credit/reconcile gate (completed Apple txns). Distinct from purchasing_enabled
+    # (initiating new StoreKit buys). Both default OFF in Phase A.
+    if not apple_iap.apple_credit_enabled():
         raise ServiceUnavailableError(
-            "Apple Stars purchasing is not enabled yet. "
+            "Apple Stars credit / transaction recovery is not enabled yet. "
             "Phase B (refunds / App Store Server Notifications) must land first."
         )
 
@@ -159,10 +161,7 @@ def _confirm_apple(
     if client_transaction_id and client_transaction_id != verified.transaction_id:
         raise ForbiddenError("Client transaction id does not match verified Apple transaction")
 
-    expected_token = apple_iap.app_account_token_for_user(user.id)
-    if verified.app_account_token:
-        if verified.app_account_token.lower() != expected_token.lower():
-            raise ForbiddenError("Apple appAccountToken does not match this account")
+    _assert_app_account_token_owns_transaction(user, verified)
 
     stars = STARS_PRODUCTS[verified.product_id] * max(1, verified.quantity)
     return _persist_credit(
@@ -173,6 +172,18 @@ def _confirm_apple(
         transaction_id=verified.transaction_id,
         stars=stars,
     )
+
+
+def _assert_app_account_token_owns_transaction(user: User, verified: apple_iap.VerifiedAppleTransaction) -> None:
+    """Require cryptographically verified appAccountToken == this account (no missing bypass)."""
+    expected_token = apple_iap.app_account_token_for_user(user.id)
+    got = (verified.app_account_token or "").strip()
+    if not got:
+        raise ForbiddenError(
+            "Apple appAccountToken is required on Stars purchases and must match this account"
+        )
+    if got.lower() != expected_token.lower():
+        raise ForbiddenError("Apple appAccountToken does not match this account")
 
 
 def _confirm_android_staged(

@@ -74,8 +74,10 @@ npm run cap:ios           # opens Xcode (macOS only)
 IAP_APPLE_BUNDLE_ID=app.fashionrise.studio
 IAP_APPLE_APP_APPLE_ID=6832116469
 IAP_APPLE_ONLINE_CHECKS=true
-# Default OFF until Phase B refunds / App Store Server Notifications.
+# Both default OFF until Phase B.
+# purchasing = initiate new StoreKit buys; credit = confirm/reconcile completed Apple txns.
 IAP_APPLE_PURCHASING_ENABLED=false
+IAP_APPLE_CREDIT_ENABLED=false
 IAP_APPLE_SHARED_SECRET=
 IAP_GOOGLE_SERVICE_ACCOUNT_JSON=
 # Forced off in production. Phase A also refuses unverified Apple credits in non-prod.
@@ -95,8 +97,8 @@ Apple root CAs for chain verify ship in-repo at `backend/app/certs/apple/*.cer` 
 - [ ] Age rating / content questionnaire  
 - [ ] IAP products created & approved as **Consumable** (`stars_50` / `stars_150` / `stars_500`)  
 - [ ] Test on TestFlight + Play internal testing  
-- [x] Phase A: Apple JWS verification foundation (purchasing gate still **OFF**)  
-- [ ] Phase B: ASN refunds + native shop UI + enable `IAP_APPLE_PURCHASING_ENABLED`  
+- [x] Phase A: Apple JWS verification foundation (purchasing + credit gates still **OFF**)  
+- [ ] Phase B: ASN refunds + native shop UI → enable `IAP_APPLE_CREDIT_ENABLED` then `IAP_APPLE_PURCHASING_ENABLED`  
 
 
 ## What we are not doing

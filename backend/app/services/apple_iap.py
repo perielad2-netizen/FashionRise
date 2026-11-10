@@ -80,8 +80,21 @@ def apple_iap_configured() -> bool:
 
 
 def apple_purchasing_enabled() -> bool:
-    """Public confirm gate — default OFF until refund/ASN Phase B lands."""
+    """Allow initiating *new* StoreKit purchases (native shop). Default OFF.
+
+    Distinct from :func:`apple_credit_enabled`. Phase B turns this on only after
+    refund/ASN + shop UI are ready — never a credit bypass.
+    """
     return bool(get_settings().iap_apple_purchasing_enabled)
+
+
+def apple_credit_enabled() -> bool:
+    """Allow server confirm/reconcile of completed Apple transactions. Default OFF.
+
+    Covers first-time confirm after StoreKit success and unfinished-txn recovery.
+    Phase A keeps this false in production; tests may enable it locally.
+    """
+    return bool(get_settings().iap_apple_credit_enabled)
 
 
 @lru_cache(maxsize=1)

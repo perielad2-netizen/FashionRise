@@ -238,8 +238,13 @@ class Settings(BaseSettings):
     # Dev-only escape hatch (historical). Forced OFF in production; Apple Phase A also
     # refuses unverified credit even in non-prod — send signed sandbox JWS instead.
     iap_allow_unverified_sandbox: bool = False
-    # Public Apple Stars purchasing gate (default OFF until Phase B refunds/ASN).
+    # Phase B client: allow initiating *new* StoreKit purchases in the native shop.
+    # Default OFF. Distinct from credit/reconcile (below).
     iap_apple_purchasing_enabled: bool = False
+    # Server: allow verifying JWS + crediting Stars for completed Apple transactions
+    # (including unfinished-txn recovery). Default OFF until Phase B ASN/refunds.
+    # Never treat this as a production “bypass” — both gates stay false in Phase A.
+    iap_apple_credit_enabled: bool = False
     iap_apple_bundle_id: str = "app.fashionrise.studio"
     # App Store Connect Apple ID (public). Required for Production SignedDataVerifier.
     iap_apple_app_apple_id: int = 6832116469
