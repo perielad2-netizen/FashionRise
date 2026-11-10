@@ -79,10 +79,16 @@ IAP_APPLE_ONLINE_CHECKS=true
 IAP_APPLE_PURCHASING_ENABLED=false
 IAP_APPLE_CREDIT_ENABLED=false
 IAP_APPLE_SHARED_SECRET=
+# ASC In-App Purchase API key (outbound Server API / TEST notifications). .p8 outside repo.
+IAP_APPLE_ASC_ISSUER_ID=
+IAP_APPLE_ASC_KEY_ID=
+IAP_APPLE_ASC_PRIVATE_KEY_PATH=/var/lib/fashionrise/secrets/apple-iap/AuthKey_<KEYID>.p8
 IAP_GOOGLE_SERVICE_ACCOUNT_JSON=
 # Forced off in production. Phase A also refuses unverified Apple credits in non-prod.
 IAP_ALLOW_UNVERIFIED_SANDBOX=false
 ```
+
+See `docs/deploy/APPLE-IAP-ASC-API-KEY.md` for secure `.p8` install steps.
 
 Also add Capacitor origins to production `CORS_ORIGINS` if the WebView origin is not already covered (e.g. `capacitor://localhost`, `https://localhost`).
 
