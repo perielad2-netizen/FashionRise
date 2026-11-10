@@ -420,16 +420,17 @@ def test_design_enhancement_normalizes_sketch_glitches_not_literal_mistakes():
     lower = prompt.lower()
     assert "design enhancement" in lower
     assert "uneven strap" in lower
-    assert "match the better side" in lower
-    assert "full-cover" in lower
-    assert "hand" in lower and "leg" in lower and "hem/belly" in lower
-    assert "missing" in lower and ("fabric" in lower or "patch" in lower or "hole" in lower)
+    assert "wow" in lower
+    assert "design idea" in lower
+    assert "kid-like" in lower or "rough/kid" in lower
+    assert "incomplete bucket fills" in lower or "incomplete" in lower
+    assert "unfilled gaps" in lower
+    assert "not treat unfilled gaps as cut-outs" in lower or "do not treat unfilled gaps" in lower
     assert "restore matching fabric" in lower
-    assert "intentional design asymmetry" in lower
     assert "balance accidental uneven straps/sleeves" in lower
-    assert "pixel-perfect trace" in lower or "not a pixel-perfect" in lower
+    assert "pixel-perfect" in lower
     assert "non-photorealistic" in lower
-    assert "crops/midriff/cut-outs" in lower
+    assert "swim" in lower or "lingerie" in lower or "true crop" in lower
 
 
 def test_system_prompt_asks_to_elevate_not_trace():
