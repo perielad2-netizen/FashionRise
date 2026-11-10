@@ -32,12 +32,12 @@ SKETCH_JOB_TYPES = frozenset({"sketch_clean", "sketch_polish", "style_suggest"})
 # (and polish's extra image_prompt) without a schema change.
 JSON_OBJECT_RESPONSE_FORMAT = {"type": "json_object"}
 
-# Hard budget for the images.edit brief (production maint slice). Protected
-# instructions (enhancement + coverage + non-photoreal illustration style + optional
-# textile reference) always fit inside this budget; only lower-priority vision
-# prose is bounded to fill the remainder. Raised from 3800 to fit Front/Back
-# DESIGN ENHANCEMENT without crowding coverage/pattern contracts or design facts.
-IMAGE_PROMPT_MAX_CHARS = 4500
+# Hard budget for the images.edit brief. Protected instructions (enhancement +
+# coverage + non-photoreal style + optional textile / Front-Back / shared-spec)
+# must always fit intact — never mid-slice. GPT Image 2.5 allows up to 32000.
+# The old 4500 cap truncated dual Magic + shared garment spec mid-sentence and
+# dropped "Do NOT keep rough sketch glitches" on Back/swatch jobs.
+IMAGE_PROMPT_MAX_CHARS = 12000
 
 # Fixed garment-coverage contract for adult, non-explicit fashion (Issue #64).
 # Distinguishes drawn fabric from exposed skin / croquis body / paper — does not
@@ -90,14 +90,16 @@ _FABRIC_SWATCH_EDIT_CONTRACT = (
 # Front + Back: elevate the design; do not pixel-trace sketch mistakes.
 # Protected — must survive IMAGE_PROMPT_MAX_CHARS evidence bounding.
 _DESIGN_ENHANCEMENT_CONTRACT = (
-    "DESIGN ENHANCEMENT (Front and Back): Rough/kid-like sketches are OK — elevate into a "
-    "WOW professional fashion illustration. Keep the DESIGN IDEA (garment concept, fabric/"
-    "color theme, silhouette/cut) — NOT a pixel-perfect trace. Erase sketch ugliness: "
-    "wobbly lines, incomplete bucket fills, leftover unfilled gaps, ragged hems, missing "
-    "fabric patches, uneven straps/sleeves, unfinished hands/legs/shoes. Do NOT treat "
-    "unfilled gaps as cut-outs — restore matching fabric. Only keep clearly designed "
-    "openings (swim/lingerie/true crop). Preserve Image 1 fabric fills (shoes/bags/belts). "
-    "No invented panels. Elevated—not traced/cartoonish; keep painted fabric/color theme."
+    "DESIGN ENHANCEMENT (Front and Back): Rough/kid-like sketches are OK — MUST elevate "
+    "into a WOW professional fashion illustration. Keep the DESIGN IDEA (garment concept, "
+    "fabric/color theme, silhouette/cut) — NOT a pixel-perfect trace of the rough drawing. "
+    "MUST erase sketch glitches so the result looks finished, not like a cleaned tracing: "
+    "wobbly/crooked lines, incomplete bucket fills, leftover unfilled gaps, ragged hems, "
+    "missing fabric patches, uneven straps/sleeves, unfinished hands/legs/shoes, one-sided "
+    "incomplete details (match the better side). Do NOT treat unfilled gaps as cut-outs — "
+    "restore matching fabric. Only keep clearly designed openings (swim/lingerie/true crop). "
+    "Preserve Image 1 fabric fills (shoes/bags/belts). No invented panels. Elevated — not "
+    "traced/cartoonish; keep painted fabric/color theme."
 )
 
 # Illustration-style restriction — equal priority with coverage; must not be truncated
@@ -384,12 +386,13 @@ def _system_prompt(job_type: str) -> str:
             "exposed skin/midriff/cut-outs, and any intentionally drawn white/pale fabric — invent nothing; "
             "Never invent accent colors, contrast panels, trims, bodysuits, linings, or modesty panels; "
             "do not treat blank/light croquis body or paper as garment fabric; explicitly call for a WOW "
-            "professional fashion illustration that keeps the design idea but erases sketch mistakes "
-            "(incomplete fills, leftover gaps, uneven lines, missing fabric patches — restore matching "
-            "fabric); do NOT treat unfinished fill gaps as intentional cut-outs; only keep clearly "
-            "designed swim/lingerie/true-crop openings; do not describe amateur line quality or ask to "
-            "keep a traced/cartoon/kid-sketch look; do not request a different croquis family than the "
-            "SELECTED STUDIO REFERENCE)."
+            "professional fashion illustration that keeps the design idea but MUST erase sketch glitches "
+            "so the result looks finished, not like a cleaned tracing (incomplete fills, leftover gaps, "
+            "uneven lines, missing fabric patches, unfinished hands/legs/shoes — restore matching "
+            "fabric; match the better side on one-sided mistakes); do NOT treat unfinished fill gaps as "
+            "intentional cut-outs; only keep clearly designed swim/lingerie/true-crop openings; do not "
+            "describe amateur line quality or ask to keep a traced/cartoon/kid-sketch look; do not "
+            "request a different croquis family than the SELECTED STUDIO REFERENCE)."
         )
     return (
         "You are a fashion stylist AI. Respond ONLY with valid JSON using keys: "
@@ -405,8 +408,9 @@ def _normalized_studio_side(input_data: dict[str, Any]) -> str | None:
 
 
 # Bound for SHARED GARMENT SPEC payload text inside the image prompt.
-# Kept tight so COLOR/DESIGN/COVERAGE/STYLE protected contracts always fit.
-_SHARED_GARMENT_SPEC_PROMPT_CHARS = 320
+# Raised with IMAGE_PROMPT_MAX_CHARS so enhancement notes are not crushed to
+# "WOW elevate… keep the DESIGN" before "erase sketch mistakes" can appear.
+_SHARED_GARMENT_SPEC_PROMPT_CHARS = 640
 
 # Ordered whitelist: color/material identity first; diagnostics/notes last.
 # Alphabetical JSON + blind truncation previously dropped main_colors when a
@@ -850,6 +854,17 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
         if ref is not None and ref.family is not None and evidence:
             evidence = _neutralize_opposite_subject_language(evidence, ref.family)
         identity_bits = _design_identity_bits(structured)
+        # Vision refine_ok lists sketch imperfections that MUST be erased in the edit.
+        refine_ok = structured.get("refine_ok")
+        if isinstance(refine_ok, list):
+            refine_bits = [str(b).strip() for b in refine_ok if str(b).strip()]
+            if refine_bits:
+                fix_clause = (
+                    "MUST fix these sketch imperfections (do not preserve them): "
+                    + "; ".join(refine_bits[:8])
+                    + "."
+                )
+                evidence = f"{fix_clause} {evidence}".strip() if evidence else fix_clause
         if not evidence:
             bullets = structured.get("polish_bullets") or structured.get("cleanup_bullets") or []
             if isinstance(bullets, list) and bullets:
@@ -915,8 +930,9 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
     else:
         prompt = protected
     if len(prompt) > IMAGE_PROMPT_MAX_CHARS:
-        # Defensive: protected alone must fit; never slice mid-instruction.
-        prompt = protected[:IMAGE_PROMPT_MAX_CHARS]
+        # Never mid-slice protected contracts (that previously dropped glitch-fix).
+        # Evidence is already budgeted above; keep protected intact.
+        prompt = protected
     return prompt
 
 

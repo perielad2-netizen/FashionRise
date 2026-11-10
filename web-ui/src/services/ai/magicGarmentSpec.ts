@@ -176,13 +176,14 @@ function materialsFromDoc(doc: StudioDraftDocument, max = 8): string[] {
   return [...seen]
 }
 
-/** Enhancement intent shared by Front-only and Dual Magic (both sides). */
+/** Enhancement intent shared by Front-only and Dual Magic (both sides).
+ * Glitch-erase verbs lead so shared-spec compact still keeps them when notes clip. */
 const MAGIC_ENHANCEMENT_NOTES =
-  'WOW elevate a rough/kid-like sketch into a stunning professional fashion illustration; ' +
+  'MUST erase sketch glitches (incomplete fills, leftover gaps, uneven lines, missing fabric, ' +
+  'unfinished hands/legs/shoes) — restore matching fabric; do NOT treat unfilled gaps as cut-outs; ' +
+  'WOW elevate rough/kid-like sketch into a stunning professional fashion illustration; ' +
   'keep the DESIGN IDEA (silhouette/cut, fabric/color theme, Front/Back coherence); ' +
   'ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; ' +
-  'erase sketch mistakes (incomplete fills, leftover gaps, uneven lines, missing fabric); ' +
-  'do NOT treat unfilled gaps as cut-outs — restore matching fabric; ' +
   'only keep clearly designed swim/lingerie/true-crop openings; no traced/cartoon look.'
 
 /** #183 — pale bridal / open neckline / both sleeves (same contract as Try On). */
