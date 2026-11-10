@@ -3,23 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple IAP Phase C1** — official Sandbox TEST requested; Apple delivery hit endpoint with **422** until ASN `data.environment` peek fix; replay after fix expected; gates **OFF**.)
+**Last updated:** 2026-11-10 (**Apple IAP Phase C1 COMPLETE for processing** — one Sandbox TEST requested; ASN `data.environment` peek fixed (**#272** → `2894a83d`); durable receipt `TEST`/`ignored`; purchases/adjustments **0**; gates **OFF**. Apple Get-Status still shows first attempt `UNSUCCESSFUL_HTTP_RESPONSE_CODE`.)
 
-**Phase:** Apple App Store launch readiness. Phase B **#268** deployed gates-OFF. Phase C1 ASC API + one Sandbox TEST in progress.
+**Phase:** Apple App Store launch readiness. Phase B deployed gates-OFF. Phase C1 ASN path proven with official TEST payload.
 
-## Apple Stars IAP — Phase C1 signed ASN V2 validation (2026-11-10)
+## Apple Stars IAP — Phase C1 signed ASN V2 validation (2026-11-10) — DONE (processing)
 
 | Status | Detail |
 |---|---|
-| Goal | One official Apple Sandbox **Request a Test Notification** → verified non-financial `TEST` receipt; gates stay OFF |
-| ASC URLs (owner) | Production + Sandbox ASN V2 URLs → `https://fashionrise.app/api/v1/shop/iap/apple/notifications` |
-| ASC API | Key ID `4N9N354RG3` · `.p8` at `/var/lib/fashionrise/secrets/apple-iap/AuthKey_4N9N354RG3.p8` · Issuer synced into prod `.env` (not logged) |
-| Official TEST request | **SUCCESS** — Sandbox `request_test_notification` returned token (redacted); **one** request only |
-| Apple delivery status | First attempt **`UNSUCCESSFUL_HTTP_RESPONSE_CODE`** — nginx shows Apple POST → FastAPI **422** `Apple transaction JWS missing environment` |
-| Root cause | ASN V2 JWT has `environment` under **`data.environment`**, not top-level (transaction JWS). Peek fixed to read both; crypto verify unchanged |
-| Hotfix | Deploy ASN env-peek fix → replay saved signedPayload (no second Apple TEST) → expect durable `TEST`/`ignored` receipt |
-| Financial invariants | purchases**=0** · notifications**=0** (pre-fix) · adjustments**=0** · gates purchasing/credit **false** |
-| Next | Confirm post-fix receipt + Apple retry/SUCCESS if any; then PM checkpoint for controlled StoreKit sandbox (credit still OFF) → release/TestFlight build track |
+| Production BE | **`2894a83d`** (ASC API **#271** + ASN env-peek **#272**) · Alembic **027** · health/ready OK |
+| ASC API | Key ID `4N9N354RG3` · `.p8` installed under `/var/lib/fashionrise/secrets/apple-iap/` · Issuer in prod `.env` |
+| Official TEST request | **One** Sandbox `request_test_notification` — token redacted `0a04b1…1162` |
+| Apple first delivery | Reached nginx/FastAPI · **422** (env peek bug) · Get-Status attempt result **`UNSUCCESSFUL_HTTP_RESPONSE_CODE`** |
+| Hotfix | **#272** — peek `data.environment` for ASN V2; crypto unchanged |
+| Processing proof | Replayed Apple’s signedPayload locally after fix → **HTTP 200** · `notification_type=TEST` · `processing_state=ignored` · Sandbox · uuid suffix `c147ba11` |
+| Financial invariants | notifications**=1** (TEST only) · purchases**=0** · adjustments**=0** · purchasing/credit **false** |
+| Apple Get-Status note | Still reports the original failed attempt (no second TEST requested). Future Apple retries of same UUID should idempotent-2xx |
+| Next PM checkpoint | Controlled StoreKit sandbox purchase path with credit gate still OFF or PM-gated · then TestFlight/release build (Codemagic) — **not** started here |
 
 ## Apple Stars IAP — Phase B end-to-end (2026-11-10) — DEPLOYED GATES OFF
 
