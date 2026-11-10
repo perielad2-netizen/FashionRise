@@ -122,8 +122,14 @@ def load_apple_root_certificates() -> tuple[bytes, ...]:
     return tuple(p.read_bytes() for p in certs)
 
 
-def _environment_from_unverified_jws(jws: str) -> Environment:
-    """Peek only to select Production vs Sandbox verifier — never trust for credit."""
+def _environment_from_unverified_jws(
+    jws: str, *, missing_message: str = "Apple transaction JWS missing environment"
+) -> Environment:
+    """Peek only to select Production vs Sandbox verifier — never trust for credit.
+
+    StoreKit transaction JWS carries top-level ``environment``. ASN V2 notification
+    envelopes put it under ``data.environment`` (Apple ResponseBodyV2DecodedPayload).
+    """
     try:
         payload = jwt.decode(
             jws,
@@ -133,11 +139,15 @@ def _environment_from_unverified_jws(jws: str) -> Environment:
     except Exception as exc:  # noqa: BLE001 — treat as invalid client payload
         raise ValidationAppError("Apple transaction JWS could not be parsed") from exc
     raw = str(payload.get("environment") or "").strip()
+    if not raw:
+        data = payload.get("data")
+        if isinstance(data, dict):
+            raw = str(data.get("environment") or "").strip()
     if raw.lower() == "sandbox":
         return Environment.SANDBOX
     if raw.lower() == "production":
         return Environment.PRODUCTION
-    raise ValidationAppError("Apple transaction JWS missing environment")
+    raise ValidationAppError(missing_message)
 
 
 def _build_verifier(environment: Environment) -> SignedDataVerifier:
@@ -254,8 +264,10 @@ def verify_signed_notification_payload(signed_payload: str) -> VerifiedAppleNoti
     if not apple_iap_configured():
         raise ServiceUnavailableError("Apple IAP verification is not configured")
 
-    # Outer ASN envelope uses the same environment peek as transactions.
-    env = _environment_from_unverified_jws(token)
+    # Outer ASN envelope: environment is under data.environment (not top-level).
+    env = _environment_from_unverified_jws(
+        token, missing_message="Apple notification JWS missing environment"
+    )
     if env not in (Environment.PRODUCTION, Environment.SANDBOX):
         raise ForbiddenError("Unsupported Apple notification environment")
 
