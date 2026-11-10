@@ -12,14 +12,15 @@ describe('iOS Capacitor safe-area wiring', () => {
     expect(cfg).not.toMatch(/contentInset:\s*'automatic'/)
   })
 
-  it('keeps the committed iOS capacitor.config.json in sync (Codemagic source)', () => {
-    const native = readFileSync(
-      path.resolve(__dirname, '../../../ios/App/App/capacitor.config.json'),
+  it('ships a Codemagic assert that rewrites native contentInset to never', () => {
+    const script = readFileSync(
+      path.resolve(__dirname, '../../../scripts/assert-ios-capacitor-content-inset.mjs'),
       'utf8',
     )
-    const parsed = JSON.parse(native) as { ios?: { contentInset?: string } }
-    expect(parsed.ios?.contentInset).toBe('never')
-    expect(native).not.toMatch(/"contentInset"\s*:\s*"automatic"/)
+    expect(script).toContain("contentInset: 'never'")
+    expect(script).toContain('rewrote contentInset')
+    const yaml = readFileSync(path.resolve(__dirname, '../../../../codemagic.yaml'), 'utf8')
+    expect(yaml).toContain('assert-ios-capacitor-content-inset.mjs')
   })
 
   it('overlays the status bar so the WebView is edge-to-edge', () => {

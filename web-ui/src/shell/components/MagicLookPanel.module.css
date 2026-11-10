@@ -16,14 +16,11 @@
   overflow: hidden;
 }
 
-/* Native iOS: avoid a dead dark band under the status bar — sheet fills below inset. */
+/* Native iOS: sheet is edge-to-edge (no dark band under status bar).
+   Safe-area is applied as panel padding so the gradient fills the notch. */
 :global(html.fr-native-shell) .overlay {
   place-items: stretch;
-  padding:
-    env(safe-area-inset-top, 0px)
-    0
-    0
-    0;
+  padding: 0;
 }
 
 .panel {
@@ -205,23 +202,23 @@
 .stage {
   position: relative;
   flex: 1 1 auto;
-  /* Bound height inside the flex panel so object-fit can shrink the preview
-     instead of overflowing and clipping the head/hem (#180 owner report). */
-  min-height: 160px;
-  max-height: min(64dvh, 640px);
+  /* Definite height (not only max-height): absolute + contain needs a real box.
+     Intrinsic-height <img> + overflow:hidden was cropping head/feet on iOS. */
+  min-height: min(42dvh, 360px);
+  height: min(58dvh, 640px);
+  max-height: min(58dvh, 640px);
   border-radius: 14px;
   overflow: hidden;
   background:
     radial-gradient(ellipse 70% 50% at 30% 20%, rgba(236, 72, 153, 0.12), transparent 60%),
     #0b1220;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  /* Avoid flex+%-height img bugs on iOS WKWebView that crop head/feet. */
   display: block;
 }
 
 .image,
 .sketchPreview {
-  /* Absolute fill + contain: reliable full-body fit on Capacitor iOS. */
+  /* Absolute fill + contain: full figure visible (letterbox if needed). */
   position: absolute;
   inset: 0;
   width: 100%;
@@ -464,10 +461,22 @@
     height: 100%;
     border-radius: 0;
     width: 100%;
+    /* Paint under the status bar; keep title/actions clear of the notch. */
+    padding-top: max(10px, env(safe-area-inset-top, 0px));
+  }
+
+  :global(html.fr-native-shell) .stage {
+    /* Use remaining flex space on the full-height native sheet. */
+    height: auto;
+    max-height: none;
+    min-height: min(40dvh, 280px);
+    flex: 1 1 auto;
   }
 
   .stage {
-    min-height: 120px;
+    min-height: min(36dvh, 280px);
+    height: min(52dvh, 560px);
+    max-height: min(52dvh, 560px);
   }
 
   .details {

@@ -44,7 +44,8 @@ describe('MagicLookPanel mobile viewport contract (#180)', () => {
 
   it('fits the look image inside the stage with contain (no head/hem CSS crop)', () => {
     const stage = rule(css, '.stage')
-    expect(stage).toContain('max-height: min(64dvh, 640px)')
+    // Definite height so absolute+contain has a real box (max-height alone still cropped).
+    expect(stage).toMatch(/height:\s*min\(58dvh,\s*640px\)/)
     expect(stage).toContain('overflow: hidden')
     expect(stage).toContain('position: relative')
     // Absolute fill avoids iOS WKWebView flex+%-height crops of head/feet.
@@ -54,9 +55,16 @@ describe('MagicLookPanel mobile viewport contract (#180)', () => {
     expect(css).not.toMatch(/\.image,\s*\n\.sketchPreview \{[^}]*object-fit: cover/s)
   })
 
-  it('native shell look overlay fills below the status bar (no dead top band)', () => {
+  it('native shell look overlay fills edge-to-edge (no dead top band)', () => {
     expect(css).toContain('html.fr-native-shell')
     expect(css).toContain('place-items: stretch')
+    // Overlay itself is unpadded; panel paints under the status bar.
+    expect(css).toMatch(
+      /html\.fr-native-shell\) \.overlay \{[^}]*padding:\s*0/s,
+    )
+    expect(css).toMatch(
+      /html\.fr-native-shell\) \.panel \{[^}]*padding-top:\s*max\(10px,\s*env\(safe-area-inset-top/s,
+    )
   })
 
   it('compacts at representative phone widths (320–430) without horizontal overflow', () => {
