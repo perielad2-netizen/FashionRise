@@ -17,6 +17,7 @@ from app.services.techpack_ai import set_professional_provider_override
 from app.services.techpack_ai_professional import MockProfessionalProvider
 from app.services.techpack_ai_worker import (
     claim_next_techpack_run,
+    reclaim_stale_running_techpack_runs,
     run_techpack_worker_tick,
 )
 from app.storage.local import LocalStorageBackend
@@ -301,6 +302,45 @@ def test_uncertain_outcome_marks_reconciliation_not_blind_retry(client, db_sessi
     assert again.status_code == 202
     assert again.json()["run_id"] == str(run_id)
     assert again.json()["status"] == "reconciliation_required"
+
+
+def test_stale_running_reclaim_fails_without_restarting_paid_work(
+    client, db_session, monkeypatch
+):
+    """Worker SIGKILL left status=running + in_flight + 0 artifacts — reclaim must fail it."""
+    from datetime import UTC, datetime, timedelta
+
+    tokens = register_with_invite(client, db_session, "async_stale@example.com", "async_stale")
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    _enable_ai(monkeypatch, me["email"])
+    set_professional_provider_override(MockProfessionalProvider())
+    draft = _draft(client, db_session, tokens, me)
+    idem = f"stale-{uuid.uuid4().hex}"
+    gen = client.post(
+        f"/api/v1/techpacks/{draft['id']}/ai/generate-professional",
+        headers=_auth(tokens),
+        json={"idempotency_key": idem},
+    )
+    run_id = uuid.UUID(gen.json()["run_id"])
+    row = db_session.get(TechpackAIRun, run_id)
+    assert row is not None
+    req = dict(row.request)
+    req["provider_in_flight"] = {"kind": "pattern_sheet", "piece_id": "piece-x"}
+    req["usage"] = {"cost_usd_cents": 290}
+    row.status = "running"
+    row.cost_usd_cents = 290
+    row.request = req
+    row.updated_at = datetime.now(UTC) - timedelta(hours=3)
+    db_session.add(row)
+    db_session.commit()
+
+    n = reclaim_stale_running_techpack_runs(db_session, older_than_seconds=60)
+    assert n == 1
+    db_session.refresh(row)
+    assert row.status == "failed"
+    assert int(row.cost_usd_cents) == 290
+    assert "interrupted" in (row.error_message or "").lower()
+    assert not (row.request or {}).get("provider_in_flight")
 
 
 def test_unauthenticated_generate_rejected(client, db_session, monkeypatch):
