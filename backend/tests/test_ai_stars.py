@@ -33,8 +33,8 @@ def stars_env(monkeypatch: pytest.MonkeyPatch):
         "AI_STARS_UNLIMITED_EMAILS",
         "perielad@gmail.com,perielad2@gmail.com",
     )
-    # Default release polish: force finite wallet for purchase testing.
-    monkeypatch.setenv("AI_STARS_FINITE_OVERRIDE_EMAILS", "perielad2@gmail.com")
+    # Finite override is opt-in; empty by default (production must set explicitly).
+    monkeypatch.setenv("AI_STARS_FINITE_OVERRIDE_EMAILS", "")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -102,9 +102,33 @@ def test_unlimited_never_debits(db_session, stars_env):
     assert ai_stars.user_has_unlimited_stars(user) is True
 
 
-def test_finite_override_disables_unlimited_for_purchase_tester(db_session, stars_env, client):
-    """perielad2 stays on a real wallet while other owners keep unlimited; admin untouched."""
+def test_finite_override_unset_keeps_unlimited_owners(db_session, stars_env):
+    """Empty/opt-out finite override must not demote unlimited owners."""
+    assert get_settings().ai_stars_finite_override_emails == ""
+    user = User(
+        email="perielad2@gmail.com",
+        username="peri2_default_unlimited",
+        hashed_password="x",
+        is_admin=True,
+        is_active=True,
+        ai_stars_unlimited=True,
+        ai_stars=999_999,
+    )
+    db_session.add(user)
+    db_session.commit()
+    assert ai_stars.email_has_finite_override(user.email) is False
+    assert ai_stars.user_has_unlimited_stars(user) is True
+    assert user.is_admin is True
+
+
+def test_finite_override_disables_unlimited_for_purchase_tester(
+    db_session, stars_env, client, monkeypatch
+):
+    """Explicit AI_STARS_FINITE_OVERRIDE_EMAILS forces a real wallet; admin untouched."""
     from sqlalchemy import select
+
+    monkeypatch.setenv("AI_STARS_FINITE_OVERRIDE_EMAILS", "perielad2@gmail.com")
+    get_settings.cache_clear()
 
     tokens = register_with_invite(
         client, db_session, email="perielad2@gmail.com", username="peri2_finite"
@@ -159,6 +183,9 @@ def test_finite_override_disables_unlimited_for_purchase_tester(db_session, star
 
 
 def test_clearing_finite_override_restores_unlimited(db_session, stars_env, monkeypatch):
+    monkeypatch.setenv("AI_STARS_FINITE_OVERRIDE_EMAILS", "perielad2@gmail.com")
+    get_settings.cache_clear()
+
     user = User(
         email="perielad2@gmail.com",
         username="peri2_restore",
