@@ -12,7 +12,7 @@
 | Status | Detail |
 |---|---|
 | Baseline `main` | **`bd94f8b4`** (Phase A #267 merged; **not** deployed to production as of 2026-11-10 preflight) |
-| Branch | `cursor/apple-iap-phase-b-complete-77c6` |
+| Branch / PR | `cursor/apple-iap-phase-b-complete-77c6` · **#268** (do **not** merge until PM approves) |
 | Scope | ASN V2 webhook, refund/revoke/refund-reversed accounting, `ai_stars_iap_debt`, native iOS Stars shop, unfinished-txn recovery, Alembic **026**, nginx docs |
 | Gates | `IAP_APPLE_PURCHASING_ENABLED` + `IAP_APPLE_CREDIT_ENABLED` — **both still default OFF** (not persisted ON) |
 | Migration head (repo) | **026** (revises 025). Production still on **025** until authorized migrate |
