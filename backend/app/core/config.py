@@ -250,6 +250,12 @@ class Settings(BaseSettings):
     iap_apple_app_apple_id: int = 6832116469
     # OCSP / online chain checks for Apple roots (disable in offline unit tests).
     iap_apple_online_checks: bool = True
+    # App Store Server API (ASC In-App Purchase key) — outbound API only.
+    # Used for Request/Get Test Notification and future history lookups.
+    # Private key stays on disk outside the repo; never commit .p8 contents.
+    iap_apple_asc_issuer_id: str = ""
+    iap_apple_asc_key_id: str = ""
+    iap_apple_asc_private_key_path: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod

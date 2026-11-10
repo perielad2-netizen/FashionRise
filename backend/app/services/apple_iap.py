@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import jwt
+from appstoreserverlibrary.api_client import AppStoreServerAPIClient
 from appstoreserverlibrary.models.Environment import Environment
 from appstoreserverlibrary.models.InAppOwnershipType import InAppOwnershipType
 from appstoreserverlibrary.models.Type import Type
@@ -392,3 +393,106 @@ def expected_env_mismatch(expected: Environment, env_name: str) -> bool:
 
 def clear_apple_iap_caches() -> None:
     load_apple_root_certificates.cache_clear()
+
+
+def apple_asc_api_configured() -> bool:
+    """True when ASC In-App Purchase API key material is present for outbound calls."""
+    s = get_settings()
+    issuer = (s.iap_apple_asc_issuer_id or "").strip()
+    key_id = (s.iap_apple_asc_key_id or "").strip()
+    path = (s.iap_apple_asc_private_key_path or "").strip()
+    if not issuer or not key_id or not path:
+        return False
+    try:
+        p = Path(path)
+        return p.is_file() and p.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def load_apple_asc_signing_key() -> bytes:
+    """Read the ASC ``.p8`` signing key from the configured filesystem path."""
+    path = (get_settings().iap_apple_asc_private_key_path or "").strip()
+    if not path:
+        raise ServiceUnavailableError("Apple ASC private key path is not configured")
+    p = Path(path)
+    if not p.is_file():
+        raise ServiceUnavailableError("Apple ASC private key file is missing")
+    raw = p.read_bytes()
+    if b"BEGIN PRIVATE KEY" not in raw and b"BEGIN EC PRIVATE KEY" not in raw:
+        raise ServiceUnavailableError("Apple ASC private key file is not a PEM .p8")
+    return raw
+
+
+def build_app_store_server_api_client(*, environment: Environment) -> AppStoreServerAPIClient:
+    """Official App Store Server API client (Sandbox or Production).
+
+    Requires ``IAP_APPLE_ASC_ISSUER_ID``, ``IAP_APPLE_ASC_KEY_ID``, and
+    ``IAP_APPLE_ASC_PRIVATE_KEY_PATH``. Does not enable purchasing or credit gates.
+    """
+    if environment not in (Environment.PRODUCTION, Environment.SANDBOX):
+        raise ForbiddenError("Unsupported App Store Server API environment")
+    if not apple_asc_api_configured():
+        raise ServiceUnavailableError("Apple App Store Server API is not configured")
+
+    settings = get_settings()
+    bundle_id = (settings.iap_apple_bundle_id or IOS_BUNDLE_ID_DEFAULT).strip()
+    return AppStoreServerAPIClient(
+        signing_key=load_apple_asc_signing_key(),
+        key_id=(settings.iap_apple_asc_key_id or "").strip(),
+        issuer_id=(settings.iap_apple_asc_issuer_id or "").strip(),
+        bundle_id=bundle_id,
+        environment=environment,
+    )
+
+
+def request_sandbox_test_notification() -> str:
+    """Ask Apple to send one ASN V2 TEST notification to the configured Sandbox URL.
+
+    Returns the ``testNotificationToken`` (caller must not log the full value).
+    """
+    client = build_app_store_server_api_client(environment=Environment.SANDBOX)
+    try:
+        resp = client.request_test_notification()
+    except Exception as exc:  # noqa: BLE001
+        _log.exception("apple_asc_request_test_notification_failed")
+        raise ServiceUnavailableError(
+            "Apple Request Test Notification failed"
+        ) from exc
+    token = (getattr(resp, "testNotificationToken", None) or "").strip()
+    if not token:
+        raise ServiceUnavailableError("Apple TEST notification token missing")
+    return token
+
+
+def get_sandbox_test_notification_status(test_notification_token: str) -> dict[str, Any]:
+    """Fetch Apple's delivery attempts for a prior sandbox TEST token (redacted)."""
+    token = (test_notification_token or "").strip()
+    if not token:
+        raise ValidationAppError("testNotificationToken is required")
+    client = build_app_store_server_api_client(environment=Environment.SANDBOX)
+    try:
+        resp = client.get_test_notification_status(token)
+    except Exception as exc:  # noqa: BLE001
+        _log.exception("apple_asc_get_test_notification_status_failed")
+        raise ServiceUnavailableError(
+            "Apple Get Test Notification Status failed"
+        ) from exc
+
+    attempts: list[dict[str, Any]] = []
+    for item in getattr(resp, "sendAttempts", None) or []:
+        result = getattr(item, "sendAttemptResult", None)
+        raw = getattr(item, "rawSendAttemptResult", None)
+        attempts.append(
+            {
+                "attempt_date_ms": getattr(item, "attemptDate", None),
+                "result": getattr(result, "value", None) or raw or str(result or ""),
+            }
+        )
+    signed = getattr(resp, "signedPayload", None)
+    return {
+        "attempt_count": len(attempts),
+        "attempts": attempts,
+        "has_signed_payload": bool(signed),
+        "signed_payload_len": len(signed) if isinstance(signed, str) else 0,
+    }
