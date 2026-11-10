@@ -3,21 +3,33 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**PR #278 FE DEPLOYED for test** — chat popup / Clear / Front·Back toggle / smart-back Magic live @ `7594c90e`; BE still `1fea9ded`; public IAP gates **OFF**.)
+**Last updated:** 2026-11-10 (**C1 Sandbox first purchase PASS** — `stars_50` credited once for `perielad2@gmail.com`; public IAP gates still **OFF**; UI polish proposals for PM; **no App Review submit**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Studio UX fixes (2026-11-10) — PR #278 · FE DEPLOYED (test)
+## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS · PM STOP
 
 | Status | Detail |
 |---|---|
-| PR | [#278](https://github.com/perielad2-netizen/FashionRise/pull/278) · tip **`7594c90e`** · not yet merged to `main` |
-| Production FE | **`7594c90e`** · `/var/www/fashionrise/releases/7594c90e-studio-chat-clear-fb-278` · public `/version.json` matches |
-| Production BE | unchanged **`1fea9ded`** · API + worker **active** · `/health` ok |
-| Vite gates | Front/Back+Magic+Dual **ON** · registration **OFF** · assert pass |
-| Scope | Runway chat above sheets · Clear on tool rail · Front\|Back toggle · smart Back Magic when Back empty |
-| Backup / rollback | `/var/backups/fashionrise/studio-chat-clear-fb-deploy-20261110T212459Z/ROLLBACK.sh` → prior FE **`1fea9ded-stars-shop-polish`** |
-| Owner test | Hard-refresh until App **`7594c90e`**. Verify Chat from Top 10/My circle, Clear on toolbar, Front/Back toggle, Magic with empty Back invents Back. |
+| Tester | `perielad2@gmail.com` · sandbox allowlist · finite override · effective unlimited **false** |
+| Purchase | **Sandbox** `stars_50` · txn `2000001264125176` · **50** Stars credited exactly once · status `active` |
+| Ownership | ASN `app_account_token` matches server token for user · bundle `app.fashionrise.studio` |
+| Idempotency | Second confirm ~3s later · **no** second credit · unique `(ios, transaction_id)` |
+| Wallet | Live `ai_stars=1000039` · debt **0** (matches credit log remaining) |
+| Public gates | purchasing **false** · credit **false** · unverified sandbox **false** (allowlist-only path used) |
+| Audit doc | `docs/deploy/APPLE-STARS-IAP-C1-SANDBOX-RESULTS.md` |
+| UI follow-ups | (1) “Buying…” on all packs — **code fix in this PR** (2) USD vs ILS — ASC/storefront, keep StoreKit `priceString` (3) placeholder sheet icon — ASC/TF App Store icon |
+| App Store submit | **Not ready** — polish + PM gate plan still required; ledger/security **not** a blocker |
+| Stop line | No public gate enable · no new purchases · no App Review |
+
+## Studio UX fixes (2026-11-10) — PR #278/#279 MERGED · FE LIVE
+
+| Status | Detail |
+|---|---|
+| Merge | **#278** `90d30bfd` · **#279** `5c71e30e` (main tip) |
+| Production FE | **`7594c90e`** · `/var/www/fashionrise/releases/7594c90e-studio-chat-clear-fb-278` |
+| Production BE | tip includes techpack reclaim overlay; API + worker **active** |
+| Scope | Runway chat above sheets · Clear on tool rail · Front\|Back toggle · smart Back Magic · stale techpack reclaim |
 
 ## Stars shop polish (2026-11-10) — MERGED · DEPLOYED · TF READY
 
