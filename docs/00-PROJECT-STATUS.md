@@ -3,9 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple Stars IAP Phase B deployed gates-OFF** — PR **#268** squash-merged → `main` **`b6c614d2`**, production BE/FE on that tip, Alembic **027**. Purchasing + credit still **OFF**. No Codemagic / App Store submit / live buys.)
+**Last updated:** 2026-11-10 (**Apple IAP Phase C1 STOPPED** — inbound ASN verifier/nginx ready on prod `b6c614d2` / Alembic **027**, gates **OFF**; official Apple Sandbox TEST notification **not sent** — missing App Store Server API key + ASC Sandbox URL owner actions.)
 
-**Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Audit docs **#266** squash-merged. Phase A **#267** squash-merged → `main` **`bd94f8b4`**. Phase B **#268** squash-merged + production deploy (gates OFF).
+**Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Phase B **#268** deployed gates-OFF. Phase C1 ASN signed-delivery validation **blocked on owner credentials/ASC**.
+
+## Apple Stars IAP — Phase C1 signed ASN V2 validation (2026-11-10) — BLOCKED
+
+| Status | Detail |
+|---|---|
+| Goal | One official Apple Sandbox **Request a Test Notification** → cryptographically verified non-financial `TEST` receipt; gates stay OFF; no purchases |
+| Production revision | BE/FE still **`b6c614d2`** · services **active** · `/health` ok · `/ready` database ok · Alembic **027** |
+| Gates | `IAP_APPLE_PURCHASING_ENABLED=false` · `IAP_APPLE_CREDIT_ENABLED=false` · `IAP_ALLOW_UNVERIFIED_SANDBOX=false` |
+| Inbound verifier | **READY** — `verification_configured=true`; public roots in `backend/app/certs/apple/*.cer` (4); prod `.env` now also sets `IAP_APPLE_BUNDLE_ID=app.fashionrise.studio`, `IAP_APPLE_APP_APPLE_ID=6832116469`, `IAP_APPLE_ONLINE_CHECKS=true` (non-secret). No private Apple keys required for inbound ASN verify |
+| Nginx | Exact `POST /api/v1/shop/iap/apple/notifications` allowlisted; HTTPS via Cloudflare → origin |
+| Cloudflare | Probe POST (forged Sandbox-shaped JWS) reaches FastAPI → **403** `Apple notification signature verification failed` (app crypto reject). No interactive Access/login challenge observed on this path. No CF API credentials in agent secrets — path-exact Access/WAF exception **not** created via dashboard/API; owner should confirm Zero Trust does not block Apple ASN POSTs before cutover |
+| App Store Connect Sandbox URL | **NOT configured by agent** — no ASC UI/API access. Owner must set App Store Server Notifications V2 **Sandbox** URL to `https://fashionrise.app/api/v1/shop/iap/apple/notifications` for app **FashionRise: AI Design Studio** (`app.fashionrise.studio` / Apple ID **6832116469**). Do **not** overwrite Production URL without separate authorization |
+| Official Apple TEST | **NOT EXECUTED** — App Store Server API credentials absent (no Issuer ID / Key ID / `.p8` on VPS, in `.env`, or in Cursor secrets). Cannot call Request a Test Notification / Get Test Notification Status without them |
+| DB invariants after C1 probes | purchases**=0** · notifications**=0** · adjustments**=0** · bad_debt_rows**=0** |
+| Owner actions (exact) | 1) ASC → Users and Access → Keys → App Store Connect API → create/use **In-App Purchase** key; store Issuer ID, Key ID, and `.p8` via approved secret process into prod (names TBD e.g. `IAP_APPLE_ASC_ISSUER_ID` / `IAP_APPLE_ASC_KEY_ID` / `IAP_APPLE_ASC_PRIVATE_KEY` — not yet wired in code; alternatively owner runs TEST from ASC “Request a Test Notification” UI once Sandbox URL is saved). 2) ASC → App → App Store Server Notifications → Version 2 → set **Sandbox Server URL** to the exact endpoint above → Save. 3) Re-authorize agent (or owner) for **one** Sandbox TEST only, gates still OFF |
+| Next PM action | After Sandbox URL saved + either ASC UI TEST or API key provisioned: resume C1 for **single** official TEST; then review delivery status + durable `ignored`/`TEST` receipt before any credit-gate work |
 
 ## Apple Stars IAP — Phase B end-to-end (2026-11-10) — DEPLOYED GATES OFF
 
@@ -18,15 +34,15 @@
 | Gates (prod `.env` + runtime) | `IAP_APPLE_PURCHASING_ENABLED=false` · `IAP_APPLE_CREDIT_ENABLED=false` · `IAP_ALLOW_UNVERIFIED_SANDBOX=false` (explicitly set, not missing) |
 | Status endpoint | `GET /api/v1/shop/iap/apple/status` → `purchasing_enabled=false`, `credit_enabled=false`, `verification_configured=true` (local + public) |
 | Nginx | Added exact locations: `app-account-token`, `apple/status`, `apple/notifications` (kept `confirm`/`restore`). Auth `/stars` already present |
-| Cloudflare | Public POST to ASN path returns **app** 422 for unsigned payloads (route not CF-blocked for this probe). Path-exact Access/WAF exception for Apple still recommended before ASN production URL cutover — **not** proven via Apple signed test notification |
-| Unsigned ASN | Rejected (422 validation / parse failure); **0** notification/purchase/adjustment rows; **0** bad debt rows |
+| Cloudflare | Forged ASN POST returns **app** 403 signature failure (route reachable in probe). Path-exact Access/WAF exception still owner-confirm before Apple cutover |
+| Unsigned ASN | Rejected; **0** notification/purchase/adjustment rows; **0** bad debt rows |
 | Account-token | Unauthenticated → **401** (auth required). Authenticated smoke deferred (no paid/session exercise) |
 | Backup / rollback | `/var/backups/fashionrise/apple-iap-phase-b-268-20261110T154937Z/` · `fashionrise_beta.sql.gz` (~153MB, gzip -t ok) + custom format dump + `ROLLBACK.sh` (code/nginx/FE; **do not** auto-downgrade 027 with payment data) |
 | Prior prod tip | BE `65239732` · FE `b1dc83a7-fill-cutout-holes` |
 | Hotfixes | FE `npm ci` needed `chown` on `web-ui` after root checkout (permission); no payment-logic changes |
 | Native iOS | TestFlight IPA **not** rebuilt — Capgo/native shop UI **not** validated on device by this web deploy |
-| Outstanding App Store Connect | Paid Apps Agreement / products / ASN V2 URLs / sandbox testers / Server API key as needed |
-| Next (pending PM) | Authorize Apple notification infrastructure validation (ASC ASN URL + signed test) → controlled StoreKit sandbox with credit gate still OFF or PM-gated ON → then purchasing gate · **no** Codemagic/submit yet |
+| Outstanding App Store Connect | Sandbox ASN V2 URL + App Store Server API key (or ASC UI TEST) · products/agreement/sandbox testers as needed |
+| Next | Complete Phase C1 owner actions above → single Sandbox TEST → then PM-gated sandbox purchase path · **no** Codemagic/submit yet |
 | Docs | `docs/deploy/APPLE-STARS-IAP-PHASE-B.md` · `docs/deploy/PROPOSED-NGINX-SHOP-ALLOWLIST.md` |
 
 ## Apple Stars IAP — Phase A (merged 2026-11-10)
