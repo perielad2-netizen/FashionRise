@@ -36,7 +36,7 @@ import {
 import { documentForCloud } from '@/services/designsApi'
 import { isMagicUiEnabled } from '@/config/magicUi'
 import {
-  downloadBlob,
+  saveOrDownloadBlob,
   exportFilename,
   exportFrontBackSheetPng,
   exportSketchPng,
@@ -3092,14 +3092,14 @@ export function useStudioEditor() {
       if (!url) return
       void fetch(url)
         .then((r) => r.blob())
-        .then((blob) => downloadBlob(blob, exportFilename(`look-${side}`)))
+        .then((blob) => saveOrDownloadBlob(blob, exportFilename(`look-${side}`)))
         .catch(() => setMagicError('Could not download the look image.'))
       return
     }
     if (!magicLookUrlRef.current) return
     void fetch(magicLookUrlRef.current)
       .then((r) => r.blob())
-      .then((blob) => downloadBlob(blob, exportFilename('look')))
+      .then((blob) => saveOrDownloadBlob(blob, exportFilename('look')))
       .catch(() => setMagicError('Could not download the look image.'))
   }, [magicDualActive, magicDualViewSide])
 
@@ -3109,7 +3109,7 @@ export function useStudioEditor() {
       if (!url) return
       void fetch(url)
         .then((r) => r.blob())
-        .then((blob) => downloadBlob(blob, exportFilename(`look-${side}`)))
+        .then((blob) => saveOrDownloadBlob(blob, exportFilename(`look-${side}`)))
         .catch(() => setMagicError(`Could not download the ${side} look.`))
     },
     [],
@@ -3541,7 +3541,10 @@ export function useStudioEditor() {
               referenceOpacity: doc.dimmed ? 0.4 : 1,
             },
           })
-          downloadBlob(blob, exportFilename(null).replace('.png', '-front-back.png'))
+          await saveOrDownloadBlob(
+            blob,
+            exportFilename(null).replace('.png', '-front-back.png'),
+          )
           publishStudioNotice(
             referenceIncluded
               ? 'Front + back sheet exported. Check your downloads.'
@@ -3568,7 +3571,10 @@ export function useStudioEditor() {
         })
         const suffix =
           side === 'back' ? '-back' : side === 'front' ? '-front' : ''
-        downloadBlob(blob, exportFilename(null).replace('.png', `${suffix}.png`))
+        await saveOrDownloadBlob(
+          blob,
+          exportFilename(null).replace('.png', `${suffix}.png`),
+        )
         const wantedReference = referenceUrlForDocument(doc, refSide) !== null
         publishStudioNotice(
           pinPending

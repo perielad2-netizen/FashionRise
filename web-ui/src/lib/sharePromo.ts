@@ -95,15 +95,8 @@ export async function copyText(text: string): Promise<void> {
 
 export async function downloadImageFromUrl(imageUrl: string, fileName: string): Promise<void> {
   const file = await fileFromImageUrl(imageUrl, fileName)
-  const url = URL.createObjectURL(file)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = file.name
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  const { saveOrDownloadBlob } = await import('@/lib/exportCanvas')
+  await saveOrDownloadBlob(file, file.name)
 }
 
 export type NativeShareResult = 'shared' | 'cancelled' | 'unavailable'

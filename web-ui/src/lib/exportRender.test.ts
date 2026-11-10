@@ -293,3 +293,36 @@ describe('download and filename', () => {
     expect(exportFilename('שמלה', now)).toBe('fashionrise-sketch-2026-10-20-0905.png')
   })
 })
+
+describe('saveOrDownloadBlob native share', () => {
+  it('shares files on Capacitor instead of relying on <a download>', async () => {
+    const { saveOrDownloadBlob } = await import('@/lib/exportCanvas')
+    const share = vi.fn(async () => undefined)
+    const canShare = vi.fn(() => true)
+    const download = vi.fn()
+
+    await saveOrDownloadBlob(new Blob(['png'], { type: 'image/png' }), 'look.png', {
+      isNative: () => true,
+      canShare,
+      share,
+      download,
+    })
+
+    expect(canShare).toHaveBeenCalled()
+    expect(share).toHaveBeenCalledTimes(1)
+    expect(download).not.toHaveBeenCalled()
+    const arg = share.mock.calls[0]?.[0] as ShareData
+    expect(arg.files?.length).toBe(1)
+    expect(arg.files?.[0]?.name).toBe('look.png')
+  })
+
+  it('falls back to anchor download on web', async () => {
+    const { saveOrDownloadBlob } = await import('@/lib/exportCanvas')
+    const download = vi.fn()
+    await saveOrDownloadBlob(new Blob(['png'], { type: 'image/png' }), 'look.png', {
+      isNative: () => false,
+      download,
+    })
+    expect(download).toHaveBeenCalledTimes(1)
+  })
+})
