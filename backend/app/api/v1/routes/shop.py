@@ -115,6 +115,8 @@ def get_apple_iap_status(
 
     Unauthenticated / non-tester callers see public gates. Designated sandbox
     tester accounts see purchasing/credit enabled while public gates stay OFF.
+    Identity is the JWT subject → DB ``User.email`` only — query/header email
+    fields are ignored and cannot spoof the allowlist.
     """
     _ = request.url
     return iap_service.apple_shop_status(user)

@@ -158,7 +158,10 @@ def _confirm_apple(
 
     # Credit/reconcile gate (completed Apple txns). Distinct from purchasing_enabled
     # (initiating new StoreKit buys). Both default OFF for the public; designated
-    # sandbox-tester emails may confirm while public gates stay OFF.
+    # sandbox-tester emails may enter confirm while public gates stay OFF — but only
+    # verified Apple Sandbox transactions may credit through that exception (checked
+    # after cryptographic verify below).
+    global_credit = apple_iap.apple_credit_enabled()
     if not apple_iap.apple_credit_enabled_for(user):
         raise ServiceUnavailableError(
             "Apple Stars credit / transaction recovery is not enabled yet. "
@@ -188,6 +191,16 @@ def _confirm_apple(
         raise ValidationAppError("Apple transaction JWS (jwsRepresentation) is required")
 
     verified = apple_iap.verify_signed_transaction_jws(jws or "")
+
+    # Tester exception is Sandbox-only. Never credit a verified Production txn while
+    # the global credit gate is OFF — environment comes from Apple-signed JWS only.
+    if not global_credit:
+        env = (verified.environment or "").strip()
+        if env != "Sandbox":
+            raise ForbiddenError(
+                "Sandbox tester credit requires a cryptographically verified "
+                "Apple Sandbox transaction"
+            )
 
     if verified.product_id not in STARS_PRODUCTS:
         raise ValidationAppError("Unknown Stars product on verified Apple transaction")

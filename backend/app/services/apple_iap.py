@@ -136,7 +136,13 @@ def apple_purchasing_enabled_for(user: Any | None = None) -> bool:
 
 
 def apple_credit_enabled_for(user: Any | None = None) -> bool:
-    """Public credit gate OR designated sandbox-tester email."""
+    """Public credit gate OR designated sandbox-tester email.
+
+    Status/UI only: a True result for a tester does **not** authorize Production
+    credits. ``iap_service._confirm_apple`` still requires a cryptographically
+    verified Apple ``Sandbox`` environment when the global credit gate is OFF.
+    Identity is the authenticated DB user email — never a client-supplied field.
+    """
     if apple_credit_enabled():
         return True
     if user is None:
