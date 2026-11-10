@@ -3,23 +3,34 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**PR #276 PM harden** — finite override **opt-in empty default**; prod test wallet read-only shows **999999** Stars / unlimited / debt **0**. Awaiting PM review. No merge/deploy/Codemagic in this amendment.)
+**Last updated:** 2026-11-10 (**PR #276 MERGED + DEPLOYED** — shop polish live; public IAP gates **OFF**; finite override **empty**; new finite invite pending owner registration; Codemagic ready on `main` @ `1fea9ded` for TF **>117**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Stars shop polish before App Store (2026-11-10) — PR #276 AMENDED (do not merge yet)
+## Stars shop polish (2026-11-10) — MERGED · DEPLOYED · TF READY
 
 | Status | Detail |
 |---|---|
-| Branch | `cursor/web-stars-shop-polish-77c6` |
-| Shop copy | “Stars power your AI fashion creations…” + costs **Magic 10 · Model 10 · Fabric 5 · PDF 50** (matches `AI_STARS_*_COST` / croquis=Model) |
-| Package order | Canonical `stars_50` → `stars_150` → `stars_500` with friendly **Starter / Creator / Studio**; StoreKit localized `priceString` only |
-| Finite override | **`AI_STARS_FINITE_OVERRIDE_EMAILS` defaults to empty** (opt-in). Production must explicitly set `perielad2@gmail.com` for purchase testing. Wins over unlimited list + DB flag; does **not** change `is_admin`. |
-| Restore unlimited | Clear that email from `AI_STARS_FINITE_OVERRIDE_EMAILS` (or set empty) and restart API |
-| Prod wallet (read-only) | Designated test account `perielad2@gmail.com`: **`ai_stars=999999`**, `ai_stars_unlimited=true`, **`ai_stars_iap_debt=0`**, effective unlimited **true**, finite override **not** set in prod `.env`. Balance not modified. |
-| Purchase-test recommendation | Do **not** overwrite the 999999 ledger silently. Prefer (a) a **new** invite-only finite account added only to `IAP_APPLE_SANDBOX_TESTER_EMAILS` (starting balance 10), or (b) a **separately PM-authorized, auditable** one-time seed of a known finite balance after enabling the override — never delete payment/IAP history. |
-| Gates | Public purchasing/credit **OFF**; sandbox tester allowlist unchanged |
-| Next | PM approve amendment → merge/deploy with explicit finite override + chosen finite test wallet → **one** Codemagic TF build **> 117** → sandbox 50-Star purchase matrix |
+| Merge | Squash **#276** → `main` **`1fea9dedb12d3cef756c7c9d2a3881fb888726cb`** (reviewed HEAD `c981328f`) |
+| Production BE | **`1fea9ded`** @ `/opt/fashionrise/src` · API + worker **active** · `/health` ok · `/ready` database ok |
+| Production FE | **`1fea9ded`** · `/var/www/fashionrise/releases/1fea9ded-stars-shop-polish` · shop copy embedded |
+| Alembic | **027 (head)** |
+| Apple gates | purchasing **false** · credit **false** · unverified sandbox **false** |
+| Finite override | **`AI_STARS_FINITE_OVERRIDE_EMAILS=` empty** (feature available, unused) |
+| Owner wallets | Existing sandbox testers left at **999999** — **not** modified |
+| New finite tester | Invite pending for owner-controlled `perielad2+iap-sandbox@gmail.com` · code at `/var/lib/fashionrise/invites/perielad2-iap-sandbox.code` (not printed) · on `IAP_APPLE_SANDBOX_TESTER_EMAILS` (count **4**) · account **not yet registered** |
+| Expected wallet after register | ordinary user · not unlimited · **ai_stars=10** · debt **0** · non-admin |
+| Codemagic | **Ready** — branch **`main`** @ **`1fea9ded`** · workflow **`fashionrise-ios-app-store`** · version **1.0** · build# `PROJECT_BUILD_NUMBER+100` (**>117**) · one IPA only |
+| Codemagic result | **Not started** (no CM API). Owner starts **one** build after registering the finite tester |
+| Backup | `/var/backups/fashionrise/stars-shop-polish-276-20261110T200258Z/` |
+| Stop line | No real-money purchases · no public purchasing · no App Review submit |
+
+### Owner next actions
+
+1. Read invite code from VPS `/var/lib/fashionrise/invites/perielad2-iap-sandbox.code` (do not paste into chat).
+2. Register via `POST /api/v1/auth/register` (web `/register` UI is off) with that email + invite + chosen password → starting Stars **10**.
+3. Codemagic → branch **`main`** (`1fea9ded…`) → **FashionRise iOS (App Store IPA)** → Start **once** → ASC Ready to Test (build **>117**).
+4. Install TF · sign in as new finite tester · sandbox 50-Star matrix (10→60; duplicate no-op; Magic −10→50).
 
 ## Paid-Stars iOS release build (2026-11-10) — DEPLOYED · CODEMAGIC READY
 
