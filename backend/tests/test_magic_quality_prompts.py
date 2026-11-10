@@ -289,11 +289,11 @@ def _shared_spec_payload_from_prompt(prompt: str) -> dict[str, Any]:
 
 
 def test_shared_garment_spec_prioritizes_main_colors_over_long_details():
-    """Regression: alphabetical JSON[:320] dropped main_colors after lengthy details."""
+    """Regression: alphabetical JSON packing dropped main_colors after lengthy details."""
     spec = _realistic_fe_gray_garment_spec()
     # Prove the old failure mode: alphabetical sort places lengthy details before main_colors.
     naive = json.dumps(spec, ensure_ascii=True, sort_keys=True)
-    assert naive.find('"main_colors"') > sketch_openai._SHARED_GARMENT_SPEC_PROMPT_CHARS
+    assert naive.find('"details"') < naive.find('"main_colors"')
 
     clause = sketch_openai._shared_garment_spec_clause({"shared_garment_spec": spec})
     payload = clause.split(": ", 1)[1]
@@ -423,6 +423,7 @@ def test_design_enhancement_normalizes_sketch_glitches_not_literal_mistakes():
     assert "wow" in lower
     assert "design idea" in lower
     assert "kid-like" in lower or "rough/kid" in lower
+    assert "must erase sketch glitches" in lower
     assert "incomplete bucket fills" in lower or "incomplete" in lower
     assert "unfilled gaps" in lower
     assert "not treat unfilled gaps as cut-outs" in lower or "do not treat unfilled gaps" in lower
@@ -431,6 +432,82 @@ def test_design_enhancement_normalizes_sketch_glitches_not_literal_mistakes():
     assert "pixel-perfect" in lower
     assert "non-photorealistic" in lower
     assert "swim" in lower or "lingerie" in lower or "true crop" in lower
+    # Vision refine_ok must reach the edit brief (not dropped by budget).
+    assert "must fix these sketch imperfections" in lower
+    assert "crooked edges" in lower
+
+
+def test_full_fe_shared_spec_never_mid_slices_glitch_fix():
+    """Regression: 4500-char cap mid-sliced Back+swatch and dropped glitch-fix."""
+    notes = (
+        "MUST erase sketch glitches (incomplete fills, leftover gaps, uneven lines, missing fabric, "
+        "unfinished hands/legs/shoes) — restore matching fabric; do NOT treat unfilled gaps as cut-outs; "
+        "WOW elevate rough/kid-like sketch into a stunning professional fashion illustration; "
+        "keep the DESIGN IDEA (silhouette/cut, fabric/color theme, Front/Back coherence); "
+        "ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; "
+        "only keep clearly designed swim/lingerie/true-crop openings; no traced/cartoon look."
+    )[:500]
+    details = (
+        "model=teen_a; front_strokes=48; front_fills=6; back_strokes=44; back_fills=5; "
+        "render=polished_professional_enhancement; sketch_role=strong_guidance_not_pixel_trace; "
+        "color_authority=applied_fills_and_ink_combination; accessory_fabric_fills=preserve_as_painted_in_sketch; "
+        "sketch_cleanup=smart_normalize_accidental_gaps; fingerprint="
+        + ("a" * 64)
+    )[:1000]
+    spec = {
+        "notes": notes,
+        "colors": ["#1e3a5f", "#4a6fa5", "#111827"],
+        "main_colors": ["#1e3a5f", "#4a6fa5"],
+        "materials": ["denim patchwork fill", "solid fill"],
+        "details": details,
+        "garment_category": "studio",
+        "silhouette": "jumpsuit",
+        "neckline": "V",
+        "hem": "floor",
+    }
+    structured = {
+        "summary": "Patchwork denim jumpsuit",
+        "image_prompt": "patchwork denim jumpsuit flared sleeves wide legs V neck",
+        "design_identity": {
+            "garment_category": "jumpsuit",
+            "silhouette": "wide-leg jumpsuit",
+            "pose": "standing",
+            "neckline": "deep V-neck",
+            "sleeve_type": "bell",
+            "sleeve_length": "long",
+            "hemline": "floor",
+            "main_colors": "denim blue patchwork",
+            "fabric_patterns": "patchwork denim",
+            "distinctive_details": "flared sleeve slits",
+            "skin_visible_regions": "face neck hands",
+            "garment_panels": "bodice sleeves pants",
+            "cutouts_and_openings": "V neckline",
+        },
+        "refine_ok": ["uneven fill edges", "incomplete hand", "leftover unfilled gaps"],
+    }
+    for side in ("front", "back"):
+        prompt = sketch_openai._build_image_prompt(
+            structured,
+            structured["summary"],
+            job=_job(
+                studio_side=side,
+                shared_garment_spec=spec,
+                fabric_swatch_base64="data:image/png;base64,aa",
+            ),
+        )
+        assert len(prompt) <= sketch_openai.IMAGE_PROMPT_MAX_CHARS
+        # Intact protected contracts — never mid-slice the illustration style sentence.
+        assert "non-photorealistic fashion illustration." in prompt
+        assert "Do NOT keep rough sketch glitches" in prompt
+        assert "MUST erase sketch glitches" in prompt
+        assert "Design evidence:" in prompt
+        assert "MUST fix these sketch imperfections" in prompt
+        assert "incomplete hand" in prompt.lower()
+        # Shared-spec notes keep glitch verbs (not crushed to "WOW elevate… DESIGN").
+        clause = sketch_openai._shared_garment_spec_clause(
+            {"shared_garment_spec": spec}
+        )
+        assert "erase sketch glitches" in clause.lower()
 
 
 def test_system_prompt_asks_to_elevate_not_trace():
@@ -484,7 +561,9 @@ def test_edit_request_uses_high_fidelity_and_exactly_one_edit(monkeypatch, setti
     name, buf, mime = captured["image"]
     assert name.startswith("sketch.")
     assert isinstance(buf, BytesIO)
-    assert buf.getvalue() == _TINY_PNG
+    # Pale-visibility prep may re-encode the 1×1 fixture; still must send a PNG sketch.
+    sketch_sent = buf.getvalue()
+    assert sketch_sent.startswith(b"\x89PNG")
     assert mime.startswith("image/")
     assert saved and saved[0][1] == b"FAKEPNG"
 
