@@ -12,8 +12,9 @@ Consumable Stars policy (not subscription renewal semantics):
   per-transaction advisory lock refuses credit and records ``blocked``.
 
 Concurrency: confirm and ASN both take ``pg_advisory_xact_lock`` on
-``iap:ios:<transaction_id>`` **before** mutating purchases/wallets (then lock
-purchase, then user — never the reverse).
+``iap:ios:<transaction_id>`` **before** locking notification / purchase / user
+rows. ASN never holds a notification ``FOR UPDATE`` while waiting on the
+advisory (that inversion deadlocks against confirm's attach path).
 """
 
 from __future__ import annotations
@@ -64,10 +65,15 @@ _IAP_LOCK_NS = 728401
 def lock_apple_transaction(db: Session, transaction_id: str) -> None:
     """Exclusive transaction-scoped lock shared by confirm + ASN paths.
 
-    Lock order (deadlock-safe):
-      1. advisory(txn)
-      2. iap_purchases row (FOR UPDATE)
-      3. users row (FOR UPDATE)
+    Global lock order (deadlock-safe) for a given Apple transaction_id:
+      1. advisory(txn)          — always first; serializes confirm vs ASN
+      2. notification row FOR UPDATE (ASN apply / failure mark / attach)
+      3. iap_purchases row FOR UPDATE
+      4. users row FOR UPDATE
+
+    Confirm follows 1 → 3 → 4 → 2 (notification updates only while already
+    holding the advisory). ASN must take 1 before 2 so it never waits on the
+    advisory while holding a notification row lock.
     """
     txn = (transaction_id or "").strip()
     if not txn:
@@ -94,16 +100,25 @@ def process_apple_notification(db: Session, *, signed_payload: str) -> dict[str,
 
     verified = apple_iap.verify_signed_notification_payload(raw)
     # Phase 1: durable receipt commit so apply crashes cannot erase the UUID.
+    # Commits without holding locks across the confirm path.
     row = _ensure_notification_receipt(db, verified)
 
     if row.processing_state in _TERMINAL_OK:
         return _receipt_payload(row, duplicate=True)
 
-    # Phase 2: lock + apply in a fresh transaction unit.
+    txn_id = (
+        verified.transaction.transaction_id if verified.transaction else None
+    ) or row.transaction_id
+
+    # Phase 2: advisory FIRST, then notification row lock, then apply.
     try:
+        if txn_id:
+            lock_apple_transaction(db, txn_id)
+
         row = _lock_notification_by_uuid(db, verified.notification_uuid)
         if row is None:
             raise ServiceUnavailableError("Apple notification receipt missing")
+        # Re-check authoritative state after locks (another worker may have finished).
         if row.processing_state in _TERMINAL_OK:
             db.commit()
             return _receipt_payload(row, duplicate=True)
@@ -114,23 +129,30 @@ def process_apple_notification(db: Session, *, signed_payload: str) -> dict[str,
         row.updated_at = datetime.now(UTC)
         db.flush()
 
-        txn_id = (
-            verified.transaction.transaction_id if verified.transaction else None
-        ) or row.transaction_id
-        if txn_id:
-            lock_apple_transaction(db, txn_id)
         _apply_verified_notification(db, row, verified)
         db.commit()
     except ForbiddenError as exc:
-        _mark_notification_failed(db, verified.notification_uuid, str(exc)[:200])
+        _mark_notification_failed(
+            db,
+            verified.notification_uuid,
+            str(exc)[:200],
+            transaction_id=txn_id,
+        )
         raise
     except IntegrityError:
         db.rollback()
-        again = _lock_notification_by_uuid(db, verified.notification_uuid)
+        again = _relock_notification_for_status(
+            db, verified.notification_uuid, transaction_id=txn_id
+        )
         if again is not None and again.processing_state in _TERMINAL_OK:
             db.commit()
             return _receipt_payload(again, duplicate=True)
-        _mark_notification_failed(db, verified.notification_uuid, "integrity_conflict")
+        _mark_notification_failed(
+            db,
+            verified.notification_uuid,
+            "integrity_conflict",
+            transaction_id=txn_id,
+        )
         raise ServiceUnavailableError(
             "Apple notification processing conflict; retry"
         ) from None
@@ -141,7 +163,10 @@ def process_apple_notification(db: Session, *, signed_payload: str) -> dict[str,
             verified.notification_type,
         )
         _mark_notification_failed(
-            db, verified.notification_uuid, type(exc).__name__[:80]
+            db,
+            verified.notification_uuid,
+            type(exc).__name__[:80],
+            transaction_id=txn_id,
         )
         raise ServiceUnavailableError(
             "Apple notification processing temporarily unavailable"
@@ -342,6 +367,7 @@ def _refresh_notification_fields(
 
 
 def _lock_notification_by_uuid(db: Session, notification_uuid: str) -> IapAppleNotification | None:
+    """Lock notification row. Caller must already hold advisory(txn) when txn is known."""
     return db.scalar(
         select(IapAppleNotification)
         .where(IapAppleNotification.notification_uuid == notification_uuid)
@@ -349,12 +375,45 @@ def _lock_notification_by_uuid(db: Session, notification_uuid: str) -> IapAppleN
     )
 
 
-def _mark_notification_failed(db: Session, notification_uuid: str, error: str) -> None:
-    """Durably mark a previously committed receipt as failed (Apple should retry)."""
+def _relock_notification_for_status(
+    db: Session,
+    notification_uuid: str,
+    *,
+    transaction_id: str | None,
+) -> IapAppleNotification | None:
+    """After rollback: advisory (if known) then notification FOR UPDATE."""
+    if transaction_id:
+        lock_apple_transaction(db, transaction_id)
+    return _lock_notification_by_uuid(db, notification_uuid)
+
+
+def _mark_notification_failed(
+    db: Session,
+    notification_uuid: str,
+    error: str,
+    *,
+    transaction_id: str | None = None,
+) -> None:
+    """Durably mark a previously committed receipt as failed (Apple should retry).
+
+    Lock order: advisory(txn) when known, then notification FOR UPDATE.
+    """
     try:
         db.rollback()
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110
         pass
+    # Resolve txn id from the row without FOR UPDATE if caller did not pass one.
+    txn = (transaction_id or "").strip() or None
+    if not txn:
+        peek = db.scalar(
+            select(IapAppleNotification).where(
+                IapAppleNotification.notification_uuid == notification_uuid
+            )
+        )
+        if peek is not None:
+            txn = (peek.transaction_id or "").strip() or None
+    if txn:
+        lock_apple_transaction(db, txn)
     row = _lock_notification_by_uuid(db, notification_uuid)
     if row is None:
         return
