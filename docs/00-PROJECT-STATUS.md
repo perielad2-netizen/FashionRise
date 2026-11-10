@@ -3,9 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**PR #274 MERGED + DEPLOYED** — Sandbox-only tester credit harden live; public IAP gates **OFF**; Alembic **027**; Codemagic ready to start on `main` @ `d7a3cfcd`.)
+**Last updated:** 2026-11-10 (**PR #276 PM harden** — finite override **opt-in empty default**; prod test wallet read-only shows **999999** Stars / unlimited / debt **0**. Awaiting PM review. No merge/deploy/Codemagic in this amendment.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## Stars shop polish before App Store (2026-11-10) — PR #276 AMENDED (do not merge yet)
+
+| Status | Detail |
+|---|---|
+| Branch | `cursor/web-stars-shop-polish-77c6` |
+| Shop copy | “Stars power your AI fashion creations…” + costs **Magic 10 · Model 10 · Fabric 5 · PDF 50** (matches `AI_STARS_*_COST` / croquis=Model) |
+| Package order | Canonical `stars_50` → `stars_150` → `stars_500` with friendly **Starter / Creator / Studio**; StoreKit localized `priceString` only |
+| Finite override | **`AI_STARS_FINITE_OVERRIDE_EMAILS` defaults to empty** (opt-in). Production must explicitly set `perielad2@gmail.com` for purchase testing. Wins over unlimited list + DB flag; does **not** change `is_admin`. |
+| Restore unlimited | Clear that email from `AI_STARS_FINITE_OVERRIDE_EMAILS` (or set empty) and restart API |
+| Prod wallet (read-only) | Designated test account `perielad2@gmail.com`: **`ai_stars=999999`**, `ai_stars_unlimited=true`, **`ai_stars_iap_debt=0`**, effective unlimited **true**, finite override **not** set in prod `.env`. Balance not modified. |
+| Purchase-test recommendation | Do **not** overwrite the 999999 ledger silently. Prefer (a) a **new** invite-only finite account added only to `IAP_APPLE_SANDBOX_TESTER_EMAILS` (starting balance 10), or (b) a **separately PM-authorized, auditable** one-time seed of a known finite balance after enabling the override — never delete payment/IAP history. |
+| Gates | Public purchasing/credit **OFF**; sandbox tester allowlist unchanged |
+| Next | PM approve amendment → merge/deploy with explicit finite override + chosen finite test wallet → **one** Codemagic TF build **> 117** → sandbox 50-Star purchase matrix |
 
 ## Paid-Stars iOS release build (2026-11-10) — DEPLOYED · CODEMAGIC READY
 

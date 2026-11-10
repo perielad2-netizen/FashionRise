@@ -3,7 +3,8 @@
 Costs (defaults):
   magic=10, croquis=10, pdf=50, fabric=5
 New accounts start with ``AI_STARS_STARTING_BALANCE`` (default 10).
-Owner emails in ``AI_STARS_UNLIMITED_EMAILS`` never debit.
+Owner emails in ``AI_STARS_UNLIMITED_EMAILS`` never debit, unless listed in
+``AI_STARS_FINITE_OVERRIDE_EMAILS`` (temporary purchase-test override).
 """
 
 from __future__ import annotations
@@ -58,21 +59,44 @@ def cost_catalog() -> dict[str, int]:
     }
 
 
-def _unlimited_emails() -> set[str]:
-    raw = (get_settings().ai_stars_unlimited_emails or "").strip()
-    if not raw:
+def _email_set(raw: str | None) -> set[str]:
+    text = (raw or "").strip()
+    if not text:
         return set()
-    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+    return {part.strip().lower() for part in text.split(",") if part.strip()}
+
+
+def _unlimited_emails() -> set[str]:
+    return _email_set(get_settings().ai_stars_unlimited_emails)
+
+
+def _finite_override_emails() -> set[str]:
+    """Accounts forced onto a real finite wallet (purchase testing)."""
+    return _email_set(get_settings().ai_stars_finite_override_emails)
+
+
+def email_has_finite_override(email: str | None) -> bool:
+    return (email or "").strip().lower() in _finite_override_emails()
 
 
 def email_has_unlimited_stars(email: str) -> bool:
-    return (email or "").strip().lower() in _unlimited_emails()
+    normalized = (email or "").strip().lower()
+    if not normalized or normalized in _finite_override_emails():
+        return False
+    return normalized in _unlimited_emails()
 
 
 def user_has_unlimited_stars(user: User | Any) -> bool:
+    """Effective unlimited Stars — finite override wins over flag and email list.
+
+    ``is_admin`` and other admin powers are independent of this Stars benefit.
+    """
+    email = str(getattr(user, "email", "") or "")
+    if email_has_finite_override(email):
+        return False
     if bool(getattr(user, "ai_stars_unlimited", False)):
         return True
-    return email_has_unlimited_stars(str(getattr(user, "email", "") or ""))
+    return email_has_unlimited_stars(email)
 
 
 def apply_new_user_stars(user: User) -> None:

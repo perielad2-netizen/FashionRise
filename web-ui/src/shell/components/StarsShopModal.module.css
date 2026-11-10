@@ -59,9 +59,16 @@
 }
 
 .hint {
-  margin: 0 0 16px;
+  margin: 0 0 8px;
   color: rgba(248, 244, 240, 0.68);
   font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.costs {
+  margin: 0 0 16px;
+  color: rgba(248, 244, 240, 0.55);
+  font-size: 0.78rem;
   line-height: 1.45;
 }
 

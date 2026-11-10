@@ -33,6 +33,8 @@ def stars_env(monkeypatch: pytest.MonkeyPatch):
         "AI_STARS_UNLIMITED_EMAILS",
         "perielad@gmail.com,perielad2@gmail.com",
     )
+    # Finite override is opt-in; empty by default (production must set explicitly).
+    monkeypatch.setenv("AI_STARS_FINITE_OVERRIDE_EMAILS", "")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -82,8 +84,8 @@ def test_debit_magic_once_then_block(db_session, stars_env):
 
 def test_unlimited_never_debits(db_session, stars_env):
     user = User(
-        email="perielad2@gmail.com",
-        username="peri2",
+        email="perielad@gmail.com",
+        username="peri_owner_debit",
         hashed_password="x",
         is_admin=False,
         is_active=True,
@@ -97,7 +99,110 @@ def test_unlimited_never_debits(db_session, stars_env):
     remaining = ai_stars.debit_magic_stars(db_session, user)
     db_session.commit()
     assert remaining == before
-    assert user.ai_stars_unlimited is True
+    assert ai_stars.user_has_unlimited_stars(user) is True
+
+
+def test_finite_override_unset_keeps_unlimited_owners(db_session, stars_env):
+    """Empty/opt-out finite override must not demote unlimited owners."""
+    assert get_settings().ai_stars_finite_override_emails == ""
+    user = User(
+        email="perielad2@gmail.com",
+        username="peri2_default_unlimited",
+        hashed_password="x",
+        is_admin=True,
+        is_active=True,
+        ai_stars_unlimited=True,
+        ai_stars=999_999,
+    )
+    db_session.add(user)
+    db_session.commit()
+    assert ai_stars.email_has_finite_override(user.email) is False
+    assert ai_stars.user_has_unlimited_stars(user) is True
+    assert user.is_admin is True
+
+
+def test_finite_override_disables_unlimited_for_purchase_tester(
+    db_session, stars_env, client, monkeypatch
+):
+    """Explicit AI_STARS_FINITE_OVERRIDE_EMAILS forces a real wallet; admin untouched."""
+    from sqlalchemy import select
+
+    monkeypatch.setenv("AI_STARS_FINITE_OVERRIDE_EMAILS", "perielad2@gmail.com")
+    get_settings.cache_clear()
+
+    tokens = register_with_invite(
+        client, db_session, email="perielad2@gmail.com", username="peri2_finite"
+    )
+    user = db_session.scalar(select(User).where(User.email == "perielad2@gmail.com"))
+    assert user is not None
+    user.ai_stars_unlimited = True  # stale DB flag must not win over finite override
+    user.is_admin = True
+    user.ai_stars = 40
+    db_session.commit()
+    db_session.refresh(user)
+
+    assert user.is_admin is True
+    assert ai_stars.user_has_unlimited_stars(user) is False
+    assert ai_stars.public_balance(user)["ai_stars_unlimited"] is False
+    assert ai_stars.public_balance(user)["ai_stars"] == 40
+
+    me = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert me.status_code == 200, me.text
+    body = me.json()
+    assert body["ai_stars_unlimited"] is False
+    assert body["ai_stars"] == 40
+    assert body["is_admin"] is True
+
+    remaining = ai_stars.debit_stars(db_session, user, "magic")
+    db_session.commit()
+    assert remaining == 30
+    db_session.refresh(user)
+    assert user.ai_stars == 30
+    assert user.is_admin is True
+
+    credited = ai_stars.credit_stars(db_session, user, 50, reason="iap_test")
+    db_session.commit()
+    assert credited == 80
+    db_session.refresh(user)
+    assert user.ai_stars == 80
+
+    other = User(
+        email="perielad@gmail.com",
+        username="peri_still_unlimited",
+        hashed_password="x",
+        is_admin=False,
+        is_active=True,
+    )
+    ai_stars.apply_new_user_stars(other)
+    db_session.add(other)
+    db_session.commit()
+    assert ai_stars.user_has_unlimited_stars(other) is True
+
+
+def test_clearing_finite_override_restores_unlimited(db_session, stars_env, monkeypatch):
+    monkeypatch.setenv("AI_STARS_FINITE_OVERRIDE_EMAILS", "perielad2@gmail.com")
+    get_settings.cache_clear()
+
+    user = User(
+        email="perielad2@gmail.com",
+        username="peri2_restore",
+        hashed_password="x",
+        is_admin=True,
+        is_active=True,
+        ai_stars_unlimited=True,
+        ai_stars=100,
+    )
+    db_session.add(user)
+    db_session.commit()
+    assert ai_stars.user_has_unlimited_stars(user) is False
+
+    monkeypatch.setenv("AI_STARS_FINITE_OVERRIDE_EMAILS", "")
+    get_settings.cache_clear()
+    assert ai_stars.user_has_unlimited_stars(user) is True
+    assert user.is_admin is True
 
 
 def test_magic_failure_does_not_reduce_stars(db_session, stars_env, monkeypatch):

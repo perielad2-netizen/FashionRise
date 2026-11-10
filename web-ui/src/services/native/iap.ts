@@ -74,11 +74,25 @@ export type PurchaseFlowState =
  * Launch console prices (USD): Starter $5.99 · Creator $16.99 · Studio $49.99
  * Never display hardcoded prices as the App Store price — use StoreKit localization.
  */
+/** Canonical display order: Starter (50) → Creator (150) → Studio (500). */
 export const STARS_IAP_PRODUCTS: Array<{ productId: string; stars: number; name: string }> = [
   { productId: 'stars_50', stars: 50, name: 'Starter' },
   { productId: 'stars_150', stars: 150, name: 'Creator' },
   { productId: 'stars_500', stars: 500, name: 'Studio' },
 ]
+
+const STARS_IAP_ORDER = new Map(
+  STARS_IAP_PRODUCTS.map((product, index) => [product.productId, index] as const),
+)
+
+/** Sort mapped StoreKit products into Starter → Creator → Studio; drop unknowns. */
+export function sortStarsIapProducts(products: StarsIapProduct[]): StarsIapProduct[] {
+  return [...products]
+    .filter((product) => STARS_IAP_ORDER.has(product.productId) && product.stars > 0)
+    .sort(
+      (a, b) => (STARS_IAP_ORDER.get(a.productId) ?? 99) - (STARS_IAP_ORDER.get(b.productId) ?? 99),
+    )
+}
 
 /** In-flight purchase guard (module scope — survives remounts within the same JS context). */
 let purchaseInFlight = false
@@ -118,16 +132,22 @@ export async function listStarsIapProducts(): Promise<StarsIapProduct[]> {
     productIdentifiers: ids,
     productType: PURCHASE_TYPE.INAPP,
   })
-  return products.map((p) => {
+  const mapped: StarsIapProduct[] = []
+  for (const p of products) {
     const meta = STARS_IAP_PRODUCTS.find((x) => x.productId === p.identifier)
-    return {
-      productId: p.identifier,
-      title: p.title || meta?.name || p.identifier,
-      description: p.description || '',
+    if (!meta) continue
+    mapped.push({
+      productId: meta.productId,
+      // Friendly FashionRise package name — not ASC marketing title.
+      title: meta.name,
+      description: p.description || `${meta.stars} Stars`,
+      // Always Apple's localized StoreKit price string (never hardcode USD).
       priceString: p.priceString || '',
-      stars: meta?.stars ?? 0,
-    }
-  })
+      stars: meta.stars,
+    })
+  }
+  // Explicit canonical order regardless of StoreKit response order.
+  return sortStarsIapProducts(mapped)
 }
 
 function classifyPurchaseError(err: unknown): PurchaseFlowState {
