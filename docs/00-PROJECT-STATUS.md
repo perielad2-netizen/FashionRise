@@ -3,23 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple IAP Phase C1 waiting on owner `.p8` + Issuer ID** — ASC API env wired; secure path `/var/lib/fashionrise/secrets/apple-iap/` prepared; Key ID `4N9N354RG3` set; gates **OFF**; official Sandbox TEST not yet requested.)
+**Last updated:** 2026-11-10 (**Apple IAP Phase C1** — official Sandbox TEST requested; Apple delivery hit endpoint with **422** until ASN `data.environment` peek fix; replay after fix expected; gates **OFF**.)
 
-**Phase:** Apple App Store launch readiness. Phase B **#268** deployed gates-OFF. Phase C1 awaiting owner key install, then one Sandbox TEST.
+**Phase:** Apple App Store launch readiness. Phase B **#268** deployed gates-OFF. Phase C1 ASC API + one Sandbox TEST in progress.
 
-## Apple Stars IAP — Phase C1 signed ASN V2 validation (2026-11-10) — WAITING ON OWNER KEY
+## Apple Stars IAP — Phase C1 signed ASN V2 validation (2026-11-10)
 
 | Status | Detail |
 |---|---|
 | Goal | One official Apple Sandbox **Request a Test Notification** → verified non-financial `TEST` receipt; gates stay OFF |
-| ASC URLs (owner) | Production + Sandbox Server Notifications V2 URLs reported configured to `https://fashionrise.app/api/v1/shop/iap/apple/notifications` |
-| Code | `IAP_APPLE_ASC_ISSUER_ID` / `IAP_APPLE_ASC_KEY_ID` / `IAP_APPLE_ASC_PRIVATE_KEY_PATH` + `scripts/request_apple_asn_test.py` (official `AppStoreServerAPIClient`) |
-| Prod secrets dir | `/var/lib/fashionrise/secrets/apple-iap/` (750, `fashionriseapp`) — see `INSTALL.owner.txt` + `docs/deploy/APPLE-IAP-ASC-API-KEY.md` |
-| Env on VPS | `IAP_APPLE_ASC_KEY_ID=4N9N354RG3` · `IAP_APPLE_ASC_PRIVATE_KEY_PATH=…/AuthKey_4N9N354RG3.p8` · `IAP_APPLE_ASC_ISSUER_ID=` (empty) · purchasing/credit **false** |
-| Blocked on | Owner SCP of `.p8` to that path + Issuer UUID in `ISSUER_ID` file or `.env` + `touch READY` — **do not paste `.p8` into chat** |
-| Official Apple TEST | **Pending** key install |
-| Gates / Alembic | Both payment gates **OFF** · Alembic **027** · BE tip still `b6c614d2` until ASC helper deploy |
-| Next | After `READY`: sync Issuer into `.env`, deploy ASC helper commit, `request-once` + status poll, verify `ignored`/`TEST` receipt and zero purchases/adjustments |
+| ASC URLs (owner) | Production + Sandbox ASN V2 URLs → `https://fashionrise.app/api/v1/shop/iap/apple/notifications` |
+| ASC API | Key ID `4N9N354RG3` · `.p8` at `/var/lib/fashionrise/secrets/apple-iap/AuthKey_4N9N354RG3.p8` · Issuer synced into prod `.env` (not logged) |
+| Official TEST request | **SUCCESS** — Sandbox `request_test_notification` returned token (redacted); **one** request only |
+| Apple delivery status | First attempt **`UNSUCCESSFUL_HTTP_RESPONSE_CODE`** — nginx shows Apple POST → FastAPI **422** `Apple transaction JWS missing environment` |
+| Root cause | ASN V2 JWT has `environment` under **`data.environment`**, not top-level (transaction JWS). Peek fixed to read both; crypto verify unchanged |
+| Hotfix | Deploy ASN env-peek fix → replay saved signedPayload (no second Apple TEST) → expect durable `TEST`/`ignored` receipt |
+| Financial invariants | purchases**=0** · notifications**=0** (pre-fix) · adjustments**=0** · gates purchasing/credit **false** |
+| Next | Confirm post-fix receipt + Apple retry/SUCCESS if any; then PM checkpoint for controlled StoreKit sandbox (credit still OFF) → release/TestFlight build track |
 
 ## Apple Stars IAP — Phase B end-to-end (2026-11-10) — DEPLOYED GATES OFF
 
