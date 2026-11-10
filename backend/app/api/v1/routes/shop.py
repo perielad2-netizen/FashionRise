@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import CurrentUser
+from app.auth.dependencies import CurrentUser, OptionalUser
 from app.core.errors import ForbiddenError, ServiceUnavailableError, ValidationAppError
 from app.core.rate_limit import limiter
 from app.db.session import get_db
@@ -107,10 +107,17 @@ def get_iap_app_account_token(
 
 @router.get("/iap/apple/status")
 @limiter.limit("60/minute")
-def get_apple_iap_status(request: Request) -> dict[str, Any]:
-    """Native shop gate/config status (no auth; no secrets)."""
+def get_apple_iap_status(
+    request: Request,
+    user: OptionalUser,
+) -> dict[str, Any]:
+    """Native shop gate/config status (optional auth; no secrets).
+
+    Unauthenticated / non-tester callers see public gates. Designated sandbox
+    tester accounts see purchasing/credit enabled while public gates stay OFF.
+    """
     _ = request.url
-    return iap_service.apple_shop_status()
+    return iap_service.apple_shop_status(user)
 
 
 @router.post("/iap/confirm")
@@ -142,8 +149,7 @@ def restore_iap_purchases(
     user: CurrentUser,
 ) -> dict[str, Any]:
     _ = request.url
-    _ = user
-    return iap_service.restore_placeholder()
+    return iap_service.restore_placeholder(user)
 
 
 @router.post("/iap/apple/notifications")

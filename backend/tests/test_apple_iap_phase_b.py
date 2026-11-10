@@ -79,12 +79,14 @@ def _verified_asn(
 def test_apple_shop_status_gates_default_off(client, monkeypatch):
     monkeypatch.setenv("IAP_APPLE_PURCHASING_ENABLED", "false")
     monkeypatch.setenv("IAP_APPLE_CREDIT_ENABLED", "false")
+    monkeypatch.setenv("IAP_APPLE_SANDBOX_TESTER_EMAILS", "")
     get_settings.cache_clear()
     res = client.get("/api/v1/shop/iap/apple/status")
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["purchasing_enabled"] is False
     assert body["credit_enabled"] is False
+    assert body.get("sandbox_tester") is False
     assert {p["product_id"] for p in body["products"]} == {
         "stars_50",
         "stars_150",

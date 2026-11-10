@@ -78,6 +78,9 @@ IAP_APPLE_ONLINE_CHECKS=true
 # purchasing = initiate new StoreKit buys; credit = confirm/reconcile completed Apple txns.
 IAP_APPLE_PURCHASING_ENABLED=false
 IAP_APPLE_CREDIT_ENABLED=false
+# Designated FashionRise emails that may Buy + confirm while public gates stay OFF.
+# Keep short (sandbox Testers only). Empty = no allowlist bypass.
+IAP_APPLE_SANDBOX_TESTER_EMAILS=
 IAP_APPLE_SHARED_SECRET=
 # ASC In-App Purchase API key (outbound Server API / TEST notifications). .p8 outside repo.
 IAP_APPLE_ASC_ISSUER_ID=
@@ -87,6 +90,8 @@ IAP_GOOGLE_SERVICE_ACCOUNT_JSON=
 # Forced off in production. Phase A also refuses unverified Apple credits in non-prod.
 IAP_ALLOW_UNVERIFIED_SANDBOX=false
 ```
+
+**Controlled sandbox (public purchasing stays OFF):** set `IAP_APPLE_SANDBOX_TESTER_EMAILS` to the FashionRise account email(s) used on the TestFlight device. Authenticated `GET /shop/iap/apple/status` returns `purchasing_enabled`/`credit_enabled` true only for those emails; anonymous and other users still see gates OFF. Do **not** flip the public `IAP_APPLE_*_ENABLED` flags until the sandbox matrix passes.
 
 See `docs/deploy/APPLE-IAP-ASC-API-KEY.md` for secure `.p8` install steps.
 
@@ -104,7 +109,10 @@ Apple root CAs for chain verify ship in-repo at `backend/app/certs/apple/*.cer` 
 - [ ] IAP products created & approved as **Consumable** (`stars_50` / `stars_150` / `stars_500`)  
 - [ ] Test on TestFlight + Play internal testing  
 - [x] Phase A: Apple JWS verification foundation (purchasing + credit gates still **OFF**)  
-- [ ] Phase B: ASN refunds + native shop UI → enable `IAP_APPLE_CREDIT_ENABLED` then `IAP_APPLE_PURCHASING_ENABLED`  
+- [x] Phase B: ASN refunds + native shop UI deployed (public gates still **OFF**)  
+- [ ] Controlled sandbox via `IAP_APPLE_SANDBOX_TESTER_EMAILS` (public gates stay OFF)  
+- [ ] After sandbox matrix: enable public `IAP_APPLE_CREDIT_ENABLED` then `IAP_APPLE_PURCHASING_ENABLED`  
+- [ ] Submit FashionRise **1.0** with consumables `stars_50` / `stars_150` / `stars_500` together  
 
 
 ## What we are not doing

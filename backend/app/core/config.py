@@ -245,6 +245,10 @@ class Settings(BaseSettings):
     # (including unfinished-txn recovery). Default OFF until Phase B ASN/refunds.
     # Never treat this as a production “bypass” — both gates stay false in Phase A.
     iap_apple_credit_enabled: bool = False
+    # Controlled sandbox: comma-separated FashionRise account emails that may Buy +
+    # confirm while public purchasing/credit gates stay OFF. Empty = no allowlist.
+    # Does not enable unverified credit. Keep the list short (designated Testers only).
+    iap_apple_sandbox_tester_emails: str = ""
     iap_apple_bundle_id: str = "app.fashionrise.studio"
     # App Store Connect Apple ID (public). Required for Production SignedDataVerifier.
     iap_apple_app_apple_id: int = 6832116469

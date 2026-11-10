@@ -49,6 +49,8 @@ export type AppleIapStatus = {
   purchasing_enabled: boolean
   credit_enabled: boolean
   verification_configured: boolean
+  /** True when the signed-in account is on IAP_APPLE_SANDBOX_TESTER_EMAILS. */
+  sandbox_tester?: boolean
   products: Array<{ product_id: string; stars: number }>
 }
 
@@ -97,7 +99,9 @@ export function isNativeAndroidShell(): boolean {
 }
 
 export async function fetchAppleIapStatus(): Promise<AppleIapStatus> {
-  return apiRequest<AppleIapStatus>('/shop/iap/apple/status', { auth: false })
+  // Prefer auth so designated sandbox testers receive purchasing/credit=true
+  // while public gates remain OFF for anonymous / non-tester callers.
+  return apiRequest<AppleIapStatus>('/shop/iap/apple/status')
 }
 
 export async function fetchAppAccountToken(): Promise<string> {

@@ -3,9 +3,41 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple IAP Phase C1 COMPLETE for processing** — one Sandbox TEST requested; ASN `data.environment` peek fixed (**#272** → `2894a83d`); durable receipt `TEST`/`ignored`; purchases/adjustments **0**; gates **OFF**. Apple Get-Status still shows first attempt `UNSUCCESSFUL_HTTP_RESPONSE_CODE`.)
+**Last updated:** 2026-11-10 (**Paid-Stars iOS release execution** — native shop + product IDs verified; sandbox-tester allowlist ready; **Codemagic TF build not started** — owner must start one `fashionrise-ios-app-store` run. Public purchasing/credit **OFF**.)
 
-**Phase:** Apple App Store launch readiness. Phase B deployed gates-OFF. Phase C1 ASN path proven with official TEST payload.
+**Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## Paid-Stars iOS release build (2026-11-10) — IN PROGRESS
+
+| Status | Detail |
+|---|---|
+| Goal | One signed TestFlight IPA (**1.0**, `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` **> 20**) with Capgo StoreKit Stars shop (`stars_50` / `stars_150` / `stars_500`) |
+| Main tip inspected | `e4131fc4` (Phase C1 docs) · BE prod still **`2894a83d`** · Alembic **027** · gates **OFF** |
+| Product IDs | Embedded in `web-ui/src/services/native/iap.ts` + `backend` `STARS_PRODUCTS` — **stars_50 / stars_150 / stars_500** |
+| Native shop UI | Capgo `@capgo/native-purchases` **7.19.3** · Pod `CapgoNativePurchases` · `StarsShopModal` iOS path shows StoreKit **localized `priceString`** + **Buy** (not web cart) · Buy disabled while public gate OFF |
+| Codemagic | Workflow `fashionrise-ios-app-store` · Xcode **26.5** · single `App.ipa` · ASC upload via `codemagic access` · **no** beta/App Store review · YAML assert **ok** |
+| Codemagic result | **NOT STARTED** — no `CODEMAGIC_API_TOKEN` / CM API credentials in agent environment. Owner must **manually Start** one build in Codemagic UI (branch tip with this release / `main` after merge). Do **not** start a second upload. |
+| ASC / TestFlight | Upload status **pending** Codemagic start. Last known ASC build was **1.0 (20)** (90189 lessons fixed on `main`). |
+| Safe sandbox credit | **`IAP_APPLE_SANDBOX_TESTER_EMAILS`** allowlist — designated FashionRise emails get Buy+confirm while public `IAP_APPLE_PURCHASING_ENABLED` / `IAP_APPLE_CREDIT_ENABLED` stay **false**. Status endpoint optional-auth. |
+| Local checks | `iap.test.ts` 7/7 · `test_iap_confirm` (+ allowlist) pass · `assert-codemagic-ios-yaml` ok · CFBundleVersion unit tests ok |
+| ASC metadata (owner) | Privacy URL live (`/privacy`). Confirm Paid Apps Agreement + banking/tax, sandbox Apple ID linked to TestFlight, three consumables Ready to Submit with app **1.0**. Agent cannot read ASC agreements (IAP key ≠ Apps API). |
+| Public purchasing | **OFF** — do not flip public gates until sandbox matrix passes |
+
+### Real-iPhone sandbox sequence (Sandbox Apple ID · TestFlight build · allowlisted FashionRise email)
+
+1. **StoreKit load** — Open Stars shop → packages show App Store localized prices (not hardcoded USD) · Buy enabled for allowlisted account only.
+2. **Sandbox purchase** — Buy `stars_50` · complete Apple Sandbox sheet (no real money).
+3. **Verified credit** — Balance rises by 50 · `POST /shop/iap/confirm` 200 · DB `iap_purchases` row active for that `transaction_id`.
+4. **Spend Stars** — Run Magic / Fabric / Model and confirm wallet debit.
+5. **Duplicate confirm** — Re-open shop / recover → same txn returns `already_processed` · balance unchanged.
+6. **Interrupted recovery** — Kill app mid-confirm (after Apple success, before credit) → reopen shop → recovery credits once.
+7. **Refund / debt** — Where Sandbox tooling allows refund/revoke, confirm ASN clawback / `ai_stars_iap_debt` path; skip if Apple sandbox cannot issue refund for the txn.
+
+### Exact next actions
+
+1. **Owner:** Merge allowlist release PR → deploy BE → set `IAP_APPLE_SANDBOX_TESTER_EMAILS=<tester@…>` (gates stay false) → restart API.
+2. **Owner:** Codemagic → **Start** workflow **FashionRise iOS (App Store IPA)** once on that tip · confirm log `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` and single IPA upload · wait ASC **Processing → Ready to Test**.
+3. Install TestFlight build · run sequence above · then prepare **FashionRise 1.0 + three consumables** for App Store submission together (public gates still OFF until PM signs off).
 
 ## Apple Stars IAP — Phase C1 signed ASN V2 validation (2026-11-10) — DONE (processing)
 
