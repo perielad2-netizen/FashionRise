@@ -1,9 +1,18 @@
 /**
  * Stars In-App Purchase adapter (Apple StoreKit / Google Play Billing).
- * No custom card UI — stores own checkout. We only unlock Stars after a verified purchase.
+ *
+ * iOS (Capacitor native shell):
+ * - Load localized products from StoreKit
+ * - Purchase with server-issued appAccountToken
+ * - Confirm with StoreKit 2 jwsRepresentation (server verifies + credits)
+ * - Finish/acknowledge only after durable backend acceptance
+ * - Bounded unfinished-txn recovery via getPurchases({ appAccountToken })
+ *
+ * Android: adapter present but purchasing stays gated off (Play verification staged).
+ * Web: this module is a no-op; StarsShopModal keeps the web cart UX.
  */
-import { NativePurchases, PURCHASE_TYPE } from '@capgo/native-purchases'
-import { apiRequest } from '@/services/api/client'
+import { NativePurchases, PURCHASE_TYPE, type Transaction } from '@capgo/native-purchases'
+import { ApiError, apiRequest } from '@/services/api/client'
 import { isNativeShell, nativePlatform } from './platform'
 
 export type StarsIapProduct = {
@@ -14,9 +23,43 @@ export type StarsIapProduct = {
   stars: number
 }
 
+export type IapConfirmResult = {
+  stars_credited: number
+  already_processed?: boolean
+  blocked?: boolean
+  ai_stars?: number
+  product_id?: string
+  transaction_id?: string
+  reason?: string
+}
+
+export type AppleIapStatus = {
+  platform: string
+  purchasing_enabled: boolean
+  credit_enabled: boolean
+  verification_configured: boolean
+  products: Array<{ product_id: string; stars: number }>
+}
+
+export type PurchaseFlowState =
+  | 'idle'
+  | 'loading_products'
+  | 'available'
+  | 'unavailable'
+  | 'purchasing'
+  | 'confirming'
+  | 'success'
+  | 'cancelled'
+  | 'verification_failed'
+  | 'network_failure'
+  | 'recovery_required'
+  | 'already_processed'
+  | 'gate_off'
+
 /**
  * Product IDs — must match App Store Connect + Play Console exactly.
  * Launch console prices (USD): Starter $5.99 · Creator $16.99 · Studio $49.99
+ * Never display hardcoded prices as the App Store price — use StoreKit localization.
  */
 export const STARS_IAP_PRODUCTS: Array<{ productId: string; stars: number; name: string }> = [
   { productId: 'stars_50', stars: 50, name: 'Starter' },
@@ -24,8 +67,33 @@ export const STARS_IAP_PRODUCTS: Array<{ productId: string; stars: number; name:
   { productId: 'stars_500', stars: 500, name: 'Studio' },
 ]
 
+/** In-flight purchase guard (module scope — survives remounts within the same JS context). */
+let purchaseInFlight = false
+let recoveryInFlight = false
+let lastRecoveryAt = 0
+const RECOVERY_COOLDOWN_MS = 15_000
+
 export function iapAvailable(): boolean {
   return isNativeShell()
+}
+
+export function isNativeIosStarsShop(): boolean {
+  return isNativeShell() && nativePlatform() === 'ios'
+}
+
+export function isNativeAndroidShell(): boolean {
+  return isNativeShell() && nativePlatform() === 'android'
+}
+
+export async function fetchAppleIapStatus(): Promise<AppleIapStatus> {
+  return apiRequest<AppleIapStatus>('/shop/iap/apple/status', { auth: false })
+}
+
+export async function fetchAppAccountToken(): Promise<string> {
+  const res = await apiRequest<{ app_account_token: string }>('/shop/iap/app-account-token')
+  const token = (res.app_account_token || '').trim()
+  if (!token) throw new Error('Missing app account token')
+  return token
 }
 
 export async function listStarsIapProducts(): Promise<StarsIapProduct[]> {
@@ -47,24 +115,34 @@ export async function listStarsIapProducts(): Promise<StarsIapProduct[]> {
   })
 }
 
-export async function purchaseStarsPack(productId: string): Promise<{ stars_credited: number }> {
-  if (!iapAvailable()) {
-    throw new Error('In-app purchases are only available in the App Store / Play Store app')
+function classifyPurchaseError(err: unknown): PurchaseFlowState {
+  const msg = err instanceof Error ? err.message : String(err || '')
+  const lower = msg.toLowerCase()
+  if (
+    lower.includes('cancel') ||
+    lower.includes('user cancelled') ||
+    lower.includes('user canceled') ||
+    lower.includes('paymentsheeterror.canceled')
+  ) {
+    return 'cancelled'
   }
-  const meta = STARS_IAP_PRODUCTS.find((p) => p.productId === productId)
-  if (!meta) throw new Error('Unknown Stars pack')
+  if (lower.includes('network') || lower.includes('timeout') || lower.includes('failed to fetch')) {
+    return 'network_failure'
+  }
+  if (err instanceof ApiError) {
+    if (err.status === 503) return 'gate_off'
+    if (err.status === 403 || err.status === 422) return 'verification_failed'
+    if (err.status >= 500) return 'network_failure'
+  }
+  return 'verification_failed'
+}
 
-  const transaction = await NativePurchases.purchaseProduct({
-    productIdentifier: productId,
-    productType: PURCHASE_TYPE.INAPP,
-  })
-
-  // Server verifies with Apple/Google and credits the Stars wallet.
-  return apiRequest<{ stars_credited: number }>('/shop/iap/confirm', {
+async function confirmTransaction(transaction: Transaction, productId: string): Promise<IapConfirmResult> {
+  return apiRequest<IapConfirmResult>('/shop/iap/confirm', {
     method: 'POST',
     body: {
       platform: nativePlatform(),
-      product_id: productId,
+      product_id: productId || transaction.productIdentifier || '',
       transaction_id: transaction.transactionId,
       purchase_token: transaction.purchaseToken ?? null,
       receipt: transaction.receipt ?? null,
@@ -73,8 +151,235 @@ export async function purchaseStarsPack(productId: string): Promise<{ stars_cred
   })
 }
 
+async function finishTransaction(transaction: Transaction): Promise<void> {
+  // Capgo: acknowledgePurchase finishes StoreKit 2 transactions when
+  // autoAcknowledgePurchases was false. Safe no-op if already finished.
+  try {
+    const token = String(transaction.purchaseToken || transaction.transactionId || '')
+    if (!token) return
+    await NativePurchases.acknowledgePurchase({ purchaseToken: token })
+  } catch {
+    /* already finished / unsupported — recovery path handles leftovers */
+  }
+}
+
+/**
+ * Full iOS purchase → confirm → finish flow.
+ * Does not start when another purchase is in flight.
+ */
+export async function purchaseStarsPack(productId: string): Promise<{
+  result: IapConfirmResult | null
+  state: PurchaseFlowState
+  message?: string
+}> {
+  if (!isNativeIosStarsShop()) {
+    return {
+      result: null,
+      state: 'unavailable',
+      message: 'In-app purchases are only available in the iOS App Store app',
+    }
+  }
+  if (purchaseInFlight) {
+    return { result: null, state: 'purchasing', message: 'A purchase is already in progress' }
+  }
+
+  const meta = STARS_IAP_PRODUCTS.find((p) => p.productId === productId)
+  if (!meta) {
+    return { result: null, state: 'unavailable', message: 'Unknown Stars pack' }
+  }
+
+  purchaseInFlight = true
+  let transaction: Transaction | null = null
+  try {
+    let status: AppleIapStatus
+    try {
+      status = await fetchAppleIapStatus()
+    } catch {
+      status = {
+        platform: 'ios',
+        purchasing_enabled: false,
+        credit_enabled: false,
+        verification_configured: false,
+        products: [],
+      }
+    }
+    if (!status.purchasing_enabled) {
+      return {
+        result: null,
+        state: 'gate_off',
+        message: 'Apple Stars purchasing is not enabled yet.',
+      }
+    }
+
+    const appAccountToken = await fetchAppAccountToken()
+
+    transaction = await NativePurchases.purchaseProduct({
+      productIdentifier: productId,
+      productType: PURCHASE_TYPE.INAPP,
+      appAccountToken,
+      // Finish only after durable backend credit (or explicit blocked/already_processed).
+      autoAcknowledgePurchases: false,
+    })
+
+    if (!transaction.jwsRepresentation) {
+      return {
+        result: null,
+        state: 'recovery_required',
+        message:
+          'Purchase completed in the App Store but signed transaction evidence is missing. Recovery will retry when you reopen the shop.',
+      }
+    }
+
+    try {
+      const result = await confirmTransaction(transaction, productId)
+      // Finish after durable acceptance (credit, already processed, or blocked refund).
+      await finishTransaction(transaction)
+      if (result.blocked) {
+        return {
+          result,
+          state: 'already_processed',
+          message: 'This purchase was refunded or revoked by Apple and was not credited.',
+        }
+      }
+      if (result.already_processed) {
+        return { result, state: 'already_processed' }
+      }
+      return { result, state: 'success' }
+    } catch (confirmErr) {
+      const state = classifyPurchaseError(confirmErr)
+      if (state === 'network_failure' || state === 'gate_off') {
+        return {
+          result: null,
+          state: state === 'gate_off' ? 'gate_off' : 'recovery_required',
+          message:
+            state === 'gate_off'
+              ? 'Purchase recorded by Apple; Stars credit is not enabled yet. Contact support if Stars are missing after enablement.'
+              : 'Purchase succeeded in the App Store but confirmation failed. We will retry when the app resumes.',
+        }
+      }
+      return {
+        result: null,
+        state,
+        message: confirmErr instanceof Error ? confirmErr.message : 'Verification failed',
+      }
+    }
+  } catch (err) {
+    const state = classifyPurchaseError(err)
+    return {
+      result: null,
+      state,
+      message:
+        state === 'cancelled'
+          ? undefined
+          : err instanceof Error
+            ? err.message
+            : 'Purchase failed',
+    }
+  } finally {
+    purchaseInFlight = false
+  }
+}
+
+/**
+ * Bounded unfinished-transaction recovery for the signed-in account.
+ * Uses Capgo getPurchases filtered by appAccountToken — does not replay
+ * historical consumables as fresh credits (server idempotency + token bind).
+ */
+export async function recoverPendingStarsPurchases(): Promise<{
+  recovered: number
+  attempted: number
+  state: PurchaseFlowState
+  message?: string
+}> {
+  if (!isNativeIosStarsShop()) {
+    return { recovered: 0, attempted: 0, state: 'unavailable' }
+  }
+  if (purchaseInFlight || recoveryInFlight) {
+    return { recovered: 0, attempted: 0, state: 'purchasing' }
+  }
+  const now = Date.now()
+  if (now - lastRecoveryAt < RECOVERY_COOLDOWN_MS) {
+    return { recovered: 0, attempted: 0, state: 'idle' }
+  }
+
+  recoveryInFlight = true
+  lastRecoveryAt = now
+  try {
+    let status: AppleIapStatus
+    try {
+      status = await fetchAppleIapStatus()
+    } catch {
+      return { recovered: 0, attempted: 0, state: 'network_failure' }
+    }
+    if (!status.credit_enabled) {
+      return { recovered: 0, attempted: 0, state: 'gate_off' }
+    }
+
+    const appAccountToken = await fetchAppAccountToken()
+    const { purchases } = await NativePurchases.getPurchases({
+      productType: PURCHASE_TYPE.INAPP,
+      appAccountToken,
+    })
+
+    let recovered = 0
+    let attempted = 0
+    for (const purchase of purchases || []) {
+      const productId = purchase.productIdentifier || ''
+      if (!STARS_IAP_PRODUCTS.some((p) => p.productId === productId)) continue
+      if (!purchase.jwsRepresentation) continue
+      // Skip transactions bound to a different account token when present.
+      const txnToken = (purchase.appAccountToken || '').trim()
+      if (txnToken && txnToken.toLowerCase() !== appAccountToken.toLowerCase()) continue
+
+      attempted += 1
+      try {
+        const result = await confirmTransaction(purchase, productId)
+        await finishTransaction(purchase)
+        if (!result.blocked && (result.stars_credited > 0 || result.already_processed)) {
+          recovered += 1
+        }
+      } catch {
+        /* leave unfinished for a later bounded retry */
+      }
+    }
+
+    // Handshake with backend restore endpoint (does not credit).
+    try {
+      await apiRequest<{ restored: number }>('/shop/iap/restore', { method: 'POST', body: {} })
+    } catch {
+      /* ignore */
+    }
+
+    return {
+      recovered,
+      attempted,
+      state: recovered > 0 ? 'success' : 'idle',
+      message:
+        recovered > 0
+          ? `Recovered ${recovered} Stars purchase${recovered === 1 ? '' : 's'}.`
+          : undefined,
+    }
+  } catch (err) {
+    return {
+      recovered: 0,
+      attempted: 0,
+      state: classifyPurchaseError(err),
+      message: err instanceof Error ? err.message : undefined,
+    }
+  } finally {
+    recoveryInFlight = false
+  }
+}
+
+/** @deprecated Prefer purchaseStarsPack return state; kept for call-site compat. */
 export async function restoreStarsPurchases(): Promise<{ restored: number }> {
-  if (!iapAvailable()) return { restored: 0 }
-  await NativePurchases.restorePurchases()
-  return apiRequest<{ restored: number }>('/shop/iap/restore', { method: 'POST', body: {} })
+  const out = await recoverPendingStarsPurchases()
+  return { restored: out.recovered }
+}
+
+/** Test helper — reset module guards. */
+export function __resetIapGuardsForTests(): void {
+  purchaseInFlight = false
+  recoveryInFlight = false
+  lastRecoveryAt = 0
 }

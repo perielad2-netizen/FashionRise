@@ -1,8 +1,8 @@
 """App Store / Play Store Stars purchases.
 
 Apple and Google own checkout. We verify the signed transaction server-side, then
-credit the Stars wallet. Phase A: Apple JWS verification via App Store Server
-Library. Public purchasing stays default-OFF until refund/ASN (Phase B).
+credit the Stars wallet. Phase B adds ASN V2 refund/revoke handling and native
+shop recovery. Public purchasing and credit stay default-OFF.
 Android verification remains staged and unchanged.
 """
 
@@ -16,10 +16,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import ConflictError, ForbiddenError, ServiceUnavailableError, ValidationAppError
-from app.models.iap_purchase import IapPurchase
+from app.core.errors import (
+    ConflictError,
+    ForbiddenError,
+    ServiceUnavailableError,
+    ValidationAppError,
+)
+from app.models.iap_purchase import (
+    STATUS_ACTIVE,
+    STATUS_BLOCKED,
+    STATUS_REFUND_REVERSED,
+    STATUS_REFUNDED,
+    STATUS_REVOKED,
+    IapPurchase,
+)
 from app.models.user import User
-from app.services import ai_stars, apple_iap
+from app.services import ai_stars, apple_asn, apple_iap
 
 _log = logging.getLogger(__name__)
 
@@ -32,6 +44,8 @@ STARS_PRODUCTS: dict[str, int] = {
     "stars_150": 150,  # Creator — $16.99
     "stars_500": 500,  # Studio — $49.99
 }
+
+_TAKEBACK_STATUSES = frozenset({STATUS_BLOCKED, STATUS_REFUNDED, STATUS_REVOKED})
 
 
 def iap_verification_ready(*, platform: str | None = None) -> bool:
@@ -53,6 +67,19 @@ def iap_verification_ready(*, platform: str | None = None) -> bool:
 def app_account_token_payload(user: User) -> dict[str, str]:
     """Opaque StoreKit appAccountToken for the signed-in user (Phase A helper)."""
     return {"app_account_token": apple_iap.app_account_token_for_user(user.id)}
+
+
+def apple_shop_status() -> dict[str, Any]:
+    """Native shop readiness (gates + configuration). No secrets."""
+    return {
+        "platform": "ios",
+        "purchasing_enabled": apple_iap.apple_purchasing_enabled(),
+        "credit_enabled": apple_iap.apple_credit_enabled(),
+        "verification_configured": apple_iap.apple_iap_configured(),
+        "products": [
+            {"product_id": pid, "stars": stars} for pid, stars in STARS_PRODUCTS.items()
+        ],
+    }
 
 
 def confirm_purchase(
@@ -95,14 +122,16 @@ def confirm_purchase(
 
 
 def restore_placeholder() -> dict[str, Any]:
-    """Client calls NativePurchases.restorePurchases(); re-confirm each txn via confirm."""
+    """Client re-confirms unfinished StoreKit txns via /shop/iap/confirm (credit gate)."""
     return {
         "restored": 0,
         "note": (
-            "Phase A: restore is a no-op. Phase B unfinished-txn recovery re-POSTs "
-            "/shop/iap/confirm with each signed JWS when IAP_APPLE_CREDIT_ENABLED is on "
-            "(distinct from IAP_APPLE_PURCHASING_ENABLED for starting new buys)."
+            "Native recovery re-POSTs /shop/iap/confirm with each signed JWS when "
+            "IAP_APPLE_CREDIT_ENABLED is on. This endpoint acknowledges the restore "
+            "handshake only — Stars come solely from verified confirm."
         ),
+        "credit_enabled": apple_iap.apple_credit_enabled(),
+        "purchasing_enabled": apple_iap.apple_purchasing_enabled(),
     }
 
 
@@ -121,11 +150,11 @@ def _confirm_apple(
         raise ServiceUnavailableError("Unverified IAP sandbox credit is forbidden in production")
 
     # Credit/reconcile gate (completed Apple txns). Distinct from purchasing_enabled
-    # (initiating new StoreKit buys). Both default OFF in Phase A.
+    # (initiating new StoreKit buys). Both default OFF.
     if not apple_iap.apple_credit_enabled():
         raise ServiceUnavailableError(
             "Apple Stars credit / transaction recovery is not enabled yet. "
-            "Phase B (refunds / App Store Server Notifications) must land first."
+            "ASN refund handling must be live before the credit gate is turned on."
         )
 
     if not apple_iap.apple_iap_configured():
@@ -137,7 +166,7 @@ def _confirm_apple(
     # Dev-only escape hatch — never production (gated above + settings validator).
     if settings.iap_allow_unverified_sandbox and settings.environment != "production":
         raise ServiceUnavailableError(
-            "Unverified sandbox IAP credit is disabled for Apple Phase A. "
+            "Unverified sandbox IAP credit is disabled for Apple. "
             "Send a real signed transaction JWS (StoreKit sandbox) instead."
         )
 
@@ -163,6 +192,18 @@ def _confirm_apple(
 
     _assert_app_account_token_owns_transaction(user, verified)
 
+    # ASN takeback arrived before confirm → never credit; record blocked purchase.
+    pending_takeback = apple_asn.pending_takeback_for_transaction(
+        db, transaction_id=verified.transaction_id
+    )
+    if pending_takeback is not None:
+        return _persist_blocked_after_prior_refund(
+            db,
+            user,
+            verified=verified,
+            notification=pending_takeback,
+        )
+
     stars = STARS_PRODUCTS[verified.product_id] * max(1, verified.quantity)
     return _persist_credit(
         db,
@@ -170,6 +211,8 @@ def _confirm_apple(
         platform="ios",
         product_id=verified.product_id,
         transaction_id=verified.transaction_id,
+        original_transaction_id=verified.original_transaction_id,
+        environment=verified.environment,
         stars=stars,
     )
 
@@ -194,7 +237,7 @@ def _confirm_android_staged(
     transaction_id: str | None,
     purchase_token: str | None,
 ) -> dict[str, Any]:
-    """Android path unchanged (staged). Phase A does not modify Play Billing."""
+    """Android path unchanged (staged). Phase B does not modify Play Billing."""
     _ = db
     _ = user
     pid = (product_id or "").strip()
@@ -207,7 +250,7 @@ def _confirm_android_staged(
     settings = get_settings()
     if settings.iap_allow_unverified_sandbox and settings.environment != "production":
         raise ServiceUnavailableError(
-            "Unverified sandbox IAP credit is disabled while Apple Phase A is in progress."
+            "Unverified sandbox IAP credit is disabled while Apple IAP is the active path."
         )
 
     if not (settings.iap_google_service_account_json or "").strip():
@@ -219,6 +262,74 @@ def _confirm_android_staged(
     )
 
 
+def _persist_blocked_after_prior_refund(
+    db: Session,
+    user: User,
+    *,
+    verified: apple_iap.VerifiedAppleTransaction,
+    notification: Any,
+) -> dict[str, Any]:
+    """Refund/revoke ASN beat confirm — create blocked row, zero Stars credit."""
+    existing = _find_purchase(db, platform="ios", transaction_id=verified.transaction_id)
+    if existing is not None:
+        return _idempotent_or_conflict(db, user, existing)
+
+    stars = STARS_PRODUCTS.get(verified.product_id, 0) * max(1, verified.quantity)
+    row = IapPurchase(
+        user_id=user.id,
+        platform="ios",
+        product_id=verified.product_id,
+        transaction_id=verified.transaction_id,
+        original_transaction_id=verified.original_transaction_id,
+        environment=verified.environment,
+        status=STATUS_BLOCKED,
+        stars_credited=0,
+        stars_clawed_back=0,
+        stars_restored=0,
+    )
+    db.add(row)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        existing = _find_purchase(db, platform="ios", transaction_id=verified.transaction_id)
+        if existing is None:
+            raise
+        return _idempotent_or_conflict(db, user, existing)
+
+    # Attach unmatched notification to this purchase for audit.
+    try:
+        notification.iap_purchase_id = row.id
+        notification.user_id = user.id
+        if notification.processing_state == "unmatched":
+            notification.processing_state = "applied"
+        notification.audit_meta = {
+            **(notification.audit_meta or {}),
+            "policy": "blocked_on_confirm_after_prior_takeback",
+            "would_have_credited": stars,
+        }
+    except Exception:  # noqa: BLE001
+        _log.exception("apple_asn_attach_blocked_failed")
+
+    db.commit()
+    db.refresh(user)
+    _log.info(
+        "iap_blocked_prior_refund user_id=%s product=%s txn_suffix=%s",
+        user.id,
+        verified.product_id,
+        verified.transaction_id[-12:],
+    )
+    return {
+        "stars_credited": 0,
+        "already_processed": True,
+        "blocked": True,
+        "reason": "apple_refund_or_revoke_recorded",
+        "ai_stars": int(getattr(user, "ai_stars", 0) or 0),
+        "product_id": verified.product_id,
+        "transaction_id": verified.transaction_id,
+    }
+
+
 def _persist_credit(
     db: Session,
     user: User,
@@ -227,6 +338,8 @@ def _persist_credit(
     product_id: str,
     transaction_id: str,
     stars: int,
+    original_transaction_id: str | None = None,
+    environment: str | None = None,
 ) -> dict[str, Any]:
     existing = _find_purchase(db, platform=platform, transaction_id=transaction_id)
     if existing is not None:
@@ -237,7 +350,12 @@ def _persist_credit(
         platform=platform,
         product_id=product_id,
         transaction_id=transaction_id,
+        original_transaction_id=original_transaction_id or transaction_id,
+        environment=environment,
+        status=STATUS_ACTIVE,
         stars_credited=stars,
+        stars_clawed_back=0,
+        stars_restored=0,
     )
     db.add(row)
     try:
@@ -274,6 +392,7 @@ def _persist_credit(
         "stars_credited": stars,
         "already_processed": False,
         "ai_stars": balance,
+        "ai_stars_iap_debt": int(getattr(user, "ai_stars_iap_debt", 0) or 0),
         "product_id": product_id,
         "transaction_id": transaction_id,
     }
@@ -292,14 +411,25 @@ def _idempotent_or_conflict(db: Session, user: User, existing: IapPurchase) -> d
     if existing.user_id != user.id:
         raise ConflictError("This purchase is already linked to another account")
     balance = int(getattr(user, "ai_stars", 0) or 0)
+    debt = int(getattr(user, "ai_stars_iap_debt", 0) or 0)
     # Ensure we see committed balance
     locked = db.scalar(select(User).where(User.id == user.id))
     if locked is not None:
         balance = int(getattr(locked, "ai_stars", 0) or 0)
+        debt = int(getattr(locked, "ai_stars_iap_debt", 0) or 0)
+
+    status = str(getattr(existing, "status", STATUS_ACTIVE) or STATUS_ACTIVE)
+    credited = int(getattr(existing, "stars_credited", 0) or 0)
+    blocked = status in _TAKEBACK_STATUSES and credited == 0
+    already_takeback = status in (STATUS_REFUNDED, STATUS_REVOKED, STATUS_BLOCKED)
     return {
         "stars_credited": 0,
         "already_processed": True,
+        "blocked": blocked or already_takeback,
+        "status": status,
         "ai_stars": balance,
+        "ai_stars_iap_debt": debt,
         "product_id": existing.product_id,
         "transaction_id": existing.transaction_id,
+        "refund_reversed": status == STATUS_REFUND_REVERSED,
     }
