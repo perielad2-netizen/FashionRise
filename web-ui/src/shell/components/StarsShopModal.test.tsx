@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StarsShopModal } from './StarsShopModal'
 
 const listStarsIapProducts = vi.fn()
 const fetchAppleIapStatus = vi.fn()
 const recoverPendingStarsPurchases = vi.fn()
+const purchaseStarsPack = vi.fn()
 const refreshUser = vi.fn()
 
 vi.mock('@/services/native/iap', () => ({
@@ -12,7 +13,7 @@ vi.mock('@/services/native/iap', () => ({
   isNativeAndroidShell: () => false,
   isNativeIosStarsShop: () => true,
   listStarsIapProducts: (...args: unknown[]) => listStarsIapProducts(...args),
-  purchaseStarsPack: vi.fn(),
+  purchaseStarsPack: (...args: unknown[]) => purchaseStarsPack(...args),
   recoverPendingStarsPurchases: (...args: unknown[]) => recoverPendingStarsPurchases(...args),
 }))
 
@@ -41,6 +42,7 @@ describe('StarsShopModal native iOS polish', () => {
     listStarsIapProducts.mockReset()
     fetchAppleIapStatus.mockReset()
     recoverPendingStarsPurchases.mockReset()
+    purchaseStarsPack.mockReset()
     refreshUser.mockReset()
     recoverPendingStarsPurchases.mockResolvedValue({ recovered: 0, attempted: 0, state: 'idle' })
     fetchAppleIapStatus.mockResolvedValue({
@@ -98,5 +100,38 @@ describe('StarsShopModal native iOS polish', () => {
     expect(screen.getByText(/\$16\.99/)).toBeInTheDocument()
     expect(screen.getByText(/\$49\.99/)).toBeInTheDocument()
     expect(screen.queryByText(/FashionRise - 500 Stars/i)).not.toBeInTheDocument()
+  })
+
+  it('shows Buying… only on the selected package while purchase is in flight', async () => {
+    let resolvePurchase: (value: {
+      result: null
+      state: 'success'
+      message?: string
+    }) => void = () => undefined
+    purchaseStarsPack.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePurchase = resolve
+        }),
+    )
+
+    render(<StarsShopModal open onClose={() => undefined} />)
+    const buyButtons = await waitFor(() => {
+      const buttons = screen.getAllByRole('button', { name: /^Buy$/i })
+      expect(buttons).toHaveLength(3)
+      return buttons
+    })
+
+    fireEvent.click(buyButtons[0]!)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Buying/i })).toBeInTheDocument()
+    })
+    expect(screen.getAllByRole('button', { name: /^Buy$/i })).toHaveLength(2)
+    expect(purchaseStarsPack).toHaveBeenCalledWith('stars_50')
+
+    resolvePurchase({ result: null, state: 'success' })
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /^Buy$/i })).toHaveLength(3)
+    })
   })
 })

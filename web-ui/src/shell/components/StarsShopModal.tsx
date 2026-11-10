@@ -66,6 +66,8 @@ export function StarsShopModal({ open, onClose }: Props) {
   const [iapProducts, setIapProducts] = useState<StarsIapProduct[]>([])
   const [iapStatus, setIapStatus] = useState<AppleIapStatus | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Only the tapped package shows “Buying…” — other packs stay labeled Buy (disabled). */
+  const [buyingProductId, setBuyingProductId] = useState<string | null>(null)
   const [flowState, setFlowState] = useState<PurchaseFlowState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -179,6 +181,7 @@ export function StarsShopModal({ open, onClose }: Props) {
     if (purchaseLock.current || busy) return
     purchaseLock.current = true
     setBusy(true)
+    setBuyingProductId(productId)
     setError(null)
     setNotice(null)
     setFlowState('purchasing')
@@ -208,6 +211,7 @@ export function StarsShopModal({ open, onClose }: Props) {
       }
     } finally {
       setBusy(false)
+      setBuyingProductId(null)
       purchaseLock.current = false
     }
   }
@@ -284,7 +288,10 @@ export function StarsShopModal({ open, onClose }: Props) {
                       }
                       onClick={() => void onNativeBuy(pkg.productId)}
                     >
-                      {busy && flowState === 'purchasing' ? 'Buying…' : 'Buy'}
+                      {buyingProductId === pkg.productId &&
+                      (flowState === 'purchasing' || flowState === 'confirming')
+                        ? 'Buying…'
+                        : 'Buy'}
                     </button>
                   </li>
                 ))}
