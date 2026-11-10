@@ -1,7 +1,7 @@
 import { getCachedDefaultFabricImage } from '@/lib/defaultFabricTiles'
 import { getCachedFabricImage, registerFabricCacheClearHook } from '@/lib/fabricAssetCache'
 import {
-  contourToSvgPath,
+  fillOpToSvgPath,
   FABRIC_PRESETS,
   type FabricFillStyle,
   type FillOp,
@@ -13,7 +13,7 @@ import {
 export type FillPaintContext = {
   fillStyle: string | CanvasGradient | CanvasPattern
   globalAlpha: number
-  fill(path: Path2D): void
+  fill(path: Path2D, fillRule?: CanvasFillRule): void
   createLinearGradient(x0: number, y0: number, x1: number, y1: number): CanvasGradient
   createPattern(image: CanvasImageSource, repetition: string): CanvasPattern | null
   save(): void
@@ -22,16 +22,18 @@ export type FillPaintContext = {
 
 /**
  * Paint fill regions under ink. Shared by live preview canvases and PNG/Magic export.
+ * Fills with `holes` use even-odd so inner cutouts (face windows) stay empty.
  */
 export function paintFillOps(ctx: FillPaintContext, fills: FillOp[]): void {
   for (const fill of fills) {
-    const d = contourToSvgPath(fill.contour)
+    const d = fillOpToSvgPath(fill)
     if (!d) continue
     const path = new Path2D(d)
     ctx.save()
     ctx.globalAlpha = 1
     ctx.fillStyle = resolveFillStyle(ctx, fill)
-    ctx.fill(path)
+    if (fill.holes && fill.holes.length > 0) ctx.fill(path, 'evenodd')
+    else ctx.fill(path)
     ctx.restore()
   }
 }

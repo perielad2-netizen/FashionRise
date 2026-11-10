@@ -13,7 +13,7 @@ import {
   paperToDesignY,
   withPaperOrigin,
 } from '@/lib/paperBounds'
-import { createFillId, type FillOp, type FillStyle } from '@/lib/fills'
+import { createFillId, MAX_FILL_HOLES, type FillOp, type FillStyle } from '@/lib/fills'
 
 export type FloodFillOk = { ok: true; fill: FillOp }
 export type FloodFillErr = {
@@ -234,12 +234,20 @@ export function floodFillAgainstBarrier(input: {
   // shared seams/walls first falsely flags split panels (bodice/skirt) as cutouts.
   const tightSimplified = simplifyContour(tightContour, 1.4)
   const visibleInk = input.visibleInk ?? barrier
-  if (floodEnclosesUnsupportedCutout(visited, barrier, visibleInk, tightSimplified)) {
+  const holePaperContours = floodEnclosesUnsupportedCutout(
+    visited,
+    barrier,
+    visibleInk,
+    tightSimplified,
+  )
+    ? extractHoleContours(visited, barrier, visibleInk, tightSimplified)
+    : []
+  if (holePaperContours === null) {
     return {
       ok: false,
       reason: 'unsupported_cutout',
       message:
-        'This area has an inner cutout. Fills can’t keep holes empty yet — tap a simpler closed area, or erase the inner outline first.',
+        'This area has an inner cutout that could not be kept empty. Tap a simpler closed area, or erase the inner outline first.',
     }
   }
 
@@ -260,11 +268,21 @@ export function floodFillAgainstBarrier(input: {
     simplified.push(paperToDesignX(simplifiedPaper[i]!), paperToDesignY(simplifiedPaper[i + 1]!))
   }
 
+  const holesDesign: number[][] = []
+  for (const holePaper of holePaperContours) {
+    const holeDesign: number[] = []
+    for (let i = 0; i + 1 < holePaper.length; i += 2) {
+      holeDesign.push(paperToDesignX(holePaper[i]!), paperToDesignY(holePaper[i + 1]!))
+    }
+    if (holeDesign.length >= 6) holesDesign.push(holeDesign)
+  }
+
   return {
     ok: true,
     fill: {
       id: createFillId(),
       contour: simplified,
+      ...(holesDesign.length ? { holes: holesDesign } : {}),
       style: input.style,
       seedX: input.x,
       seedY: input.y,
@@ -820,6 +838,24 @@ function cellNearBarrier(barrier: Uint8Array, x: number, y: number, radius: numb
  */
 const MIN_UNSUPPORTED_CUTOUT_PIXELS = 4
 
+/** True when a paper cell inside the outer contour is an enclosed hollow. */
+function isEnclosedHollowCell(
+  i: number,
+  x: number,
+  y: number,
+  visited: Uint8Array,
+  barrier: Uint8Array,
+  visibleInk: Uint8Array,
+  outerMask: Uint8Array,
+): boolean {
+  if (!outerMask[i] || visited[i] || visibleInk[i]) return false
+  if (!barrier[i]) return true
+  // Dilate sealed this cell — only count interior hollows, not frontier fringe.
+  // Radius matches gap-close so the outer dilate band next to the flood is not
+  // mistaken for its own ring-shaped "hole" (nested even-odd would refill it).
+  return !cellNearVisited(visited, x, y, DEFAULT_GAP_CLOSE_PX)
+}
+
 /**
  * True when painting the persisted fill contour would cover an inner cutout the
  * flood never visited.
@@ -843,25 +879,174 @@ function floodEnclosesUnsupportedCutout(
     const row = y * PAPER_WIDTH
     for (let x = minX; x <= maxX; x += 1) {
       const i = row + x
-      if (!mask[i]) continue
-      if (visited[i]) continue
-      // Skip actual drawn ink; empty sketch cells may still be cutouts.
-      if (visibleInk[i]) continue
-      // Surviving hollow (empty even after dilate) — classic cutout.
-      if (!barrier[i]) {
-        holePixels += 1
-        if (holePixels >= MIN_UNSUPPORTED_CUTOUT_PIXELS) return true
-        continue
-      }
-      // Dilate sealed this cell. Count only interior sealed hollows, not the
-      // 1px dilate fringe hugging the flood frontier from contour simplify.
-      if (!cellNearVisited(visited, x, y, 1)) {
-        holePixels += 1
-        if (holePixels >= MIN_UNSUPPORTED_CUTOUT_PIXELS) return true
-      }
+      if (!isEnclosedHollowCell(i, x, y, visited, barrier, visibleInk, mask)) continue
+      holePixels += 1
+      if (holePixels >= MIN_UNSUPPORTED_CUTOUT_PIXELS) return true
     }
   }
   return false
+}
+
+/**
+ * Trace each enclosed hollow as a hole contour (paper coords, simplified).
+ * Returns [] when no holes, or null when hollows exist but cannot be captured
+ * (fail closed — caller keeps the unsupported_cutout UX).
+ */
+function extractHoleContours(
+  visited: Uint8Array,
+  barrier: Uint8Array,
+  visibleInk: Uint8Array,
+  outerContour: number[],
+): number[][] | null {
+  const coverage = rasterizeContourCoverage(outerContour)
+  if (!coverage) return null
+  const { mask: outerMask, minX, minY, maxX, maxY } = coverage
+  const claimed = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
+  const holes: number[][] = []
+  let hollowSeen = 0
+
+  for (let y = minY; y <= maxY; y += 1) {
+    const row = y * PAPER_WIDTH
+    for (let x = minX; x <= maxX; x += 1) {
+      const i = row + x
+      if (claimed[i]) continue
+      if (!isEnclosedHollowCell(i, x, y, visited, barrier, visibleInk, outerMask)) continue
+      hollowSeen += 1
+
+      // Flood this hollow component (stay inside outer mask; stop at visited/ink).
+      // Dilate may fully seal a small face window (barrier=1, visibleInk=0); those
+      // cells still seed a hole. Frontier dilate beside the flood is excluded by
+      // isEnclosedHollowCell's near-visited radius (= gap-close).
+      const holeMask = new Uint8Array(PAPER_WIDTH * PAPER_HEIGHT)
+      const stackX = new Int32Array(PAPER_WIDTH * PAPER_HEIGHT)
+      const stackY = new Int32Array(PAPER_WIDTH * PAPER_HEIGHT)
+      let sp = 0
+      stackX[0] = x
+      stackY[0] = y
+      sp = 1
+      claimed[i] = 1
+      holeMask[i] = 1
+      let count = 1
+      let hMinX = x
+      let hMinY = y
+      let hMaxX = x
+      let hMaxY = y
+
+      while (sp > 0) {
+        sp -= 1
+        const cx = stackX[sp]!
+        const cy = stackY[sp]!
+        const neighbors = [
+          [cx + 1, cy],
+          [cx - 1, cy],
+          [cx, cy + 1],
+          [cx, cy - 1],
+        ] as const
+        for (const [nx, ny] of neighbors) {
+          if (nx < minX || ny < minY || nx > maxX || ny > maxY) continue
+          const ni = ny * PAPER_WIDTH + nx
+          if (claimed[ni]) continue
+          if (!isEnclosedHollowCell(ni, nx, ny, visited, barrier, visibleInk, outerMask)) continue
+          claimed[ni] = 1
+          holeMask[ni] = 1
+          stackX[sp] = nx
+          stackY[sp] = ny
+          sp += 1
+          count += 1
+          if (nx < hMinX) hMinX = nx
+          if (ny < hMinY) hMinY = ny
+          if (nx > hMaxX) hMaxX = nx
+          if (ny > hMaxY) hMaxY = ny
+        }
+      }
+
+      if (count < MIN_UNSUPPORTED_CUTOUT_PIXELS) continue
+      if (holes.length >= MAX_FILL_HOLES) return null
+
+      const raw = traceContour(holeMask, hMinX, hMinY, hMaxX, hMaxY)
+      if (raw.length < 6) return null
+      const simplified = simplifyContour(raw, 1.2)
+      if (simplified.length < 6) return null
+      holes.push(simplified)
+    }
+  }
+
+  if (hollowSeen >= MIN_UNSUPPORTED_CUTOUT_PIXELS && holes.length === 0) return null
+  // Even-odd safety: nested hole paths flip the interior back to filled.
+  return preferInnermostHoles(holes)
+}
+
+/** Drop outer contours that fully contain another hole (keep the cutout cavity). */
+function preferInnermostHoles(holes: number[][]): number[][] {
+  if (holes.length <= 1) return holes
+  const kept: number[][] = []
+  for (let i = 0; i < holes.length; i += 1) {
+    const outer = holes[i]!
+    const cx = contourCentroidX(outer)
+    const cy = contourCentroidY(outer)
+    let containsOther = false
+    for (let j = 0; j < holes.length; j += 1) {
+      if (i === j) continue
+      const inner = holes[j]!
+      if (pointInContour(contourCentroidX(inner), contourCentroidY(inner), outer)) {
+        // Only treat as nested when the candidate "inner" is actually smaller.
+        if (contourArea(inner) < contourArea(outer)) {
+          containsOther = true
+          break
+        }
+      }
+      // Also drop if this hole's own centroid sits inside a smaller hole (noise).
+      if (pointInContour(cx, cy, inner) && contourArea(inner) < contourArea(outer)) {
+        containsOther = true
+        break
+      }
+    }
+    if (!containsOther) kept.push(outer)
+  }
+  return kept.length > 0 ? kept : holes
+}
+
+function contourCentroidX(contour: number[]): number {
+  let s = 0
+  const n = contour.length / 2
+  for (let i = 0; i < contour.length; i += 2) s += contour[i]!
+  return s / n
+}
+
+function contourCentroidY(contour: number[]): number {
+  let s = 0
+  const n = contour.length / 2
+  for (let i = 1; i < contour.length; i += 2) s += contour[i]!
+  return s / n
+}
+
+function contourArea(contour: number[]): number {
+  let a = 0
+  const n = contour.length / 2
+  for (let i = 0; i < n; i += 1) {
+    const x1 = contour[i * 2]!
+    const y1 = contour[i * 2 + 1]!
+    const x2 = contour[((i + 1) % n) * 2]!
+    const y2 = contour[((i + 1) % n) * 2 + 1]!
+    a += x1 * y2 - x2 * y1
+  }
+  return Math.abs(a) / 2
+}
+
+function pointInContour(x: number, y: number, contour: number[]): boolean {
+  // Ray cast even-odd.
+  let inside = false
+  const n = contour.length / 2
+  for (let i = 0, j = n - 1; i < n; j = i, i += 1) {
+    const xi = contour[i * 2]!
+    const yi = contour[i * 2 + 1]!
+    const xj = contour[j * 2]!
+    const yj = contour[j * 2 + 1]!
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
 }
 
 function cellNearVisited(visited: Uint8Array, x: number, y: number, radius: number): boolean {
