@@ -124,6 +124,23 @@ describe('fills schema', () => {
     expect(original[0]!.contour[0]).toBe(1)
   })
 
+  it('parses and clones fills with inner cutout holes', () => {
+    const withHole = {
+      id: 'hood',
+      contour: [10, 10, 200, 10, 200, 200, 10, 200],
+      holes: [[60, 60, 120, 60, 120, 120, 60, 120]],
+      style: solidStyle('#1E3A8A'),
+      seedX: 30,
+      seedY: 30,
+    }
+    const parsed = parseFillOp(JSON.parse(JSON.stringify(withHole)))
+    expect(parsed?.holes).toEqual([[60, 60, 120, 60, 120, 120, 60, 120]])
+    expect(checkPersistableFill(withHole).ok).toBe(true)
+    const cloned = cloneFills([withHole])
+    cloned[0]!.holes![0]![0] = 99
+    expect(withHole.holes[0]![0]).toBe(60)
+  })
+
   it('exposes fashion fabric and gradient presets', () => {
     expect(FABRIC_PRESETS.map((f) => f.id)).toEqual([
       'satin',

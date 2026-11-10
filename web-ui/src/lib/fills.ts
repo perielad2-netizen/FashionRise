@@ -52,6 +52,12 @@ export type FillOp = {
   id: string
   /** Closed polygon in design space: [x0,y0,x1,y1,...], at least 3 points. */
   contour: number[]
+  /**
+   * Optional inner cutouts (face windows, armholes drawn as closed loops inside
+   * the outer outline). Painted with even-odd so holes stay empty. Legacy fills
+   * omit this field.
+   */
+  holes?: number[][]
   style: FillStyle
   /** Seed click used to create the fill (for debugging / UX). */
   seedX: number
@@ -63,6 +69,11 @@ export type FillOp = {
    */
   eraseAfterStrokeIndex?: number
 }
+
+/** Max inner cutout loops persisted on one fill. */
+export const MAX_FILL_HOLES = 8
+/** Max flat contour values per hole ([x,y,...]). */
+export const MAX_FILL_HOLE_CONTOUR_VALUES = 2_000
 
 export type FashionPaletteSwatch = {
   id: string
@@ -358,16 +369,19 @@ export function createFillId(): string {
 
 export function cloneFills(fills: FillOp[]): FillOp[] {
   return fills.map((f) => {
+    const holes = f.holes?.map((h) => [...h])
     if (f.style.kind === 'gradient') {
       return {
         ...f,
         contour: [...f.contour],
+        ...(holes && holes.length ? { holes } : {}),
         style: { ...f.style, colors: [...f.style.colors] as [string, string] },
       }
     }
     return {
       ...f,
       contour: [...f.contour],
+      ...(holes && holes.length ? { holes } : {}),
       style: { ...f.style },
     }
   })
@@ -382,19 +396,49 @@ export function contourToSvgPath(contour: number[]): string {
   return `${d} Z`
 }
 
-export function parseFillOp(raw: unknown): FillOp | null {
-  if (!raw || typeof raw !== 'object') return null
-  const f = raw as Partial<FillOp>
-  if (!Array.isArray(f.contour) || f.contour.length < 6) return null
-  // Reject oversized / malformed contours outright — never silently truncate.
-  if (f.contour.length > MAX_FILL_CONTOUR_VALUES) return null
+/** Outer contour + holes as one even-odd SVG path (multiple subpaths). */
+export function fillOpToSvgPath(fill: Pick<FillOp, 'contour' | 'holes'>): string {
+  const parts = [contourToSvgPath(fill.contour)]
+  if (fill.holes) {
+    for (const hole of fill.holes) {
+      const d = contourToSvgPath(hole)
+      if (d) parts.push(d)
+    }
+  }
+  return parts.filter(Boolean).join(' ')
+}
+
+function parseContourValues(
+  raw: unknown,
+  opts: { maxValues: number },
+): number[] | null {
+  if (!Array.isArray(raw) || raw.length < 6 || raw.length % 2 !== 0) return null
+  if (raw.length > opts.maxValues) return null
   const contour: number[] = []
-  for (const n of f.contour) {
+  for (const n of raw) {
     if (typeof n !== 'number' || !Number.isFinite(n)) return null
     if (n < CONTOUR_COORD_MIN || n > CONTOUR_COORD_MAX) return null
     contour.push(n)
   }
-  if (contour.length < 6 || contour.length % 2 !== 0) return null
+  return contour.length >= 6 ? contour : null
+}
+
+export function parseFillOp(raw: unknown): FillOp | null {
+  if (!raw || typeof raw !== 'object') return null
+  const f = raw as Partial<FillOp>
+  const contour = parseContourValues(f.contour, { maxValues: MAX_FILL_CONTOUR_VALUES })
+  if (!contour) return null
+  let holes: number[][] | undefined
+  if (f.holes !== undefined) {
+    if (!Array.isArray(f.holes) || f.holes.length > MAX_FILL_HOLES) return null
+    holes = []
+    for (const holeRaw of f.holes) {
+      const hole = parseContourValues(holeRaw, { maxValues: MAX_FILL_HOLE_CONTOUR_VALUES })
+      if (!hole) return null
+      holes.push(hole)
+    }
+    if (holes.length === 0) holes = undefined
+  }
   const style = parseFillStyle(f.style)
   if (!style) return null
   const seedX = typeof f.seedX === 'number' && Number.isFinite(f.seedX) ? f.seedX : contour[0]!
@@ -408,6 +452,7 @@ export function parseFillOp(raw: unknown): FillOp | null {
   return {
     id: typeof f.id === 'string' && f.id ? f.id : createFillId(),
     contour,
+    ...(holes ? { holes } : {}),
     style,
     seedX,
     seedY,
@@ -440,12 +485,30 @@ export function checkPersistableFill(fill: FillOp): PersistableFillResult {
         'That fill outline is too detailed to save. Try a simpler closed region — nothing was added.',
     }
   }
+  if (fill.holes && fill.holes.length > MAX_FILL_HOLES) {
+    return {
+      ok: false,
+      message:
+        'That fill has too many inner cutouts to save. Simplify the openings — nothing was added.',
+    }
+  }
   for (const n of fill.contour) {
     if (typeof n !== 'number' || !Number.isFinite(n) || n < CONTOUR_COORD_MIN || n > CONTOUR_COORD_MAX) {
       return {
         ok: false,
         message:
           'That fill could not be saved in a form that reopens correctly. Nothing was added.',
+      }
+    }
+  }
+  if (fill.holes) {
+    for (const hole of fill.holes) {
+      if (!Array.isArray(hole) || hole.length < 6 || hole.length > MAX_FILL_HOLE_CONTOUR_VALUES) {
+        return {
+          ok: false,
+          message:
+            'An inner cutout in that fill could not be saved. Try a clearer closed opening — nothing was added.',
+        }
       }
     }
   }

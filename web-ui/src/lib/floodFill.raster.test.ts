@@ -280,7 +280,7 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
     expect(result.ok).toBe(true)
   })
 
-  it('rejects nested cutout fills that would paint the hole (pixels + save path)', () => {
+  it('fills nested cutouts with even-odd holes (pixels + save path)', () => {
     const outer = multiStrokeRect(1.2, 2)
     const ix0 = 300
     const iy0 = 320
@@ -299,22 +299,28 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
       y: 380,
       style: solidStyle('#B91C1C'),
     })
-    // Single-contour persistence cannot keep holes empty — fail closed.
-    expect(ring.ok).toBe(false)
-    if (!ring.ok) {
-      expect(ring.reason).toBe('unsupported_cutout')
-      expect(ring.message.toLowerCase()).toMatch(/cutout|hole|inner/)
+    // Ring fill persists outer + hole contours so the face window stays empty.
+    expect(ring.ok).toBe(true)
+    if (ring.ok) {
+      expect(ring.fill.holes?.length).toBeGreaterThanOrEqual(1)
+      const persist = checkPersistableFill(ring.fill)
+      expect(persist.ok).toBe(true)
+      const roundTrip = parseFillOp(JSON.parse(JSON.stringify(ring.fill)))
+      expect(roundTrip?.holes?.length).toBeGreaterThanOrEqual(1)
+
+      const canvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
+      const ctx = canvas.getContext('2d')!
+      paintFillOps(ctx, [roundTrip!])
+      const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+      const holeIdx =
+        (Math.round((iy0 + iy1) / 2) * DESIGN_WIDTH + Math.round((ix0 + ix1) / 2)) * 4
+      const ringIdx = (380 * DESIGN_WIDTH + 260) * 4
+      // Outer ring painted; inner cutout empty.
+      expect(img.data[ringIdx + 3]!).toBeGreaterThan(10)
+      expect(img.data[holeIdx + 3]!).toBe(0)
     }
 
-    const hole = floodFillRegion({
-      strokes,
-      x: 340,
-      y: 370,
-      style: solidStyle('#1D4ED8'),
-    })
-    expect(hole.ok).toBe(true)
-
-    // Prove why we reject: painting an outer-only contour would flood the cutout.
+    // Prove outer-only contour (no holes) would wrongly paint the cutout.
     const bogusOuter: FillOp = {
       id: 'bogus-ring',
       contour: [230, 250, 450, 250, 450, 510, 230, 510],
@@ -323,32 +329,20 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
       seedY: 380,
     }
     const canvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
-    const ctx = canvas.getContext('2d')
-    expect(ctx).toBeTruthy()
-    paintFillOps(ctx!, [bogusOuter])
-    const img = ctx!.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+    const ctx = canvas.getContext('2d')!
+    paintFillOps(ctx, [bogusOuter])
+    const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
     const holeIdx = (Math.round((iy0 + iy1) / 2) * DESIGN_WIDTH + Math.round((ix0 + ix1) / 2)) * 4
     expect(img.data[holeIdx + 3]!).toBeGreaterThan(10)
 
-    // Successful hole fill survives persist parse (save/reopen) and re-paint without
-    // spilling into the ring sample outside the hole.
-    if (hole.ok) {
-      const persist = checkPersistableFill(hole.fill)
-      expect(persist.ok).toBe(true)
-      const roundTrip = parseFillOp(JSON.parse(JSON.stringify(hole.fill)))
-      expect(roundTrip).not.toBeNull()
-      const exportCanvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
-      const exportCtx = exportCanvas.getContext('2d')!
-      paintFillOps(exportCtx, [roundTrip!])
-      const exported = exportCtx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-      const holePx =
-        exported.data[
-          (Math.round((iy0 + iy1) / 2) * DESIGN_WIDTH + Math.round((ix0 + ix1) / 2)) * 4 + 3
-        ]!
-      const ringPx = exported.data[(380 * DESIGN_WIDTH + 260) * 4 + 3]!
-      expect(holePx).toBeGreaterThan(10)
-      expect(ringPx).toBe(0)
-    }
+    // Filling inside the hole itself still works as a separate solid fill.
+    const hole = floodFillRegion({
+      strokes,
+      x: 340,
+      y: 370,
+      style: solidStyle('#1D4ED8'),
+    })
+    expect(hole.ok).toBe(true)
   })
 
   it('protects a visibly hollow 6px continuous cutout even when dilate seals the barrier', () => {
@@ -385,7 +379,7 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
     // Document the dilate-seal behaviour that previously hid this case.
     expect(layers.barrier[designToPaperIndex(cx, cy)]).toBe(1)
 
-    // 2–3) Filling the surrounding panel must fail closed — no FillOp.
+    // 2–3) Filling the surrounding panel keeps the hollow empty via even-odd holes.
     const ring = floodFillRegion({
       strokes,
       x: 340,
@@ -393,24 +387,22 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
       style: solidStyle('#B91C1C'),
       gapClose: DEFAULT_GAP_CLOSE_PX,
     })
-    expect(ring.ok).toBe(false)
-    if (!ring.ok) {
-      expect(ring.reason).toBe('unsupported_cutout')
-      expect(ring.message.toLowerCase()).toMatch(/cutout|hole|inner/)
+    expect(ring.ok).toBe(true)
+    if (ring.ok) {
+      expect(ring.fill.holes?.length).toBeGreaterThanOrEqual(1)
     }
-    expect(Object.prototype.hasOwnProperty.call(ring, 'fill')).toBe(false)
 
-    // 4) Saved/exported path: no fill paint may cover the hollow (no FillOp to paint).
+    // 4) Saved/exported path: fill paints the ring but not the hollow centre.
     const exportCanvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
     const exportCtx = exportCanvas.getContext('2d')!
-    paintFillOps(exportCtx, [])
+    if (ring.ok) paintFillOps(exportCtx, [ring.fill])
     paintInkStrokes(exportCtx, strokes, { sealTips: true })
     const exported = exportCtx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
-    // Hollow stays empty (ink only on the loop; no fill underpaint).
+    // Hollow stays empty (even-odd hole; ink only on the loop).
     expect(exported.data[(cy * DESIGN_WIDTH + cx) * 4 + 3]!).toBe(0)
   })
 
-  it('detects a small 8px cutout offset between former sparse sample points', () => {
+  it('keeps a small 8px cutout empty via hole contours (even between sparse samples)', () => {
     // Outer panel ~220×280 → old lattice step was floor(min/24)=10. Place an 8×8
     // continuous cutout so its interior sits between those sample positions.
     const outer = multiStrokeRect(0.75, 2.25)
@@ -431,13 +423,11 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
       y: 380,
       style: solidStyle('#B91C1C'),
     })
-    expect(ring.ok).toBe(false)
-    if (!ring.ok) {
-      expect(ring.reason).toBe('unsupported_cutout')
-      expect(ring.message.toLowerCase()).toMatch(/cutout|hole|inner/)
+    expect(ring.ok).toBe(true)
+    if (ring.ok) {
+      expect(ring.fill.holes?.length).toBeGreaterThanOrEqual(1)
+      expect(checkPersistableFill(ring.fill).ok).toBe(true)
     }
-    // Rejected path must not yield a persistable FillOp.
-    expect(Object.prototype.hasOwnProperty.call(ring, 'fill')).toBe(false)
 
     // A slightly larger sibling cutout remains fillable on its own (accepted path).
     const bigHx0 = 360
@@ -493,9 +483,19 @@ describe('production Canvas2D raster fill path (#127 safety)', () => {
       y: 400,
       style: solidStyle('#B91C1C'),
     })
-    expect(panel.ok).toBe(false)
-    if (!panel.ok) expect(panel.reason).toBe('unsupported_cutout')
-    expect(Object.prototype.hasOwnProperty.call(panel, 'fill')).toBe(false)
+    expect(panel.ok).toBe(true)
+    if (panel.ok) {
+      expect(panel.fill.holes?.length).toBeGreaterThanOrEqual(1)
+      const canvas = createCanvas(DESIGN_WIDTH, DESIGN_HEIGHT)
+      const ctx = canvas.getContext('2d')!
+      paintFillOps(ctx, [panel.fill])
+      const img = ctx.getImageData(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT)
+      const hollowIdx =
+        (Math.round((hy0 + hy1) / 2) * DESIGN_WIDTH + Math.round((hx0 + hx1) / 2)) * 4
+      const panelIdx = (400 * DESIGN_WIDTH + 280) * 4
+      expect(img.data[panelIdx + 3]!).toBeGreaterThan(10)
+      expect(img.data[hollowIdx + 3]!).toBe(0)
+    }
 
     // Prove a hypothetical outer-only fill would obliterate the hollow.
     const bogus: FillOp = {

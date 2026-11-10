@@ -40,7 +40,7 @@ export type Canvas2DLike = {
   globalAlpha: number
   globalCompositeOperation: GlobalCompositeOperation | string
   fillRect(x: number, y: number, w: number, h: number): void
-  fill(path: Path2D): void
+  fill(path: Path2D, fillRule?: CanvasFillRule): void
   drawImage(
     image: CanvasImageSource,
     dx: number,

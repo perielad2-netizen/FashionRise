@@ -223,7 +223,7 @@ describe('Issue #127 extended paper bounds', () => {
     }
   })
 
-  it('still protects a 6px hollow cutout on the extended paper', () => {
+  it('keeps a 6px hollow cutout empty on the extended paper (even-odd holes)', () => {
     // Modest closed panel that still crosses the legacy left edge (x<0).
     const outerPts = [
       -40, 300, 420, 300, 420, 620, -40, 620,
@@ -251,8 +251,8 @@ describe('Issue #127 extended paper bounds', () => {
       style: solidStyle('#B91C1C'),
       gapClose: DEFAULT_GAP_CLOSE_PX,
     })
-    expect(ring.ok).toBe(false)
-    if (!ring.ok) expect(ring.reason).toBe('unsupported_cutout')
+    expect(ring.ok).toBe(true)
+    if (ring.ok) expect(ring.fill.holes?.length).toBeGreaterThanOrEqual(1)
   })
 
   it('preserves Fit Page croquis framing and allows pan into paper margins', () => {
