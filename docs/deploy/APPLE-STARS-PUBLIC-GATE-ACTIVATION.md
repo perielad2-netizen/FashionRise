@@ -23,7 +23,7 @@ Sandbox allowlist (`IAP_APPLE_SANDBOX_TESTER_EMAILS`) is **temporary** for TestF
 | A2 | App version **1.0** | `MARKETING_VERSION=1.0` |
 | A3 | Consumables in ASC | `stars_50` / `stars_150` / `stars_500` · type **Consumable** · Ready to Submit / Approved with app |
 | A4 | Israel / storefront pricing | Each SKU has price for Israel (ILS). Shop displays StoreKit `priceString` only |
-| A5 | App Store icon | ASC App Information 1024 icon uploaded; TF IPA embeds non-blank AppIcon (`Assets.car`) |
+| A5 | App icon (iOS) | Comes from the **Xcode `AppIcon` asset catalog** inside the uploaded build (not a separate marketing upload for the purchase sheet). Confirm after processing in App Store Connect → the build’s binary / TestFlight install shows the FashionRise icon (not a placeholder). Codemagic `npm run check:ios-appicon` must pass before IPA build. |
 | A6 | Privacy policy URL | Live HTTPS URL in ASC |
 | A7 | Screenshots + metadata | Phone (+ iPad if listed); description mentions Stars as consumable AI credits |
 | A8 | Digital Services Act (EU) | ASC DSA / trader contact fields complete for FashionRise legal entity |
