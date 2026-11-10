@@ -1,15 +1,16 @@
-"""Store IAP confirm stays fail-closed until Apple/Google credentials are configured."""
+"""Store IAP confirm — fail-closed gates and unknown products."""
 
+from app.core.config import get_settings
 from tests.auth_test_helpers import register_with_invite
 from tests.test_looks_api import _auth
 
 
-def test_iap_confirm_fail_closed_without_credentials(client, db_session, monkeypatch):
+def test_iap_confirm_fail_closed_while_apple_credit_disabled(client, db_session, monkeypatch):
+    monkeypatch.setenv("IAP_APPLE_PURCHASING_ENABLED", "false")
+    monkeypatch.setenv("IAP_APPLE_CREDIT_ENABLED", "false")
     monkeypatch.setenv("IAP_APPLE_SHARED_SECRET", "")
     monkeypatch.setenv("IAP_GOOGLE_SERVICE_ACCOUNT_JSON", "")
     monkeypatch.setenv("IAP_ALLOW_UNVERIFIED_SANDBOX", "false")
-    from app.core.config import get_settings
-
     get_settings.cache_clear()
 
     tokens = register_with_invite(client, db_session, "iap.user@example.com", "iapUser")
@@ -20,19 +21,22 @@ def test_iap_confirm_fail_closed_without_credentials(client, db_session, monkeyp
             "platform": "ios",
             "product_id": "stars_50",
             "transaction_id": "txn-test-1",
-            "receipt": "fake-receipt",
+            "jws": "a.b.c",
         },
     )
     assert res.status_code == 503, res.text
-    assert "not configured" in res.json()["detail"]["message"].lower()
+    msg = res.json()["detail"]["message"].lower()
+    assert "not enabled" in msg
+    assert "credit" in msg or "recovery" in msg
 
 
 def test_iap_confirm_rejects_unknown_product(client, db_session, monkeypatch):
-    monkeypatch.setenv("IAP_ALLOW_UNVERIFIED_SANDBOX", "true")
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    from app.core.config import get_settings
+    monkeypatch.setenv("IAP_ALLOW_UNVERIFIED_SANDBOX", "false")
+    monkeypatch.setenv("IAP_APPLE_PURCHASING_ENABLED", "false")
+    monkeypatch.setenv("IAP_APPLE_CREDIT_ENABLED", "false")
+    from app.core.config import get_settings as gs
 
-    get_settings.cache_clear()
+    gs.cache_clear()
 
     tokens = register_with_invite(client, db_session, "iap2@example.com", "iapUser2")
     res = client.post(

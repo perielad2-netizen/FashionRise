@@ -87,6 +87,17 @@ def checkout_cart(
     return stars_shop.checkout_cart(db, user)
 
 
+@router.get("/iap/app-account-token")
+@limiter.limit("60/minute")
+def get_iap_app_account_token(
+    request: Request,
+    user: CurrentUser,
+) -> dict[str, Any]:
+    """Opaque StoreKit appAccountToken UUID for the signed-in account (Phase A)."""
+    _ = request.url
+    return iap_service.app_account_token_payload(user)
+
+
 @router.post("/iap/confirm")
 @limiter.limit("30/minute")
 def confirm_iap_purchase(

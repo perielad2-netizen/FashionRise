@@ -230,13 +230,26 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:ops@fashionrise.app"
 
-    # Store IAP verification (App Store / Play Store). Empty = confirm endpoint fail-closed.
-    # Never commit real secrets. Apple shared secret or App Store Server API key later.
+    # Store IAP verification (App Store / Play Store). Confirm stays fail-closed until ready.
+    # Never commit real secrets. Legacy shared secret is unused (StoreKit 2 JWS only).
     iap_apple_shared_secret: str = ""
     # Path or inline JSON for Google Play Developer API service account.
     iap_google_service_account_json: str = ""
-    # Dev-only: credit Stars without store verification. Forced off in production.
+    # Dev-only escape hatch (historical). Forced OFF in production; Apple Phase A also
+    # refuses unverified credit even in non-prod — send signed sandbox JWS instead.
     iap_allow_unverified_sandbox: bool = False
+    # Phase B client: allow initiating *new* StoreKit purchases in the native shop.
+    # Default OFF. Distinct from credit/reconcile (below).
+    iap_apple_purchasing_enabled: bool = False
+    # Server: allow verifying JWS + crediting Stars for completed Apple transactions
+    # (including unfinished-txn recovery). Default OFF until Phase B ASN/refunds.
+    # Never treat this as a production “bypass” — both gates stay false in Phase A.
+    iap_apple_credit_enabled: bool = False
+    iap_apple_bundle_id: str = "app.fashionrise.studio"
+    # App Store Connect Apple ID (public). Required for Production SignedDataVerifier.
+    iap_apple_app_apple_id: int = 6832116469
+    # OCSP / online chain checks for Apple roots (disable in offline unit tests).
+    iap_apple_online_checks: bool = True
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -247,6 +260,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_safety(self) -> "Settings":
+        # Always coerce — misconfiguration must not enable unverified credits in prod.
+        if self.environment == "production" and self.iap_allow_unverified_sandbox:
+            self.iap_allow_unverified_sandbox = False
         if self.testing:
             return self
         if self.environment != "production":
@@ -259,6 +275,8 @@ class Settings(BaseSettings):
             raise ValueError("CORS_ORIGINS must not be * in production; list explicit HTTPS origins")
         if self.debug:
             raise ValueError("DEBUG must be false in production")
+        if self.iap_allow_unverified_sandbox:
+            raise ValueError("IAP_ALLOW_UNVERIFIED_SANDBOX must be false in production")
         return self
 
     @model_validator(mode="after")

@@ -3,28 +3,25 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**Apple Stars IAP readiness audit** — docs-only; **stop for PM review**. No implement / merge-of-IAP / deploy / Codemagic / real purchases.)
+**Last updated:** 2026-11-10 (**Apple Stars IAP Phase A hardening** on PR **#267** — required `appAccountToken`, split purchase/credit gates, Postgres concurrency. **STOP for PM review.** No merge / deploy / enable / Codemagic / paid txns.)
 
-**Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Protected family beta product surface unchanged until IAP work is approved.
+**Phase:** Apple App Store launch readiness (TestFlight **1.0 (20)** owner QA passed). Audit docs **#266** squash-merged → `main` **`eca770b3`**.
 
-## Apple Stars IAP — App Store readiness audit (2026-11-10) — PM REVIEW
+## Apple Stars IAP — Phase A backend verification (2026-11-10) — PM REVIEW
 
 | Status | Detail |
 |---|---|
-| Scope | Audit-only of Apple Stars In-App Purchase path before public App Store submission |
-| Verdict | **Not App Store payment-ready.** Client adapter + confirm API + `iap_purchases` table exist, but **server does not validate Apple-signed transactions**, shop UI does **not** call StoreKit, and restore/refund/recovery are incomplete |
-| Product IDs | Code + catalog aligned: `stars_50` (50 / $5.99), `stars_150` (150 / $16.99), `stars_500` (500 / $49.99) — must still be created/approved as **Consumable** IAPs in App Store Connect |
-| Server verify | `iap_service._verify_with_store` is an explicit **stub**: with Apple secret set it still returns **503** (“staged”); without credentials confirm is fail-closed (**503**). Prod `.env` has **no** `IAP_APPLE_*` keys today |
-| Client | `web-ui/src/services/native/iap.ts` uses `@capgo/native-purchases` `PURCHASE_TYPE.INAPP` and posts `transaction_id` / `receipt` / `jws` to `POST /shop/iap/confirm` — **StarsShopModal does not use this path** (cart/checkout only; checkout disabled) |
-| Idempotency | `uq_iap_purchases_platform_txn` + same-user reconfirm → `already_processed` / 0 stars. Cross-user reuse → conflict. Concurrent double-confirm relies on unique constraint (should catch `IntegrityError` → idempotent response). **Stars amount comes from client `product_id` map**, not from a verified Apple payload yet |
-| Refunds / ASN | **None** — no App Store Server Notifications webhook, no revoke/debit on refund |
-| Restore / interrupt | `restorePurchases()` then `POST /shop/iap/restore` is a **placeholder** (`restored: 0`). No `getPurchases()` re-confirm loop after failed confirm |
-| DB / nginx | Alembic **`iap_purchases` present** (prod alembic **025**). Nginx allowlists `/shop/iap/confirm` + `/restore` |
-| Tests | `test_iap_confirm.py`: fail-closed without credentials + unknown product only — **no** JWS/verify/idempotent-credit/refund tests |
-| Docs | `docs/STORE-DEPLOY.md` already marks verification as staged |
-| Next (pending PM) | Approve implementation plan below → wire App Store Server API v2 (JWS) verify → bind Stars amount to verified product → native shop UI → unfinished-txn recovery → ASN refunds → sandbox QA → then credentials + Codemagic only when PM asks |
+| Scope | Production-grade Apple StoreKit 2 / App Store Server Library JWS verification + idempotent Stars credit (backend only) |
+| PR | **#267** `cursor/web-iap-apple-verify-a-77c6` (do **not** merge until PM approves) |
+| Verify | Official `SignedDataVerifier`; Stars from **verified** `productId` only (`stars_50/150/500`) |
+| Ownership | Verified `appAccountToken` **required** and must match account — missing token rejected (no legacy bypass) |
+| Gates | `IAP_APPLE_PURCHASING_ENABLED` (new buys) and `IAP_APPLE_CREDIT_ENABLED` (confirm/reconcile) — **both default OFF**; not a production recovery bypass |
+| Safety | Production coerces `IAP_ALLOW_UNVERIFIED_SANDBOX=false`; legacy shared-secret refused; Android/web/UI unchanged |
+| Idempotency | Unique `(platform, transaction_id)` + `IntegrityError` recovery; Postgres concurrent confirm test |
+| Refunds | **Not in Phase A** — `docs/deploy/APPLE-STARS-IAP-PHASE-B.md` |
+| Next (pending PM) | Approve **#267** → Phase B ASN + shop UI → enable credit then purchasing |
 
-**Do not** implement IAP verification, merge payment code, deploy, trigger Codemagic, or run real purchases until PM signs off.
+Audit archive: `docs/deploy/APPLE-STARS-IAP-AUDIT.md` (merged via **#266**).
 
 ## Codemagic iOS — permanent 90189 / unique build fix (2026-11-09)
 
