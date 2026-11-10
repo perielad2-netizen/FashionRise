@@ -178,12 +178,12 @@ function materialsFromDoc(doc: StudioDraftDocument, max = 8): string[] {
 
 /** Enhancement intent shared by Front-only and Dual Magic (both sides). */
 const MAGIC_ENHANCEMENT_NOTES =
-  'Polished professional fashion concept: keep silhouette/cut and Front/Back coherence; ' +
+  'WOW elevate a rough/kid-like sketch into a stunning professional fashion illustration; ' +
+  'keep the DESIGN IDEA (silhouette/cut, fabric/color theme, Front/Back coherence); ' +
   'ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; ' +
-  'fix accidental L/R mistakes (hands/legs/shoes/hem/belly)—match the better side; ' +
-  'restore missing fabric patches/bare holes in continuous sleeves/torso; ' +
-  'finish unfinished full-cover only — keep intentional crops/midriff/cut-outs; ' +
-  'honor painted fabric fills + ink; no traced/cartoon look.'
+  'erase sketch mistakes (incomplete fills, leftover gaps, uneven lines, missing fabric); ' +
+  'do NOT treat unfilled gaps as cut-outs — restore matching fabric; ' +
+  'only keep clearly designed swim/lingerie/true-crop openings; no traced/cartoon look.'
 
 /** #183 — pale bridal / open neckline / both sleeves (same contract as Try On). */
 function paleBridalNotes(front: SideBag, back: SideBag, mainColors: string[]): string[] {
