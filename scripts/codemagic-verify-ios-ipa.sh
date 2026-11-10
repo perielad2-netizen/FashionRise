@@ -132,4 +132,25 @@ if [ "$BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
   exit 1
 fi
 
+# App icon must be compiled into the bundle. Modern Xcode stores it in Assets.car;
+# older layouts may also emit AppIcon*.png beside the binary.
+APP_DIR="$(dirname "$PLIST")"
+ASSETS_CAR="$APP_DIR/Assets.car"
+ICON_PNG_COUNT="$(find "$APP_DIR" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'AppIcon*.PNG' \) 2>/dev/null | wc -l | tr -d ' ')"
+echo "APP_DIR=$APP_DIR"
+echo "ASSETS_CAR_EXISTS=$([ -f "$ASSETS_CAR" ] && echo yes || echo no)"
+echo "APPICON_PNG_COUNT=$ICON_PNG_COUNT"
+if [ -f "$ASSETS_CAR" ]; then
+  ASSETS_SIZE="$(stat -f%z "$ASSETS_CAR" 2>/dev/null || stat -c%s "$ASSETS_CAR")"
+  echo "ASSETS_CAR_BYTES=$ASSETS_SIZE"
+  # A real FashionRise icon catalog is tens of KB+; a stub/empty car is suspicious.
+  if [ -z "$ASSETS_SIZE" ] || [ "$ASSETS_SIZE" -lt 8192 ]; then
+    echo "ERROR: Assets.car is missing or suspiciously small (${ASSETS_SIZE:-0} bytes)"
+    exit 1
+  fi
+elif [ "$ICON_PNG_COUNT" = "0" ]; then
+  echo "ERROR: IPA app bundle has neither Assets.car nor AppIcon*.png — purchase sheet will show a placeholder"
+  exit 1
+fi
+
 echo "OK: single IPA verified with CFBundleVersion=$ACTUAL marketing=$MARKETING bundleId=$BUNDLE_ID"

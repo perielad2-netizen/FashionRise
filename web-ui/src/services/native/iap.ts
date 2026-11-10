@@ -30,7 +30,10 @@ export type StarsIapProduct = {
   productId: string
   title: string
   description: string
+  /** StoreKit `Product.displayPrice` — never invent/FX-convert this string. */
   priceString: string
+  /** StoreKit currency code (ISO 4217) from Capgo — for QA/storefront checks only. */
+  currencyCode?: string
   stars: number
 }
 
@@ -141,8 +144,9 @@ export async function listStarsIapProducts(): Promise<StarsIapProduct[]> {
       // Friendly FashionRise package name — not ASC marketing title.
       title: meta.name,
       description: p.description || `${meta.stars} Stars`,
-      // Always Apple's localized StoreKit price string (never hardcode USD).
+      // Always Apple's localized StoreKit price string (never hardcode USD/ILS).
       priceString: p.priceString || '',
+      currencyCode: (p.currencyCode || '').trim() || undefined,
       stars: meta.stars,
     })
   }

@@ -96,6 +96,15 @@ workflows:
           chmod +x "$CM_BUILD_DIR/scripts/codemagic-set-ios-build-number.sh"
           "$CM_BUILD_DIR/scripts/codemagic-set-ios-build-number.sh"
 
+      - name: Assert iOS AppIcon is real (not blank white)
+        script: |
+          # working_directory is web-ui — npm script resolves
+          # web-ui/scripts/assert-ios-appicon.mjs (not repo-root scripts/).
+          # Purchase sheet uses the compiled Xcode AppIcon asset catalog.
+          # A solid-white 1024 PNG still "builds" but Apple shows a placeholder.
+          # Fail closed: requires sharp or Pillow pixel scan (no size-only pass).
+          npm run check:ios-appicon
+
       - name: Build App Store IPA
         script: |
           cd "$CM_BUILD_DIR/web-ui/ios/App"
