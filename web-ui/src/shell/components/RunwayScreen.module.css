@@ -721,7 +721,8 @@
 .chatScrim {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  /* Above browse sheets (.sheetScrim = 92) so Chat opens from Top 10 / My circle. */
+  z-index: 100;
   display: grid;
   align-items: end;
   justify-items: stretch;

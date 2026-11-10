@@ -648,6 +648,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
                 onTool={editor.setTool}
                 onUndo={editor.undo}
                 onRedo={editor.redo}
+                onClear={editor.clear}
+                canClear={editor.strokes.length > 0 || editor.fills.length > 0}
                 orientation={narrow ? 'horizontal' : 'vertical'}
                 showCloseSmallGaps={editor.showCloseSmallGaps}
                 closeSmallGapsArmed={editor.fillCloseSmallGaps}

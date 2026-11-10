@@ -11,6 +11,7 @@ import {
   Pencil,
   Pipette,
   Redo2,
+  Trash2,
   Undo2,
   ZoomIn,
   ZoomOut,
@@ -170,6 +171,9 @@ export function ImmersiveToolbar({
               <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
                 <Redo2 size={18} strokeWidth={1.75} />
               </ToolBtn>
+              <ToolBtn active={false} label="Clear canvas" onClick={onClear}>
+                <Trash2 size={18} strokeWidth={1.75} />
+              </ToolBtn>
             </div>
             <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Expand toolbar">
               {moreControl}
@@ -242,6 +246,9 @@ export function ImmersiveToolbar({
             </ToolBtn>
             <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
               <Redo2 size={18} strokeWidth={1.75} />
+            </ToolBtn>
+            <ToolBtn active={false} label="Clear canvas" onClick={onClear}>
+              <Trash2 size={18} strokeWidth={1.75} />
             </ToolBtn>
           </div>
 

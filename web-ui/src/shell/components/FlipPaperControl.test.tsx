@@ -5,18 +5,19 @@ import { FlipPaperControl } from '@/shell/components/FlipPaperControl'
 import { rearUnavailableReasonForModel } from '@/shell/rearUnavailableReason'
 
 describe('FlipPaperControl', () => {
-  it('shows an icon-only flip control with Flip to Back tooltip on the front side', () => {
+  it('shows a Front/Back segmented toggle with Front selected', () => {
     render(
       <FlipPaperControl activeSide="front" rearAvailable onSideChange={() => undefined} />,
     )
-    expect(screen.queryByText('FRONT')).toBeNull()
-    expect(screen.queryByText('BACK')).toBeNull()
+    expect(screen.getByText('Front')).toBeInTheDocument()
+    expect(screen.getByText('Back')).toBeInTheDocument()
     expect(screen.getByTestId('flip-paper-control')).toHaveAttribute('data-side', 'front')
-    expect(screen.getByTestId('flip-paper-button')).toHaveAttribute('title', 'Flip to Back')
-    expect(screen.getByTestId('flip-paper-button')).toHaveAttribute('aria-label', 'Flip to Back')
+    expect(screen.getByTestId('flip-paper-front')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('flip-paper-button')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('flip-paper-button')).toHaveAttribute('title', 'Show Back')
   })
 
-  it('toggles to Back when flipped and available', async () => {
+  it('toggles to Back when Back is available', async () => {
     const user = userEvent.setup()
     const onSideChange = vi.fn()
     render(

@@ -3,9 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**PR #276 MERGED + DEPLOYED** — shop polish live; public IAP gates **OFF**; finite override **empty**; new finite invite pending owner registration; Codemagic ready on `main` @ `1fea9ded` for TF **>117**.)
+**Last updated:** 2026-11-10 (**PR #278 FE DEPLOYED for test** — chat popup / Clear / Front·Back toggle / smart-back Magic live @ `7594c90e`; BE still `1fea9ded`; public IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## Studio UX fixes (2026-11-10) — PR #278 · FE DEPLOYED (test)
+
+| Status | Detail |
+|---|---|
+| PR | [#278](https://github.com/perielad2-netizen/FashionRise/pull/278) · tip **`7594c90e`** · not yet merged to `main` |
+| Production FE | **`7594c90e`** · `/var/www/fashionrise/releases/7594c90e-studio-chat-clear-fb-278` · public `/version.json` matches |
+| Production BE | unchanged **`1fea9ded`** · API + worker **active** · `/health` ok |
+| Vite gates | Front/Back+Magic+Dual **ON** · registration **OFF** · assert pass |
+| Scope | Runway chat above sheets · Clear on tool rail · Front\|Back toggle · smart Back Magic when Back empty |
+| Backup / rollback | `/var/backups/fashionrise/studio-chat-clear-fb-deploy-20261110T212459Z/ROLLBACK.sh` → prior FE **`1fea9ded-stars-shop-polish`** |
+| Owner test | Hard-refresh until App **`7594c90e`**. Verify Chat from Top 10/My circle, Clear on toolbar, Front/Back toggle, Magic with empty Back invents Back. |
 
 ## Stars shop polish (2026-11-10) — MERGED · DEPLOYED · TF READY
 
@@ -13,7 +25,7 @@
 |---|---|
 | Merge | Squash **#276** → `main` **`1fea9dedb12d3cef756c7c9d2a3881fb888726cb`** (reviewed HEAD `c981328f`) |
 | Production BE | **`1fea9ded`** @ `/opt/fashionrise/src` · API + worker **active** · `/health` ok · `/ready` database ok |
-| Production FE | **`1fea9ded`** · `/var/www/fashionrise/releases/1fea9ded-stars-shop-polish` · shop copy embedded |
+| Production FE | **superseded for test** by **`7594c90e`** (prior `/var/www/fashionrise/releases/1fea9ded-stars-shop-polish`) |
 | Alembic | **027 (head)** |
 | Apple gates | purchasing **false** · credit **false** · unverified sandbox **false** |
 | Finite override | **`AI_STARS_FINITE_OVERRIDE_EMAILS=` empty** (feature available, unused) |

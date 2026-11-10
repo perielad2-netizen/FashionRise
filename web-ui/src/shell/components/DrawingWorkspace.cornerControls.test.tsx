@@ -40,7 +40,8 @@ describe('DrawingWorkspace paper corner controls', () => {
     expect(within(paper).getByTestId('paper-fullscreen-button')).toBeTruthy()
     expect(within(paper).getByTestId('flip-paper-control')).toBeTruthy()
     expect(within(paper).getByRole('button', { name: 'Enter full screen drawing' })).toBeTruthy()
-    expect(within(paper).getByRole('button', { name: 'Flip to Back' })).toBeTruthy()
+    expect(within(paper).getByRole('button', { name: 'Back' })).toBeTruthy()
+    expect(within(paper).getByRole('button', { name: 'Front' })).toBeTruthy()
   })
 
   it('hides paper Full Screen in immersive mode (toolbar owns exit/fullscreen)', () => {

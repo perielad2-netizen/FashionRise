@@ -69,7 +69,14 @@ describe('ImmersiveToolbar', () => {
     expect(onClear).toHaveBeenCalled()
   })
 
-  it('minimizes to pencil, eraser, fill, hand, undo, redo, and Exit', () => {
+  it('exposes Clear canvas on the primary immersive toolbar', () => {
+    const onClear = vi.fn()
+    render(<ImmersiveToolbar {...baseProps} onClear={onClear} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear canvas' }))
+    expect(onClear).toHaveBeenCalled()
+  })
+
+  it('minimizes to pencil, eraser, fill, hand, undo, redo, clear, and Exit', () => {
     const onTool = vi.fn()
     const onUndo = vi.fn()
     const onRedo = vi.fn()
@@ -92,6 +99,7 @@ describe('ImmersiveToolbar', () => {
     expect(screen.getByRole('button', { name: 'Pencil' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Eraser' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Fill' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Clear canvas' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Hand pan' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Redo' })).toBeTruthy()

@@ -4,6 +4,7 @@ import {
   Pencil,
   Pipette,
   Redo2,
+  Trash2,
   Undo2,
 } from 'lucide-react'
 import type { ToolKind } from '@/lib/strokes'
@@ -16,6 +17,9 @@ type Props = {
   onTool: (tool: ToolKind) => void
   onUndo: () => void
   onRedo: () => void
+  /** Clear all strokes and fills on the active paper. */
+  onClear?: () => void
+  canClear?: boolean
   orientation?: 'vertical' | 'horizontal'
   /** Highlight when the next Fill will use a bounded Close-small-gaps seal. */
   closeSmallGapsArmed?: boolean
@@ -30,6 +34,8 @@ export function FloatingToolRail({
   onTool,
   onUndo,
   onRedo,
+  onClear,
+  canClear = true,
   orientation = 'vertical',
   closeSmallGapsArmed = false,
   onCloseSmallGaps,
@@ -115,6 +121,19 @@ export function FloatingToolRail({
       >
         <Redo2 size={18} strokeWidth={1.75} />
       </button>
+      {onClear ? (
+        <button
+          type="button"
+          className={styles.btn}
+          aria-label="Clear canvas"
+          title="Clear canvas"
+          data-testid="tool-rail-clear"
+          disabled={!canClear}
+          onClick={onClear}
+        >
+          <Trash2 size={18} strokeWidth={1.75} />
+        </button>
+      ) : null}
     </div>
   )
 }
