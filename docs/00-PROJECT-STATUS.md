@@ -3,39 +3,49 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-10 (**PR #274 sandbox gate harden** — allowlisted tester credits only when Apple-verified env is exactly `Sandbox`; public gates stay OFF. Merge/deploy + Codemagic prep.)
+**Last updated:** 2026-11-10 (**PR #274 MERGED + DEPLOYED** — Sandbox-only tester credit harden live; public IAP gates **OFF**; Alembic **027**; Codemagic ready to start on `main` @ `d7a3cfcd`.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Paid-Stars iOS release build (2026-11-10) — IN PROGRESS
+## Paid-Stars iOS release build (2026-11-10) — DEPLOYED · CODEMAGIC READY
 
 | Status | Detail |
 |---|---|
-| Goal | One signed TestFlight IPA (**1.0**, `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` **> 20**) with Capgo StoreKit Stars shop (`stars_50` / `stars_150` / `stars_500`) |
-| Sandbox credit harden | Tester exception requires **allowlisted DB email** (JWT→User) **and** cryptographically verified Apple env **`Sandbox`**. Verified `Production` txn with public credit OFF → **403**. Global credit ON → normal Production credit. |
-| Product IDs | Embedded in `web-ui/src/services/native/iap.ts` + `backend` `STARS_PRODUCTS` — **stars_50 / stars_150 / stars_500** |
-| Native shop UI | Capgo `@capgo/native-purchases` **7.19.3** · Pod `CapgoNativePurchases` · `StarsShopModal` iOS path shows StoreKit **localized `priceString`** + **Buy** (not web cart) |
-| Codemagic | Workflow `fashionrise-ios-app-store` · branch **`main`** (post-merge tip) · Xcode **26.5** · single `App.ipa` · ASC upload via `codemagic access` · **no** beta/App Store review |
-| Codemagic result | Owner starts **one** manual build after merge/deploy (no CM API token here). Do **not** duplicate upload. |
-| ASC / TestFlight | Pending Codemagic. Last known ASC build **1.0 (20)**. |
-| Safe sandbox credit | **`IAP_APPLE_SANDBOX_TESTER_EMAILS`** · public `IAP_APPLE_*_ENABLED=false` |
-| Public purchasing | **OFF** — do not flip public gates until sandbox matrix passes |
+| Merge | Squash **#274** → `main` **`d7a3cfcdcbce005e97cb32ef2547cdfd59f4f8c1`** |
+| Production BE | **`d7a3cfcd`** @ `/opt/fashionrise/src` · `fashionrise-api` + `fashionrise-ai-worker` **active** · `/health` ok · `/ready` database ok |
+| Production FE | **`d7a3cfcd`** · `/var/www/fashionrise/releases/d7a3cfcd-ios-stars-sandbox-allowlist` · Vite Front/Back+Magic+Dual ON, registration OFF |
+| Alembic | **027 (head)** unchanged |
+| Apple gates | `IAP_APPLE_PURCHASING_ENABLED=false` · `IAP_APPLE_CREDIT_ENABLED=false` · `IAP_ALLOW_UNVERIFIED_SANDBOX=false` |
+| Sandbox allowlist | `IAP_APPLE_SANDBOX_TESTER_EMAILS` configured (count=3; values not logged) · anon/public status OFF · tester status ON · outsider OFF · Production confirm denied for tester |
+| Sandbox credit harden | Allowlisted DB email **and** verified Apple env **`Sandbox`** required when public credit OFF |
+| Product IDs | `stars_50` / `stars_150` / `stars_500` |
+| Native shop | Capgo `@capgo/native-purchases` **7.19.3** · Pod present · localized StoreKit Buy UI |
+| Codemagic | **Ready to start** — branch **`main`** @ **`d7a3cfcd`** · workflow **`fashionrise-ios-app-store`** (UI: FashionRise iOS (App Store IPA)) · version **1.0** · build# `PROJECT_BUILD_NUMBER+100` (>20) · single `App.ipa` · signing `app_store` + `codemagic access` · no beta/App Store submit |
+| Codemagic result | **Not started** (no CM API token). Owner starts **one** build only. |
+| Backup | `/var/backups/fashionrise/ios-stars-sandbox-allowlist-20261110T174648Z/` |
+
+### Codemagic manual start (owner)
+
+1. Open [Codemagic](https://codemagic.io/apps) → FashionRise app.
+2. Select branch **`main`** (confirm tip **`d7a3cfcd…`** / latest merge of #274).
+3. Workflow **FashionRise iOS (App Store IPA)** (`fashionrise-ios-app-store`).
+4. Start **once**. In logs confirm `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` and exactly one `App.ipa` uploaded.
+5. App Store Connect → wait **Processing → Ready to Test**. Do **not** start a second build/upload.
 
 ### Real-iPhone sandbox sequence (Sandbox Apple ID · TestFlight build · allowlisted FashionRise email)
 
-1. **StoreKit load** — Open Stars shop → packages show App Store localized prices (not hardcoded USD) · Buy enabled for allowlisted account only.
+1. **StoreKit load** — Open Stars shop → packages show App Store localized prices · Buy enabled for allowlisted account only.
 2. **Sandbox purchase** — Buy `stars_50` · complete Apple Sandbox sheet (no real money).
-3. **Verified credit** — Balance rises by 50 · `POST /shop/iap/confirm` 200 · DB `iap_purchases` row active for that `transaction_id`.
-4. **Spend Stars** — Run Magic / Fabric / Model and confirm wallet debit.
-5. **Duplicate confirm** — Re-open shop / recover → same txn returns `already_processed` · balance unchanged.
-6. **Interrupted recovery** — Kill app mid-confirm (after Apple success, before credit) → reopen shop → recovery credits once.
-7. **Refund / debt** — Where Sandbox tooling allows refund/revoke, confirm ASN clawback / `ai_stars_iap_debt` path; skip if Apple sandbox cannot issue refund for the txn.
+3. **Verified credit** — Balance +50 · confirm 200 · `iap_purchases` active.
+4. **Spend Stars** — Magic / Fabric / Model debit.
+5. **Duplicate confirm** — same txn → `already_processed`.
+6. **Interrupted recovery** — kill mid-confirm → reopen → credit once.
+7. **Refund / debt** — if Sandbox tooling allows; else skip.
 
 ### Exact next actions
 
-1. **Owner:** Merge allowlist release PR → deploy BE → set `IAP_APPLE_SANDBOX_TESTER_EMAILS=<tester@…>` (gates stay false) → restart API.
-2. **Owner:** Codemagic → **Start** workflow **FashionRise iOS (App Store IPA)** once on that tip · confirm log `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` and single IPA upload · wait ASC **Processing → Ready to Test**.
-3. Install TestFlight build · run sequence above · then prepare **FashionRise 1.0 + three consumables** for App Store submission together (public gates still OFF until PM signs off).
+1. **Owner:** Start the Codemagic workflow above on `main` @ `d7a3cfcd` (**one** build).
+2. Install TestFlight build · run sandbox sequence · then submit **FashionRise 1.0 + three consumables** together (public gates still OFF until PM signs off).
 
 ## Apple Stars IAP — Phase C1 signed ASN V2 validation (2026-11-10) — DONE (processing)
 
