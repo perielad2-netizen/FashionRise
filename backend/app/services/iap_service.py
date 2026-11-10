@@ -69,13 +69,20 @@ def app_account_token_payload(user: User) -> dict[str, str]:
     return {"app_account_token": apple_iap.app_account_token_for_user(user.id)}
 
 
-def apple_shop_status() -> dict[str, Any]:
-    """Native shop readiness (gates + configuration). No secrets."""
+def apple_shop_status(user: User | None = None) -> dict[str, Any]:
+    """Native shop readiness (gates + configuration). No secrets.
+
+    When ``user`` is a designated sandbox tester, purchasing/credit flip on for
+    that session even while public gates stay OFF.
+    """
     return {
         "platform": "ios",
-        "purchasing_enabled": apple_iap.apple_purchasing_enabled(),
-        "credit_enabled": apple_iap.apple_credit_enabled(),
+        "purchasing_enabled": apple_iap.apple_purchasing_enabled_for(user),
+        "credit_enabled": apple_iap.apple_credit_enabled_for(user),
         "verification_configured": apple_iap.apple_iap_configured(),
+        "sandbox_tester": bool(
+            user is not None and apple_iap.email_is_apple_sandbox_tester(user.email)
+        ),
         "products": [
             {"product_id": pid, "stars": stars} for pid, stars in STARS_PRODUCTS.items()
         ],
@@ -121,17 +128,17 @@ def confirm_purchase(
     )
 
 
-def restore_placeholder() -> dict[str, Any]:
+def restore_placeholder(user: User | None = None) -> dict[str, Any]:
     """Client re-confirms unfinished StoreKit txns via /shop/iap/confirm (credit gate)."""
     return {
         "restored": 0,
         "note": (
             "Native recovery re-POSTs /shop/iap/confirm with each signed JWS when "
-            "IAP_APPLE_CREDIT_ENABLED is on. This endpoint acknowledges the restore "
-            "handshake only — Stars come solely from verified confirm."
+            "credit is enabled globally or for a sandbox-tester account. This endpoint "
+            "acknowledges the restore handshake only — Stars come solely from verified confirm."
         ),
-        "credit_enabled": apple_iap.apple_credit_enabled(),
-        "purchasing_enabled": apple_iap.apple_purchasing_enabled(),
+        "credit_enabled": apple_iap.apple_credit_enabled_for(user),
+        "purchasing_enabled": apple_iap.apple_purchasing_enabled_for(user),
     }
 
 
@@ -150,8 +157,12 @@ def _confirm_apple(
         raise ServiceUnavailableError("Unverified IAP sandbox credit is forbidden in production")
 
     # Credit/reconcile gate (completed Apple txns). Distinct from purchasing_enabled
-    # (initiating new StoreKit buys). Both default OFF.
-    if not apple_iap.apple_credit_enabled():
+    # (initiating new StoreKit buys). Both default OFF for the public; designated
+    # sandbox-tester emails may enter confirm while public gates stay OFF — but only
+    # verified Apple Sandbox transactions may credit through that exception (checked
+    # after cryptographic verify below).
+    global_credit = apple_iap.apple_credit_enabled()
+    if not apple_iap.apple_credit_enabled_for(user):
         raise ServiceUnavailableError(
             "Apple Stars credit / transaction recovery is not enabled yet. "
             "ASN refund handling must be live before the credit gate is turned on."
@@ -180,6 +191,16 @@ def _confirm_apple(
         raise ValidationAppError("Apple transaction JWS (jwsRepresentation) is required")
 
     verified = apple_iap.verify_signed_transaction_jws(jws or "")
+
+    # Tester exception is Sandbox-only. Never credit a verified Production txn while
+    # the global credit gate is OFF — environment comes from Apple-signed JWS only.
+    if not global_credit:
+        env = (verified.environment or "").strip()
+        if env != "Sandbox":
+            raise ForbiddenError(
+                "Sandbox tester credit requires a cryptographically verified "
+                "Apple Sandbox transaction"
+            )
 
     if verified.product_id not in STARS_PRODUCTS:
         raise ValidationAppError("Unknown Stars product on verified Apple transaction")

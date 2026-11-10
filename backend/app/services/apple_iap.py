@@ -7,6 +7,8 @@ from the client — only from a verified ``productId``.
 
 Public purchasing stays behind ``IAP_APPLE_PURCHASING_ENABLED`` (default off).
 Credit/recovery stays behind ``IAP_APPLE_CREDIT_ENABLED`` (default off).
+``IAP_APPLE_SANDBOX_TESTER_EMAILS`` may enable Buy/confirm for designated
+accounts only while those public gates remain OFF.
 """
 
 from __future__ import annotations
@@ -110,6 +112,42 @@ def apple_credit_enabled() -> bool:
     Phase A keeps this false in production; tests may enable it locally.
     """
     return bool(get_settings().iap_apple_credit_enabled)
+
+
+def _sandbox_tester_emails() -> set[str]:
+    raw = (get_settings().iap_apple_sandbox_tester_emails or "").strip()
+    if not raw:
+        return set()
+    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+
+
+def email_is_apple_sandbox_tester(email: str | None) -> bool:
+    """Designated FashionRise account allowed for gated sandbox Buy/confirm."""
+    return (email or "").strip().lower() in _sandbox_tester_emails()
+
+
+def apple_purchasing_enabled_for(user: Any | None = None) -> bool:
+    """Public gate OR designated sandbox-tester email (global gates stay OFF)."""
+    if apple_purchasing_enabled():
+        return True
+    if user is None:
+        return False
+    return email_is_apple_sandbox_tester(getattr(user, "email", None))
+
+
+def apple_credit_enabled_for(user: Any | None = None) -> bool:
+    """Public credit gate OR designated sandbox-tester email.
+
+    Status/UI only: a True result for a tester does **not** authorize Production
+    credits. ``iap_service._confirm_apple`` still requires a cryptographically
+    verified Apple ``Sandbox`` environment when the global credit gate is OFF.
+    Identity is the authenticated DB user email — never a client-supplied field.
+    """
+    if apple_credit_enabled():
+        return True
+    if user is None:
+        return False
+    return email_is_apple_sandbox_tester(getattr(user, "email", None))
 
 
 @lru_cache(maxsize=1)
