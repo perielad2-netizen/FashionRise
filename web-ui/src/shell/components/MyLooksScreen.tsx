@@ -111,15 +111,8 @@ function LazyLookThumb({ look }: { look: LookRecord }) {
 
 async function downloadJobImage(jobId: string, filename: string): Promise<void> {
   const blob = await fetchJobImageBlob(jobId)
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  const { saveOrDownloadBlob } = await import('@/lib/exportCanvas')
+  await saveOrDownloadBlob(blob, filename)
 }
 
 function LookDetailDialog({
