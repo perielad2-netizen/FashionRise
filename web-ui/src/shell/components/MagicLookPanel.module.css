@@ -16,6 +16,16 @@
   overflow: hidden;
 }
 
+/* Native iOS: avoid a dead dark band under the status bar — sheet fills below inset. */
+:global(html.fr-native-shell) .overlay {
+  place-items: stretch;
+  padding:
+    env(safe-area-inset-top, 0px)
+    0
+    0
+    0;
+}
+
 .panel {
   width: min(920px, 100%);
   /* Prefer small viewport height so expanding mobile chrome cannot bury the footer */
@@ -205,18 +215,19 @@
     radial-gradient(ellipse 70% 50% at 30% 20%, rgba(236, 72, 153, 0.12), transparent 60%),
     #0b1220;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Avoid flex+%-height img bugs on iOS WKWebView that crop head/feet. */
+  display: block;
 }
 
 .image,
 .sketchPreview {
-  /* Fill the stage box; contain keeps the full person visible (no CSS crop). */
+  /* Absolute fill + contain: reliable full-body fit on Capacitor iOS. */
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  max-width: 100%;
-  max-height: 100%;
+  max-width: none;
+  max-height: none;
   object-fit: contain;
   object-position: center center;
   display: block;
@@ -446,6 +457,13 @@
       calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12px)
     );
     border-radius: 14px;
+  }
+
+  :global(html.fr-native-shell) .panel {
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    width: 100%;
   }
 
   .stage {
