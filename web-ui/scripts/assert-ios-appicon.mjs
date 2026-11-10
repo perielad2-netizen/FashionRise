@@ -4,8 +4,9 @@
  * or blank (all-white). A white 1024 PNG looks like a "placeholder" on Apple's
  * purchase sheet even though Xcode builds succeed.
  *
- * Pixel validation requires sharp OR Python Pillow. There is no size-only
- * success path — missing scanners fail the build.
+ * Pixel validation requires one of: sharp, @napi-rs/canvas (web-ui
+ * devDependency — present after `npm ci`), or Python Pillow. There is no
+ * size-only success path — missing scanners fail the build.
  *
  * Env overrides (tests / fixtures only — do not use in release builds):
  *   FR_IOS_APPICON_PNG  — absolute path to a PNG to pixel-scan instead of the
@@ -58,44 +59,84 @@ function assertProjectWiring() {
   }
 }
 
+function nonWhitePctFromRgba(data, width, height) {
+  let nonWhite = 0
+  let hasTransparent = false
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    const a = data[i + 3]
+    if (a < 255) hasTransparent = true
+    if (!(r > 250 && g > 250 && b > 250)) nonWhite += 1
+  }
+  if (hasTransparent) fail('AppIcon must not have alpha (App Store rejects transparency)')
+  return (100 * nonWhite) / (width * height)
+}
+
 /**
  * @param {string} pngPath
- * @returns {Promise<{ width: number, height: number, nonWhitePct: number, via: string }>}
+ * @param {Buffer} buf
+ * @param {ReturnType<typeof createRequire>} require
+ * @returns {Promise<{ width: number, height: number, nonWhitePct: number, via: string } | null>}
  */
-async function scanPixels(pngPath) {
-  const buf = fs.readFileSync(pngPath)
-  if (buf.length < 8 || buf[0] !== 0x89 || buf.toString('ascii', 1, 4) !== 'PNG') {
-    fail('AppIcon is not a PNG')
-  }
-
-  const require = createRequire(import.meta.url)
+async function trySharp(pngPath, buf, require) {
   let sharp
   try {
     sharp = require('sharp')
   } catch {
-    sharp = null
+    return null
   }
-
-  if (sharp) {
-    const meta = await sharp(buf).metadata()
-    if (meta.width !== 1024 || meta.height !== 1024) {
-      fail(`AppIcon must be 1024x1024, got ${meta.width}x${meta.height}`)
-    }
-    if (meta.hasAlpha) fail('AppIcon must not have alpha (App Store rejects transparency)')
-    const { data, info } = await sharp(buf).raw().toBuffer({ resolveWithObject: true })
-    let nonWhite = 0
-    const channels = info.channels
-    for (let i = 0; i < data.length; i += channels) {
-      const r = data[i]
-      const g = data[i + 1]
-      const b = data[i + 2]
-      if (!(r > 250 && g > 250 && b > 250)) nonWhite += 1
-    }
-    const nonWhitePct = (100 * nonWhite) / (info.width * info.height)
-    return { width: info.width, height: info.height, nonWhitePct, via: 'sharp' }
+  const meta = await sharp(buf).metadata()
+  if (meta.width !== 1024 || meta.height !== 1024) {
+    fail(`AppIcon must be 1024x1024, got ${meta.width}x${meta.height}`)
   }
+  if (meta.hasAlpha) fail('AppIcon must not have alpha (App Store rejects transparency)')
+  const { data, info } = await sharp(buf).raw().toBuffer({ resolveWithObject: true })
+  let nonWhite = 0
+  const channels = info.channels
+  for (let i = 0; i < data.length; i += channels) {
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    if (!(r > 250 && g > 250 && b > 250)) nonWhite += 1
+  }
+  const nonWhitePct = (100 * nonWhite) / (info.width * info.height)
+  return { width: info.width, height: info.height, nonWhitePct, via: 'sharp' }
+}
 
-  // Fail closed: Pillow must succeed when sharp is absent.
+/**
+ * Prefer @napi-rs/canvas — already a web-ui devDependency, installed by Codemagic `npm ci`.
+ * @param {string} pngPath
+ * @param {ReturnType<typeof createRequire>} require
+ * @returns {Promise<{ width: number, height: number, nonWhitePct: number, via: string } | null>}
+ */
+async function tryNapiCanvas(pngPath, require) {
+  let canvas
+  try {
+    canvas = require('@napi-rs/canvas')
+  } catch {
+    return null
+  }
+  const img = await canvas.loadImage(pngPath)
+  const width = img.width
+  const height = img.height
+  if (width !== 1024 || height !== 1024) {
+    fail(`AppIcon must be 1024x1024, got ${width}x${height}`)
+  }
+  const c = canvas.createCanvas(width, height)
+  const ctx = c.getContext('2d')
+  ctx.drawImage(img, 0, 0)
+  const { data } = ctx.getImageData(0, 0, width, height)
+  const nonWhitePct = nonWhitePctFromRgba(data, width, height)
+  return { width, height, nonWhitePct, via: 'napi-canvas' }
+}
+
+/**
+ * @param {string} pngPath
+ * @returns {{ width: number, height: number, nonWhitePct: number, via: string } | null}
+ */
+function tryPillow(pngPath) {
   const py = spawnSync(
     'python3',
     [
@@ -106,7 +147,6 @@ import sys
 path = sys.argv[1]
 im = Image.open(path)
 if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
-    # Flatten only after rejecting true alpha usage for App Store icon.
     bands = im.getbands()
     if "A" in bands:
         extrema = im.getchannel("A").getextrema()
@@ -127,14 +167,17 @@ print(f"{w} {h} {pct:.4f}")
     { encoding: 'utf8' },
   )
 
-  if (py.error) {
-    fail(`pixel scanner unavailable (no sharp, python3 error: ${py.error.message})`)
-  }
+  if (py.error) return null
   if (py.status === 3) fail('AppIcon must not have alpha (App Store rejects transparency)')
   if (py.status === 4) fail(`AppIcon must be 1024x1024 (${(py.stderr || '').trim()})`)
   if (py.status !== 0) {
+    // ModuleNotFoundError etc. — try next / fail closed at end
+    const err = (py.stderr || py.stdout || '').trim()
+    if (/No module named ['"]PIL['"]/i.test(err) || /ModuleNotFoundError/i.test(err)) {
+      return null
+    }
     fail(
-      `Pillow pixel scan failed (exit ${py.status}). Install Pillow or sharp — size-only checks are not accepted. ${(py.stderr || py.stdout || '').trim()}`,
+      `Pillow pixel scan failed (exit ${py.status}). Install @napi-rs/canvas, sharp, or Pillow — size-only checks are not accepted. ${err}`,
     )
   }
   const parts = (py.stdout || '').trim().split(/\s+/)
@@ -145,6 +188,32 @@ print(f"{w} {h} {pct:.4f}")
     fail(`Pillow scan returned unparseable output: ${JSON.stringify(py.stdout)}`)
   }
   return { width, height, nonWhitePct, via: 'pillow' }
+}
+
+/**
+ * @param {string} pngPath
+ * @returns {Promise<{ width: number, height: number, nonWhitePct: number, via: string }>}
+ */
+async function scanPixels(pngPath) {
+  const buf = fs.readFileSync(pngPath)
+  if (buf.length < 8 || buf[0] !== 0x89 || buf.toString('ascii', 1, 4) !== 'PNG') {
+    fail('AppIcon is not a PNG')
+  }
+
+  const require = createRequire(import.meta.url)
+
+  const viaSharp = await trySharp(pngPath, buf, require)
+  if (viaSharp) return viaSharp
+
+  const viaCanvas = await tryNapiCanvas(pngPath, require)
+  if (viaCanvas) return viaCanvas
+
+  const viaPillow = tryPillow(pngPath)
+  if (viaPillow) return viaPillow
+
+  fail(
+    'pixel scanner unavailable (need @napi-rs/canvas after npm ci, or sharp, or Pillow). Size-only checks are not accepted.',
+  )
 }
 
 if (!fs.existsSync(iconPath)) fail(`missing ${iconPath}`)

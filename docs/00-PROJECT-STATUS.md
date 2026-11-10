@@ -3,22 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**PR #281 pre-merge verification PASS** · AppIcon checker rejects blank-white fixtures · Codemagic uses `npm run check:ios-appicon` under `web-ui` · public IAP gates **OFF** · **no IPA / no App Review**.)
+**Last updated:** 2026-11-11 (**#281 MERGED** `7365afdb` · Codemagic AppIcon assert hotfix: use `@napi-rs/canvas` after `npm ci` when Pillow/sharp absent · public IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## App Store release prep (2026-11-11) — #280 LIVE · #281 READY · PM STOP BEFORE PUBLIC GATES
+## App Store release prep (2026-11-11) — #280 LIVE · #281 MERGED · APPICON SCANNER HOTFIX
 
 | Status | Detail |
 |---|---|
-| Merge | Squash **#280** → `main` **`03cd74ac`** (approved HEAD `87909365`) · FE **`03cd74ac-buying-ui-c1-280`** live |
-| #281 | AppIcon fix + fail-closed pixel assert · blank-white fixture **rejected** · Codemagic path `npm run check:ios-appicon` (cwd `web-ui`) |
+| Merge | Squash **#280** → `03cd74ac` · Squash **#281** → **`7365afdb`** · FE **`03cd74ac-buying-ui-c1-280`** live |
+| Codemagic AppIcon | First post-#281 run failed: Mac builder had no Pillow/sharp. Fix: assert uses **`@napi-rs/canvas`** (already in `web-ui` devDependencies / `npm ci`) before Pillow |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
-| Currency USD↔ILS | **Likely** Sandbox storefront split until device `currencyCode` / Sandbox Apple ID country confirm. Not an FE hardcode. Doc: `docs/deploy/APPLE-STARS-CURRENCY-STOREFRONT.md` |
-| App Icon | iOS icon is the **Xcode AppIcon asset catalog in the uploaded build**; confirm on the processed ASC/TestFlight binary. Blank-white stub replaced; checker requires sharp/Pillow (no size-only pass) |
-| Public activation | `docs/deploy/APPLE-STARS-PUBLIC-GATE-ACTIVATION.md` — credit then purchasing; no reviewer allowlist |
-| App Store blockers | (1) public gates OFF (2) TF IPA with real AppIcon not built (3) ASC DSA/metadata/screenshots (4) PM authorize gate flip + submit |
-| Stop line | No public gate enable · no Codemagic IPA · no App Review |
+| Currency USD↔ILS | **Likely** Sandbox storefront split until device `currencyCode` / Sandbox Apple ID country confirm |
+| App Icon | From Xcode AppIcon catalog in uploaded build; blank-white rejected by pixel scan (no size-only pass) |
+| App Store blockers | (1) public gates OFF (2) TF IPA with real AppIcon not yet green on Codemagic (3) ASC DSA/metadata (4) PM authorize gate flip |
+| Stop line | No public gate enable · no payment activation · Codemagic restart is owner/PM |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 
