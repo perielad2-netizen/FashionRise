@@ -3,6 +3,19 @@
 **Purpose:** Bounded procedure so App Review and public customers can buy Stars and receive **verified** credits.  
 **This document does not flip gates.** Activation requires explicit PM authorization after the checklist is green.
 
+## Live status (2026-11-11 ~21:55 IST / 19:55 UTC)
+
+PM-authorized App Review activation completed on production:
+
+| Gate | Value |
+|---|---|
+| `IAP_APPLE_CREDIT_ENABLED` | **true** (C1 then C2) |
+| `IAP_APPLE_PURCHASING_ENABLED` | **true** |
+| `IAP_ALLOW_UNVERIFIED_SANDBOX` | **false** (unchanged) |
+| Products in `/shop/iap/apple/status` | `stars_50` / `stars_150` / `stars_500` |
+
+Prior C1 Sandbox ledger for `stars_50` remains valid. Unverified sandbox credit stays disabled.
+
 ## Invariants (never bypass)
 
 1. StoreKit 2 **JWS** verification via App Store Server Library (Production + Sandbox roots).
