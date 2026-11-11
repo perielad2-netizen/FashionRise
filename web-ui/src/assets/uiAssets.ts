@@ -16,7 +16,11 @@ export const UI_ASSETS = {
     login: '/branding/fashion_rise_login.png',
     /** Emblem only, cropped from the approved logo. */
     emblem: '/branding/fashion_rise_emblem.png',
-    /** Compact monogram used in the header, nav, and app icons. */
+    /**
+     * Compact approved app icon used in GlobalHeader, StudioHeader, Privacy,
+     * and as the source for favicon / PWA / native launcher tiles.
+     * Separate from Home `brand.login` and full lockup `brand.logo`.
+     */
     mark: '/branding/fashion_rise_mark.png',
   },
   header: {
@@ -63,7 +67,9 @@ export type UiAssetGroup = keyof typeof UI_ASSETS
 export const UI_ASSET_MANIFEST = [
   { uiObject: 'Login.BrandLockup', key: 'brand.login', path: UI_ASSETS.brand.login },
   { uiObject: 'GlobalHeader.Mark', key: 'brand.mark', path: UI_ASSETS.brand.mark },
-  { uiObject: 'StudioHeader.BrandLogo', key: 'brand.logo', path: UI_ASSETS.brand.logo },
+  { uiObject: 'StudioHeader.BrandMark', key: 'brand.mark', path: UI_ASSETS.brand.mark },
+  /** Full lockup preserved for docs / design-lab — not the Home hero (Home uses brand.login). */
+  { uiObject: 'Brand.FullLockup', key: 'brand.logo', path: UI_ASSETS.brand.logo },
   { uiObject: 'StudioHeader.Profile', key: 'header.profile', path: UI_ASSETS.header.profile },
   { uiObject: 'StudioHeader.Magic', key: 'header.magic', path: UI_ASSETS.header.magic },
   { uiObject: 'ModelPanel.FemaleCard', key: 'model.female', path: UI_ASSETS.model.female },

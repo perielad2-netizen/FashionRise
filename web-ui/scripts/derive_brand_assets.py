@@ -151,17 +151,25 @@ def frame_icon(im: Image.Image) -> Image.Image:
 
 
 def app_icon(mark: Image.Image, size: int) -> Image.Image:
-    trimmed = trim(erode_cream_fringe(mark.convert("RGBA")), 2)
-    canvas = Image.new("RGBA", (size, size), NAVY)
-    # Keep the emblem inside the maskable safe zone.
-    inner = int(size * 0.62)
-    scale = inner / max(trimmed.width, trimmed.height)
-    nw, nh = max(1, int(trimmed.width * scale)), max(1, int(trimmed.height * scale))
-    emblem = trimmed.resize((nw, nh), Image.Resampling.LANCZOS)
-    layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    layer.paste(emblem, ((size - nw) // 2, (size - nh) // 2 - int(size * 0.02)), emblem)
-    canvas.alpha_composite(layer)
-    # PWA and favicon tiles are opaque navy. Partial edge pixels stay on that field.
+    """Opaque full-bleed tile from the approved app-icon mark.
+
+    Prefer `scripts/apply_approved_app_icon.py` when refreshing from the PM
+    master PNG. This helper only re-rasterizes an existing mark for PWA sizes
+    and must not touch `fashion_rise_logo.png` / `fashion_rise_login.png`.
+    """
+    fill = (28, 16, 48, 255)
+    src = mark.convert("RGBA")
+    canvas = Image.new("RGBA", (size, size), fill)
+    # Cover the tile so the gold frame stays edge-close (no tiny inset emblem).
+    scale = max(size / max(src.width, 1), size / max(src.height, 1))
+    nw, nh = max(1, int(src.width * scale)), max(1, int(src.height * scale))
+    resized = src.resize((nw, nh), Image.Resampling.LANCZOS)
+    layer = Image.new("RGBA", (nw, nh), fill)
+    layer.alpha_composite(resized)
+    left = (nw - size) // 2
+    top = (nh - size) // 2
+    tile = layer.crop((left, top, left + size, top + size))
+    canvas.alpha_composite(tile)
     return canvas.convert("RGB").convert("RGBA")
 
 

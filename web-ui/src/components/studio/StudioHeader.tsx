@@ -14,7 +14,7 @@ export function StudioHeader({ username, savedLabel, onMagic, onLogout }: Props)
     <header className={styles.header}>
       <div className={styles.brand}>
         <img
-          src={UI_ASSETS.brand.logo}
+          src={UI_ASSETS.brand.mark}
           alt="FashionRise"
           className={styles.logo}
           width={56}
