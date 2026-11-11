@@ -12,9 +12,13 @@
 | Status | Detail |
 |---|---|
 | Product | Create Account → email/username/password → **immediate Studio session** (no email verification) |
-| Flag | `EMAIL_VERIFICATION_REQUIRED=false` (default) · verification endpoints retained for future |
-| Mode | **`REGISTRATION_MODE=public`** |
-| Nginx | Cloudflare `real_ip` + register/status/verify/resend allowlist · `TRUST_PROXY_HEADERS=true` |
+| Production BE | **`8979550c`** @ `/opt/fashionrise/src` · Alembic **028** · API+worker **active** |
+| Production FE | **`8979550c`** @ `/var/www/fashionrise/releases/public-reg-immediate-8979550c` |
+| Flag | `EMAIL_VERIFICATION_REQUIRED=false` · verification endpoints retained for future |
+| Mode | **`REGISTRATION_MODE=public`** · status `registration_available=true` |
+| Prod e2e | register→session→`/me`→login→duplicate 409 · starting Stars **10** · Google enabled · logo unchanged |
+| Nginx | Cloudflare `real_ip` + register/status/verify/resend · `TRUST_PROXY_HEADERS=true` |
+| Backup | `/var/backups/fashionrise/public-reg-immediate-20261111T192748Z/` |
 | IAP gates | purchasing **false** · credit **false** · unverified **false** |
 | Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` |
 | **Exact next step** | Owner smoke Create Account on fashionrise.app · then Codemagic IPA when ready |
@@ -72,13 +76,13 @@
 | Status | Detail |
 |---|---|
 | Merged on main | #278–#285 · **#287** · **#288** · **#289** (public email registration) · brand icon · iPad Screenshots · Magic Stars |
-| Production FE | **`c0a942ef`** (registration SPA deployed; Create Account waits on API public mode) |
-| Production BE | **`ba619985`** · Alembic **028** · `REGISTRATION_MODE=closed` · `TRUST_PROXY_HEADERS=true` |
+| Production FE | **`8979550c`** (immediate Create Account live) |
+| Production BE | **`8979550c`** · Alembic **028** · `REGISTRATION_MODE=public` · verification off · `TRUST_PROXY_HEADERS=true` |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
-| **Exact next step** | Owner SMTP credentials → `REGISTRATION_MODE=public` + API restart → e2e registration |
+| **Exact next step** | Owner smoke Create Account on fashionrise.app · Codemagic IPA when ready |
 | Then | Codemagic **App Store IPA** from approved `main` → ASC metadata/DSA → PM gate flip + 1.0 submit |
-| Stop line | No public payment activation · no App Review until checklist green · registration stays closed until SMTP |
+| Stop line | No public payment activation · no App Review until checklist green |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 
