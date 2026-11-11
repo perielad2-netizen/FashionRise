@@ -1,6 +1,8 @@
-# FashionRise — Codemagic iOS workflows (Capacitor)
+# FashionRise — Codemagic native workflows (Capacitor)
 # Docs: https://docs.codemagic.io/yaml-quick-start/building-an-ionic-app/
 #       https://docs.codemagic.io/yaml-publishing/app-store-connect/
+#       https://docs.codemagic.io/yaml-code-signing/signing-android/
+#       https://docs.codemagic.io/yaml-publishing/publishing-to-google-play/
 #       https://docs.codemagic.io/knowledge-codemagic/build-versioning/
 #       https://docs.codemagic.io/yaml-basic-configuration/environment-variables/
 #       https://docs.codemagic.io/troubleshooting/accessing-builder-machine-via-ssh/
@@ -10,6 +12,8 @@
 # - fashionrise-ios-app-store: App Store IPA → ASC (no review submit)
 # - fashionrise-ipad-screenshots: simulator .app + VNC iPad screenshot session
 #   (NO IPA publish, NO ASC, NO IAP gate changes)
+# - fashionrise-android-play-internal: signed Play AAB artifact (internal testing)
+#   (NO production track submit; upload/manual distribute in Play Console)
 # Signing materials live in Codemagic (Team integrations + Code signing
 # identities), not in GitHub secrets.
 #
@@ -247,3 +251,80 @@ workflows:
       - /tmp/fr-ipad-sim-derived/Build/Products/**/*.app
       - /tmp/xcodebuild_logs/*.log
     # Explicitly no publishing: block — do not upload IPA / change ASC.
+
+  # ---------------------------------------------------------------------------
+  # Manual Google Play internal-testing AAB (signed). Does NOT change iOS / web.
+  # Operator: Codemagic → Code signing identities → upload keystore as
+  # reference name fashionrise_android_upload. Env group fashionrise_native
+  # must include the same croquis notice texts as iOS / production web.
+  # ---------------------------------------------------------------------------
+  fashionrise-android-play-internal:
+    name: FashionRise Android (Play AAB)
+    max_build_duration: 120
+    instance_type: linux_x2
+    working_directory: web-ui
+
+    environment:
+      android_signing:
+        # Must match Codemagic → Code signing identities → Android keystores
+        # → Reference name for the FashionRise upload keystore.
+        - fashionrise_android_upload
+      groups:
+        - fashionrise_native
+      vars:
+        GOOGLE_PLAY_PACKAGE_NAME: app.fashionrise.studio
+        ANDROID_VERSION_NAME: "1.0"
+        # versionCode = PROJECT_BUILD_NUMBER + OFFSET (raise if Play latest ≥ stamp).
+        ANDROID_VERSION_CODE_OFFSET: "0"
+      node: 22
+      java: 21
+
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm ci
+
+      - name: Build native web bundle (Capacitor dist/)
+        script: |
+          # Committed .env.native → https://fashionrise.app/api/v1
+          # Croquis notices from fashionrise_native (same as iOS / prod web).
+          export VITE_BUILD_SHA="${CM_COMMIT:0:8}"
+          npm run build:native
+
+      - name: Sync Capacitor Android project
+        script: |
+          npx cap sync android
+
+      - name: Assert Android launcher icons are real
+        script: |
+          npm run check:android-appicon
+
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/web-ui/android/local.properties"
+
+      - name: Set versionCode / versionName
+        script: |
+          chmod +x "$CM_BUILD_DIR/scripts/codemagic-set-android-version-code.sh"
+          "$CM_BUILD_DIR/scripts/codemagic-set-android-version-code.sh"
+
+      - name: Build signed Play App Bundle (AAB)
+        script: |
+          set -euo pipefail
+          test -n "${CM_KEYSTORE_PATH:-}"
+          test -f "$CM_KEYSTORE_PATH"
+          VC="$(cat /tmp/fr-android-version-code.txt)"
+          VN="$(cat /tmp/fr-android-version-name.txt)"
+          cd "$CM_BUILD_DIR/web-ui/android"
+          ./gradlew bundleRelease \
+            -PversionCode="$VC" \
+            -PversionName="$VN"
+          AAB="$CM_BUILD_DIR/web-ui/android/app/build/outputs/bundle/release/app-release.aab"
+          test -f "$AAB"
+          echo "Built AAB: $AAB (versionCode=$VC versionName=$VN package=$GOOGLE_PLAY_PACKAGE_NAME)"
+
+    artifacts:
+      - $CM_BUILD_DIR/web-ui/android/app/build/outputs/bundle/release/*.aab
+      - $CM_BUILD_DIR/web-ui/android/app/build/outputs/**/mapping.txt
+    # No google_play publishing block — upload the AAB manually to Play Console
+    # Internal testing until a Play API service account is wired in Codemagic.
