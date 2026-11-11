@@ -4,23 +4,40 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginPage } from '@/pages/LoginPage'
 
 const login = vi.fn()
+const authState = {
+  user: null as null,
+  bootstrapping: false,
+  isAuthenticated: false,
+  googleOAuthAvailable: false,
+  registrationStatus: {
+    mode: 'closed' as const,
+    configured_mode: 'closed' as const,
+    registration_available: false,
+    requires_invitation: false,
+    requires_email_verification: false,
+    email_delivery_configured: false,
+  },
+  login,
+  register: vi.fn(),
+  logout: vi.fn(),
+}
 
 vi.mock('@/services/auth/AuthProvider', () => ({
-  useAuth: () => ({
-    user: null,
-    bootstrapping: false,
-    isAuthenticated: false,
-    googleOAuthAvailable: false,
-    login,
-    register: vi.fn(),
-    logout: vi.fn(),
-  }),
+  useAuth: () => authState,
 }))
 
 describe('LoginPage validation', () => {
   beforeEach(() => {
     login.mockReset()
     vi.stubEnv('VITE_REGISTRATION_UI_ENABLED', 'false')
+    authState.registrationStatus = {
+      mode: 'closed',
+      configured_mode: 'closed',
+      registration_available: false,
+      requires_invitation: false,
+      requires_email_verification: false,
+      email_delivery_configured: false,
+    }
   })
 
   afterEach(() => {
@@ -56,13 +73,34 @@ describe('LoginPage validation', () => {
     expect(login).not.toHaveBeenCalled()
   })
 
-  it('hides Create account when registration UI is disabled (production default)', () => {
+  it('hides Create account when registration is closed (production default)', () => {
     render(
       <MemoryRouter>
         <LoginPage />
       </MemoryRouter>,
     )
     expect(screen.queryByRole('link', { name: /create account/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Create Account when backend public registration is available', () => {
+    authState.registrationStatus = {
+      mode: 'public',
+      configured_mode: 'public',
+      registration_available: true,
+      requires_invitation: false,
+      requires_email_verification: true,
+      email_delivery_configured: true,
+    }
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: /create account/i })).toHaveAttribute(
+      'href',
+      '/register',
+    )
+    expect(screen.getByText(/don't have an account/i)).toBeInTheDocument()
   })
 
   it('calls login with trimmed email on valid submit', async () => {

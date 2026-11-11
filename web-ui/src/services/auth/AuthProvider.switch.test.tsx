@@ -25,6 +25,14 @@ vi.mock('@/services/auth/authApi', () => ({
   restoreSession: (...args: unknown[]) => api.restoreSession(...args),
   logoutLocal: () => api.logoutLocal(),
   getGoogleOAuthStatus: async () => ({ google_oauth_enabled: false }),
+  getRegistrationStatus: async () => ({
+    mode: 'closed',
+    configured_mode: 'closed',
+    registration_available: false,
+    requires_invitation: false,
+    requires_email_verification: false,
+    email_delivery_configured: false,
+  }),
   fetchMe: (...args: unknown[]) => api.fetchMe(...args),
 }))
 
@@ -131,7 +139,11 @@ describe('AuthProvider account switching', () => {
     tokenStore.get.mockReturnValue({ accessToken: 'x', refreshToken: 'y' })
     api.restoreSession.mockResolvedValue(userA)
 
-    let resolveRegister: (v: { user: typeof userC; tokens: unknown }) => void = () => {}
+    let resolveRegister: (v: {
+      status: 'authenticated'
+      user: typeof userC
+      tokens: unknown
+    }) => void = () => {}
     api.register.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -152,7 +164,7 @@ describe('AuthProvider account switching', () => {
     await waitFor(() => expect(screen.getByTestId('user-id')).toHaveTextContent('none'))
 
     await act(async () => {
-      resolveRegister({ user: userC, tokens: {} })
+      resolveRegister({ status: 'authenticated', user: userC, tokens: {} })
     })
     await waitFor(() => expect(screen.getByTestId('user-id')).toHaveTextContent('user-c'))
   })

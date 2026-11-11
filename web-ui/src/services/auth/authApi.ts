@@ -30,7 +30,22 @@ export type RegisterPayload = {
   username: string
   password: string
   displayName?: string | null
-  invitationCode: string
+  invitationCode?: string | null
+}
+
+export type RegisterResult =
+  | { status: 'authenticated'; user: User; tokens: StoredTokens }
+  | { status: 'verification_pending'; email: string; message: string }
+
+export type RegistrationStatus = {
+  mode: 'closed' | 'invite_only' | 'public'
+  configured_mode: 'closed' | 'invite_only' | 'public'
+  registration_available: boolean
+  requires_invitation: boolean
+  requires_email_verification: boolean
+  email_delivery_configured: boolean
+  prerequisite?: string | null
+  note?: string | null
 }
 
 function toStored(tokens: TokenResponse): StoredTokens {
@@ -61,6 +76,14 @@ export async function getCfAccessSsoStatus(signal?: AbortSignal): Promise<CfAcce
 
 export async function getGoogleOAuthStatus(signal?: AbortSignal): Promise<GoogleOAuthStatus> {
   return apiRequest<GoogleOAuthStatus>('/auth/google/status', {
+    method: 'GET',
+    auth: false,
+    signal,
+  })
+}
+
+export async function getRegistrationStatus(signal?: AbortSignal): Promise<RegistrationStatus> {
+  return apiRequest<RegistrationStatus>('/auth/registration/status', {
     method: 'GET',
     auth: false,
     signal,
@@ -140,20 +163,65 @@ export async function login(payload: LoginPayload): Promise<{ user: User; tokens
   }
 }
 
-export async function register(
-  payload: RegisterPayload,
-): Promise<{ user: User; tokens: StoredTokens }> {
+export async function register(payload: RegisterPayload): Promise<RegisterResult> {
   // Clear any previous session before accepting a newly created account.
   tokenStore.clear()
-  const tokens = await apiRequest<TokenResponse>('/auth/register', {
+  const invite = (payload.invitationCode || '').trim()
+  const response = await apiRequest<{
+    status: 'authenticated' | 'verification_pending'
+    access_token?: string | null
+    refresh_token?: string | null
+    token_type?: string
+    email?: string | null
+    message?: string | null
+  }>('/auth/register', {
     method: 'POST',
     body: {
       email: payload.email.trim().toLowerCase(),
       username: payload.username.trim(),
       password: payload.password,
       display_name: payload.displayName ?? null,
-      invitation_code: payload.invitationCode.trim(),
+      invitation_code: invite || null,
     },
+    auth: false,
+  })
+
+  if (response.status === 'verification_pending') {
+    return {
+      status: 'verification_pending',
+      email: (response.email || payload.email).trim().toLowerCase(),
+      message:
+        response.message ||
+        'Check your email to verify your account before signing in.',
+    }
+  }
+
+  if (!response.access_token || !response.refresh_token) {
+    throw new Error('Registration did not return a session')
+  }
+
+  const stored = toStored({
+    access_token: response.access_token,
+    refresh_token: response.refresh_token,
+    token_type: response.token_type || 'bearer',
+  })
+  tokenStore.set(stored)
+  try {
+    const user = await fetchMe()
+    return { status: 'authenticated', user, tokens: stored }
+  } catch (err) {
+    // Registration may have committed, but identity bootstrap failed. Drop the
+    // half-session so no stale prior account remains; recover via sign-in.
+    tokenStore.clear()
+    throw err
+  }
+}
+
+export async function verifyEmail(token: string): Promise<{ user: User; tokens: StoredTokens }> {
+  tokenStore.clear()
+  const tokens = await apiRequest<TokenResponse>('/auth/verify-email', {
+    method: 'POST',
+    body: { token: token.trim() },
     auth: false,
   })
   const stored = toStored(tokens)
@@ -162,11 +230,17 @@ export async function register(
     const user = await fetchMe()
     return { user, tokens: stored }
   } catch (err) {
-    // Registration may have committed, but identity bootstrap failed. Drop the
-    // half-session so no stale prior account remains; recover via sign-in.
     tokenStore.clear()
     throw err
   }
+}
+
+export async function resendVerification(email: string): Promise<void> {
+  await apiRequest<void>('/auth/resend-verification', {
+    method: 'POST',
+    body: { email: email.trim().toLowerCase() },
+    auth: false,
+  })
 }
 
 export async function fetchMe(): Promise<User> {

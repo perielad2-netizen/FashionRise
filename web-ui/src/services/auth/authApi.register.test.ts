@@ -34,6 +34,7 @@ describe('authApi.register', () => {
   it('clears prior tokens, posts invitation-backed register, then fetches me', async () => {
     apiRequest
       .mockResolvedValueOnce({
+        status: 'authenticated',
         access_token: 'a',
         refresh_token: 'r',
         token_type: 'bearer',
@@ -69,14 +70,41 @@ describe('authApi.register', () => {
       auth: false,
     })
     expect(tokenStore.set).toHaveBeenCalledWith({ accessToken: 'a', refreshToken: 'r' })
-    expect(result.user.id).toBe('u-new')
-    expect(result.user.is_admin).toBe(false)
+    expect(result.status).toBe('authenticated')
+    if (result.status === 'authenticated') {
+      expect(result.user.id).toBe('u-new')
+      expect(result.user.is_admin).toBe(false)
+    }
+  })
+
+  it('returns verification_pending without setting a session', async () => {
+    apiRequest.mockResolvedValueOnce({
+      status: 'verification_pending',
+      email: 'new@example.com',
+      message: 'Check your email',
+      access_token: null,
+      refresh_token: null,
+    })
+
+    const { register } = await import('@/services/auth/authApi')
+    const result = await register({
+      email: 'new@example.com',
+      username: 'newuser',
+      password: 'StrongPass123!',
+    })
+    expect(result).toEqual({
+      status: 'verification_pending',
+      email: 'new@example.com',
+      message: 'Check your email',
+    })
+    expect(tokenStore.set).not.toHaveBeenCalled()
   })
 
   it('clears tokens when register succeeds but /auth/me fails (no stale identity)', async () => {
     const { ApiError } = await import('@/services/api/client')
     apiRequest
       .mockResolvedValueOnce({
+        status: 'authenticated',
         access_token: 'a',
         refresh_token: 'r',
         token_type: 'bearer',
@@ -102,6 +130,7 @@ describe('authApi.register', () => {
     const { ApiError } = await import('@/services/api/client')
     apiRequest
       .mockResolvedValueOnce({
+        status: 'authenticated',
         access_token: 'a',
         refresh_token: 'r',
         token_type: 'bearer',

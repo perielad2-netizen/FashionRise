@@ -93,6 +93,23 @@ describe('assert-prod-vite-flags compiled extraction', () => {
     const failures = assertCompiledGatesMatchAllowlist(gates)
     expect(failures.some((f) => f.includes('VITE_REGISTRATION_UI_ENABLED'))).toBe(true)
   })
+
+  it('accepts backend-gated /register when registration helper still folds false', () => {
+    const bundle = [
+      'function Es(){return!0}',
+      'function jx(){return!0}',
+      'function dS(){return!0}',
+      'function Ii(){return!1}',
+      'let n=t?.frontBackEnabled??Es();',
+      'a=Es(),o=jx(),s=1',
+      ',Ze=dS(),Qe=busy',
+      'path:`/register`,element:(0,V.jsx)(Mo,{},Ii()?`reg-on`:`reg-off`)',
+    ].join('')
+    const gates = extractCompiledGates(bundle)
+    expect(gates.registration.id).toBe('Ii')
+    expect(gates.registration.value).toBe(false)
+    expect(assertCompiledGatesMatchAllowlist(gates)).toEqual([])
+  })
 })
 
 describe('assert-prod-vite-flags Node env allowlist', () => {

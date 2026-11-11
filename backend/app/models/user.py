@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.body_measurement_profile import BodyMeasurementProfile
     from app.models.design_export import DesignExport
     from app.models.design_revision import DesignRevision
+    from app.models.email_verification_token import EmailVerificationToken
     from app.models.fabric_asset import FabricAsset
     from app.models.gallery_comment import GalleryComment
     from app.models.gallery_comment_like import GalleryCommentLike
@@ -36,6 +37,17 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Public email registration sets False until ownership is verified.
+    # Invite + Google paths set True. ORM default True keeps legacy test/script
+    # User() constructors and existing accounts (migration 028 backfill) working.
+    # DB server_default false only applies to raw SQL inserts that omit the column.
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, server_default="false"
+    )
+    # Persistent resend throttle for public email verification (UTC).
+    email_verification_last_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # AI Stars wallet — spend gate for Magic / future AI features.
     ai_stars: Mapped[int] = mapped_column(Integer, default=10, nullable=False, server_default="10")
     # Outstanding Apple IAP refund liability (Stars already spent that Apple refunded).
@@ -53,6 +65,9 @@ class User(Base):
 
     profile: Mapped["UserProfile"] = relationship(back_populates="user", uselist=False)
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
+    email_verification_tokens: Mapped[list["EmailVerificationToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     designs: Mapped[list["GarmentDesign"]] = relationship(back_populates="user")
     gallery_items: Mapped[list["GalleryItem"]] = relationship(back_populates="user")
     ratings: Mapped[list["Rating"]] = relationship(back_populates="user")

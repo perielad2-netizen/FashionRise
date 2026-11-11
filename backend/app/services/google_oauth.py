@@ -181,6 +181,12 @@ def upsert_google_user(db: Session, *, userinfo: dict[str, Any]) -> User:
     if existing is not None:
         if not existing.is_active:
             raise UnauthorizedError("Account disabled")
+        # Google verified the mailbox — mark ownership verified without privilege change.
+        if not existing.email_verified:
+            existing.email_verified = True
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
         return existing
 
     settings = get_settings()
@@ -200,6 +206,7 @@ def upsert_google_user(db: Session, *, userinfo: dict[str, Any]) -> User:
         hashed_password=hash_password(secrets.token_urlsafe(48)),
         is_admin=False,
         is_active=True,
+        email_verified=True,
     )
     ai_stars.apply_new_user_stars(user)
     db.add(user)

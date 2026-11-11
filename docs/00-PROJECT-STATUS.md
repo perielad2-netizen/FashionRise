@@ -3,9 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**#288 MERGED + FE LIVE** · `42a4bce2` · brand icon on web · Home hero untouched · public IAP gates **OFF** · **no Codemagic**.)
+**Last updated:** 2026-11-11 (**PR #289 final PM amendment** · User→token lock order · capture requires TESTING+non-production · **no merge/deploy** · IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## Public email registration (2026-11-11) — PR #289 · FINAL PM AMENDMENT · AWAITING PM
+
+| Status | Detail |
+|---|---|
+| Branch | `cursor/web-public-email-register-77c6` · PR **#289** |
+| Modes | `REGISTRATION_MODE=closed\|invite_only\|public` (default closed) |
+| Public flow | Register → SMTP email with **`#token=` fragment** → Confirm email (no auto-consume) → session |
+| Hardening | Atomic single-use redeem · DB resend throttle · commit-then-send · **consistent lock order `User` → token** on verify + resend · capture requires **`TESTING=true` and `ENVIRONMENT≠production`** · authenticated SMTP requires TLS/465 |
+| Concurrency | Deterministic PG verify-versus-resend race: verification wins (verified, no unnecessary resend) **or** resend wins (old token invalidated; replacement verifiable) — no deadlocks / duplicate redeem |
+| Rate limits | SlowAPI + `client_ip_key`; production needs Nginx Option B + `TRUST_PROXY_HEADERS=true` for per-visitor buckets |
+| Migration | **`028`** remains head |
+| Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` |
+| Stop line | **No merge · no production deploy · no mode flip · no Codemagic · no IAP · no App Review** |
+| **Exact next step (PM)** | Re-review #289 HEAD → approve merge → activation doc |
 
 ## Brand icon refresh (2026-11-11) — #288 MERGED · FE LIVE
 
@@ -63,9 +78,9 @@
 | Production FE | **`42a4bce2`** live (brand icon) |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
-| **Exact next step** | PM: one Codemagic **App Store IPA** from latest `main` → verify new icon on TestFlight/ASC · also iPad Screenshots VNC as needed |
+| **Exact next step** | PM: review **public email registration** PR → then Codemagic **App Store IPA** from approved `main` (icon + registration when activated) |
 | Then | ASC metadata/DSA → PM gate flip + 1.0 submit |
-| Stop line | No public payment activation · no App Review until checklist green |
+| Stop line | No public payment activation · no App Review until checklist green · registration stays closed until activation doc |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 

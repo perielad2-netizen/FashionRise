@@ -13,7 +13,7 @@ export type ValidatedRegister = {
   username: string
   displayName: string | null
   password: string
-  invitationCode: string
+  invitationCode: string | null
 }
 
 export type RegisterValidationResult =
@@ -30,12 +30,14 @@ export function validateRegister(input: {
   password: string
   confirmPassword: string
   invitationCode: string
+  requireInvitation?: boolean
 }): RegisterValidationResult {
   const errors: RegisterFieldErrors = {}
   const email = input.email.trim().toLowerCase()
   const username = input.username.trim()
   const displayNameRaw = input.displayName.trim()
   const invitationCode = input.invitationCode.trim()
+  const requireInvitation = input.requireInvitation !== false
   // Passwords are not trimmed beyond what the backend login path does; keep exact body.
   const password = input.password
   const confirmPassword = input.confirmPassword
@@ -58,9 +60,11 @@ export function validateRegister(input: {
   if (!confirmPassword) errors.confirmPassword = 'Confirm your password.'
   else if (confirmPassword !== password) errors.confirmPassword = 'Passwords do not match.'
 
-  if (!invitationCode) errors.invitationCode = 'Enter your invitation code.'
-  else if (invitationCode.length < 16)
-    errors.invitationCode = 'Invitation code looks incomplete.'
+  if (requireInvitation) {
+    if (!invitationCode) errors.invitationCode = 'Enter your invitation code.'
+    else if (invitationCode.length < 16)
+      errors.invitationCode = 'Invitation code looks incomplete.'
+  }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors }
 
@@ -70,6 +74,6 @@ export function validateRegister(input: {
     username,
     displayName: displayNameRaw ? displayNameRaw : null,
     password,
-    invitationCode,
+    invitationCode: invitationCode || null,
   }
 }

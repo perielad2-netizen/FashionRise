@@ -148,11 +148,28 @@ export function extractCompiledGates(bundleText) {
   }
   const magicId = magicMatch[2] || magicMatch[1]
 
-  const regMatch = bundleText.match(new RegExp(`path:\`/register\`,element:(${ID})\\(\\)\\?`))
-  if (!regMatch) {
-    throw new Error('compiled bundle missing registration gate on /register route')
+  // Registration UI build flag (must stay false in production):
+  // 1) Legacy: Vite ternary gate on /register → `path:`/register`,element:Ii()?…`
+  // 2) Current: /register always mounts RegisterPage; key keeps helper live as
+  //    `…(Oc,{},to()?`reg-on`:`reg-off`)` while backend status gates the UX.
+  let regId = null
+  const regRouteMatch = bundleText.match(
+    new RegExp(`path:\`/register\`,element:(${ID})\\(\\)\\?`),
+  )
+  const regKeyMatch = bundleText.match(
+    new RegExp(`path:\`/register\`[\\s\\S]{0,120}?(${ID})\\(\\)\\?\`reg-on\`:\`reg-off\``),
+  )
+  if (regRouteMatch) {
+    regId = regRouteMatch[1]
+  } else if (regKeyMatch) {
+    regId = regKeyMatch[1]
+  } else if (!bundleText.includes('path:`/register`') && !bundleText.includes('path:"/register"')) {
+    throw new Error('compiled bundle missing /register route')
+  } else {
+    throw new Error(
+      'compiled bundle missing registration gate helper (expected false-folded isRegistrationUiEnabled)',
+    )
   }
-  const regId = regMatch[1]
 
   const requireBool = (id, label) => {
     if (!(id in bools)) {
