@@ -50,7 +50,7 @@ npm run cap:ios           # opens Xcode (macOS only)
 | Workflow | `fashionrise-android-play-internal` (UI: **FashionRise Android (Play AAB)**) |
 | Working dir | `web-ui` |
 | Package / applicationId | `app.fashionrise.studio` |
-| targetSdk / compileSdk | **35** (`web-ui/android/variables.gradle`) |
+| targetSdk / compileSdk | **36** (`web-ui/android/variables.gradle`) |
 | versionName | **1.0** |
 | versionCode | `PROJECT_BUILD_NUMBER + ANDROID_VERSION_CODE_OFFSET` (default offset `0`) |
 | Signing | Codemagic `android_signing` reference **`fashionrise_android_upload`** → Gradle `CM_KEYSTORE_*` |
