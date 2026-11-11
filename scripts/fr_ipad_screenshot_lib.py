@@ -16,7 +16,11 @@ ACCEPTED_IPAD_13_SIZES: frozenset[tuple[int, int]] = frozenset(
     }
 )
 
-_IPAD_13_NAME = re.compile(r"ipad (?:pro|air) \(13[- ]?inch", re.I)
+# Match both Apple naming styles seen on Codemagic / Xcode:
+#   "iPad Pro (13-inch) (M4)"  — parentheses around size
+#   "iPad Pro 13-inch (M5)"    — no parentheses around size
+# Rejects 11-inch / mini / 12.9-inch (must contain the token 13-inch).
+_IPAD_13_NAME = re.compile(r"ipad (?:pro|air) \(?13[- ]?inch\)?", re.I)
 
 
 def is_supported_13_inch_ipad_name(name: str) -> bool:

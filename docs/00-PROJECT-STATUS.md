@@ -3,9 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**PR #285 MERGED** `385a2215` · iPad Screenshots Codemagic workflow on main · public IAP gates **OFF** · **Codemagic not started**.)
+**Last updated:** 2026-11-11 (**iPad sim name hotfix** · match `iPad Pro 13-inch (M5)` style · public IAP gates **OFF** · **no Codemagic restart yet**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## iPad simulator picker hotfix (2026-11-11) — PR READY
+
+| Status | Detail |
+|---|---|
+| Live failure | Codemagic had `iPad Pro 13-inch (M5)` / `iPad Air 13-inch (M4/M3)` but picker only matched `(13-inch)` parenthesized names |
+| Fix | `_IPAD_13_NAME` accepts both `iPad Pro (13-inch) (M4)` and `iPad Pro 13-inch (M5)`; still rejects 11″ / mini / 12.9″; Pro preferred over Air |
+| Unchanged | IPA workflow · device family 1,2 · VNC helpers · PNG dimension rules · IAP gates OFF |
+| **Next step** | After merge: re-run Codemagic **FashionRise iPad Screenshots** with VNC |
+| Stop line | No Codemagic start in this PR · no App Review |
 
 ## iPad App Store screenshots via Codemagic (2026-11-11) — #285 MERGED
 
@@ -14,11 +24,9 @@
 | Approved HEAD | `b61ddff8efe119868d7617898539216cd3b2c289` (unchanged at merge) |
 | Merge | Squash **#285** → `main` **`385a2215b94d2195ddcd36d4aaf9e57cc5d8b73e`** |
 | Device family | **iPhone + iPad** remains (`TARGETED_DEVICE_FAMILY=1,2`) |
-| Workflows | App Store IPA workflow unchanged · new **FashionRise iPad Screenshots** available in `codemagic.yaml` |
+| Workflows | App Store IPA workflow unchanged · **FashionRise iPad Screenshots** in `codemagic.yaml` |
 | Gates | purchasing **false** · credit **false** · unverified Sandbox **false** |
 | Docs | `docs/deploy/IPAD-SCREENSHOTS-CODEMAGIC.md` |
-| **Next step** | PM starts Codemagic workflow **FashionRise iPad Screenshots** with VNC enabled → capture → `fr-ipad-finish` → download Artifacts (13″ PNGs for ASC) |
-| Stop line | No backend deploy · no Apple purchases · no App Review · wait for PM to start Codemagic |
 
 ## Stale Stars after Magic (2026-11-11) — #283 MERGED · FE LIVE
 
