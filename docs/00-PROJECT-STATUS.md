@@ -3,9 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**PR #283 MERGED + FE DEPLOYED** · Magic Stars header refresh live · public IAP gates **OFF** · **no Codemagic / no App Review**.)
+**Last updated:** 2026-11-11 (**iPad Screenshots Codemagic workflow** ready for PM · keep iPhone+iPad · public IAP gates **OFF** · **no Codemagic start / no App Review**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## iPad App Store screenshots via Codemagic (2026-11-11) — PR READY
+
+| Status | Detail |
+|---|---|
+| Decision | Keep **iPhone + iPad** (`TARGETED_DEVICE_FAMILY=1,2`) — tablet is core for sketch/design |
+| Workflow | Codemagic **FashionRise iPad Screenshots** (`fashionrise-ipad-screenshots`) — manual + VNC |
+| Mechanism | Unsigned simulator `.app` → dynamic 13″ iPad Pro/Air pick → boot/install/launch → `fr-ipad-shot` PNGs in artifacts |
+| Docs | `docs/deploy/IPAD-SCREENSHOTS-CODEMAGIC.md` (Windows VNC steps) |
+| Safety | No IPA publish · no ASC · no IAP gate changes · production API from `.env.native` |
+| Stop line | Do **not** start Codemagic until PM approves this PR |
 
 ## Stale Stars after Magic (2026-11-11) — #283 MERGED · FE LIVE
 
