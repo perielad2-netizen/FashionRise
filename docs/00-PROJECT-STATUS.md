@@ -3,22 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**#288 icon quality** · exterior flood-fill matte · Home hero untouched · public IAP gates **OFF** · **no Codemagic**.)
+**Last updated:** 2026-11-11 (**#288 MERGED + FE LIVE** · `42a4bce2` · brand icon on web · Home hero untouched · public IAP gates **OFF** · **no Codemagic**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Brand icon refresh (2026-11-11) — #288 OPEN · quality fix
+## Brand icon refresh (2026-11-11) — #288 MERGED · FE LIVE
 
 | Status | Detail |
 |---|---|
-| PR | https://github.com/perielad2-netizen/FashionRise/pull/288 · branch `cursor/web-brand-icon-refresh-77c6` |
-| Source | PM-approved `web-ui/branding-src/fashion_rise_app_icon_1024.png` (exact artwork; no redesign) |
-| Quality fix | Exterior-connected flood-fill matte (preserves pale interior artwork); legacy `derive_brand_assets.py` no longer overwrites approved icons/lockups |
-| Replaced | GlobalHeader/StudioHeader mark · favicon-32 · apple-touch · PWA 192/512 · iOS `AppIcon-512@2x.png` · Android `ic_launcher*` |
-| **Preserved** | Home hero `fashion_rise_login.png` · full lockup `fashion_rise_logo.png` · emblem · feature UI icons |
-| Pipeline | `scripts/apply_approved_app_icon.py` · Codemagic `check:ios-appicon` unchanged (fail-closed) |
-| Codemagic IPA | **Required after merge** for native App Store / TestFlight icon; web/PWA icons ship with FE deploy |
-| Stop line | No merge/deploy/Codemagic · no backend · no IAP gate flip · no App Review |
+| Approved HEAD | `505826c4112a304a87c51585af09f883105a1965` (unchanged at merge) |
+| Merge | Squash **#288** → `main` **`42a4bce263beb5fc2e1ecd8b9143df33ec67e258`** |
+| Production FE | **`42a4bce2`** · `/var/www/fashionrise/releases/42a4bce2-brand-icon-refresh-288` · public `/version.json` matches · prior `23c5cb2c-magic-stars-refresh-283` |
+| Rollback | `/var/backups/fashionrise/brand-icon-refresh-288-deploy-20261111T173715Z/ROLLBACK.sh` |
+| Live verify | favicon-32 + header mark hashes match release · Home `fashion_rise_login.png` SHA identical to prior release · IAP status purchasing/credit **false** · `.env` unverified Sandbox **false** |
+| Source | PM-approved `web-ui/branding-src/fashion_rise_app_icon_1024.png` (exact artwork; exterior flood-fill matte) |
+| Native AppIcon | In repo / merge; **needs new Codemagic IPA** for TestFlight / ASC (not started) |
+| **Exact next step (PM)** | Create one FashionRise iOS App Store IPA from latest `main`, then visually verify icon on TestFlight + processed ASC build before selecting for 1.0 |
+| Stop line | No Codemagic in this turn · no backend · no IAP gate flip · no App Review |
 
 ## iPad simulator picker hotfix (2026-11-11) — #287 MERGED
 
@@ -58,12 +59,12 @@
 
 | Status | Detail |
 |---|---|
-| Merged on main | #278–#285 · **#287** · AppIcon · Buying UI · Magic Stars refresh · **iPad Screenshots workflow** · sim-name hotfix |
-| Production FE | **`23c5cb2c`** live |
+| Merged on main | #278–#285 · **#287** · **#288** · brand icon refresh · iPad Screenshots · Magic Stars |
+| Production FE | **`42a4bce2`** live (brand icon) |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
-| **Exact next step** | Run Codemagic **FashionRise iPad Screenshots** (VNC) to produce 13″ ASC screenshots |
-| Then | Final App Store IPA Codemagic build → ASC metadata/DSA → PM gate flip + 1.0 submit |
+| **Exact next step** | PM: one Codemagic **App Store IPA** from latest `main` → verify new icon on TestFlight/ASC · also iPad Screenshots VNC as needed |
+| Then | ASC metadata/DSA → PM gate flip + 1.0 submit |
 | Stop line | No public payment activation · no App Review until checklist green |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
