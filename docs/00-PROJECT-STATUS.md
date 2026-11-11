@@ -3,20 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**iPad Screenshots Codemagic workflow** ready for PM · keep iPhone+iPad · public IAP gates **OFF** · **no Codemagic start / no App Review**.)
+**Last updated:** 2026-11-11 (**PR #285 PM hardening** · hardwired VNC helpers + `fr-ipad-finish` + 13″ size check · public IAP gates **OFF** · **no Codemagic start**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## iPad App Store screenshots via Codemagic (2026-11-11) — PR READY
+## iPad App Store screenshots via Codemagic (2026-11-11) — PR #285 HARDENING
 
 | Status | Detail |
 |---|---|
-| Decision | Keep **iPhone + iPad** (`TARGETED_DEVICE_FAMILY=1,2`) — tablet is core for sketch/design |
-| Workflow | Codemagic **FashionRise iPad Screenshots** (`fashionrise-ipad-screenshots`) — manual + VNC |
-| Mechanism | Unsigned simulator `.app` → dynamic 13″ iPad Pro/Air pick → boot/install/launch → `fr-ipad-shot` PNGs in artifacts |
-| Docs | `docs/deploy/IPAD-SCREENSHOTS-CODEMAGIC.md` (Windows VNC steps) |
-| Safety | No IPA publish · no ASC · no IAP gate changes · production API from `.env.native` |
-| Stop line | Do **not** start Codemagic until PM approves this PR |
+| Decision | Keep **iPhone + iPad** (`TARGETED_DEVICE_FAMILY=1,2`) |
+| Workflow | **FashionRise iPad Screenshots** — manual + VNC |
+| Hardening | Hardwired UDID/out-dir in `~/bin/fr-ipad-shot` · explicit `simctl io <udid>` · **`fr-ipad-finish`** ends successfully · boot smoke fails loud · Apple 13″ sizes only (2064×2752 / 2048×2732 ± landscape) |
+| Docs | `docs/deploy/IPAD-SCREENSHOTS-CODEMAGIC.md` (finish → Artifacts; do not cancel) |
+| Safety | No IPA/ASC/IAP changes · production API from `.env.native` |
+| Stop line | Wait PM merge · do not start Codemagic yet |
 
 ## Stale Stars after Magic (2026-11-11) — #283 MERGED · FE LIVE
 

@@ -161,7 +161,8 @@ workflows:
         XCODE_WORKSPACE: App.xcworkspace
         XCODE_SCHEME: App
         BUNDLE_ID: app.fashionrise.studio
-        # Bounded VNC hold after boot/install/launch (cancel early in Codemagic UI).
+        # Bounded VNC hold after boot/install/launch. Prefer fr-ipad-finish
+        # (successful Artifacts publish) over canceling the build.
         FR_IPAD_SCREENSHOT_HOLD_MINUTES: "45"
         # Stable DerivedData so we can locate App.app without globbing ASC IPA paths.
         FR_SIM_DERIVED_DATA: /tmp/fr-ipad-sim-derived

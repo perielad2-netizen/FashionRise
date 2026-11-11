@@ -1,24 +1,58 @@
 #!/usr/bin/env bash
-# Capture the booted iOS Simulator display at native resolution.
-# Sequential PNGs land in FR_IPAD_SCREENSHOT_DIR (and CM_EXPORT_DIR mirror).
+# Capture one native-resolution simulator PNG for a *specific* UDID.
+# Prefer the generated ~/bin/fr-ipad-shot wrapper (hardwired UDID + dirs).
 #
 # Usage:
-#   fr-ipad-shot
-#   fr-ipad-shot studio-home
-#   codemagic-ipad-screenshot.sh [optional-label]
+#   codemagic-ipad-screenshot.sh --udid UDID --out DIR [--export DIR] [label]
 set -euo pipefail
 
-OUT_DIR="${FR_IPAD_SCREENSHOT_DIR:-${CM_EXPORT_DIR:-$PWD}/ipad-screenshots}"
-mkdir -p "$OUT_DIR"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$ROOT/scripts${PYTHONPATH:+:$PYTHONPATH}"
 
-# Require a booted device (do not invent UDIDs).
-if ! xcrun simctl list devices booted | grep -q 'Booted'; then
-  echo "fr-ipad-shot: FAIL — no booted simulator (open Simulator / boot first)" >&2
+UDID=""
+OUT_DIR=""
+EXPORT_DIR=""
+LABEL=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --udid)
+      UDID="${2:-}"
+      shift 2
+      ;;
+    --out)
+      OUT_DIR="${2:-}"
+      shift 2
+      ;;
+    --export)
+      EXPORT_DIR="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: $0 --udid UDID --out DIR [--export DIR] [label]" >&2
+      exit 0
+      ;;
+    *)
+      LABEL="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$UDID" || -z "$OUT_DIR" ]]; then
+  echo "fr-ipad-shot: FAIL — require --udid and --out (use generated ~/bin/fr-ipad-shot)" >&2
   exit 1
 fi
 
-label_raw="${1:-}"
-label="$(printf '%s' "$label_raw" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-//;s/-$//')"
+mkdir -p "$OUT_DIR"
+
+# Confirm the target device is booted (explicit UDID — never ambiguous 'booted').
+if ! xcrun simctl list devices | grep "$UDID" | grep -q Booted; then
+  echo "fr-ipad-shot: FAIL — simulator $UDID is not Booted" >&2
+  exit 1
+fi
+
+label="$(printf '%s' "$LABEL" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-//;s/-$//')"
 
 next=1
 shopt -s nullglob
@@ -42,16 +76,20 @@ else
 fi
 
 dest="$OUT_DIR/$name"
-# Native resolution of the simulator display (not a scaled desktop grab).
-xcrun simctl io booted screenshot "$dest"
-# Fail closed if the file is missing or empty.
+# Explicit device UDID — do not use 'booted' when multiple sims may exist.
+xcrun simctl io "$UDID" screenshot "$dest"
 test -s "$dest"
 
-# Mirror into Codemagic export dir so the build ZIP always includes shots.
-if [[ -n "${CM_EXPORT_DIR:-}" ]]; then
-  mkdir -p "$CM_EXPORT_DIR/ipad-screenshots"
-  cp -f "$dest" "$CM_EXPORT_DIR/ipad-screenshots/$name"
+# Fail loud if dimensions are not an Apple-accepted 13-inch size.
+python3 - <<PY
+from fr_ipad_screenshot_lib import assert_accepted_ipad_13_dimensions
+w, h = assert_accepted_ipad_13_dimensions("$dest")
+print(f"fr-ipad-shot: ok size={w}x{h} path=$dest")
+PY
+
+if [[ -n "$EXPORT_DIR" ]]; then
+  mkdir -p "$EXPORT_DIR"
+  cp -f "$dest" "$EXPORT_DIR/$name"
 fi
 
-echo "fr-ipad-shot: wrote $dest"
 ls -la "$dest"

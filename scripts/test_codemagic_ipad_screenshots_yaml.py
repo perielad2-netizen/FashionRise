@@ -60,9 +60,9 @@ def main() -> int:
         "codemagic-ipad-screenshots-session.sh",
         "TARGETED_DEVICE_FAMILY = \"1,2\"",
         "npm run build:native",
+        "fr-ipad-finish",
     ):
         if needle not in script_blob and needle not in raw:
-            # device-family check is in a script step string
             if needle not in raw:
                 raise AssertionError(f"missing required screenshots step content: {needle}")
 
