@@ -11,6 +11,7 @@ from app.core.errors import AppError, ValidationAppError
 from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.schemas.auth import (
+    DeleteAccountRequest,
     RefreshRequest,
     RegisterResponse,
     RegistrationStatusResponse,
@@ -186,4 +187,19 @@ def stars_wallet(user: CurrentUser) -> dict:
 def logout(request: Request, user: CurrentUser, db: Session = Depends(get_db)) -> Response:
     """Revoke all refresh tokens for the current user. Access token remains valid until expiry."""
     auth_service.revoke_all_refresh_tokens_for_user(db, user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute;20/hour")
+def delete_account(
+    request: Request,
+    data: DeleteAccountRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Permanently delete the current user's account (App Store Guideline 5.1.1(v))."""
+    if data.confirm != "DELETE":
+        raise ValidationAppError("Confirmation required")
+    auth_service.delete_account(db, user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

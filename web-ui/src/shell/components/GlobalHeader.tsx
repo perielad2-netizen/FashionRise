@@ -1,7 +1,8 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
-import { ChevronDown, LogOut, Mail, Settings, UserRound, X } from 'lucide-react'
+import { ChevronDown, LogOut, Mail, Settings, Trash2, UserRound, X } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { CONTACT_EMAIL, openContactMail } from '@/lib/contact'
+import { deleteAccount } from '@/services/auth/authApi'
 import styles from './GlobalHeader.module.css'
 
 type Props = {
@@ -11,7 +12,7 @@ type Props = {
   onComingSoon?: (label: string) => void
 }
 
-type Panel = 'about' | 'contact' | null
+type Panel = 'about' | 'contact' | 'delete' | null
 
 export function GlobalHeader({ leading, username, onLogout }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -20,9 +21,13 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
   const [message, setMessage] = useState('')
   const [replyEmail, setReplyEmail] = useState('')
   const [sentHint, setSentHint] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const subjectId = useId()
   const messageId = useId()
   const replyId = useId()
+  const deleteConfirmId = useId()
 
   function openContact() {
     setMenuOpen(false)
@@ -30,9 +35,19 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
     setPanel('contact')
   }
 
+  function openDeleteAccount() {
+    setMenuOpen(false)
+    setDeleteConfirm('')
+    setDeleteError(null)
+    setDeleteBusy(false)
+    setPanel('delete')
+  }
+
   function closePanel() {
+    if (deleteBusy) return
     setPanel(null)
     setSentHint(null)
+    setDeleteError(null)
   }
 
   function onSubmitContact(event: FormEvent) {
@@ -46,6 +61,25 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
       username,
     })
     setSentHint(`Opening your email app to message ${CONTACT_EMAIL}.`)
+  }
+
+  async function onConfirmDelete(event: FormEvent) {
+    event.preventDefault()
+    if (deleteConfirm.trim() !== 'DELETE' || deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await deleteAccount()
+      setPanel(null)
+      onLogout()
+    } catch (err) {
+      const msg =
+        typeof err === 'object' && err && 'message' in err
+          ? String((err as { message?: string }).message || '')
+          : ''
+      setDeleteError(msg || 'Could not delete account. Try again or email support.')
+      setDeleteBusy(false)
+    }
   }
 
   return (
@@ -99,6 +133,15 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
               >
                 <LogOut size={14} />
                 Sign out
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                onClick={openDeleteAccount}
+              >
+                <Trash2 size={14} />
+                Delete account
               </button>
             </div>
           ) : null}
@@ -242,6 +285,73 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
                 >
                   <Mail size={14} aria-hidden />
                   Send message
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {panel === 'delete' ? (
+        <div className={styles.aboutScrim} role="presentation" onClick={closePanel}>
+          <div
+            className={`${styles.aboutCard} ${styles.contactCard}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fr-delete-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.aboutHeader}>
+              <h2 id="fr-delete-title">Delete account</h2>
+              <button
+                type="button"
+                className={styles.aboutClose}
+                aria-label="Close delete account"
+                onClick={closePanel}
+                disabled={deleteBusy}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className={styles.aboutBody}>
+              This permanently deletes your FashionRise account, designs, looks, and related data.
+              Stars balance and purchase history tied to this account are removed. This cannot be
+              undone.
+            </p>
+            <form className={styles.contactForm} onSubmit={onConfirmDelete}>
+              <label className={styles.contactLabel} htmlFor={deleteConfirmId}>
+                Type DELETE to confirm
+              </label>
+              <input
+                id={deleteConfirmId}
+                className={styles.contactInput}
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                autoComplete="off"
+                disabled={deleteBusy}
+                placeholder="DELETE"
+              />
+              {deleteError ? (
+                <p className={styles.deleteError} role="alert">
+                  {deleteError}
+                </p>
+              ) : null}
+              <div className={styles.contactActions}>
+                <button
+                  type="button"
+                  className={styles.contactGhost}
+                  onClick={closePanel}
+                  disabled={deleteBusy}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={styles.deletePrimary}
+                  disabled={deleteBusy || deleteConfirm.trim() !== 'DELETE'}
+                >
+                  <Trash2 size={14} aria-hidden />
+                  {deleteBusy ? 'Deleting…' : 'Delete account'}
                 </button>
               </div>
             </form>

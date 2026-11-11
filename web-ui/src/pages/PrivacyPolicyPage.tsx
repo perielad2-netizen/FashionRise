@@ -256,8 +256,10 @@ export function PrivacyPolicyPage() {
             </li>
           </ul>
           <p>
-            If you need broader account or media deletion help, contact us using the email below and
-            we will help with what FashionRise can remove from your account data.
+            You can permanently delete your FashionRise account from inside the app or website: open{' '}
+            <strong>My Studio</strong> → <strong>Delete account</strong>, then type DELETE to confirm.
+            That removes your account profile and associated designs, looks, and private media FashionRise
+            can delete. If you need additional help after deletion, contact us using the email below.
           </p>
         </section>
 
@@ -267,7 +269,7 @@ export function PrivacyPolicyPage() {
           <ul>
             <li>Access personal information FashionRise holds about your account</li>
             <li>Correct inaccurate account details (such as username/email where supported)</li>
-            <li>Request deletion or restriction of personal data we can remove</li>
+            <li>Delete your account in-app (My Studio → Delete account) or request further deletion help</li>
             <li>Object to certain processing, including optional Runway publishing and push</li>
             <li>Withdraw consents that are based on consent (for example Runway publish consent for
               future publishes, Create Model notices for future uploads, or push permission)</li>
