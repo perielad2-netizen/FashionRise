@@ -1,12 +1,15 @@
-# FashionRise — Codemagic iOS IPA workflow (Capacitor)
+# FashionRise — Codemagic iOS workflows (Capacitor)
 # Docs: https://docs.codemagic.io/yaml-quick-start/building-an-ionic-app/
 #       https://docs.codemagic.io/yaml-publishing/app-store-connect/
 #       https://docs.codemagic.io/knowledge-codemagic/build-versioning/
 #       https://docs.codemagic.io/yaml-basic-configuration/environment-variables/
+#       https://docs.codemagic.io/troubleshooting/accessing-builder-machine-via-ssh/
+#       https://docs.codemagic.io/yaml-code-signing/ios-simulator-builds/
 #
-# Manual start only (no triggering:). Uploads the IPA to App Store Connect
-# via the "codemagic access" integration. Does NOT submit TestFlight beta
-# review, App Store review, or auto-distribute to beta groups.
+# Manual start only (no triggering:).
+# - fashionrise-ios-app-store: App Store IPA → ASC (no review submit)
+# - fashionrise-ipad-screenshots: simulator .app + VNC iPad screenshot session
+#   (NO IPA publish, NO ASC, NO IAP gate changes)
 # Signing materials live in Codemagic (Team integrations + Code signing
 # identities), not in GitHub secrets.
 #
@@ -137,3 +140,110 @@ workflows:
         auth: integration
         submit_to_testflight: false
         submit_to_app_store: false
+
+  # ---------------------------------------------------------------------------
+  # Manual iPad Simulator screenshots via Codemagic remote Mac + VNC (Windows OK).
+  # Does NOT build/publish an IPA. Does NOT touch App Store Connect or IAP gates.
+  # Operator docs: docs/deploy/IPAD-SCREENSHOTS-CODEMAGIC.md
+  # ---------------------------------------------------------------------------
+  fashionrise-ipad-screenshots:
+    name: FashionRise iPad Screenshots
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    working_directory: web-ui
+    # No app_store_connect integration — screenshot session only.
+
+    environment:
+      groups:
+        # Same croquis notice texts as native / production-gated builds.
+        - fashionrise_native
+      vars:
+        XCODE_WORKSPACE: App.xcworkspace
+        XCODE_SCHEME: App
+        BUNDLE_ID: app.fashionrise.studio
+        # Bounded VNC hold after boot/install/launch. Prefer fr-ipad-finish
+        # (successful Artifacts publish) over canceling the build.
+        FR_IPAD_SCREENSHOT_HOLD_MINUTES: "45"
+        # Stable DerivedData so we can locate App.app without globbing ASC IPA paths.
+        FR_SIM_DERIVED_DATA: /tmp/fr-ipad-sim-derived
+      node: 22
+      xcode: 26.5
+      cocoapods: default
+
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm ci
+
+      - name: Build native web bundle (Capacitor dist/)
+        script: |
+          # Production API via committed .env.native (https://fashionrise.app/api/v1).
+          # Never print tokens / passwords. Croquis notices from fashionrise_native.
+          export VITE_BUILD_SHA="${CM_COMMIT:0:8}"
+          npm run build:native
+
+      - name: Sync Capacitor iOS project
+        script: |
+          npx cap sync ios
+          node scripts/assert-ios-capacitor-content-inset.mjs
+
+      - name: Install CocoaPods
+        script: |
+          cd ios/App
+          pod install
+
+      - name: Assert iOS AppIcon is real (not blank white)
+        script: |
+          npm run check:ios-appicon
+
+      - name: Assert iPhone+iPad device family preserved
+        script: |
+          # TARGETED_DEVICE_FAMILY must stay "1,2" (iPhone + iPad).
+          grep -q 'TARGETED_DEVICE_FAMILY = "1,2";' ios/App/App.xcodeproj/project.pbxproj
+
+      - name: Build unsigned simulator .app
+        script: |
+          set -euo pipefail
+          rm -rf "$FR_SIM_DERIVED_DATA"
+          mkdir -p "$FR_SIM_DERIVED_DATA"
+          cd "$CM_BUILD_DIR/web-ui/ios/App"
+          # Prefer a 13-inch iPad destination when Xcode already knows one; build
+          # still targets generic iOS Simulator SDK so install works on the
+          # dynamically selected device below.
+          xcodebuild build \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$FR_SIM_DERIVED_DATA" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+          APP_PATH="$(find "$FR_SIM_DERIVED_DATA/Build/Products" -type d -name 'App.app' | head -n 1)"
+          test -n "$APP_PATH"
+          test -d "$APP_PATH"
+          echo "FR_SIMULATOR_APP_PATH=$APP_PATH" >> "$CM_ENV"
+          echo "Built simulator app at $APP_PATH"
+          # Never print secrets from the bundle; only confirm Info.plist identity.
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist"
+
+      - name: Boot iPad, launch FashionRise, hold for VNC screenshots
+        script: |
+          set -euo pipefail
+          chmod +x "$CM_BUILD_DIR/scripts/codemagic-pick-ipad-simulator.sh"
+          chmod +x "$CM_BUILD_DIR/scripts/codemagic-ipad-screenshot.sh"
+          chmod +x "$CM_BUILD_DIR/scripts/codemagic-ipad-screenshots-session.sh"
+          export FR_IPAD_SCREENSHOT_DIR="$CM_BUILD_DIR/artifacts/ipad-screenshots"
+          mkdir -p "$FR_IPAD_SCREENSHOT_DIR" "$CM_EXPORT_DIR/ipad-screenshots"
+          "$CM_BUILD_DIR/scripts/codemagic-ipad-screenshots-session.sh"
+
+    artifacts:
+      # Screenshots (primary deliverable) + simulator .app for local debug if needed.
+      - $CM_BUILD_DIR/artifacts/ipad-screenshots/*.png
+      - $CM_EXPORT_DIR/ipad-screenshots/*.png
+      - $CM_BUILD_DIR/artifacts/ipad-screenshots/**
+      - /tmp/fr-ipad-sim-derived/Build/Products/**/*.app
+      - /tmp/xcodebuild_logs/*.log
+    # Explicitly no publishing: block — do not upload IPA / change ASC.

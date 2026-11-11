@@ -101,12 +101,31 @@ def assert_unique_build_number_policy(raw: str, wf: dict) -> None:
             raise AssertionError("xcode must remain 26.5")
 
 
+def assert_ipad_screenshots_workflow_present(raw: str) -> None:
+    if "fashionrise-ipad-screenshots:" not in raw:
+        raise AssertionError("missing fashionrise-ipad-screenshots workflow")
+    if "FashionRise iPad Screenshots" not in raw:
+        raise AssertionError("missing FashionRise iPad Screenshots display name")
+    # Screenshots workflow must never publish / build IPA.
+    if yaml is not None:
+        data = yaml.safe_load(raw)
+        shot = data["workflows"]["fashionrise-ipad-screenshots"]
+        if "publishing" in shot:
+            raise AssertionError("ipad screenshots workflow must not publish")
+        if "triggering" in shot:
+            raise AssertionError("ipad screenshots workflow must be manual")
+        arts = [str(a) for a in (shot.get("artifacts") or [])]
+        if any(".ipa" in a for a in arts):
+            raise AssertionError("ipad screenshots artifacts must not include .ipa")
+
+
 def main() -> int:
     raw = YAML_PATH.read_text()
     wf = load_workflow()
     assert_single_ipa_artifact(wf if "_raw" not in wf else {"_raw": raw}, raw)
     assert_no_ipa_staging_copies(raw)
     assert_unique_build_number_policy(raw, wf)
+    assert_ipad_screenshots_workflow_present(raw)
     print("assert-codemagic-ios-yaml: ok")
     return 0
 
