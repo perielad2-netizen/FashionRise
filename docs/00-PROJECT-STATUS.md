@@ -3,9 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**#287 MERGED** · iPad sim name hotfix · `4e9b1820` · public IAP gates **OFF** · **no Codemagic restart**.)
+**Last updated:** 2026-11-11 (**#288 icon quality** · exterior flood-fill matte · Home hero untouched · public IAP gates **OFF** · **no Codemagic**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## Brand icon refresh (2026-11-11) — #288 OPEN · quality fix
+
+| Status | Detail |
+|---|---|
+| PR | https://github.com/perielad2-netizen/FashionRise/pull/288 · branch `cursor/web-brand-icon-refresh-77c6` |
+| Source | PM-approved `web-ui/branding-src/fashion_rise_app_icon_1024.png` (exact artwork; no redesign) |
+| Quality fix | Exterior-connected flood-fill matte (preserves pale interior artwork); legacy `derive_brand_assets.py` no longer overwrites approved icons/lockups |
+| Replaced | GlobalHeader/StudioHeader mark · favicon-32 · apple-touch · PWA 192/512 · iOS `AppIcon-512@2x.png` · Android `ic_launcher*` |
+| **Preserved** | Home hero `fashion_rise_login.png` · full lockup `fashion_rise_logo.png` · emblem · feature UI icons |
+| Pipeline | `scripts/apply_approved_app_icon.py` · Codemagic `check:ios-appicon` unchanged (fail-closed) |
+| Codemagic IPA | **Required after merge** for native App Store / TestFlight icon; web/PWA icons ship with FE deploy |
+| Stop line | No merge/deploy/Codemagic · no backend · no IAP gate flip · no App Review |
 
 ## iPad simulator picker hotfix (2026-11-11) — #287 MERGED
 

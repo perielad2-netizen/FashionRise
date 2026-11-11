@@ -62,7 +62,8 @@ describe('UI_ASSETS registry', () => {
       expect.arrayContaining([
         'Login.BrandLockup',
         'GlobalHeader.Mark',
-        'StudioHeader.BrandLogo',
+        'StudioHeader.BrandMark',
+        'Brand.FullLockup',
         'StudioHeader.Profile',
         'StudioHeader.Magic',
         'ModelPanel.FemaleCard',
@@ -92,5 +93,13 @@ describe('UI_ASSETS registry', () => {
     expect(existsSync(resolve(publicRoot, UI_ASSETS.model.femaleSource.slice(1)))).toBe(true)
     expect(existsSync(resolve(publicRoot, UI_ASSETS.model.maleSource.slice(1)))).toBe(true)
     expect(existsSync(resolve(publicRoot, UI_ASSETS.brand.logo.slice(1)))).toBe(true)
+  })
+
+  it('keeps Home/login lockup separate from the small app-icon mark', () => {
+    expect(UI_ASSETS.brand.login).not.toBe(UI_ASSETS.brand.mark)
+    expect(UI_ASSETS.brand.logo).not.toBe(UI_ASSETS.brand.mark)
+    expect(existsSync(resolve(publicRoot, 'icons/favicon-32.png'))).toBe(true)
+    expect(existsSync(resolve(publicRoot, 'icons/icon-512.png'))).toBe(true)
+    expect(existsSync(resolve(publicRoot, 'icons/apple-touch-icon.png'))).toBe(true)
   })
 })
