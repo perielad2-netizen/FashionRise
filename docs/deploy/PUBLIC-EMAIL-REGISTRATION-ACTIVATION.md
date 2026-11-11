@@ -44,9 +44,10 @@ Status payload reports the exact prerequisite when public cannot activate.
 
 | Stage | Status | Notes |
 |---|---|---|
-| **1 — BE foundation** | **DONE 2026-11-11** | Deployed `ba619985…` · Alembic **028** · `REGISTRATION_MODE=closed` · backup `public-reg-stage1-20261111T190454Z` · FE unchanged · no SMTP |
-| **2 — SMTP + Nginx** | Not started | Requires separate PM authorization |
-| **3 — FE + public mode** | Not started | Requires separate PM authorization |
+| **1 — BE foundation** | **DONE 2026-11-11** | Deployed `ba619985…` · Alembic **028** · backup `public-reg-stage1-20261111T190454Z` |
+| **2 — Nginx + visitor IP** | **DONE 2026-11-11** | Cloudflare `real_ip` · register/status/verify/resend allowlisted · `TRUST_PROXY_HEADERS=true` · rollback `public-reg-activate-20261111T191438Z` |
+| **3 — FE deploy** | **DONE 2026-11-11** | `/var/www/fashionrise/releases/public-reg-activate-c0a942ef` · prior `42a4bce2` preserved |
+| **4 — SMTP + public mode** | **BLOCKED** | No `SMTP_*` on VPS. Keep `REGISTRATION_MODE=closed` until owner configures SMTP, then set `public` + restart API |
 
 ## Exact safe production activation steps (ordered)
 
