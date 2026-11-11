@@ -60,4 +60,5 @@ Small brand / platform icons are produced by
 - Canvas croquis were not replaced.
 - `public/favicon.svg` is an unused Vite scaffold leftover and is not linked. The live favicon is `icons/favicon-32.png`.
 - `fr_icon_back.png` and `fr_icon_import.png` remain unmapped.
-- App-icon matte key only removes the pale presentation canvas outside the gold frame — artwork pixels are never reinvented.
+- App-icon matte uses **exterior-connected flood-fill** of the pale presentation canvas outside the gold frame. Pale / cream pixels inside the artwork are preserved. No AI knockout / no redesign.
+- `derive_brand_assets.py` must not overwrite approved app icons or Home/login lockups; refresh icons only via `apply_approved_app_icon.py`.

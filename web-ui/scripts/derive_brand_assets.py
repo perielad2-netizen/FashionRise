@@ -180,18 +180,32 @@ def save_png(im: Image.Image, path: Path) -> None:
 
 
 def main() -> None:
-    logo = Image.open(LOGO).convert("RGBA")
-    mark = Image.open(MARK).convert("RGBA")
+    """Derive model cards only.
 
-    # Emblem block ends just before the wordmark (wordmark ink begins ~y844).
-    emblem = erode_cream_fringe(crop_rows(logo, 100, 838))
-    save_png(emblem, ROOT / "branding" / "fashion_rise_emblem.png")
-
-    # Emblem + approved wordmark. Omits the tiny tagline and pill CTA.
-    login = erode_cream_fringe(crop_rows(logo, 100, 976))
-    if login.width > 960:
-        login = login.resize((960, int(login.height * 960 / login.width)), Image.Resampling.LANCZOS)
-    save_png(login, ROOT / "branding" / "fashion_rise_login.png")
+    Approved app-icon surfaces (mark / favicon / PWA / iOS AppIcon / Android
+    launchers) are owned by `apply_approved_app_icon.py` and must not be
+    overwritten here. Home/login lockups (`fashion_rise_login.png`,
+    `fashion_rise_logo.png`, `fashion_rise_emblem.png`) are also left untouched
+    so a casual re-run cannot mutate the Home dashboard hero.
+    """
+    # Refuse to touch approved icon + Home lockup paths even if invoked wrong.
+    protected = [
+        ROOT / "branding" / "fashion_rise_mark.png",
+        ROOT / "branding" / "fashion_rise_logo.png",
+        ROOT / "branding" / "fashion_rise_login.png",
+        ROOT / "branding" / "fashion_rise_emblem.png",
+        ROOT / "icons" / "favicon-32.png",
+        ROOT / "icons" / "apple-touch-icon.png",
+        ROOT / "icons" / "icon-192.png",
+        ROOT / "icons" / "icon-512.png",
+    ]
+    print(
+        "derive_brand_assets: skipping brand lockups + app icons "
+        "(use scripts/apply_approved_app_icon.py for icon refresh)."
+    )
+    for path in protected:
+        if path.exists():
+            print(f"  preserve {path.relative_to(ROOT)}")
 
     models = ROOT / "assets" / "ui" / "models"
     save_png(
@@ -201,13 +215,6 @@ def main() -> None:
     save_png(frame_figure(Image.open(models / "fr_model_male.png")), models / "fr_model_male_card.png")
     save_png(frame_icon(Image.open(models / "fr_model_custom.png")), models / "fr_model_custom_card.png")
     save_png(frame_icon(Image.open(models / "fr_model_blank.png")), models / "fr_model_blank_card.png")
-
-    icons = ROOT / "icons"
-    save_png(app_icon(mark, 32), icons / "favicon-32.png")
-    save_png(app_icon(mark, 180), icons / "apple-touch-icon.png")
-    save_png(app_icon(mark, 192), icons / "icon-192.png")
-    # Square opaque tile. The emblem sits inside the maskable safe zone.
-    save_png(app_icon(mark, 512), icons / "icon-512.png")
 
 
 if __name__ == "__main__":
