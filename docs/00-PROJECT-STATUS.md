@@ -3,24 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**PR #289 final PM amendment** · User→token lock order · capture requires TESTING+non-production · **no merge/deploy** · IAP gates **OFF**.)
+**Last updated:** 2026-11-11 (**PR #289 MERGED** · public email registration on `main` · **no production deploy yet** · IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Public email registration (2026-11-11) — PR #289 · FINAL PM AMENDMENT · AWAITING PM
+## Public email registration (2026-11-11) — #289 MERGED · AWAITING CONTROLLED DEPLOY
 
 | Status | Detail |
 |---|---|
-| Branch | `cursor/web-public-email-register-77c6` · PR **#289** |
-| Modes | `REGISTRATION_MODE=closed\|invite_only\|public` (default closed) |
+| Approved HEAD | `0807e1e0b37edb51f2b0f053bf4b2a9a74ae4fe2` (unchanged at merge) |
+| Merge | Squash **#289** → `main` **`0403676f0c6f259006afa9b200a69912a2132490`** |
+| Modes | `REGISTRATION_MODE=closed\|invite_only\|public` (default closed; production still closed) |
 | Public flow | Register → SMTP email with **`#token=` fragment** → Confirm email (no auto-consume) → session |
-| Hardening | Atomic single-use redeem · DB resend throttle · commit-then-send · **consistent lock order `User` → token** on verify + resend · capture requires **`TESTING=true` and `ENVIRONMENT≠production`** · authenticated SMTP requires TLS/465 |
-| Concurrency | Deterministic PG verify-versus-resend race: verification wins (verified, no unnecessary resend) **or** resend wins (old token invalidated; replacement verifiable) — no deadlocks / duplicate redeem |
-| Rate limits | SlowAPI + `client_ip_key`; production needs Nginx Option B + `TRUST_PROXY_HEADERS=true` for per-visitor buckets |
-| Migration | **`028`** remains head |
+| Hardening | Atomic single-use redeem · DB resend throttle · commit-then-send · **consistent lock order `User` → token** · capture requires **`TESTING=true` and `ENVIRONMENT≠production`** · authenticated SMTP requires TLS/465 |
+| Migration | **`028`** on `main` — **not applied in production yet** |
 | Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` |
-| Stop line | **No merge · no production deploy · no mode flip · no Codemagic · no IAP · no App Review** |
-| **Exact next step (PM)** | Re-review #289 HEAD → approve merge → activation doc |
+| Production | **Not deployed** · no SMTP config · no mode flip · FE still prior release |
+| Stop line | **No backend/FE deploy · no alembic 028 in prod · no SMTP · no public mode · no Codemagic · no IAP · no App Review** |
+| **Exact next step (PM)** | Separately authorize controlled production deploy via activation runbook |
 
 ## Brand icon refresh (2026-11-11) — #288 MERGED · FE LIVE
 
@@ -74,12 +74,12 @@
 
 | Status | Detail |
 |---|---|
-| Merged on main | #278–#285 · **#287** · **#288** · brand icon refresh · iPad Screenshots · Magic Stars |
-| Production FE | **`42a4bce2`** live (brand icon) |
+| Merged on main | #278–#285 · **#287** · **#288** · **#289** (public email registration) · brand icon · iPad Screenshots · Magic Stars |
+| Production FE | **`42a4bce2`** live (brand icon) — registration code not deployed yet |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
-| **Exact next step** | PM: review **public email registration** PR → then Codemagic **App Store IPA** from approved `main` (icon + registration when activated) |
-| Then | ASC metadata/DSA → PM gate flip + 1.0 submit |
+| **Exact next step** | PM: authorize controlled **#289** production deploy via `PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` (SMTP + migration `028` + mode flip) |
+| Then | Codemagic **App Store IPA** from approved `main` → ASC metadata/DSA → PM gate flip + 1.0 submit |
 | Stop line | No public payment activation · no App Review until checklist green · registration stays closed until activation doc |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
