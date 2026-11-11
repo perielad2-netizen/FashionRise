@@ -1391,6 +1391,11 @@ export function useStudioEditor() {
     setMagicStatusHint(null)
   }, [])
 
+  /** Authoritative Stars balance after a billable Magic debit commits — never invent a local delta. */
+  const refreshStarsAfterBillableMagicSuccess = useCallback(() => {
+    void refreshUser()
+  }, [refreshUser])
+
   const applySettledMagicJob = useCallback(
     async (jobId: string, signal?: AbortSignal) => {
       const job = await recoverMagicJob(jobId, signal)
@@ -1412,8 +1417,10 @@ export function useStudioEditor() {
       }
       setMagicPhase('ready')
       setMagicError(null)
+      // Recovery of a completed paid job: refresh wallet so Create header matches ledger.
+      refreshStarsAfterBillableMagicSuccess()
     },
-    [user?.id],
+    [refreshStarsAfterBillableMagicSuccess, user?.id],
   )
 
   const referenceUrlForDocument = useCallback(
@@ -1676,6 +1683,8 @@ export function useStudioEditor() {
           )
         }
         setMagicPhase('ready')
+        // At least one side completed — server debit is committed; refresh Create header Stars.
+        refreshStarsAfterBillableMagicSuccess()
         return
       }
 
@@ -1717,7 +1726,7 @@ export function useStudioEditor() {
       })
       setMagicJobId(job.id)
       persistMagicJobId(user.id, job.id)
-      void refreshUser()
+      // Do not refresh Stars here — debit commits when the job completes, not at enqueue.
 
       setMagicPhase('polling')
       const settled = await settleMagicJobWithImage(job.id, controller.signal)
@@ -1733,6 +1742,7 @@ export function useStudioEditor() {
         setMagicLookUrl(settled.lookObjectUrl)
       }
       setMagicPhase('ready')
+      refreshStarsAfterBillableMagicSuccess()
     } catch (err) {
       if (controller.signal.aborted) {
         setMagicPhase('failed')
@@ -1763,6 +1773,7 @@ export function useStudioEditor() {
     activeSide,
     dualMagicEnabled,
     frontBackEnabled,
+    refreshStarsAfterBillableMagicSuccess,
     refreshUser,
     publishStudioNotice,
     referenceOpacity,
@@ -2976,8 +2987,11 @@ export function useStudioEditor() {
         setMagicLookUrl(primary.lookObjectUrl)
       }
       setMagicPhase('ready')
+      if (nextFront.phase === 'ready' || nextBack.phase === 'ready') {
+        refreshStarsAfterBillableMagicSuccess()
+      }
     },
-    [activeSide],
+    [activeSide, refreshStarsAfterBillableMagicSuccess],
   )
 
   const recoverLastMagic = useCallback(() => {
@@ -3263,6 +3277,7 @@ export function useStudioEditor() {
             }
           }
           setMagicPhase('ready')
+          if (!failed) refreshStarsAfterBillableMagicSuccess()
         } catch (err) {
           if (controller.signal.aborted) return
           const message = err instanceof Error ? err.message : 'Retry failed.'
@@ -3279,7 +3294,14 @@ export function useStudioEditor() {
         }
       })()
     },
-    [dualMagicEnabled, magicDualViewSide, magicOperationId, referenceUrlForDocument, user?.id],
+    [
+      dualMagicEnabled,
+      magicDualViewSide,
+      magicOperationId,
+      referenceUrlForDocument,
+      refreshStarsAfterBillableMagicSuccess,
+      user?.id,
+    ],
   )
 
   const backToSketchFromMagic = useCallback(() => {

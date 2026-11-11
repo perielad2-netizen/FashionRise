@@ -24,6 +24,7 @@ vi.mock('@/services/auth/AuthProvider', () => ({
   useAuth: () => ({
     user: { id: 'u1', username: 'demo' },
     logout: vi.fn(),
+    refreshUser: vi.fn(async () => undefined),
     isAuthenticated: true,
     bootstrapping: false,
   }),

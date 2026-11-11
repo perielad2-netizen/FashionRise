@@ -82,7 +82,9 @@ describe('AuthProvider account switching', () => {
     api.register.mockReset()
     api.restoreSession.mockReset()
     api.logoutLocal.mockReset()
+    api.fetchMe.mockReset()
     fabricCache.bindFabricCacheToUser.mockReset()
+    tokenStore.get.mockReset()
     tokenStore.get.mockReturnValue(null)
     api.restoreSession.mockResolvedValue(null)
   })
@@ -172,5 +174,154 @@ describe('AuthProvider account switching', () => {
     expect(api.logoutLocal).toHaveBeenCalled()
     expect(screen.getByTestId('user-id')).toHaveTextContent('none')
     expect(fabricCache.bindFabricCacheToUser).toHaveBeenCalledWith(null)
+  })
+
+  describe('refreshUser session identity (token value equality)', () => {
+    function RefreshProbe() {
+      const { user, refreshUser, logout, login } = useAuth()
+      return (
+        <div>
+          <div data-testid="user-id">{user?.id ?? 'none'}</div>
+          <div data-testid="stars">{user?.ai_stars ?? 'none'}</div>
+          <button type="button" onClick={() => void refreshUser()}>
+            refresh
+          </button>
+          <button type="button" onClick={() => logout()}>
+            logout
+          </button>
+          <button
+            type="button"
+            onClick={() => void login({ email: 'b@ex.com', password: 'pw' })}
+          >
+            login-b
+          </button>
+        </div>
+      )
+    }
+
+    /** Mimic real tokenStore.get(): new object instance every call, same values while session is alive. */
+    function installValueTokenStore(tokens: { accessToken: string; refreshToken: string } | null) {
+      let current = tokens
+      tokenStore.get.mockImplementation(() =>
+        current ? { accessToken: current.accessToken, refreshToken: current.refreshToken } : null,
+      )
+      return {
+        set: (next: { accessToken: string; refreshToken: string } | null) => {
+          current = next
+        },
+      }
+    }
+
+    it('accepts /me when tokenStore.get() returns fresh objects with the same token values', async () => {
+      const session = installValueTokenStore({ accessToken: 'tok-a', refreshToken: 'ref-a' })
+      void session
+      api.restoreSession.mockResolvedValue({ ...userA, ai_stars: 1_000_089 })
+      api.fetchMe.mockResolvedValue({ ...userA, ai_stars: 1_000_079 })
+
+      render(
+        <AuthProvider>
+          <RefreshProbe />
+        </AuthProvider>,
+      )
+      await waitFor(() => expect(screen.getByTestId('user-id')).toHaveTextContent('user-a'))
+      expect(screen.getByTestId('stars')).toHaveTextContent('1000089')
+
+      // Prove get() yields distinct object identities with identical values.
+      const a = tokenStore.get()
+      const b = tokenStore.get()
+      expect(a).not.toBe(b)
+      expect(a).toEqual(b)
+
+      await act(async () => {
+        screen.getByRole('button', { name: 'refresh' }).click()
+      })
+
+      await waitFor(() => expect(screen.getByTestId('stars')).toHaveTextContent('1000079'))
+      expect(screen.getByTestId('user-id')).toHaveTextContent('user-a')
+    })
+
+    it('rejects stale /me after logout during the request', async () => {
+      const session = installValueTokenStore({ accessToken: 'tok-a', refreshToken: 'ref-a' })
+      api.restoreSession.mockResolvedValue({ ...userA, ai_stars: 1_000_089 })
+
+      let resolveMe: (v: typeof userA & { ai_stars: number }) => void = () => {}
+      api.fetchMe.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveMe = resolve
+          }),
+      )
+
+      render(
+        <AuthProvider>
+          <RefreshProbe />
+        </AuthProvider>,
+      )
+      await waitFor(() => expect(screen.getByTestId('user-id')).toHaveTextContent('user-a'))
+
+      await act(async () => {
+        screen.getByRole('button', { name: 'refresh' }).click()
+      })
+
+      session.set(null)
+      await act(async () => {
+        screen.getByRole('button', { name: 'logout' }).click()
+      })
+      expect(screen.getByTestId('user-id')).toHaveTextContent('none')
+
+      await act(async () => {
+        resolveMe({ ...userA, ai_stars: 1_000_079 })
+      })
+
+      expect(screen.getByTestId('user-id')).toHaveTextContent('none')
+      expect(screen.getByTestId('stars')).toHaveTextContent('none')
+    })
+
+    it('rejects previous-account /me after account switch', async () => {
+      const session = installValueTokenStore({ accessToken: 'tok-a', refreshToken: 'ref-a' })
+      api.restoreSession.mockResolvedValue({ ...userA, ai_stars: 1_000_089 })
+
+      let resolveMe: (v: typeof userA & { ai_stars: number }) => void = () => {}
+      api.fetchMe.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveMe = resolve
+          }),
+      )
+      api.login.mockResolvedValue({
+        user: { ...userB, ai_stars: 50 },
+        tokens: {},
+      })
+
+      render(
+        <AuthProvider>
+          <RefreshProbe />
+        </AuthProvider>,
+      )
+      await waitFor(() => expect(screen.getByTestId('user-id')).toHaveTextContent('user-a'))
+      expect(screen.getByTestId('stars')).toHaveTextContent('1000089')
+
+      await act(async () => {
+        screen.getByRole('button', { name: 'refresh' }).click()
+      })
+
+      // Account switch replaces session tokens before the old /me resolves.
+      session.set({ accessToken: 'tok-b', refreshToken: 'ref-b' })
+      await act(async () => {
+        screen.getByRole('button', { name: 'login-b' }).click()
+      })
+      await waitFor(() => expect(screen.getByTestId('user-id')).toHaveTextContent('user-b'))
+      expect(screen.getByTestId('stars')).toHaveTextContent('50')
+
+      await act(async () => {
+        resolveMe({ ...userA, ai_stars: 1_000_079 })
+      })
+
+      // Previous account wallet must never paint onto the new session.
+      expect(screen.getByTestId('user-id')).toHaveTextContent('user-b')
+      expect(screen.getByTestId('stars')).toHaveTextContent('50')
+      expect(screen.getByTestId('stars')).not.toHaveTextContent('1000079')
+      expect(screen.getByTestId('stars')).not.toHaveTextContent('1000089')
+    })
   })
 })

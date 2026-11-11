@@ -88,9 +88,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshUser = useCallback(async () => {
-    if (!tokenStore.get()) return
+    const tokenAtStart = tokenStore.get()
+    if (!tokenAtStart) return
     try {
       const me = await fetchMe()
+      // Drop stale /me after logout or account switch — never paint another user's wallet.
+      // Compare token *values* (tokenStore.get() allocates a fresh object each call).
+      const tokenNow = tokenStore.get()
+      if (
+        !tokenNow ||
+        tokenNow.accessToken !== tokenAtStart.accessToken ||
+        tokenNow.refreshToken !== tokenAtStart.refreshToken
+      ) {
+        return
+      }
       bindFabricCacheToUser(me.id)
       setUser(me)
     } catch {
