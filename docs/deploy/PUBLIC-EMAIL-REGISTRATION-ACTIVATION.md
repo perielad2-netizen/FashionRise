@@ -44,10 +44,11 @@ Status payload reports the exact prerequisite when public cannot activate.
 
 | Stage | Status | Notes |
 |---|---|---|
-| **1 — BE foundation** | **DONE 2026-11-11** | Deployed `ba619985…` · Alembic **028** · backup `public-reg-stage1-20261111T190454Z` |
-| **2 — Nginx + visitor IP** | **DONE 2026-11-11** | Cloudflare `real_ip` · register/status/verify/resend allowlisted · `TRUST_PROXY_HEADERS=true` · rollback `public-reg-activate-20261111T191438Z` |
-| **3 — FE deploy** | **DONE 2026-11-11** | `/var/www/fashionrise/releases/public-reg-activate-c0a942ef` · prior `42a4bce2` preserved |
-| **4 — SMTP + public mode** | **BLOCKED** | No `SMTP_*` on VPS. Keep `REGISTRATION_MODE=closed` until owner configures SMTP, then set `public` + restart API |
+| **1 — BE foundation** | **DONE** | Alembic **028** · backup `public-reg-stage1-20261111T190454Z` |
+| **2 — Nginx + visitor IP** | **DONE** | Cloudflare `real_ip` · register/status/verify/resend · `TRUST_PROXY_HEADERS=true` |
+| **3 — Immediate public registration** | **LIVE** | `REGISTRATION_MODE=public` · `EMAIL_VERIFICATION_REQUIRED=false` · Create Account → session (no SMTP) |
+
+**Product default:** email verification is **off**. Set `EMAIL_VERIFICATION_REQUIRED=true` (+ SMTP) only if ownership proof is re-enabled later.
 
 ## Exact safe production activation steps (ordered)
 

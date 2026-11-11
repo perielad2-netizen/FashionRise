@@ -19,8 +19,33 @@ from tests.auth_test_helpers import register_with_invite
 
 @pytest.fixture
 def public_mode(monkeypatch):
-    # Capture requires TESTING=true AND ENVIRONMENT != production.
+    """Product default: public registration without email verification / SMTP."""
     monkeypatch.setenv("REGISTRATION_MODE", "public")
+    monkeypatch.setenv("EMAIL_VERIFICATION_REQUIRED", "false")
+    monkeypatch.setenv("TESTING", "true")
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://fashionrise.app")
+    get_settings.cache_clear()
+    email_delivery.clear_captured_emails()
+    email_verification.clear_resend_cooldowns()
+    try:
+        yield
+    finally:
+        monkeypatch.delenv("REGISTRATION_MODE", raising=False)
+        monkeypatch.delenv("EMAIL_VERIFICATION_REQUIRED", raising=False)
+        monkeypatch.setenv("REGISTRATION_ENABLED", "true")
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv("TESTING", "true")
+        get_settings.cache_clear()
+        email_delivery.clear_captured_emails()
+        email_verification.clear_resend_cooldowns()
+
+
+@pytest.fixture
+def public_mode_verify(monkeypatch):
+    """Optional future path: public + EMAIL_VERIFICATION_REQUIRED with capture mail."""
+    monkeypatch.setenv("REGISTRATION_MODE", "public")
+    monkeypatch.setenv("EMAIL_VERIFICATION_REQUIRED", "true")
     monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "capture")
     monkeypatch.setenv("TESTING", "true")
     monkeypatch.setenv("ENVIRONMENT", "staging")
@@ -33,6 +58,7 @@ def public_mode(monkeypatch):
         yield
     finally:
         monkeypatch.delenv("REGISTRATION_MODE", raising=False)
+        monkeypatch.delenv("EMAIL_VERIFICATION_REQUIRED", raising=False)
         monkeypatch.setenv("REGISTRATION_ENABLED", "true")
         monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "smtp")
         monkeypatch.setenv("ENVIRONMENT", "production")
@@ -101,8 +127,44 @@ def test_registration_status_invite_only(client, monkeypatch):
         get_settings.cache_clear()
 
 
-def test_public_mode_without_smtp_stays_closed(client, monkeypatch):
+def test_public_mode_without_smtp_works_when_verification_off(client, monkeypatch):
     monkeypatch.setenv("REGISTRATION_MODE", "public")
+    monkeypatch.setenv("EMAIL_VERIFICATION_REQUIRED", "false")
+    monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "smtp")
+    monkeypatch.setenv("SMTP_HOST", "")
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "")
+    get_settings.cache_clear()
+    try:
+        status = client.get("/api/v1/auth/registration/status").json()
+        assert status["configured_mode"] == "public"
+        assert status["mode"] == "public"
+        assert status["registration_available"] is True
+        assert status["requires_email_verification"] is False
+        assert status["prerequisite"] is None
+
+        r = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "nosmtp@example.com",
+                "username": "nosmtp_user",
+                "password": "StrongPass123!",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "authenticated"
+        assert body["access_token"]
+        assert body["refresh_token"]
+    finally:
+        monkeypatch.delenv("REGISTRATION_MODE", raising=False)
+        monkeypatch.delenv("EMAIL_VERIFICATION_REQUIRED", raising=False)
+        monkeypatch.setenv("REGISTRATION_ENABLED", "true")
+        get_settings.cache_clear()
+
+
+def test_public_mode_with_verification_requires_smtp(client, monkeypatch):
+    monkeypatch.setenv("REGISTRATION_MODE", "public")
+    monkeypatch.setenv("EMAIL_VERIFICATION_REQUIRED", "true")
     monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "smtp")
     monkeypatch.setenv("SMTP_HOST", "")
     monkeypatch.setenv("SMTP_FROM_EMAIL", "")
@@ -113,27 +175,26 @@ def test_public_mode_without_smtp_stays_closed(client, monkeypatch):
         assert status["mode"] == "closed"
         assert status["registration_available"] is False
         assert status["prerequisite"]
-        assert "SMTP_HOST" in status["prerequisite"]
-
         r = client.post(
             "/api/v1/auth/register",
             json={
-                "email": "nosmtp@example.com",
-                "username": "nosmtp_user",
+                "email": "needsmtp@example.com",
+                "username": "needsmtp",
                 "password": "StrongPass123!",
             },
         )
         assert r.status_code == 403
     finally:
         monkeypatch.delenv("REGISTRATION_MODE", raising=False)
+        monkeypatch.delenv("EMAIL_VERIFICATION_REQUIRED", raising=False)
         monkeypatch.setenv("REGISTRATION_ENABLED", "true")
         get_settings.cache_clear()
 
 
-def test_public_registration_success_and_verify(client, db_session, public_mode):
+def test_public_registration_immediate_session(client, db_session, public_mode):
     status = client.get("/api/v1/auth/registration/status").json()
     assert status["mode"] == "public"
-    assert status["requires_email_verification"] is True
+    assert status["requires_email_verification"] is False
 
     r = client.post(
         "/api/v1/auth/register",
@@ -146,26 +207,70 @@ def test_public_registration_success_and_verify(client, db_session, public_mode)
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["status"] == "verification_pending"
-    assert body["access_token"] is None
+    assert body["status"] == "authenticated"
+    assert body["access_token"]
+    assert body["refresh_token"]
     assert body["email"] == "public.user@example.com"
+    assert email_delivery.captured_emails() == []
 
     user = db_session.scalar(select(User).where(User.email == "public.user@example.com"))
+    assert user is not None
+    assert user.email_verified is True
+    assert user.is_admin is False
+    assert user.ai_stars_unlimited is False
+    assert user.ai_stars == get_settings().ai_stars_starting_balance
+
+    me = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {body['access_token']}"},
+    )
+    assert me.status_code == 200
+    assert me.json()["email"] == "public.user@example.com"
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "public.user@example.com", "password": "StrongPass123!"},
+    )
+    assert login.status_code == 200
+    assert login.json()["access_token"]
+
+
+def test_public_registration_success_and_verify(client, db_session, public_mode_verify):
+    status = client.get("/api/v1/auth/registration/status").json()
+    assert status["mode"] == "public"
+    assert status["requires_email_verification"] is True
+
+    r = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "Verify.User@Example.com",
+            "username": "verify_user",
+            "password": "StrongPass123!",
+            "display_name": "Verify User",
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "verification_pending"
+    assert body["access_token"] is None
+    assert body["email"] == "verify.user@example.com"
+
+    user = db_session.scalar(select(User).where(User.email == "verify.user@example.com"))
     assert user is not None
     assert user.email_verified is False
     assert user.is_admin is False
     assert user.ai_stars_unlimited is False
     assert user.ai_stars == get_settings().ai_stars_starting_balance
 
-    # Unverified must not login or receive tokens.
+    # Unverified must not login or receive tokens when verification is required.
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": "public.user@example.com", "password": "StrongPass123!"},
+        json={"email": "verify.user@example.com", "password": "StrongPass123!"},
     )
     assert login.status_code == 401
     assert "not verified" in login.json()["detail"]["message"].lower()
 
-    raw = _token_from_captured("public.user@example.com")
+    raw = _token_from_captured("verify.user@example.com")
     # Captured body must not be logged elsewhere; ensure token is single-use.
     verify = client.post("/api/v1/auth/verify-email", json={"token": raw})
     assert verify.status_code == 200, verify.text
@@ -181,7 +286,7 @@ def test_public_registration_success_and_verify(client, db_session, public_mode)
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert me.status_code == 200
-    assert me.json()["email"] == "public.user@example.com"
+    assert me.json()["email"] == "verify.user@example.com"
     assert me.json()["is_admin"] is False
 
     reuse = client.post("/api/v1/auth/verify-email", json={"token": raw})
@@ -190,12 +295,12 @@ def test_public_registration_success_and_verify(client, db_session, public_mode)
     # Password login works after verification.
     again = client.post(
         "/api/v1/auth/login",
-        json={"email": "public.user@example.com", "password": "StrongPass123!"},
+        json={"email": "verify.user@example.com", "password": "StrongPass123!"},
     )
     assert again.status_code == 200
 
 
-def test_public_resend_verification(client, db_session, public_mode, monkeypatch):
+def test_public_resend_verification(client, db_session, public_mode_verify, monkeypatch):
     monkeypatch.setenv("EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS", "0")
     get_settings.cache_clear()
 
@@ -376,7 +481,7 @@ def test_public_concurrent_duplicate_email(engine, public_mode):
             ).all()
         )
         assert len(users) == 1
-        assert users[0].email_verified is False
+        assert users[0].email_verified is True
         assert users[0].is_admin is False
         assert users[0].ai_stars_unlimited is False
     finally:
@@ -393,10 +498,11 @@ def test_public_does_not_require_invitation_code(client, public_mode):
         },
     )
     assert r.status_code == 200
-    assert r.json()["status"] == "verification_pending"
+    assert r.json()["status"] == "authenticated"
+    assert r.json()["access_token"]
 
 
-def test_verify_url_uses_fragment_not_query(client, public_mode):
+def test_verify_url_uses_fragment_not_query(client, public_mode_verify):
     client.post(
         "/api/v1/auth/register",
         json={
@@ -417,7 +523,7 @@ def test_verify_url_uses_fragment_not_query(client, public_mode):
     assert "Opening the page alone does not verify" in msg.body_text
 
 
-def test_concurrent_verification_token_redemption(engine, public_mode):
+def test_concurrent_verification_token_redemption(engine, public_mode_verify):
     """Exactly one concurrent redemption of the same token may authenticate."""
     from app.core.errors import AppError, UnauthorizedError, ValidationAppError
     from app.schemas.auth import UserRegister
@@ -481,7 +587,7 @@ def test_concurrent_verification_token_redemption(engine, public_mode):
         session.close()
 
 
-def test_concurrent_verify_versus_resend(engine, public_mode, monkeypatch):
+def test_concurrent_verify_versus_resend(engine, public_mode_verify, monkeypatch):
     """User→token lock order: verify vs resend must not deadlock; exactly one redeem path."""
     from app.core.errors import UnauthorizedError
     from app.models.email_verification_token import EmailVerificationToken
@@ -594,7 +700,7 @@ def test_concurrent_verify_versus_resend(engine, public_mode, monkeypatch):
         session.close()
 
 
-def test_concurrent_resend_does_not_stampede(engine, public_mode, monkeypatch):
+def test_concurrent_resend_does_not_stampede(engine, public_mode_verify, monkeypatch):
     from app.schemas.auth import UserRegister
     from app.services import auth_service
 
@@ -642,6 +748,7 @@ def test_concurrent_resend_does_not_stampede(engine, public_mode, monkeypatch):
 
 def test_capture_backend_rejected_outside_tests(monkeypatch):
     monkeypatch.setenv("REGISTRATION_MODE", "public")
+    monkeypatch.setenv("EMAIL_VERIFICATION_REQUIRED", "true")
     monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "capture")
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("ENVIRONMENT", "staging")
@@ -668,12 +775,14 @@ def test_capture_backend_rejected_outside_tests(monkeypatch):
         monkeypatch.setenv("TESTING", "true")
         monkeypatch.setenv("ENVIRONMENT", "production")
         monkeypatch.delenv("REGISTRATION_MODE", raising=False)
+        monkeypatch.delenv("EMAIL_VERIFICATION_REQUIRED", raising=False)
         get_settings.cache_clear()
 
 
 def test_capture_rejected_when_testing_true_but_environment_production(client, monkeypatch):
-    """PM guard: capture must not satisfy public registration in production even with TESTING=true."""
+    """PM guard: capture must not satisfy verification-required public mode in production."""
     monkeypatch.setenv("REGISTRATION_MODE", "public")
+    monkeypatch.setenv("EMAIL_VERIFICATION_REQUIRED", "true")
     monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "capture")
     monkeypatch.setenv("TESTING", "true")
     monkeypatch.setenv("ENVIRONMENT", "production")
@@ -712,6 +821,7 @@ def test_capture_rejected_when_testing_true_but_environment_production(client, m
         assert email_delivery.captured_emails() == []
     finally:
         monkeypatch.delenv("REGISTRATION_MODE", raising=False)
+        monkeypatch.delenv("EMAIL_VERIFICATION_REQUIRED", raising=False)
         monkeypatch.setenv("TESTING", "true")
         monkeypatch.setenv("ENVIRONMENT", "production")
         get_settings.cache_clear()
@@ -720,6 +830,7 @@ def test_capture_rejected_when_testing_true_but_environment_production(client, m
 
 def test_authenticated_smtp_without_tls_rejected(monkeypatch):
     monkeypatch.setenv("REGISTRATION_MODE", "public")
+    monkeypatch.setenv("EMAIL_VERIFICATION_REQUIRED", "true")
     monkeypatch.setenv("EMAIL_DELIVERY_BACKEND", "smtp")
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("SMTP_FROM_EMAIL", "noreply@fashionrise.app")
@@ -734,6 +845,7 @@ def test_authenticated_smtp_without_tls_rejected(monkeypatch):
         assert "encrypted" in (s.registration_public_prerequisite() or "").lower()
     finally:
         monkeypatch.delenv("REGISTRATION_MODE", raising=False)
+        monkeypatch.delenv("EMAIL_VERIFICATION_REQUIRED", raising=False)
         monkeypatch.delenv("SMTP_USERNAME", raising=False)
         monkeypatch.delenv("SMTP_PASSWORD", raising=False)
         monkeypatch.setenv("SMTP_USE_TLS", "true")
@@ -741,7 +853,7 @@ def test_authenticated_smtp_without_tls_rejected(monkeypatch):
 
 
 def test_smtp_failure_after_commit_leaves_recoverable_account(
-    client, db_session, public_mode, monkeypatch
+    client, db_session, public_mode_verify, monkeypatch
 ):
     """If delivery fails after commit, the user can resend — no stranded credentials."""
     from app.core.errors import ServiceUnavailableError
