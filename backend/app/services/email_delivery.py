@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+import ssl
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from typing import Any
@@ -54,6 +55,11 @@ def send_email(*, to_email: str, subject: str, body_text: str, meta: dict[str, A
     settings = get_settings()
     backend = (settings.email_delivery_backend or "smtp").strip().lower()
     if backend == "capture":
+        # Never allow capture outside automated tests (production must use SMTP).
+        if not settings.testing:
+            raise ServiceUnavailableError(
+                "EMAIL_DELIVERY_BACKEND=capture is not allowed outside automated tests"
+            )
         _CAPTURED.append(
             CapturedEmail(
                 to_email=to_email,
@@ -67,27 +73,38 @@ def send_email(*, to_email: str, subject: str, body_text: str, meta: dict[str, A
 
     if not settings.email_delivery_configured():
         raise ServiceUnavailableError(
-            "Email delivery is not configured (SMTP_HOST and SMTP_FROM_EMAIL required)"
+            settings.registration_public_prerequisite()
+            or "Email delivery is not configured (SMTP_HOST and SMTP_FROM_EMAIL required)"
         )
 
     msg = _build_message(to_email=to_email, subject=subject, body_text=body_text)
     host = settings.smtp_host.strip()
     port = int(settings.smtp_port)
+    user = (settings.smtp_username or "").strip()
+    password = settings.smtp_password or ""
+
     try:
-        if settings.smtp_use_tls:
+        if port == 465:
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(host, port, timeout=30, context=context) as smtp:
+                if user:
+                    smtp.login(user, password)
+                smtp.send_message(msg)
+        elif settings.smtp_use_tls:
             with smtplib.SMTP(host, port, timeout=30) as smtp:
                 smtp.ehlo()
-                smtp.starttls()
+                smtp.starttls(context=ssl.create_default_context())
                 smtp.ehlo()
-                user = (settings.smtp_username or "").strip()
                 if user:
-                    smtp.login(user, settings.smtp_password or "")
+                    smtp.login(user, password)
                 smtp.send_message(msg)
         else:
+            # Unauthenticated plaintext only (local relays). Auth without TLS is refused above.
+            if user:
+                raise ServiceUnavailableError(
+                    "Authenticated SMTP requires SMTP_USE_TLS=true or port 465"
+                )
             with smtplib.SMTP(host, port, timeout=30) as smtp:
-                user = (settings.smtp_username or "").strip()
-                if user:
-                    smtp.login(user, settings.smtp_password or "")
                 smtp.send_message(msg)
     except OSError as exc:
         _log.warning("smtp_send_failed to=%s err=%s", to_email, type(exc).__name__)
@@ -103,9 +120,10 @@ def send_verification_email(*, to_email: str, verify_url: str) -> None:
     subject = "Verify your FashionRise account"
     body = (
         "Welcome to FashionRise.\n\n"
-        "Confirm your email address to finish creating your account:\n"
+        "Open this link, then confirm on the page to finish creating your account:\n"
         f"{verify_url}\n\n"
-        "This link expires soon and can be used only once. "
+        "The link expires soon and can be used only once. "
+        "Opening the page alone does not verify your email — you must confirm in the app. "
         "If you did not create a FashionRise account, you can ignore this message.\n"
     )
     # Meta must never include the raw token — only a non-sensitive kind tag.

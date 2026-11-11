@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -24,6 +25,8 @@ from app.schemas.auth import (
     UserRegister,
 )
 from app.services import ai_stars, email_verification, invitation_service
+
+_log = logging.getLogger(__name__)
 
 
 def _normalize_email(email: str) -> str:
@@ -211,6 +214,7 @@ def _register_public(
         user.ai_stars_unlimited = False
     db.add(user)
 
+    raw_token: str | None = None
     try:
         db.flush()
         profile = UserProfile(
@@ -222,7 +226,10 @@ def _register_public(
             ),
         )
         db.add(profile)
-        email_verification.mint_and_send_verification(db, user)
+        # Commit user + verification token before sending mail so a delivery
+        # failure never leaves an emailed link without a recoverable account,
+        # and a post-send commit failure cannot strand credentials.
+        raw_token = email_verification.mint_verification_token(db, user)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -234,13 +241,28 @@ def _register_public(
         db.rollback()
         raise
 
+    delivery_note = (
+        "Check your email to verify your account before signing in. "
+        "Open the link, then confirm on the page — opening alone does not verify."
+    )
+    try:
+        assert raw_token is not None
+        email_verification.send_verification_for_raw_token(
+            to_email=email_norm,
+            raw_token=raw_token,
+        )
+    except Exception:
+        # Account + token already committed; resend recovers after cooldown.
+        _log.warning("public_register_verification_email_deferred")
+        delivery_note = (
+            "Your account was created, but the verification email could not be sent yet. "
+            "Use Resend verification from the registration page, then confirm the link."
+        )
+
     return RegisterResponse(
         status="verification_pending",
         email=email_norm,
-        message=(
-            "Check your email to verify your account before signing in. "
-            "We sent a one-time verification link."
-        ),
+        message=delivery_note,
     )
 
 

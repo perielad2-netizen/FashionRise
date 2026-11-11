@@ -19,9 +19,6 @@ from app.services import email_delivery
 
 _log = logging.getLogger(__name__)
 
-# In-process last-resend timestamps keyed by normalized email (abuse soft-limit).
-_LAST_RESEND_AT: dict[str, float] = {}
-
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -32,14 +29,25 @@ def _hash_token(raw: str) -> str:
 
 
 def clear_resend_cooldowns() -> None:
-    _LAST_RESEND_AT.clear()
+    """No-op retained for tests that cleared the former in-process map."""
+    return None
 
 
-def mint_and_send_verification(db: Session, user: User) -> None:
-    """Invalidate prior unused tokens, mint a new one, and send the email."""
+def build_verify_url(raw_token: str) -> str:
+    """SPA handoff via URL fragment so the token never hits server access logs."""
+    settings = get_settings()
+    app_url = (settings.public_app_url or "https://fashionrise.app").rstrip("/")
+    # Fragment is not sent to Nginx/API. SPA reads hash, clears history, POSTs body.
+    return f"{app_url}/verify-email#token={quote(raw_token, safe='')}"
+
+
+def mint_verification_token(db: Session, user: User) -> str:
+    """Invalidate prior unused tokens and mint a new one. Returns plaintext once.
+
+    Caller must commit (or flush) before sending email. Does not send mail.
+    """
     settings = get_settings()
     now = _now()
-    # Expire outstanding unused tokens for this user (single active challenge).
     db.execute(
         update(EmailVerificationToken)
         .where(
@@ -58,49 +66,77 @@ def mint_and_send_verification(db: Session, user: User) -> None:
         expires_at=now + timedelta(minutes=ttl),
     )
     db.add(row)
+    user.email_verification_last_sent_at = now
+    db.add(user)
     db.flush()
+    return raw
 
-    app_url = (settings.public_app_url or "https://fashionrise.app").rstrip("/")
-    # Token only in query for the SPA verify page — never logged here.
-    verify_url = f"{app_url}/verify-email?token={quote(raw, safe='')}"
-    email_delivery.send_verification_email(to_email=user.email, verify_url=verify_url)
-    _log.info("email_verification_sent user_id=%s", user.id)
+
+def send_verification_for_raw_token(*, to_email: str, raw_token: str) -> None:
+    email_delivery.send_verification_email(
+        to_email=to_email,
+        verify_url=build_verify_url(raw_token),
+    )
+    _log.info("email_verification_sent")
+
+
+def mint_and_send_verification(db: Session, user: User) -> str:
+    """Mint token (flush) and send email. Prefer commit-then-send at call sites."""
+    raw = mint_verification_token(db, user)
+    send_verification_for_raw_token(to_email=user.email, raw_token=raw)
+    return raw
 
 
 def verify_email_token(db: Session, raw_token: str) -> User:
+    """Atomically redeem a single-use token (conditional UPDATE … WHERE used_at IS NULL)."""
     raw = (raw_token or "").strip()
     if len(raw) < 16 or len(raw) > 200:
         raise ValidationAppError("Invalid verification link")
 
     digest = _hash_token(raw)
-    row = db.scalar(
-        select(EmailVerificationToken).where(EmailVerificationToken.token_hash == digest)
-    )
-    if row is None:
-        raise UnauthorizedError("Invalid or expired verification link")
-    if row.used_at is not None:
-        raise UnauthorizedError("Verification link already used")
-    exp = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=UTC)
-    if exp < _now():
+    now = _now()
+
+    # Atomic claim — concurrent redemptions: exactly one UPDATE wins.
+    claimed = db.execute(
+        update(EmailVerificationToken)
+        .where(
+            EmailVerificationToken.token_hash == digest,
+            EmailVerificationToken.used_at.is_(None),
+            EmailVerificationToken.expires_at >= now,
+        )
+        .values(used_at=now)
+        .returning(
+            EmailVerificationToken.id,
+            EmailVerificationToken.user_id,
+        )
+    ).first()
+
+    if claimed is None:
+        existing = db.scalar(
+            select(EmailVerificationToken).where(EmailVerificationToken.token_hash == digest)
+        )
+        if existing is None:
+            raise UnauthorizedError("Invalid or expired verification link")
+        if existing.used_at is not None:
+            raise UnauthorizedError("Verification link already used")
         raise UnauthorizedError("Verification link expired")
 
-    user = db.get(User, row.user_id)
+    token_id, user_id = claimed
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
     if user is None or not user.is_active:
         raise UnauthorizedError("Account unavailable")
 
-    row.used_at = _now()
     user.email_verified = True
-    db.add(row)
     db.add(user)
     # Invalidate any other outstanding tokens for this user.
     db.execute(
         update(EmailVerificationToken)
         .where(
             EmailVerificationToken.user_id == user.id,
-            EmailVerificationToken.id != row.id,
+            EmailVerificationToken.id != token_id,
             EmailVerificationToken.used_at.is_(None),
         )
-        .values(used_at=_now())
+        .values(used_at=now)
     )
     db.commit()
     db.refresh(user)
@@ -111,8 +147,9 @@ def verify_email_token(db: Session, raw_token: str) -> User:
 def resend_verification(db: Session, email: str) -> None:
     """Resend verification for an unverified account.
 
-    Always succeeds from the caller's perspective when the email format is valid —
-    do not reveal whether the account exists.
+    Persistent cooldown uses ``users.email_verification_last_sent_at`` under
+    ``SELECT … FOR UPDATE`` so concurrent resends cannot stampede.
+    Always returns success when the email format is valid (no account oracle).
     """
     from app.services import invitation_service
 
@@ -122,24 +159,36 @@ def resend_verification(db: Session, email: str) -> None:
 
     settings = get_settings()
     cooldown = max(0, int(settings.email_verification_resend_cooldown_seconds))
-    import time
+    now = _now()
 
-    now_ts = time.time()
-    last = _LAST_RESEND_AT.get(email_norm)
-    if last is not None and cooldown > 0 and (now_ts - last) < cooldown:
-        # Soft cooldown — same opaque success response.
-        _log.info("email_verification_resend_cooldown email_present=1")
-        return
-
-    user = db.scalar(select(User).where(User.email == email_norm))
+    user = db.scalar(
+        select(User).where(User.email == email_norm).with_for_update()
+    )
     if user is None or user.email_verified or not user.is_active:
-        _LAST_RESEND_AT[email_norm] = now_ts
+        # Opaque success — do not reveal account existence.
+        db.commit()
         return
 
+    last = user.email_verification_last_sent_at
+    if last is not None and cooldown > 0:
+        last_aware = last if last.tzinfo else last.replace(tzinfo=UTC)
+        if (now - last_aware).total_seconds() < cooldown:
+            _log.info("email_verification_resend_cooldown")
+            db.commit()
+            return
+
+    # Reserve the cooldown slot under the row lock before releasing the transaction.
+    raw = mint_verification_token(db, user)
     try:
-        mint_and_send_verification(db, user)
         db.commit()
     except Exception:
         db.rollback()
         raise
-    _LAST_RESEND_AT[email_norm] = now_ts
+
+    # Send after commit so a delivery failure does not roll back the token / cooldown.
+    try:
+        send_verification_for_raw_token(to_email=user.email, raw_token=raw)
+    except Exception:
+        # Account + token remain; caller gets opaque 204. User can retry after cooldown.
+        _log.warning("email_verification_resend_delivery_failed")
+        return

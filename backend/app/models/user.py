@@ -44,6 +44,10 @@ class User(Base):
     email_verified: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False, server_default="false"
     )
+    # Persistent resend throttle for public email verification (UTC).
+    email_verification_last_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # AI Stars wallet — spend gate for Magic / future AI features.
     ai_stars: Mapped[int] = mapped_column(Integer, default=10, nullable=False, server_default="10")
     # Outstanding Apple IAP refund liability (Stars already spent that Apple refunded).

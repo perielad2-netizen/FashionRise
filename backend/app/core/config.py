@@ -341,13 +341,30 @@ class Settings(BaseSettings):
         return max(1, self.max_croquis_upload_size_mb) * 1024 * 1024
 
     def email_delivery_configured(self) -> bool:
-        """True when verification mail can be sent (or captured in tests)."""
+        """True when verification mail can be sent for the current environment.
+
+        ``capture`` is test-only and never satisfies public registration in
+        production (``ENVIRONMENT=production``), even if ``TESTING=true``.
+        Authenticated SMTP requires encrypted transport (STARTTLS or implicit TLS).
+        """
         backend = (self.email_delivery_backend or "smtp").strip().lower()
         if backend == "capture":
-            return True
+            # Capture is pytest-only. Production processes (testing=false) never qualify.
+            return bool(self.testing)
         host = (self.smtp_host or "").strip()
         from_addr = (self.smtp_from_email or "").strip()
-        return bool(host and from_addr)
+        if not (host and from_addr):
+            return False
+        user = (self.smtp_username or "").strip()
+        if user:
+            # Authenticated SMTP must use encrypted transport.
+            if self.smtp_use_tls:
+                return True
+            # Implicit TLS (SMTPS) on 465 is acceptable without STARTTLS flag.
+            if int(self.smtp_port) == 465:
+                return True
+            return False
+        return True
 
     def configured_registration_mode(self) -> Literal["closed", "invite_only", "public"]:
         if self.registration_mode is not None:
@@ -366,9 +383,22 @@ class Settings(BaseSettings):
             return None
         if self.email_delivery_configured():
             return None
+        backend = (self.email_delivery_backend or "smtp").strip().lower()
+        if backend == "capture":
+            return (
+                "PUBLIC registration rejects EMAIL_DELIVERY_BACKEND=capture outside automated "
+                "tests. Set EMAIL_DELIVERY_BACKEND=smtp with SMTP_HOST, SMTP_FROM_EMAIL, and "
+                "encrypted transport (SMTP_USE_TLS=true or port 465) when using SMTP auth."
+            )
+        user = (self.smtp_username or "").strip()
+        if user and not self.smtp_use_tls and int(self.smtp_port) != 465:
+            return (
+                "PUBLIC registration requires encrypted SMTP for authenticated relays: "
+                "set SMTP_USE_TLS=true (STARTTLS) or use port 465 (SMTPS)."
+            )
         return (
             "PUBLIC registration requires email delivery: set EMAIL_DELIVERY_BACKEND=smtp "
-            "with SMTP_HOST and SMTP_FROM_EMAIL (and credentials as needed), "
+            "with SMTP_HOST and SMTP_FROM_EMAIL (and credentials + TLS as needed), "
             "then restart the API. Until then effective mode remains closed."
         )
 

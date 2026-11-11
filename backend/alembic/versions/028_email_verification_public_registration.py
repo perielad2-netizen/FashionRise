@@ -4,7 +4,8 @@ Revision ID: 028
 Revises: 027
 Create Date: 2026-11-11
 
-Adds users.email_verified (existing accounts backfilled verified) and
+Adds users.email_verified (existing accounts backfilled verified),
+users.email_verification_last_sent_at (persistent resend throttle), and
 email_verification_tokens for short-lived single-use ownership proofs.
 """
 
@@ -34,6 +35,11 @@ def upgrade() -> None:
     )
     # Preserve access for every account that already existed before public registration.
     op.execute(sa.text("UPDATE users SET email_verified = true"))
+
+    op.add_column(
+        "users",
+        sa.Column("email_verification_last_sent_at", sa.DateTime(timezone=True), nullable=True),
+    )
 
     op.create_table(
         "email_verification_tokens",
@@ -76,4 +82,5 @@ def downgrade() -> None:
         table_name="email_verification_tokens",
     )
     op.drop_table("email_verification_tokens")
+    op.drop_column("users", "email_verification_last_sent_at")
     op.drop_column("users", "email_verified")

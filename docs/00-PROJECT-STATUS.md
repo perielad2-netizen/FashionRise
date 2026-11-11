@@ -3,23 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**Public email registration PR ready for PM** · modes `closed` / `invite_only` / `public` · email verification · **no merge/deploy** · IAP gates **OFF** · Home logo untouched · App Store build **125** untouched.)
+**Last updated:** 2026-11-11 (**PR #289 security hardening amendment** · fragment verify + confirm · atomic redeem · persistent resend · capture rejected outside tests · **no merge/deploy** · IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Public email registration (2026-11-11) — PR READY · AWAITING PM
+## Public email registration (2026-11-11) — PR #289 · SECURITY HARDENING · AWAITING PM
 
 | Status | Detail |
 |---|---|
-| Branch | `cursor/web-public-email-register-77c6` |
-| Modes | `REGISTRATION_MODE=closed\|invite_only\|public` (default closed; legacy `REGISTRATION_ENABLED` maps to closed/invite_only) |
-| Public flow | Register → verification email (SMTP) → `/verify-email` → session; unverified cannot login |
-| FE | Login **Don't have an account? Create Account** when `/auth/registration/status` says available; RegisterPage public vs invite; login logo unchanged |
-| Security | Hashed single-use tokens · SlowAPI limits · resend cooldown · no admin/unlimited on public create · Google/invite verified |
-| Migration | **`028`** — `users.email_verified` (existing → true) + `email_verification_tokens` |
-| Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` — SMTP required before public is effective |
+| Branch | `cursor/web-public-email-register-77c6` · PR **#289** |
+| Modes | `REGISTRATION_MODE=closed\|invite_only\|public` (default closed) |
+| Public flow | Register → SMTP email with **`#token=` fragment** → Confirm email (no auto-consume) → session |
+| Hardening | Atomic single-use redeem · DB resend throttle (`email_verification_last_sent_at` + `FOR UPDATE`) · commit-then-send · capture rejected when `TESTING=false` · authenticated SMTP requires TLS/465 |
+| Rate limits | SlowAPI + `client_ip_key`; production needs Nginx Option B + `TRUST_PROXY_HEADERS=true` for per-visitor buckets |
+| Migration | **`028`** validated via disposable `alembic upgrade 028` smoke |
+| Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` |
 | Stop line | **No merge · no production deploy · no mode flip · no Codemagic · no IAP · no App Review** |
-| **Exact next step (PM)** | Review PR → approve merge → follow activation doc (backup → migrate 028 → SMTP → `REGISTRATION_MODE=public`) |
+| **Exact next step (PM)** | Re-review #289 HEAD → approve merge → activation doc |
 
 ## Brand icon refresh (2026-11-11) — #288 MERGED · FE LIVE
 
