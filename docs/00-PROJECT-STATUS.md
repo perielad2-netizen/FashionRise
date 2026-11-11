@@ -3,20 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**PR #285 PM hardening** · hardwired VNC helpers + `fr-ipad-finish` + 13″ size check · public IAP gates **OFF** · **no Codemagic start**.)
+**Last updated:** 2026-11-11 (**PR #285 MERGED** `385a2215` · iPad Screenshots Codemagic workflow on main · public IAP gates **OFF** · **Codemagic not started**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## iPad App Store screenshots via Codemagic (2026-11-11) — PR #285 HARDENING
+## iPad App Store screenshots via Codemagic (2026-11-11) — #285 MERGED
 
 | Status | Detail |
 |---|---|
-| Decision | Keep **iPhone + iPad** (`TARGETED_DEVICE_FAMILY=1,2`) |
-| Workflow | **FashionRise iPad Screenshots** — manual + VNC |
-| Hardening | Hardwired UDID/out-dir in `~/bin/fr-ipad-shot` · explicit `simctl io <udid>` · **`fr-ipad-finish`** ends successfully · boot smoke fails loud · Apple 13″ sizes only (2064×2752 / 2048×2732 ± landscape) |
-| Docs | `docs/deploy/IPAD-SCREENSHOTS-CODEMAGIC.md` (finish → Artifacts; do not cancel) |
-| Safety | No IPA/ASC/IAP changes · production API from `.env.native` |
-| Stop line | Wait PM merge · do not start Codemagic yet |
+| Approved HEAD | `b61ddff8efe119868d7617898539216cd3b2c289` (unchanged at merge) |
+| Merge | Squash **#285** → `main` **`385a2215b94d2195ddcd36d4aaf9e57cc5d8b73e`** |
+| Device family | **iPhone + iPad** remains (`TARGETED_DEVICE_FAMILY=1,2`) |
+| Workflows | App Store IPA workflow unchanged · new **FashionRise iPad Screenshots** available in `codemagic.yaml` |
+| Gates | purchasing **false** · credit **false** · unverified Sandbox **false** |
+| Docs | `docs/deploy/IPAD-SCREENSHOTS-CODEMAGIC.md` |
+| **Next step** | PM starts Codemagic workflow **FashionRise iPad Screenshots** with VNC enabled → capture → `fr-ipad-finish` → download Artifacts (13″ PNGs for ASC) |
+| Stop line | No backend deploy · no Apple purchases · no App Review · wait for PM to start Codemagic |
 
 ## Stale Stars after Magic (2026-11-11) — #283 MERGED · FE LIVE
 
@@ -34,13 +36,13 @@
 
 | Status | Detail |
 |---|---|
-| Merged on main | #278–#283 lineage · AppIcon (#281/#282) · Buying UI (#280) · Magic Stars refresh (#283) |
-| Production FE | **`23c5cb2c`** live (includes Studio + IAP shop UI + Magic Stars refresh) |
+| Merged on main | #278–#285 · AppIcon · Buying UI · Magic Stars refresh · **iPad Screenshots workflow** |
+| Production FE | **`23c5cb2c`** live |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
-| App Icon | TF confirmed real FashionRise icon (needs next IPA for native binary that includes #281+#282 asserts) |
-| Remaining blockers | (1) final Codemagic TF IPA from tip with AppIcon assert green (2) ASC DSA/metadata/screenshots (3) PM authorize public gate flip + 1.0 + IAP submit (4) no App Review until gates/checklist green |
-| Stop line | No public payment activation · no App Review · Codemagic only when PM starts it |
+| **Exact next step** | Run Codemagic **FashionRise iPad Screenshots** (VNC) to produce 13″ ASC screenshots |
+| Then | Final App Store IPA Codemagic build → ASC metadata/DSA → PM gate flip + 1.0 submit |
+| Stop line | No public payment activation · no App Review until checklist green |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 
