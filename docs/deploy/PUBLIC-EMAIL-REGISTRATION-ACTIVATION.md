@@ -20,7 +20,7 @@
 **Fail closed:**
 
 - `REGISTRATION_MODE=public` without real SMTP (`SMTP_HOST` + `SMTP_FROM_EMAIL`) keeps **effective mode closed**.
-- `EMAIL_DELIVERY_BACKEND=capture` **never** satisfies public registration outside automated tests.
+- `EMAIL_DELIVERY_BACKEND=capture` satisfies readiness **only** when **both** `TESTING=true` **and** `ENVIRONMENT` is not `production`. Production with `TESTING=true` still keeps effective mode closed and must not capture mail.
 - Authenticated SMTP requires encrypted transport (`SMTP_USE_TLS=true` or port `465` SMTPS).
 
 Status payload reports the exact prerequisite when public cannot activate.
@@ -68,9 +68,10 @@ Status payload reports the exact prerequisite when public cannot activate.
 |---|---|
 | Token handoff | URL **fragment** only; POST body on confirm; history scrubbed |
 | Single-use | Atomic `UPDATE … WHERE used_at IS NULL` — concurrent redeem → one success |
+| Lock order | Always **`users` `FOR UPDATE` then** verification-token mint/claim (verify + resend) — avoids verify/resend deadlocks |
 | Resend | `users.email_verification_last_sent_at` under `SELECT FOR UPDATE` |
 | Commit vs send | User + token commit **before** SMTP; delivery failure → resend recovers |
-| Capture backend | Rejected when `TESTING=false` (production processes) |
+| Capture backend | Allowed only when `TESTING=true` **and** `ENVIRONMENT≠production` (config + delivery) |
 | Rate limit IP | Requires trusted Nginx overwrite + `TRUST_PROXY_HEADERS=true` |
 
 ---

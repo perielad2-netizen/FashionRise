@@ -3,20 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**PR #289 security hardening amendment** · fragment verify + confirm · atomic redeem · persistent resend · capture rejected outside tests · **no merge/deploy** · IAP gates **OFF**.)
+**Last updated:** 2026-11-11 (**PR #289 final PM amendment** · User→token lock order · capture requires TESTING+non-production · **no merge/deploy** · IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Public email registration (2026-11-11) — PR #289 · SECURITY HARDENING · AWAITING PM
+## Public email registration (2026-11-11) — PR #289 · FINAL PM AMENDMENT · AWAITING PM
 
 | Status | Detail |
 |---|---|
 | Branch | `cursor/web-public-email-register-77c6` · PR **#289** |
 | Modes | `REGISTRATION_MODE=closed\|invite_only\|public` (default closed) |
 | Public flow | Register → SMTP email with **`#token=` fragment** → Confirm email (no auto-consume) → session |
-| Hardening | Atomic single-use redeem · DB resend throttle (`email_verification_last_sent_at` + `FOR UPDATE`) · commit-then-send · capture rejected when `TESTING=false` · authenticated SMTP requires TLS/465 |
+| Hardening | Atomic single-use redeem · DB resend throttle · commit-then-send · **consistent lock order `User` → token** on verify + resend · capture requires **`TESTING=true` and `ENVIRONMENT≠production`** · authenticated SMTP requires TLS/465 |
+| Concurrency | Deterministic PG verify-versus-resend race: verification wins (verified, no unnecessary resend) **or** resend wins (old token invalidated; replacement verifiable) — no deadlocks / duplicate redeem |
 | Rate limits | SlowAPI + `client_ip_key`; production needs Nginx Option B + `TRUST_PROXY_HEADERS=true` for per-visitor buckets |
-| Migration | **`028`** validated via disposable `alembic upgrade 028` smoke |
+| Migration | **`028`** remains head |
 | Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` |
 | Stop line | **No merge · no production deploy · no mode flip · no Codemagic · no IAP · no App Review** |
 | **Exact next step (PM)** | Re-review #289 HEAD → approve merge → activation doc |

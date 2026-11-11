@@ -349,8 +349,8 @@ class Settings(BaseSettings):
         """
         backend = (self.email_delivery_backend or "smtp").strip().lower()
         if backend == "capture":
-            # Capture is pytest-only. Production processes (testing=false) never qualify.
-            return bool(self.testing)
+            # Capture is disposable-test only: TESTING=true AND not production.
+            return bool(self.testing) and self.environment != "production"
         host = (self.smtp_host or "").strip()
         from_addr = (self.smtp_from_email or "").strip()
         if not (host and from_addr):
@@ -361,9 +361,7 @@ class Settings(BaseSettings):
             if self.smtp_use_tls:
                 return True
             # Implicit TLS (SMTPS) on 465 is acceptable without STARTTLS flag.
-            if int(self.smtp_port) == 465:
-                return True
-            return False
+            return int(self.smtp_port) == 465
         return True
 
     def configured_registration_mode(self) -> Literal["closed", "invite_only", "public"]:
@@ -386,8 +384,9 @@ class Settings(BaseSettings):
         backend = (self.email_delivery_backend or "smtp").strip().lower()
         if backend == "capture":
             return (
-                "PUBLIC registration rejects EMAIL_DELIVERY_BACKEND=capture outside automated "
-                "tests. Set EMAIL_DELIVERY_BACKEND=smtp with SMTP_HOST, SMTP_FROM_EMAIL, and "
+                "PUBLIC registration rejects EMAIL_DELIVERY_BACKEND=capture unless "
+                "TESTING=true and ENVIRONMENT is not production. "
+                "Set EMAIL_DELIVERY_BACKEND=smtp with SMTP_HOST, SMTP_FROM_EMAIL, and "
                 "encrypted transport (SMTP_USE_TLS=true or port 465) when using SMTP auth."
             )
         user = (self.smtp_username or "").strip()

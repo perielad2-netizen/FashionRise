@@ -19,6 +19,9 @@ from app.services import email_delivery
 
 _log = logging.getLogger(__name__)
 
+# Lock order (mandatory): users row FOR UPDATE, then email_verification_tokens.
+# verify_email_token and resend_verification must both follow this order.
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -30,7 +33,7 @@ def _hash_token(raw: str) -> str:
 
 def clear_resend_cooldowns() -> None:
     """No-op retained for tests that cleared the former in-process map."""
-    return None
+    return
 
 
 def build_verify_url(raw_token: str) -> str:
@@ -44,6 +47,7 @@ def build_verify_url(raw_token: str) -> str:
 def mint_verification_token(db: Session, user: User) -> str:
     """Invalidate prior unused tokens and mint a new one. Returns plaintext once.
 
+    Caller must already hold ``User`` ``FOR UPDATE`` when racing with verify/resend.
     Caller must commit (or flush) before sending email. Does not send mail.
     """
     settings = get_settings()
@@ -88,7 +92,11 @@ def mint_and_send_verification(db: Session, user: User) -> str:
 
 
 def verify_email_token(db: Session, raw_token: str) -> User:
-    """Atomically redeem a single-use token (conditional UPDATE … WHERE used_at IS NULL)."""
+    """Redeem a single-use token with lock order User → token.
+
+    Lookup resolves ``user_id`` without locking the token row, then locks the
+    user, then atomically claims the token (``UPDATE … WHERE used_at IS NULL``).
+    """
     raw = (raw_token or "").strip()
     if len(raw) < 16 or len(raw) > 200:
         raise ValidationAppError("Invalid verification link")
@@ -96,7 +104,19 @@ def verify_email_token(db: Session, raw_token: str) -> User:
     digest = _hash_token(raw)
     now = _now()
 
-    # Atomic claim — concurrent redemptions: exactly one UPDATE wins.
+    # Probe only — do not lock the token before the user (consistent lock order).
+    probe = db.scalar(
+        select(EmailVerificationToken).where(EmailVerificationToken.token_hash == digest)
+    )
+    if probe is None:
+        raise UnauthorizedError("Invalid or expired verification link")
+
+    # 1) Lock user first.
+    user = db.scalar(select(User).where(User.id == probe.user_id).with_for_update())
+    if user is None or not user.is_active:
+        raise UnauthorizedError("Account unavailable")
+
+    # 2) Atomic claim on the token while holding the user lock.
     claimed = db.execute(
         update(EmailVerificationToken)
         .where(
@@ -105,27 +125,20 @@ def verify_email_token(db: Session, raw_token: str) -> User:
             EmailVerificationToken.expires_at >= now,
         )
         .values(used_at=now)
-        .returning(
-            EmailVerificationToken.id,
-            EmailVerificationToken.user_id,
-        )
+        .returning(EmailVerificationToken.id)
     ).first()
 
     if claimed is None:
-        existing = db.scalar(
+        row = db.scalar(
             select(EmailVerificationToken).where(EmailVerificationToken.token_hash == digest)
         )
-        if existing is None:
+        if row is None:
             raise UnauthorizedError("Invalid or expired verification link")
-        if existing.used_at is not None:
+        if row.used_at is not None:
             raise UnauthorizedError("Verification link already used")
         raise UnauthorizedError("Verification link expired")
 
-    token_id, user_id = claimed
-    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
-    if user is None or not user.is_active:
-        raise UnauthorizedError("Account unavailable")
-
+    token_id = claimed[0]
     user.email_verified = True
     db.add(user)
     # Invalidate any other outstanding tokens for this user.
@@ -147,8 +160,8 @@ def verify_email_token(db: Session, raw_token: str) -> User:
 def resend_verification(db: Session, email: str) -> None:
     """Resend verification for an unverified account.
 
-    Persistent cooldown uses ``users.email_verification_last_sent_at`` under
-    ``SELECT … FOR UPDATE`` so concurrent resends cannot stampede.
+    Lock order: ``User`` ``FOR UPDATE``, then token mint/invalidate.
+    Persistent cooldown uses ``users.email_verification_last_sent_at``.
     Always returns success when the email format is valid (no account oracle).
     """
     from app.services import invitation_service
@@ -161,9 +174,8 @@ def resend_verification(db: Session, email: str) -> None:
     cooldown = max(0, int(settings.email_verification_resend_cooldown_seconds))
     now = _now()
 
-    user = db.scalar(
-        select(User).where(User.email == email_norm).with_for_update()
-    )
+    # 1) Lock user first (same order as verify_email_token).
+    user = db.scalar(select(User).where(User.email == email_norm).with_for_update())
     if user is None or user.email_verified or not user.is_active:
         # Opaque success — do not reveal account existence.
         db.commit()
@@ -177,7 +189,7 @@ def resend_verification(db: Session, email: str) -> None:
             db.commit()
             return
 
-    # Reserve the cooldown slot under the row lock before releasing the transaction.
+    # 2) Mint/replace tokens while holding the user lock.
     raw = mint_verification_token(db, user)
     try:
         db.commit()
@@ -188,7 +200,7 @@ def resend_verification(db: Session, email: str) -> None:
     # Send after commit so a delivery failure does not roll back the token / cooldown.
     try:
         send_verification_for_raw_token(to_email=user.email, raw_token=raw)
-    except Exception:
+    except Exception:  # noqa: BLE001 — delivery failure must not undo committed token
         # Account + token remain; caller gets opaque 204. User can retry after cooldown.
         _log.warning("email_verification_resend_delivery_failed")
         return

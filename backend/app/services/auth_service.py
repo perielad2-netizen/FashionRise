@@ -229,7 +229,11 @@ def _register_public(
         # Commit user + verification token before sending mail so a delivery
         # failure never leaves an emailed link without a recoverable account,
         # and a post-send commit failure cannot strand credentials.
-        raw_token = email_verification.mint_verification_token(db, user)
+        # New row is exclusive to this insert; lock user before mint for order parity
+        # with verify/resend (User → token) under concurrent follow-up requests.
+        locked = db.scalar(select(User).where(User.id == user.id).with_for_update())
+        assert locked is not None
+        raw_token = email_verification.mint_verification_token(db, locked)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -251,7 +255,7 @@ def _register_public(
             to_email=email_norm,
             raw_token=raw_token,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — delivery failure must not undo committed account
         # Account + token already committed; resend recovers after cooldown.
         _log.warning("public_register_verification_email_deferred")
         delivery_note = (

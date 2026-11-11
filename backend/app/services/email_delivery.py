@@ -55,10 +55,11 @@ def send_email(*, to_email: str, subject: str, body_text: str, meta: dict[str, A
     settings = get_settings()
     backend = (settings.email_delivery_backend or "smtp").strip().lower()
     if backend == "capture":
-        # Never allow capture outside automated tests (production must use SMTP).
-        if not settings.testing:
+        # Require TESTING=true and a non-production ENVIRONMENT.
+        if not settings.testing or settings.environment == "production":
             raise ServiceUnavailableError(
-                "EMAIL_DELIVERY_BACKEND=capture is not allowed outside automated tests"
+                "EMAIL_DELIVERY_BACKEND=capture requires TESTING=true and "
+                "ENVIRONMENT other than production"
             )
         _CAPTURED.append(
             CapturedEmail(
