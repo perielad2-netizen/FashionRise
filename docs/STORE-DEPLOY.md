@@ -37,9 +37,34 @@ npm run cap:android       # opens Android Studio (needs Android SDK)
 npm run cap:ios           # opens Xcode (macOS only)
 ```
 
-- **Android AAB:** Android Studio → Build → Generate Signed Bundle  
+- **Android AAB (local):** Android Studio → Build → Generate Signed Bundle  
+- **Android AAB (Codemagic):** root `codemagic.yaml` → workflow **FashionRise Android (Play AAB)** — manual start; signed AAB artifact for Play Internal testing  
 - **iOS IPA (local):** Xcode → Product → Archive → Distribute (requires Mac)  
 - **iOS IPA (Codemagic):** root `codemagic.yaml` → workflow **FashionRise iOS (App Store IPA)** — manual start only; no TestFlight / App Store submit
+
+### Codemagic Android (Play Internal AAB)
+
+| Item | Value (from repo — do not guess) |
+|------|----------------------------------|
+| Config | `/codemagic.yaml` |
+| Workflow | `fashionrise-android-play-internal` (UI: **FashionRise Android (Play AAB)**) |
+| Working dir | `web-ui` |
+| Package / applicationId | `app.fashionrise.studio` |
+| targetSdk / compileSdk | **36** (`web-ui/android/variables.gradle`) |
+| versionName | **1.0** |
+| versionCode | `PROJECT_BUILD_NUMBER + ANDROID_VERSION_CODE_OFFSET` (default offset `0`) |
+| Signing | Codemagic `android_signing` reference **`fashionrise_android_upload`** → Gradle `CM_KEYSTORE_*` |
+| Native web | `npm run build:native` + `npx cap sync android` |
+| Artifact | `web-ui/android/app/build/outputs/bundle/release/*.aab` |
+| Publish | **Manual** Play Console → Internal testing (no auto production submit) |
+| Env group | `fashionrise_native` (same croquis notice texts as iOS) |
+
+**Operator prerequisites (outside this PR):**
+
+1. Upload an Android **upload keystore** in Codemagic → Code signing identities with reference name **`fashionrise_android_upload`** (keep a private backup — Codemagic cannot re-download it).
+2. Play Console app `app.fashionrise.studio` → create Internal testing track; upload the AAB from Codemagic artifacts.
+3. **Play Billing (Stars)** is still staged: UI shows packages but purchasing stays off until Play Console consumables `stars_50` / `stars_150` / `stars_500` exist **and** backend Play Developer API verification is configured (`IAP_GOOGLE_SERVICE_ACCOUNT_JSON`). Do not invent credits.
+4. Email/password login + registration work in the Android shell (same FE as iOS/web). Google Sign-In remains available on Android (hidden only on iOS for Guideline 4.8).
 
 ### Codemagic iOS (first App Store IPA)
 
