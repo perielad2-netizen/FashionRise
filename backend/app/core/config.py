@@ -187,11 +187,14 @@ class Settings(BaseSettings):
     # false → closed, true → invite_only. Default false keeps production closed.
     registration_enabled: bool = False
     # Explicit registration mode. When set, overrides registration_enabled.
-    # public requires a configured email delivery mechanism (SMTP or capture).
-    # If public is selected without delivery, effective mode stays closed.
     registration_mode: Literal["closed", "invite_only", "public"] | None = None
 
-    # Email delivery for public registration verification. Empty host → not configured.
+    # When true, public registration requires SMTP and email ownership proof before
+    # login. Default false: Create Account signs users in immediately (App Store 1.0).
+    # Verification endpoints remain available for a future re-enable.
+    email_verification_required: bool = False
+
+    # Email delivery for optional public registration verification. Empty host → not configured.
     # Prefer existing SMTP over a new provider. Capture backend is for tests only.
     email_delivery_backend: Literal["smtp", "capture"] = "smtp"
     smtp_host: str = ""
@@ -370,35 +373,47 @@ class Settings(BaseSettings):
         return "invite_only" if self.registration_enabled else "closed"
 
     def effective_registration_mode(self) -> Literal["closed", "invite_only", "public"]:
-        """Authoritative mode for register/status. Public without email stays closed."""
+        """Authoritative mode for register/status.
+
+        When email verification is required, public without delivery stays closed.
+        When verification is off, public mode does not depend on SMTP.
+        """
         configured = self.configured_registration_mode()
-        if configured == "public" and not self.email_delivery_configured():
+        if (
+            configured == "public"
+            and self.email_verification_required
+            and not self.email_delivery_configured()
+        ):
             return "closed"
         return configured
 
     def registration_public_prerequisite(self) -> str | None:
         if self.configured_registration_mode() != "public":
             return None
+        if not self.email_verification_required:
+            return None
         if self.email_delivery_configured():
             return None
         backend = (self.email_delivery_backend or "smtp").strip().lower()
         if backend == "capture":
             return (
-                "PUBLIC registration rejects EMAIL_DELIVERY_BACKEND=capture unless "
-                "TESTING=true and ENVIRONMENT is not production. "
-                "Set EMAIL_DELIVERY_BACKEND=smtp with SMTP_HOST, SMTP_FROM_EMAIL, and "
-                "encrypted transport (SMTP_USE_TLS=true or port 465) when using SMTP auth."
+                "PUBLIC registration with EMAIL_VERIFICATION_REQUIRED=true rejects "
+                "EMAIL_DELIVERY_BACKEND=capture unless TESTING=true and ENVIRONMENT is "
+                "not production. Set EMAIL_DELIVERY_BACKEND=smtp with SMTP_HOST, "
+                "SMTP_FROM_EMAIL, and encrypted transport (SMTP_USE_TLS=true or port 465) "
+                "when using SMTP auth — or set EMAIL_VERIFICATION_REQUIRED=false."
             )
         user = (self.smtp_username or "").strip()
         if user and not self.smtp_use_tls and int(self.smtp_port) != 465:
             return (
-                "PUBLIC registration requires encrypted SMTP for authenticated relays: "
-                "set SMTP_USE_TLS=true (STARTTLS) or use port 465 (SMTPS)."
+                "EMAIL_VERIFICATION_REQUIRED=true needs encrypted SMTP for authenticated "
+                "relays: set SMTP_USE_TLS=true (STARTTLS) or use port 465 (SMTPS)."
             )
         return (
-            "PUBLIC registration requires email delivery: set EMAIL_DELIVERY_BACKEND=smtp "
-            "with SMTP_HOST and SMTP_FROM_EMAIL (and credentials + TLS as needed), "
-            "then restart the API. Until then effective mode remains closed."
+            "EMAIL_VERIFICATION_REQUIRED=true needs email delivery: set "
+            "EMAIL_DELIVERY_BACKEND=smtp with SMTP_HOST and SMTP_FROM_EMAIL "
+            "(and credentials + TLS as needed), or set EMAIL_VERIFICATION_REQUIRED=false "
+            "for immediate public registration without verification."
         )
 
 

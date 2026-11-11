@@ -3,24 +3,21 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**Public registration activation BLOCKED on SMTP** · Nginx+FE ready · mode still **closed** · IAP gates **OFF**.)
+**Last updated:** 2026-11-11 (**Public registration LIVE — immediate Create Account** · no SMTP/verification · IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Public email registration (2026-11-11) — ACTIVATION BLOCKED · SMTP OWNER ACTION
+## Public email registration (2026-11-11) — LIVE · IMMEDIATE ACCESS
 
 | Status | Detail |
 |---|---|
-| Merge / BE | **#289** on `main` · production BE **`ba619985…`** · Alembic **`028`** · 17/17 users verified |
-| Nginx | **Updated** — Cloudflare `real_ip` + allowlist `register` / `registration/status` / `verify-email` / `resend-verification` · `X-Forwarded-For` overwrite · `TRUST_PROXY_HEADERS=true` |
-| Production FE | **`c0a942ef`** @ `/var/www/fashionrise/releases/public-reg-activate-c0a942ef` (prior `42a4bce2` preserved) |
-| Mode | Still **`REGISTRATION_MODE=closed`** — **not** flipped to public (no usable SMTP) |
-| **Blocker** | **No SMTP provider configured** on VPS (no `SMTP_HOST` / `SMTP_FROM_EMAIL` / credentials in `.env`, secrets, or backups) |
-| Required owner input | Set production `.env`: `EMAIL_DELIVERY_BACKEND=smtp`, `SMTP_HOST`, `SMTP_PORT` (587+`SMTP_USE_TLS=true` or 465), `SMTP_FROM_EMAIL` (verified domain), `SMTP_USERNAME`/`SMTP_PASSWORD` if auth · then SPF/DKIM for the From domain · then operator sets `REGISTRATION_MODE=public` + restart API |
-| Backup / rollback | `/var/backups/fashionrise/public-reg-activate-20261111T191438Z/ROLLBACK.sh` (nginx + env + FE symlink) |
+| Product | Create Account → email/username/password → **immediate Studio session** (no email verification) |
+| Flag | `EMAIL_VERIFICATION_REQUIRED=false` (default) · verification endpoints retained for future |
+| Mode | **`REGISTRATION_MODE=public`** |
+| Nginx | Cloudflare `real_ip` + register/status/verify/resend allowlist · `TRUST_PROXY_HEADERS=true` |
 | IAP gates | purchasing **false** · credit **false** · unverified **false** |
 | Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` |
-| **Exact next step** | Owner supplies SMTP → set env → `REGISTRATION_MODE=public` → restart `fashionrise-api` → e2e Create Account → verify email → login |
+| **Exact next step** | Owner smoke Create Account on fashionrise.app · then Codemagic IPA when ready |
 
 ## Brand icon refresh (2026-11-11) — #288 MERGED · FE LIVE
 

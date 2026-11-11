@@ -62,13 +62,16 @@ def registration_status_payload() -> RegistrationStatusResponse:
     effective = settings.effective_registration_mode()
     prerequisite = settings.registration_public_prerequisite()
     available = effective in ("invite_only", "public")
+    requires_verification = effective == "public" and bool(settings.email_verification_required)
     note = None
     if configured == "public" and effective != "public":
         note = prerequisite
     elif effective == "invite_only":
         note = "Invitation code required for email registration."
-    elif effective == "public":
+    elif effective == "public" and requires_verification:
         note = "Public email registration with email verification."
+    elif effective == "public":
+        note = "Public email registration — create an account and enter the Studio."
     elif effective == "closed":
         note = "Email registration is closed."
     return RegistrationStatusResponse(
@@ -76,7 +79,7 @@ def registration_status_payload() -> RegistrationStatusResponse:
         configured_mode=configured,
         registration_available=available,
         requires_invitation=effective == "invite_only",
-        requires_email_verification=effective == "public",
+        requires_email_verification=requires_verification,
         email_delivery_configured=settings.email_delivery_configured(),
         prerequisite=prerequisite,
         note=note,
@@ -186,8 +189,15 @@ def _register_public(
     email_norm: str,
     username: str,
 ) -> RegisterResponse:
+    """Public self-serve registration.
+
+    Default (EMAIL_VERIFICATION_REQUIRED=false): create a verified account and
+    issue a session immediately — no SMTP. When verification is re-enabled later,
+    the mint/send path below remains available.
+    """
     settings = get_settings()
-    if not settings.email_delivery_configured():
+    require_verify = bool(settings.email_verification_required)
+    if require_verify and not settings.email_delivery_configured():
         raise ForbiddenError(
             settings.registration_public_prerequisite()
             or "Public registration requires email delivery"
@@ -204,12 +214,12 @@ def _register_public(
         hashed_password=hash_password(_login_password(data.password)),
         is_admin=False,
         is_active=True,
-        email_verified=False,
+        # Immediate access when verification is off; otherwise pending proof.
+        email_verified=not require_verify,
     )
     # Normal starting Stars — never admin / never unlimited via this path.
     ai_stars.apply_new_user_stars(user)
     if user.is_admin or user.ai_stars_unlimited:
-        # Belt-and-suspenders: public registration must never escalate.
         user.is_admin = False
         user.ai_stars_unlimited = False
     db.add(user)
@@ -226,14 +236,10 @@ def _register_public(
             ),
         )
         db.add(profile)
-        # Commit user + verification token before sending mail so a delivery
-        # failure never leaves an emailed link without a recoverable account,
-        # and a post-send commit failure cannot strand credentials.
-        # New row is exclusive to this insert; lock user before mint for order parity
-        # with verify/resend (User → token) under concurrent follow-up requests.
-        locked = db.scalar(select(User).where(User.id == user.id).with_for_update())
-        assert locked is not None
-        raw_token = email_verification.mint_verification_token(db, locked)
+        if require_verify:
+            locked = db.scalar(select(User).where(User.id == user.id).with_for_update())
+            assert locked is not None
+            raw_token = email_verification.mint_verification_token(db, locked)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -244,6 +250,17 @@ def _register_public(
     except Exception:
         db.rollback()
         raise
+
+    if not require_verify:
+        db.refresh(user)
+        access, refresh = issue_tokens(db, user)
+        return RegisterResponse(
+            status="authenticated",
+            access_token=access,
+            refresh_token=refresh,
+            email=user.email,
+            message="Account created",
+        )
 
     delivery_note = (
         "Check your email to verify your account before signing in. "
@@ -256,7 +273,6 @@ def _register_public(
             raw_token=raw_token,
         )
     except Exception:  # noqa: BLE001 — delivery failure must not undo committed account
-        # Account + token already committed; resend recovers after cooldown.
         _log.warning("public_register_verification_email_deferred")
         delivery_note = (
             "Your account was created, but the verification email could not be sent yet. "
@@ -270,6 +286,12 @@ def _register_public(
     )
 
 
+def _email_verification_blocks_access(user: User) -> bool:
+    """When verification is required, unverified password users cannot get a session."""
+    settings = get_settings()
+    return bool(settings.email_verification_required) and not user.email_verified
+
+
 def authenticate(db: Session, data: UserLogin) -> User:
     email_norm = _normalize_email(str(data.email))
     user = db.scalar(select(User).where(func.lower(User.email) == email_norm))
@@ -277,7 +299,7 @@ def authenticate(db: Session, data: UserLogin) -> User:
         raise UnauthorizedError("Invalid email or password")
     if not user.is_active:
         raise UnauthorizedError("Account disabled")
-    if not user.email_verified:
+    if _email_verification_blocks_access(user):
         raise UnauthorizedError(
             "Email not verified. Check your inbox for the verification link, or request a new one."
         )
@@ -285,7 +307,7 @@ def authenticate(db: Session, data: UserLogin) -> User:
 
 
 def issue_tokens(db: Session, user: User) -> tuple[str, str]:
-    if not user.email_verified:
+    if _email_verification_blocks_access(user):
         raise UnauthorizedError("Email not verified")
     access = create_access_token(user.id)
     raw = secrets.token_urlsafe(48)
@@ -317,7 +339,7 @@ def refresh_session(db: Session, raw_refresh: str) -> tuple[str, str]:
     user = db.get(User, row.user_id)
     if not user or not user.is_active:
         raise UnauthorizedError("User inactive")
-    if not user.email_verified:
+    if _email_verification_blocks_access(user):
         raise UnauthorizedError("Email not verified")
 
     row.revoked_at = datetime.now(UTC)

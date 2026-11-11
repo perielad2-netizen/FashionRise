@@ -40,7 +40,7 @@ class TokenResponse(BaseModel):
 
 
 class RegisterResponse(BaseModel):
-    """Invite registration returns tokens; public registration returns verification_pending."""
+    """Invite/public (verification off) return tokens; verification-required may pending."""
 
     status: Literal["authenticated", "verification_pending"]
     access_token: str | None = None
