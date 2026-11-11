@@ -3,20 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**#282 MERGED** `86164917` · TF AppIcon/Buying/IAP/Magic debit PASS · **stale Stars header after Magic** fix in flight · public IAP gates **OFF**.)
+**Last updated:** 2026-11-11 (**PR #283 amendment** · Magic Stars refresh + AuthProvider session check uses **token value** equality · public IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Stale Stars after Magic (2026-11-11) — FE FIX READY FOR PM
+## Stale Stars after Magic (2026-11-11) — PR #283 PM CORRECTION
 
 | Status | Detail |
 |---|---|
 | TF confirmed | Real AppIcon · Buying… per pack · Sandbox +50 · Magic −10 server debit |
-| Bug | Create header Stars stayed pre-Magic until tab navigation (e.g. 1,000,089 → still 1,000,089 after −10) |
-| Root cause | `refreshUser()` ran at Magic **enqueue**, not after `settleMagicJobWithImage` success when the debit commits |
-| Fix | Refresh authoritative `/me` Stars after billable Magic success (single / dual / recover / retry); no optimistic local debit; AuthProvider drops stale `/me` after logout/switch |
+| Bug | Create header Stars stayed pre-Magic until tab navigation |
+| Root cause | `refreshUser()` at Magic enqueue (before debit) · plus AuthProvider used `!==` on `tokenStore.get()` objects (always new instances → rejected legitimate refreshes) |
+| Fix | Refresh `/me` after billable Magic success; compare **accessToken/refreshToken values** (not object identity); drop stale `/me` on logout/switch; no optimistic debit |
 | Gates | purchasing **false** · credit **false** · unverified **false** |
-| Stop line | No backend ledger changes · no sandbox buys · no public gate flip · no App Review · include in final iOS release IPA |
+| Stop line | No backend ledger · no sandbox buys · no public gate flip · no Codemagic/App Review · wait PM merge |
 
 ## App Store release prep (2026-11-11) — #280 LIVE · #281/#282 MERGED
 

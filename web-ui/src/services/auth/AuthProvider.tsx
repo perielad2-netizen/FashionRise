@@ -93,7 +93,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await fetchMe()
       // Drop stale /me after logout or account switch — never paint another user's wallet.
-      if (tokenStore.get() !== tokenAtStart) return
+      // Compare token *values* (tokenStore.get() allocates a fresh object each call).
+      const tokenNow = tokenStore.get()
+      if (
+        !tokenNow ||
+        tokenNow.accessToken !== tokenAtStart.accessToken ||
+        tokenNow.refreshToken !== tokenAtStart.refreshToken
+      ) {
+        return
+      }
       bindFabricCacheToUser(me.id)
       setUser(me)
     } catch {
