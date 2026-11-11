@@ -3,19 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**iPad sim name hotfix** · match `iPad Pro 13-inch (M5)` style · public IAP gates **OFF** · **no Codemagic restart yet**.)
+**Last updated:** 2026-11-11 (**#287 MERGED** · iPad sim name hotfix · `4e9b1820` · public IAP gates **OFF** · **no Codemagic restart**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## iPad simulator picker hotfix (2026-11-11) — PR READY
+## iPad simulator picker hotfix (2026-11-11) — #287 MERGED
 
 | Status | Detail |
 |---|---|
+| Merge SHA | `4e9b182041936ba92c2c408a547dcee110dd2e3e` |
 | Live failure | Codemagic had `iPad Pro 13-inch (M5)` / `iPad Air 13-inch (M4/M3)` but picker only matched `(13-inch)` parenthesized names |
 | Fix | `_IPAD_13_NAME` accepts both `iPad Pro (13-inch) (M4)` and `iPad Pro 13-inch (M5)`; still rejects 11″ / mini / 12.9″; Pro preferred over Air |
 | Unchanged | IPA workflow · device family 1,2 · VNC helpers · PNG dimension rules · IAP gates OFF |
-| **Next step** | After merge: re-run Codemagic **FashionRise iPad Screenshots** with VNC |
-| Stop line | No Codemagic start in this PR · no App Review |
+| **Next step** | Re-run Codemagic **FashionRise iPad Screenshots** with VNC |
+| Stop line | No Codemagic start · no App Review · no backend deploy |
 
 ## iPad App Store screenshots via Codemagic (2026-11-11) — #285 MERGED
 
@@ -44,7 +45,7 @@
 
 | Status | Detail |
 |---|---|
-| Merged on main | #278–#285 · AppIcon · Buying UI · Magic Stars refresh · **iPad Screenshots workflow** |
+| Merged on main | #278–#285 · **#287** · AppIcon · Buying UI · Magic Stars refresh · **iPad Screenshots workflow** · sim-name hotfix |
 | Production FE | **`23c5cb2c`** live |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
