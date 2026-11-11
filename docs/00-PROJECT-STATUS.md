@@ -3,24 +3,24 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**PR #289 MERGED** · public email registration on `main` · **no production deploy yet** · IAP gates **OFF**.)
+**Last updated:** 2026-11-11 (**Stage 1 public-registration BE foundation LIVE** · mode **closed** · Alembic **028** · **no SMTP / no public open** · IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Public email registration (2026-11-11) — #289 MERGED · AWAITING CONTROLLED DEPLOY
+## Public email registration (2026-11-11) — STAGE 1 LIVE · AWAITING STAGE 2
 
 | Status | Detail |
 |---|---|
-| Approved HEAD | `0807e1e0b37edb51f2b0f053bf4b2a9a74ae4fe2` (unchanged at merge) |
-| Merge | Squash **#289** → `main` **`0403676f0c6f259006afa9b200a69912a2132490`** |
-| Modes | `REGISTRATION_MODE=closed\|invite_only\|public` (default closed; production still closed) |
-| Public flow | Register → SMTP email with **`#token=` fragment** → Confirm email (no auto-consume) → session |
-| Hardening | Atomic single-use redeem · DB resend throttle · commit-then-send · **consistent lock order `User` → token** · capture requires **`TESTING=true` and `ENVIRONMENT≠production`** · authenticated SMTP requires TLS/465 |
-| Migration | **`028`** on `main` — **not applied in production yet** |
+| Merge | Squash **#289** → `main` **`0403676f…`** (docs tip **`ba619985…`**) |
+| Production BE | **`ba61998531565233ac86f7bbda53fdef46d0e044`** @ `/opt/fashionrise/src` · `fashionrise-api` + `fashionrise-ai-worker` **active** |
+| Alembic | **`028` (head)** applied once · all **17** existing users `email_verified=true` · `email_verification_tokens` present |
+| Mode | **`REGISTRATION_MODE=closed`** (overrides legacy `REGISTRATION_ENABLED=true`) · `/auth/registration/status` → `mode=closed` · `POST /auth/register` **403** |
+| Backup | `/var/backups/fashionrise/public-reg-stage1-20261111T190454Z/` (`fashionrise_beta.dump` verified via `pg_restore -l`, `ROLLBACK.sh`) |
+| Production FE | **unchanged** `42a4bce2` · no SPA registration deploy |
+| Not done (Stage 2+) | SMTP · Nginx allowlist for register/verify/resend/status · `TRUST_PROXY_HEADERS` · FE deploy · `REGISTRATION_MODE=public` |
 | Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` |
-| Production | **Not deployed** · no SMTP config · no mode flip · FE still prior release |
-| Stop line | **No backend/FE deploy · no alembic 028 in prod · no SMTP · no public mode · no Codemagic · no IAP · no App Review** |
-| **Exact next step (PM)** | Separately authorize controlled production deploy via activation runbook |
+| Stop line | **No SMTP · no Nginx open · no FE deploy · no public mode · no Codemagic · no IAP · no App Review** |
+| **Exact next step (PM)** | Authorize Stage 2 (SMTP + Nginx allowlist) then Stage 3 (FE + `REGISTRATION_MODE=public`) |
 
 ## Brand icon refresh (2026-11-11) — #288 MERGED · FE LIVE
 
@@ -75,12 +75,13 @@
 | Status | Detail |
 |---|---|
 | Merged on main | #278–#285 · **#287** · **#288** · **#289** (public email registration) · brand icon · iPad Screenshots · Magic Stars |
-| Production FE | **`42a4bce2`** live (brand icon) — registration code not deployed yet |
+| Production FE | **`42a4bce2`** live (brand icon) — registration SPA **not** deployed |
+| Production BE | **`ba619985`** · Alembic **028** · `REGISTRATION_MODE=closed` |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
-| **Exact next step** | PM: authorize controlled **#289** production deploy via `PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` (SMTP + migration `028` + mode flip) |
+| **Exact next step** | PM: authorize Stage 2 SMTP + Nginx register allowlist (still closed), then Stage 3 FE + `REGISTRATION_MODE=public` |
 | Then | Codemagic **App Store IPA** from approved `main` → ASC metadata/DSA → PM gate flip + 1.0 submit |
-| Stop line | No public payment activation · no App Review until checklist green · registration stays closed until activation doc |
+| Stop line | No public payment activation · no App Review until checklist green · registration stays closed until Stage 3 |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 

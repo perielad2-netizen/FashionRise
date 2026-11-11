@@ -40,17 +40,25 @@ Status payload reports the exact prerequisite when public cannot activate.
 
 ---
 
+## Stage status (production)
+
+| Stage | Status | Notes |
+|---|---|---|
+| **1 — BE foundation** | **DONE 2026-11-11** | Deployed `ba619985…` · Alembic **028** · `REGISTRATION_MODE=closed` · backup `public-reg-stage1-20261111T190454Z` · FE unchanged · no SMTP |
+| **2 — SMTP + Nginx** | Not started | Requires separate PM authorization |
+| **3 — FE + public mode** | Not started | Requires separate PM authorization |
+
 ## Exact safe production activation steps (ordered)
 
 | Step | Change | Notes |
 |---|---|---|
-| **1. Backup DB** | Snapshot `fashionrise_beta` | Required before migration. |
-| **2. Backend deploy** | Deploy approved SHA containing public registration | Keep `REGISTRATION_MODE` unset/closed for first restart. |
-| **3. Migration `028`** | `alembic upgrade 028` | Adds `users.email_verified` (existing → `true`), `users.email_verification_last_sent_at`, `email_verification_tokens`. |
-| **4. Configure SMTP** | `EMAIL_DELIVERY_BACKEND=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM_EMAIL`, credentials | **Do not** set `capture`. If `SMTP_USERNAME` is set, require `SMTP_USE_TLS=true` or port `465`. Confirm a test message from the API host. |
-| **5. Nginx + visitor IP** | Proxy register / verify-email / resend / registration/status | Extend auth regex. For per-visitor SlowAPI buckets, apply Option B `real_ip` + overwrite `X-Real-IP` then set `TRUST_PROXY_HEADERS=true` (see `PROPOSED-NGINX-REGISTER-ALLOWLIST.md`). Without that, limits share the proxy peer. |
-| **6. Flip mode** | `REGISTRATION_MODE=public` + restart `fashionrise-api` | Confirm `GET /api/v1/auth/registration/status` → `mode=public`, `registration_available=true`, `email_delivery_configured=true`. |
-| **7. Frontend** | Deploy SPA from the same product SHA | Fragment verify + Confirm button. Login logo unchanged. Vite registration flag may stay false. |
+| **1. Backup DB** | Snapshot `fashionrise_beta` | **Stage 1 done** — `/var/backups/fashionrise/public-reg-stage1-20261111T190454Z/` |
+| **2. Backend deploy** | Deploy approved SHA containing public registration | **Stage 1 done** — `/opt/fashionrise/src` @ `ba619985…` with `REGISTRATION_MODE=closed` |
+| **3. Migration `028`** | `alembic upgrade 028` | **Stage 1 done** — head **028**; existing users backfilled `email_verified=true` |
+| **4. Configure SMTP** | `EMAIL_DELIVERY_BACKEND=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM_EMAIL`, credentials | **Stage 2** — **Do not** set `capture`. If `SMTP_USERNAME` is set, require `SMTP_USE_TLS=true` or port `465`. Confirm a test message from the API host. |
+| **5. Nginx + visitor IP** | Proxy register / verify-email / resend / registration/status | **Stage 2** — Extend auth regex (today register is edge-denied; status/verify/resend not allowlisted). For per-visitor SlowAPI buckets, apply Option B `real_ip` + overwrite `X-Real-IP` then set `TRUST_PROXY_HEADERS=true` (see `PROPOSED-NGINX-REGISTER-ALLOWLIST.md`). |
+| **6. Flip mode** | `REGISTRATION_MODE=public` + restart `fashionrise-api` | **Stage 3** — Confirm `GET /api/v1/auth/registration/status` → `mode=public`, `registration_available=true`, `email_delivery_configured=true`. |
+| **7. Frontend** | Deploy SPA from the same product SHA | **Stage 3** — Fragment verify + Confirm button. Login logo unchanged. Vite registration flag may stay false. |
 | **8. Accept** | Create → confirm email → login; concurrent verify (one win); resend cooldown; duplicate email/username; invite_only + Google regression | Rate-limit smoke with distinct visitor IPs after Option B. |
 
 ### Rollback
