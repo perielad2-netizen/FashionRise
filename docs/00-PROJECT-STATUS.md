@@ -3,32 +3,33 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**PR #283 amendment** · Magic Stars refresh + AuthProvider session check uses **token value** equality · public IAP gates **OFF**.)
+**Last updated:** 2026-11-11 (**PR #283 MERGED + FE DEPLOYED** · Magic Stars header refresh live · public IAP gates **OFF** · **no Codemagic / no App Review**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## Stale Stars after Magic (2026-11-11) — PR #283 PM CORRECTION
+## Stale Stars after Magic (2026-11-11) — #283 MERGED · FE LIVE
 
 | Status | Detail |
 |---|---|
-| TF confirmed | Real AppIcon · Buying… per pack · Sandbox +50 · Magic −10 server debit |
-| Bug | Create header Stars stayed pre-Magic until tab navigation |
-| Root cause | `refreshUser()` at Magic enqueue (before debit) · plus AuthProvider used `!==` on `tokenStore.get()` objects (always new instances → rejected legitimate refreshes) |
-| Fix | Refresh `/me` after billable Magic success; compare **accessToken/refreshToken values** (not object identity); drop stale `/me` on logout/switch; no optimistic debit |
-| Gates | purchasing **false** · credit **false** · unverified **false** |
-| Stop line | No backend ledger · no sandbox buys · no public gate flip · no Codemagic/App Review · wait PM merge |
+| Approved HEAD | `6cf5dfdc5d6a60edd2abab6b6f97a063debfbb28` (unchanged at merge) |
+| Merge | Squash **#283** → `main` **`23c5cb2c12d7b60d85e17ac52b27ca729f5bbcf4`** |
+| Production FE | **`23c5cb2c`** · `/var/www/fashionrise/releases/23c5cb2c-magic-stars-refresh-283` · public `/version.json` matches · prior `03cd74ac-buying-ui-c1-280` |
+| Rollback | `/var/backups/fashionrise/magic-stars-refresh-283-deploy-20261111T071536Z/ROLLBACK.sh` |
+| Fix | Refresh authoritative `/me` after billable Magic success (single/dual/recover/retry); AuthProvider compares **token values**; no optimistic debit; fail/cancel do not fabricate |
+| Validation | Vitest Magic Stars + AuthProvider isolation **10/10** · API `/health`+`/ready` **200** · gates purchasing/credit/unverified **false** |
+| Stop line | No backend ledger change · no new sandbox buys · no public gate flip · **no Codemagic yet** · no App Review |
 
-## App Store release prep (2026-11-11) — #280 LIVE · #281/#282 MERGED
+## App Store release prep (2026-11-11) — REMAINING FOR 1.0
 
 | Status | Detail |
 |---|---|
-| Merge | Squash **#280** → `03cd74ac` · **#281** → `7365afdb` · **#282** → **`86164917`** · FE **`03cd74ac-buying-ui-c1-280`** live |
-| Codemagic AppIcon | Assert uses **`@napi-rs/canvas`** after `npm ci` (Pillow/sharp optional) |
+| Merged on main | #278–#283 lineage · AppIcon (#281/#282) · Buying UI (#280) · Magic Stars refresh (#283) |
+| Production FE | **`23c5cb2c`** live (includes Studio + IAP shop UI + Magic Stars refresh) |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
-| Currency USD↔ILS | **Likely** Sandbox storefront split until device `currencyCode` / Sandbox Apple ID country confirm |
-| App Icon | TF confirmed real FashionRise icon |
-| App Store blockers | (1) public gates OFF (2) final TF IPA should include Magic Stars refresh fix (3) ASC DSA/metadata (4) PM authorize gate flip |
-| Stop line | No public gate enable · no payment activation |
+| Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
+| App Icon | TF confirmed real FashionRise icon (needs next IPA for native binary that includes #281+#282 asserts) |
+| Remaining blockers | (1) final Codemagic TF IPA from tip with AppIcon assert green (2) ASC DSA/metadata/screenshots (3) PM authorize public gate flip + 1.0 + IAP submit (4) no App Review until gates/checklist green |
+| Stop line | No public payment activation · no App Review · Codemagic only when PM starts it |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 
