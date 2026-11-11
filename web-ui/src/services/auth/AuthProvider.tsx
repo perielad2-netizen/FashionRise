@@ -25,6 +25,7 @@ import {
 } from '@/services/auth/authApi'
 import { tokenStore } from '@/services/auth/tokenStore'
 import { isNativeIosStarsShop, recoverPendingStarsPurchases } from '@/services/native/iap'
+import { isNativeShell, nativePlatform } from '@/services/native/platform'
 
 type AuthState = {
   user: User | null
@@ -56,7 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             getRegistrationStatus().catch(() => null),
           ])
           if (cancelled) return
-          if (google) setGoogleOAuthAvailable(Boolean(google.google_oauth_enabled))
+          // Guideline 4.8: hide Google Sign-In in the iOS native shell; keep it on web.
+          const googleOn =
+            Boolean(google?.google_oauth_enabled) &&
+            !(isNativeShell() && nativePlatform() === 'ios')
+          setGoogleOAuthAvailable(googleOn)
           if (registration) setRegistrationStatus(registration)
         } catch {
           /* status unavailable — password login still works */

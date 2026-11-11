@@ -179,6 +179,14 @@
   background: rgba(214, 51, 132, 0.16);
 }
 
+.menuItemDanger {
+  color: #fda4af;
+}
+
+.menuItemDanger:hover {
+  background: rgba(244, 63, 94, 0.18);
+}
+
 @media (max-width: 1100px) {
   .tagline {
     letter-spacing: 0.22em;
@@ -389,4 +397,30 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: transparent;
   color: rgba(248, 243, 238, 0.85);
+}
+
+.deletePrimary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 0;
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  color: #fff7fb;
+}
+
+.deletePrimary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.deleteError {
+  margin: 0;
+  font-size: 12px;
+  color: #fda4af;
 }

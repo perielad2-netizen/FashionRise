@@ -186,9 +186,13 @@ export function RegisterPage() {
 
         <h1 className={styles.title}>Create account</h1>
         <p className={styles.subtitle}>
-          {publicMode
-            ? 'Join FashionRise with Google, or create an email account and start designing.'
-            : 'Join FashionRise with Google, or use an invitation to create an email account.'}
+          {googleOAuthAvailable
+            ? publicMode
+              ? 'Join FashionRise with Google, or create an email account and start designing.'
+              : 'Join FashionRise with Google, or use an invitation to create an email account.'
+            : publicMode
+              ? 'Create an email account and start designing.'
+              : 'Use an invitation to create an email account.'}
         </p>
 
         {googleOAuthAvailable ? (

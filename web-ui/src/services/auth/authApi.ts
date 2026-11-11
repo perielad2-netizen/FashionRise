@@ -266,6 +266,15 @@ export function logoutLocal(): void {
   tokenStore.clear()
 }
 
+/** Permanently delete the signed-in account. Caller must clear local session after. */
+export async function deleteAccount(): Promise<void> {
+  await apiRequest<void>('/auth/account', {
+    method: 'DELETE',
+    body: { confirm: 'DELETE' },
+  })
+  tokenStore.clear()
+}
+
 /** Validate existing session: /auth/me, refresh once on 401. */
 export async function restoreSession(): Promise<User | null> {
   const tokens = tokenStore.get()

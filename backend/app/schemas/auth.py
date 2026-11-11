@@ -62,6 +62,12 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 
+class DeleteAccountRequest(BaseModel):
+    """Explicit confirm string required so clients cannot soft-delete by accident."""
+
+    confirm: Literal["DELETE"]
+
+
 class RegistrationStatusResponse(BaseModel):
     mode: Literal["closed", "invite_only", "public"]
     configured_mode: Literal["closed", "invite_only", "public"]
