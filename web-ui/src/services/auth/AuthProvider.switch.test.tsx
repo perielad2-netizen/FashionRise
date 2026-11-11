@@ -173,4 +173,61 @@ describe('AuthProvider account switching', () => {
     expect(screen.getByTestId('user-id')).toHaveTextContent('none')
     expect(fabricCache.bindFabricCacheToUser).toHaveBeenCalledWith(null)
   })
+
+  it('refreshUser drops stale /me after logout (no cross-account Stars paint)', async () => {
+    function RefreshProbe() {
+      const { user, refreshUser, logout } = useAuth()
+      return (
+        <div>
+          <div data-testid="user-id">{user?.id ?? 'none'}</div>
+          <div data-testid="stars">{user?.ai_stars ?? 'none'}</div>
+          <button type="button" onClick={() => void refreshUser()}>
+            refresh
+          </button>
+          <button type="button" onClick={() => logout()}>
+            logout
+          </button>
+        </div>
+      )
+    }
+
+    const tokenA = { accessToken: 'tok-a', refreshToken: 'ref-a' }
+    tokenStore.get.mockReturnValue(tokenA)
+    api.restoreSession.mockResolvedValue({ ...userA, ai_stars: 1_000_089 })
+
+    let resolveMe: (v: typeof userA & { ai_stars: number }) => void = () => {}
+    api.fetchMe.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveMe = resolve
+        }),
+    )
+
+    render(
+      <AuthProvider>
+        <RefreshProbe />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('user-id')).toHaveTextContent('user-a'))
+    expect(screen.getByTestId('stars')).toHaveTextContent('1000089')
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'refresh' }).click()
+    })
+
+    // Logout while /me is in flight — token no longer matches refresh start.
+    tokenStore.get.mockReturnValue(null)
+    await act(async () => {
+      screen.getByRole('button', { name: 'logout' }).click()
+    })
+    expect(screen.getByTestId('user-id')).toHaveTextContent('none')
+
+    await act(async () => {
+      resolveMe({ ...userA, ai_stars: 1_000_079 })
+    })
+
+    // Stale wallet must not reappear after logout.
+    expect(screen.getByTestId('user-id')).toHaveTextContent('none')
+    expect(screen.getByTestId('stars')).toHaveTextContent('none')
+  })
 })

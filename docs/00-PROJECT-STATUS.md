@@ -3,21 +3,32 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**#281 MERGED** `7365afdb` · Codemagic AppIcon assert hotfix: use `@napi-rs/canvas` after `npm ci` when Pillow/sharp absent · public IAP gates **OFF**.)
+**Last updated:** 2026-11-11 (**#282 MERGED** `86164917` · TF AppIcon/Buying/IAP/Magic debit PASS · **stale Stars header after Magic** fix in flight · public IAP gates **OFF**.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## App Store release prep (2026-11-11) — #280 LIVE · #281 MERGED · APPICON SCANNER HOTFIX
+## Stale Stars after Magic (2026-11-11) — FE FIX READY FOR PM
 
 | Status | Detail |
 |---|---|
-| Merge | Squash **#280** → `03cd74ac` · Squash **#281** → **`7365afdb`** · FE **`03cd74ac-buying-ui-c1-280`** live |
-| Codemagic AppIcon | First post-#281 run failed: Mac builder had no Pillow/sharp. Fix: assert uses **`@napi-rs/canvas`** (already in `web-ui` devDependencies / `npm ci`) before Pillow |
+| TF confirmed | Real AppIcon · Buying… per pack · Sandbox +50 · Magic −10 server debit |
+| Bug | Create header Stars stayed pre-Magic until tab navigation (e.g. 1,000,089 → still 1,000,089 after −10) |
+| Root cause | `refreshUser()` ran at Magic **enqueue**, not after `settleMagicJobWithImage` success when the debit commits |
+| Fix | Refresh authoritative `/me` Stars after billable Magic success (single / dual / recover / retry); no optimistic local debit; AuthProvider drops stale `/me` after logout/switch |
+| Gates | purchasing **false** · credit **false** · unverified **false** |
+| Stop line | No backend ledger changes · no sandbox buys · no public gate flip · no App Review · include in final iOS release IPA |
+
+## App Store release prep (2026-11-11) — #280 LIVE · #281/#282 MERGED
+
+| Status | Detail |
+|---|---|
+| Merge | Squash **#280** → `03cd74ac` · **#281** → `7365afdb` · **#282** → **`86164917`** · FE **`03cd74ac-buying-ui-c1-280`** live |
+| Codemagic AppIcon | Assert uses **`@napi-rs/canvas`** after `npm ci` (Pillow/sharp optional) |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until device `currencyCode` / Sandbox Apple ID country confirm |
-| App Icon | From Xcode AppIcon catalog in uploaded build; blank-white rejected by pixel scan (no size-only pass) |
-| App Store blockers | (1) public gates OFF (2) TF IPA with real AppIcon not yet green on Codemagic (3) ASC DSA/metadata (4) PM authorize gate flip |
-| Stop line | No public gate enable · no payment activation · Codemagic restart is owner/PM |
+| App Icon | TF confirmed real FashionRise icon |
+| App Store blockers | (1) public gates OFF (2) final TF IPA should include Magic Stars refresh fix (3) ASC DSA/metadata (4) PM authorize gate flip |
+| Stop line | No public gate enable · no payment activation |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 
