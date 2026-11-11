@@ -183,9 +183,27 @@ class Settings(BaseSettings):
     max_fabric_dimension_px: int = 2048
     fabric_name_max_length: int = 80
 
-    # Invite-only beta registration. Default false so production stays closed until
-    # an independently approved deployment flips the gate (and Nginx allowlists POST).
+    # Legacy invite gate. Prefer REGISTRATION_MODE. When mode is unset:
+    # false → closed, true → invite_only. Default false keeps production closed.
     registration_enabled: bool = False
+    # Explicit registration mode. When set, overrides registration_enabled.
+    # public requires a configured email delivery mechanism (SMTP or capture).
+    # If public is selected without delivery, effective mode stays closed.
+    registration_mode: Literal["closed", "invite_only", "public"] | None = None
+
+    # Email delivery for public registration verification. Empty host → not configured.
+    # Prefer existing SMTP over a new provider. Capture backend is for tests only.
+    email_delivery_backend: Literal["smtp", "capture"] = "smtp"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+    smtp_from_email: str = ""
+    smtp_from_name: str = "FashionRise"
+    email_verification_token_ttl_minutes: int = 60
+    # Soft per-email resend cooldown (seconds) in addition to SlowAPI IP limits.
+    email_verification_resend_cooldown_seconds: int = 60
 
     # When true, rate limiting may key on X-Real-IP set by a trusted reverse proxy
     # that overwrites the header with $remote_addr. Default false ignores client XFF.
@@ -321,6 +339,38 @@ class Settings(BaseSettings):
     @property
     def max_croquis_upload_bytes(self) -> int:
         return max(1, self.max_croquis_upload_size_mb) * 1024 * 1024
+
+    def email_delivery_configured(self) -> bool:
+        """True when verification mail can be sent (or captured in tests)."""
+        backend = (self.email_delivery_backend or "smtp").strip().lower()
+        if backend == "capture":
+            return True
+        host = (self.smtp_host or "").strip()
+        from_addr = (self.smtp_from_email or "").strip()
+        return bool(host and from_addr)
+
+    def configured_registration_mode(self) -> Literal["closed", "invite_only", "public"]:
+        if self.registration_mode is not None:
+            return self.registration_mode
+        return "invite_only" if self.registration_enabled else "closed"
+
+    def effective_registration_mode(self) -> Literal["closed", "invite_only", "public"]:
+        """Authoritative mode for register/status. Public without email stays closed."""
+        configured = self.configured_registration_mode()
+        if configured == "public" and not self.email_delivery_configured():
+            return "closed"
+        return configured
+
+    def registration_public_prerequisite(self) -> str | None:
+        if self.configured_registration_mode() != "public":
+            return None
+        if self.email_delivery_configured():
+            return None
+        return (
+            "PUBLIC registration requires email delivery: set EMAIL_DELIVERY_BACKEND=smtp "
+            "with SMTP_HOST and SMTP_FROM_EMAIL (and credentials as needed), "
+            "then restart the API. Until then effective mode remains closed."
+        )
 
 
 @lru_cache

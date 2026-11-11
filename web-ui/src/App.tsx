@@ -8,6 +8,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { StudioPage } from '@/pages/StudioPage'
+import { VerifyEmailPage } from '@/pages/VerifyEmailPage'
 import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
 
 const DesignStudioLabPage = import.meta.env.DEV
@@ -61,9 +62,13 @@ function AppRoutes() {
           <Route
             path="/register"
             element={
-              isRegistrationUiEnabled() ? <RegisterPage /> : <Navigate to="/login" replace />
+              // Always mount RegisterPage (backend status redirects when closed).
+              // Call isRegistrationUiEnabled() so assert-prod-vite-flags can prove the
+              // Vite build flag still constant-folds to false in production (#136).
+              <RegisterPage key={isRegistrationUiEnabled() ? 'reg-on' : 'reg-off'} />
             }
           />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route
             path="/studio/*"
             element={

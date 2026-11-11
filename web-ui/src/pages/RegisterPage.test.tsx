@@ -10,6 +10,14 @@ const authState = {
   bootstrapping: false,
   isAuthenticated: false,
   googleOAuthAvailable: false,
+  registrationStatus: {
+    mode: 'invite_only' as const,
+    configured_mode: 'invite_only' as const,
+    registration_available: true,
+    requires_invitation: true,
+    requires_email_verification: false,
+    email_delivery_configured: false,
+  },
   login: vi.fn(),
   register: registerMock,
   logout: vi.fn(),
@@ -25,6 +33,7 @@ function renderRegister(initialPath = '/register') {
       <Routes>
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/login" element={<div>Sign in page</div>} />
+        <Route path="/studio/home" element={<div>Studio</div>} />
         <Route path="/studio" element={<div>Studio</div>} />
       </Routes>
     </MemoryRouter>,
@@ -37,11 +46,32 @@ describe('RegisterPage', () => {
     authState.user = null
     authState.isAuthenticated = false
     authState.bootstrapping = false
+    authState.registrationStatus = {
+      mode: 'invite_only',
+      configured_mode: 'invite_only',
+      registration_available: true,
+      requires_invitation: true,
+      requires_email_verification: false,
+      email_delivery_configured: false,
+    }
   })
 
   it('links back to Sign In', () => {
     renderRegister()
     expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/login')
+  })
+
+  it('redirects to login when registration is closed', () => {
+    authState.registrationStatus = {
+      mode: 'closed',
+      configured_mode: 'closed',
+      registration_available: false,
+      requires_invitation: false,
+      requires_email_verification: false,
+      email_delivery_configured: false,
+    }
+    renderRegister()
+    expect(screen.getByText('Sign in page')).toBeInTheDocument()
   })
 
   it('validates required fields without calling register', async () => {
@@ -68,13 +98,49 @@ describe('RegisterPage', () => {
     expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument()
   })
 
+  it('public mode hides invitation field and shows verification pending', async () => {
+    const user = userEvent.setup()
+    authState.registrationStatus = {
+      mode: 'public',
+      configured_mode: 'public',
+      registration_available: true,
+      requires_invitation: false,
+      requires_email_verification: true,
+      email_delivery_configured: true,
+    }
+    registerMock.mockResolvedValueOnce({
+      status: 'verification_pending',
+      email: 'new@example.com',
+      message: 'Check your email to verify your account before signing in.',
+    })
+    renderRegister()
+    expect(screen.queryByRole('textbox', { name: /invitation code/i })).not.toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: /^email$/i }), 'new@example.com')
+    await user.type(screen.getByRole('textbox', { name: /^username$/i }), 'newuser')
+    await user.type(document.querySelector('input[name="password"]') as HTMLElement, 'StrongPass123!')
+    await user.type(
+      document.querySelector('input[name="confirmPassword"]') as HTMLElement,
+      'StrongPass123!',
+    )
+    await user.click(screen.getByRole('button', { name: /create account/i }))
+    expect(
+      await screen.findByRole('heading', { name: /check your email/i }),
+    ).toBeInTheDocument()
+    expect(registerMock).toHaveBeenCalledTimes(1)
+  })
+
   it('prevents double submit while pending', async () => {
     const user = userEvent.setup()
     let resolveRegister: (() => void) | undefined
     registerMock.mockImplementation(
       () =>
-        new Promise<void>((resolve) => {
-          resolveRegister = resolve
+        new Promise((resolve) => {
+          resolveRegister = () =>
+            resolve({
+              status: 'authenticated',
+              user: { id: 'u1' },
+              tokens: { accessToken: 'a', refreshToken: 'r' },
+            })
         }),
     )
     renderRegister()

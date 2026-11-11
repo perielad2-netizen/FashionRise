@@ -3,9 +3,23 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**#288 MERGED + FE LIVE** · `42a4bce2` · brand icon on web · Home hero untouched · public IAP gates **OFF** · **no Codemagic**.)
+**Last updated:** 2026-11-11 (**Public email registration PR ready for PM** · modes `closed` / `invite_only` / `public` · email verification · **no merge/deploy** · IAP gates **OFF** · Home logo untouched · App Store build **125** untouched.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## Public email registration (2026-11-11) — PR READY · AWAITING PM
+
+| Status | Detail |
+|---|---|
+| Branch | `cursor/web-public-email-register-77c6` |
+| Modes | `REGISTRATION_MODE=closed\|invite_only\|public` (default closed; legacy `REGISTRATION_ENABLED` maps to closed/invite_only) |
+| Public flow | Register → verification email (SMTP) → `/verify-email` → session; unverified cannot login |
+| FE | Login **Don't have an account? Create Account** when `/auth/registration/status` says available; RegisterPage public vs invite; login logo unchanged |
+| Security | Hashed single-use tokens · SlowAPI limits · resend cooldown · no admin/unlimited on public create · Google/invite verified |
+| Migration | **`028`** — `users.email_verified` (existing → true) + `email_verification_tokens` |
+| Activation | `docs/deploy/PUBLIC-EMAIL-REGISTRATION-ACTIVATION.md` — SMTP required before public is effective |
+| Stop line | **No merge · no production deploy · no mode flip · no Codemagic · no IAP · no App Review** |
+| **Exact next step (PM)** | Review PR → approve merge → follow activation doc (backup → migrate 028 → SMTP → `REGISTRATION_MODE=public`) |
 
 ## Brand icon refresh (2026-11-11) — #288 MERGED · FE LIVE
 
@@ -63,9 +77,9 @@
 | Production FE | **`42a4bce2`** live (brand icon) |
 | Production BE gates | purchasing **false** · credit **false** · unverified **false** |
 | Currency USD↔ILS | **Likely** Sandbox storefront split until `currencyCode` / Sandbox Apple ID country confirm |
-| **Exact next step** | PM: one Codemagic **App Store IPA** from latest `main` → verify new icon on TestFlight/ASC · also iPad Screenshots VNC as needed |
+| **Exact next step** | PM: review **public email registration** PR → then Codemagic **App Store IPA** from approved `main` (icon + registration when activated) |
 | Then | ASC metadata/DSA → PM gate flip + 1.0 submit |
-| Stop line | No public payment activation · no App Review until checklist green |
+| Stop line | No public payment activation · no App Review until checklist green · registration stays closed until activation doc |
 
 ## Apple Stars IAP — C1 Sandbox first purchase (2026-11-10) — AUDIT PASS
 

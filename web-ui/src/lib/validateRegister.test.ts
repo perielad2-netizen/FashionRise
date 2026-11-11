@@ -32,6 +32,16 @@ describe('validateRegister', () => {
     if (!result.ok) expect(result.errors.invitationCode).toBeTruthy()
   })
 
+  it('allows public registration without invitation code', () => {
+    const result = validateRegister({
+      ...base,
+      invitationCode: '',
+      requireInvitation: false,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.invitationCode).toBeNull()
+  })
+
   it('rejects short passwords', () => {
     const result = validateRegister({
       ...base,

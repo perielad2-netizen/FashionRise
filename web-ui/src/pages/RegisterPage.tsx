@@ -2,10 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
+import { canAdvertiseRegistration } from '@/config/registrationUi'
 import { mapRegisterError } from '@/lib/mapRegisterError'
 import { validateRegister, type RegisterFieldErrors } from '@/lib/validateRegister'
 import { ApiError } from '@/services/api/client'
-import { getGoogleOAuthStartUrl } from '@/services/auth/authApi'
+import { getGoogleOAuthStartUrl, resendVerification } from '@/services/auth/authApi'
 import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './RegisterPage.module.css'
 
@@ -14,7 +15,8 @@ function initialFromQuery(params: URLSearchParams, key: string): string {
 }
 
 export function RegisterPage() {
-  const { register, isAuthenticated, bootstrapping, googleOAuthAvailable } = useAuth()
+  const { register, isAuthenticated, bootstrapping, googleOAuthAvailable, registrationStatus } =
+    useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   // Email-only query prefill is safe. Never put invitation tokens in URL query params
@@ -31,13 +33,40 @@ export function RegisterPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [uncertain, setUncertain] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null)
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null)
+  const [resendBusy, setResendBusy] = useState(false)
+  const [resendNote, setResendNote] = useState<string | null>(null)
+
+  const available = canAdvertiseRegistration(registrationStatus?.registration_available ?? null)
+  const requireInvitation = registrationStatus?.requires_invitation !== false
+  const publicMode = registrationStatus?.mode === 'public'
 
   if (bootstrapping) return null
   if (isAuthenticated) return <Navigate to="/studio/home" replace />
+  if (!available) return <Navigate to="/login" replace />
 
   function onGoogle() {
     if (busy) return
     window.location.assign(getGoogleOAuthStartUrl('/studio/home'))
+  }
+
+  async function onResend() {
+    if (!pendingEmail || resendBusy) return
+    setResendBusy(true)
+    setResendNote(null)
+    try {
+      await resendVerification(pendingEmail)
+      setResendNote('If an unverified account exists for this email, we sent a new link.')
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setResendNote(err.message || 'Unable to resend right now. Try again shortly.')
+      } else {
+        setResendNote('Unable to resend right now. Try again shortly.')
+      }
+    } finally {
+      setResendBusy(false)
+    }
   }
 
   async function onSubmit(e: FormEvent) {
@@ -59,6 +88,7 @@ export function RegisterPage() {
       password,
       confirmPassword,
       invitationCode,
+      requireInvitation: publicMode ? false : requireInvitation,
     })
     if (!validated.ok) {
       setFieldErrors(validated.errors)
@@ -68,13 +98,20 @@ export function RegisterPage() {
     setFieldErrors({})
     setBusy(true)
     try {
-      await register({
+      const result = await register({
         email: validated.email,
         username: validated.username,
         password: validated.password,
         displayName: validated.displayName,
         invitationCode: validated.invitationCode,
       })
+      if (result.status === 'verification_pending') {
+        setPendingEmail(result.email)
+        setPendingMessage(result.message)
+        setPassword('')
+        setConfirmPassword('')
+        return
+      }
       navigate('/studio/home', { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
@@ -89,6 +126,47 @@ export function RegisterPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  if (pendingEmail) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.glow} aria-hidden />
+        <div className={styles.card}>
+          <div className={styles.brand}>
+            <div className={styles.logoPlate}>
+              <img
+                src={UI_ASSETS.brand.login}
+                alt="FashionRise"
+                className={styles.logo}
+                draggable={false}
+              />
+            </div>
+          </div>
+          <h1 className={styles.title}>Check your email</h1>
+          <p className={styles.subtitle}>
+            {pendingMessage ||
+              `We sent a verification link to ${pendingEmail}. Verify your email before signing in.`}
+          </p>
+          {resendNote ? (
+            <p className={styles.hint} role="status">
+              {resendNote}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className={styles.submit}
+            disabled={resendBusy}
+            onClick={() => void onResend()}
+          >
+            {resendBusy ? 'Sending…' : 'Resend verification email'}
+          </button>
+          <p className={styles.footerLinks}>
+            Already verified? <Link to="/login">Sign in</Link>
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -108,7 +186,9 @@ export function RegisterPage() {
 
         <h1 className={styles.title}>Create account</h1>
         <p className={styles.subtitle}>
-          Join FashionRise with Google, or use an invitation to create an email account.
+          {publicMode
+            ? 'Join FashionRise with Google, or create an email account.'
+            : 'Join FashionRise with Google, or use an invitation to create an email account.'}
         </p>
 
         {googleOAuthAvailable ? (
@@ -119,7 +199,7 @@ export function RegisterPage() {
 
         {googleOAuthAvailable ? (
           <p className={styles.orDivider} role="separator">
-            or register with invitation
+            {publicMode ? 'or register with email' : 'or register with invitation'}
           </p>
         ) : null}
 
@@ -263,37 +343,39 @@ export function RegisterPage() {
             ) : null}
           </label>
 
-          <label className={styles.field}>
-            <span>Invitation code</span>
-            <input
-              type="text"
-              name="invitationCode"
-              autoComplete="one-time-code"
-              spellCheck={false}
-              value={invitationCode}
-              onChange={(e) => {
-                setInvitationCode(e.target.value)
-                if (fieldErrors.invitationCode)
-                  setFieldErrors((prev) => ({ ...prev, invitationCode: undefined }))
-              }}
-              disabled={busy}
-              aria-invalid={Boolean(fieldErrors.invitationCode)}
-              aria-describedby={
-                fieldErrors.invitationCode
-                  ? 'register-invite-error'
-                  : 'register-invite-hint'
-              }
-            />
-            {fieldErrors.invitationCode ? (
-              <span id="register-invite-error" className={styles.fieldError} role="alert">
-                {fieldErrors.invitationCode}
-              </span>
-            ) : (
-              <span id="register-invite-hint" className={styles.hintInline}>
-                Paste the one-time code from your operator. Email must match the invite.
-              </span>
-            )}
-          </label>
+          {!publicMode ? (
+            <label className={styles.field}>
+              <span>Invitation code</span>
+              <input
+                type="text"
+                name="invitationCode"
+                autoComplete="one-time-code"
+                spellCheck={false}
+                value={invitationCode}
+                onChange={(e) => {
+                  setInvitationCode(e.target.value)
+                  if (fieldErrors.invitationCode)
+                    setFieldErrors((prev) => ({ ...prev, invitationCode: undefined }))
+                }}
+                disabled={busy}
+                aria-invalid={Boolean(fieldErrors.invitationCode)}
+                aria-describedby={
+                  fieldErrors.invitationCode
+                    ? 'register-invite-error'
+                    : 'register-invite-hint'
+                }
+              />
+              {fieldErrors.invitationCode ? (
+                <span id="register-invite-error" className={styles.fieldError} role="alert">
+                  {fieldErrors.invitationCode}
+                </span>
+              ) : (
+                <span id="register-invite-hint" className={styles.hintInline}>
+                  Paste the one-time code from your operator. Email must match the invite.
+                </span>
+              )}
+            </label>
+          ) : null}
 
           {formError ? (
             <p className={styles.error} role="alert">
@@ -309,12 +391,12 @@ export function RegisterPage() {
           ) : null}
 
           <button type="submit" className={styles.submit} disabled={busy}>
-            {busy ? 'Creating account…' : uncertain ? 'Sign in instead' : 'Create account'}
+            {busy ? 'Creating account…' : uncertain ? 'Sign in instead' : 'Create Account'}
           </button>
         </form>
 
         <p className={styles.footerLinks}>
-          Already have an account? <Link to="/login">Sign in</Link>
+          Already have an account? <Link to="/login">Sign In</Link>
         </p>
       </div>
     </div>

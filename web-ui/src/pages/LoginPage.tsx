@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
-import { isRegistrationUiEnabled } from '@/config/registrationUi'
+import { canAdvertiseRegistration } from '@/config/registrationUi'
 import { validateLogin, type LoginFieldErrors } from '@/lib/validateLogin'
 import { ApiError } from '@/services/api/client'
 import { getGoogleOAuthStartUrl } from '@/services/auth/authApi'
@@ -10,7 +10,8 @@ import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './LoginPage.module.css'
 
 export function LoginPage() {
-  const { login, isAuthenticated, bootstrapping, googleOAuthAvailable } = useAuth()
+  const { login, isAuthenticated, bootstrapping, googleOAuthAvailable, registrationStatus } =
+    useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
@@ -19,6 +20,10 @@ export function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const showCreateAccount = canAdvertiseRegistration(
+    registrationStatus?.registration_available ?? null,
+  )
 
   useEffect(() => {
     const err = searchParams.get('error')
@@ -164,10 +169,9 @@ export function LoginPage() {
           </button>
         </form>
 
-        {isRegistrationUiEnabled() ? (
+        {showCreateAccount ? (
           <p className={styles.footerLinks}>
-            New here? <Link to="/register">Create account</Link>
-            {googleOAuthAvailable ? ' or continue with Google above.' : null}
+            Don&apos;t have an account? <Link to="/register">Create Account</Link>
           </p>
         ) : googleOAuthAvailable ? (
           <p className={styles.footerLinks}>

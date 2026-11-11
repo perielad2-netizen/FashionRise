@@ -1,19 +1,29 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import ConflictError, ForbiddenError, UnauthorizedError, ValidationAppError
+from app.core.errors import (
+    ConflictError,
+    ForbiddenError,
+    UnauthorizedError,
+    ValidationAppError,
+)
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.models.user_profile import UserProfile
-from app.schemas.auth import UserLogin, UserRegister
-from app.services import ai_stars, invitation_service
+from app.schemas.auth import (
+    RegisterResponse,
+    RegistrationStatusResponse,
+    UserLogin,
+    UserRegister,
+)
+from app.services import ai_stars, email_verification, invitation_service
 
 
 def _normalize_email(email: str) -> str:
@@ -43,20 +53,76 @@ def _conflict_from_integrity(exc: IntegrityError) -> ConflictError | None:
     return None
 
 
-def register_user(db: Session, data: UserRegister) -> User:
+def registration_status_payload() -> RegistrationStatusResponse:
     settings = get_settings()
-    if not settings.registration_enabled:
+    configured = settings.configured_registration_mode()
+    effective = settings.effective_registration_mode()
+    prerequisite = settings.registration_public_prerequisite()
+    available = effective in ("invite_only", "public")
+    note = None
+    if configured == "public" and effective != "public":
+        note = prerequisite
+    elif effective == "invite_only":
+        note = "Invitation code required for email registration."
+    elif effective == "public":
+        note = "Public email registration with email verification."
+    elif effective == "closed":
+        note = "Email registration is closed."
+    return RegistrationStatusResponse(
+        mode=effective,
+        configured_mode=configured,
+        registration_available=available,
+        requires_invitation=effective == "invite_only",
+        requires_email_verification=effective == "public",
+        email_delivery_configured=settings.email_delivery_configured(),
+        prerequisite=prerequisite,
+        note=note,
+    )
+
+
+def _assert_registration_open(mode: str) -> None:
+    if mode == "closed":
+        settings = get_settings()
+        prereq = settings.registration_public_prerequisite()
+        if prereq and settings.configured_registration_mode() == "public":
+            raise ForbiddenError(prereq)
         raise ForbiddenError("Registration is not available")
+
+
+def register_user(db: Session, data: UserRegister) -> RegisterResponse:
+    settings = get_settings()
+    mode = settings.effective_registration_mode()
+    _assert_registration_open(mode)
 
     email_norm = _normalize_email(str(data.email))
     username = data.username.strip()
     if not username:
         raise ValidationAppError("Username is required")
 
+    if mode == "invite_only":
+        return _register_invite_only(db, data, email_norm=email_norm, username=username)
+    if mode == "public":
+        return _register_public(db, data, email_norm=email_norm, username=username)
+    raise ForbiddenError("Registration is not available")
+
+
+def _register_invite_only(
+    db: Session,
+    data: UserRegister,
+    *,
+    email_norm: str,
+    username: str,
+) -> RegisterResponse:
+    raw_invite = (data.invitation_code or "").strip()
+    if not raw_invite:
+        raise ValidationAppError("Invitation code is required")
+    if len(raw_invite) < 16:
+        raise ValidationAppError("Invitation code looks incomplete")
+
     # Lock + validate invitation before creating the user. Same transaction as insert.
     invitation = invitation_service.assert_invitation_redeemable(
         db,
-        raw_token=data.invitation_code,
+        raw_token=raw_invite,
         email=email_norm,
     )
 
@@ -71,6 +137,7 @@ def register_user(db: Session, data: UserRegister) -> User:
         hashed_password=hash_password(_login_password(data.password)),
         is_admin=False,
         is_active=True,
+        email_verified=True,
     )
     ai_stars.apply_new_user_stars(user)
     db.add(user)
@@ -92,8 +159,6 @@ def register_user(db: Session, data: UserRegister) -> User:
         db.rollback()
         conflict = _conflict_from_integrity(exc)
         if conflict is not None:
-            # Invitation was never committed as redeemed; loser may retry with a fresh invite
-            # or the other invite remains pending when this invite lost on username/email.
             raise conflict from None
         raise
     except Exception:
@@ -101,7 +166,82 @@ def register_user(db: Session, data: UserRegister) -> User:
         raise
 
     db.refresh(user)
-    return user
+    access, refresh = issue_tokens(db, user)
+    return RegisterResponse(
+        status="authenticated",
+        access_token=access,
+        refresh_token=refresh,
+        email=user.email,
+        message="Account created",
+    )
+
+
+def _register_public(
+    db: Session,
+    data: UserRegister,
+    *,
+    email_norm: str,
+    username: str,
+) -> RegisterResponse:
+    settings = get_settings()
+    if not settings.email_delivery_configured():
+        raise ForbiddenError(
+            settings.registration_public_prerequisite()
+            or "Public registration requires email delivery"
+        )
+
+    if db.scalar(select(User).where(func.lower(User.email) == email_norm)):
+        raise ConflictError("Email already registered")
+    if db.scalar(select(User).where(User.username == username)):
+        raise ConflictError("Username already taken")
+
+    user = User(
+        email=email_norm,
+        username=username,
+        hashed_password=hash_password(_login_password(data.password)),
+        is_admin=False,
+        is_active=True,
+        email_verified=False,
+    )
+    # Normal starting Stars — never admin / never unlimited via this path.
+    ai_stars.apply_new_user_stars(user)
+    if user.is_admin or user.ai_stars_unlimited:
+        # Belt-and-suspenders: public registration must never escalate.
+        user.is_admin = False
+        user.ai_stars_unlimited = False
+    db.add(user)
+
+    try:
+        db.flush()
+        profile = UserProfile(
+            user_id=user.id,
+            display_name=(
+                data.display_name.strip()
+                if data.display_name and data.display_name.strip()
+                else username
+            ),
+        )
+        db.add(profile)
+        email_verification.mint_and_send_verification(db, user)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        conflict = _conflict_from_integrity(exc)
+        if conflict is not None:
+            raise conflict from None
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+    return RegisterResponse(
+        status="verification_pending",
+        email=email_norm,
+        message=(
+            "Check your email to verify your account before signing in. "
+            "We sent a one-time verification link."
+        ),
+    )
 
 
 def authenticate(db: Session, data: UserLogin) -> User:
@@ -111,15 +251,21 @@ def authenticate(db: Session, data: UserLogin) -> User:
         raise UnauthorizedError("Invalid email or password")
     if not user.is_active:
         raise UnauthorizedError("Account disabled")
+    if not user.email_verified:
+        raise UnauthorizedError(
+            "Email not verified. Check your inbox for the verification link, or request a new one."
+        )
     return user
 
 
 def issue_tokens(db: Session, user: User) -> tuple[str, str]:
+    if not user.email_verified:
+        raise UnauthorizedError("Email not verified")
     access = create_access_token(user.id)
     raw = secrets.token_urlsafe(48)
     digest = hashlib.sha256(raw.encode()).hexdigest()
     settings = get_settings()
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
+    expires_at = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
     row = RefreshToken(user_id=user.id, token_hash=digest, expires_at=expires_at)
     db.add(row)
     db.commit()
@@ -127,8 +273,8 @@ def issue_tokens(db: Session, user: User) -> tuple[str, str]:
 
 
 def _expires_ok(expires_at: datetime) -> bool:
-    now = datetime.now(timezone.utc)
-    exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+    now = datetime.now(UTC)
+    exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=UTC)
     return exp >= now
 
 
@@ -145,8 +291,10 @@ def refresh_session(db: Session, raw_refresh: str) -> tuple[str, str]:
     user = db.get(User, row.user_id)
     if not user or not user.is_active:
         raise UnauthorizedError("User inactive")
+    if not user.email_verified:
+        raise UnauthorizedError("Email not verified")
 
-    row.revoked_at = datetime.now(timezone.utc)
+    row.revoked_at = datetime.now(UTC)
     db.add(row)
     db.commit()
     return issue_tokens(db, user)
@@ -154,7 +302,7 @@ def refresh_session(db: Session, raw_refresh: str) -> tuple[str, str]:
 
 def revoke_all_refresh_tokens_for_user(db: Session, user: User) -> None:
     """Invalidate every active refresh token for this user (sign-out all sessions)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.execute(
         update(RefreshToken)
         .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))

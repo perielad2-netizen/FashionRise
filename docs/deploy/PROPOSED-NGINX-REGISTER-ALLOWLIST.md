@@ -88,9 +88,18 @@ location = /api/v1/auth/register {
 
 Apply the **same** `proxy_set_header` overwrite quartet to:
 
-- `location ~ ^/api/v1/auth/(login|refresh|logout|me)$`
+- `location ~ ^/api/v1/auth/(login|refresh|logout|me|registration/status|verify-email|resend-verification)$`
 - `location ~ ^/api/v1/designs(?:/.*)?$`
 - the new register location
+
+Public email registration also needs:
+
+```nginx
+# Exact paths (methods limited in app + SlowAPI). Prefer adding to the auth regex above.
+# GET  /api/v1/auth/registration/status
+# POST /api/v1/auth/verify-email
+# POST /api/v1/auth/resend-verification
+```
 
 Remove the old `location = /api/v1/auth/register { return 403; }` only when the POST proxy block is installed.
 

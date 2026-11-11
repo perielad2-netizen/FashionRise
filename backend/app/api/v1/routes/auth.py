@@ -10,19 +10,62 @@ from app.core.config import get_settings
 from app.core.errors import AppError, ValidationAppError
 from app.core.rate_limit import limiter
 from app.db.session import get_db
-from app.schemas.auth import RefreshRequest, TokenResponse, UserLogin, UserRegister
+from app.schemas.auth import (
+    RefreshRequest,
+    RegisterResponse,
+    RegistrationStatusResponse,
+    ResendVerificationRequest,
+    TokenResponse,
+    UserLogin,
+    UserRegister,
+    VerifyEmailRequest,
+)
 from app.schemas.user import UserRead
-from app.services import ai_stars, auth_service, cf_access_sso, google_oauth
+from app.services import (
+    ai_stars,
+    auth_service,
+    cf_access_sso,
+    email_verification,
+    google_oauth,
+)
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=TokenResponse)
-@limiter.limit("20/minute")
-def register(request: Request, data: UserRegister, db: Session = Depends(get_db)) -> TokenResponse:
-    user = auth_service.register_user(db, data)
+@router.get("/registration/status", response_model=RegistrationStatusResponse)
+@limiter.limit("60/minute")
+def registration_status(request: Request) -> RegistrationStatusResponse:
+    """Public capability probe — SPA uses this to show/hide Create Account."""
+    return auth_service.registration_status_payload()
+
+
+@router.post("/register", response_model=RegisterResponse)
+@limiter.limit("10/minute;40/hour")
+def register(request: Request, data: UserRegister, db: Session = Depends(get_db)) -> RegisterResponse:
+    return auth_service.register_user(db, data)
+
+
+@router.post("/verify-email", response_model=TokenResponse)
+@limiter.limit("20/minute;60/hour")
+def verify_email(
+    request: Request,
+    data: VerifyEmailRequest,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    user = email_verification.verify_email_token(db, data.token)
     access, refresh = auth_service.issue_tokens(db, user)
     return TokenResponse(access_token=access, refresh_token=refresh)
+
+
+@router.post("/resend-verification", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute;20/hour")
+def resend_verification(
+    request: Request,
+    data: ResendVerificationRequest,
+    db: Session = Depends(get_db),
+) -> Response:
+    email_verification.resend_verification(db, str(data.email))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/login", response_model=TokenResponse)

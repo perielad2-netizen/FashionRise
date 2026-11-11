@@ -12,12 +12,15 @@ import { bindFabricCacheToUser } from '@/lib/fabricAssetCache'
 import {
   fetchMe,
   getGoogleOAuthStatus,
+  getRegistrationStatus,
   login as apiLogin,
   logoutLocal,
   register as apiRegister,
   restoreSession,
   type LoginPayload,
   type RegisterPayload,
+  type RegisterResult,
+  type RegistrationStatus,
   type User,
 } from '@/services/auth/authApi'
 import { tokenStore } from '@/services/auth/tokenStore'
@@ -27,11 +30,12 @@ type AuthState = {
   user: User | null
   bootstrapping: boolean
   login: (payload: LoginPayload) => Promise<void>
-  register: (payload: RegisterPayload) => Promise<void>
+  register: (payload: RegisterPayload) => Promise<RegisterResult>
   logout: () => void
   refreshUser: () => Promise<void>
   isAuthenticated: boolean
   googleOAuthAvailable: boolean
+  registrationStatus: RegistrationStatus | null
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -40,24 +44,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [bootstrapping, setBootstrapping] = useState(true)
   const [googleOAuthAvailable, setGoogleOAuthAvailable] = useState(false)
+  const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      const loadPublicStatus = async () => {
+        try {
+          const [google, registration] = await Promise.all([
+            getGoogleOAuthStatus().catch(() => null),
+            getRegistrationStatus().catch(() => null),
+          ])
+          if (cancelled) return
+          if (google) setGoogleOAuthAvailable(Boolean(google.google_oauth_enabled))
+          if (registration) setRegistrationStatus(registration)
+        } catch {
+          /* status unavailable — password login still works */
+        }
+      }
+
       if (tokenStore.get()) {
         const restored = await restoreSession()
         if (!cancelled) {
           setUser(restored)
           setBootstrapping(false)
         }
+        // Still load public capability so logout → login shows Create Account correctly.
+        void loadPublicStatus()
         return
       }
-      try {
-        const status = await getGoogleOAuthStatus()
-        if (!cancelled) setGoogleOAuthAvailable(Boolean(status.google_oauth_enabled))
-      } catch {
-        /* status unavailable — password / register still work */
-      }
+      await loadPublicStatus()
       if (!cancelled) setBootstrapping(false)
     })()
     return () => {
@@ -77,8 +93,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     bindFabricCacheToUser(null)
     const result = await apiRegister(payload)
-    bindFabricCacheToUser(result.user.id)
-    setUser(result.user)
+    if (result.status === 'authenticated') {
+      bindFabricCacheToUser(result.user.id)
+      setUser(result.user)
+    }
+    return result
   }, [])
 
   const logout = useCallback(() => {
@@ -145,8 +164,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshUser,
       isAuthenticated: Boolean(user),
       googleOAuthAvailable,
+      registrationStatus,
     }),
-    [user, bootstrapping, login, register, logout, refreshUser, googleOAuthAvailable],
+    [
+      user,
+      bootstrapping,
+      login,
+      register,
+      logout,
+      refreshUser,
+      googleOAuthAvailable,
+      registrationStatus,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
