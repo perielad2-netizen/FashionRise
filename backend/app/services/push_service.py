@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -22,16 +23,21 @@ from app.schemas.push import NativePushDeviceCreate, PushSubscriptionCreate
 
 logger = logging.getLogger(__name__)
 
-# SPA destinations allowed in notification payloads (never auth tokens).
+# Push-tap SPA destinations only. Never password-reset, verify-email, OAuth, or token URLs.
+# (Email deep links use a separate client urlPolicy and are not push destinations.)
 _ALLOWED_PUSH_PATH_PREFIXES = (
     "/studio",
-    "/login",
-    "/register",
-    "/forgot-password",
-    "/reset-password",
-    "/verify-email",
     "/privacy",
 )
+_BLOCKED_PUSH_PATH_PREFIXES = (
+    "/reset-password",
+    "/verify-email",
+    "/forgot-password",
+    "/auth/google",
+    "/auth/cf-access",
+    "/api/",
+)
+_TOKENISH = re.compile(r"(?:^|[?#&])(?:token|code|access_token|refresh_token|id_token|handoff)=", re.I)
 
 
 def push_enabled() -> bool:
@@ -67,29 +73,30 @@ def native_ios_enabled() -> bool:
 
 
 def sanitize_push_url(url: str | None) -> str:
-    raw = (url or "/studio/runway").strip() or "/studio/runway"
+    """Allow only non-credential Studio/privacy paths for push taps."""
+    fallback = "/studio/runway"
+    raw = (url or fallback).strip() or fallback
     if raw.startswith("https://fashionrise.app") or raw.startswith("http://fashionrise.app"):
         try:
             from urllib.parse import urlparse
 
             parsed = urlparse(raw)
-            path = parsed.path or "/"
-            suffix = ""
-            if parsed.query:
-                suffix += f"?{parsed.query}"
-            if parsed.fragment:
-                suffix += f"#{parsed.fragment}"
-            raw = f"{path}{suffix}"
+            raw = parsed.path or "/"
         except Exception:  # noqa: BLE001
-            return "/studio/runway"
-    if not raw.startswith("/"):
-        return "/studio/runway"
+            return fallback
+    if not raw.startswith("/") or raw.startswith("//"):
+        return fallback
+    if _TOKENISH.search(raw):
+        return fallback
     path = raw.split("?", 1)[0].split("#", 1)[0]
+    if any(path == p or path.startswith(p) for p in _BLOCKED_PUSH_PATH_PREFIXES):
+        return fallback
     if path != "/" and not any(
         path == p or path.startswith(f"{p}/") for p in _ALLOWED_PUSH_PATH_PREFIXES
     ):
-        return "/studio/runway"
-    return raw
+        return fallback
+    # Drop query/hash — push destinations never carry credentials.
+    return path if path != "/" else fallback
 
 
 def upsert_subscription(

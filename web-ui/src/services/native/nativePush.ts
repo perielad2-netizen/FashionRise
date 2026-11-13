@@ -9,7 +9,8 @@ import { PushNotifications } from '@capacitor/push-notifications'
 import { apiRequest, getApiBaseUrl } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 import { isNativeShell, nativePlatform } from './platform'
-import { classifyFashionRiseUrl, navigateInApp } from './urlPolicy'
+import { sanitizePushDestination } from './pushDestination'
+import { navigateInApp } from './urlPolicy'
 
 export type NativePushCapability = {
   android_enabled: boolean
@@ -100,19 +101,8 @@ export async function deleteNativePushDevice(deviceToken: string): Promise<void>
 }
 
 function openNotificationUrl(rawUrl: unknown): void {
-  const url = typeof rawUrl === 'string' ? rawUrl : '/studio/runway'
-  const classified = classifyFashionRiseUrl(url.startsWith('/') ? url : `/${url}`)
-  if (classified.kind === 'in_app') {
-    navigateInApp(classified.path)
-    return
-  }
-  // Absolute fashionrise.app in payload
-  const abs = classifyFashionRiseUrl(url)
-  if (abs.kind === 'in_app') {
-    navigateInApp(abs.path)
-    return
-  }
-  navigateInApp('/studio/runway')
+  // Push taps never open reset/verify/OAuth or any token-bearing URL.
+  navigateInApp(sanitizePushDestination(rawUrl))
 }
 
 async function installListeners(): Promise<void> {

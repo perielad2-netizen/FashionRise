@@ -1,37 +1,40 @@
 /* FashionRise Web Push handlers — imported by the generated Workbox SW.
  * Keep this file free of HTML navigation fallbacks (CF Access SW safety).
+ * Push destinations never include password-reset, verification, or OAuth tokens.
  */
 /* eslint-disable no-restricted-globals */
 
-const ALLOWED_PUSH_PREFIXES = [
-  '/studio',
-  '/login',
-  '/register',
-  '/forgot-password',
+const PUSH_PATH_ALLOWLIST = ['/studio', '/privacy']
+const BLOCKED_PUSH_PREFIXES = [
   '/reset-password',
   '/verify-email',
-  '/privacy',
+  '/forgot-password',
+  '/auth/google',
+  '/auth/cf-access',
+  '/api/',
 ]
+const TOKENISH = /(?:^|[?#&])(?:token|code|access_token|refresh_token|id_token|handoff)=/i
 
 function sanitizePushUrl(raw) {
-  let url = typeof raw === 'string' && raw.trim() ? raw.trim() : '/studio/runway'
+  const fallback = '/studio/runway'
+  let url = typeof raw === 'string' && raw.trim() ? raw.trim() : fallback
   try {
     if (/^https?:\/\//i.test(url)) {
       const u = new URL(url)
       if (u.hostname !== 'fashionrise.app' && u.hostname !== 'www.fashionrise.app') {
-        return '/studio/runway'
+        return fallback
       }
       url = `${u.pathname}${u.search}${u.hash}`
     }
   } catch {
-    return '/studio/runway'
+    return fallback
   }
-  if (!url.startsWith('/')) return '/studio/runway'
-  const path = url.split('?')[0].split('#')[0]
-  const ok = ALLOWED_PUSH_PREFIXES.some(
-    (p) => path === p || path.startsWith(`${p}/`),
-  )
-  return ok ? url : '/studio/runway'
+  if (!url.startsWith('/') || url.startsWith('//')) return fallback
+  if (TOKENISH.test(url)) return fallback
+  const path = url.split('?')[0].split('#')[0] || '/'
+  if (BLOCKED_PUSH_PREFIXES.some((p) => path === p || path.startsWith(p))) return fallback
+  const ok = PUSH_PATH_ALLOWLIST.some((p) => path === p || path.startsWith(`${p}/`))
+  return ok && path !== '/' ? path : fallback
 }
 
 self.addEventListener('push', (event) => {

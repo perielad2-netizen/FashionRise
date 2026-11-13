@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**#303 approved for merge** — native nav + fail-closed FCM/APNs foundation; **`NATIVE_PUSH_*` remain OFF**. #318+#319 already on tip `fe0dba34`. iOS App Store published; iOS **1.0.1** later. Stars purchasing still OFF.)
+**Last updated:** 2026-11-14 (**#303 approved for merge** — native nav + fail-closed FCM/APNs foundation; review fixes included; **`NATIVE_PUSH_*` remain OFF**. #318+#319 already on tip `fe0dba34`. iOS App Store published; Stars purchasing still OFF.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -114,11 +114,12 @@ An earlier status block asked to start a Codemagic iOS 1.0 TestFlight RC on `bd8
 | Nav fixes | Central `urlPolicy` + deep-link/click guard; `allowNavigation: []`; Privacy relative `/privacy`; Android App Links intent filter; iOS entitlements + `UIBackgroundModes` |
 | OAuth | Android Google one-time handoff **unchanged** (reused securely) |
 | Native push | Table `native_push_devices` (Alembic **030**); `/push/native/*` API; FE `nativePush.ts`; Runway toggle routes native vs Web Push; logout cleanup |
+| Review fixes | AppDelegate Capacitor APNs callbacks; push destinations exclude reset/verify/OAuth/tokens; Debug=`development` / Release=`production` entitlements; coexistence docs |
 | Flags | `NATIVE_PUSH_ANDROID_ENABLED` / `NATIVE_PUSH_IOS_ENABLED` default **false** — incomplete infra cannot break Web Push |
 | Operator | `docs/deploy/NATIVE-PUSH-OPERATOR.md` · AASA/assetlinks **templates only** (no live fingerprints committed) |
 | Audit table | `docs/NATIVE-NAV-PUSH-AUDIT.md` |
 | Store / push prod | **Do not** Codemagic IPA/AAB · **do not** enable native push in production until authorized |
-| **Exact next step** | Merge with flags false → QA web push regression → operator secrets + staging native enable → one consolidated iOS build after QA |
+| **Exact next step** | Merge #303 with flags false → QA web push regression → operator secrets + staging native enable → one consolidated iOS build after QA |
 
 ## Mobile QA fixes (2026-11-13) — password reset · overlays · Stars UX
 

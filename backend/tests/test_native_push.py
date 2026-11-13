@@ -97,7 +97,13 @@ def test_sanitize_push_url_allowlist():
     assert push_service.sanitize_push_url("https://fashionrise.app/studio/runway") == "/studio/runway"
     assert push_service.sanitize_push_url("https://evil.example/phish") == "/studio/runway"
     assert push_service.sanitize_push_url("/api/v1/auth/me") == "/studio/runway"
-    assert push_service.sanitize_push_url("/reset-password#token=abc") == "/reset-password#token=abc"
+    # Password-reset / verify / OAuth / token-bearing URLs must never be push destinations.
+    assert push_service.sanitize_push_url("/reset-password#token=abc") == "/studio/runway"
+    assert push_service.sanitize_push_url("/verify-email#token=xyz") == "/studio/runway"
+    assert push_service.sanitize_push_url("/forgot-password") == "/studio/runway"
+    assert push_service.sanitize_push_url("/auth/google/complete#access_token=x") == "/studio/runway"
+    assert push_service.sanitize_push_url("/studio/runway?token=leak") == "/studio/runway"
+    assert push_service.sanitize_push_url("/privacy") == "/privacy"
 
 
 def test_notify_skips_native_when_disabled(client, db_session, monkeypatch):

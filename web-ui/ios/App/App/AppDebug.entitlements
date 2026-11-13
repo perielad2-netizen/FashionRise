@@ -2,11 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Operator: enable Push Notifications capability in Xcode / Codemagic profile.
-	     aps-environment is rewritten by signing (development vs production). -->
+	<!-- Debug / development provisioning → sandbox APNs. -->
 	<key>aps-environment</key>
 	<string>development</string>
-	<!-- Universal Links — requires live apple-app-site-association on fashionrise.app. -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:fashionrise.app</string>

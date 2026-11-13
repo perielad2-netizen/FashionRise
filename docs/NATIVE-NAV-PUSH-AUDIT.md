@@ -19,9 +19,12 @@
 | Runway Web Push click | SW `clients.navigate(url)` | Allowlisted path only | **P2** | SW `sanitizePushUrl` |
 | Shared looks / designs links | https fashionrise.app without verified App/Universal Links | Browser fallback until association live; if opened in app → SPA | **P1** | Manifest App Links + entitlements; router |
 | Cold start / `appUrlOpen` | Partial (OAuth only on Android) | All FashionRise allowlisted URLs | **P1** | `installNativeDeepLinkRouter` + `App.getLaunchUrl` |
-| iOS associated domains | Missing | `applinks:fashionrise.app` | **P1** | `App.entitlements` + operator AASA |
+| iOS associated domains | Missing | `applinks:fashionrise.app` | **P1** | Debug/Release entitlements + operator AASA |
 | Android assetlinks | Missing | Signed Digital Asset Links | **P1** | Intent filter + template; operator SHA-256 |
 | Settings / privacy / account | Mix of relative + one absolute privacy | All FashionRise in-SPA | Fixed | Privacy relative |
+| Push tap → reset/verify/OAuth URLs | Allowlist previously included auth paths | Push destinations = `/studio` + `/privacy` only; no tokens | **P0** | `sanitize_push_url` / `pushDestination` / SW |
+| iOS AppDelegate APNs callbacks | Missing Capacitor forwards | Post register success/failure to Capacitor | **P0** | `AppDelegate.swift` |
+| iOS Release `aps-environment` | Shared file had `development` | Release → `production`; Debug → `development` | **P1** | `AppRelease` / `AppDebug.entitlements` |
 
 ### Intentional system interfaces (not defects)
 
@@ -39,10 +42,12 @@
 | API `native_push_devices` | Alembic **030** · register/list/delete · capability probe |
 | Fan-out | `notify_user` → web + native (per-platform fail-closed) |
 | Android FCM | Code path present; needs `google-services.json` + SA JSON + flag |
-| iOS APNs | Entitlements + background mode; needs `.p8` + httpx http2 + flag |
+| iOS APNs | AppDelegate Capacitor callbacks; Debug/Release entitlements; needs `.p8` + http2 + flag + distribution profile with Push + Associated Domains |
 | Permission timing | After auth only · desired opt-out · capability gate |
 | Account isolation | Token upsert reassigns to current user; logout removes this device only |
+| Web + native coexistence | Separate tables; independent fan-out; per-device opt-out; collapse does not drop other devices (see operator doc) |
 | Duplicate delivery | Collapse/tag per device; does **not** disable other devices |
+| Push destinations | Never reset/verify/OAuth/token URLs |
 
 **Operator doc:** `docs/deploy/NATIVE-PUSH-OPERATOR.md`
 
