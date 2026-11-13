@@ -12,12 +12,14 @@ import { bindFabricCacheToUser } from '@/lib/fabricAssetCache'
 import {
   fetchMe,
   getGoogleOAuthStatus,
+  getPasswordResetStatus,
   getRegistrationStatus,
   login as apiLogin,
   logoutLocal,
   register as apiRegister,
   restoreSession,
   type LoginPayload,
+  type PasswordResetStatus,
   type RegisterPayload,
   type RegisterResult,
   type RegistrationStatus,
@@ -37,6 +39,7 @@ type AuthState = {
   isAuthenticated: boolean
   googleOAuthAvailable: boolean
   registrationStatus: RegistrationStatus | null
+  passwordResetAvailable: boolean
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -46,15 +49,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [bootstrapping, setBootstrapping] = useState(true)
   const [googleOAuthAvailable, setGoogleOAuthAvailable] = useState(false)
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null)
+  const [passwordResetAvailable, setPasswordResetAvailable] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       const loadPublicStatus = async () => {
         try {
-          const [google, registration] = await Promise.all([
+          const [google, registration, passwordReset] = await Promise.all([
             getGoogleOAuthStatus().catch(() => null),
             getRegistrationStatus().catch(() => null),
+            getPasswordResetStatus().catch(() => null as PasswordResetStatus | null),
           ])
           if (cancelled) return
           // Guideline 4.8: hide Google Sign-In in the iOS native shell; keep it on web.
@@ -63,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             !(isNativeShell() && nativePlatform() === 'ios')
           setGoogleOAuthAvailable(googleOn)
           if (registration) setRegistrationStatus(registration)
+          setPasswordResetAvailable(Boolean(passwordReset?.password_reset_available))
         } catch {
           /* status unavailable — password login still works */
         }
@@ -170,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(user),
       googleOAuthAvailable,
       registrationStatus,
+      passwordResetAvailable,
     }),
     [
       user,
@@ -180,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshUser,
       googleOAuthAvailable,
       registrationStatus,
+      passwordResetAvailable,
     ],
   )
 

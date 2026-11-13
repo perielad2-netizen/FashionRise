@@ -66,6 +66,14 @@ export type GoogleOAuthStatus = {
   note?: string
 }
 
+export type PasswordResetStatus = {
+  password_reset_available: boolean
+  password_reset_enabled: boolean
+  email_delivery_configured: boolean
+  prerequisite?: string | null
+  note?: string | null
+}
+
 export async function getCfAccessSsoStatus(signal?: AbortSignal): Promise<CfAccessSsoStatus> {
   return apiRequest<CfAccessSsoStatus>('/auth/cf-access/status', {
     method: 'GET',
@@ -88,6 +96,45 @@ export async function getRegistrationStatus(signal?: AbortSignal): Promise<Regis
     auth: false,
     signal,
   })
+}
+
+export async function getPasswordResetStatus(
+  signal?: AbortSignal,
+): Promise<PasswordResetStatus> {
+  return apiRequest<PasswordResetStatus>('/auth/password-reset/status', {
+    method: 'GET',
+    auth: false,
+    signal,
+  })
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiRequest<void>('/auth/forgot-password', {
+    method: 'POST',
+    body: { email: email.trim().toLowerCase() },
+    auth: false,
+  })
+}
+
+export async function resetPassword(
+  token: string,
+  password: string,
+): Promise<{ user: User; tokens: StoredTokens }> {
+  tokenStore.clear()
+  const tokens = await apiRequest<TokenResponse>('/auth/reset-password', {
+    method: 'POST',
+    body: { token: token.trim(), password },
+    auth: false,
+  })
+  const stored = toStored(tokens)
+  tokenStore.set(stored)
+  try {
+    const user = await fetchMe()
+    return { user, tokens: stored }
+  } catch (err) {
+    tokenStore.clear()
+    throw err
+  }
 }
 
 /** Browser navigation target that begins Google Sign-In (server redirects to Google). */

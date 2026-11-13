@@ -12,8 +12,14 @@ import { isNativeShell, nativePlatform } from '@/services/native/platform'
 import styles from './LoginPage.module.css'
 
 export function LoginPage() {
-  const { login, isAuthenticated, bootstrapping, googleOAuthAvailable, registrationStatus } =
-    useAuth()
+  const {
+    login,
+    isAuthenticated,
+    bootstrapping,
+    googleOAuthAvailable,
+    registrationStatus,
+    passwordResetAvailable,
+  } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
@@ -167,6 +173,12 @@ export function LoginPage() {
               </span>
             ) : null}
           </label>
+
+          {passwordResetAvailable ? (
+            <p className={styles.forgotRow}>
+              <Link to="/forgot-password">Forgot password?</Link>
+            </p>
+          ) : null}
 
           {formError ? (
             <p className={styles.error} role="alert">
