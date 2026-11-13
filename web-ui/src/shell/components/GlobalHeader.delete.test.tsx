@@ -9,6 +9,45 @@ vi.mock('@/services/auth/authApi', () => ({
   deleteAccount: () => api.deleteAccount(),
 }))
 
+vi.mock('@/services/starsShopApi', () => ({
+  fetchStarsWallet: vi.fn(async () => ({
+    ai_stars: 10,
+    ai_stars_unlimited: false,
+    ai_stars_magic_cost: 10,
+    ai_stars_costs: { magic: 10, croquis: 10, pdf: 50, fabric: 5 },
+  })),
+  fetchStarPackages: vi.fn(async () => []),
+  fetchStarCart: vi.fn(async () => ({
+    id: 'c',
+    status: 'open',
+    items: [],
+    stars_total: 0,
+    price_usd_cents_total: 0,
+    checkout_enabled: false,
+    checkout_note: null,
+  })),
+  formatUsdCents: (c: number) => `$${(c / 100).toFixed(2)}`,
+  setStarCartItem: vi.fn(),
+  clearStarCart: vi.fn(),
+  checkoutStarCart: vi.fn(),
+}))
+
+vi.mock('@/services/auth/AuthProvider', () => ({
+  useAuth: () => ({
+    user: { id: 'u1', username: 'peri', ai_stars: 10 },
+    refreshUser: vi.fn(),
+  }),
+}))
+
+vi.mock('@/services/native/iap', () => ({
+  isNativeIosStarsShop: () => false,
+  isNativeAndroidShell: () => false,
+  fetchAppleIapStatus: vi.fn(),
+  listStarsIapProducts: vi.fn(),
+  purchaseStarsPack: vi.fn(),
+  recoverPendingStarsPurchases: vi.fn(),
+}))
+
 import { GlobalHeader } from '@/shell/components/GlobalHeader'
 
 describe('GlobalHeader delete account', () => {

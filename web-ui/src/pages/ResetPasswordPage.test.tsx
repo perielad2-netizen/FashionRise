@@ -11,6 +11,7 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => navigate,
+    Navigate: ({ to }: { to: string }) => <div data-testid="navigate" data-to={to} />,
   }
 })
 
@@ -25,7 +26,7 @@ vi.mock('@/services/auth/authApi', async () => {
 })
 
 const authState = {
-  user: null as null,
+  user: null as null | { id: string; username: string },
   bootstrapping: false,
   isAuthenticated: false,
   googleOAuthAvailable: false,
@@ -46,6 +47,8 @@ describe('ResetPasswordPage', () => {
     resetPassword.mockReset()
     navigate.mockReset()
     authState.passwordResetAvailable = true
+    authState.isAuthenticated = false
+    authState.user = null
     window.history.replaceState(null, '', '/reset-password')
   })
 
@@ -86,6 +89,32 @@ describe('ResetPasswordPage', () => {
       </MemoryRouter>,
     )
     expect(screen.getByText(/unsafe format/i)).toBeInTheDocument()
+    expect(resetPassword).not.toHaveBeenCalled()
+  })
+
+  it('shows the password form when already authenticated if a reset token is present', () => {
+    authState.isAuthenticated = true
+    authState.user = { id: 'a1', username: 'account_a' }
+    window.history.replaceState(null, '', '/reset-password#token=abcdefghijklmnopqrstuvwxyz012345')
+    render(
+      <MemoryRouter>
+        <ResetPasswordPage />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByTestId('navigate')).toBeNull()
+    expect(screen.getByRole('button', { name: /save password/i })).toBeInTheDocument()
+    expect(screen.getByText(/signed in as/i)).toBeInTheDocument()
+    expect(screen.getByText('account_a')).toBeInTheDocument()
+    expect(resetPassword).not.toHaveBeenCalled()
+  })
+
+  it('does not redeem on open — only Save password POSTs', () => {
+    window.history.replaceState(null, '', '/reset-password#token=abcdefghijklmnopqrstuvwxyz012345')
+    render(
+      <MemoryRouter>
+        <ResetPasswordPage />
+      </MemoryRouter>,
+    )
     expect(resetPassword).not.toHaveBeenCalled()
   })
 })

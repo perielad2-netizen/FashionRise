@@ -20,33 +20,56 @@ function clearHashFromHistory(): void {
   window.history.replaceState(null, '', `${pathname}${search}`)
 }
 
+function hasQueryToken(): boolean {
+  if (typeof window === 'undefined') return false
+  return Boolean(new URLSearchParams(window.location.search).get('token'))
+}
+
+/**
+ * Password reset handoff. Opening the link never redeems the token — only an
+ * explicit Save password POST does. A valid hash token always shows this form,
+ * even if another FashionRise session is already signed in.
+ */
 export function ResetPasswordPage() {
-  const { isAuthenticated, bootstrapping, refreshUser, passwordResetAvailable } = useAuth()
+  const { user, isAuthenticated, bootstrapping, refreshUser, passwordResetAvailable } = useAuth()
   const navigate = useNavigate()
-  const [token, setToken] = useState<string | null>(null)
+  // Capture token on first paint so an existing session cannot Navigate away first.
+  const [token, setToken] = useState<string | null>(() => {
+    if (hasQueryToken()) return null
+    const fromHash = readTokenFromHash()
+    return fromHash || null
+  })
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [queryTokenRejected, setQueryTokenRejected] = useState(false)
+  const [queryTokenRejected, setQueryTokenRejected] = useState(() => hasQueryToken())
+  const [hashScrubbed, setHashScrubbed] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const search = new URLSearchParams(window.location.search)
     if (search.get('token')) {
       setQueryTokenRejected(true)
-      clearHashFromHistory()
+      setToken(null)
       const url = new URL(window.location.href)
       url.searchParams.delete('token')
-      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+      window.history.replaceState(null, '', `${url.pathname}${url.search}`)
       return
     }
     const fromHash = readTokenFromHash()
     if (fromHash) {
       setToken(fromHash)
       clearHashFromHistory()
+      setHashScrubbed(true)
+      return
     }
-  }, [])
+    if (token && !hashScrubbed) {
+      // Token already captured via useState initializer — scrub hash if still present.
+      clearHashFromHistory()
+      setHashScrubbed(true)
+    }
+  }, [token, hashScrubbed])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -80,7 +103,12 @@ export function ResetPasswordPage() {
   }
 
   if (bootstrapping) return null
-  if (isAuthenticated && !busy && !error) return <Navigate to="/studio/home" replace />
+
+  // Never bounce a valid reset intent into Studio — form stays compact / mobile-safe.
+  const hasResetIntent = Boolean(token) || queryTokenRejected
+  if (isAuthenticated && !busy && !error && !hasResetIntent) {
+    return <Navigate to="/studio/home" replace />
+  }
 
   return (
     <div className={styles.page}>
@@ -114,6 +142,12 @@ export function ResetPasswordPage() {
               Enter a new password for your FashionRise account. Opening this page alone does not
               change your password.
             </p>
+            {isAuthenticated && user?.username ? (
+              <p className={styles.subtitle} role="status">
+                You are signed in as <strong>{user.username}</strong>. Saving a new password signs
+                you into the account for this reset link (and ends the current session).
+              </p>
+            ) : null}
             <form className={styles.form} onSubmit={(e) => void onSubmit(e)} noValidate>
               <label className={styles.field}>
                 <span>New password</span>

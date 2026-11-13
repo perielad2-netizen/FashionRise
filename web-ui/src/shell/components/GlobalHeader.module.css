@@ -62,6 +62,39 @@
   gap: 10px;
 }
 
+.starsBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 114, 182, 0.55);
+  background: rgba(244, 114, 182, 0.16);
+  color: #fdf2f8;
+  font-size: 12px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.starsBadge:hover {
+  background: rgba(244, 114, 182, 0.26);
+}
+
+.starsCostList {
+  margin: 0 0 12px;
+  padding-left: 1.15rem;
+  color: var(--fr-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.starsCostList li {
+  margin: 0 0 6px;
+}
+
 .appVersion {
   display: inline-flex;
   align-items: center;

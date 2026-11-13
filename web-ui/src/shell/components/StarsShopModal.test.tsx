@@ -22,6 +22,12 @@ vi.mock('@/services/starsShopApi', () => ({
   clearStarCart: vi.fn(),
   fetchStarCart: vi.fn(),
   fetchStarPackages: vi.fn(),
+  fetchStarsWallet: vi.fn(async () => ({
+    ai_stars: 40,
+    ai_stars_unlimited: false,
+    ai_stars_magic_cost: 10,
+    ai_stars_costs: { magic: 10, croquis: 10, pdf: 50, fabric: 5 },
+  })),
   formatUsdCents: (cents: number) => `$${(cents / 100).toFixed(2)}`,
   setStarCartItem: vi.fn(),
 }))
