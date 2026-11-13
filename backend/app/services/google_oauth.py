@@ -3,7 +3,9 @@
 Flow:
   1. GET /auth/google/start → redirect to Google
   2. GET /auth/google/callback → exchange code, upsert user, issue tokens
-  3. Redirect browser to SPA ``/auth/google/complete#access_token=…&refresh_token=…``
+  3a. Web: redirect SPA ``/auth/google/complete#access_token=…&refresh_token=…``
+  3b. Android native: redirect custom scheme with a one-time handoff code (no tokens);
+      app redeems via POST /auth/google/native-handoff
 """
 
 from __future__ import annotations
@@ -14,9 +16,10 @@ import json
 import logging
 import re
 import secrets
+import threading
 import time
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlencode
 
 import httpx
@@ -37,6 +40,12 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 _STATE_MAX_AGE_SEC = 600
+_HANDOFF_TTL_SEC = 90
+_NATIVE_ANDROID_SCHEME = "app.fashionrise.studio"
+
+# One-time native handoff codes (in-process). Single uvicorn worker in prod.
+_handoff_lock = threading.Lock()
+_handoffs: dict[str, dict[str, Any]] = {}
 
 
 def google_oauth_configured() -> bool:
@@ -57,11 +66,19 @@ def _b64url_decode(raw: str) -> bytes:
     return urlsafe_b64decode((raw + pad).encode("ascii"))
 
 
-def mint_oauth_state(*, next_path: str = "/studio") -> str:
+def _normalize_client(client: str | None) -> Literal["web", "android"]:
+    raw = (client or "web").strip().lower()
+    if raw == "android":
+        return "android"
+    return "web"
+
+
+def mint_oauth_state(*, next_path: str = "/studio", client: str = "web") -> str:
     safe_next = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/studio"
     payload = {
         "n": secrets.token_urlsafe(16),
         "next": safe_next,
+        "client": _normalize_client(client),
         "exp": int(time.time()) + _STATE_MAX_AGE_SEC,
     }
     body = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
@@ -94,7 +111,55 @@ def parse_oauth_state(state: str) -> dict[str, Any]:
     exp = int(data.get("exp") or 0)
     if exp < int(time.time()):
         raise UnauthorizedError("Google sign-in expired — try again")
+    data["client"] = _normalize_client(str(data.get("client") or "web"))
     return data
+
+
+def _purge_expired_handoffs(now: float | None = None) -> None:
+    ts = time.time() if now is None else now
+    expired = [k for k, v in _handoffs.items() if float(v.get("exp") or 0) < ts]
+    for key in expired:
+        _handoffs.pop(key, None)
+
+
+def mint_native_handoff(*, access: str, refresh: str, next_path: str) -> str:
+    """Create a short-lived one-time code that redeems to FashionRise session tokens.
+
+    Tokens never appear in the Android deep link — only this opaque code does.
+    """
+    safe_next = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/studio"
+    code = secrets.token_urlsafe(32)
+    with _handoff_lock:
+        _purge_expired_handoffs()
+        _handoffs[code] = {
+            "access": access,
+            "refresh": refresh,
+            "next": safe_next,
+            "exp": time.time() + _HANDOFF_TTL_SEC,
+        }
+    return code
+
+
+def redeem_native_handoff(code: str) -> dict[str, str]:
+    """Consume a handoff code exactly once. Returns access/refresh/next."""
+    key = (code or "").strip()
+    if not key or len(key) > 200:
+        raise UnauthorizedError("Invalid Google sign-in handoff")
+    with _handoff_lock:
+        _purge_expired_handoffs()
+        row = _handoffs.pop(key, None)
+    if row is None:
+        raise UnauthorizedError("Google sign-in handoff expired or already used")
+    return {
+        "access_token": str(row["access"]),
+        "refresh_token": str(row["refresh"]),
+        "next": str(row.get("next") or "/studio"),
+    }
+
+
+def clear_native_handoffs_for_tests() -> None:
+    with _handoff_lock:
+        _handoffs.clear()
 
 
 def authorization_url(*, state: str) -> str:
@@ -222,11 +287,22 @@ def upsert_google_user(db: Session, *, userinfo: dict[str, Any]) -> User:
     return user
 
 
-def complete_login_redirect(*, access: str, refresh: str, next_path: str = "/studio") -> str:
+def complete_login_redirect(
+    *,
+    access: str,
+    refresh: str,
+    next_path: str = "/studio",
+    client: str = "web",
+) -> str:
     settings = get_settings()
     app = (settings.public_app_url or "https://fashionrise.app").rstrip("/")
     safe_next = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/studio"
-    # Hash fragment keeps tokens out of Referer / most access logs.
+    if _normalize_client(client) == "android":
+        # Custom scheme opens the Capacitor Android app. Code is one-time; no JWTs in the URL.
+        code = mint_native_handoff(access=access, refresh=refresh, next_path=safe_next)
+        q = urlencode({"code": code, "next": safe_next})
+        return f"{_NATIVE_ANDROID_SCHEME}://auth/google/native?{q}"
+    # Hash fragment keeps tokens out of Referer / most access logs (web only).
     frag = urlencode({"access_token": access, "refresh_token": refresh, "next": safe_next})
     return f"{app}/auth/google/complete#{frag}"
 
@@ -237,7 +313,8 @@ def status_payload() -> dict[str, Any]:
         "auto_register": bool(get_settings().google_oauth_auto_register),
         "note": (
             "When enabled, GET /auth/google/start begins Google Sign-In. "
-            "Verified Gmail accounts can log in; new accounts are created when auto_register is true."
+            "Verified Gmail accounts can log in; new accounts are created when auto_register is true. "
+            "Android native uses a one-time handoff code (POST /auth/google/native-handoff)."
         ),
     }
 

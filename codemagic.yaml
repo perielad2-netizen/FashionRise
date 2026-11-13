@@ -276,7 +276,8 @@ workflows:
         GOOGLE_PLAY_PACKAGE_NAME: app.fashionrise.studio
         ANDROID_VERSION_NAME: "1.0"
         # versionCode = PROJECT_BUILD_NUMBER + OFFSET (raise if Play latest ≥ stamp).
-        ANDROID_VERSION_CODE_OFFSET: "0"
+        # Raise when Play Internal already consumed lower versionCodes from prior AABs.
+        ANDROID_VERSION_CODE_OFFSET: "10"
       node: 22
       java: 21
 

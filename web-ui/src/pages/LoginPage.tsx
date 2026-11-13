@@ -7,6 +7,8 @@ import { validateLogin, type LoginFieldErrors } from '@/lib/validateLogin'
 import { ApiError } from '@/services/api/client'
 import { getGoogleOAuthStartUrl } from '@/services/auth/authApi'
 import { useAuth } from '@/services/auth/AuthProvider'
+import { openAndroidGoogleOAuth } from '@/services/native/googleOAuthReturn'
+import { isNativeShell, nativePlatform } from '@/services/native/platform'
 import styles from './LoginPage.module.css'
 
 export function LoginPage() {
@@ -62,7 +64,15 @@ export function LoginPage() {
 
   function onGoogle() {
     if (busy) return
-    window.location.assign(getGoogleOAuthStartUrl('/studio/home'))
+    const androidNative = isNativeShell() && nativePlatform() === 'android'
+    const startUrl = getGoogleOAuthStartUrl('/studio/home', {
+      client: androidNative ? 'android' : 'web',
+    })
+    if (androidNative) {
+      void openAndroidGoogleOAuth(startUrl)
+      return
+    }
+    window.location.assign(startUrl)
   }
 
   return (

@@ -8,6 +8,8 @@ import { validateRegister, type RegisterFieldErrors } from '@/lib/validateRegist
 import { ApiError } from '@/services/api/client'
 import { getGoogleOAuthStartUrl, resendVerification } from '@/services/auth/authApi'
 import { useAuth } from '@/services/auth/AuthProvider'
+import { openAndroidGoogleOAuth } from '@/services/native/googleOAuthReturn'
+import { isNativeShell, nativePlatform } from '@/services/native/platform'
 import styles from './RegisterPage.module.css'
 
 function initialFromQuery(params: URLSearchParams, key: string): string {
@@ -48,7 +50,15 @@ export function RegisterPage() {
 
   function onGoogle() {
     if (busy) return
-    window.location.assign(getGoogleOAuthStartUrl('/studio/home'))
+    const androidNative = isNativeShell() && nativePlatform() === 'android'
+    const startUrl = getGoogleOAuthStartUrl('/studio/home', {
+      client: androidNative ? 'android' : 'web',
+    })
+    if (androidNative) {
+      void openAndroidGoogleOAuth(startUrl)
+      return
+    }
+    window.location.assign(startUrl)
   }
 
   async function onResend() {
