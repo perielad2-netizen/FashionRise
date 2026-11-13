@@ -261,7 +261,8 @@ workflows:
   fashionrise-android-play-internal:
     name: FashionRise Android (Play AAB)
     max_build_duration: 120
-    instance_type: linux_x2
+    # Personal / free Codemagic plan: linux_x2 unavailable; mac_mini_m2 builds Android AABs.
+    instance_type: mac_mini_m2
     working_directory: web-ui
 
     environment:
@@ -313,9 +314,12 @@ workflows:
           set -euo pipefail
           test -n "${CM_KEYSTORE_PATH:-}"
           test -f "$CM_KEYSTORE_PATH"
+          test -n "${ANDROID_SDK_ROOT:-}"
           VC="$(cat /tmp/fr-android-version-code.txt)"
           VN="$(cat /tmp/fr-android-version-name.txt)"
           cd "$CM_BUILD_DIR/web-ui/android"
+          # mac_mini_m2 checkout may drop the executable bit on the wrapper.
+          chmod +x ./gradlew
           ./gradlew bundleRelease \
             -PversionCode="$VC" \
             -PversionName="$VN"
