@@ -298,6 +298,8 @@ workflows:
 
       - name: Assert Android launcher icons are real
         script: |
+          # Pixel scan in assert-android-appicon.mjs requires Pillow on the builder.
+          python3 -m pip install --user --quiet pillow
           npm run check:android-appicon
 
       - name: Set Android SDK location
