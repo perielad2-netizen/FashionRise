@@ -3,9 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-11 (**Public registration LIVE — immediate Create Account** · no SMTP/verification · IAP gates **OFF**.)
+**Last updated:** 2026-11-13 (**QA: password-reset auth race · overlay menus · Stars header/billing UX** · no native store submit.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## Mobile QA fixes (2026-11-13) — password reset · overlays · Stars UX
+
+| Status | Detail |
+|---|---|
+| Trigger | Tester feedback 2026-11-13 (reset link → Studio skip; dual menus; hard-to-find Stars) |
+| Password reset | `ResetPasswordPage` keeps the compact form when a hash token is present even if already signed in; opening the link does **not** redeem; redeem stays POST single-use |
+| Overlays | Shell coordinates nav drawer ↔ account menu (mutual close + Escape); account menu outside-click |
+| Stars UX | Global header Stars badge → Stars Shop; account menu **My Stars & Billing** (balance + live `/auth/stars` costs + ops estimate); no invented purchase history |
+| Platform gates | iOS StoreKit path unchanged; Android Play Billing still not enabled; web checkout still gated |
+| Native release | **Do not** start Codemagic IPA/AAB / store submit until QA consolidates |
+| Remaining | In-app purchase history UI needs a future authoritative API; Android Play products still staged |
+| **Exact next step** | Continue QA on web FE tip · then one consolidated native build |
 
 ## Public email registration (2026-11-11) — LIVE · IMMEDIATE ACCESS
 

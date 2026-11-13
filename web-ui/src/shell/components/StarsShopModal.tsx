@@ -22,6 +22,7 @@ import {
   type StarCart,
   type StarPackage,
 } from '@/services/starsShopApi'
+import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
 import { useAuth } from '@/services/auth/AuthProvider'
 import styles from './StarsShopModal.module.css'
 
@@ -58,8 +59,10 @@ function stateMessage(state: PurchaseFlowState, fallback?: string): string | nul
 
 export function StarsShopModal({ open, onClose }: Props) {
   const { user, refreshUser } = useAuth()
+  const { costs } = useAiStarsWallet()
   const nativeIos = isNativeIosStarsShop()
   const nativeAndroid = isNativeAndroidShell()
+  const costLine = `Magic: ${costs.magic} Stars · Model: ${costs.croquis} Stars · Fabric: ${costs.fabric} Stars · PDF: ${costs.pdf} Stars`
 
   const [packages, setPackages] = useState<StarPackage[]>([])
   const [cart, setCart] = useState<StarCart | null>(null)
@@ -248,9 +251,7 @@ export function StarsShopModal({ open, onClose }: Props) {
             <p className={styles.hint}>
               Stars power your AI fashion creations. Choose a package below to get started.
             </p>
-            <p className={styles.costs}>
-              Magic: 10 Stars · Model: 10 Stars · Fabric: 5 Stars · PDF: 50 Stars
-            </p>
+            <p className={styles.costs}>{costLine}</p>
             {flowState === 'loading_products' ? (
               <p className={styles.empty}>Loading App Store products…</p>
             ) : null}
@@ -312,9 +313,7 @@ export function StarsShopModal({ open, onClose }: Props) {
                 ? ' Google Play Stars purchasing is not available yet.'
                 : ' Packages are listed now; web checkout opens later. On iOS, buy Stars in the App Store app.'}
             </p>
-            <p className={styles.costs}>
-              Magic: 10 Stars · Model: 10 Stars · Fabric: 5 Stars · PDF: 50 Stars
-            </p>
+            <p className={styles.costs}>{costLine}</p>
 
             <section className={styles.section}>
               <h3>Packages</h3>

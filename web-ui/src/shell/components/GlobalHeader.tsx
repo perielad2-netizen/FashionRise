@@ -1,8 +1,23 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react'
-import { ChevronDown, LogOut, Mail, Settings, Trash2, UserRound, X } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  ChevronDown,
+  LogOut,
+  Mail,
+  Settings,
+  Star,
+  Trash2,
+  UserRound,
+  X,
+} from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { CONTACT_EMAIL, openContactMail } from '@/lib/contact'
+import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
 import { deleteAccount } from '@/services/auth/authApi'
+import {
+  isNativeAndroidShell,
+  isNativeIosStarsShop,
+} from '@/services/native/iap'
+import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './GlobalHeader.module.css'
 
 type Props = {
@@ -10,13 +25,36 @@ type Props = {
   username: string
   onLogout: () => void
   onComingSoon?: (label: string) => void
+  /** Controlled account menu — shell coordinates with nav drawer. */
+  accountMenuOpen?: boolean
+  onAccountMenuOpenChange?: (open: boolean) => void
 }
 
-type Panel = 'about' | 'contact' | 'delete' | null
+type Panel = 'about' | 'contact' | 'delete' | 'stars' | null
 
-export function GlobalHeader({ leading, username, onLogout }: Props) {
-  const [menuOpen, setMenuOpen] = useState(false)
+function opsFor(balance: number | null, unlimited: boolean, cost: number): string {
+  if (unlimited) return 'Unlimited'
+  if (cost <= 0) return '—'
+  const b = Math.max(0, Number(balance ?? 0))
+  return String(Math.floor(b / cost))
+}
+
+export function GlobalHeader({
+  leading,
+  username,
+  onLogout,
+  accountMenuOpen: accountMenuOpenProp,
+  onAccountMenuOpenChange,
+}: Props) {
+  const [menuOpenInternal, setMenuOpenInternal] = useState(false)
+  const menuOpen = accountMenuOpenProp ?? menuOpenInternal
+  const setMenuOpen = (next: boolean) => {
+    onAccountMenuOpenChange?.(next)
+    if (accountMenuOpenProp === undefined) setMenuOpenInternal(next)
+  }
+
   const [panel, setPanel] = useState<Panel>(null)
+  const [shopOpen, setShopOpen] = useState(false)
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [replyEmail, setReplyEmail] = useState('')
@@ -28,11 +66,31 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
   const messageId = useId()
   const replyId = useId()
   const deleteConfirmId = useId()
+  const menuWrapRef = useRef<HTMLDivElement>(null)
+  const { balance, unlimited, costs, reload } = useAiStarsWallet()
+
+  const nativeIos = isNativeIosStarsShop()
+  const nativeAndroid = isNativeAndroidShell()
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDoc = (e: MouseEvent) => {
+      if (!menuWrapRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [menuOpen])
 
   function openContact() {
     setMenuOpen(false)
     setSentHint(null)
     setPanel('contact')
+  }
+
+  function openStarsBilling() {
+    setMenuOpen(false)
+    void reload()
+    setPanel('stars')
   }
 
   function openDeleteAccount() {
@@ -48,6 +106,12 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
     setPanel(null)
     setSentHint(null)
     setDeleteError(null)
+  }
+
+  function openShopFromHeader() {
+    setMenuOpen(false)
+    setPanel(null)
+    setShopOpen(true)
   }
 
   function onSubmitContact(event: FormEvent) {
@@ -82,6 +146,13 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
     }
   }
 
+  const starsLabel = unlimited ? '∞' : String(balance ?? 0)
+  const purchaseNote = nativeIos
+    ? 'Buy Stars with Apple In‑App Purchase when purchasing is enabled for this build.'
+    : nativeAndroid
+      ? 'Google Play Billing for Stars is not available yet. Your current balance still works for AI features.'
+      : 'Web checkout for Stars is not open yet. On iPhone, buy Stars in the FashionRise iOS app when enabled.'
+
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
@@ -96,23 +167,51 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
         <span className={styles.plus}>+</span> Create
       </p>
       <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.starsBadge}
+          data-testid="global-stars-badge"
+          onClick={openShopFromHeader}
+          title={
+            unlimited
+              ? 'Unlimited Stars — open Stars Shop'
+              : `${starsLabel} Stars — Magical looks, models, fabric & PDF. Tap to buy or view.`
+          }
+          aria-label={
+            unlimited ? 'Unlimited Stars, open Stars Shop' : `${starsLabel} Stars, open Stars Shop`
+          }
+        >
+          <Star size={14} aria-hidden />
+          <span>{starsLabel}</span>
+        </button>
         <span className={styles.avatar} aria-hidden>
           <UserRound size={16} />
         </span>
-        <div className={styles.menuWrap}>
+        <div className={styles.menuWrap} ref={menuWrapRef}>
           <button
             type="button"
             className={styles.studioBtn}
             aria-expanded={menuOpen}
             aria-haspopup="menu"
-            onClick={() => setMenuOpen((v) => !v)}
+            data-testid="global-account-menu"
+            onClick={() => setMenuOpen(!menuOpen)}
           >
             <span>My Studio</span>
             <ChevronDown size={14} />
           </button>
           {menuOpen ? (
-            <div className={styles.menu} role="menu">
+            <div className={styles.menu} role="menu" data-testid="global-account-menu-panel">
               <p className={styles.menuUser}>{username}</p>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.menuItem}
+                data-testid="menu-stars-billing"
+                onClick={openStarsBilling}
+              >
+                <Star size={14} />
+                My Stars &amp; Billing
+              </button>
               <button
                 type="button"
                 role="menuitem"
@@ -152,6 +251,7 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
           aria-label="Settings and About"
           title="Settings / About"
           onClick={() => {
+            setMenuOpen(false)
             setSentHint(null)
             setPanel('about')
           }}
@@ -159,6 +259,82 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
           <Settings size={16} />
         </button>
       </div>
+
+      {panel === 'stars' ? (
+        <div className={styles.aboutScrim} role="presentation" onClick={closePanel}>
+          <div
+            className={`${styles.aboutCard} ${styles.contactCard}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fr-stars-title"
+            data-testid="stars-billing-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.aboutHeader}>
+              <h2 id="fr-stars-title">My Stars &amp; Billing</h2>
+              <button
+                type="button"
+                className={styles.aboutClose}
+                aria-label="Close Stars & Billing"
+                onClick={closePanel}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className={styles.aboutBody}>
+              Balance:{' '}
+              <strong data-testid="stars-billing-balance">
+                {unlimited ? 'Unlimited' : `${balance ?? 0} Stars`}
+              </strong>
+            </p>
+            <p className={styles.aboutBody}>Current AI feature costs (from your account):</p>
+            <ul className={styles.starsCostList}>
+              <li>
+                Magic look — {costs.magic} Stars
+                {!unlimited ? ` · ~${opsFor(balance, unlimited, costs.magic)} with your balance` : ''}
+              </li>
+              <li>
+                Create Model — {costs.croquis} Stars
+                {!unlimited
+                  ? ` · ~${opsFor(balance, unlimited, costs.croquis)} with your balance`
+                  : ''}
+              </li>
+              <li>
+                AI fabric — {costs.fabric} Stars
+                {!unlimited
+                  ? ` · ~${opsFor(balance, unlimited, costs.fabric)} with your balance`
+                  : ''}
+              </li>
+              <li>
+                Tech pack PDF — {costs.pdf} Stars
+                {!unlimited ? ` · ~${opsFor(balance, unlimited, costs.pdf)} with your balance` : ''}
+              </li>
+            </ul>
+            <p className={styles.aboutBody}>{purchaseNote}</p>
+            <p className={styles.aboutBody}>
+              In-app purchase history is not listed here yet. Store receipts stay with Apple or
+              Google; FashionRise only keeps what is needed to credit Stars safely.
+            </p>
+            <div className={styles.contactActions}>
+              <button type="button" className={styles.contactGhost} onClick={closePanel}>
+                Close
+              </button>
+              <button
+                type="button"
+                className={styles.contactPrimary}
+                data-testid="stars-billing-open-shop"
+                onClick={() => {
+                  setPanel(null)
+                  setShopOpen(true)
+                }}
+              >
+                <Star size={14} aria-hidden />
+                Open Stars Shop
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {panel === 'about' ? (
         <div className={styles.aboutScrim} role="presentation" onClick={closePanel}>
@@ -315,8 +491,8 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
             </div>
             <p className={styles.aboutBody}>
               This permanently deletes your FashionRise account, designs, looks, and related data.
-              Stars balance and purchase history tied to this account are removed. This cannot be
-              undone.
+              Stars balance tied to this account is removed. Store receipts remain with Apple or
+              Google. This cannot be undone.
             </p>
             <form className={styles.contactForm} onSubmit={onConfirmDelete}>
               <label className={styles.contactLabel} htmlFor={deleteConfirmId}>
@@ -358,6 +534,14 @@ export function GlobalHeader({ leading, username, onLogout }: Props) {
           </div>
         </div>
       ) : null}
+
+      <StarsShopModal
+        open={shopOpen}
+        onClose={() => {
+          setShopOpen(false)
+          void reload()
+        }}
+      />
     </header>
   )
 }

@@ -149,3 +149,74 @@ def test_build_reset_url_uses_fragment(reset_enabled):
     url = password_reset.build_reset_url("abcDEF0123456789xyz")
     assert url.startswith("https://fashionrise.app/reset-password#token=")
     assert "?" not in url.split("#", 1)[0]
+
+
+def test_opening_link_does_not_redeem(client, db_session, reset_enabled):
+    """GET/status and forgot alone never consume a minted token — only POST reset does."""
+    register_with_invite(
+        client,
+        db_session,
+        email="hold_token@example.com",
+        username="hold_token",
+        password="oldpass12",
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "hold_token@example.com"},
+        ).status_code
+        == 204
+    )
+    raw = _token_from_captured("hold_token@example.com")
+    # Probing status / invalid methods must not burn the token.
+    assert client.get("/api/v1/auth/password-reset/status").status_code == 200
+    assert client.get("/api/v1/auth/reset-password").status_code == 405
+    first = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": raw, "password": "freshpass1"},
+    )
+    assert first.status_code == 200
+    second = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": raw, "password": "freshpass2"},
+    )
+    assert second.status_code == 401
+
+
+def test_expired_and_invalid_tokens_rejected(client, db_session, reset_enabled):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.password_reset_token import PasswordResetToken
+
+    register_with_invite(
+        client,
+        db_session,
+        email="expire_me@example.com",
+        username="expire_me",
+        password="oldpass12",
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "expire_me@example.com"},
+        ).status_code
+        == 204
+    )
+    raw = _token_from_captured("expire_me@example.com")
+    row = db_session.scalar(select(PasswordResetToken).limit(1))
+    assert row is not None
+    row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.add(row)
+    db_session.commit()
+
+    expired = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": raw, "password": "newpass99"},
+    )
+    assert expired.status_code == 401
+
+    invalid = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "zzzzzzzzzzzzzzzzzzzz", "password": "newpass99"},
+    )
+    assert invalid.status_code == 401
