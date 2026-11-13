@@ -60,27 +60,20 @@ describe('ImmersiveToolbar', () => {
     expect(screen.getByTestId('immersive-exit')).toBeTruthy()
   })
 
-  it('exposes Clear canvas in the immersive More menu', () => {
+  it('exposes Clear canvas on the primary immersive toolbar (no More menu)', () => {
     const onClear = vi.fn()
     render(<ImmersiveToolbar {...baseProps} onClear={onClear} />)
-    fireEvent.click(screen.getByTestId('immersive-toolbar-more'))
-    expect(screen.getByTestId('immersive-more-menu')).toBeTruthy()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Clear canvas' }))
-    expect(onClear).toHaveBeenCalled()
-  })
-
-  it('exposes Clear canvas on the primary immersive toolbar', () => {
-    const onClear = vi.fn()
-    render(<ImmersiveToolbar {...baseProps} onClear={onClear} />)
+    expect(screen.queryByTestId('immersive-toolbar-more')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Clear canvas' }))
     expect(onClear).toHaveBeenCalled()
   })
 
-  it('minimizes to pencil, eraser, fill, hand, undo, redo, clear, and Exit', () => {
+  it('minimizes to two rows: tools+clear, then Max/Exit (no More)', () => {
     const onTool = vi.fn()
     const onUndo = vi.fn()
     const onRedo = vi.fn()
     const onExit = vi.fn()
+    const onClear = vi.fn()
     render(
       <ImmersiveToolbar
         {...baseProps}
@@ -89,6 +82,7 @@ describe('ImmersiveToolbar', () => {
         onUndo={onUndo}
         onRedo={onRedo}
         onExit={onExit}
+        onClear={onClear}
       />,
     )
 
@@ -105,12 +99,19 @@ describe('ImmersiveToolbar', () => {
     expect(screen.getByRole('button', { name: 'Redo' })).toBeTruthy()
     expect(screen.getByTestId('immersive-toolbar-maximize')).toBeTruthy()
     expect(screen.getByTestId('immersive-exit')).toBeTruthy()
+    expect(screen.queryByTestId('immersive-toolbar-more')).toBeNull()
+    expect(screen.queryByTestId('immersive-more-menu')).toBeNull()
+
+    // Exactly two structural rows in minimized mode.
+    expect(bar.children).toHaveLength(2)
 
     expect(screen.queryByRole('button', { name: 'Eyedropper' })).toBeNull()
     expect(screen.queryByText('125%')).toBeNull()
     expect(screen.queryByText('Materials')).toBeNull()
     expect(screen.queryByText('Models')).toBeNull()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Clear canvas' }))
+    expect(onClear).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Hand pan' }))
     expect(onTool).toHaveBeenCalledWith('pan')
     fireEvent.click(screen.getByRole('button', { name: 'Fill' }))
@@ -126,5 +127,6 @@ describe('ImmersiveToolbar', () => {
     expect(screen.getByTestId('immersive-toolbar').getAttribute('data-minimized')).toBe('false')
     expect(screen.getByTestId('immersive-exit')).toBeTruthy()
     expect(screen.getByText('125%')).toBeTruthy()
+    expect(screen.queryByTestId('immersive-toolbar-more')).toBeNull()
   })
 })
