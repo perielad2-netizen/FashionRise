@@ -17,6 +17,7 @@ const authState = {
     requires_email_verification: false,
     email_delivery_configured: false,
   },
+  passwordResetAvailable: false,
   login,
   register: vi.fn(),
   logout: vi.fn(),
@@ -30,6 +31,7 @@ describe('LoginPage validation', () => {
   beforeEach(() => {
     login.mockReset()
     vi.stubEnv('VITE_REGISTRATION_UI_ENABLED', 'false')
+    authState.passwordResetAvailable = false
     authState.registrationStatus = {
       mode: 'closed',
       configured_mode: 'closed',
@@ -80,6 +82,29 @@ describe('LoginPage validation', () => {
       </MemoryRouter>,
     )
     expect(screen.queryByRole('link', { name: /create account/i })).not.toBeInTheDocument()
+  })
+
+  it('hides Forgot password when reset is unavailable', () => {
+    authState.passwordResetAvailable = false
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('link', { name: /forgot password/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Forgot password when backend reports available', () => {
+    authState.passwordResetAvailable = true
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    )
   })
 
   it('shows Create Account when backend public registration is available', () => {

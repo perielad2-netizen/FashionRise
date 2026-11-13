@@ -129,3 +129,16 @@ def send_verification_email(*, to_email: str, verify_url: str) -> None:
     )
     # Meta must never include the raw token — only a non-sensitive kind tag.
     send_email(to_email=to_email, subject=subject, body_text=body, meta={"kind": "email_verification"})
+
+
+def send_password_reset_email(*, to_email: str, reset_url: str) -> None:
+    subject = "Reset your FashionRise password"
+    body = (
+        "We received a request to reset your FashionRise password.\n\n"
+        "Open this link, then choose a new password on the page:\n"
+        f"{reset_url}\n\n"
+        "The link expires soon and can be used only once. "
+        "Opening the page alone does not change your password — you must submit a new one. "
+        "If you did not request a reset, you can ignore this message.\n"
+    )
+    send_email(to_email=to_email, subject=subject, body_text=body, meta={"kind": "password_reset"})

@@ -24,6 +24,7 @@ from app.models.iap_stars_adjustment import IapStarsAdjustment
 from app.models.push_subscription import PushSubscription
 from app.models.rating import Rating
 from app.models.email_verification_token import EmailVerificationToken
+from app.models.password_reset_token import PasswordResetToken
 from app.models.refresh_token import RefreshToken
 from app.models.registration_invitation import RegistrationInvitation
 from app.models.star_cart import StarCart, StarCartItem
@@ -63,6 +64,7 @@ __all__ = [
     "PushSubscription",
     "Rating",
     "EmailVerificationToken",
+    "PasswordResetToken",
     "RefreshToken",
     "RegistrationInvitation",
     "StarCart",

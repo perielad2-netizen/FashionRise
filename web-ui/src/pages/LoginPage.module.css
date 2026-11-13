@@ -199,6 +199,22 @@
   cursor: wait;
 }
 
+.forgotRow {
+  margin: calc(var(--space-xs) * -1) 0 var(--space-sm);
+  text-align: right;
+  font-size: var(--font-size-sm);
+}
+
+.forgotRow a {
+  color: var(--pink-soft);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.forgotRow a:hover {
+  text-decoration: underline;
+}
+
 .footerLinks {
   margin-top: var(--space-md);
   text-align: center;

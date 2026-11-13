@@ -8,6 +8,8 @@ import { LoginPage } from '@/pages/LoginPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { StudioPage } from '@/pages/StudioPage'
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage'
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { VerifyEmailPage } from '@/pages/VerifyEmailPage'
 import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
 
@@ -69,6 +71,8 @@ function AppRoutes() {
             }
           />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route
             path="/studio/*"
             element={

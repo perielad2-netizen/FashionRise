@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.design_export import DesignExport
     from app.models.design_revision import DesignRevision
     from app.models.email_verification_token import EmailVerificationToken
+    from app.models.password_reset_token import PasswordResetToken
     from app.models.fabric_asset import FabricAsset
     from app.models.gallery_comment import GalleryComment
     from app.models.gallery_comment_like import GalleryCommentLike
@@ -48,6 +49,10 @@ class User(Base):
     email_verification_last_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Soft throttle for forgot-password emails (UTC).
+    password_reset_last_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # AI Stars wallet — spend gate for Magic / future AI features.
     ai_stars: Mapped[int] = mapped_column(Integer, default=10, nullable=False, server_default="10")
     # Outstanding Apple IAP refund liability (Stars already spent that Apple refunded).
@@ -66,6 +71,9 @@ class User(Base):
     profile: Mapped["UserProfile"] = relationship(back_populates="user", uselist=False)
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
     email_verification_tokens: Mapped[list["EmailVerificationToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     designs: Mapped[list["GarmentDesign"]] = relationship(back_populates="user")

@@ -31,6 +31,11 @@ vi.mock('@/services/auth/authApi', () => ({
     requires_email_verification: false,
     email_delivery_configured: false,
   }),
+  getPasswordResetStatus: async () => ({
+    password_reset_available: false,
+    password_reset_enabled: false,
+    email_delivery_configured: false,
+  }),
 }))
 
 vi.mock('@/services/auth/tokenStore', () => ({

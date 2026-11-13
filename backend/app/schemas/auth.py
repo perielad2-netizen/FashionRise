@@ -83,3 +83,20 @@ class RegistrationStatusResponse(BaseModel):
     email_delivery_configured: bool
     prerequisite: str | None = None
     note: str | None = None
+
+
+class PasswordResetStatusResponse(BaseModel):
+    password_reset_available: bool
+    password_reset_enabled: bool
+    email_delivery_configured: bool
+    prerequisite: str | None = None
+    note: str | None = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: Annotated[str, StringConstraints(min_length=16, max_length=200)]
+    password: Annotated[str, StringConstraints(min_length=8, max_length=128)]

@@ -208,6 +208,13 @@ class Settings(BaseSettings):
     # Soft per-email resend cooldown (seconds) in addition to SlowAPI IP limits.
     email_verification_resend_cooldown_seconds: int = 60
 
+    # Forgot-password email recovery. Default off — enable only after SMTP works.
+    # SPA shows the Forgot password? link only when enabled AND email delivery is configured.
+    password_reset_enabled: bool = False
+    password_reset_token_ttl_minutes: int = 60
+    # Soft per-email cooldown (seconds) in addition to SlowAPI IP limits on /forgot-password.
+    password_reset_request_cooldown_seconds: int = 60
+
     # When true, rate limiting may key on X-Real-IP set by a trusted reverse proxy
     # that overwrites the header with $remote_addr. Default false ignores client XFF.
     trust_proxy_headers: bool = False
@@ -386,6 +393,37 @@ class Settings(BaseSettings):
         ):
             return "closed"
         return configured
+
+    def password_reset_available(self) -> bool:
+        """True only when the feature flag is on and outbound email can send."""
+        return bool(self.password_reset_enabled) and self.email_delivery_configured()
+
+    def password_reset_prerequisite(self) -> str | None:
+        if self.password_reset_available():
+            return None
+        if not self.password_reset_enabled:
+            return (
+                "PASSWORD_RESET_ENABLED is false. Set PASSWORD_RESET_ENABLED=true after "
+                "SMTP_HOST and SMTP_FROM_EMAIL (and credentials + TLS) are verified."
+            )
+        backend = (self.email_delivery_backend or "smtp").strip().lower()
+        if backend == "capture":
+            return (
+                "PASSWORD_RESET_ENABLED=true rejects EMAIL_DELIVERY_BACKEND=capture unless "
+                "TESTING=true and ENVIRONMENT is not production. Set EMAIL_DELIVERY_BACKEND=smtp "
+                "with SMTP_HOST, SMTP_FROM_EMAIL, and encrypted transport "
+                "(SMTP_USE_TLS=true or port 465) when using SMTP auth."
+            )
+        user = (self.smtp_username or "").strip()
+        if user and not self.smtp_use_tls and int(self.smtp_port) != 465:
+            return (
+                "PASSWORD_RESET_ENABLED=true needs encrypted SMTP for authenticated relays: "
+                "set SMTP_USE_TLS=true (STARTTLS) or use port 465 (SMTPS)."
+            )
+        return (
+            "PASSWORD_RESET_ENABLED=true needs email delivery: set EMAIL_DELIVERY_BACKEND=smtp "
+            "with SMTP_HOST and SMTP_FROM_EMAIL (and credentials + TLS as needed)."
+        )
 
     def registration_public_prerequisite(self) -> str | None:
         if self.configured_registration_mode() != "public":

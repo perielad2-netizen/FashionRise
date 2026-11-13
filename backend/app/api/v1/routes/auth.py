@@ -12,11 +12,14 @@ from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.schemas.auth import (
     DeleteAccountRequest,
+    ForgotPasswordRequest,
     GoogleNativeHandoffRequest,
+    PasswordResetStatusResponse,
     RefreshRequest,
     RegisterResponse,
     RegistrationStatusResponse,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserLogin,
     UserRegister,
@@ -29,6 +32,7 @@ from app.services import (
     cf_access_sso,
     email_verification,
     google_oauth,
+    password_reset,
 )
 
 router = APIRouter()
@@ -74,6 +78,40 @@ def resend_verification(
 @limiter.limit("30/minute")
 def login(request: Request, data: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
     user = auth_service.authenticate(db, data)
+    access, refresh = auth_service.issue_tokens(db, user)
+    return TokenResponse(access_token=access, refresh_token=refresh)
+
+
+@router.get("/password-reset/status", response_model=PasswordResetStatusResponse)
+@limiter.limit("60/minute")
+def password_reset_status(request: Request) -> PasswordResetStatusResponse:
+    """Public capability probe — SPA shows Forgot password? only when available."""
+    return PasswordResetStatusResponse(**password_reset.status_payload())
+
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute;20/hour")
+def forgot_password(
+    request: Request,
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Email a single-use reset link. Opaque success (no account oracle) when available."""
+    password_reset.request_password_reset(db, str(data.email))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/reset-password", response_model=TokenResponse)
+@limiter.limit("20/minute;60/hour")
+def reset_password(
+    request: Request,
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    """Redeem reset token, set new password, revoke other sessions, sign the user in."""
+    user = password_reset.reset_password_with_token(db, data.token, data.password)
+    # Drop every prior refresh session before issuing a fresh pair.
+    auth_service.revoke_all_refresh_tokens_for_user(db, user)
     access, refresh = auth_service.issue_tokens(db, user)
     return TokenResponse(access_token=access, refresh_token=refresh)
 
