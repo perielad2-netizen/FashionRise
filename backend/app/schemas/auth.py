@@ -68,6 +68,12 @@ class DeleteAccountRequest(BaseModel):
     confirm: Literal["DELETE"]
 
 
+class GoogleNativeHandoffRequest(BaseModel):
+    """One-time Android OAuth handoff code (never log or echo)."""
+
+    code: Annotated[str, StringConstraints(min_length=16, max_length=200)]
+
+
 class RegistrationStatusResponse(BaseModel):
     mode: Literal["closed", "invite_only", "public"]
     configured_mode: Literal["closed", "invite_only", "public"]

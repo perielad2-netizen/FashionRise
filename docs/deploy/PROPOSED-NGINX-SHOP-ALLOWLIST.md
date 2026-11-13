@@ -99,7 +99,7 @@ location = /api/v1/shop/iap/apple/notifications {
 Also allow `GET /api/v1/auth/stars` by extending the auth regex:
 
 ```nginx
-location ~ ^/api/v1/auth/(login|refresh|logout|me|account|stars|cf-access/status|cf-access/login|google/status|google/start|google/callback)$ {
+location ~ ^/api/v1/auth/(login|refresh|logout|me|account|stars|cf-access/status|cf-access/login|google/status|google/start|google/callback|google/native-handoff)$ {
 ```
 
 ## Cloudflare

@@ -12,7 +12,7 @@ Replace with:
 
 ```nginx
 # Authentication and session endpoints (+ Google OAuth + optional CF Access SSO).
-location ~ ^/api/v1/auth/(login|refresh|logout|me|account|stars|registration/status|verify-email|resend-verification|cf-access/status|cf-access/login|google/status|google/start|google/callback)$ {
+location ~ ^/api/v1/auth/(login|refresh|logout|me|account|stars|registration/status|verify-email|resend-verification|cf-access/status|cf-access/login|google/status|google/start|google/callback|google/native-handoff)$ {
     proxy_pass http://127.0.0.1:8010;
     proxy_http_version 1.1;
     proxy_set_header Host $host;

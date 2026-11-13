@@ -1,12 +1,13 @@
 import { App } from '@capacitor/app'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { SplashScreen } from '@capacitor/splash-screen'
+import { installAndroidGoogleOAuthReturnListener } from './googleOAuthReturn'
 import {
   isNativeIosStarsShop,
   recoverPendingStarsPurchases,
   startIapTransactionUpdateRecovery,
 } from './iap'
-import { isNativeShell } from './platform'
+import { isNativeShell, nativePlatform } from './platform'
 
 /** Soften native chrome once the SPA mounts. Safe no-op on web. */
 export async function bootstrapNativeShell(): Promise<void> {
@@ -30,6 +31,11 @@ export async function bootstrapNativeShell(): Promise<void> {
     if (canGoBack) window.history.back()
     else void App.exitApp()
   })
+
+  // Android Google Sign-In: Custom Tabs → custom-scheme handoff → redeem in-app.
+  if (nativePlatform() === 'android') {
+    void installAndroidGoogleOAuthReturnListener()
+  }
 
   // Bounded Apple Stars recovery on resume (cooldown + credit gate inside recover).
   if (isNativeIosStarsShop()) {

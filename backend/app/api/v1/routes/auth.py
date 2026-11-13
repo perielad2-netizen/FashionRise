@@ -12,6 +12,7 @@ from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.schemas.auth import (
     DeleteAccountRequest,
+    GoogleNativeHandoffRequest,
     RefreshRequest,
     RegisterResponse,
     RegistrationStatusResponse,
@@ -112,11 +113,19 @@ def google_oauth_status() -> dict[str, Any]:
 
 @router.get("/google/start")
 @limiter.limit("40/minute")
-def google_oauth_start(request: Request, next: str = "/studio") -> RedirectResponse:
-    """Begin Google OAuth — redirects the browser to Google accounts."""
+def google_oauth_start(
+    request: Request,
+    next: str = "/studio",
+    client: str = "web",
+) -> RedirectResponse:
+    """Begin Google OAuth — redirects the browser to Google accounts.
+
+    ``client=android`` marks the signed OAuth state so the callback returns a
+    custom-scheme handoff URL instead of SPA hash tokens.
+    """
     if not google_oauth.google_oauth_configured():
         raise ValidationAppError("Google sign-in is not configured")
-    state = google_oauth.mint_oauth_state(next_path=next or "/studio")
+    state = google_oauth.mint_oauth_state(next_path=next or "/studio", client=client)
     return RedirectResponse(url=google_oauth.authorization_url(state=state), status_code=302)
 
 
@@ -129,7 +138,7 @@ async def google_oauth_callback(
     state: str | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
-    """Google redirects here; exchange code, upsert user, redirect SPA with tokens in hash."""
+    """Google redirects here; exchange code, upsert user, redirect SPA or native handoff."""
     app_url = (get_settings().public_app_url or "https://fashionrise.app").rstrip("/")
     if error:
         return RedirectResponse(url=f"{app_url}/login?error={quote(error)}", status_code=302)
@@ -141,9 +150,10 @@ async def google_oauth_callback(
         user = google_oauth.upsert_google_user(db, userinfo=userinfo)
         access, refresh = google_oauth.issue_tokens_for_google_user(db, user)
         next_path = str(state_data.get("next") or "/studio")
+        client = str(state_data.get("client") or "web")
         return RedirectResponse(
             url=google_oauth.complete_login_redirect(
-                access=access, refresh=refresh, next_path=next_path
+                access=access, refresh=refresh, next_path=next_path, client=client
             ),
             status_code=302,
         )
@@ -157,6 +167,20 @@ async def google_oauth_callback(
             url=f"{app_url}/login?error=google_sign_in_failed",
             status_code=302,
         )
+
+
+@router.post("/google/native-handoff", response_model=TokenResponse)
+@limiter.limit("30/minute;120/hour")
+def google_native_handoff(
+    request: Request,
+    data: GoogleNativeHandoffRequest,
+) -> TokenResponse:
+    """Redeem a one-time Android OAuth handoff code for FashionRise session tokens."""
+    redeemed = google_oauth.redeem_native_handoff(data.code)
+    return TokenResponse(
+        access_token=redeemed["access_token"],
+        refresh_token=redeemed["refresh_token"],
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)

@@ -64,6 +64,52 @@ def test_oauth_state_roundtrip(google_env):
     state = google_oauth.mint_oauth_state(next_path="/studio")
     data = google_oauth.parse_oauth_state(state)
     assert data["next"] == "/studio"
+    assert data["client"] == "web"
+
+
+def test_oauth_state_android_client(google_env):
+    state = google_oauth.mint_oauth_state(next_path="/studio/home", client="android")
+    data = google_oauth.parse_oauth_state(state)
+    assert data["client"] == "android"
+    assert data["next"] == "/studio/home"
+
+
+def test_android_complete_redirect_uses_handoff_not_tokens(google_env):
+    google_oauth.clear_native_handoffs_for_tests()
+    url = google_oauth.complete_login_redirect(
+        access="access-token-value",
+        refresh="refresh-token-value",
+        next_path="/studio/home",
+        client="android",
+    )
+    assert url.startswith("app.fashionrise.studio://auth/google/native?")
+    assert "access_token" not in url
+    assert "refresh_token" not in url
+    qs = parse_qs(urlparse(url).query)
+    assert "code" in qs
+    code = qs["code"][0]
+    redeemed = google_oauth.redeem_native_handoff(code)
+    assert redeemed["access_token"] == "access-token-value"
+    assert redeemed["refresh_token"] == "refresh-token-value"
+    # One-time
+    with pytest.raises(Exception):
+        google_oauth.redeem_native_handoff(code)
+
+
+def test_native_handoff_endpoint(client, google_env):
+    google_oauth.clear_native_handoffs_for_tests()
+    code = google_oauth.mint_native_handoff(
+        access="a-token",
+        refresh="r-token",
+        next_path="/studio/home",
+    )
+    res = client.post("/api/v1/auth/google/native-handoff", json={"code": code})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["access_token"] == "a-token"
+    assert body["refresh_token"] == "r-token"
+    again = client.post("/api/v1/auth/google/native-handoff", json={"code": code})
+    assert again.status_code == 401
 
 
 def test_upsert_creates_and_reuses(client, db_session, google_env):

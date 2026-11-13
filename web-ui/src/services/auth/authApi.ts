@@ -91,14 +91,20 @@ export async function getRegistrationStatus(signal?: AbortSignal): Promise<Regis
 }
 
 /** Browser navigation target that begins Google Sign-In (server redirects to Google). */
-export function getGoogleOAuthStartUrl(nextPath = '/studio/home'): string {
+export function getGoogleOAuthStartUrl(
+  nextPath = '/studio/home',
+  opts?: { client?: 'web' | 'android' },
+): string {
   const base = getApiBaseUrl()
   const next = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/studio/home'
-  return `${base}/auth/google/start?next=${encodeURIComponent(next)}`
+  const client = opts?.client === 'android' ? 'android' : 'web'
+  const qs = new URLSearchParams({ next, client })
+  return `${base}/auth/google/start?${qs.toString()}`
 }
 
 /**
- * Apply tokens returned from the Google OAuth complete redirect (hash fragment).
+ * Apply tokens returned from the Google OAuth complete redirect (hash fragment)
+ * or Android native handoff redeem.
  */
 export async function completeGoogleOAuthSession(tokens: {
   access_token: string
@@ -118,6 +124,18 @@ export async function completeGoogleOAuthSession(tokens: {
     tokenStore.clear()
     throw err
   }
+}
+
+/** Redeem one-time Android OAuth handoff code (tokens never appear in the deep link). */
+export async function redeemGoogleNativeHandoff(code: string): Promise<{
+  access_token: string
+  refresh_token: string
+}> {
+  return apiRequest<TokenResponse>('/auth/google/native-handoff', {
+    method: 'POST',
+    body: { code },
+    auth: false,
+  })
 }
 
 /**
