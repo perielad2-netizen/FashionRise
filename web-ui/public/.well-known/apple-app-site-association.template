@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "REPLACE_TEAM_ID.app.fashionrise.studio",
+        "paths": [
+          "/studio*",
+          "/login*",
+          "/register*",
+          "/forgot-password*",
+          "/reset-password*",
+          "/verify-email*",
+          "/privacy*",
+          "/auth/google/complete*"
+        ]
+      }
+    ]
+  }
+}

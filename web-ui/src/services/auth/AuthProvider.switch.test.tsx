@@ -47,6 +47,21 @@ vi.mock('@/lib/fabricAssetCache', () => ({
   bindFabricCacheToUser: (...args: unknown[]) => fabricCache.bindFabricCacheToUser(...args),
 }))
 
+vi.mock('@/services/native/nativePush', () => ({
+  clearNativePushForLogout: vi.fn(async () => undefined),
+  syncNativePushAfterAuth: vi.fn(async () => 'disabled' as const),
+}))
+
+vi.mock('@/services/native/iap', () => ({
+  isNativeIosStarsShop: () => false,
+  recoverPendingStarsPurchases: vi.fn(),
+}))
+
+vi.mock('@/services/native/platform', () => ({
+  isNativeShell: () => false,
+  nativePlatform: () => 'web',
+}))
+
 import { AuthProvider, useAuth } from '@/services/auth/AuthProvider'
 
 function Probe() {

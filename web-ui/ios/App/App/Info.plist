@@ -52,5 +52,10 @@
 	<string>FashionRise uses your photo library so you can choose a fully clothed fashion pose for Create Model.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>FashionRise saves look images you download to your photo library (FashionRise album).</string>
+	<!-- Remote notifications (APNs). Capability + entitlements still required in Xcode. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

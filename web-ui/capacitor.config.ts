@@ -13,9 +13,11 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     // Local assets only — do not point at a remote URL for store builds.
+    // Empty allowNavigation: FashionRise-owned URLs stay in-SPA via urlPolicy /
+    // deepLinks; Google OAuth uses Custom Tabs / system browser, not WebView.
     androidScheme: 'https',
     iosScheme: 'capacitor',
-    allowNavigation: ['fashionrise.app', '*.fashionrise.app'],
+    allowNavigation: [],
   },
   plugins: {
     SplashScreen: {

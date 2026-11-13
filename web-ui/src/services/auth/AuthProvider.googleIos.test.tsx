@@ -16,6 +16,11 @@ vi.mock('@/services/native/iap', () => ({
   recoverPendingStarsPurchases: vi.fn(),
 }))
 
+vi.mock('@/services/native/nativePush', () => ({
+  clearNativePushForLogout: vi.fn(async () => undefined),
+  syncNativePushAfterAuth: vi.fn(async () => 'disabled' as const),
+}))
+
 vi.mock('@/services/auth/authApi', () => ({
   login: vi.fn(),
   register: vi.fn(),

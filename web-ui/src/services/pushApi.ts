@@ -1,4 +1,11 @@
 import { apiRequest } from '@/services/api/client'
+import {
+  disableNativePush,
+  enableNativePush,
+  nativePushIsEnabled,
+  syncNativePushAfterAuth,
+} from '@/services/native/nativePush'
+import { isNativeShell } from '@/services/native/platform'
 
 export type PushVapidPublicKey = {
   public_key: string
@@ -80,6 +87,11 @@ export function pushSupported(): boolean {
 }
 
 export async function enableRunwayPush(): Promise<'granted' | 'denied' | 'unsupported' | 'disabled'> {
+  if (isNativeShell()) {
+    const result = await enableNativePush()
+    if (result === 'unauthenticated') return 'disabled'
+    return result
+  }
   if (!pushSupported()) return 'unsupported'
   const vapid = await getPushVapidPublicKey()
   if (!vapid.enabled || !vapid.public_key) return 'disabled'
@@ -114,6 +126,10 @@ export async function enableRunwayPush(): Promise<'granted' | 'denied' | 'unsupp
 }
 
 export async function disableRunwayPush(): Promise<void> {
+  if (isNativeShell()) {
+    await disableNativePush()
+    return
+  }
   setPushDesired(false)
   if (!pushSupported()) return
   const reg = await navigator.serviceWorker.ready
@@ -129,6 +145,7 @@ export async function disableRunwayPush(): Promise<void> {
 }
 
 export async function runwayPushIsEnabled(): Promise<boolean> {
+  if (isNativeShell()) return nativePushIsEnabled()
   if (!pushSupported()) return false
   if (Notification.permission !== 'granted') return false
   const reg = await navigator.serviceWorker.ready
@@ -150,6 +167,14 @@ export async function ensureDefaultRunwayPush(): Promise<{
   on: boolean
   result: 'granted' | 'denied' | 'unsupported' | 'disabled' | 'skipped' | 'already'
 }> {
+  if (isNativeShell()) {
+    if (await runwayPushIsEnabled()) return { on: true, result: 'already' }
+    const result = await syncNativePushAfterAuth()
+    if (result === 'skipped' || result === 'unauthenticated') {
+      return { on: false, result: result === 'skipped' ? 'skipped' : 'disabled' }
+    }
+    return { on: result === 'granted', result }
+  }
   if (!isPushDesired()) return { on: false, result: 'skipped' }
   if (!pushSupported()) return { on: false, result: 'unsupported' }
   if (await runwayPushIsEnabled()) return { on: true, result: 'already' }
