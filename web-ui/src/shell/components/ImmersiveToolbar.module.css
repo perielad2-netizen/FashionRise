@@ -63,71 +63,7 @@
   gap: 4px;
 }
 
-.moreWrap {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.moreBtn {
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0 10px;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.moreBtn:hover,
-.moreBtn[aria-expanded='true'] {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.moreMenu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
-  min-width: 168px;
-  padding: 6px;
-  border-radius: 12px;
-  background: #151d30;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 -14px 28px rgba(0, 0, 0, 0.45);
-  z-index: 30;
-}
-
-.moreItem {
-  width: 100%;
-  min-height: 40px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.92);
-  padding: 0 10px;
-  text-align: left;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.moreItem:hover {
-  background: rgba(214, 51, 132, 0.18);
-}
-
-/* Compact sketch strip — more canvas, five essentials + maximize.
+/* Compact sketch strip — exactly two rows: tools (+ clear) then Max/Exit.
    Center with left/right + margin auto (avoid transform clip on tablets). */
 .barMinimized {
   left: max(8px, env(safe-area-inset-left, 0px));
@@ -137,17 +73,28 @@
   margin-left: auto;
   margin-right: auto;
   padding: 4px;
-  gap: 0;
+  gap: 4px;
   border-radius: 14px;
 }
 
 .barMinimized .rowPrimary {
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.barMinimized .rowMinimizedChrome {
+  justify-content: center;
+  flex-wrap: nowrap;
 }
 
 .barMinimized .cluster {
   background: transparent;
+  flex-wrap: nowrap;
+}
+
+.barMinimized .exitCluster {
+  margin-left: 0;
 }
 
 .minimizeBtn,
@@ -192,14 +139,12 @@
 @media (max-width: 360px) {
   .minimizeBtn .btnText,
   .expandBtn .btnText,
-  .moreBtn .btnText,
   .barMinimized .exitBtn span {
     display: none;
   }
 
   .minimizeBtn,
   .expandBtn,
-  .moreBtn,
   .barMinimized .exitBtn {
     width: 44px;
     padding: 0;
@@ -294,7 +239,8 @@
   .btnActive,
   .textBtn,
   .exitBtn,
-  .moreBtn {
+  .minimizeBtn,
+  .expandBtn {
     min-height: 40px;
     height: 40px;
   }
@@ -302,5 +248,11 @@
   .btn,
   .btnActive {
     width: 40px;
+  }
+
+  .barMinimized .btn,
+  .barMinimized .btnActive {
+    width: 40px;
+    height: 40px;
   }
 }

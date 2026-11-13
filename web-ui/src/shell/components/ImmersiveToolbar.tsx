@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   ChevronDown,
   ChevronUp,
@@ -6,7 +6,6 @@ import {
   Hand,
   Maximize2,
   Minimize2,
-  MoreHorizontal,
   PaintBucket,
   Pencil,
   Pipette,
@@ -50,7 +49,7 @@ type Props = {
   onBrushKind?: (kind: BrushKind) => void
   onSave: () => void
   onExit: () => void
-  /** Clear ink/fills — Studio More menu is hidden while immersive. */
+  /** Clear ink/fills — trash icon on the tools row (no More menu duplicate). */
   onClear: () => void
   saveLabel?: string
   /** Optional controlled minimize state (defaults to internal state). */
@@ -87,143 +86,24 @@ export function ImmersiveToolbar({
   onMinimizedChange,
 }: Props) {
   const [minimizedInternal, setMinimizedInternal] = useState(false)
-  const [moreOpen, setMoreOpen] = useState(false)
-  const moreRef = useRef<HTMLDivElement>(null)
   const minimized = minimizedProp ?? minimizedInternal
   const setMinimized = (next: boolean) => {
     onMinimizedChange?.(next)
     if (minimizedProp === undefined) setMinimizedInternal(next)
-    if (next) setMoreOpen(false)
   }
-
-  useEffect(() => {
-    if (!moreOpen) return
-    const onDoc = (e: MouseEvent) => {
-      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [moreOpen])
 
   const brushLabel = `${brushKindShortLabel(brushKind)} · ${formatBrushSizePx(brushSize)} px`
 
-  const moreMenu = moreOpen ? (
-    <div className={styles.moreMenu} role="menu" data-testid="immersive-more-menu">
-      <button
-        type="button"
-        role="menuitem"
-        className={styles.moreItem}
-        onClick={() => {
-          setMoreOpen(false)
-          onClear()
-        }}
-      >
-        Clear canvas
-      </button>
-    </div>
-  ) : null
-
-  const moreControl = (
-    <div className={styles.moreWrap} ref={moreRef}>
-      <button
-        type="button"
-        className={styles.moreBtn}
-        aria-label="More"
-        aria-expanded={moreOpen}
-        data-testid="immersive-toolbar-more"
-        title="More — Clear canvas"
-        onClick={() => setMoreOpen((v) => !v)}
-      >
-        <MoreHorizontal size={18} strokeWidth={1.75} aria-hidden />
-        <span className={styles.btnText}>More</span>
-      </button>
-      {moreMenu}
-    </div>
-  )
-
   if (minimized) {
     return (
-      <>
-        <div
-          className={`${styles.bar} ${styles.barMinimized}`}
-          role="toolbar"
-          aria-label="Immersive drawing toolbar"
-          data-testid="immersive-toolbar"
-          data-minimized="true"
-        >
-          <div className={`${styles.row} ${styles.rowPrimary}`}>
-            <div className={styles.cluster} role="group" aria-label="Drawing tools">
-              <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
-                <Pencil size={18} strokeWidth={1.75} />
-              </ToolBtn>
-              <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
-                <Eraser size={18} strokeWidth={1.75} />
-              </ToolBtn>
-              <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
-                <PaintBucket size={18} strokeWidth={1.75} />
-              </ToolBtn>
-              <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
-                <Hand size={18} strokeWidth={1.75} />
-              </ToolBtn>
-              <ToolBtn active={false} label="Undo" disabled={!canUndo} onClick={onUndo}>
-                <Undo2 size={18} strokeWidth={1.75} />
-              </ToolBtn>
-              <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
-                <Redo2 size={18} strokeWidth={1.75} />
-              </ToolBtn>
-              <ToolBtn active={false} label="Clear canvas" onClick={onClear}>
-                <Trash2 size={18} strokeWidth={1.75} />
-              </ToolBtn>
-            </div>
-            <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Expand toolbar">
-              {moreControl}
-              <button
-                type="button"
-                className={styles.expandBtn}
-                onClick={() => setMinimized(false)}
-                aria-label="Maximize sketch toolbar"
-                aria-expanded={false}
-                data-testid="immersive-toolbar-maximize"
-                title="Maximize toolbar"
-              >
-                <ChevronUp size={18} strokeWidth={2} aria-hidden />
-                <span className={styles.btnText}>Max</span>
-              </button>
-              <button
-                type="button"
-                className={styles.exitBtn}
-                onClick={onExit}
-                aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
-                data-testid="immersive-exit"
-              >
-                {nativeFullscreen ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
-                <span>Exit</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </>
-    )
-  }
-
-  return (
-    <>
       <div
-        className={styles.bar}
+        className={`${styles.bar} ${styles.barMinimized}`}
         role="toolbar"
         aria-label="Immersive drawing toolbar"
         data-testid="immersive-toolbar"
-        data-minimized="false"
+        data-minimized="true"
       >
-        {onBrushKind && tool === 'draw' ? (
-          <div className={`${styles.row} ${styles.rowKinds}`}>
-            <BrushKindStrip
-              compact
-              brushKind={brushKind}
-              onBrushKind={onBrushKind}
-            />
-          </div>
-        ) : null}
+        {/* Row 1: drawing tools including Clear canvas */}
         <div className={`${styles.row} ${styles.rowPrimary}`}>
           <div className={styles.cluster} role="group" aria-label="Drawing tools">
             <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
@@ -234,9 +114,6 @@ export function ImmersiveToolbar({
             </ToolBtn>
             <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
               <PaintBucket size={18} strokeWidth={1.75} />
-            </ToolBtn>
-            <ToolBtn active={tool === 'eyedropper'} label="Eyedropper" onClick={() => onTool('eyedropper')}>
-              <Pipette size={18} strokeWidth={1.75} />
             </ToolBtn>
             <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
               <Hand size={18} strokeWidth={1.75} />
@@ -251,20 +128,21 @@ export function ImmersiveToolbar({
               <Trash2 size={18} strokeWidth={1.75} />
             </ToolBtn>
           </div>
-
-          <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Toolbar layout">
-            {moreControl}
+        </div>
+        {/* Row 2: maximize + exit only */}
+        <div className={`${styles.row} ${styles.rowMinimizedChrome}`}>
+          <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Expand toolbar">
             <button
               type="button"
-              className={styles.minimizeBtn}
-              onClick={() => setMinimized(true)}
-              aria-label="Minimize sketch toolbar"
-              aria-expanded={true}
-              data-testid="immersive-toolbar-minimize"
-              title="Minimize toolbar — keep pencil, eraser, fill, hand, undo, redo"
+              className={styles.expandBtn}
+              onClick={() => setMinimized(false)}
+              aria-label="Maximize sketch toolbar"
+              aria-expanded={false}
+              data-testid="immersive-toolbar-maximize"
+              title="Maximize toolbar"
             >
-              <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
-              <span className={styles.btnText}>Minimize</span>
+              <ChevronUp size={18} strokeWidth={2} aria-hidden />
+              <span className={styles.btnText}>Max</span>
             </button>
             <button
               type="button"
@@ -278,49 +156,118 @@ export function ImmersiveToolbar({
             </button>
           </div>
         </div>
+      </div>
+    )
+  }
 
-        <div className={`${styles.row} ${styles.rowSecondary}`}>
-          <div className={styles.cluster} role="group" aria-label="Zoom">
-            <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
-              <ZoomOut size={18} strokeWidth={1.75} />
-            </ToolBtn>
-            <span className={styles.zoomReadout} aria-live="polite">
-              {zoomPercent}%
-            </span>
-            <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
-              <ZoomIn size={18} strokeWidth={1.75} />
-            </ToolBtn>
-            <button type="button" className={styles.textBtn} onClick={onFitPage}>
-              Fit page
-            </button>
-            <button type="button" className={styles.textBtn} onClick={onFitWidth}>
-              Fit width
-            </button>
-            <button type="button" className={styles.textBtn} onClick={onHundred}>
-              100%
-            </button>
-            <button type="button" className={styles.textBtn} onClick={onCenter}>
-              Center
-            </button>
-          </div>
+  return (
+    <div
+      className={styles.bar}
+      role="toolbar"
+      aria-label="Immersive drawing toolbar"
+      data-testid="immersive-toolbar"
+      data-minimized="false"
+    >
+      {onBrushKind && tool === 'draw' ? (
+        <div className={`${styles.row} ${styles.rowKinds}`}>
+          <BrushKindStrip compact brushKind={brushKind} onBrushKind={onBrushKind} />
+        </div>
+      ) : null}
+      <div className={`${styles.row} ${styles.rowPrimary}`}>
+        <div className={styles.cluster} role="group" aria-label="Drawing tools">
+          <ToolBtn active={tool === 'draw'} label="Pencil" onClick={() => onTool('draw')}>
+            <Pencil size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
+            <Eraser size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
+            <PaintBucket size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={tool === 'eyedropper'} label="Eyedropper" onClick={() => onTool('eyedropper')}>
+            <Pipette size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={tool === 'pan'} label="Hand pan" onClick={() => onTool('pan')}>
+            <Hand size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={false} label="Undo" disabled={!canUndo} onClick={onUndo}>
+            <Undo2 size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={false} label="Redo" disabled={!canRedo} onClick={onRedo}>
+            <Redo2 size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <ToolBtn active={false} label="Clear canvas" onClick={onClear}>
+            <Trash2 size={18} strokeWidth={1.75} />
+          </ToolBtn>
+        </div>
 
-          <div className={styles.cluster} role="group" aria-label="Studio actions">
-            <button type="button" className={styles.textBtn} onClick={onOpenBrush} aria-label="Brush settings">
-              {brushLabel}
-            </button>
-            <button type="button" className={styles.textBtn} onClick={onOpenMaterials}>
-              Materials
-            </button>
-            <button type="button" className={styles.textBtn} onClick={onOpenModels}>
-              Models
-            </button>
-            <button type="button" className={styles.textBtn} onClick={onSave}>
-              {saveLabel}
-            </button>
-          </div>
+        <div className={`${styles.cluster} ${styles.exitCluster}`} role="group" aria-label="Toolbar layout">
+          <button
+            type="button"
+            className={styles.minimizeBtn}
+            onClick={() => setMinimized(true)}
+            aria-label="Minimize sketch toolbar"
+            aria-expanded={true}
+            data-testid="immersive-toolbar-minimize"
+            title="Minimize toolbar — keep pencil, eraser, fill, hand, undo, redo, clear"
+          >
+            <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
+            <span className={styles.btnText}>Minimize</span>
+          </button>
+          <button
+            type="button"
+            className={styles.exitBtn}
+            onClick={onExit}
+            aria-label={nativeFullscreen ? 'Exit full screen drawing' : 'Exit immersive drawing'}
+            data-testid="immersive-exit"
+          >
+            {nativeFullscreen ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
+            <span>Exit</span>
+          </button>
         </div>
       </div>
-    </>
+
+      <div className={`${styles.row} ${styles.rowSecondary}`}>
+        <div className={styles.cluster} role="group" aria-label="Zoom">
+          <ToolBtn active={false} label="Zoom out" onClick={onZoomOut}>
+            <ZoomOut size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <span className={styles.zoomReadout} aria-live="polite">
+            {zoomPercent}%
+          </span>
+          <ToolBtn active={false} label="Zoom in" onClick={onZoomIn}>
+            <ZoomIn size={18} strokeWidth={1.75} />
+          </ToolBtn>
+          <button type="button" className={styles.textBtn} onClick={onFitPage}>
+            Fit page
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onFitWidth}>
+            Fit width
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onHundred}>
+            100%
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onCenter}>
+            Center
+          </button>
+        </div>
+
+        <div className={styles.cluster} role="group" aria-label="Studio actions">
+          <button type="button" className={styles.textBtn} onClick={onOpenBrush} aria-label="Brush settings">
+            {brushLabel}
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onOpenMaterials}>
+            Materials
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onOpenModels}>
+            Models
+          </button>
+          <button type="button" className={styles.textBtn} onClick={onSave}>
+            {saveLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
