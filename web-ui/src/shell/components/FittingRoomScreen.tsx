@@ -72,8 +72,6 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const [noticeTone, setNoticeTone] = useState<'ok' | 'info' | 'error'>('ok')
   const [saved, setSaved] = useState<FittingRoomSavedResult[]>([])
-  const [compareA, setCompareA] = useState<string | null>(null)
-  const [compareB, setCompareB] = useState<string | null>(null)
 
   const showNotice = useCallback((text: string, tone: 'ok' | 'info' | 'error') => {
     setNotice(text)
@@ -389,8 +387,6 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       await saveFittingResult(record)
       const rows = await listSavedResults(userId)
       setSaved(rows)
-      if (!compareA) setCompareA(record.id)
-      else if (!compareB) setCompareB(record.id)
       showNotice('Saved privately on this device ✓', 'ok')
     } catch {
       showNotice('Could not save this preview.', 'error')
@@ -401,8 +397,6 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     await deleteSavedResult(id)
     const rows = await listSavedResults(userId)
     setSaved(rows)
-    if (compareA === id) setCompareA(null)
-    if (compareB === id) setCompareB(null)
   }
 
   if (!isFittingRoomUiEnabled()) {
@@ -420,8 +414,6 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const serverOff = preflight != null && !preflight.enabled
   const canTry =
     Boolean(personUrl && pieces.length && consent && preflight?.enabled && phase !== 'running')
-  const compareLeft = saved.find((s) => s.id === compareA) || null
-  const compareRight = saved.find((s) => s.id === compareB) || null
 
   return (
     <section className={styles.screen} aria-labelledby="fitting-room-brand" data-testid="fitting-room-screen">
@@ -643,9 +635,9 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         </div>
 
         <div className={styles.panel} style={{ gridColumn: '1 / -1' }}>
-          <h2 className={styles.panelTitle}>4 · Save, Compare & Share</h2>
+          <h2 className={styles.panelTitle}>4 · Saved previews</h2>
           <p className={styles.panelHint}>
-            Saved previews stay on this device. Pick two to compare side by side.
+            Previews you save stay on this device. Use Download or Share from the try-on result above.
           </p>
           {saved.length === 0 ? (
             <p className={styles.previewEmpty}>No saved Fitting Room previews yet</p>
@@ -659,22 +651,6 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
                     <button
                       type="button"
                       className={styles.btnGhost}
-                      aria-pressed={compareA === row.id}
-                      onClick={() => setCompareA(row.id)}
-                    >
-                      Left
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.btnGhost}
-                      aria-pressed={compareB === row.id}
-                      onClick={() => setCompareB(row.id)}
-                    >
-                      Right
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.btnGhost}
                       onClick={() => void onDeleteSaved(row.id)}
                     >
                       Delete
@@ -682,24 +658,6 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-          {(compareLeft || compareRight) && (
-            <div className={styles.compareRow} data-testid="fitting-room-compare">
-              <div className={styles.comparePane}>
-                {compareLeft ? (
-                  <img src={compareLeft.dataUrl} alt="Compare left outfit" />
-                ) : (
-                  <p className={styles.previewEmpty}>Pick Left</p>
-                )}
-              </div>
-              <div className={styles.comparePane}>
-                {compareRight ? (
-                  <img src={compareRight.dataUrl} alt="Compare right outfit" />
-                ) : (
-                  <p className={styles.previewEmpty}>Pick Right</p>
-                )}
-              </div>
             </div>
           )}
         </div>

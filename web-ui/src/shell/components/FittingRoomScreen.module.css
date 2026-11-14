@@ -89,30 +89,6 @@
   text-transform: lowercase;
 }
 
-.compareRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
-  margin-top: 0.5rem;
-}
-
-.comparePane {
-  min-height: 220px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--fr-line);
-  border-radius: var(--fr-radius);
-  background: var(--fr-panel-2);
-  overflow: hidden;
-}
-
-.comparePane img {
-  width: 100%;
-  height: 100%;
-  max-height: min(55dvh, 480px);
-  object-fit: contain;
-}
-
 .steps {
   display: grid;
   gap: 0.9rem;
