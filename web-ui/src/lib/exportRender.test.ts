@@ -294,35 +294,31 @@ describe('download and filename', () => {
   })
 })
 
-describe('saveOrDownloadBlob native share', () => {
-  it('shares files on Capacitor instead of relying on <a download>', async () => {
+describe('saveOrDownloadBlob platform paths (V2-0033)', () => {
+  it('uses Capacitor native save and never falls back to <a download> on native', async () => {
     const { saveOrDownloadBlob } = await import('@/lib/exportCanvas')
-    const share = vi.fn(async () => undefined)
-    const canShare = vi.fn(() => true)
+    const saveNative = vi.fn(async () => 'gallery' as const)
     const download = vi.fn()
 
-    await saveOrDownloadBlob(new Blob(['png'], { type: 'image/png' }), 'look.png', {
+    const method = await saveOrDownloadBlob(new Blob(['png'], { type: 'image/png' }), 'look.png', {
       isNative: () => true,
-      canShare,
-      share,
+      saveNative,
       download,
     })
 
-    expect(canShare).toHaveBeenCalled()
-    expect(share).toHaveBeenCalledTimes(1)
+    expect(method).toBe('gallery')
+    expect(saveNative).toHaveBeenCalledTimes(1)
     expect(download).not.toHaveBeenCalled()
-    const arg = share.mock.calls[0]?.[0] as ShareData
-    expect(arg.files?.length).toBe(1)
-    expect(arg.files?.[0]?.name).toBe('look.png')
   })
 
-  it('falls back to anchor download on web', async () => {
+  it('uses anchor download on web only', async () => {
     const { saveOrDownloadBlob } = await import('@/lib/exportCanvas')
     const download = vi.fn()
-    await saveOrDownloadBlob(new Blob(['png'], { type: 'image/png' }), 'look.png', {
+    const method = await saveOrDownloadBlob(new Blob(['png'], { type: 'image/png' }), 'look.png', {
       isNative: () => false,
       download,
     })
+    expect(method).toBe('web')
     expect(download).toHaveBeenCalledTimes(1)
   })
 })

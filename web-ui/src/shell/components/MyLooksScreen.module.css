@@ -321,6 +321,12 @@
   justify-items: center;
 }
 
+.stateOk {
+  margin: 8px 0 0;
+  color: #bbf7d0;
+  font-size: 12px;
+}
+
 .emptyTitle {
   margin: 0 0 6px;
   font-family: var(--fr-serif);

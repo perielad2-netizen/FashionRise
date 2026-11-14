@@ -19,13 +19,16 @@
     "check:sw": "node scripts/assert-sw-access-safe.mjs"
   },
   "dependencies": {
+    "@capacitor-community/media": "^8.0.1",
     "@capacitor/android": "^7.6.10",
     "@capacitor/app": "^7.1.2",
     "@capacitor/browser": "^7.0.5",
     "@capacitor/cli": "^7.6.10",
     "@capacitor/core": "^7.6.10",
+    "@capacitor/filesystem": "^7.1.9",
     "@capacitor/ios": "^7.6.10",
     "@capacitor/push-notifications": "^7.0.7",
+    "@capacitor/share": "^7.0.4",
     "@capacitor/splash-screen": "^7.0.5",
     "@capacitor/status-bar": "^7.0.6",
     "@capgo/native-purchases": "^7.19.3",
