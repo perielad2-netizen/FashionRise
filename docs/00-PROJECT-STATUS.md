@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch E** — V2-0030/0032/0026 merged; V2-0031 Home gallery open for PM review with empty authorized catalog. PR #303 still open; no store/push/billing enable.)
+**Last updated:** 2026-11-14 (**QA V2 Batch E** — V2-0031 #312 merged (gallery activation pending assets); V2-0021 canvas labels in PM review. PR #303 still open; no store/push/billing enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
@@ -11,12 +11,12 @@
 
 | Status | Detail |
 |---|---|
-| Baseline | `main` includes #311 (V2-0026) |
-| Merged | **V2-0030** #309 · **V2-0032** #310 · **V2-0026** #311 |
-| Branch | `cursor/web-home-gallery-77c6` (V2-0031) |
-| IDs | **V2-0031** Home before/after gallery — PM review; do not invent pairs |
-| Gate | Production `AUTHORIZED_HOME_EXAMPLES` stays empty until genuine licensed assets are supplied |
-| **Exact next step** | PM review gallery PR; authorize real example pairs before visible carousel |
+| Baseline | `main` includes #312 (V2-0031) |
+| Merged | **V2-0030** #309 · **V2-0032** #310 · **V2-0026** #311 · **V2-0031** #312 |
+| Branch | `cursor/web-canvas-props-labels-77c6` (V2-0021) |
+| IDs | **V2-0021** honest Fixed canvas labels (no resize); then V2-0010 later |
+| Gallery note | `AUTHORIZED_HOME_EXAMPLES` stays empty — activation pending authorized marketing pairs |
+| **Exact next step** | PM review V2-0021; leave push/billing/store gates unchanged |
 
 ## QA V2 Batch D (2026-11-14) — MERGED #307
 
