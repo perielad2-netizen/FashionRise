@@ -467,13 +467,12 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             id={personInputId}
             className={styles.fileInput}
             type="file"
-            accept="image/*"
-            capture="environment"
+            accept="image/jpeg,image/png,image/webp"
             onChange={(e) => void onPickPerson(e.target.files?.[0] ?? null)}
           />
           <div className={styles.actions}>
             <button type="button" className={styles.btn} onClick={() => personRef.current?.click()}>
-              {personUrl ? 'Replace photo' : 'Upload photo'}
+              {personUrl ? 'Replace photo' : 'Choose photo'}
             </button>
             {personUrl ? (
               <button type="button" className={styles.btnGhost} onClick={() => void clearPerson()}>
@@ -544,7 +543,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             id={garmentInputId}
             className={styles.fileInput}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             onChange={(e) => void onPickGarment(e.target.files?.[0] ?? null)}
           />
           <div className={styles.actions}>
