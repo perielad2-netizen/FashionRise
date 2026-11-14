@@ -100,38 +100,58 @@ export function HomeBeforeAfterGallery({ examples }: Props) {
               key={example.id}
               className={styles.slide}
               role="listitem"
-              aria-label={`${example.title}: before and after`}
+              aria-label={
+                example.composite
+                  ? `${example.title}: sketch to AI look`
+                  : `${example.title}: before and after`
+              }
               data-testid={`home-gallery-slide-${example.id}`}
             >
               <p className={styles.slideTitle}>{example.title}</p>
-              <div className={styles.pair}>
-                <figure className={styles.frame}>
+              {example.composite ? (
+                <figure className={styles.compositeFrame}>
                   <img
-                    src={example.before.src}
-                    alt={example.before.alt}
-                    width={example.before.width}
-                    height={example.before.height}
-                    className={styles.image}
+                    src={example.composite.src}
+                    alt={example.composite.alt}
+                    width={example.composite.width}
+                    height={example.composite.height}
+                    className={styles.compositeImage}
                     loading={i === 0 ? 'eager' : 'lazy'}
                     decoding="async"
                     draggable={false}
+                    data-testid={`home-gallery-composite-${example.id}`}
                   />
-                  <figcaption className={styles.caption}>Sketch</figcaption>
                 </figure>
-                <figure className={styles.frame}>
-                  <img
-                    src={example.after.src}
-                    alt={example.after.alt}
-                    width={example.after.width}
-                    height={example.after.height}
-                    className={styles.image}
-                    loading={i === 0 ? 'eager' : 'lazy'}
-                    decoding="async"
-                    draggable={false}
-                  />
-                  <figcaption className={styles.caption}>AI Look</figcaption>
-                </figure>
-              </div>
+              ) : (
+                <div className={styles.pair}>
+                  <figure className={styles.frame}>
+                    <img
+                      src={example.before.src}
+                      alt={example.before.alt}
+                      width={example.before.width}
+                      height={example.before.height}
+                      className={styles.image}
+                      loading={i === 0 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      draggable={false}
+                    />
+                    <figcaption className={styles.caption}>Sketch</figcaption>
+                  </figure>
+                  <figure className={styles.frame}>
+                    <img
+                      src={example.after.src}
+                      alt={example.after.alt}
+                      width={example.after.width}
+                      height={example.after.height}
+                      className={styles.image}
+                      loading={i === 0 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      draggable={false}
+                    />
+                    <figcaption className={styles.caption}>AI Look</figcaption>
+                  </figure>
+                </div>
+              )}
             </article>
           ))}
         </div>

@@ -32,6 +32,7 @@ describe('homeAuthorizedExamples', () => {
     expect(AUTHORIZED_HOME_EXAMPLES.length).toBeGreaterThan(0)
     expect(getAuthorizedHomeExamples().every(isAuthorizedHomeExample)).toBe(true)
     expect(AUTHORIZED_HOME_EXAMPLES[0]?.authorization.licensedFor).toBe('home-marketing')
+    expect(AUTHORIZED_HOME_EXAMPLES[0]?.composite?.src).toContain('hero-pair-01')
   })
 
   it('accepts only rows with home-marketing authorization and sized images', () => {

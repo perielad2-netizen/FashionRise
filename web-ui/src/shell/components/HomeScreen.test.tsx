@@ -40,9 +40,13 @@ describe('HomeScreen', () => {
     expect(screen.getByText(/Turn your fashion ideas into stunning AI creations/i)).toBeInTheDocument()
     expect(screen.getByTestId('home-before-after-gallery')).toBeInTheDocument()
     expect(
-      screen.getByAltText(/Fashion sketch of a strapless pink evening gown/i),
+      screen.getByTestId('home-gallery-composite-pink-gown-sketch-to-look'),
     ).toBeInTheDocument()
+    expect(screen.getByAltText(/One FashionRise hero/i)).toBeInTheDocument()
     expect(document.querySelector('img[src*="fashion_rise_login"]')).toBeNull()
+    expect(document.querySelectorAll('[data-testid="home-before-after-gallery"] img')).toHaveLength(
+      1,
+    )
 
     const cta = screen.getByTestId('home-start-creating')
     expect(cta).toHaveAccessibleName(/Start creating/i)

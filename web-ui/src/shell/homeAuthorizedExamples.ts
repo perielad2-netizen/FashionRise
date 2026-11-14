@@ -27,6 +27,11 @@ export type AuthorizedHomeExample = {
   id: string
   title: string
   authorization: HomeExampleAuthorization
+  /**
+   * Preferred: one beautiful sketch→AI look composite for the Home hero.
+   * When present, the gallery renders this alone (not a two-up cut).
+   */
+  composite?: HomeExampleImage
   before: HomeExampleImage
   after: HomeExampleImage
 }
@@ -55,6 +60,7 @@ export function isAuthorizedHomeExample(value: unknown): value is AuthorizedHome
   if (!value || typeof value !== 'object') return false
   const row = value as AuthorizedHomeExample
   const auth = row.authorization
+  const compositeOk = row.composite === undefined || isHomeExampleImage(row.composite)
   return (
     isNonEmptyString(row.id) &&
     isNonEmptyString(row.title) &&
@@ -62,6 +68,7 @@ export function isAuthorizedHomeExample(value: unknown): value is AuthorizedHome
     typeof auth === 'object' &&
     isNonEmptyString(auth.source) &&
     auth.licensedFor === 'home-marketing' &&
+    compositeOk &&
     isHomeExampleImage(row.before) &&
     isHomeExampleImage(row.after)
   )
@@ -69,7 +76,7 @@ export function isAuthorizedHomeExample(value: unknown): value is AuthorizedHome
 
 /**
  * Production catalog — PM-authorized home marketing pairs only.
- * Source: owner Android QA home-hero example (2026-11-14), sketch → AI look.
+ * Source: owner Android QA home-hero example (2026-11-14), single composite preferred.
  */
 export const AUTHORIZED_HOME_EXAMPLES: readonly AuthorizedHomeExample[] = Object.freeze([
   {
@@ -78,7 +85,13 @@ export const AUTHORIZED_HOME_EXAMPLES: readonly AuthorizedHomeExample[] = Object
     authorization: {
       source: 'PM Android QA home hero example 2026-11-14 (Addition 01)',
       licensedFor: 'home-marketing',
-      notes: 'Owner-provided marketing pair for Home main-idea hero',
+      notes: 'Owner-provided marketing composite for Home main-idea hero',
+    },
+    composite: {
+      src: '/assets/ui/home/hero-pair-01.jpg',
+      alt: 'One FashionRise hero: fashion sketch transforming into an AI look of a pink evening gown',
+      width: 838,
+      height: 496,
     },
     before: {
       src: '/assets/ui/home/hero-sketch-01.jpg',
