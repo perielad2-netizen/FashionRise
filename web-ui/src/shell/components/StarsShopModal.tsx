@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ShoppingBag, Star, X } from 'lucide-react'
 import { ApiError } from '@/services/api/client'
 import {
@@ -222,13 +223,21 @@ export function StarsShopModal({ open, onClose }: Props) {
   const unlimited = Boolean(user?.ai_stars_unlimited)
   const balance = unlimited ? '∞' : String(user?.ai_stars ?? 0)
 
-  return (
-    <div className={styles.backdrop} role="presentation" onClick={onClose}>
+  // Portal to body so GlobalHeader stacking/background cannot clip the shop title
+  // when opened from the yellow Stars badge inside the header.
+  return createPortal(
+    <div
+      className={styles.backdrop}
+      role="presentation"
+      data-testid="stars-shop-backdrop"
+      onClick={onClose}
+    >
       <div
         className={styles.modal}
         role="dialog"
         aria-modal="true"
         aria-label="Stars shop"
+        data-testid="stars-shop-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <header className={styles.header}>
@@ -403,6 +412,7 @@ export function StarsShopModal({ open, onClose }: Props) {
         ) : null}
         {notice ? <p className={styles.notice}>{notice}</p> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
