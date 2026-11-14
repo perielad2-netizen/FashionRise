@@ -139,8 +139,17 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       try {
         const pf = await fetchFittingRoomPreflight()
         if (!cancelled) setPreflight(pf)
-      } catch {
+      } catch (err) {
         if (!cancelled) {
+          const status = err instanceof ApiError ? err.status : 0
+          // 403 from nginx allowlist / gate vs true server disabled (200 + enabled:false).
+          setErrorMsg(
+            status === 403
+              ? 'Fitting Room API is blocked by the edge allowlist. Ask an operator to open /ai/fitting-room/*.'
+              : status === 401
+                ? 'Sign in again to use Fitting Room.'
+                : 'Could not reach Fitting Room preflight. Check connection and retry.',
+          )
           setPreflight({
             enabled: false,
             live_http: false,
