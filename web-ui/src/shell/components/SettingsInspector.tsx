@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { CONTACT_EMAIL } from '@/lib/contact'
+import { PAPER_HEIGHT, PAPER_WIDTH } from '@/lib/paperBounds'
+import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
 import styles from './SettingsInspector.module.css'
 
 type Props = {
@@ -11,6 +13,8 @@ type Tab = 'settings' | 'help'
 
 export function SettingsInspector({ dimmed, onToggleDim }: Props) {
   const [tab, setTab] = useState<Tab>('settings')
+  const modelSizeLabel = `${DESIGN_WIDTH} × ${DESIGN_HEIGHT}`
+  const paperSizeLabel = `${PAPER_WIDTH} × ${PAPER_HEIGHT}`
 
   return (
     <aside className={styles.panel} aria-label="Settings inspector">
@@ -37,15 +41,35 @@ export function SettingsInspector({ dimmed, onToggleDim }: Props) {
 
       {tab === 'settings' ? (
         <>
-          <section className={styles.section}>
+          <section className={styles.section} data-testid="canvas-properties">
             <h3>Canvas</h3>
-            <div className={styles.row}>
-              <span>Size</span>
-              <strong>768 × 1024</strong> model · extended paper 1280 × 1536
+            <div className={styles.propBlock}>
+              <div className={styles.row}>
+                <span>Size</span>
+                <span className={styles.fixedBadge} data-testid="canvas-size-fixed">
+                  Fixed
+                </span>
+              </div>
+              <p className={styles.propValue} data-testid="canvas-size-value">
+                Model {modelSizeLabel} · extended paper {paperSizeLabel}
+              </p>
+              <p className={styles.propHint} data-testid="canvas-size-hint">
+                Drawing size is fixed so saved sketches stay aligned. Resizing is not available.
+              </p>
             </div>
-            <div className={styles.row}>
-              <span>Background</span>
-              <strong>Cream paper</strong>
+            <div className={styles.propBlock}>
+              <div className={styles.row}>
+                <span>Background</span>
+                <span className={styles.fixedBadge} data-testid="canvas-background-fixed">
+                  Fixed
+                </span>
+              </div>
+              <p className={styles.propValue} data-testid="canvas-background-value">
+                Cream paper
+              </p>
+              <p className={styles.propHint} data-testid="canvas-background-hint">
+                Studio paper color is set by the product and cannot be changed here.
+              </p>
             </div>
             <div className={styles.row}>
               <span>Dim reference</span>
@@ -54,9 +78,13 @@ export function SettingsInspector({ dimmed, onToggleDim }: Props) {
                 className={dimmed ? styles.toggleOn : styles.toggle}
                 aria-pressed={dimmed}
                 aria-label={dimmed ? 'Dim reference on' : 'Dim reference off'}
+                data-testid="canvas-dim-reference"
                 onClick={onToggleDim}
               />
             </div>
+            <p className={styles.propHint} data-testid="canvas-dim-hint">
+              Lowers croquis visibility while you draw — this setting is editable.
+            </p>
           </section>
 
           <section className={styles.section}>

@@ -31,7 +31,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0018 | **Security review — not exploit** | A | Parameterized + React text; synthetic tests |
 | V2-0019 | **Security review — not exploit** | A | Same as 0018 |
 | V2-0020 | **Security review — not exploit** | A | Same as 0018 |
-| V2-0021 | **Feature request** | E | Canvas props — prefer honest read-only labels before risky resize |
+| V2-0021 | **Implemented** P2 (PM review) | E | Canvas props — Fixed labels for size/background; Dim reference stays editable; no resize |
 | V2-0022 | **Confirmed** | C | Header clip; autosave status max-width widened beside Stars |
 | V2-0023 | **Confirmed** | C | Brush footprint; kind-aware brush tip preview |
 | V2-0024 | **Confirmed** | C | Airbrush draft/stamp presence boosted |
@@ -41,7 +41,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0028 | **Confirmed** | C | Pattern scale Fine↔Coarse + explanation |
 | V2-0029 | **Confirmed** | C | Brush color on brush sheet + Materials link |
 | V2-0030 | **Fixed** P1 | E | Rectangular eraser (`rectErase`): clips active-side strokes/fills **inside** the selection (crossing segments kept outside); layer-aware; Undo/Redo; Clear + freehand erase kept |
-| V2-0031 | **Implemented** P1 (await PM assets) | E | Home before/after gallery wired; production catalog empty until authorized pairs |
+| V2-0031 | **Implemented** P1 | E | Home before/after gallery (#312); activation pending authorized examples (`AUTHORIZED_HOME_EXAMPLES` empty) |
 | V2-0032 | **Fixed** P2 | E | Home value copy — sketch→Magic look + Start creating CTA (ahead of carousel) |
 | V2-0033 | **Confirmed** P1 | B | My Looks Download no-op on Android WebView `<a download>`; Capacitor Media (+ Share fallback) + recursive `fr-dl/` + `apiRequestBlob` refresh |
 | V2-0034 | **Confirmed** P1 | C | Personal My Model is FRONT-only (one front image); pin/restore coerce Front; Flip hidden/disabled; Back bags preserved; create does not auto-select — Use in Studio is explicit |
@@ -103,14 +103,21 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 - Commits through existing StrokeHistory + draft document path (save/reopen preserved).
 - Freehand Eraser and Clear canvas unchanged.
 
-**Shipped:** V2-0030 (#309), V2-0032 (#310), V2-0026 (#311).  
-**Open for PM review:** V2-0031 Home before/after gallery — UI + empty authorized catalog (no invented pairs; fill `AUTHORIZED_HOME_EXAMPLES` only with genuine licensed assets).  
-**Still out of scope:** CTL-*, push enable, store submit, merging #303.
+**Shipped:** V2-0030 (#309), V2-0032 (#310), V2-0026 (#311), V2-0031 (#312).  
+**Open for PM review:** V2-0021 canvas property honesty labels.  
+**Still out of scope:** CTL-*, push enable, Stars billing changes, store submit, merging #303.
 
-## Batch E — V2-0031 Home before/after gallery
+## Batch E — V2-0031 Home before/after gallery (merged #312)
 
 - `HomeBeforeAfterGallery` mounts after the Home hero; FashionRise branding + Start creating CTA unchanged.
-- Renders **only** when `AUTHORIZED_HOME_EXAMPLES` contains validated `home-marketing` pairs; empty catalog → no gallery DOM.
+- Renders **only** when `AUTHORIZED_HOME_EXAMPLES` contains validated `home-marketing` pairs; production catalog remains **empty** → no gallery DOM until authorized assets land.
 - Touch scroll-snap + 44px prev/next; `prefers-reduced-motion` disables smooth scroll; first slide eager, others lazy; width/height + aspect-ratio reserve space.
 - Does **not** load My Designs / My Looks / Runway or other private user content.
-- PM gate: add genuine authorized sketch↔Magic pairs to `web-ui/src/shell/homeAuthorizedExamples.ts` before enabling a visible carousel.
+- **Activation pending:** add genuine authorized sketch↔Magic pairs to `web-ui/src/shell/homeAuthorizedExamples.ts` for a visible carousel.
+
+## Batch E — V2-0021 Canvas properties
+
+- Studio Settings → Canvas: Size and Background labeled **Fixed** with honest copy (no resize / no background picker).
+- Values sourced from `DESIGN_*` + `PAPER_*` constants — model + extended paper sizes stay truthful.
+- Dim reference remains the only interactive canvas preference.
+- No drawing-format migration and no pixel-dimension editing.

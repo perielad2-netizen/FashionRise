@@ -83,6 +83,39 @@
   color: var(--fr-muted);
 }
 
+.propBlock {
+  display: grid;
+  gap: 4px;
+}
+
+.propValue {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--fr-text);
+  line-height: 1.35;
+}
+
+.propHint {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #9ca3af;
+}
+
+.fixedBadge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d1d5db;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .toggle,
 .toggleOn {
   width: 42px;
@@ -91,7 +124,7 @@
   border: 0;
   background: rgba(255, 255, 255, 0.12);
   position: relative;
-  cursor: default;
+  cursor: pointer;
 }
 
 .toggleOn {
