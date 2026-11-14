@@ -3,19 +3,27 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch D** — AI FRONT/BACK consistency. Batch C #306 merged; PR #303 still open; no store/push enable.)
+**Last updated:** 2026-11-14 (**QA V2 Batch E planning** — after Batch D #307 merged. PR #303 still open; no store/push/billing enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## QA V2 Batch D (2026-11-14) — AI FRONT/BACK consistency
+## QA V2 Batch E (2026-11-14) — PLANNING (feature backlog)
 
 | Status | Detail |
 |---|---|
-| Baseline | `main` `597d24a3` (#306 Batch C) |
-| Branch | `cursor/web-qa-v2-batch-d-77c6` |
+| Baseline | `main` `6103f489` (#307 Batch D) |
+| Branch | `cursor/web-qa-v2-batch-e-77c6` |
+| IDs | V2-0010, 0021, 0026, **0030–0032** |
+| Plan | Independent PRs after PM ack; prefer P1 eraser/gallery or copy-first 0032; see `docs/QA-V2-RECONCILIATION.md` Batch E section |
+| **Exact next step** | PM pick first E slice → implement as separate PR; no push/billing/store |
+
+## QA V2 Batch D (2026-11-14) — MERGED #307
+
+| Status | Detail |
+|---|---|
+| Merge | `6103f489` on `main` |
 | IDs | **V2-0017** |
-| Fixes | Dual Magic Back attaches Front `pair_reference_base64`; stronger pair/shared-spec prompts; Back-only retry preserves good Front; Ready ≠ perfect match notice |
-| **Exact next step** | Review/merge Batch D → Batch E (features) or stop |
+| Fixes | Dual Magic Back Front `pair_reference_base64` + prompt-identity bind; stronger pair prompts; Back-only retry preserves good Front |
 
 ## QA V2 Batch C (2026-11-14) — MERGED #306
 
