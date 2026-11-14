@@ -41,6 +41,7 @@ import {
   listFriends,
   removeFriend,
   requestFriendByUsername,
+  type FriendUser,
   type Friendship,
 } from '@/services/friendsApi'
 import { ApiError } from '@/services/api/client'
@@ -54,6 +55,7 @@ import {
 } from '@/services/pushApi'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
 import { isNativeShell } from '@/services/native/platform'
+import { FriendProfilePanel } from '@/shell/components/FriendProfilePanel'
 import styles from './RunwayScreen.module.css'
 
 type Props = {
@@ -665,6 +667,7 @@ function FriendsPanel({
   const formRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [keyboardPad, setKeyboardPad] = useState(0)
+  const [viewingFriend, setViewingFriend] = useState<FriendUser | null>(null)
 
   // V2-0011: keep Add friend row above the Android soft keyboard.
   useEffect(() => {
@@ -685,6 +688,12 @@ function FriendsPanel({
       vv.removeEventListener('scroll', sync)
     }
   }, [])
+
+  if (viewingFriend) {
+    return (
+      <FriendProfilePanel friend={viewingFriend} onBack={() => setViewingFriend(null)} />
+    )
+  }
 
   return (
     <div className={styles.friendsPanel} style={{ paddingBottom: keyboardPad || undefined }}>
@@ -785,14 +794,22 @@ function FriendsPanel({
                   const label = row.friend.display_name || row.friend.username
                   return (
                     <li key={row.id} className={styles.friendCard}>
-                      <div className={styles.friendText}>
-                        <strong>{label}</strong>
-                        <span>@{row.friend.username}</span>
-                      </div>
+                      <button
+                        type="button"
+                        className={styles.friendOpen}
+                        data-testid={`friend-open-${row.friend.user_id}`}
+                        onClick={() => setViewingFriend(row.friend)}
+                      >
+                        <span className={styles.friendText}>
+                          <strong>{label}</strong>
+                          <span>@{row.friend.username}</span>
+                        </span>
+                      </button>
                       <button
                         type="button"
                         className={styles.ghostBtn}
                         disabled={busy}
+                        data-testid={`friend-remove-${row.friend.user_id}`}
                         onClick={() => onRemove(row.friend.user_id, label)}
                       >
                         Remove

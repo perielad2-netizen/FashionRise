@@ -61,6 +61,23 @@ export async function getGalleryItem(
   })
 }
 
+/**
+ * Public Runway looks for one creator (GET /gallery/user/{user_id}).
+ * Backend already filters visibility=public; client re-checks as a safety net.
+ */
+export async function listUserGallery(
+  userId: string,
+  signal?: AbortSignal,
+): Promise<GalleryItem[]> {
+  const rows = await apiRequest<GalleryItem[]>(
+    `/gallery/user/${encodeURIComponent(userId)}`,
+    { method: 'GET', signal },
+  )
+  return rows.filter(
+    (row) => row.visibility === 'public' && row.moderation_status === 'ok',
+  )
+}
+
 export async function likeGalleryItem(id: string): Promise<void> {
   await apiRequest<void>(`/gallery/${encodeURIComponent(id)}/like`, { method: 'POST' })
 }

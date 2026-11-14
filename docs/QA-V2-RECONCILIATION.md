@@ -20,7 +20,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0007 | **Intentional** | B | Own looks: likes/scores from others only; UI hint preserved; no self-vote |
 | V2-0008 | **Blocked** | B | TEMP native push toggle OFF + copy; **reconcile with PR #303** (reuse its push path — no second impl); flags not enabled |
 | V2-0009 | **Mitigated** | B | Sticky Add-friend + scrollable friends body; no hidden-list defect proven |
-| V2-0010 | **Feature request** | E | Friend row actions — planning (read-only profile first); privacy/auth gated |
+| V2-0010 | **Implemented** P2 (PM review) | E | Friend row → read-only profile + published Runway looks; Remove preserved |
 | V2-0011 | **Confirmed** | B | Android `adjustResize` + visualViewport pad / scrollIntoView for Add friend |
 | V2-0012 | **Fixed** | A | Mid-session `apiRequest` refresh-on-401 + session-expired event |
 | V2-0013 | **Fixed** | A | Same root as 0012 + honest ack path; refresh race amendment (discard stale after logout/switch) |
@@ -31,7 +31,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0018 | **Security review — not exploit** | A | Parameterized + React text; synthetic tests |
 | V2-0019 | **Security review — not exploit** | A | Same as 0018 |
 | V2-0020 | **Security review — not exploit** | A | Same as 0018 |
-| V2-0021 | **Implemented** P2 (PM review) | E | Canvas props — Fixed labels for size/background; Dim reference stays editable; no resize |
+| V2-0021 | **Fixed** P2 | E | Canvas props — Fixed labels for size/background; Dim reference stays editable; no resize (#313) |
 | V2-0022 | **Confirmed** | C | Header clip; autosave status max-width widened beside Stars |
 | V2-0023 | **Confirmed** | C | Brush footprint; kind-aware brush tip preview |
 | V2-0024 | **Confirmed** | C | Airbrush draft/stamp presence boosted |
@@ -103,8 +103,8 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 - Commits through existing StrokeHistory + draft document path (save/reopen preserved).
 - Freehand Eraser and Clear canvas unchanged.
 
-**Shipped:** V2-0030 (#309), V2-0032 (#310), V2-0026 (#311), V2-0031 (#312).  
-**Open for PM review:** V2-0021 canvas property honesty labels.  
+**Shipped:** V2-0030 (#309), V2-0032 (#310), V2-0026 (#311), V2-0031 (#312), V2-0021 (#313).  
+**Open for PM review:** V2-0010 friend read-only profile.  
 **Still out of scope:** CTL-*, push enable, Stars billing changes, store submit, merging #303.
 
 ## Batch E — V2-0031 Home before/after gallery (merged #312)
@@ -115,9 +115,17 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 - Does **not** load My Designs / My Looks / Runway or other private user content.
 - **Activation pending:** add genuine authorized sketch↔Magic pairs to `web-ui/src/shell/homeAuthorizedExamples.ts` for a visible carousel.
 
-## Batch E — V2-0021 Canvas properties
+## Batch E — V2-0021 Canvas properties (merged #313)
 
 - Studio Settings → Canvas: Size and Background labeled **Fixed** with honest copy (no resize / no background picker).
 - Values sourced from `DESIGN_*` + `PAPER_*` constants — model + extended paper sizes stay truthful.
 - Dim reference remains the only interactive canvas preference.
 - No drawing-format migration and no pixel-dimension editing.
+
+## Batch E — V2-0010 Friend read-only profile
+
+- Tapping a friend row opens `FriendProfilePanel` (Back returns to Friends).
+- Loads public profile (`GET /profiles/{id}`) + published Runway looks (`GET /gallery/user/{id}`); client filters `visibility=public` + `moderation_status=ok`.
+- Published look count comes from the public gallery list — does **not** surface `designs_count` / private designs.
+- Remove friend control unchanged on the friends list.
+- No schema / DB / push / billing / store changes.
