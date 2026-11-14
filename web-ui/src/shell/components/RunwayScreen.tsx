@@ -100,7 +100,9 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
     try {
-      // Native shell: leave toggle off until #303 + operator FCM/APNs (V2-0008).
+      // TEMP (V2-0008): keep native toggle OFF until PR #303 lands with FCM/APNs.
+      // When integrating #303, replace this early-return with #303's native push
+      // enablement path — do not invent a second push implementation here.
       if (isNativeShell()) {
         setPushOn(false)
         setPushNeedsGesture(false)
@@ -171,7 +173,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     setPushNotice(null)
     setPushNeedsGesture(false)
     try {
-      // V2-0008: native app push is blocked until #303 + FCM/APNs operator config.
+      // TEMP (V2-0008): reconcile with PR #303 on merge — wire this toggle to
+      // #303's native push APIs/flags instead of a parallel implementation.
       // Do not pretend Web Push works inside the Capacitor shell.
       if (isNativeShell()) {
         setPushOn(false)

@@ -1,11 +1,61 @@
-import { describe, expect, it, vi } from 'vitest'
-import { blobToBase64, SaveCancelledError, saveImageBlobNative } from './nativeImageSave'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const writeFile = vi.hoisted(() =>
+  vi.fn(async (opts: { path: string }) => ({ uri: `file:///cache/${opts.path}` })),
+)
+
+vi.mock('@capacitor/filesystem', () => ({
+  Directory: { Cache: 'CACHE' },
+  Filesystem: {
+    writeFile: (...args: unknown[]) => writeFile(...(args as [ { path: string } ])),
+  },
+}))
+
+import {
+  blobToBase64,
+  SaveCancelledError,
+  saveImageBlobNative,
+  writeCacheFileForDownload,
+} from './nativeImageSave'
 
 describe('nativeImageSave', () => {
+  beforeEach(() => {
+    writeFile.mockClear()
+  })
+
   it('encodes blobs to base64 without corruption', async () => {
     const bytes = new Uint8Array([1, 2, 3, 250, 255])
     const b64 = await blobToBase64(new Blob([bytes], { type: 'image/png' }))
     expect(b64).toBe(btoa(String.fromCharCode(...bytes)))
+  })
+
+  it('writeCacheFileForDownload passes recursive:true so fr-dl/ is created', async () => {
+    const result = await writeCacheFileForDownload('fr-dl/look-front.png', 'YWJj')
+    expect(result.uri).toBe('file:///cache/fr-dl/look-front.png')
+    expect(writeFile).toHaveBeenCalledTimes(1)
+    expect(writeFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'fr-dl/look-front.png',
+        data: 'YWJj',
+        directory: 'CACHE',
+        recursive: true,
+      }),
+    )
+  })
+
+  it('saveImageBlobNative uses recursive cache write when no writeCacheFile override', async () => {
+    await saveImageBlobNative(new Blob(['png'], { type: 'image/png' }), 'gown-front.png', {
+      platform: () => 'android',
+      ensureAlbumId: async () => 'album-1',
+      savePhoto: async () => ({ identifier: 'p1' }),
+      shareFiles: vi.fn(),
+    })
+    expect(writeFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: expect.stringMatching(/^fr-dl\//),
+        recursive: true,
+      }),
+    )
   })
 
   it('saves to gallery via Media when album is available', async () => {

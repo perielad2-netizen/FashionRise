@@ -16,7 +16,7 @@
 | V2-0005 | **Confirmed** UX confusion | A | Immersive Save reused autosave “Saved…” label — fixed in Batch A PR |
 | V2-0006 | **Confirmed** UX | C | Gear → About |
 | V2-0007 | **Intentional** (verified) | B | Own looks: likes/scores from others only; UI hint preserved; no self-vote |
-| V2-0008 | **Confirmed** / blocked by native setup | B | Platform-aware toggle copy; native stays off until #303 + FCM/APNs — flags not enabled |
+| V2-0008 | **Confirmed** / blocked by native setup | B | TEMP native toggle OFF + copy in RunwayScreen; **reconcile with PR #303** (reuse its push path — no second impl); flags not enabled |
 | V2-0009 | **Mitigated UX** | B | Sticky Add-friend + scrollable friends body; no hidden-list defect proven |
 | V2-0010 | **Feature request** | E | Friend row actions — not in Batch B |
 | V2-0011 | **Confirmed** | B | Android `adjustResize` + visualViewport pad / scrollIntoView for Add friend |
@@ -63,7 +63,7 @@ Remain **roadmap only** (CTL-M01…M06, CTL-B01…B07, CTL-T01…T08). Not defec
 ## Batch B PR scope
 
 1. V2-0007 — verify own-look reaction restriction + copy (no self-vote regression).  
-2. V2-0008 — native push toggle messaging; coordinate with #303; **do not enable** push flags.  
+2. V2-0008 — TEMP native toggle OFF + messaging; **must reconcile with PR #303** (use #303 native push — do not duplicate); **do not enable** push flags here.  
 3. V2-0009 / V2-0011 — Friends sticky add-row + Android keyboard (`adjustResize` + visualViewport).  
 4. V2-0010 — remains Batch E feature request.  
 5. V2-0033 — platform-aware My Looks / Magic image save (Media gallery + Share file; web anchor unchanged); `fetchJobImageBlob` via `apiRequestBlob` with Batch A session isolation.

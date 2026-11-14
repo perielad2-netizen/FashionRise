@@ -45,12 +45,18 @@ function isUserCancel(err: unknown): boolean {
   return false
 }
 
-async function defaultWriteCacheFile(path: string, base64: string): Promise<{ uri: string }> {
+/** Write under Cache, creating parent dirs (e.g. `fr-dl/`) when missing. */
+export async function writeCacheFileForDownload(
+  path: string,
+  base64: string,
+): Promise<{ uri: string }> {
   const { Filesystem, Directory } = await import('@capacitor/filesystem')
   const result = await Filesystem.writeFile({
     path,
     data: base64,
     directory: Directory.Cache,
+    // Capacitor defaults recursive=false; first download must create `fr-dl/`.
+    recursive: true,
   })
   return { uri: result.uri }
 }
@@ -128,7 +134,7 @@ export async function saveImageBlobNative(
 
   const base64 = await blobToBase64(blob)
   const cachePath = `fr-dl/${Date.now()}-${safeName}`
-  const write = deps.writeCacheFile ?? defaultWriteCacheFile
+  const write = deps.writeCacheFile ?? writeCacheFileForDownload
   const { uri } = await write(cachePath, base64)
   if (!uri) throw new Error('Could not write the image to device storage')
 
