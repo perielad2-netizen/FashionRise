@@ -25,6 +25,7 @@ import {
   type RegistrationStatus,
   type User,
 } from '@/services/auth/authApi'
+import { SESSION_EXPIRED_EVENT } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 import { isNativeIosStarsShop, recoverPendingStarsPurchases } from '@/services/native/iap'
 import { isNativeShell, nativePlatform } from '@/services/native/platform'
@@ -144,6 +145,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Shared AI default tiles are public; warm them once a session is alive.
     if (user?.id) void preloadDefaultFabricTiles()
   }, [user?.id])
+
+  // Mid-session refresh failure (apiRequest): drop identity without leaving a zombie session.
+  useEffect(() => {
+    const onExpired = () => {
+      bindFabricCacheToUser(null)
+      setUser(null)
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
+  }, [])
 
   // After sign-in, attempt bounded Apple unfinished-txn recovery for this account only.
   // Account switches clear user first (login/register), so prior recovery cannot credit the new session.

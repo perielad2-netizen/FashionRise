@@ -3,9 +3,22 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-13 (**QA: password-reset auth race · overlay menus · Stars header/billing UX** · no native store submit.)
+**Last updated:** 2026-11-14 (**QA V2 Batch A** — auth refresh-on-401 · Save-design label · text-safety / naming regressions · ledger. PR #303 still open; no store/push enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## QA V2 Batch A (2026-11-14) — integrity / security (first PR)
+
+| Status | Detail |
+|---|---|
+| Source | Uploaded Master Plan + Tracker; ledger `docs/QA-V2-RECONCILIATION.md` |
+| Baseline | `main` `d7f61f9e` (#302 in). **PR #303 open / not merged** |
+| Branch | `cursor/web-qa-v2-batch-a-77c6` |
+| IDs in this PR | V2-0005, 0012–0016, 0018–0020 |
+| Fixes | Mid-session `apiRequest` single-flight refresh-on-401 + `fr:session-expired`; immersive toolbar **Save design** label (not autosave status) |
+| Verified intentional / safe | V2-0015 no title overwrite; V2-0016 non-destructive OCC+dialog; V2-0018/19/20 parameterized + React text (synthetic tests) |
+| Not in this PR | Batches B–E; CTL-* roadmap; native push flags; store submit |
+| **Exact next step** | Review/merge Batch A → then Batch B only |
 
 ## Mobile QA fixes (2026-11-13) — password reset · overlays · Stars UX
 

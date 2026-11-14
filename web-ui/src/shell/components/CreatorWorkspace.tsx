@@ -751,7 +751,8 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
                 onSave={editor.beginSaveDesign}
                 onExit={exitImmersive}
                 onClear={editor.clear}
-                saveLabel={editor.saveStatusLabel || 'Save'}
+                // V2-0005: never reuse autosave status ("Saved…") as the Save-design action label.
+                saveLabel="Save design"
               />
             ) : null}
           </div>
