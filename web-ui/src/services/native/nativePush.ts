@@ -224,7 +224,7 @@ export async function disableNativePush(): Promise<void> {
 }
 
 export async function enableNativePush(): Promise<
-  'granted' | 'denied' | 'unsupported' | 'disabled' | 'unauthenticated'
+  'granted' | 'denied' | 'unsupported' | 'disabled' | 'skipped' | 'unauthenticated'
 > {
   setNativePushDesired(true)
   return syncNativePushAfterAuth()

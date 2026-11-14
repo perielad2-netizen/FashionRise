@@ -89,7 +89,8 @@ export function pushSupported(): boolean {
 export async function enableRunwayPush(): Promise<'granted' | 'denied' | 'unsupported' | 'disabled'> {
   if (isNativeShell()) {
     const result = await enableNativePush()
-    if (result === 'unauthenticated') return 'disabled'
+    // Fail-closed for auth / no-op skip — UI treats both as disabled.
+    if (result === 'unauthenticated' || result === 'skipped') return 'disabled'
     return result
   }
   if (!pushSupported()) return 'unsupported'
