@@ -1,7 +1,7 @@
 # FashionRise QA V2 — reconciliation ledger
 
 **Source of truth:** uploaded Master Plan + Tracker (2026-11-14).  
-**Code baseline:** Batch E implementation — V2-0030 rect eraser after #308 planning merge.  
+**Code baseline:** QA V2 Batch E **COMPLETE** on `main` (#308–#314).  
 **PR #303:** open — native nav/push **not merged**; `NATIVE_PUSH_*` remain OFF.  
 **Native evidence caveat:** many screenshots are from an older Android AAB; do not treat web tip deploy as proof the installed app already has the fix.
 
@@ -20,7 +20,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0007 | **Intentional** | B | Own looks: likes/scores from others only; UI hint preserved; no self-vote |
 | V2-0008 | **Blocked** | B | TEMP native push toggle OFF + copy; **reconcile with PR #303** (reuse its push path — no second impl); flags not enabled |
 | V2-0009 | **Mitigated** | B | Sticky Add-friend + scrollable friends body; no hidden-list defect proven |
-| V2-0010 | **Implemented** P2 (PM review) | E | Friend row → read-only profile + published Runway looks; Remove preserved |
+| V2-0010 | **Fixed** P2 | E | Friend row → read-only profile + published Runway looks; Remove preserved (#314) |
 | V2-0011 | **Confirmed** | B | Android `adjustResize` + visualViewport pad / scrollIntoView for Add friend |
 | V2-0012 | **Fixed** | A | Mid-session `apiRequest` refresh-on-401 + session-expired event |
 | V2-0013 | **Fixed** | A | Same root as 0012 + honest ack path; refresh race amendment (discard stale after logout/switch) |
@@ -103,9 +103,9 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 - Commits through existing StrokeHistory + draft document path (save/reopen preserved).
 - Freehand Eraser and Clear canvas unchanged.
 
-**Shipped:** V2-0030 (#309), V2-0032 (#310), V2-0026 (#311), V2-0031 (#312), V2-0021 (#313).  
-**Open for PM review:** V2-0010 friend read-only profile.  
-**Still out of scope:** CTL-*, push enable, Stars billing changes, store submit, merging #303.
+**Batch E implementation COMPLETE:** V2-0030 (#309), V2-0032 (#310), V2-0026 (#311), V2-0031 (#312), V2-0021 (#313), V2-0010 (#314); planning #308.  
+**Pending activation (not a code gap):** V2-0031 visible carousel waits on authorized `AUTHORIZED_HOME_EXAMPLES` marketing pairs.  
+**Still out of scope / blocked elsewhere:** CTL-*, push enable, Stars billing changes, store submit, merging #303.
 
 ## Batch E — V2-0031 Home before/after gallery (merged #312)
 
@@ -122,10 +122,14 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 - Dim reference remains the only interactive canvas preference.
 - No drawing-format migration and no pixel-dimension editing.
 
-## Batch E — V2-0010 Friend read-only profile
+## Batch E — V2-0010 Friend read-only profile (merged #314)
 
 - Tapping a friend row opens `FriendProfilePanel` (Back returns to Friends).
 - Loads public profile (`GET /profiles/{id}`) + published Runway looks (`GET /gallery/user/{id}`); client filters `visibility=public` + `moderation_status=ok`.
 - Published look count comes from the public gallery list — does **not** surface `designs_count` / private designs.
 - Remove friend control unchanged on the friends list.
 - No schema / DB / push / billing / store changes.
+
+## Batch E — COMPLETE
+
+All Batch E implementation slices are on `main`. No further Batch E feature PRs unless PM opens a new batch.
