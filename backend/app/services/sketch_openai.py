@@ -116,7 +116,11 @@ _DESIGN_ENHANCEMENT_CONTRACT = (
     "incomplete details (match the better side). Do NOT treat unfilled gaps as cut-outs — "
     "restore matching fabric. Only keep clearly designed openings (swim/lingerie/true crop). "
     "Preserve Image 1 fabric fills (shoes/bags/belts). No invented panels. Elevated — not "
-    "traced/cartoonish; keep painted fabric/color theme."
+    "traced/cartoonish; keep painted fabric/color theme. "
+    "FOOTWEAR HEELS: When Image 1 shows boots, heels, or stilettos, finish a coherent heel "
+    "structure — solid sole-to-tip attachment, centered under each heel, left/right matched "
+    "as designed. Especially on Back views: no melted, floating, needle-warped, or "
+    "half-missing heels; keep sketched footwear readable and structurally sound."
 )
 
 # Illustration-style restriction — equal priority with coverage; must not be truncated
@@ -418,9 +422,11 @@ def _system_prompt(job_type: str) -> str:
             "professional fashion illustration that keeps the design idea but MUST erase sketch glitches "
             "so the result looks finished, not like a cleaned tracing (incomplete fills, leftover gaps, "
             "uneven lines, missing fabric patches, unfinished hands/legs/shoes — restore matching "
-            "fabric; match the better side on one-sided mistakes); do NOT treat unfinished fill gaps as "
-            "intentional cut-outs; only keep clearly designed swim/lingerie/true-crop openings; do not "
-            "describe amateur line quality or ask to keep a traced/cartoon/kid-sketch look; do not "
+            "fabric; match the better side on one-sided mistakes; when boots/heels/stilettos are drawn, "
+            "require coherent heel structure — solid sole-to-tip attachment, centered under each heel, "
+            "no melted/floating/warped heels especially on Back views); do NOT treat unfinished fill "
+            "gaps as intentional cut-outs; only keep clearly designed swim/lingerie/true-crop openings; "
+            "do not describe amateur line quality or ask to keep a traced/cartoon/kid-sketch look; do not "
             "request a different croquis family than the SELECTED STUDIO REFERENCE)."
         )
     return (

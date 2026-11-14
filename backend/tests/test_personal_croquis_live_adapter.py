@@ -152,14 +152,16 @@ def test_build_edit_kwargs_one_image_transparent_png(monkeypatch):
     assert style_bio.read(8) == b"\x89PNG\r\n\x1a\n"
     from app.services import personal_croquis_provider as pcp
 
-    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v5"
+    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v6"
     prompt = kwargs["prompt"].lower()
     assert "mannequin" in prompt
     assert "image 1" in prompt and "image 2" in prompt
     assert "do not automatically slim" in prompt
     assert "elongated fashion-figure" not in prompt
     assert "do not copy image 2's body shape" in prompt or "do not copy image 2" in prompt
-    assert kwargs["prompt"] == pcp.CROQUIS_LINEART_PROMPT_V5
+    assert "gender presentation" in prompt or "male-presenting" in prompt
+    assert "do not feminize" in prompt
+    assert kwargs["prompt"] == pcp.CROQUIS_LINEART_PROMPT_V6
 
 
 def test_mocked_http_edit_normalizes_to_768x1024(monkeypatch):

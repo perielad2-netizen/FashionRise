@@ -85,9 +85,12 @@ def test_personal_id_accepted_without_gender_family():
     assert "personal" in vision.lower()
     assert "female-straight" in vision.lower()  # explicitly forbidden replacement
     assert "do not" in vision.lower() and "generic library croquis" in vision.lower()
+    assert "gender presentation" in vision.lower() or "sex" in vision.lower()
+    assert "feminize" in vision.lower()
     assert "personal" in edit.lower()
     assert "female-straight" in edit.lower()
     assert "do not invent a male or female" in edit.lower()
+    assert "feminize" in edit.lower()
     # Must not map personal onto a built-in mannequin family.
     assert "female fashion-croquis family" not in vision.lower()
     assert "male fashion-croquis family" not in vision.lower()

@@ -432,6 +432,9 @@ def test_design_enhancement_normalizes_sketch_glitches_not_literal_mistakes():
     assert "pixel-perfect" in lower
     assert "non-photorealistic" in lower
     assert "swim" in lower or "lingerie" in lower or "true crop" in lower
+    # Footwear heel structure (especially Back boot/stiletto views).
+    assert "footwear heels" in lower
+    assert "sole-to-tip" in lower or "half-missing heels" in lower
     # Vision refine_ok must reach the edit brief (not dropped by budget).
     assert "must fix these sketch imperfections" in lower
     assert "crooked edges" in lower

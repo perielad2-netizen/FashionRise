@@ -436,21 +436,27 @@ def test_claim_lease_floor_exceeds_openai_timeout(monkeypatch):
     assert callable(recover_stale_croquis_claims)
 
 
-def test_prompt_v5_photo_faithful_over_style_template():
+def test_prompt_v6_photo_faithful_and_sex_presentation():
     from app.services import personal_croquis_provider as pcp
 
-    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v5"
+    assert pcp.PROMPT_VERSION_CURRENT == "croquis-lineart-v6"
     assert pcp.PROPORTION_MODE_CURRENT == "photo_faithful"
-    prompt = pcp.CROQUIS_LINEART_PROMPT_V5.lower()
+    prompt = pcp.CROQUIS_LINEART_PROMPT_V6.lower()
     assert "image 1" in prompt
     assert "image 2 is only" in prompt
     assert "do not automatically slim" in prompt
     assert "do not copy image 2" in prompt
     assert "elongated fashion-figure" not in prompt
     assert "transparent" in prompt
-    # V4 historical copy still contains the elongated phrasing; V5 must not.
+    assert "gender presentation" in prompt or "male-presenting" in prompt
+    assert "do not feminize" in prompt
+    assert "image 2 does not set the person's sex" in prompt
+    # V4 historical copy still contains the elongated phrasing; V6 must not.
     assert "elongated fashion-figure silhouette" in pcp.CROQUIS_LINEART_PROMPT_V4.lower()
     assert "elongated fashion-figure silhouette" not in prompt
+    # V5 historical lacked sex-presentation lock; V6 must keep photo-faithful + sex lock.
+    assert "do not feminize" not in pcp.CROQUIS_LINEART_PROMPT_V5.lower()
     style = pcp.load_house_style_reference_png()
     assert style.startswith(b"\x89PNG\r\n\x1a\n")
     assert len(style) > 1024
+    assert "style-only" in pcp.HOUSE_STYLE_REF_VERSION
