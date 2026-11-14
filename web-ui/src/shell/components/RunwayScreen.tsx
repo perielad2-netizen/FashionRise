@@ -12,8 +12,10 @@ import {
   Bell,
   BellOff,
   ChevronLeft,
+  Crown,
   Globe2,
   Heart,
+  Info,
   MessageCircle,
   RefreshCw,
   Sparkles,
@@ -75,13 +77,22 @@ type FriendsState =
 
 type TabId = 'feed' | 'friends'
 type BrowseSheet = 'top10' | 'circle'
+type TopLimit = 10 | 20 | 50
 
 const TABS: Array<{ id: TabId; label: string; hint: string }> = [
-  { id: 'feed', label: 'Feed', hint: 'Open Top 10 or your circle as a scrollable list' },
+  { id: 'feed', label: 'Feed', hint: 'Worldwide Top rankings or your friends circle' },
   { id: 'friends', label: 'Friends', hint: 'Manage your private circle' },
 ]
 
+const TOP_LIMITS: TopLimit[] = [10, 20, 50]
 const SCORE_HINT = 'Looks earn runway scores from likes + ratings (1–10).'
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (n >= 10_000) return `${Math.round(n / 1000)}K`
+  if (n >= 1_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`
+  return String(n)
+}
 
 export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const { user } = useAuth()
@@ -89,6 +100,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const viewerUsername = user?.username ?? null
   const [tab, setTab] = useState<TabId>('feed')
   const [browseSheet, setBrowseSheet] = useState<BrowseSheet | null>(null)
+  const [topLimit, setTopLimit] = useState<TopLimit>(10)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [friendsState, setFriendsState] = useState<FriendsState>({ status: 'loading' })
   const [friendUsername, setFriendUsername] = useState('')
@@ -241,7 +253,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     try {
       const [circle, top10] = await Promise.all([
         listGallery({ sort: 'circle', limit: 48, signal }),
-        listGallery({ sort: 'top10', limit: 10, signal }),
+        listGallery({ sort: 'top10', limit: topLimit, signal }),
       ])
       if (signal?.aborted) return
       setState({ status: 'ready', circle, top10 })
@@ -255,7 +267,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             : 'Could not load FashionRise Runway'
       setState({ status: 'error', message })
     }
-  }, [tab])
+  }, [tab, topLimit])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -354,7 +366,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             Runway
           </h1>
           <p className={styles.subtitle}>
-            Your circle’s looks first — plus a worldwide Top 10. {SCORE_HINT}
+            Worldwide rankings of the top fashion looks, based on likes and ratings from the global
+            community. {SCORE_HINT}
           </p>
         </div>
         <div className={styles.headActions}>
@@ -363,7 +376,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           </button>
           <button type="button" className={styles.primaryBtn} onClick={onOpenCreate}>
             <Sparkles size={16} aria-hidden />
-            Create
+            Start creating
           </button>
           {tab === 'feed' ? (
             <button
@@ -453,43 +466,94 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           />
         ) : (
           <div className={styles.feedHub}>
-            <p className={styles.feedHubLead}>
-              Open a list to scroll looks — Top 10 worldwide, or only your friends’ circle.
-            </p>
-            <div className={styles.feedHubActions}>
-              <button
-                type="button"
-                className={styles.hubPrimary}
-                onClick={() => setBrowseSheet('top10')}
-                data-testid="runway-open-top10"
-              >
-                <Globe2 size={18} aria-hidden />
-                <span className={styles.hubBtnText}>
-                  <strong>Show Top 10</strong>
-                  <small>
-                    {state.top10.length === 0
-                      ? 'No worldwide looks yet'
-                      : `${state.top10.length} worldwide look${state.top10.length === 1 ? '' : 's'}`}
-                  </small>
-                </span>
-              </button>
-              <button
-                type="button"
-                className={styles.hubSecondary}
-                onClick={() => setBrowseSheet('circle')}
-                data-testid="runway-open-circle"
-              >
-                <Users size={18} aria-hidden />
-                <span className={styles.hubBtnText}>
-                  <strong>My circle</strong>
-                  <small>
-                    {state.circle.length === 0
-                      ? 'Quiet for now — publish or add friends'
-                      : `${state.circle.length} look${state.circle.length === 1 ? '' : 's'} from you & friends`}
-                  </small>
-                </span>
-              </button>
+            <div
+              className={styles.topLimitRow}
+              role="tablist"
+              aria-label="Worldwide ranking size"
+              data-testid="runway-top-limit"
+            >
+              {TOP_LIMITS.map((limit) => (
+                <button
+                  key={limit}
+                  type="button"
+                  role="tab"
+                  aria-selected={topLimit === limit}
+                  className={topLimit === limit ? styles.topLimitActive : styles.topLimitBtn}
+                  data-testid={`runway-top-${limit}`}
+                  onClick={() => setTopLimit(limit)}
+                >
+                  <Crown size={13} aria-hidden />
+                  Top {limit}
+                </button>
+              ))}
             </div>
+
+            <p className={styles.rankInfo}>
+              <Info size={13} aria-hidden />
+              Shows worldwide rankings of real, available looks only.
+            </p>
+
+            <div className={styles.rankBoard}>
+              <div className={styles.rankBoardHead}>
+                <h2 className={styles.sectionTitle}>
+                  <Globe2 size={18} aria-hidden />
+                  Top {topLimit} worldwide
+                </h2>
+                <button
+                  type="button"
+                  className={styles.ghostBtn}
+                  onClick={() => setBrowseSheet('top10')}
+                  data-testid="runway-open-top10"
+                >
+                  Open full board
+                </button>
+              </div>
+
+              {state.top10.length === 0 ? (
+                <EmptyState
+                  title="No Top rankings yet"
+                  body="Publish a look from My Looks to appear on the worldwide board."
+                  actions={
+                    <button type="button" className={styles.primaryBtn} onClick={onOpenLooks}>
+                      Go to My Looks
+                    </button>
+                  }
+                />
+              ) : (
+                <ul className={styles.rankList} aria-label={`Top ${topLimit} worldwide`}>
+                  {state.top10.map((item, index) => (
+                    <RunwayCard
+                      key={item.id}
+                      item={item}
+                      rank={index + 1}
+                      layout="rank"
+                      isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                      viewerId={viewerId}
+                      viewerUsername={viewerUsername}
+                      onItemChange={patchItem}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className={styles.hubSecondary}
+              onClick={() => setBrowseSheet('circle')}
+              data-testid="runway-open-circle"
+            >
+              <Users size={18} aria-hidden />
+              <span className={styles.hubBtnText}>
+                <strong>My circle</strong>
+                <small>
+                  {state.circle.length === 0
+                    ? 'Quiet for now — publish or add friends'
+                    : `${state.circle.length} look${state.circle.length === 1 ? '' : 's'} from you & friends`}
+                </small>
+              </span>
+            </button>
+
             {state.circle.length === 0 ? (
               <div className={styles.feedHubHints}>
                 <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
@@ -544,9 +608,9 @@ function RunwayBrowseSheet({
 }) {
   const titleId = useId()
   const isTop10 = kind === 'top10'
-  const title = isTop10 ? 'Top 10 worldwide' : 'My circle'
+  const title = isTop10 ? 'Top rankings worldwide' : 'My circle'
   const hint = isTop10
-    ? 'Most liked public looks across FashionRise — scroll down to see more.'
+    ? 'Most liked public looks across FashionRise — scroll to see the full board.'
     : 'Only your looks and your friends’ published looks — scroll down to see more.'
 
   useEffect(() => {
@@ -599,7 +663,7 @@ function RunwayBrowseSheet({
         <div className={styles.sheetBody}>
           {items.length === 0 ? (
             <EmptyState
-              title={isTop10 ? 'No Top 10 yet' : 'Your circle is quiet'}
+              title={isTop10 ? 'No Top rankings yet' : 'Your circle is quiet'}
               body={
                 isTop10
                   ? 'Publish a look from My Looks to appear on the worldwide board.'
@@ -621,13 +685,14 @@ function RunwayBrowseSheet({
           ) : (
             <ul
               className={styles.sheetList}
-              aria-label={isTop10 ? 'Top 10 worldwide' : 'Circle feed'}
+              aria-label={isTop10 ? 'Top rankings worldwide' : 'Circle feed'}
             >
               {items.map((item, index) => (
                 <RunwayCard
                   key={item.id}
                   item={item}
                   rank={isTop10 ? index + 1 : undefined}
+                  layout={isTop10 ? 'rank' : 'stack'}
                   isOwn={Boolean(viewerId && item.user_id === viewerId)}
                   viewerId={viewerId}
                   viewerUsername={viewerUsername}
@@ -830,6 +895,7 @@ function RunwayCard({
   item,
   rank,
   compact = false,
+  layout = 'stack',
   isOwn = false,
   viewerId,
   viewerUsername,
@@ -838,6 +904,7 @@ function RunwayCard({
   item: GalleryItem
   rank?: number
   compact?: boolean
+  layout?: 'stack' | 'rank'
   isOwn?: boolean
   viewerId: string | null
   viewerUsername: string | null
@@ -1002,10 +1069,31 @@ function RunwayCard({
     [busy, viewerId],
   )
 
+  const ranked = layout === 'rank' && rank != null
+  const cardClass = compact
+    ? styles.topCard
+    : ranked
+      ? rank === 1
+        ? `${styles.rankCard} ${styles.rankCardLead}`
+        : styles.rankCard
+      : styles.card
+  const badgeClass =
+    rank === 1
+      ? styles.rankBadgeGold
+      : rank === 2
+        ? styles.rankBadgeSilver
+        : rank === 3
+          ? styles.rankBadgeBronze
+          : styles.rankBadge
+
   return (
-    <li className={compact ? styles.topCard : styles.card}>
-      <div className={styles.thumb}>
-        {rank != null ? <span className={styles.rankBadge}>#{rank}</span> : null}
+    <li className={cardClass}>
+      <div className={ranked ? styles.rankThumb : styles.thumb}>
+        {rank != null ? (
+          <span className={badgeClass}>
+            {rank <= 3 ? <Crown size={10} aria-hidden /> : null}#{rank}
+          </span>
+        ) : null}
         {src ? (
           <img src={src} alt="" className={styles.thumbImg} draggable={false} />
         ) : (
@@ -1016,6 +1104,25 @@ function RunwayCard({
       </div>
       <div className={styles.cardBody}>
         <h2 className={styles.cardTitle}>{item.title || 'Untitled look'}</h2>
+        {ranked ? (
+          <div className={styles.rankStats} aria-label="Look stats">
+            <span>
+              <Heart size={12} aria-hidden />
+              {formatCount(item.likes_count)}
+              <small>Likes</small>
+            </span>
+            <span>
+              <Star size={12} aria-hidden />
+              {item.rating_average != null ? item.rating_average.toFixed(2) : '—'}
+              <small>Avg. Score</small>
+            </span>
+            <span>
+              <Users size={12} aria-hidden />
+              {formatCount(item.rating_count)}
+              <small>Raters</small>
+            </span>
+          </div>
+        ) : null}
         <div className={styles.cardActions}>
           {canReact ? (
             <button

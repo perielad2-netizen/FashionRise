@@ -150,10 +150,10 @@ describe('RunwayScreen', () => {
 
   async function openTop10Sheet() {
     fireEvent.click(await screen.findByTestId('runway-open-top10'))
-    return screen.findByRole('dialog', { name: /Top 10 worldwide/i })
+    return screen.findByRole('dialog', { name: /Top rankings worldwide/i })
   }
 
-  it('loads circle + Top 10 data and opens scrollable popups from hub buttons', async () => {
+  it('loads circle + Top rankings and opens scrollable popups from hub buttons', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
@@ -161,24 +161,38 @@ describe('RunwayScreen', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
     await waitFor(() => expect(listGallery).toHaveBeenCalled())
     expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' }))
-    expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'top10' }))
+    expect(listGallery).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'top10', limit: 10 }),
+    )
+    expect(await screen.findByTestId('runway-top-limit')).toBeInTheDocument()
+    expect(screen.getByTestId('runway-top-10')).toHaveAttribute('aria-selected', 'true')
     expect(await screen.findByTestId('runway-open-top10')).toBeInTheDocument()
     expect(screen.getByTestId('runway-open-circle')).toBeInTheDocument()
     expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.queryByRole('button', { name: /^My circle$/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /Start creating/i })).toBeInTheDocument()
     expect(screen.queryByText('Comments')).toBeNull()
     expect(screen.queryByText('Like · Score')).toBeNull()
+    expect(await screen.findByText('Worldwide hit')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('runway-top-20'))
+    await waitFor(() =>
+      expect(listGallery).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'top10', limit: 20 }),
+      ),
+    )
 
     const topDialog = await openTop10Sheet()
     expect(within(topDialog).getByText('Worldwide hit')).toBeInTheDocument()
     expect(within(topDialog).getByTestId('runway-browse-back')).toHaveTextContent('Back')
-    fireEvent.click(within(topDialog).getByRole('button', { name: /Close Top 10 worldwide/i }))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Top 10 worldwide/i })).toBeNull())
+    fireEvent.click(within(topDialog).getByRole('button', { name: /Close Top rankings worldwide/i }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /Top rankings worldwide/i })).toBeNull(),
+    )
 
     const circle = await openCircleSheet()
     expect(within(circle).getByText('Friend circle look')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Start creating/i }))
     expect(onOpenCreate).toHaveBeenCalled()
     fireEvent.click(screen.getAllByRole('button', { name: /My Looks/i })[0]!)
     expect(onOpenLooks).toHaveBeenCalled()

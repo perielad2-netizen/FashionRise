@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**Android QA fixes** — header Stars/logo overlap + My Looks download confirmation toast; iOS App Store already published; QA V2 A–E merged; continue Android device QA; iOS **1.0.1** only after Android approval. No Codemagic iOS builds now. PR #303 open; push/billing gates OFF.)
+**Last updated:** 2026-11-14 (**Android QA #318+#319 merged** — header/download toast + Home/Runway polish; web FE/BE tip deploy authorized. iOS App Store already published; iOS **1.0.1** later. #303 still open; push/billing gates OFF.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -17,19 +17,27 @@
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Unchanged | #303 unmerged · native push OFF · public Stars purchasing/credit OFF |
 
-**Stop line:** No Codemagic iOS builds · no App Store submissions · no FE/BE deploy · no push/billing enable · no unrelated feature work.
+**Stop line:** No Codemagic iOS builds · no App Store submissions · no push/billing enable · no unrelated feature work.
 
-**Exact next step:** Continue **Android QA** on the test application until PM approval; then plan iOS **1.0.1**.
+**Exact next step:** Retest Android QA on the new web tip; then plan iOS **1.0.1** after Android approval.
 
-## Android QA — header overlap + download toast (2026-11-14)
+## Android QA — Home + Runway polish (2026-11-14) — #319
+
+| Status | Detail |
+|---|---|
+| Home | Removed duplicate **Create** destination row — pink **Start creating** is the only create CTA; nav is My Designs / My Looks / Runway (/ My Models); tighter hero copy |
+| Runway | Worldwide Top **10 / 20 / 50** selector; inline ranked board with #1 glow + crown badges; My circle kept; CTA label **Start creating** |
+| API | `sort=top10` limit raised to **50** (was hard-capped at 10) |
+| Out of scope | Fake designer bios / verified badges · billing · push · iOS builds |
+
+## Android QA — header overlap + download toast (2026-11-14) — #318 MERGED
 
 | Status | Detail |
 |---|---|
 | Trigger | Confirmed Android screenshots: Stars badge overlaps FashionRise wordmark; My Looks Download saves to Gallery with no success UI |
 | P1 Header | `GlobalHeader` narrow grid + ellipsis wordmark + capped Stars badge (`toLocaleString` for long balances e.g. 1,000,019); brand preserved |
 | P2 Download | My Looks detail: sticky footer toast `Saving image…` → `Saved to your gallery ✓` (gallery/web only); Share sheet = info copy (not success); errors clear; in-flight ref + disabled actions |
-| Out of scope | Billing · push · deploy · iOS builds |
-| **Exact next step** | PM review PR · retest on Android device |
+| Out of scope | Billing · push · iOS builds |
 
 ## Superseded note (2026-11-14) — iOS 1.0 TestFlight RC start was incorrect
 

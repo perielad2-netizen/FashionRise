@@ -1,4 +1,4 @@
-import { FolderHeart, Images, Sparkles, Star, UserRound } from 'lucide-react'
+import { ChevronRight, FolderHeart, Images, Sparkles, Star, UserRound } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import type { NavDestination } from '@/shell/components/GlobalNavigation'
@@ -21,33 +21,27 @@ const DESTINATIONS: Array<{
   requiresMyCroquis?: boolean
 }> = [
   {
-    id: 'create',
-    label: 'Create',
-    hint: 'Open the sketch studio and start a new design',
-    icon: Sparkles,
-  },
-  {
     id: 'designs',
     label: 'My Designs',
-    hint: 'Saved sketches and working drafts',
+    hint: 'Saved sketches and working drafts.',
     icon: FolderHeart,
   },
   {
     id: 'looks',
     label: 'My Looks',
-    hint: 'Magic looks, try-ons, and tech packs',
+    hint: 'Magic looks, try-ons, and tech packs.',
     icon: Images,
   },
   {
     id: 'runway',
     label: 'Runway',
-    hint: 'FashionRise Runway — share, like, and score looks',
+    hint: 'FashionRise Runway — share, like, and score looks.',
     icon: Star,
   },
   {
     id: 'croquis',
     label: 'My Models',
-    hint: 'Personal croquis for try-on and sketching',
+    hint: 'Personal croquis for try-on and sketching.',
     icon: UserRound,
     requiresMyCroquis: true,
   },
@@ -76,10 +70,10 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
           <h1 id="home-brand" className={styles.brand}>
             Fashion<span>Rise</span>
           </h1>
-          <p className={styles.tagline}>Sketch a garment. Turn it into a Magic look.</p>
+          <p className={styles.tagline}>Sketch it. See it come to life.</p>
           <p className={styles.lead}>
-            Draw on a fashion figure in the studio, then generate an AI Magic look from your
-            sketch — or jump back into saved designs, looks, and models.
+            Turn your fashion ideas into stunning AI creations — or jump back into saved designs,
+            looks, and models.
           </p>
           <button
             type="button"
@@ -112,6 +106,7 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
                 <span className={styles.destinationLabel}>{item.label}</span>
                 <span className={styles.destinationHint}>{item.hint}</span>
               </span>
+              <ChevronRight className={styles.destinationChevron} size={18} aria-hidden />
             </button>
           )
         })}
