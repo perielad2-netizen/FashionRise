@@ -14,6 +14,9 @@ const unlikeGalleryComment = vi.fn()
 const listFriends = vi.fn()
 const listFriendRequests = vi.fn()
 const requestFriendByUsername = vi.fn()
+const listUserGallery = vi.fn()
+const getPublicProfile = vi.fn()
+const removeFriend = vi.fn()
 
 vi.mock('@/services/galleryApi', () => ({
   listGallery: (...args: unknown[]) => listGallery(...args),
@@ -25,7 +28,12 @@ vi.mock('@/services/galleryApi', () => ({
   postGalleryComment: (...args: unknown[]) => postGalleryComment(...args),
   likeGalleryComment: (...args: unknown[]) => likeGalleryComment(...args),
   unlikeGalleryComment: (...args: unknown[]) => unlikeGalleryComment(...args),
+  listUserGallery: (...args: unknown[]) => listUserGallery(...args),
   fetchGalleryImageBlob: vi.fn(async () => new Blob()),
+}))
+
+vi.mock('@/services/profilesApi', () => ({
+  getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
 }))
 
 vi.mock('@/services/friendsApi', () => ({
@@ -33,7 +41,7 @@ vi.mock('@/services/friendsApi', () => ({
   listFriendRequests: (...args: unknown[]) => listFriendRequests(...args),
   requestFriendByUsername: (...args: unknown[]) => requestFriendByUsername(...args),
   acceptFriendRequest: vi.fn(),
-  removeFriend: vi.fn(),
+  removeFriend: (...args: unknown[]) => removeFriend(...args),
 }))
 
 const enableRunwayPush = vi.fn()
@@ -113,6 +121,9 @@ describe('RunwayScreen', () => {
     listFriends.mockReset()
     listFriendRequests.mockReset()
     requestFriendByUsername.mockReset()
+    listUserGallery.mockReset()
+    getPublicProfile.mockReset()
+    removeFriend.mockReset()
     enableRunwayPush.mockReset()
     disableRunwayPush.mockReset()
     runwayPushIsEnabled.mockReset()
@@ -128,6 +139,8 @@ describe('RunwayScreen', () => {
     listGalleryComments.mockResolvedValue([])
     listFriends.mockResolvedValue([])
     listFriendRequests.mockResolvedValue([])
+    listUserGallery.mockResolvedValue([])
+    getPublicProfile.mockResolvedValue(null)
   })
 
   async function openCircleSheet() {
@@ -351,6 +364,80 @@ describe('RunwayScreen', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /^Add$/i }))
     await waitFor(() => expect(requestFriendByUsername).toHaveBeenCalledWith('newfriend'))
+  })
+
+  it('opens a read-only friend profile from a friend row and keeps Remove', async () => {
+    listFriends.mockResolvedValue([
+      {
+        id: 'fs-1',
+        status: 'accepted',
+        requester_id: 'me',
+        addressee_id: 'yaniv',
+        created_at: '2026-11-07T00:00:00Z',
+        accepted_at: '2026-11-07T00:00:00Z',
+        friend: {
+          user_id: 'yaniv',
+          username: 'yanivprbk',
+          display_name: 'Yaniv',
+          avatar_url: null,
+        },
+      },
+    ])
+    getPublicProfile.mockResolvedValue({
+      id: 'p1',
+      user_id: 'yaniv',
+      display_name: 'Yaniv',
+      bio: 'Hello',
+      avatar_url: null,
+      cover_url: null,
+      style_tags: [],
+      designs_count: 12,
+      published_count: 1,
+      followers_count: 2,
+      likes_received_count: 4,
+      rating_average: 9,
+      rating_count: 1,
+      reputation_score: 20,
+      reputation_tier: 'rising',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+    listUserGallery.mockResolvedValue([
+      {
+        id: 'g-public',
+        design_id: null,
+        look_id: 'look-1',
+        user_id: 'yaniv',
+        title: 'Runway gown',
+        image_url: null,
+        visibility: 'public',
+        rating_average: 9,
+        rating_count: 1,
+        likes_count: 4,
+        moderation_status: 'ok',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ])
+    removeFriend.mockResolvedValue(undefined)
+
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    await waitFor(() => expect(listGallery).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('tab', { name: /Friends/i }))
+    expect(await screen.findByTestId('friend-open-yaniv')).toBeInTheDocument()
+    expect(screen.getByTestId('friend-remove-yaniv')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('friend-open-yaniv'))
+    expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('friend-profile-username')).toHaveTextContent('@yanivprbk')
+    expect(await screen.findByTestId('friend-look-g-public')).toBeInTheDocument()
+    expect(screen.queryByText('12')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('friend-profile-back'))
+    expect(await screen.findByTestId('friend-open-yaniv')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('friend-remove-yaniv'))
+    await waitFor(() => expect(removeFriend).toHaveBeenCalledWith('yaniv'))
   })
 
   it('auto-enables Runway push by default on load', async () => {

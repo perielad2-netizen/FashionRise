@@ -1037,6 +1037,26 @@
   background: rgba(255, 255, 255, 0.035);
 }
 
+.friendOpen {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.friendOpen:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
 .friendText {
   display: grid;
   gap: 2px;
@@ -1051,6 +1071,157 @@
 .friendText span {
   font-size: 11px;
   color: var(--fr-muted);
+}
+
+.friendProfile {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding-bottom: 16px;
+}
+
+.friendProfileHead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.friendBackBtn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--fr-pink-soft, #f472b6);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.friendBackBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.friendProfileEyebrow {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fr-muted);
+}
+
+.friendProfileIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.friendAvatar,
+.friendAvatarFallback {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+.friendAvatarFallback {
+  display: grid;
+  place-items: center;
+  background: rgba(214, 51, 132, 0.22);
+  color: var(--fr-pink-soft, #f472b6);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.friendBio,
+.friendBioMuted {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.friendBio {
+  color: var(--fr-text);
+}
+
+.friendBioMuted {
+  color: var(--fr-muted);
+}
+
+.friendPublicStats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 18px;
+}
+
+.friendPublicStats li {
+  display: grid;
+  gap: 2px;
+}
+
+.friendPublicStats strong {
+  font-size: 16px;
+  color: var(--fr-text);
+}
+
+.friendPublicStats span {
+  font-size: 11px;
+  color: var(--fr-muted);
+}
+
+.friendLooksSection {
+  display: grid;
+  gap: 10px;
+}
+
+.friendLooksGrid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.friendLookTile {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.friendLookImage,
+.friendLookPlaceholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 12px;
+  background: rgba(15, 22, 38, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.friendLookCaption {
+  margin: 0;
+  font-size: 11px;
+  color: var(--fr-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 721px) {
+  .friendLooksGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 520px) {
