@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**AI Fitting Room F1–F3** web test tip `3534d906` LIVE · PR **#332** open — **do not merge** · Android QA rollback tip `b69ffb25`.)
+**Last updated:** 2026-11-15 (**AI Fitting Room F1–F5** web test tip `1c1cf574` LIVE · flat **20 Stars** · PR **#332** open — **do not merge** · Android QA rollback tip `b69ffb25`.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -30,7 +30,7 @@
 | Slice | **F1–F5** on PR **#332** (`cursor/web-ai-fitting-room-f1f3-77c6`): person + outfit session IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · save/compare/share · preview disclaimer |
 | Stars | Flat **`ai_stars_fitting_room_cost=20`** per successful try-on — **not** multiplied by garments in the image / outfit collage. No charge on failure. |
 | Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **OFF** · BE `FITTING_ROOM_ENABLED` / `FITTING_ROOM_LIVE_HTTP` **OFF** |
-| Web test tip LIVE | FE `/var/www/fashionrise/releases/3534d906-fitting-room-f1f3-332` (redeploy pending latest) · BE `FITTING_ROOM_*=true` · OpenAI arming already on (`MY_CROQUIS_AI_LIVE_HTTP`) |
+| Web test tip LIVE | FE `/var/www/fashionrise/releases/1c1cf574-fitting-room-f1f5-332` · `fitting_room_stars: 20` · BE tip `1c1cf574` · `FITTING_ROOM_*=true` · `AI_STARS_FITTING_ROOM_COST=20` |
 | Android QA rollback | Prior tip **`b69ffb25-looks-magic-top-clip-331`** (Fitting Room UI absent). Rollback: `ln -sfn /var/www/fashionrise/releases/b69ffb25-looks-magic-top-clip-331 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 | Merge | **Do not merge #332** until PM approval |
 | Reuse | OpenAI Try On images.edit adapter · AI job worker · Magic Stars debit-on-success only · My Looks download toast UX |
