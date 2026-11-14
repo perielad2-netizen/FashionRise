@@ -120,9 +120,17 @@ export async function refreshAccessToken(): Promise<boolean> {
   return refreshInFlight
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+type FetchAuthOptions = RequestOptions & {
+  accept?: string
+}
+
+/**
+ * Authenticated fetch with Batch A refresh-on-401 + session isolation.
+ * Callers parse the Response body themselves (JSON vs blob).
+ */
+async function authorizedFetch(path: string, options: FetchAuthOptions = {}): Promise<Response> {
   const headers: Record<string, string> = {
-    Accept: 'application/json',
+    Accept: options.accept ?? 'application/json',
   }
 
   if (options.body !== undefined) {
@@ -159,7 +167,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   ) {
     const refreshed = await refreshAccessToken()
     if (refreshed) {
-      return apiRequest<T>(path, { ...options, _retriedAfterRefresh: true })
+      return authorizedFetch(path, { ...options, _retriedAfterRefresh: true })
     }
     // Only clear the session that failed. Logout / account-switch may have
     // already replaced or removed tokens while refresh was in flight.
@@ -169,6 +177,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     }
     throw new ApiError('Your session expired. Please sign in again.', 401, null)
   }
+
+  return response
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await authorizedFetch(path, options)
 
   const text = await response.text()
   let parsed: unknown = null
@@ -185,6 +199,30 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   return parsed as T
+}
+
+/** Authenticated binary fetch (look images) — same refresh + session isolation as apiRequest. */
+export async function apiRequestBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  const response = await authorizedFetch(path, {
+    ...options,
+    accept: 'image/*,application/octet-stream',
+  })
+
+  if (!response.ok) {
+    let parsed: unknown = null
+    try {
+      parsed = await response.json()
+    } catch {
+      parsed = null
+    }
+    throw new ApiError(extractErrorMessage(parsed, response.status), response.status, parsed)
+  }
+
+  const blob = await response.blob()
+  if (!blob.size) {
+    throw new ApiError('Look image was empty', response.status, null)
+  }
+  return blob
 }
 
 function extractErrorMessage(parsed: unknown, status: number): string {

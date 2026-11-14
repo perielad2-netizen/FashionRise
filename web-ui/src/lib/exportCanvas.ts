@@ -541,8 +541,11 @@ export function downloadBlob(blob: Blob, filename: string, deps: DownloadDeps = 
 export type SaveOrDownloadDeps = {
   /** Override Capacitor native detection (tests). */
   isNative?: () => boolean | Promise<boolean>
-  share?: (data: ShareData) => Promise<void>
-  canShare?: (data: ShareData) => boolean
+  /** Native gallery/share path (tests). */
+  saveNative?: (
+    blob: Blob,
+    filename: string,
+  ) => Promise<'gallery' | 'share'>
   /** Web fallback — defaults to downloadBlob. */
   download?: (blob: Blob, filename: string) => void
 }
@@ -556,59 +559,36 @@ async function detectNativeShell(): Promise<boolean> {
   }
 }
 
-function canShareFiles(file: File, canShare?: (data: ShareData) => boolean): boolean {
-  const check =
-    canShare ??
-    ((data: ShareData) => {
-      if (typeof navigator === 'undefined' || typeof navigator.canShare !== 'function') return false
-      try {
-        return navigator.canShare(data)
-      } catch {
-        return false
-      }
-    })
-  try {
-    return check({ files: [file] })
-  } catch {
-    return false
-  }
-}
+export { SaveCancelledError } from '@/lib/nativeImageSave'
 
 /**
- * Save/download a blob. On Capacitor iOS/Android, `<a download>` is a no-op in WKWebView —
- * open the OS share sheet so the user can Save Image / Files. Falls back to anchor download on web.
+ * Save/download a blob.
+ * - Web: `<a download>` anchor.
+ * - Native iOS/Android: Capacitor Media (Photos/Gallery) with Share-file fallback.
+ *   Never falls back to WebView anchor downloads (broken on native).
+ * Throws SaveCancelledError when the user cancels; never reports success otherwise.
  */
 export async function saveOrDownloadBlob(
   blob: Blob,
   filename: string,
   deps: SaveOrDownloadDeps = {},
-): Promise<void> {
+): Promise<'web' | 'gallery' | 'share'> {
   const safeName =
     filename.replace(/[^\w.\-]+/g, '-').replace(/^-|-$/g, '') || 'fashionrise-look.png'
-  const type = blob.type && blob.type.length > 0 ? blob.type : 'image/png'
-  const file = new File([blob], safeName, { type })
 
   const native = await (deps.isNative?.() ?? detectNativeShell())
-  if (native && canShareFiles(file, deps.canShare)) {
-    const share =
-      deps.share ??
-      (async (data: ShareData) => {
-        if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
-          throw new Error('share unavailable')
-        }
-        await navigator.share(data)
+  if (native) {
+    const saveNative =
+      deps.saveNative ??
+      (async (b: Blob, name: string) => {
+        const { saveImageBlobNative } = await import('@/lib/nativeImageSave')
+        return saveImageBlobNative(b, name)
       })
-    try {
-      await share({ files: [file], title: safeName })
-      return
-    } catch (err) {
-      // User dismissed the sheet — treat as success (no silent fallback that also fails).
-      if (err instanceof DOMException && err.name === 'AbortError') return
-      // Fall through to anchor download for odd WebView builds.
-    }
+    return saveNative(blob, safeName)
   }
 
   ;(deps.download ?? downloadBlob)(blob, safeName)
+  return 'web'
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement> {

@@ -1,5 +1,4 @@
-import { ApiError, apiRequest, getApiBaseUrl } from '@/services/api/client'
-import { tokenStore } from '@/services/auth/tokenStore'
+import { ApiError, apiRequest } from '@/services/api/client'
 import type { AiJobRead } from '@/services/ai/aiJobTypes'
 import type { SharedGarmentSpec } from '@/services/ai/magicGarmentSpec'
 
@@ -491,42 +490,8 @@ function preferCurrentMagicJob(prev: AiJobRead | null, next: AiJobRead): AiJobRe
   return next
 }
 
-/** Authenticated look image (never relies on public /static/uploads). */
+/** Authenticated look image (never relies on public /static/uploads). Uses Batch A refresh. */
 export async function fetchJobImageBlob(jobId: string, signal?: AbortSignal): Promise<Blob> {
-  const headers: Record<string, string> = { Accept: 'image/*,application/octet-stream' }
-  const tokens = tokenStore.get()
-  if (tokens?.accessToken) {
-    headers.Authorization = `Bearer ${tokens.accessToken}`
-  }
-  let response: Response
-  try {
-    response = await fetch(`${getApiBaseUrl()}/ai/jobs/${jobId}/image`, {
-      method: 'GET',
-      headers,
-      signal,
-    })
-  } catch {
-    throw new ApiError('Unable to reach FashionRise. Check that the API is running.', 0, null)
-  }
-  if (!response.ok) {
-    let parsed: unknown = null
-    try {
-      parsed = await response.json()
-    } catch {
-      parsed = null
-    }
-    const message =
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'detail' in parsed &&
-      typeof (parsed as { detail: unknown }).detail === 'object' &&
-      (parsed as { detail: { message?: unknown } }).detail !== null &&
-      typeof (parsed as { detail: { message?: unknown } }).detail?.message === 'string'
-        ? String((parsed as { detail: { message: string } }).detail.message)
-        : `Image request failed (${response.status})`
-    throw new ApiError(message, response.status, parsed)
-  }
-  const blob = await response.blob()
-  if (!blob.size) throw new ApiError('Look image was empty', response.status, null)
-  return blob
+  const { apiRequestBlob } = await import('@/services/api/client')
+  return apiRequestBlob(`/ai/jobs/${jobId}/image`, { method: 'GET', signal })
 }

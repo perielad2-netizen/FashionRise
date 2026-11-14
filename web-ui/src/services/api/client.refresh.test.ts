@@ -8,7 +8,7 @@ const tokenStore = vi.hoisted(() => ({
 
 vi.mock('@/services/auth/tokenStore', () => ({ tokenStore }))
 
-import { apiRequest, refreshAccessToken, SESSION_EXPIRED_EVENT } from './client'
+import { apiRequest, apiRequestBlob, refreshAccessToken, SESSION_EXPIRED_EVENT } from './client'
 
 type Tokens = { accessToken: string; refreshToken: string }
 
@@ -182,6 +182,38 @@ describe('apiRequest refresh-on-401 (V2-0012 / V2-0013)', () => {
     expect(tokenStore.set).not.toHaveBeenCalled()
     expect(tokenStore.clear).not.toHaveBeenCalled()
     expect(tokenStore.get()).toEqual(accountB)
+  })
+
+  it('apiRequestBlob refreshes on 401 then returns the image bytes', async () => {
+    const old: Tokens = { accessToken: 'old-access', refreshToken: 'refresh-1' }
+    let live: Tokens | null = old
+    tokenStore.get.mockImplementation(() => live)
+    tokenStore.set.mockImplementation((tokens: Tokens) => {
+      live = tokens
+    })
+
+    const png = new Uint8Array([137, 80, 78, 71])
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Invalid token' }), { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: 'new-access',
+            refresh_token: 'refresh-2',
+            token_type: 'bearer',
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(png, { status: 200, headers: { 'Content-Type': 'image/png' } }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const blob = await apiRequestBlob('/ai/jobs/job-a/image')
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(png)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    const retryAuth = (fetchMock.mock.calls[2][1] as RequestInit).headers as Record<string, string>
+    expect(retryAuth.Authorization).toBe('Bearer new-access')
   })
 
   it('single-flights concurrent 401s: one refresh, both retries use new tokens', async () => {

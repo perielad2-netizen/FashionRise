@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { createPortal } from 'react-dom'
 import {
   Bell,
@@ -45,6 +53,7 @@ import {
   runwayPushIsEnabled,
 } from '@/services/pushApi'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
+import { isNativeShell } from '@/services/native/platform'
 import styles from './RunwayScreen.module.css'
 
 type Props = {
@@ -91,6 +100,12 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
     try {
+      // Native shell: leave toggle off until #303 + operator FCM/APNs (V2-0008).
+      if (isNativeShell()) {
+        setPushOn(false)
+        setPushNeedsGesture(false)
+        return
+      }
       const { on, result } = await ensureDefaultRunwayPush()
       if (on) {
         setPushOn(true)
@@ -156,6 +171,15 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     setPushNotice(null)
     setPushNeedsGesture(false)
     try {
+      // V2-0008: native app push is blocked until #303 + FCM/APNs operator config.
+      // Do not pretend Web Push works inside the Capacitor shell.
+      if (isNativeShell()) {
+        setPushOn(false)
+        setPushNotice(
+          'App notifications aren’t enabled in this build yet (needs native push config). Web push still works in a browser.',
+        )
+        return
+      }
       if (pushOn) {
         await disableRunwayPush()
         setPushOn(false)
@@ -360,7 +384,9 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             {pushNotice ||
               (pushOn
                 ? 'On — likes, scores, and comments'
-                : 'Off until you turn it on (stores later)')}
+                : isNativeShell()
+                  ? 'Off — app notifications pending native push setup'
+                  : 'Off until you turn it on (browser / PWA)')}
           </span>
         </div>
         <button
@@ -633,20 +659,57 @@ function FriendsPanel({
   onRemove: (friendUserId: string, label: string) => void
   onRetry: () => void
 }) {
+  const formRef = useRef<HTMLFormElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [keyboardPad, setKeyboardPad] = useState(0)
+
+  // V2-0011: keep Add friend row above the Android soft keyboard.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const sync = () => {
+      const occluded = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      setKeyboardPad(occluded > 40 ? occluded : 0)
+      if (document.activeElement === inputRef.current && occluded > 40) {
+        formRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }
+    sync()
+    vv.addEventListener('resize', sync)
+    vv.addEventListener('scroll', sync)
+    return () => {
+      vv.removeEventListener('resize', sync)
+      vv.removeEventListener('scroll', sync)
+    }
+  }, [])
+
   return (
-    <div className={styles.friendsPanel}>
-      <form className={styles.addFriendForm} onSubmit={onAdd}>
+    <div className={styles.friendsPanel} style={{ paddingBottom: keyboardPad || undefined }}>
+      <form
+        ref={formRef}
+        className={styles.addFriendForm}
+        onSubmit={onAdd}
+        data-testid="add-friend-form"
+      >
         <label className={styles.addFriendLabel} htmlFor="runway-friend-username">
           Add friend by username
         </label>
         <div className={styles.addFriendRow}>
           <input
+            ref={inputRef}
             id="runway-friend-username"
             className={styles.addFriendInput}
             value={username}
             onChange={(e) => onUsernameChange(e.target.value)}
+            onFocus={() => {
+              // Defer until the keyboard animates open.
+              window.setTimeout(() => {
+                formRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+              }, 120)
+            }}
             placeholder="e.g. yanivprbk"
             autoComplete="username"
+            enterKeyHint="send"
             disabled={busy}
           />
           <button type="submit" className={styles.primaryBtn} disabled={busy || !username.trim()}>

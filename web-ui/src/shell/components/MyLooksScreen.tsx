@@ -109,10 +109,19 @@ function LazyLookThumb({ look }: { look: LookRecord }) {
   )
 }
 
-async function downloadJobImage(jobId: string, filename: string): Promise<void> {
+async function downloadJobImage(
+  jobId: string,
+  filename: string,
+): Promise<'web' | 'gallery' | 'share'> {
   const blob = await fetchJobImageBlob(jobId)
   const { saveOrDownloadBlob } = await import('@/lib/exportCanvas')
-  await saveOrDownloadBlob(blob, filename)
+  return saveOrDownloadBlob(blob, filename)
+}
+
+function downloadSuccessCopy(method: 'web' | 'gallery' | 'share'): string {
+  if (method === 'gallery') return 'Saved to Photos (FashionRise album).'
+  if (method === 'share') return 'Opened the system share sheet — save from there to finish.'
+  return 'Download started.'
 }
 
 function LookDetailDialog({
@@ -134,6 +143,7 @@ function LookDetailDialog({
   const [title, setTitle] = useState(look.title)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false)
   const [runwayShareAgreed, setRunwayShareAgreed] = useState(false)
@@ -321,6 +331,11 @@ function LookDetailDialog({
             </button>
           </div>
           {error ? <p className={styles.stateError}>{error}</p> : null}
+          {downloadNotice ? (
+            <p className={styles.stateOk} role="status" data-testid="look-download-notice">
+              {downloadNotice}
+            </p>
+          ) : null}
         </div>
 
         <div className={styles.dialogActions}>
@@ -350,9 +365,24 @@ function LookDetailDialog({
                 const side = mobileSide === 'back' && backJob ? 'back' : 'front'
                 const jobId = side === 'back' ? backJob : frontJob
                 if (!jobId) return
-                void downloadJobImage(jobId, `${look.title}-${side}.png`).catch((err) => {
-                  setError(err instanceof Error ? err.message : 'Could not download look')
-                })
+                setError(null)
+                setDownloadNotice(null)
+                setBusy(true)
+                void downloadJobImage(jobId, `${look.title}-${side}.png`)
+                  .then((method) => {
+                    setError(null)
+                    setDownloadNotice(downloadSuccessCopy(method))
+                  })
+                  .catch(async (err) => {
+                    setDownloadNotice(null)
+                    const { SaveCancelledError } = await import('@/lib/nativeImageSave')
+                    if (err instanceof SaveCancelledError || (err instanceof Error && err.name === 'SaveCancelledError')) {
+                      setError('Download cancelled.')
+                      return
+                    }
+                    setError(err instanceof Error ? err.message : 'Could not download look')
+                  })
+                  .finally(() => setBusy(false))
               }}
             >
               <Download size={14} aria-hidden />

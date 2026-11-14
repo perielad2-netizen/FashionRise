@@ -953,11 +953,17 @@
   display: grid;
   gap: 16px;
   padding-bottom: 8px;
+  min-height: 0;
 }
 
 .addFriendForm {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: grid;
   gap: 8px;
+  padding: 8px 0 10px;
+  background: linear-gradient(180deg, #141c2e 70%, rgba(20, 28, 46, 0.92) 100%);
 }
 
 .addFriendLabel {
@@ -1013,9 +1019,11 @@
 .friendList {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 12px;
   display: grid;
   gap: 8px;
+  /* V2-0009: keep long friend lists scrollable inside the Runway body. */
+  max-height: none;
 }
 
 .friendCard {
