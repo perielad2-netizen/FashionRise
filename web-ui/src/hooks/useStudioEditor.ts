@@ -131,6 +131,7 @@ import {
   type MagicLookResult,
 } from '@/services/ai/aiJobTypes'
 import { StrokeHistory } from '@/lib/history'
+import { eraseArtworkInRect, type PaperRect } from '@/lib/rectErase'
 import {
   DEFAULT_BRUSH_ENGINE,
   defaultSizeForBrushKind,
@@ -1001,6 +1002,46 @@ export function useStudioEditor() {
       clearFillGapUi()
     },
     [activeHistory, artwork, clearFillGapUi, commitFromEditor, editorSideState, syncHistoryFlags],
+  )
+
+  /** V2-0030 — erase ink inside a design-space rectangle on the active paper side. */
+  const onRectEraseComplete = useCallback(
+    (rect: PaperRect) => {
+      const state = editorSideState()
+      const ink = visibleInkFromState(state)
+      const next = eraseArtworkInRect(ink, rect, {
+        logicalLayer: brushEngine.logicalLayer,
+        includeStrokeWidth: true,
+      })
+      if (!next.changed) return
+      activeHistory().push(artwork())
+      const patch = patchActiveSideInk(state, next.strokes, next.fills)
+      if (patch.activeSide === 'back') {
+        setBackStrokes(patch.backStrokes)
+        setBackFills(patch.backFills)
+      } else {
+        setFrontStrokes(patch.frontStrokes)
+        setFrontFills(patch.frontFills)
+      }
+      syncHistoryFlags()
+      commitFromEditor({
+        frontStrokes: patch.frontStrokes,
+        frontFills: patch.frontFills,
+        backStrokes: patch.backStrokes,
+        backFills: patch.backFills,
+        activeSide: patch.activeSide,
+      })
+      clearFillGapUi()
+    },
+    [
+      activeHistory,
+      artwork,
+      brushEngine.logicalLayer,
+      clearFillGapUi,
+      commitFromEditor,
+      editorSideState,
+      syncHistoryFlags,
+    ],
   )
 
   const onFillComplete = useCallback(
@@ -4171,6 +4212,7 @@ export function useStudioEditor() {
     referenceUrl,
     referenceOpacity,
     onStrokeComplete,
+    onRectEraseComplete,
     onFillComplete,
     onFillError,
     fillCloseSmallGaps,

@@ -37,6 +37,11 @@ import {
   clampPointToPaper,
 } from '@/lib/paperBounds'
 import {
+  isMeaningfulPaperRect,
+  normalizePaperRect,
+  type PaperRect,
+} from '@/lib/rectErase'
+import {
   clampPan,
   distance,
   fitPage,
@@ -65,6 +70,8 @@ type Props = {
   referenceUrl: string | null
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
+  /** V2-0030 — rectangular selection eraser (design/paper space). */
+  onRectEraseComplete?: (rect: PaperRect) => void
   onFillComplete?: (fill: FillOp) => void
   onFillError?: (
     message: string,
@@ -193,6 +200,7 @@ export function DrawingCanvas({
   referenceUrl,
   referenceOpacity,
   onStrokeComplete,
+  onRectEraseComplete,
   onFillComplete,
   onFillError,
   fillCloseSmallGaps = false,
@@ -237,6 +245,13 @@ export function DrawingCanvas({
     y: number
     tool: 'fill' | 'eyedropper'
   } | null>(null)
+  /** V2-0030 rectangular eraser marquee in design space. */
+  const rectEraseRef = useRef<{
+    pointerId: number
+    origin: { x: number; y: number }
+    current: { x: number; y: number }
+  } | null>(null)
+  const [rectEraseDraft, setRectEraseDraft] = useState<PaperRect | null>(null)
   const viewportRef = useRef<ViewportState>(viewport ?? fitPage({ width: DESIGN_WIDTH, height: DESIGN_HEIGHT }))
   const onViewportChangeRef = useRef(onViewportChange)
   const sizeRef = useRef(size)
@@ -856,6 +871,26 @@ export function DrawingCanvas({
         return
       }
 
+      if (activeTool === 'rectErase') {
+        const clamped = clampPointToPaper(point.x, point.y)
+        const origin = { x: clamped.x, y: clamped.y }
+        rectEraseRef.current = {
+          pointerId: evt.pointerId,
+          origin,
+          current: origin,
+        }
+        setRectEraseDraft(normalizePaperRect(origin, origin))
+        activePointerId.current = evt.pointerId
+        try {
+          stage.content.setPointerCapture(evt.pointerId)
+        } catch {
+          /* optional */
+        }
+        return
+      }
+
+      if (activeTool !== 'draw' && activeTool !== 'erase') return
+
       drawing.current = true
       activePointerId.current = evt.pointerId
       try {
@@ -937,6 +972,16 @@ export function DrawingCanvas({
 
       if (pendingTap.current) return
 
+      const rectDrag = rectEraseRef.current
+      if (rectDrag && rectDrag.pointerId === evt.pointerId) {
+        const point = pointFrom(stage, evt)
+        if (!point) return
+        const clamped = clampPointToPaper(point.x, point.y)
+        rectDrag.current = { x: clamped.x, y: clamped.y }
+        setRectEraseDraft(normalizePaperRect(rectDrag.origin, rectDrag.current))
+        return
+      }
+
       const decision = decidePointer(session(), {
         type: 'move',
         pointerId: evt.pointerId,
@@ -995,6 +1040,23 @@ export function DrawingCanvas({
         return
       }
 
+      const rectDrag = rectEraseRef.current
+      if (rectDrag && rectDrag.pointerId === evt.pointerId) {
+        rectEraseRef.current = null
+        activePointerId.current = null
+        releaseCapture(evt.pointerId)
+        const rect = normalizePaperRect(rectDrag.origin, rectDrag.current)
+        setRectEraseDraft(null)
+        if (
+          e.type !== 'pointercancel' &&
+          isMeaningfulPaperRect(rect) &&
+          onRectEraseComplete
+        ) {
+          onRectEraseComplete(rect)
+        }
+        return
+      }
+
       const decision = decidePointer(session(), {
         type: e.type === 'pointercancel' ? 'cancel' : 'up',
         pointerId: evt.pointerId,
@@ -1004,7 +1066,15 @@ export function DrawingCanvas({
       })
       if (decision === 'end') finish(evt.pointerId)
     },
-    [applyFillAt, armGestureCooldown, finish, releaseCapture, sampleAt, session],
+    [
+      applyFillAt,
+      armGestureCooldown,
+      finish,
+      onRectEraseComplete,
+      releaseCapture,
+      sampleAt,
+      session,
+    ],
   )
 
   useEffect(() => {
@@ -1069,7 +1139,7 @@ export function DrawingCanvas({
     ? 'grab'
     : activeTool === 'fill'
       ? 'cell'
-      : activeTool === 'eyedropper'
+      : activeTool === 'eyedropper' || activeTool === 'rectErase'
         ? 'crosshair'
         : 'none'
   const tipScreen = Math.max(2, brushSize * contentScale)
@@ -1188,6 +1258,20 @@ export function DrawingCanvas({
             stroke="#C2410C"
             strokeWidth={2.5}
             dash={[4, 3]}
+            listening={false}
+            perfectDrawEnabled={false}
+          />
+        ) : null}
+        {rectEraseDraft ? (
+          <Rect
+            x={rectEraseDraft.x}
+            y={rectEraseDraft.y}
+            width={rectEraseDraft.width}
+            height={rectEraseDraft.height}
+            stroke="rgba(185, 28, 28, 0.95)"
+            strokeWidth={1.5}
+            dash={[6, 4]}
+            fill="rgba(185, 28, 28, 0.12)"
             listening={false}
             perfectDrawEnabled={false}
           />

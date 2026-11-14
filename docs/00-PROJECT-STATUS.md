@@ -3,19 +3,19 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch E planning** — after Batch D #307 merged. PR #303 still open; no store/push/billing enable.)
+**Last updated:** 2026-11-14 (**QA V2 Batch E** — V2-0030 rectangular eraser in progress after #308 planning merge. PR #303 still open; no store/push/billing enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## QA V2 Batch E (2026-11-14) — PLANNING (feature backlog)
+## QA V2 Batch E (2026-11-14) — features (independent PRs)
 
 | Status | Detail |
 |---|---|
-| Baseline | `main` `6103f489` (#307 Batch D) |
-| Branch | `cursor/web-qa-v2-batch-e-77c6` |
-| IDs | V2-0010, 0021, 0026, **0030–0032** |
-| Plan | Independent PRs after PM ack; prefer P1 eraser/gallery or copy-first 0032; see `docs/QA-V2-RECONCILIATION.md` Batch E section |
-| **Exact next step** | PM pick first E slice → implement as separate PR; no push/billing/store |
+| Baseline | `main` `7f25777a` (#308 planning) |
+| Branch | `cursor/web-rect-eraser-77c6` (V2-0030) |
+| IDs | **V2-0030** first → then 0032, 0026 (separate PRs) |
+| Fixes (0030) | Rectangular selection eraser; FRONT/BACK + layer-aware; Undo/Redo; Clear + freehand erase kept |
+| **Exact next step** | Merge rect eraser → V2-0032 Home copy → V2-0026 brush explainers |
 
 ## QA V2 Batch D (2026-11-14) — MERGED #307
 

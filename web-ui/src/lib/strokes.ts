@@ -1,4 +1,5 @@
-export type ToolKind = 'draw' | 'erase' | 'fill' | 'eyedropper'
+/** Studio tools. Only `draw` / `erase` are persisted as stroke tools. */
+export type ToolKind = 'draw' | 'erase' | 'fill' | 'eyedropper' | 'rectErase'
 
 /** Professional Sketch Engine V1 brush kinds (optional on legacy strokes). */
 export type BrushKind = 'tapered' | 'charcoal' | 'airbrush'

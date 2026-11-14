@@ -1,7 +1,7 @@
 # FashionRise QA V2 — reconciliation ledger
 
 **Source of truth:** uploaded Master Plan + Tracker (2026-11-14).  
-**Code baseline:** `main` after #307 Batch D merge.  
+**Code baseline:** Batch E implementation — V2-0030 rect eraser after #308 planning merge.  
 **PR #303:** open — native nav/push **not merged**; `NATIVE_PUSH_*` remain OFF.  
 **Native evidence caveat:** many screenshots are from an older Android AAB; do not treat web tip deploy as proof the installed app already has the fix.
 
@@ -40,7 +40,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0027 | **Confirmed** | C | Mouse-wheel hint gated to fine pointer; mobile slider copy |
 | V2-0028 | **Confirmed** | C | Pattern scale Fine↔Coarse + explanation |
 | V2-0029 | **Confirmed** | C | Brush color on brush sheet + Materials link |
-| V2-0030 | **Feature request** P1 | E | Rectangular-area eraser — Undo-safe; keep Clear canvas confirmed |
+| V2-0030 | **Fixed** P1 | E | Rectangular eraser tool (`rectErase`): drag selection removes active-side ink/fills (layer-aware); Undo/Redo; Clear + freehand erase kept |
 | V2-0031 | **Feature request** P1 | E | Home before/after gallery — authorized examples only; reduced-motion |
 | V2-0032 | **Feature / copy** | E | Home value copy — can ship before carousel if truthful |
 | V2-0033 | **Confirmed** P1 | B | My Looks Download no-op on Android WebView `<a download>`; Capacitor Media (+ Share fallback) + recursive `fr-dl/` + `apiRequestBlob` refresh |
@@ -95,5 +95,12 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 | P2 | V2-0021 | Label immutable canvas props **or** limited editable dims | Avoid corrupting saved drawings via resize |
 | P2 | V2-0010 | Friend row → read-only profile / published looks | Privacy/auth; remove stays confirmed |
 
-**Suggested first implementation PR after PM ack:** V2-0032 (copy-only) **or** V2-0030 (highest P1 tool ask) — not both in one PR.  
+## Batch E — V2-0030 Rectangular eraser
+
+- New Studio tool `rectErase` (rail + immersive); drag marquee in design space.
+- Pure `eraseArtworkInRect` filters active-side strokes/fills; ink layer also drops intersecting fills; shade/highlight leave fills.
+- Commits through existing StrokeHistory + draft document path (save/reopen preserved).
+- Freehand Eraser and Clear canvas unchanged.
+
+**Next E slices (separate PRs):** V2-0032 Home copy → V2-0026 brush explainers.  
 **Still out of scope:** CTL-*, push enable, store submit, merging #303.
