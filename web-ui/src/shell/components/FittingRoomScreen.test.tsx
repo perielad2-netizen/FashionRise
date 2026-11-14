@@ -25,6 +25,13 @@ vi.mock('@/lib/fittingRoomStore', () => ({
   readFittingRoomAsset: (...args: unknown[]) => mocks.readFittingRoomAsset(...args),
   writeFittingRoomAsset: (...args: unknown[]) => mocks.writeFittingRoomAsset(...args),
   deleteFittingRoomAsset: (...args: unknown[]) => mocks.deleteFittingRoomAsset(...args),
+  readOutfitSession: vi.fn(async () => null),
+  writeOutfitSession: vi.fn(async () => undefined),
+  clearOutfitSession: vi.fn(async () => undefined),
+  listSavedResults: vi.fn(async () => []),
+  saveFittingResult: vi.fn(async () => undefined),
+  deleteSavedResult: vi.fn(async () => undefined),
+  newOutfitPieceId: () => 'piece_test',
   fileToFittingRoomDataUrl: async () => ({
     dataUrl: 'data:image/png;base64,aaa',
     mimeType: 'image/png',
@@ -55,6 +62,11 @@ describe('FittingRoomScreen', () => {
       supported_categories: ['auto', 'tops', 'dresses'],
       preview_disclaimer: 'Concept preview only — not a fit guarantee.',
       ai_gate: true,
+      stars_cost: 20,
+      stars_cost_note:
+        '20 Stars per successful Fitting Room preview — flat rate whether the clothing image shows one garment or several.',
+      max_outfit_pieces: 4,
+      conflicting_category_sets: [['one-pieces', 'tops']],
     })
     mocks.readFittingRoomAsset.mockResolvedValue(null)
   })
@@ -65,13 +77,15 @@ describe('FittingRoomScreen', () => {
     expect(screen.getByText(/not enabled in this build/i)).toBeInTheDocument()
   })
 
-  it('shows disclaimer and try-on disabled until consent + assets', async () => {
+  it('shows flat 20 Stars cost and try-on disabled until consent + assets', async () => {
     render(<FittingRoomScreen userId="u1" onBackToStudio={() => undefined} />)
     await waitFor(() => expect(mocks.fetchFittingRoomPreflight).toHaveBeenCalled())
     expect(screen.getByTestId('fitting-room-screen')).toBeInTheDocument()
+    expect(screen.getByTestId('fitting-room-stars-cost')).toHaveTextContent(/20 Stars/i)
     expect(screen.getAllByText(/not a fit guarantee/i).length).toBeGreaterThan(0)
     const tryBtn = screen.getByTestId('fitting-room-try-on')
     expect(tryBtn).toBeDisabled()
+    expect(tryBtn).toHaveTextContent(/−20 Stars/i)
     await userEvent.click(screen.getByRole('checkbox', { name: /Preview only/i }))
     expect(tryBtn).toBeDisabled()
   })

@@ -1,28 +1,57 @@
 /**
- * Device-private Fitting Room assets (F1 person photo + F2 clothing).
- * IndexedDB only — no server upload until try-on enqueue.
+ * Device-private Fitting Room state (F1–F5).
+ * IndexedDB only — person/outfit/saved results stay on-device until try-on enqueue.
  */
 
 const DB_NAME = 'fashionrise-fitting-room'
-const DB_VERSION = 1
-const STORE = 'assets'
+const DB_VERSION = 2
+const ASSETS = 'assets'
+const OUTFIT = 'outfit'
+const SAVED = 'saved'
 
 export type FittingRoomAssetKind = 'person' | 'garment'
 
 export type FittingRoomAssetRecord = {
-  /** `${userId}:${kind}` */
   key: string
   userId: string
   kind: FittingRoomAssetKind
-  /** data URL (image/png or image/jpeg) */
   dataUrl: string
   mimeType: string
   updatedAt: string
   garmentCategory?: string
 }
 
+export type FittingRoomOutfitPiece = {
+  id: string
+  category: string
+  dataUrl: string
+  mimeType: string
+  updatedAt: string
+}
+
+export type FittingRoomOutfitSession = {
+  key: string
+  userId: string
+  pieces: FittingRoomOutfitPiece[]
+  updatedAt: string
+}
+
+export type FittingRoomSavedResult = {
+  id: string
+  userId: string
+  jobId: string
+  dataUrl: string
+  label: string
+  outfitCategories: string[]
+  createdAt: string
+}
+
 function assetKey(userId: string, kind: FittingRoomAssetKind): string {
   return `${userId}:${kind}`
+}
+
+function outfitKey(userId: string): string {
+  return `${userId}:outfit`
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -34,8 +63,15 @@ function openDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'key' })
+      if (!db.objectStoreNames.contains(ASSETS)) {
+        db.createObjectStore(ASSETS, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(OUTFIT)) {
+        db.createObjectStore(OUTFIT, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(SAVED)) {
+        const store = db.createObjectStore(SAVED, { keyPath: 'id' })
+        store.createIndex('byUser', 'userId', { unique: false })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -50,8 +86,8 @@ export async function readFittingRoomAsset(
   try {
     const db = await openDb()
     return await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readonly')
-      const req = tx.objectStore(STORE).get(assetKey(userId, kind))
+      const tx = db.transaction(ASSETS, 'readonly')
+      const req = tx.objectStore(ASSETS).get(assetKey(userId, kind))
       req.onsuccess = () => resolve((req.result as FittingRoomAssetRecord | undefined) ?? null)
       req.onerror = () => reject(req.error)
       tx.oncomplete = () => db.close()
@@ -70,8 +106,8 @@ export async function writeFittingRoomAsset(
     key: assetKey(record.userId, record.kind),
   }
   await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite')
-    tx.objectStore(STORE).put(full)
+    const tx = db.transaction(ASSETS, 'readwrite')
+    tx.objectStore(ASSETS).put(full)
     tx.oncomplete = () => {
       db.close()
       resolve()
@@ -87,8 +123,8 @@ export async function deleteFittingRoomAsset(
   try {
     const db = await openDb()
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).delete(assetKey(userId, kind))
+      const tx = db.transaction(ASSETS, 'readwrite')
+      tx.objectStore(ASSETS).delete(assetKey(userId, kind))
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -100,7 +136,107 @@ export async function deleteFittingRoomAsset(
   }
 }
 
-/** Read a local File into a compressed-ish data URL for private storage. */
+export async function readOutfitSession(userId: string): Promise<FittingRoomOutfitSession | null> {
+  try {
+    const db = await openDb()
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(OUTFIT, 'readonly')
+      const req = tx.objectStore(OUTFIT).get(outfitKey(userId))
+      req.onsuccess = () => resolve((req.result as FittingRoomOutfitSession | undefined) ?? null)
+      req.onerror = () => reject(req.error)
+      tx.oncomplete = () => db.close()
+    })
+  } catch {
+    return null
+  }
+}
+
+export async function writeOutfitSession(session: FittingRoomOutfitSession): Promise<void> {
+  const db = await openDb()
+  const full: FittingRoomOutfitSession = {
+    ...session,
+    key: outfitKey(session.userId),
+  }
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(OUTFIT, 'readwrite')
+    tx.objectStore(OUTFIT).put(full)
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+export async function clearOutfitSession(userId: string): Promise<void> {
+  try {
+    const db = await openDb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(OUTFIT, 'readwrite')
+      tx.objectStore(OUTFIT).delete(outfitKey(userId))
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function listSavedResults(userId: string): Promise<FittingRoomSavedResult[]> {
+  try {
+    const db = await openDb()
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(SAVED, 'readonly')
+      const idx = tx.objectStore(SAVED).index('byUser')
+      const req = idx.getAll(userId)
+      req.onsuccess = () => {
+        const rows = (req.result as FittingRoomSavedResult[]) || []
+        rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        resolve(rows)
+      }
+      req.onerror = () => reject(req.error)
+      tx.oncomplete = () => db.close()
+    })
+  } catch {
+    return []
+  }
+}
+
+export async function saveFittingResult(
+  record: FittingRoomSavedResult,
+): Promise<void> {
+  const db = await openDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(SAVED, 'readwrite')
+    tx.objectStore(SAVED).put(record)
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+export async function deleteSavedResult(id: string): Promise<void> {
+  try {
+    const db = await openDb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(SAVED, 'readwrite')
+      tx.objectStore(SAVED).delete(id)
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch {
+    /* ignore */
+  }
+}
+
 export function fileToFittingRoomDataUrl(file: File): Promise<{ dataUrl: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
@@ -119,4 +255,8 @@ export function fileToFittingRoomDataUrl(file: File): Promise<{ dataUrl: string;
     reader.onerror = () => reject(reader.error ?? new Error('Could not read that image.'))
     reader.readAsDataURL(file)
   })
+}
+
+export function newOutfitPieceId(): string {
+  return `piece_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }

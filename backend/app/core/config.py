@@ -254,6 +254,8 @@ class Settings(BaseSettings):
     ai_stars_croquis_cost: int = 10
     ai_stars_pdf_cost: int = 50
     ai_stars_fabric_cost: int = 5
+    # AI Fitting Room — flat Stars per successful try-on (1+ garments in the image = same cost).
+    ai_stars_fitting_room_cost: int = 20
     # Comma-separated emails with endless Stars (never debit).
     ai_stars_unlimited_emails: str = "perielad@gmail.com,perielad2@gmail.com"
     # Opt-in finite-wallet override for purchase testing. Empty by default.

@@ -10,11 +10,21 @@ export type FittingRoomPreflight = {
   supported_categories: string[]
   preview_disclaimer: string
   ai_gate: boolean
+  stars_cost: number
+  stars_cost_note: string
+  max_outfit_pieces: number
+  conflicting_category_sets: string[][]
+}
+
+export type FittingRoomGarmentPieceInput = {
+  imageBase64: string
+  category?: string
 }
 
 export type FittingRoomTryOnInput = {
   personImageBase64: string
-  garmentImageBase64: string
+  garmentImageBase64?: string
+  garmentPieces?: FittingRoomGarmentPieceInput[]
   idempotencyKey: string
   consentAcknowledged: boolean
   consentVersion: string
@@ -35,7 +45,14 @@ export async function enqueueFittingRoomTryOn(
     method: 'POST',
     body: {
       person_image_base64: input.personImageBase64,
-      garment_image_base64: input.garmentImageBase64,
+      ...(input.garmentPieces?.length
+        ? {
+            garment_pieces: input.garmentPieces.map((p) => ({
+              image_base64: p.imageBase64,
+              category: p.category ?? 'auto',
+            })),
+          }
+        : { garment_image_base64: input.garmentImageBase64 }),
       idempotency_key: input.idempotencyKey,
       consent_acknowledged: input.consentAcknowledged,
       consent_version: input.consentVersion,

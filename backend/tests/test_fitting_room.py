@@ -86,6 +86,8 @@ def test_preflight_fail_closed(client, db_session):
     assert body["enabled"] is False
     assert body["consent_version"] == FITTING_ROOM_CONSENT_VERSION
     assert "auto" in body["supported_categories"]
+    assert body["stars_cost"] == 20
+    assert "flat" in (body.get("stars_cost_note") or "").lower()
 
 
 def test_enqueue_blocked_when_disabled(client, db_session):
@@ -115,14 +117,18 @@ def _grant_stars(db_session, username: str, amount: int = 20) -> None:
     db_session.commit()
 
 
-def test_fitting_room_success_no_fabricate(client, db_session, monkeypatch):
+def test_fitting_room_success_flat_20_stars(client, db_session, monkeypatch):
     _enable_fitting_room(monkeypatch)
     mock = MockTryOnProvider()
     set_try_on_provider_override(mock)
     tokens = register_with_invite(
         client, db_session, email="fr-ok@example.com", username="fr_ok"
     )
-    _grant_stars(db_session, "fr_ok")
+    _grant_stars(db_session, "fr_ok", amount=40)
+
+    from app.models.user import User
+
+    before = db_session.query(User).filter(User.username == "fr_ok").one().ai_stars
 
     key = f"fitting_room:{uuid.uuid4()}"
     r = client.post(
@@ -130,11 +136,14 @@ def test_fitting_room_success_no_fabricate(client, db_session, monkeypatch):
         headers=_auth(tokens),
         json={
             "person_image_base64": _data_url((180, 120, 90, 255)),
-            "garment_image_base64": _data_url((40, 80, 200, 255)),
+            "garment_pieces": [
+                {"image_base64": _data_url((40, 80, 200, 255)), "category": "tops"},
+                {"image_base64": _data_url((20, 160, 80, 255)), "category": "bottoms"},
+                {"image_base64": _data_url((180, 40, 40, 255)), "category": "outerwear"},
+            ],
             "idempotency_key": key,
             "consent_acknowledged": True,
             "consent_version": FITTING_ROOM_CONSENT_VERSION,
-            "garment_category": "dresses",
         },
     )
     assert r.status_code == 201, r.text
@@ -146,15 +155,21 @@ def test_fitting_room_success_no_fabricate(client, db_session, monkeypatch):
 
     processed = run_magic_worker_tick(db_session, limit=4)
     assert processed >= 1
+    db_session.expire_all()
     job = db_session.get(AIJob, uuid.UUID(job_id))
     assert job is not None
     assert job.status == "completed"
     assert mock.calls == 1
-    assert any("garment_category:dresses" in h for h in mock.last_hints)
+    assert any("outfit_piece_count:3" in h for h in mock.last_hints)
     result = job.result_data or {}
     assert result.get("image_url")
     assert result.get("mode") == "fitting_room"
+    assert result.get("stars_cost") == 20
+    assert result.get("stars_debited") is True
     assert "preview" in (result.get("summary") or "").lower()
+    after = db_session.query(User).filter(User.username == "fr_ok").one().ai_stars
+    # Flat 20 even for 3 pieces — not 60.
+    assert after == before - 20
 
 
 def test_fitting_room_failure_no_success_status(client, db_session, monkeypatch):

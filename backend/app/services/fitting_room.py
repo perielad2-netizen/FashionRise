@@ -1,8 +1,12 @@
-"""AI Fitting Room — person photo + clothing image → try-on preview (F1–F3).
+"""AI Fitting Room — person photo + clothing image(s) → try-on preview (F1–F5).
 
 Reuses the OpenAI Try On Person images.edit adapter. Fail-closed behind
 ``fitting_room_enabled`` / ``fitting_room_live_http``. No wardrobe, stylist,
-shopping, or new billing. Charges existing Magic Stars only after success.
+shopping, or new billing.
+
+Stars: flat ``ai_stars_fitting_room_cost`` (default 20) per successful try-on,
+regardless of how many garments appear in the clothing image / outfit collage.
+Debit only after success.
 """
 
 from __future__ import annotations
@@ -16,12 +20,13 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException, status
+from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.ai_job import AIJob
 from app.models.user import User
-from app.services.ai_stars import assert_can_spend_magic
+from app.services.ai_stars import assert_can_spend_fitting_room, fitting_room_cost
 from app.services.personal_try_on_provider import (
     TRY_ON_CONSENT_VERSION,
     TRY_ON_PROMPT_VERSION,
@@ -48,6 +53,18 @@ SUPPORTED_GARMENT_CATEGORIES = frozenset(
     {"auto", "tops", "bottoms", "one-pieces", "dresses", "outerwear", "shoes"}
 )
 
+# Combinations that conflict for a single try-on plate (honest UX — still allowed
+# only when the client sends a single composite; we surface warnings in preflight).
+CONFLICTING_CATEGORY_SETS: tuple[frozenset[str], ...] = (
+    frozenset({"one-pieces", "tops"}),
+    frozenset({"one-pieces", "bottoms"}),
+    frozenset({"dresses", "tops"}),
+    frozenset({"dresses", "bottoms"}),
+    frozenset({"one-pieces", "dresses"}),
+)
+
+MAX_OUTFIT_PIECES = 4
+
 
 def fitting_room_enabled() -> bool:
     return bool(get_settings().fitting_room_enabled)
@@ -58,11 +75,25 @@ def fitting_room_live_armed() -> bool:
     return bool(settings.fitting_room_enabled and settings.fitting_room_live_http)
 
 
+def combo_warning_for_categories(categories: list[str]) -> str | None:
+    cats = {c for c in categories if c and c != "auto"}
+    for conflict in CONFLICTING_CATEGORY_SETS:
+        if conflict.issubset(cats):
+            labels = " + ".join(sorted(conflict))
+            return (
+                f"Selected categories ({labels}) usually conflict on one body. "
+                "The AI will still attempt a single preview collage, but results "
+                "may look inconsistent — prefer replacing one piece."
+            )
+    return None
+
+
 def preflight_public(*, user: User) -> dict[str, Any]:
-    """No billable work — UI gate + consent copy + categories."""
+    """No billable work — UI gate + consent copy + categories + flat Stars cost."""
     _ = user
     settings = get_settings()
     enabled = fitting_room_enabled()
+    cost = fitting_room_cost()
     return {
         "enabled": enabled,
         "live_http": fitting_room_live_armed(),
@@ -74,6 +105,13 @@ def preflight_public(*, user: User) -> dict[str, Any]:
             "Concept preview only — not a fit guarantee. Results may differ from real garments."
         ),
         "ai_gate": bool(settings.my_croquis_ai_enabled),
+        "stars_cost": cost,
+        "stars_cost_note": (
+            f"{cost} Stars per successful Fitting Room preview — flat rate whether the "
+            "clothing image shows one garment or several."
+        ),
+        "max_outfit_pieces": MAX_OUTFIT_PIECES,
+        "conflicting_category_sets": [sorted(s) for s in CONFLICTING_CATEGORY_SETS],
     }
 
 
@@ -95,7 +133,6 @@ def _decode_png(raw: str, *, field: str) -> bytes:
     if len(decoded) > settings.max_upload_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field} is too large.")
     if decoded[:8] != b"\x89PNG\r\n\x1a\n":
-        # Accept JPEG by re-encoding via provider path — store as-is; provider normalizes.
         if decoded[:2] != b"\xff\xd8":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -114,12 +151,53 @@ def _normalize_category(raw: str | None) -> str:
     return cat
 
 
+def _bytes_to_rgba(png_or_jpeg: bytes) -> Image.Image:
+    img = Image.open(io.BytesIO(png_or_jpeg))
+    return img.convert("RGBA")
+
+
+def compose_outfit_collage(piece_pngs: list[bytes]) -> bytes:
+    """Side-by-side collage of outfit pieces for a single images.edit garment plate.
+
+    Flat Stars cost still applies once — piece count does not multiply the charge.
+    """
+    if not piece_pngs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="At least one clothing image is required."
+        )
+    if len(piece_pngs) == 1:
+        # Normalize to PNG.
+        buf = io.BytesIO()
+        _bytes_to_rgba(piece_pngs[0]).save(buf, format="PNG")
+        return buf.getvalue()
+
+    images = [_bytes_to_rgba(p) for p in piece_pngs[:MAX_OUTFIT_PIECES]]
+    target_h = 768
+    resized: list[Image.Image] = []
+    for im in images:
+        w, h = im.size
+        scale = target_h / max(h, 1)
+        nw = max(1, int(round(w * scale)))
+        resized.append(im.resize((nw, target_h), Image.Resampling.LANCZOS))
+    gap = 12
+    total_w = sum(im.width for im in resized) + gap * (len(resized) - 1)
+    canvas = Image.new("RGBA", (total_w, target_h), (255, 255, 255, 0))
+    x = 0
+    for im in resized:
+        canvas.paste(im, (x, 0), im)
+        x += im.width + gap
+    out = io.BytesIO()
+    canvas.save(out, format="PNG")
+    return out.getvalue()
+
+
 def enqueue_fitting_room_try_on(
     db: Session,
     user: User,
     *,
     person_image_base64: str,
-    garment_image_base64: str,
+    garment_image_base64: str | None = None,
+    garment_pieces: list[dict[str, Any]] | None = None,
     idempotency_key: str,
     consent_acknowledged: bool,
     consent_version: str,
@@ -163,20 +241,56 @@ def enqueue_fitting_room_try_on(
         return existing
 
     person_png = _decode_png(person_image_base64, field="person_image_base64")
-    garment_png = _decode_png(garment_image_base64, field="garment_image_base64")
-    category = _normalize_category(garment_category)
 
-    # Stars check before enqueue — debit only after success (worker).
-    assert_can_spend_magic(db, user)
+    piece_bytes: list[bytes] = []
+    piece_cats: list[str] = []
+    if isinstance(garment_pieces, list) and garment_pieces:
+        if len(garment_pieces) > MAX_OUTFIT_PIECES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Outfit supports at most {MAX_OUTFIT_PIECES} clothing pieces.",
+            )
+        for i, piece in enumerate(garment_pieces):
+            if not isinstance(piece, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=f"garment_pieces[{i}] invalid."
+                )
+            raw = piece.get("image_base64") or piece.get("imageBase64")
+            piece_bytes.append(_decode_png(str(raw or ""), field=f"garment_pieces[{i}]"))
+            piece_cats.append(_normalize_category(piece.get("category") or piece.get("garment_category")))
+    elif garment_image_base64:
+        piece_bytes.append(_decode_png(garment_image_base64, field="garment_image_base64"))
+        piece_cats.append(_normalize_category(garment_category))
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide garment_image_base64 or garment_pieces.",
+        )
 
+    category = piece_cats[0] if len(piece_cats) == 1 else "auto"
+    combo_warning = combo_warning_for_categories(piece_cats)
+
+    # Flat Stars check before enqueue — debit only after success (worker).
+    assert_can_spend_fitting_room(db, user)
+
+    garment_png = compose_outfit_collage(piece_bytes)
     person_fp = hashlib.sha256(person_png).hexdigest()
     garment_fp = hashlib.sha256(garment_png).hexdigest()
     person_b64 = base64.b64encode(person_png).decode("ascii")
     garment_b64 = base64.b64encode(garment_png).decode("ascii")
 
-    hints: list[str] = []
-    if category != "auto":
-        hints.append(f"garment_category:{category}")
+    hints: list[str] = [
+        "fitting_room_flat_stars",
+        f"outfit_piece_count:{len(piece_bytes)}",
+    ]
+    for cat in piece_cats:
+        if cat != "auto":
+            hints.append(f"garment_category:{cat}")
+    if len(piece_bytes) > 1:
+        hints.append(
+            "Apply all clothing pieces from the garment collage onto the person photo "
+            "as one coordinated outfit without dropping earlier pieces."
+        )
 
     job = AIJob(
         user_id=user.id,
@@ -190,6 +304,10 @@ def enqueue_fitting_room_try_on(
             "person_fingerprint": person_fp,
             "garment_fingerprint": garment_fp,
             "garment_category": category,
+            "outfit_categories": piece_cats,
+            "outfit_piece_count": len(piece_bytes),
+            "combo_warning": combo_warning,
+            "stars_cost": fitting_room_cost(),
             "design_hints": hints,
             "consent_version": FITTING_ROOM_CONSENT_VERSION,
             "prompt_version": TRY_ON_PROMPT_VERSION,
@@ -234,8 +352,6 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     try:
         from app.services.personal_try_on_provider import _try_on_provider_override
 
-        # Live arming: Fitting Room flag OR injected test provider.
-        # OpenAI adapter also requires MY_CROQUIS_AI_LIVE_HTTP (shared images.edit arm).
         if _try_on_provider_override is None and not fitting_room_live_armed():
             return _fail(
                 "Fitting Room live AI is not armed on this server.",
@@ -273,12 +389,14 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     key = f"ai/{job.id.hex}_fitting_{uuid.uuid4().hex[:10]}.png"
     url = LocalStorageBackend().save_file(key=key, data=io.BytesIO(png), content_type="image/png")
 
+    cost = int(data.get("stars_cost") or fitting_room_cost())
     result = {
         "status": "completed",
         "summary": "Fitting Room preview ready (concept preview — not a fit guarantee).",
         "bullets": [
             "Person photo and clothing image were not overwritten.",
             FITTING_ROOM_NOTICE,
+            f"Flat Stars charge on success: {cost} (not per garment in the image).",
             f"Prompt {TRY_ON_PROMPT_VERSION}",
         ],
         "image_url": url,
@@ -288,12 +406,15 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         "person_fingerprint": data.get("person_fingerprint"),
         "garment_fingerprint": data.get("garment_fingerprint"),
         "garment_category": data.get("garment_category"),
+        "outfit_categories": data.get("outfit_categories"),
+        "outfit_piece_count": data.get("outfit_piece_count"),
+        "combo_warning": data.get("combo_warning"),
+        "stars_cost": cost,
         "consent_version": TRY_ON_CONSENT_VERSION,
     }
     job.status = "completed"
     job.error_message = None
     job.result_data = result
-    # Strip bulky inputs after success so the row stays lean.
     slim = dict(data)
     slim.pop("person_image_base64", None)
     slim.pop("garment_image_base64", None)

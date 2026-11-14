@@ -27,10 +27,10 @@
 | Status | Detail |
 |---|---|
 | Scope | **F1–F5** only (My Photo · Choose Clothing · AI Try-On · Build Outfit · Save/Compare/Share). No Wardrobe / Stylist / shopping / new billing. |
-| Slice | **F1–F3** PR **#332** (`cursor/web-ai-fitting-room-f1f3-77c6` @ `3534d906`): person + garment private IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · loading/success/fail/retry · preview disclaimer |
-| Follow-ups | **F4** outfit session · **F5** save/compare/share polish — separate focused PRs |
+| Slice | **F1–F5** on PR **#332** (`cursor/web-ai-fitting-room-f1f3-77c6`): person + outfit session IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · save/compare/share · preview disclaimer |
+| Stars | Flat **`ai_stars_fitting_room_cost=20`** per successful try-on — **not** multiplied by garments in the image / outfit collage. No charge on failure. |
 | Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **OFF** · BE `FITTING_ROOM_ENABLED` / `FITTING_ROOM_LIVE_HTTP` **OFF** |
-| Web test tip LIVE | FE `/var/www/fashionrise/releases/3534d906-fitting-room-f1f3-332` · `VITE_FITTING_ROOM_UI_ENABLED=true` · BE `FITTING_ROOM_*=true` on API tip `3534d906` · OpenAI arming already on (`MY_CROQUIS_AI_LIVE_HTTP`) |
+| Web test tip LIVE | FE `/var/www/fashionrise/releases/3534d906-fitting-room-f1f3-332` (redeploy pending latest) · BE `FITTING_ROOM_*=true` · OpenAI arming already on (`MY_CROQUIS_AI_LIVE_HTTP`) |
 | Android QA rollback | Prior tip **`b69ffb25-looks-magic-top-clip-331`** (Fitting Room UI absent). Rollback: `ln -sfn /var/www/fashionrise/releases/b69ffb25-looks-magic-top-clip-331 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 | Merge | **Do not merge #332** until PM approval |
 | Reuse | OpenAI Try On images.edit adapter · AI job worker · Magic Stars debit-on-success only · My Looks download toast UX |

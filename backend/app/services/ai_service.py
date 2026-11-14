@@ -168,7 +168,7 @@ def _mark_job_stars_debited(job: AIJob) -> None:
 
 
 def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
-    """Charge Magic Stars only after the full user-visible Magic flow succeeds.
+    """Charge Stars only after the full user-visible AI flow succeeds.
 
     Rules:
     - Failed jobs never debit.
@@ -177,6 +177,8 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
     - Try On Person / FASHN (``personal_try_on``): debit only when the final look
       job completes. Garment-realism is an intermediate stage and must not charge.
     - Smart OpenAI → FASHN Max: one charge when the delivered attempt succeeds.
+    - Fitting Room (``fitting_room_try_on``): flat ``fitting_room`` Stars cost
+      (default 20) once per successful preview — not per garment in the image.
     """
     if job.status != "completed":
         return
@@ -211,7 +213,10 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
             return
 
     try:
-        ai_stars.debit_magic_stars(db, user)
+        if job.job_type == "fitting_room_try_on":
+            ai_stars.debit_fitting_room_stars(db, user)
+        else:
+            ai_stars.debit_magic_stars(db, user)
     except ForbiddenError:
         # AI already produced the look; rare race if Stars were spent elsewhere
         # between enqueue assert and completion. Deliver the look; do not fail.

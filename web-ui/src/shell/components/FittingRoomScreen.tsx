@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import {
+  clearOutfitSession,
   deleteFittingRoomAsset,
+  deleteSavedResult,
   fileToFittingRoomDataUrl,
+  listSavedResults,
+  newOutfitPieceId,
   readFittingRoomAsset,
+  readOutfitSession,
+  saveFittingResult,
   writeFittingRoomAsset,
+  writeOutfitSession,
+  type FittingRoomOutfitPiece,
+  type FittingRoomSavedResult,
 } from '@/lib/fittingRoomStore'
 import { requestShare } from '@/lib/sharePromo'
 import {
@@ -30,6 +39,16 @@ function downloadSuccessCopy(method: 'web' | 'gallery' | 'share'): string {
   return 'Download started.'
 }
 
+function comboWarning(categories: string[], sets: string[][]): string | null {
+  const cats = new Set(categories.filter((c) => c && c !== 'auto'))
+  for (const set of sets) {
+    if (set.every((c) => cats.has(c))) {
+      return `Selected categories (${set.join(' + ')}) usually conflict on one body. The AI will still try, but results may look inconsistent — prefer replacing one piece.`
+    }
+  }
+  return null
+}
+
 export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const personInputId = useId()
   const garmentInputId = useId()
@@ -37,10 +56,11 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const garmentRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const noticeTimer = useRef<number | null>(null)
+  const replacePieceId = useRef<string | null>(null)
 
   const [personUrl, setPersonUrl] = useState<string | null>(null)
-  const [garmentUrl, setGarmentUrl] = useState<string | null>(null)
-  const [category, setCategory] = useState('auto')
+  const [pieces, setPieces] = useState<FittingRoomOutfitPiece[]>([])
+  const [draftCategory, setDraftCategory] = useState('auto')
   const [preflight, setPreflight] = useState<FittingRoomPreflight | null>(null)
   const [consent, setConsent] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
@@ -51,6 +71,9 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [noticeTone, setNoticeTone] = useState<'ok' | 'info' | 'error'>('ok')
+  const [saved, setSaved] = useState<FittingRoomSavedResult[]>([])
+  const [compareA, setCompareA] = useState<string | null>(null)
+  const [compareB, setCompareB] = useState<string | null>(null)
 
   const showNotice = useCallback((text: string, tone: 'ok' | 'info' | 'error') => {
     setNotice(text)
@@ -61,6 +84,19 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       noticeTimer.current = null
     }, 4200)
   }, [])
+
+  const persistOutfit = useCallback(
+    async (next: FittingRoomOutfitPiece[]) => {
+      setPieces(next)
+      await writeOutfitSession({
+        key: `${userId}:outfit`,
+        userId,
+        pieces: next,
+        updatedAt: new Date().toISOString(),
+      })
+    },
+    [userId],
+  )
 
   useEffect(() => {
     return () => {
@@ -74,16 +110,32 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     if (!isFittingRoomUiEnabled()) return
     let cancelled = false
     ;(async () => {
-      const [person, garment] = await Promise.all([
+      const [person, outfit, savedRows] = await Promise.all([
         readFittingRoomAsset(userId, 'person'),
-        readFittingRoomAsset(userId, 'garment'),
+        readOutfitSession(userId),
+        listSavedResults(userId),
       ])
       if (cancelled) return
       if (person?.dataUrl) setPersonUrl(person.dataUrl)
-      if (garment?.dataUrl) {
-        setGarmentUrl(garment.dataUrl)
-        if (garment.garmentCategory) setCategory(garment.garmentCategory)
+      if (outfit?.pieces?.length) {
+        setPieces(outfit.pieces)
+      } else {
+        // Migrate legacy single garment into outfit session once.
+        const legacy = await readFittingRoomAsset(userId, 'garment')
+        if (legacy?.dataUrl) {
+          const migrated: FittingRoomOutfitPiece[] = [
+            {
+              id: newOutfitPieceId(),
+              category: legacy.garmentCategory || 'auto',
+              dataUrl: legacy.dataUrl,
+              mimeType: legacy.mimeType,
+              updatedAt: legacy.updatedAt,
+            },
+          ]
+          if (!cancelled) await persistOutfit(migrated)
+        }
       }
+      if (!cancelled) setSaved(savedRows)
       try {
         const pf = await fetchFittingRoomPreflight()
         if (!cancelled) setPreflight(pf)
@@ -99,6 +151,10 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             preview_disclaimer:
               'Concept preview only — not a fit guarantee. Results may differ from real garments.',
             ai_gate: false,
+            stars_cost: 20,
+            stars_cost_note: '20 Stars per successful Fitting Room preview (flat rate).',
+            max_outfit_pieces: 4,
+            conflicting_category_sets: [],
           })
         }
       }
@@ -106,7 +162,20 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, persistOutfit])
+
+  const starsCost = preflight?.stars_cost ?? 20
+  const maxPieces = preflight?.max_outfit_pieces ?? 4
+  const categories = preflight?.supported_categories?.length
+    ? preflight.supported_categories
+    : DEFAULT_CATEGORIES
+  const warning = useMemo(
+    () => comboWarning(
+      pieces.map((p) => p.category),
+      preflight?.conflicting_category_sets ?? [],
+    ),
+    [pieces, preflight?.conflicting_category_sets],
+  )
 
   const onPickPerson = async (file: File | null) => {
     if (!file) return
@@ -130,15 +199,47 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     if (!file) return
     try {
       const { dataUrl, mimeType } = await fileToFittingRoomDataUrl(file)
+      const replaceId = replacePieceId.current
+      replacePieceId.current = null
+      let next: FittingRoomOutfitPiece[]
+      if (replaceId) {
+        next = pieces.map((p) =>
+          p.id === replaceId
+            ? {
+                ...p,
+                dataUrl,
+                mimeType,
+                category: draftCategory,
+                updatedAt: new Date().toISOString(),
+              }
+            : p,
+        )
+      } else {
+        if (pieces.length >= maxPieces) {
+          setErrorMsg(`Outfit supports up to ${maxPieces} clothing pieces. Replace one instead.`)
+          return
+        }
+        next = [
+          ...pieces,
+          {
+            id: newOutfitPieceId(),
+            category: draftCategory,
+            dataUrl,
+            mimeType,
+            updatedAt: new Date().toISOString(),
+          },
+        ]
+      }
+      await persistOutfit(next)
+      // Keep legacy single garment mirror for older paths.
       await writeFittingRoomAsset({
         userId,
         kind: 'garment',
-        dataUrl,
-        mimeType,
+        dataUrl: next[next.length - 1].dataUrl,
+        mimeType: next[next.length - 1].mimeType,
         updatedAt: new Date().toISOString(),
-        garmentCategory: category,
+        garmentCategory: next[next.length - 1].category,
       })
-      setGarmentUrl(dataUrl)
       setErrorMsg(null)
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not save clothing image.')
@@ -150,18 +251,27 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     setPersonUrl(null)
   }
 
-  const clearGarment = async () => {
+  const removePiece = async (id: string) => {
+    const next = pieces.filter((p) => p.id !== id)
+    await persistOutfit(next)
+    if (!next.length) {
+      await deleteFittingRoomAsset(userId, 'garment')
+    }
+  }
+
+  const clearOutfit = async () => {
+    await clearOutfitSession(userId)
     await deleteFittingRoomAsset(userId, 'garment')
-    setGarmentUrl(null)
+    setPieces([])
   }
 
   const runTryOn = async () => {
-    if (!personUrl || !garmentUrl || !preflight?.enabled || !consent) return
+    if (!personUrl || !pieces.length || !preflight?.enabled || !consent) return
     abortRef.current?.abort()
     const ac = new AbortController()
     abortRef.current = ac
     setPhase('running')
-    setStatusMsg('Creating your Fitting Room preview…')
+    setStatusMsg(`Creating your Fitting Room preview (−${starsCost} Stars on success)…`)
     setErrorMsg(null)
     if (resultBlobUrl) {
       URL.revokeObjectURL(resultBlobUrl)
@@ -172,11 +282,13 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       const idem = `fitting_room:${userId.slice(0, 8)}:${Date.now().toString(36)}`
       const job = await enqueueFittingRoomTryOn({
         personImageBase64: personUrl,
-        garmentImageBase64: garmentUrl,
+        garmentPieces: pieces.map((p) => ({
+          imageBase64: p.dataUrl,
+          category: p.category,
+        })),
         idempotencyKey: idem,
         consentAcknowledged: true,
         consentVersion: preflight.consent_version,
-        garmentCategory: category,
         signal: ac.signal,
       })
       const settled = await pollAiJobUntilSettled({ jobId: job.id, signal: ac.signal })
@@ -194,7 +306,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       setResultJobId(settled.id)
       setResultBlobUrl(url)
       setPhase('done')
-      setStatusMsg('Preview ready — concept only, not a fit guarantee.')
+      setStatusMsg(`Preview ready — −${starsCost} Stars charged. Concept only, not a fit guarantee.`)
     } catch (err) {
       if (ac.signal.aborted) return
       setPhase('failed')
@@ -235,14 +347,53 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         imageUrl: resultBlobUrl,
         imageFileName: 'fashionrise-fitting-preview.png',
       })
-      if (outcome === 'shared') {
-        showNotice('Share sheet opened.', 'info')
-      } else if (outcome === 'needs-fallback') {
+      if (outcome === 'shared') showNotice('Share sheet opened.', 'info')
+      else if (outcome === 'needs-fallback') {
         showNotice('Sharing is not available — use Download instead.', 'info')
       }
     } catch {
       showNotice('Share failed. Try download instead.', 'error')
     }
+  }
+
+  const onSavePrivate = async () => {
+    if (!resultBlobUrl || !resultJobId) return
+    try {
+      const record: FittingRoomSavedResult = {
+        id: `frsave_${resultJobId}`,
+        userId,
+        jobId: resultJobId,
+        dataUrl: resultBlobUrl,
+        label: `Outfit ${new Date().toLocaleString()}`,
+        outfitCategories: pieces.map((p) => p.category),
+        createdAt: new Date().toISOString(),
+      }
+      // Persist a durable data URL (object URLs expire).
+      const blob = await fetchJobImageBlob(resultJobId)
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(blob)
+      })
+      record.dataUrl = dataUrl
+      await saveFittingResult(record)
+      const rows = await listSavedResults(userId)
+      setSaved(rows)
+      if (!compareA) setCompareA(record.id)
+      else if (!compareB) setCompareB(record.id)
+      showNotice('Saved privately on this device ✓', 'ok')
+    } catch {
+      showNotice('Could not save this preview.', 'error')
+    }
+  }
+
+  const onDeleteSaved = async (id: string) => {
+    await deleteSavedResult(id)
+    const rows = await listSavedResults(userId)
+    setSaved(rows)
+    if (compareA === id) setCompareA(null)
+    if (compareB === id) setCompareB(null)
   }
 
   if (!isFittingRoomUiEnabled()) {
@@ -257,12 +408,11 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     )
   }
 
-  const categories = preflight?.supported_categories?.length
-    ? preflight.supported_categories
-    : DEFAULT_CATEGORIES
   const serverOff = preflight != null && !preflight.enabled
   const canTry =
-    Boolean(personUrl && garmentUrl && consent && preflight?.enabled && phase !== 'running')
+    Boolean(personUrl && pieces.length && consent && preflight?.enabled && phase !== 'running')
+  const compareLeft = saved.find((s) => s.id === compareA) || null
+  const compareRight = saved.find((s) => s.id === compareB) || null
 
   return (
     <section className={styles.screen} aria-labelledby="fitting-room-brand" data-testid="fitting-room-screen">
@@ -271,13 +421,17 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
           Fashion<span>Rise</span> Fitting Room
         </p>
         <p className={styles.lead}>
-          Upload your photo and a clothing image for a private AI try-on preview.
+          Upload your photo and clothing pieces for a private AI try-on preview.
         </p>
       </header>
 
       <p className={styles.disclaimer} role="note">
         {preflight?.preview_disclaimer ||
           'Concept preview only — not a fit guarantee. Results may differ from real garments.'}
+      </p>
+      <p className={styles.starsNote} data-testid="fitting-room-stars-cost">
+        {preflight?.stars_cost_note ||
+          `${starsCost} Stars per successful Fitting Room preview — flat rate whether the clothing image shows one garment or several.`}
       </p>
 
       {serverOff ? (
@@ -321,25 +475,56 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         </div>
 
         <div className={styles.panel}>
-          <h2 className={styles.panelTitle}>2 · Choose Clothing</h2>
+          <h2 className={styles.panelTitle}>2 · Build Outfit</h2>
           <p className={styles.panelHint}>
-            Product shot or store screenshot. Category is a soft hint for the AI.
+            Add or replace clothing pieces. Previous pieces stay in the session until you remove
+            them. Flat −{starsCost} Stars on success even if a piece shows multiple items.
           </p>
-          <div className={styles.preview}>
-            {garmentUrl ? (
-              <img className={styles.previewImg} src={garmentUrl} alt="Selected clothing" />
+          <div className={styles.outfitGrid}>
+            {pieces.length === 0 ? (
+              <p className={styles.previewEmpty}>No clothing pieces yet</p>
             ) : (
-              <p className={styles.previewEmpty}>No clothing selected</p>
+              pieces.map((piece) => (
+                <div key={piece.id} className={styles.outfitCard}>
+                  <img src={piece.dataUrl} alt={`${piece.category} piece`} />
+                  <span className={styles.outfitCat}>{piece.category}</span>
+                  <div className={styles.actions}>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      onClick={() => {
+                        replacePieceId.current = piece.id
+                        setDraftCategory(piece.category)
+                        garmentRef.current?.click()
+                      }}
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      onClick={() => void removePiece(piece.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))
             )}
           </div>
-          <div className={styles.categoryRow} role="group" aria-label="Garment category">
+          {warning ? (
+            <p className={`${styles.status} ${styles.statusError}`} role="status">
+              {warning}
+            </p>
+          ) : null}
+          <div className={styles.categoryRow} role="group" aria-label="Garment category for next piece">
             {categories.map((c) => (
               <button
                 key={c}
                 type="button"
-                className={c === category ? `${styles.chip} ${styles.chipActive}` : styles.chip}
-                aria-pressed={c === category}
-                onClick={() => setCategory(c)}
+                className={c === draftCategory ? `${styles.chip} ${styles.chipActive}` : styles.chip}
+                aria-pressed={c === draftCategory}
+                onClick={() => setDraftCategory(c)}
               >
                 {c}
               </button>
@@ -354,12 +539,20 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             onChange={(e) => void onPickGarment(e.target.files?.[0] ?? null)}
           />
           <div className={styles.actions}>
-            <button type="button" className={styles.btn} onClick={() => garmentRef.current?.click()}>
-              {garmentUrl ? 'Replace clothing' : 'Upload clothing'}
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={pieces.length >= maxPieces}
+              onClick={() => {
+                replacePieceId.current = null
+                garmentRef.current?.click()
+              }}
+            >
+              Add clothing
             </button>
-            {garmentUrl ? (
-              <button type="button" className={styles.btnGhost} onClick={() => void clearGarment()}>
-                Remove
+            {pieces.length ? (
+              <button type="button" className={styles.btnGhost} onClick={() => void clearOutfit()}>
+                Clear outfit
               </button>
             ) : null}
           </div>
@@ -377,7 +570,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             />
             <label htmlFor="fr-consent">
               {preflight?.notice_text ||
-                'I understand this is a visual concept preview only — not an accurate size or fit guarantee.'}
+                'I understand this is a visual concept preview only — not an accurate size or fit guarantee.'}{' '}
+              Successful previews cost −{starsCost} Stars (flat).
             </label>
           </div>
           <div className={styles.tryRow}>
@@ -388,7 +582,11 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
               onClick={() => void runTryOn()}
               data-testid="fitting-room-try-on"
             >
-              {phase === 'running' ? 'Working…' : phase === 'failed' ? 'Retry try-on' : 'Try on'}
+              {phase === 'running'
+                ? 'Working…'
+                : phase === 'failed'
+                  ? `Retry (−${starsCost} Stars)`
+                  : `Try on (−${starsCost} Stars)`}
             </button>
             <button type="button" className={styles.btnGhost} onClick={onBackToStudio}>
               Back to Studio
@@ -428,9 +626,74 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
                 <button type="button" className={styles.btn} onClick={() => void onShare()}>
                   Share
                 </button>
+                <button type="button" className={styles.btnPrimary} onClick={() => void onSavePrivate()}>
+                  Save privately
+                </button>
               </div>
             </>
           ) : null}
+        </div>
+
+        <div className={styles.panel} style={{ gridColumn: '1 / -1' }}>
+          <h2 className={styles.panelTitle}>4 · Save, Compare & Share</h2>
+          <p className={styles.panelHint}>
+            Saved previews stay on this device. Pick two to compare side by side.
+          </p>
+          {saved.length === 0 ? (
+            <p className={styles.previewEmpty}>No saved Fitting Room previews yet</p>
+          ) : (
+            <div className={styles.savedGrid}>
+              {saved.map((row) => (
+                <div key={row.id} className={styles.savedCard}>
+                  <img src={row.dataUrl} alt={row.label} />
+                  <span className={styles.outfitCat}>{row.label}</span>
+                  <div className={styles.actions}>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      aria-pressed={compareA === row.id}
+                      onClick={() => setCompareA(row.id)}
+                    >
+                      Left
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      aria-pressed={compareB === row.id}
+                      onClick={() => setCompareB(row.id)}
+                    >
+                      Right
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      onClick={() => void onDeleteSaved(row.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {(compareLeft || compareRight) && (
+            <div className={styles.compareRow} data-testid="fitting-room-compare">
+              <div className={styles.comparePane}>
+                {compareLeft ? (
+                  <img src={compareLeft.dataUrl} alt="Compare left outfit" />
+                ) : (
+                  <p className={styles.previewEmpty}>Pick Left</p>
+                )}
+              </div>
+              <div className={styles.comparePane}>
+                {compareRight ? (
+                  <img src={compareRight.dataUrl} alt="Compare right outfit" />
+                ) : (
+                  <p className={styles.previewEmpty}>Pick Right</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

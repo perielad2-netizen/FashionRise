@@ -308,6 +308,9 @@ def fitting_room_try_on(
         user,
         person_image_base64=body.person_image_base64,
         garment_image_base64=body.garment_image_base64,
+        garment_pieces=(
+            [p.model_dump() for p in body.garment_pieces] if body.garment_pieces else None
+        ),
         idempotency_key=body.idempotency_key,
         consent_acknowledged=body.consent_acknowledged,
         consent_version=body.consent_version,
