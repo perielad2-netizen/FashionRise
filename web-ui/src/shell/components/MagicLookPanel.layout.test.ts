@@ -12,11 +12,12 @@ function rule(source: string, selector: string): string {
 }
 
 describe('MagicLookPanel mobile viewport contract (#180)', () => {
-  it('fixes the overlay to the visible viewport with safe-area padding', () => {
+  it('fixes the overlay to the visible viewport with safe-area + header clearance', () => {
     const overlay = rule(css, '.overlay')
     expect(overlay).toContain('position: fixed')
     expect(overlay).toContain('env(safe-area-inset-top, 0px)')
     expect(overlay).toContain('env(safe-area-inset-bottom, 0px)')
+    expect(overlay).toContain('var(--fr-header-h)')
     expect(overlay).toContain('overflow: hidden')
   })
 
@@ -25,6 +26,7 @@ describe('MagicLookPanel mobile viewport contract (#180)', () => {
     expect(panel).toMatch(/100svh/)
     expect(panel).toMatch(/100dvh/)
     expect(panel).toContain('env(safe-area-inset-bottom, 0px)')
+    expect(panel).toContain('var(--fr-header-h)')
     expect(panel).toContain('min-height: 0')
     expect(panel).toContain('overflow: hidden')
   })
