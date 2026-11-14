@@ -115,8 +115,13 @@
     top: 0;
     bottom: 0;
     width: min(220px, 82vw);
-    /* Above MagicLookPanel overlay (z-index 40) so drawer is not trapped under results */
-    z-index: 55;
+    /*
+      Above in-app full-screen sheets inside .body:
+      MagicLookPanel (40), My Looks detail (80), Color/Materials & Create My Croquis (80),
+      ShareSheet (90). GlobalHeader stays a sibling above .body, so the hamburger/X
+      remains clickable. Stars shop (1200) stays above this drawer.
+    */
+    z-index: 110;
     background: #0a0f1c;
     box-shadow: 16px 0 40px rgba(0, 0, 0, 0.45);
   }
@@ -127,8 +132,8 @@
     inset: 0;
     border: 0;
     background: rgba(0, 0, 0, 0.45);
-    /* Above Magic results; below the open nav drawer */
-    z-index: 50;
+    /* Above My Looks / Magic sheets; below the open nav drawer */
+    z-index: 100;
     cursor: pointer;
   }
 }
