@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**AI Fitting Room** parallel track F1–F3 in progress — fail-closed; Android QA tip unchanged until PM approval.)
+**Last updated:** 2026-11-15 (**AI Fitting Room F1–F3** web test tip `3534d906` LIVE · PR **#332** open — **do not merge** · Android QA rollback tip `b69ffb25`.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -27,11 +27,12 @@
 | Status | Detail |
 |---|---|
 | Scope | **F1–F5** only (My Photo · Choose Clothing · AI Try-On · Build Outfit · Save/Compare/Share). No Wardrobe / Stylist / shopping / new billing. |
-| Slice | **F1–F3** first PR (`cursor/web-ai-fitting-room-f1f3-77c6`): person + garment private IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · loading/success/fail/retry · preview disclaimer |
+| Slice | **F1–F3** PR **#332** (`cursor/web-ai-fitting-room-f1f3-77c6` @ `3534d906`): person + garment private IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · loading/success/fail/retry · preview disclaimer |
 | Follow-ups | **F4** outfit session · **F5** save/compare/share polish — separate focused PRs |
-| Flags | FE `VITE_FITTING_ROOM_UI_ENABLED` default **OFF** · BE `FITTING_ROOM_ENABLED` / `FITTING_ROOM_LIVE_HTTP` default **OFF** (OpenAI path still needs existing `MY_CROQUIS_AI_LIVE_HTTP` arming) |
-| Android QA | **Do not** point Capacitor tip at Fitting Room-enabled builds until PM approval; keep prior QA tip / flags OFF |
-| Deploy | Web-only test tip from branch — **no merge** until approval |
+| Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **OFF** · BE `FITTING_ROOM_ENABLED` / `FITTING_ROOM_LIVE_HTTP` **OFF** |
+| Web test tip LIVE | FE `/var/www/fashionrise/releases/3534d906-fitting-room-f1f3-332` · `VITE_FITTING_ROOM_UI_ENABLED=true` · BE `FITTING_ROOM_*=true` on API tip `3534d906` · OpenAI arming already on (`MY_CROQUIS_AI_LIVE_HTTP`) |
+| Android QA rollback | Prior tip **`b69ffb25-looks-magic-top-clip-331`** (Fitting Room UI absent). Rollback: `ln -sfn /var/www/fashionrise/releases/b69ffb25-looks-magic-top-clip-331 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| Merge | **Do not merge #332** until PM approval |
 | Reuse | OpenAI Try On images.edit adapter · AI job worker · Magic Stars debit-on-success only · My Looks download toast UX |
 | Out of scope | Fabricate AI results · charge Stars on failure · migrations · Android store submit |
 
