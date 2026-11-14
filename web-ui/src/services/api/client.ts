@@ -50,14 +50,33 @@ function notifySessionExpired(): void {
   }
 }
 
+/** True when the store still holds the exact session that started a refresh. */
+function sessionStillMatches(started: StoredTokens): boolean {
+  const now = tokenStore.get()
+  return Boolean(
+    now &&
+      now.refreshToken === started.refreshToken &&
+      now.accessToken === started.accessToken,
+  )
+}
+
 /**
  * Single-flight access-token refresh using the stored refresh token.
  * Does not import authApi (avoids circular dependency with apiRequest).
+ *
+ * If logout or account-switch changes the store while the refresh HTTP call is
+ * in flight, the response is discarded — never restore old tokens, clear a
+ * newer session, or apply tokens for a different account.
  */
 export async function refreshAccessToken(): Promise<boolean> {
   const current = tokenStore.get()
   if (!current?.refreshToken) return false
   if (refreshInFlight) return refreshInFlight
+
+  const started: StoredTokens = {
+    accessToken: current.accessToken,
+    refreshToken: current.refreshToken,
+  }
 
   refreshInFlight = (async () => {
     try {
@@ -67,7 +86,7 @@ export async function refreshAccessToken(): Promise<boolean> {
           Accept: 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ refresh_token: current.refreshToken }),
+        body: JSON.stringify({ refresh_token: started.refreshToken }),
       })
       const text = await response.text()
       let parsed: unknown = null
@@ -78,9 +97,13 @@ export async function refreshAccessToken(): Promise<boolean> {
           parsed = text
         }
       }
+      // Logout / switch while in flight: discard without mutating the new session.
+      if (!sessionStillMatches(started)) return false
       if (!response.ok) return false
       const body = parsed as TokenResponse
       if (!body?.access_token || !body?.refresh_token) return false
+      // Re-check after parsing — another writer may have landed between.
+      if (!sessionStillMatches(started)) return false
       const stored: StoredTokens = {
         accessToken: body.access_token,
         refreshToken: body.refresh_token,
@@ -127,18 +150,23 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   // Mid-session access expiry (V2-0012 / V2-0013): refresh once, then retry.
+  const tokensAt401 = useAuth ? tokenStore.get() : null
   if (
     response.status === 401 &&
     useAuth &&
     !options._retriedAfterRefresh &&
-    Boolean(tokenStore.get()?.refreshToken)
+    Boolean(tokensAt401?.refreshToken)
   ) {
     const refreshed = await refreshAccessToken()
     if (refreshed) {
       return apiRequest<T>(path, { ...options, _retriedAfterRefresh: true })
     }
-    tokenStore.clear()
-    notifySessionExpired()
+    // Only clear the session that failed. Logout / account-switch may have
+    // already replaced or removed tokens while refresh was in flight.
+    if (tokensAt401 && sessionStillMatches(tokensAt401)) {
+      tokenStore.clear()
+      notifySessionExpired()
+    }
     throw new ApiError('Your session expired. Please sign in again.', 401, null)
   }
 
