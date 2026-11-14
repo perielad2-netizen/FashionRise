@@ -35,12 +35,8 @@ describe('HomeScreen', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: /FashionRise/i })).toBeInTheDocument()
     expect(screen.getByText(/Welcome back, Maya/i)).toBeInTheDocument()
-    expect(
-      screen.getByText(/Sketch a garment\. Turn it into a Magic look\./i),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/generate an AI Magic look from your sketch/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/Sketch it\. See it come to life\./i)).toBeInTheDocument()
+    expect(screen.getByText(/Turn your fashion ideas into stunning AI creations/i)).toBeInTheDocument()
     // Production catalog is empty — do not invent a misleading gallery.
     expect(screen.queryByTestId('home-before-after-gallery')).not.toBeInTheDocument()
     const logo = document.querySelector('img') as HTMLImageElement | null
@@ -53,6 +49,8 @@ describe('HomeScreen', () => {
     expect(onNavigate).toHaveBeenCalledWith('create')
 
     const destinations = screen.getByRole('navigation', { name: 'Studio destinations' })
+    // Create is only the pink CTA — not a second destination row.
+    expect(within(destinations).queryByRole('button', { name: /^Create\b/i })).toBeNull()
     fireEvent.click(within(destinations).getByRole('button', { name: /My Designs/i }))
     expect(onNavigate).toHaveBeenCalledWith('designs')
     fireEvent.click(within(destinations).getByRole('button', { name: /My Looks/i }))

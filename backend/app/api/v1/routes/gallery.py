@@ -46,7 +46,8 @@ def list_gallery(
             raise UnauthorizedError("Sign in to view your friends circle feed")
         rows = gallery_service.list_circle_feed(db, viewer=user, limit=limit, offset=offset)
     elif sort == "top10":
-        rows = gallery_service.list_top_worldwide(db, limit=min(limit, 10))
+        # Worldwide board supports Top 10 / 20 / 50 selectors in the Runway UI.
+        rows = gallery_service.list_top_worldwide(db, limit=min(limit, 50))
     else:
         # Full public newest/trending/top_rated stays available for Top 10 tooling,
         # but the web Runway home uses circle + top10 only.

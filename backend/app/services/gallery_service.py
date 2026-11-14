@@ -259,8 +259,8 @@ def list_circle_feed(
 
 
 def list_top_worldwide(db: Session, *, limit: int = 10) -> list[GalleryItem]:
-    """Compact global highlight strip (likes, then rating)."""
-    cap = max(1, min(int(limit or 10), 25))
+    """Worldwide rankings board (likes, then rating). Caps at Top 50."""
+    cap = max(1, min(int(limit or 10), 50))
     q = (
         _public_gallery_base()
         .order_by(

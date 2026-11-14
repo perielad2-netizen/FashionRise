@@ -281,9 +281,169 @@
 
 .feedHub {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   align-content: start;
-  padding: 8px 2px 24px;
+  padding: 4px 2px 8px;
+  min-width: 0;
+}
+
+.topLimitRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.topLimitBtn,
+.topLimitActive {
+  min-height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.topLimitBtn {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fr-text);
+}
+
+.topLimitActive {
+  border: 0;
+  background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-deep));
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.35), 0 10px 24px rgba(190, 24, 93, 0.28);
+}
+
+.topLimitBtn:focus-visible,
+.topLimitActive:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
+}
+
+.rankInfo {
+  margin: 0;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fr-muted);
+}
+
+.rankBoard {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rankBoardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rankList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.rankCard {
+  display: grid;
+  grid-template-columns: minmax(96px, 118px) minmax(0, 1fr);
+  gap: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.rankCardLead {
+  border-color: rgba(244, 114, 182, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(244, 114, 182, 0.25),
+    0 0 28px rgba(214, 51, 132, 0.28);
+}
+
+.rankThumb {
+  position: relative;
+  min-height: 148px;
+  background: linear-gradient(165deg, #f8f3ee, #efe6dc);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.rankStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 2px 0 4px;
+}
+
+.rankStats span {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fr-text);
+}
+
+.rankStats span svg {
+  color: var(--fr-pink-soft);
+}
+
+.rankStats small {
+  font-size: 10px;
+  font-weight: 550;
+  color: var(--fr-muted);
+}
+
+.rankBadgeGold,
+.rankBadgeSilver,
+.rankBadgeBronze {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rankBadgeGold {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #1f1404;
+  border: 1px solid rgba(251, 191, 36, 0.7);
+}
+
+.rankBadgeSilver {
+  background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+  color: #0f172a;
+  border: 1px solid rgba(226, 232, 240, 0.7);
+}
+
+.rankBadgeBronze {
+  background: linear-gradient(135deg, #fdba74, #c2410c);
+  color: #1f0a02;
+  border: 1px solid rgba(253, 186, 116, 0.7);
 }
 
 .feedHubLead {
