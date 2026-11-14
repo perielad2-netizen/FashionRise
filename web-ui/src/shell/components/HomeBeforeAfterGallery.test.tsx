@@ -78,4 +78,21 @@ describe('HomeBeforeAfterGallery', () => {
     fireEvent.click(prev)
     expect(screen.getByTestId('home-gallery-dot-0')).toHaveAttribute('aria-selected', 'true')
   })
+
+  it('renders one composite hero image when provided (not a two-up cut)', () => {
+    const compositePair: AuthorizedHomeExample = {
+      ...pair('hero', 'Hero'),
+      composite: {
+        src: '/assets/ui/home/hero-pair-01.jpg',
+        alt: 'One FashionRise hero composite',
+        width: 838,
+        height: 496,
+      },
+    }
+    render(<HomeBeforeAfterGallery examples={[compositePair]} />)
+    expect(screen.getByTestId('home-gallery-composite-hero')).toBeInTheDocument()
+    expect(screen.getByAltText(/One FashionRise hero composite/i)).toBeInTheDocument()
+    expect(screen.queryByAltText('Hero sketch')).not.toBeInTheDocument()
+    expect(screen.queryByAltText('Hero Magic look')).not.toBeInTheDocument()
+  })
 })

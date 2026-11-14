@@ -12,6 +12,8 @@
       var(--fr-browser-chrome-bottom, 0px)
     )
     env(safe-area-inset-left, 0px);
+  /* Let GlobalHeader account menu overflow above the main pane. */
+  overflow: visible;
 }
 
 .body {
@@ -21,6 +23,7 @@
   min-height: 0;
   min-width: 0;
   position: relative;
+  z-index: 0;
 }
 
 .navSlot {

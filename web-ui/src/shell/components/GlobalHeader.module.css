@@ -7,7 +7,14 @@
   padding: 0 18px;
   border-bottom: 1px solid var(--fr-line);
   background: linear-gradient(180deg, rgba(18, 22, 38, 0.96), rgba(8, 11, 22, 0.98));
-  overflow: hidden;
+  /* Allow account menu to paint below the bar; brand still clips its own wordmark. */
+  overflow: visible;
+  position: relative;
+  z-index: 40;
+}
+
+.headerMenuOpen {
+  z-index: 60;
 }
 
 .brand {
@@ -69,7 +76,7 @@
   min-width: 0;
   max-width: 100%;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .starsBadge {
@@ -250,7 +257,7 @@
   background: #151d30;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
-  z-index: 50;
+  z-index: 70;
 }
 
 .menuUser {

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -42,5 +42,17 @@ describe('GlobalHeader Android layout (header overlap)', () => {
     expect(headerCss).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/)
     expect(headerCss).toMatch(/\.starsBadge[\s\S]*max-width:\s*min\(/)
     expect(headerCss).toMatch(/\.wordmark[\s\S]*text-overflow:\s*ellipsis/)
+    // Account chevron menu must paint above the page body (not clipped under it).
+    expect(headerCss).toMatch(/\.header\s*\{[\s\S]*?overflow:\s*visible/)
+    expect(headerCss).toMatch(/\.headerMenuOpen\s*\{[\s\S]*?z-index:\s*60/)
+  })
+
+  it('lifts the header stacking context while the account chevron menu is open', () => {
+    const { container } = render(<GlobalHeader username="peri" onLogout={vi.fn()} />)
+    const header = container.querySelector('header')
+    expect(header).not.toHaveClass(styles.headerMenuOpen)
+    fireEvent.click(screen.getByTestId('global-account-menu'))
+    expect(screen.getByTestId('global-account-menu-panel')).toBeInTheDocument()
+    expect(header).toHaveClass(styles.headerMenuOpen)
   })
 })

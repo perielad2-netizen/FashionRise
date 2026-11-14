@@ -156,7 +156,7 @@ export function GlobalHeader({
       : 'Web checkout for Stars is not open yet. On iPhone, buy Stars in the FashionRise iOS app when enabled.'
 
   return (
-    <header className={styles.header}>
+    <header className={`${styles.header} ${menuOpen ? styles.headerMenuOpen : ''}`}>
       <div className={styles.brand}>
         {leading}
         <img src={UI_ASSETS.brand.mark} alt="" className={styles.mark} draggable={false} />
