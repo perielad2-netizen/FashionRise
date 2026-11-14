@@ -5,6 +5,11 @@
  * Only the dominant *garment-scale* patterned fill is sent. Tiny accessory
  * fills (shoes, bags, belts) must not become a global textile for Magic —
  * otherwise ink-painted dress colors get replaced by shoe satin.
+ *
+ * Multi-fabric sketches are not blocked: the full sketch already carries every
+ * painted textile. The optional swatch is a fidelity hint for the main garment
+ * fabric — if encoding cannot stay under the transport budget, Magic continues
+ * without a swatch (never fails with a size error).
  */
 import { getCachedFabricImage, ensureFabricAssetsForFills } from '@/lib/fabricAssetCache'
 import { getFabricPromptShort } from '@/lib/fabricPromptCache'
@@ -16,10 +21,17 @@ import {
 } from '@/lib/paintFills'
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/lib/strokes'
 
-/** Bounded swatch edge (px). Large enough to show repeat; small enough for edit payload. */
+/** Preferred swatch edge (px). Large enough to show repeat; shrunk only if needed. */
 export const FABRIC_SWATCH_EDGE_PX = 512
-/** Soft cap for encoded data URL length (~350KB decoded). */
-export const FABRIC_SWATCH_MAX_DATA_URL_CHARS = 480_000
+/**
+ * Soft transport budget for the encoded data URL (~1.4MB decoded).
+ * Matches backend fabric-swatch validation (sketch upload ceiling).
+ * Never fail Magic for size — compress / shrink, then omit if still over.
+ */
+export const FABRIC_SWATCH_MAX_DATA_URL_CHARS = 1_900_000
+
+const SWATCH_EDGE_STEPS = [512, 384, 256, 192] as const
+const JPEG_QUALITY_STEPS = [0.92, 0.85, 0.75, 0.65] as const
 
 /**
  * Patterned fill must cover at least this fraction of the design plane to count
@@ -86,8 +98,7 @@ export function isGarmentScalePatternedFill(fill: FillOp): boolean {
   return area / plane >= MAGIC_FABRIC_MIN_DESIGN_AREA_FRACTION
 }
 
-function tileOntoSwatch(tile: HTMLCanvasElement): HTMLCanvasElement {
-  const edge = FABRIC_SWATCH_EDGE_PX
+function tileOntoSwatch(tile: HTMLCanvasElement, edge: number): HTMLCanvasElement {
   const out = document.createElement('canvas')
   out.width = edge
   out.height = edge
@@ -105,14 +116,35 @@ function tileOntoSwatch(tile: HTMLCanvasElement): HTMLCanvasElement {
   return out
 }
 
-function canvasToPngDataUrl(canvas: HTMLCanvasElement): string {
-  return canvas.toDataURL('image/png')
+/**
+ * Encode a swatch under the transport budget. Prefers PNG, then JPEG quality
+ * steps, then smaller edges. Returns null only when every attempt exceeds the
+ * budget (Magic then proceeds with the sketch alone — never throws).
+ */
+export function encodeSwatchDataUrl(
+  tile: HTMLCanvasElement,
+  maxChars: number = FABRIC_SWATCH_MAX_DATA_URL_CHARS,
+): string | null {
+  if (!tile.width || !tile.height) return null
+
+  for (const edge of SWATCH_EDGE_STEPS) {
+    const swatch = tileOntoSwatch(tile, edge)
+    const png = swatch.toDataURL('image/png')
+    if (png && png.length <= maxChars) return png
+
+    for (const q of JPEG_QUALITY_STEPS) {
+      const jpg = swatch.toDataURL('image/jpeg', q)
+      if (jpg && jpg.length <= maxChars) return jpg
+    }
+  }
+  return null
 }
 
 /**
  * Build a Magic textile reference from the same tile Studio uses when painting.
- * Returns null when there is no garment-scale patterned fabric, or the uploaded
- * asset is unavailable.
+ * Returns null when there is no garment-scale patterned fabric, the uploaded
+ * asset is unavailable, or the swatch cannot be encoded under budget.
+ * Never throws for payload size — multi-fabric Magic must still run.
  */
 export async function captureFabricSwatchForMagic(
   fills: FillOp[],
@@ -128,9 +160,8 @@ export async function captureFabricSwatchForMagic(
     if (tile.width !== BUILTIN_FABRIC_TILE_PX) {
       // Still usable — proceed with whatever renderFabricTile produced.
     }
-    const swatch = tileOntoSwatch(tile)
-    const dataUrl = canvasToPngDataUrl(swatch)
-    if (!dataUrl || dataUrl.length > FABRIC_SWATCH_MAX_DATA_URL_CHARS) return null
+    const dataUrl = encodeSwatchDataUrl(tile)
+    if (!dataUrl) return null
     const approxBytes = Math.floor((dataUrl.length * 3) / 4)
     return {
       dataUrl,
@@ -150,11 +181,10 @@ export async function captureFabricSwatchForMagic(
       )
     }
     const tile = renderUploadedFabricTile(img, fill.style.scale)
-    const swatch = tileOntoSwatch(tile)
-    const dataUrl = canvasToPngDataUrl(swatch)
-    if (!dataUrl || dataUrl.length > FABRIC_SWATCH_MAX_DATA_URL_CHARS) {
-      throw new Error('Fabric swatch is too large to send to Magic. Try a smaller fabric image.')
-    }
+    const dataUrl = encodeSwatchDataUrl(tile)
+    // Oversized custom textiles: skip swatch rather than block Magic. The
+    // sketched multi-fabric look is already in image_base64.
+    if (!dataUrl) return null
     const approxBytes = Math.floor((dataUrl.length * 3) / 4)
     const promptShort = getFabricPromptShort(fill.style.assetId)
     const label = promptShort

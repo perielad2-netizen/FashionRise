@@ -547,8 +547,9 @@ def _validate_optional_fabric_swatch(input_data: dict) -> None:
     if not isinstance(raw, str):
         raise ValidationAppError("fabric_swatch_base64 must be a string")
     settings = get_settings()
-    # Textile swatches are small tiles — keep well under the sketch upload limit.
-    max_bytes = min(settings.max_upload_bytes, 1_500_000)
+    # Same ceiling as sketch uploads — do not special-case multi-fabric Magic
+    # with a tighter artificial swatch cap (FE already compresses under budget).
+    max_bytes = settings.max_upload_bytes
     match = _DATA_URL_RE.match(raw.strip())
     b64 = match.group(2) if match else raw.strip()
     if len(b64) > int(max_bytes * 1.4) + 64:
