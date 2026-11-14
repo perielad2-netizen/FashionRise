@@ -40,7 +40,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0027 | **Confirmed** | C | Mouse-wheel hint gated to fine pointer; mobile slider copy |
 | V2-0028 | **Confirmed** | C | Pattern scale Fine↔Coarse + explanation |
 | V2-0029 | **Confirmed** | C | Brush color on brush sheet + Materials link |
-| V2-0030 | **Fixed** P1 | E | Rectangular eraser tool (`rectErase`): drag selection removes active-side ink/fills (layer-aware); Undo/Redo; Clear + freehand erase kept |
+| V2-0030 | **Fixed** P1 | E | Rectangular eraser (`rectErase`): clips active-side strokes/fills **inside** the selection (crossing segments kept outside); layer-aware; Undo/Redo; Clear + freehand erase kept |
 | V2-0031 | **Feature request** P1 | E | Home before/after gallery — authorized examples only; reduced-motion |
 | V2-0032 | **Feature / copy** | E | Home value copy — can ship before carousel if truthful |
 | V2-0033 | **Confirmed** P1 | B | My Looks Download no-op on Android WebView `<a download>`; Capacitor Media (+ Share fallback) + recursive `fr-dl/` + `apiRequestBlob` refresh |
@@ -98,7 +98,8 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 ## Batch E — V2-0030 Rectangular eraser
 
 - New Studio tool `rectErase` (rail + immersive); drag marquee in design space.
-- Pure `eraseArtworkInRect` filters active-side strokes/fills; ink layer also drops intersecting fills; shade/highlight leave fills.
+- Pure `eraseArtworkInRect` **clips** strokes at selection boundaries (including segments with both endpoints outside) and punches fill holes so exterior artwork remains.
+- Layer-aware; ink layer punches fills; shade/highlight leave fills.
 - Commits through existing StrokeHistory + draft document path (save/reopen preserved).
 - Freehand Eraser and Clear canvas unchanged.
 
