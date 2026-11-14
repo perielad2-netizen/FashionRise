@@ -85,8 +85,8 @@ describe('HomeBeforeAfterGallery', () => {
       composite: {
         src: '/assets/ui/home/hero-pair-01.jpg',
         alt: 'One FashionRise hero composite',
-        width: 838,
-        height: 496,
+        width: 826,
+        height: 463,
       },
     }
     render(<HomeBeforeAfterGallery examples={[compositePair]} />)

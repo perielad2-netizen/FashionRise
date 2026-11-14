@@ -90,8 +90,8 @@ export const AUTHORIZED_HOME_EXAMPLES: readonly AuthorizedHomeExample[] = Object
     composite: {
       src: '/assets/ui/home/hero-pair-01.jpg',
       alt: 'One FashionRise hero: fashion sketch transforming into an AI look of a pink evening gown',
-      width: 838,
-      height: 496,
+      width: 826,
+      height: 463,
     },
     before: {
       src: '/assets/ui/home/hero-sketch-01.jpg',

@@ -30,10 +30,11 @@
 
 .viewport {
   min-width: 0;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 18px;
+  border: 1px solid rgba(244, 114, 182, 0.28);
+  background: rgba(15, 22, 38, 0.55);
   overflow: hidden;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
 }
 
 .track {
@@ -63,6 +64,16 @@
   box-sizing: border-box;
 }
 
+.slideComposite {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 .slideTitle {
   margin: 0 0 8px;
   font-size: 12px;
@@ -79,20 +90,20 @@
 .compositeFrame {
   margin: 0;
   min-width: 0;
+  width: 100%;
+  line-height: 0;
 }
 
 .compositeImage {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 838 / 496;
+  aspect-ratio: 826 / 463;
   object-fit: cover;
-  border-radius: 14px;
-  background:
-    radial-gradient(circle at 50% 20%, rgba(214, 51, 132, 0.16), transparent 55%),
-    rgba(248, 243, 238, 0.96);
-  border: 1px solid rgba(244, 114, 182, 0.28);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  object-position: center;
+  border: 0;
+  border-radius: 0;
+  background: #f4ebe6;
 }
 
 .frame {
@@ -184,6 +195,10 @@
 @media (min-width: 901px) {
   .slide {
     padding: 14px 16px;
+  }
+
+  .slideComposite {
+    padding: 0;
   }
 
   .pair {
