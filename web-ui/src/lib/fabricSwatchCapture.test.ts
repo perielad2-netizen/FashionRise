@@ -164,4 +164,59 @@ describe('fabricSwatchCapture', () => {
     expect(swatch!.label).toMatch(/satin repeating textile/i)
     vi.restoreAllMocks()
   })
+
+  it('encodeSwatchDataUrl falls back to JPEG when PNG exceeds budget', async () => {
+    const { encodeSwatchDataUrl } = await import('@/lib/fabricSwatchCapture')
+    const hugePng = `data:image/png;base64,${'A'.repeat(50_000)}`
+    const smallJpg = 'data:image/jpeg;base64,/9j/4AAQ'
+    const tile = {
+      width: 64,
+      height: 64,
+    } as unknown as HTMLCanvasElement
+    const realCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
+      if (tag !== 'canvas') return realCreate(tag)
+      return {
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          createPattern: () => ({}),
+          fillStyle: '#000',
+          fillRect: () => undefined,
+          imageSmoothingEnabled: true,
+          drawImage: () => undefined,
+        }),
+        toDataURL: (type?: string) => (type === 'image/jpeg' ? smallJpg : hugePng),
+      } as unknown as HTMLCanvasElement
+    }) as typeof document.createElement)
+
+    const out = encodeSwatchDataUrl(tile, 10_000)
+    expect(out).toBe(smallJpg)
+    vi.restoreAllMocks()
+  })
+
+  it('encodeSwatchDataUrl returns null instead of throwing when every encode exceeds budget', async () => {
+    const { encodeSwatchDataUrl } = await import('@/lib/fabricSwatchCapture')
+    const over = `data:image/png;base64,${'C'.repeat(20_000)}`
+    const tile = { width: 32, height: 32 } as unknown as HTMLCanvasElement
+    const realCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
+      if (tag !== 'canvas') return realCreate(tag)
+      return {
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          createPattern: () => ({}),
+          fillStyle: '#000',
+          fillRect: () => undefined,
+          imageSmoothingEnabled: true,
+          drawImage: () => undefined,
+        }),
+        toDataURL: () => over,
+      } as unknown as HTMLCanvasElement
+    }) as typeof document.createElement)
+
+    expect(encodeSwatchDataUrl(tile, 100)).toBeNull()
+    vi.restoreAllMocks()
+  })
 })
