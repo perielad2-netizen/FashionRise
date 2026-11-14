@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**#303 approved for merge** — native nav + fail-closed FCM/APNs foundation; review fixes included; **`NATIVE_PUSH_*` remain OFF**. #318+#319 already on tip `fe0dba34`. iOS App Store published; Stars purchasing still OFF.)
+**Last updated:** 2026-11-14 (**#303 MERGED + LIVE** tip `1a8e6121` — native nav + fail-closed FCM/APNs foundation + #320 tsc hotfix; **`NATIVE_PUSH_*` remain OFF**. Alembic **030**. iOS App Store published; Stars purchasing still OFF.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -15,32 +15,33 @@
 | **Android test app** | **Current gate** | Continue device QA on the new web tip until required tests pass. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
-| **Gates** | Native push **foundation merged** · **`NATIVE_PUSH_*` OFF** until explicit enable · Stars purchasing/credit OFF |
+| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** until explicit enable · Stars purchasing/credit OFF |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · no unrelated feature work.
 
-**Exact next step:** Merge/deploy #303 with flags OFF; then continue Android QA. Enable `NATIVE_PUSH_*` only after operator FCM/APNs setup + explicit approval.
+**Exact next step:** Continue Android QA on tip `1a8e6121`. Enable `NATIVE_PUSH_*` only after operator FCM/APNs setup + explicit approval.
 
-## Native nav + push foundation (2026-11-14) — #303 APPROVED
+## Native nav + push foundation (2026-11-14) — #303 LIVE
 
 | Status | Detail |
 |---|---|
+| Merge | **#303** + build hotfix **#320** on `main` tip **`1a8e6121`** |
 | Scope | Stay-in-app Capacitor URL policy/deep links + fail-closed native push (Alembic **030**, `/push/native/*`, FE `nativePush.ts`) |
 | Flags | **`native_push_android_enabled=false`** · **`native_push_ios_enabled=false`** (no live FCM/APNs send) |
 | Docs | `docs/NATIVE-NAV-PUSH-AUDIT.md` · `docs/deploy/NATIVE-PUSH-OPERATOR.md` |
 | Out of scope | Flipping enable flags · store submit · Stars billing |
 
-## Web tip deploy (2026-11-14) — #318+#319 LIVE
+## Web tip deploy (2026-11-14) — #303 LIVE
 
 | Status | Detail |
 |---|---|
-| Merge | **#318** + **#319** on `main` tip **`fe0dba34`** |
-| FE | `/var/www/fashionrise/releases/fe0dba34-android-qa-318-319` · public `/version.json` matches · prior `qa-reset-stars-d7f61f9e` |
-| BE | API+worker restarted on same tip · `sort=top10` cap **50** · `/health` ok |
-| Vite gates | Front/Back+Magic+Dual **ON** · Registration UI assert **false** (backend status still gates Create Account) |
-| Not deployed yet | #303 tip (pending this merge) · Codemagic store builds · push enable · Stars purchasing |
-| Rollback | `ln -sfn /var/www/fashionrise/releases/qa-reset-stars-d7f61f9e /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
-| **Exact next step** | Owner/Android QA on tip `fe0dba34` (+ #303 after deploy) |
+| Tip | **`1a8e6121`** (includes #318+#319+#303+#320) |
+| FE | `/var/www/fashionrise/releases/1a8e6121-native-nav-push-303` · public `/version.json` matches · prior `fe0dba34-android-qa-318-319` |
+| BE | API+worker on same tip · Alembic **030** (`native_push_devices`) · `/health` ok · runtime push flags **False/False** |
+| Vite gates | Front/Back+Magic+Dual **ON** · Registration UI assert **false** |
+| Not enabled | Live FCM/APNs · Codemagic store builds · Stars purchasing |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/fe0dba34-android-qa-318-319 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| **Exact next step** | Android QA on tip `1a8e6121`; enable `NATIVE_PUSH_*` only after operator FCM/APNs setup + explicit approval |
 
 ## Android QA — Home + Runway polish (2026-11-14) — #319
 
