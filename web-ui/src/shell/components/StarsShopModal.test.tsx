@@ -83,6 +83,13 @@ describe('StarsShopModal native iOS polish', () => {
     ])
   })
 
+  it('portals the shop to document.body so header stacking cannot clip the title', async () => {
+    render(<StarsShopModal open onClose={() => undefined} />)
+    const backdrop = await waitFor(() => screen.getByTestId('stars-shop-backdrop'))
+    expect(backdrop.parentElement).toBe(document.body)
+    expect(screen.getByTestId('stars-shop-modal')).toBeInTheDocument()
+  })
+
   it('shows friendly copy, finite balance, ordered packages, and localized prices', async () => {
     render(<StarsShopModal open onClose={() => undefined} />)
 
