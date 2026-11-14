@@ -29,19 +29,20 @@ const fixturePair: AuthorizedHomeExample = {
 }
 
 describe('HomeScreen', () => {
-  it('shows FashionRise logo brand and routes destinations', () => {
+  it('shows sketch→AI look hero and routes destinations without a logo plate', () => {
     const onNavigate = vi.fn()
     render(<HomeScreen username="Maya Designer" onNavigate={onNavigate} />)
 
-    expect(screen.getByRole('heading', { level: 1, name: /FashionRise/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: /Sketch it\. See it come to life\./i })).toBeInTheDocument()
     expect(screen.getByText(/Welcome back, Maya/i)).toBeInTheDocument()
-    expect(screen.getByText(/Sketch it\. See it come to life\./i)).toBeInTheDocument()
+    expect(screen.getByText('Fashion')).toBeInTheDocument()
+    expect(screen.getByText('Rise')).toBeInTheDocument()
     expect(screen.getByText(/Turn your fashion ideas into stunning AI creations/i)).toBeInTheDocument()
-    // Production catalog is empty — do not invent a misleading gallery.
-    expect(screen.queryByTestId('home-before-after-gallery')).not.toBeInTheDocument()
-    const logo = document.querySelector('img') as HTMLImageElement | null
-    expect(logo?.getAttribute('src')).toContain('fashion_rise_login')
-    expect(logo?.getAttribute('src') ?? '').not.toMatch(/model|croquis|female/i)
+    expect(screen.getByTestId('home-before-after-gallery')).toBeInTheDocument()
+    expect(
+      screen.getByAltText(/Fashion sketch of a strapless pink evening gown/i),
+    ).toBeInTheDocument()
+    expect(document.querySelector('img[src*="fashion_rise_login"]')).toBeNull()
 
     const cta = screen.getByTestId('home-start-creating')
     expect(cta).toHaveAccessibleName(/Start creating/i)
@@ -49,7 +50,6 @@ describe('HomeScreen', () => {
     expect(onNavigate).toHaveBeenCalledWith('create')
 
     const destinations = screen.getByRole('navigation', { name: 'Studio destinations' })
-    // Create is only the pink CTA — not a second destination row.
     expect(within(destinations).queryByRole('button', { name: /^Create\b/i })).toBeNull()
     fireEvent.click(within(destinations).getByRole('button', { name: /My Designs/i }))
     expect(onNavigate).toHaveBeenCalledWith('designs')
@@ -61,7 +61,7 @@ describe('HomeScreen', () => {
     expect(onNavigate).toHaveBeenCalledWith('croquis')
   })
 
-  it('keeps branding and Start creating when authorized examples are present', () => {
+  it('keeps Start creating when authorized examples are overridden', () => {
     const onNavigate = vi.fn()
     render(
       <HomeScreen
@@ -71,7 +71,6 @@ describe('HomeScreen', () => {
       />,
     )
 
-    expect(screen.getByRole('heading', { level: 1, name: /FashionRise/i })).toBeInTheDocument()
     expect(screen.getByTestId('home-start-creating')).toBeInTheDocument()
     expect(screen.getByTestId('home-before-after-gallery')).toBeInTheDocument()
     expect(screen.getByAltText('Fixture sketch')).toBeInTheDocument()

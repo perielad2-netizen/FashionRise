@@ -144,35 +144,46 @@ describe('RunwayScreen', () => {
   })
 
   async function openCircleSheet() {
+    fireEvent.click(await screen.findByTestId('runway-tab-feed'))
     fireEvent.click(await screen.findByTestId('runway-open-circle'))
     return screen.findByRole('list', { name: 'Circle feed' })
   }
 
   async function openTop10Sheet() {
+    fireEvent.click(await screen.findByTestId('runway-tab-top'))
     fireEvent.click(await screen.findByTestId('runway-open-top10'))
     return screen.findByRole('dialog', { name: /Top rankings worldwide/i })
   }
 
-  it('loads circle + Top rankings and opens scrollable popups from hub buttons', async () => {
+  it('keeps Feed and Top as separate pages', async () => {
     const onOpenCreate = vi.fn()
     const onOpenLooks = vi.fn()
     render(<RunwayScreen onOpenCreate={onOpenCreate} onOpenLooks={onOpenLooks} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Runway' })).toBeInTheDocument()
-    await waitFor(() => expect(listGallery).toHaveBeenCalled())
-    expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' }))
-    expect(listGallery).toHaveBeenCalledWith(
-      expect.objectContaining({ sort: 'top10', limit: 10 }),
+    await waitFor(() =>
+      expect(listGallery).toHaveBeenCalledWith(expect.objectContaining({ sort: 'circle' })),
+    )
+    expect(listGallery).not.toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'top10' }),
+    )
+    expect(await screen.findByTestId('runway-open-circle')).toBeInTheDocument()
+    expect(screen.queryByTestId('runway-top-limit')).toBeNull()
+    expect(await screen.findByText('Friend circle look')).toBeInTheDocument()
+    expect(screen.queryByText('Worldwide hit')).toBeNull()
+    expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: /Start creating/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('runway-tab-top'))
+    await waitFor(() =>
+      expect(listGallery).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'top10', limit: 10 }),
+      ),
     )
     expect(await screen.findByTestId('runway-top-limit')).toBeInTheDocument()
     expect(screen.getByTestId('runway-top-10')).toHaveAttribute('aria-selected', 'true')
-    expect(await screen.findByTestId('runway-open-top10')).toBeInTheDocument()
-    expect(screen.getByTestId('runway-open-circle')).toBeInTheDocument()
-    expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('button', { name: /Start creating/i })).toBeInTheDocument()
-    expect(screen.queryByText('Comments')).toBeNull()
-    expect(screen.queryByText('Like · Score')).toBeNull()
     expect(await screen.findByText('Worldwide hit')).toBeInTheDocument()
+    expect(screen.queryByText('Friend circle look')).toBeNull()
 
     fireEvent.click(screen.getByTestId('runway-top-20'))
     await waitFor(() =>
@@ -472,5 +483,17 @@ describe('RunwayScreen', () => {
     fireEvent.click(toggle)
     await waitFor(() => expect(disableRunwayPush).toHaveBeenCalled())
     expect(await screen.findByTestId('runway-push-toggle')).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('locks the push toggle when the server has push disabled', async () => {
+    ensureDefaultRunwayPush.mockResolvedValue({ on: false, result: 'disabled' })
+    runwayPushIsEnabled.mockResolvedValue(false)
+    render(<RunwayScreen onOpenCreate={vi.fn()} onOpenLooks={vi.fn()} />)
+    const toggle = await screen.findByTestId('runway-push-toggle')
+    await waitFor(() => expect(toggle).toBeDisabled())
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByText(/isn’t (enabled|configured) on the server yet/i)).toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(enableRunwayPush).not.toHaveBeenCalled()
   })
 })

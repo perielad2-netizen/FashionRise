@@ -80,9 +80,9 @@ export function HomeBeforeAfterGallery({ examples }: Props) {
     >
       <div className={styles.header}>
         <h2 id={headingId} className={styles.title}>
-          Sketch to Magic look
+          Home Hero Gallery
         </h2>
-        <p className={styles.subtitle}>Authorized product examples — not private user designs.</p>
+        <p className={styles.subtitle}>Sketch → AI look — the FashionRise idea.</p>
       </div>
 
       <div className={styles.viewport}>
@@ -129,7 +129,7 @@ export function HomeBeforeAfterGallery({ examples }: Props) {
                     decoding="async"
                     draggable={false}
                   />
-                  <figcaption className={styles.caption}>Magic look</figcaption>
+                  <figcaption className={styles.caption}>AI Look</figcaption>
                 </figure>
               </div>
             </article>
