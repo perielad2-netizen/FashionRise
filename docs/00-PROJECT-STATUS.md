@@ -3,20 +3,20 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch E** — V2-0021 #313 merged; V2-0010 friend read-only profile in PM review. PR #303 still open; no store/push/billing enable.)
+**Last updated:** 2026-11-14 (**QA V2 Batch E COMPLETE** — all Batch E implementation PRs merged. V2-0031 gallery activation still pending authorized marketing images. PR #303 still open; no store/push/billing enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## QA V2 Batch E (2026-11-14) — features (independent PRs)
+## QA V2 Batch E (2026-11-14) — COMPLETE
 
 | Status | Detail |
 |---|---|
-| Baseline | `main` includes #313 (V2-0021) |
-| Merged | **V2-0030** #309 · **V2-0032** #310 · **V2-0026** #311 · **V2-0031** #312 · **V2-0021** #313 |
-| Branch | `cursor/web-friend-readonly-profile-77c6` (V2-0010) |
-| IDs | **V2-0010** friend row → read-only profile + published Runway looks |
-| Gallery note | `AUTHORIZED_HOME_EXAMPLES` stays empty — activation pending authorized marketing pairs |
-| **Exact next step** | PM review V2-0010; leave push/billing/store gates unchanged |
+| Baseline | `main` includes #314 (`7b5334b1`) |
+| Merged | **V2-0030** #309 · **V2-0032** #310 · **V2-0026** #311 · **V2-0031** #312 · **V2-0021** #313 · **V2-0010** #314 |
+| Planning | #308 |
+| Gallery note | V2-0031 UI shipped; `AUTHORIZED_HOME_EXAMPLES` empty — **activation pending** authorized marketing pairs |
+| Gates | Push / Stars billing / store submit / #303 merge — **unchanged (OFF / open separately)** |
+| **Exact next step** | Master-plan checkpoint with PM — do not start new Batch E work; decide App Store / #303 / gallery assets next |
 
 ## QA V2 Batch D (2026-11-14) — MERGED #307
 
