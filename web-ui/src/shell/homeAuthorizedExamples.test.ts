@@ -28,9 +28,10 @@ const validPair: AuthorizedHomeExample = {
 }
 
 describe('homeAuthorizedExamples', () => {
-  it('ships an empty production catalog until PM authorizes real pairs', () => {
-    expect(AUTHORIZED_HOME_EXAMPLES).toEqual([])
-    expect(getAuthorizedHomeExamples()).toEqual([])
+  it('ships PM-authorized home-marketing pairs for the hero gallery', () => {
+    expect(AUTHORIZED_HOME_EXAMPLES.length).toBeGreaterThan(0)
+    expect(getAuthorizedHomeExamples().every(isAuthorizedHomeExample)).toBe(true)
+    expect(AUTHORIZED_HOME_EXAMPLES[0]?.authorization.licensedFor).toBe('home-marketing')
   })
 
   it('accepts only rows with home-marketing authorization and sized images', () => {

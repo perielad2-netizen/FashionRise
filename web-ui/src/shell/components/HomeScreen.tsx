@@ -1,5 +1,4 @@
 import { ChevronRight, FolderHeart, Images, Sparkles, Star, UserRound } from 'lucide-react'
-import { UI_ASSETS } from '@/assets/uiAssets'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import type { NavDestination } from '@/shell/components/GlobalNavigation'
 import { HomeBeforeAfterGallery } from '@/shell/components/HomeBeforeAfterGallery'
@@ -55,22 +54,18 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
   )
 
   return (
-    <section className={styles.screen} aria-labelledby="home-brand">
+    <section className={styles.screen} aria-labelledby="home-headline">
+      <HomeBeforeAfterGallery examples={homeExamples} />
+
       <header className={styles.hero}>
-        <div className={styles.logoPlate}>
-          <img
-            src={UI_ASSETS.brand.login}
-            alt=""
-            className={styles.logo}
-            draggable={false}
-          />
-        </div>
         <div className={styles.copy}>
           <p className={styles.greeting}>Welcome back, {firstName}</p>
-          <h1 id="home-brand" className={styles.brand}>
+          <p className={styles.brandMark}>
             Fashion<span>Rise</span>
+          </p>
+          <h1 id="home-headline" className={styles.tagline}>
+            Sketch it. See it come to life.
           </h1>
-          <p className={styles.tagline}>Sketch it. See it come to life.</p>
           <p className={styles.lead}>
             Turn your fashion ideas into stunning AI creations — or jump back into saved designs,
             looks, and models.
@@ -86,8 +81,6 @@ export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
           </button>
         </div>
       </header>
-
-      <HomeBeforeAfterGallery examples={homeExamples} />
 
       <nav className={styles.destinations} aria-label="Studio destinations">
         {destinations.map((item) => {

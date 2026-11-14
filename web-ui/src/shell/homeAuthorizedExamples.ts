@@ -68,10 +68,32 @@ export function isAuthorizedHomeExample(value: unknown): value is AuthorizedHome
 }
 
 /**
- * Production catalog. Keep empty until PM provides genuine authorized pairs.
- * Do not invent sketch/Magic results or reuse private user artwork.
+ * Production catalog — PM-authorized home marketing pairs only.
+ * Source: owner Android QA home-hero example (2026-11-14), sketch → AI look.
  */
-export const AUTHORIZED_HOME_EXAMPLES: readonly AuthorizedHomeExample[] = Object.freeze([])
+export const AUTHORIZED_HOME_EXAMPLES: readonly AuthorizedHomeExample[] = Object.freeze([
+  {
+    id: 'pink-gown-sketch-to-look',
+    title: 'Sketch to AI look',
+    authorization: {
+      source: 'PM Android QA home hero example 2026-11-14 (Addition 01)',
+      licensedFor: 'home-marketing',
+      notes: 'Owner-provided marketing pair for Home main-idea hero',
+    },
+    before: {
+      src: '/assets/ui/home/hero-sketch-01.jpg',
+      alt: 'Fashion sketch of a strapless pink evening gown',
+      width: 403,
+      height: 496,
+    },
+    after: {
+      src: '/assets/ui/home/hero-look-01.jpg',
+      alt: 'AI fashion look of the same pink evening gown on a model',
+      width: 403,
+      height: 496,
+    },
+  },
+])
 
 /** Safe accessor — drops any row that fails authorization validation. */
 export function getAuthorizedHomeExamples(

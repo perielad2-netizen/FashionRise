@@ -50,7 +50,7 @@ describe('HomeBeforeAfterGallery', () => {
     render(<HomeBeforeAfterGallery examples={[pair('a', 'Look A'), pair('b', 'Look B')]} />)
 
     expect(screen.getByTestId('home-before-after-gallery')).toBeInTheDocument()
-    expect(screen.getByText(/Authorized product examples/i)).toBeInTheDocument()
+    expect(screen.getByText(/Sketch → AI look/i)).toBeInTheDocument()
     expect(screen.getByTestId('home-gallery-slide-a')).toBeInTheDocument()
 
     const firstBefore = screen.getByAltText('Look A sketch')

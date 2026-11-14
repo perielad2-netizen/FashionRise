@@ -75,12 +75,13 @@ type FriendsState =
   | { status: 'error'; message: string }
   | { status: 'ready'; friends: Friendship[]; requests: Friendship[] }
 
-type TabId = 'feed' | 'friends'
+type TabId = 'feed' | 'top' | 'friends'
 type BrowseSheet = 'top10' | 'circle'
 type TopLimit = 10 | 20 | 50
 
 const TABS: Array<{ id: TabId; label: string; hint: string }> = [
-  { id: 'feed', label: 'Feed', hint: 'Worldwide Top rankings or your friends circle' },
+  { id: 'feed', label: 'Feed', hint: 'Looks from you and your friends only' },
+  { id: 'top', label: 'Top', hint: 'Worldwide top liked and rated looks' },
   { id: 'friends', label: 'Friends', hint: 'Manage your private circle' },
 ]
 
@@ -108,6 +109,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [friendNotice, setFriendNotice] = useState<string | null>(null)
   const [pushOn, setPushOn] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
+  const [pushLocked, setPushLocked] = useState(false)
   const [pushNotice, setPushNotice] = useState<string | null>(null)
   const [pushNeedsGesture, setPushNeedsGesture] = useState(false)
 
@@ -118,10 +120,22 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
       const { on, result } = await ensureDefaultRunwayPush()
       if (on) {
         setPushOn(true)
+        setPushLocked(false)
         setPushNeedsGesture(false)
         if (result === 'granted') {
           setPushNotice('Push on — we’ll notify likes, scores, and comments')
         }
+        return
+      }
+      if (result === 'disabled') {
+        setPushOn(false)
+        setPushLocked(true)
+        setPushNeedsGesture(false)
+        setPushNotice(
+          isNativeShell()
+            ? 'Native push isn’t enabled on the server yet'
+            : 'Push isn’t configured on the server yet',
+        )
         return
       }
       if (result === 'skipped') {
@@ -147,13 +161,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             : 'Notifications blocked in browser settings',
         )
         setPushNeedsGesture(false)
-      } else if (result === 'disabled') {
-        setPushNotice(
-          isNativeShell()
-            ? 'Native push isn’t enabled on the server yet'
-            : 'Push isn’t configured on the server yet',
-        )
       } else if (result === 'unsupported') {
+        setPushLocked(true)
         setPushNotice('Push needs a modern browser (or install the app to Home Screen on iPhone).')
       }
       setPushOn(false)
@@ -172,6 +181,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         if (cancelled) return
         if (on) {
           setPushOn(true)
+          setPushLocked(false)
           return
         }
         await applyPushAutoEnable(false)
@@ -185,11 +195,12 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   }, [applyPushAutoEnable])
 
   const onRunwayGestureForPush = useCallback(() => {
-    if (!pushNeedsGesture || pushBusy) return
+    if (pushLocked || !pushNeedsGesture || pushBusy) return
     void applyPushAutoEnable(true)
-  }, [applyPushAutoEnable, pushBusy, pushNeedsGesture])
+  }, [applyPushAutoEnable, pushBusy, pushLocked, pushNeedsGesture])
 
   const onTogglePush = useCallback(async () => {
+    if (pushLocked && !pushOn) return
     setPushBusy(true)
     setPushNotice(null)
     setPushNeedsGesture(false)
@@ -202,12 +213,14 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         return
       }
       if (!isNativeShell() && !pushSupported()) {
+        setPushLocked(true)
         setPushNotice('Push needs a modern browser (or install the app to Home Screen on iPhone).')
         return
       }
       const result = await enableRunwayPush()
       if (result === 'granted') {
         setPushOn(true)
+        setPushLocked(false)
         setPushNotice('Push on — we’ll notify likes, scores, and comments')
       } else if (result === 'denied') {
         setPushNotice(
@@ -216,12 +229,15 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             : 'Notifications blocked in browser settings',
         )
       } else if (result === 'disabled') {
+        setPushOn(false)
+        setPushLocked(true)
         setPushNotice(
           isNativeShell()
             ? 'Native push isn’t enabled on the server yet'
             : 'Push isn’t configured on the server yet',
         )
       } else {
+        setPushLocked(true)
         setPushNotice('Push isn’t supported here')
       }
     } catch (err) {
@@ -229,7 +245,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     } finally {
       setPushBusy(false)
     }
-  }, [pushOn])
+  }, [pushLocked, pushOn])
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (tab === 'friends') {
@@ -257,12 +273,15 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
 
     setState({ status: 'loading' })
     try {
-      const [circle, top10] = await Promise.all([
-        listGallery({ sort: 'circle', limit: 48, signal }),
-        listGallery({ sort: 'top10', limit: topLimit, signal }),
-      ])
+      if (tab === 'top') {
+        const top10 = await listGallery({ sort: 'top10', limit: topLimit, signal })
+        if (signal?.aborted) return
+        setState({ status: 'ready', circle: [], top10 })
+        return
+      }
+      const circle = await listGallery({ sort: 'circle', limit: 48, signal })
       if (signal?.aborted) return
-      setState({ status: 'ready', circle, top10 })
+      setState({ status: 'ready', circle, top10: [] })
     } catch (err) {
       if (signal?.aborted) return
       const message =
@@ -372,8 +391,11 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             Runway
           </h1>
           <p className={styles.subtitle}>
-            Worldwide rankings of the top fashion looks, based on likes and ratings from the global
-            community. {SCORE_HINT}
+            {tab === 'top'
+              ? `Worldwide rankings of the top fashion looks, based on likes and ratings. ${SCORE_HINT}`
+              : tab === 'feed'
+                ? `Your friends circle feed — looks from you and people you follow. ${SCORE_HINT}`
+                : 'Add friends and manage your private circle.'}
           </p>
         </div>
         <div className={styles.headActions}>
@@ -384,12 +406,12 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             <Sparkles size={16} aria-hidden />
             Start creating
           </button>
-          {tab === 'feed' ? (
+          {tab === 'feed' || tab === 'top' ? (
             <button
               type="button"
               className={styles.refreshBtn}
               onClick={() => void load()}
-              aria-label="Refresh feed"
+              aria-label={tab === 'top' ? 'Refresh Top rankings' : 'Refresh feed'}
             >
               <RefreshCw size={14} aria-hidden />
               Refresh
@@ -408,9 +430,13 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             {pushNotice ||
               (pushOn
                 ? 'On — likes, scores, and comments'
-                : isNativeShell()
-                  ? 'Off — app notifications pending native push setup'
-                  : 'Off until you turn it on (browser / PWA)')}
+                : pushLocked
+                  ? isNativeShell()
+                    ? 'Unavailable until native push is enabled on the server'
+                    : 'Unavailable until push is configured on the server'
+                  : isNativeShell()
+                    ? 'Off — app notifications pending native push setup'
+                    : 'Off until you turn it on (browser / PWA)')}
           </span>
         </div>
         <button
@@ -419,7 +445,8 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
           className={pushOn ? styles.pushToggleOn : styles.pushToggle}
           aria-checked={pushOn}
           aria-label="Push notifications"
-          disabled={pushBusy}
+          aria-disabled={pushLocked && !pushOn}
+          disabled={pushBusy || (pushLocked && !pushOn)}
           data-testid="runway-push-toggle"
           onClick={() => void onTogglePush()}
         />
@@ -435,9 +462,11 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
             className={tab === item.id ? styles.tabActive : styles.tab}
             onClick={() => setTab(item.id)}
             title={item.hint}
+            data-testid={`runway-tab-${item.id}`}
           >
             {item.id === 'friends' ? <Users size={14} aria-hidden /> : null}
-            {item.id === 'feed' ? <Star size={14} aria-hidden /> : null}
+            {item.id === 'feed' ? <Users size={14} aria-hidden /> : null}
+            {item.id === 'top' ? <Crown size={14} aria-hidden /> : null}
             {item.label}
           </button>
         ))}
@@ -470,7 +499,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
               </button>
             }
           />
-        ) : (
+        ) : tab === 'top' ? (
           <div className={styles.feedHub}>
             <div
               className={styles.topLimitRow}
@@ -542,34 +571,54 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
                 </ul>
               )}
             </div>
-
-            <button
-              type="button"
-              className={styles.hubSecondary}
-              onClick={() => setBrowseSheet('circle')}
-              data-testid="runway-open-circle"
-            >
-              <Users size={18} aria-hidden />
-              <span className={styles.hubBtnText}>
-                <strong>My circle</strong>
-                <small>
-                  {state.circle.length === 0
-                    ? 'Quiet for now — publish or add friends'
-                    : `${state.circle.length} look${state.circle.length === 1 ? '' : 's'} from you & friends`}
-                </small>
-              </span>
-            </button>
+          </div>
+        ) : (
+          <div className={styles.feedHub}>
+            <div className={styles.rankBoardHead}>
+              <h2 className={styles.sectionTitle}>
+                <Users size={18} aria-hidden />
+                Friends feed
+              </h2>
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                onClick={() => setBrowseSheet('circle')}
+                data-testid="runway-open-circle"
+              >
+                Open full feed
+              </button>
+            </div>
 
             {state.circle.length === 0 ? (
-              <div className={styles.feedHubHints}>
-                <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
-                  Go to My Looks
-                </button>
-                <button type="button" className={styles.ghostBtn} onClick={() => setTab('friends')}>
-                  Add friends
-                </button>
-              </div>
-            ) : null}
+              <EmptyState
+                title="Your circle is quiet"
+                body="Publish a look or add friends to fill this feed."
+                actions={
+                  <div className={styles.feedHubHints}>
+                    <button type="button" className={styles.ghostBtn} onClick={onOpenLooks}>
+                      Go to My Looks
+                    </button>
+                    <button type="button" className={styles.ghostBtn} onClick={() => setTab('friends')}>
+                      Add friends
+                    </button>
+                  </div>
+                }
+              />
+            ) : (
+              <ul className={styles.rankList} aria-label="Friends feed">
+                {state.circle.map((item) => (
+                  <RunwayCard
+                    key={item.id}
+                    item={item}
+                    layout="stack"
+                    isOwn={Boolean(viewerId && item.user_id === viewerId)}
+                    viewerId={viewerId}
+                    viewerUsername={viewerUsername}
+                    onItemChange={patchItem}
+                  />
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>
