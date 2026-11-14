@@ -147,9 +147,15 @@
   color: #6b7280;
 }
 
-.card:hover,
-.cardSelected:hover {
-  border-color: rgba(214, 51, 132, 0.55);
+/* V2-0002: only fine pointers get hover chrome — sticky :hover on touch mimicked dual selection. */
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    border-color: rgba(214, 51, 132, 0.35);
+  }
+
+  .cardSelected:hover {
+    border-color: var(--fr-pink);
+  }
 }
 
 .card,

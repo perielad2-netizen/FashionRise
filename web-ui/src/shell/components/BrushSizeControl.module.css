@@ -39,7 +39,9 @@
 }
 
 .tip,
-.tipErase {
+.tipErase,
+.tipAirbrush,
+.tipCharcoal {
   display: block;
   border-radius: 999px;
   background: #f8fafc;
@@ -50,6 +52,19 @@
   background: transparent;
   border: 2px solid #9ca3af;
   box-shadow: none;
+}
+
+/* V2-0023: soft footprint for airbrush; grainy ring for charcoal. */
+.tipAirbrush {
+  background: radial-gradient(circle, rgba(248, 250, 252, 0.95) 0%, rgba(248, 250, 252, 0.2) 55%, transparent 72%);
+  box-shadow: none;
+}
+
+.tipCharcoal {
+  box-shadow:
+    0 0 0 1px rgba(214, 51, 132, 0.35),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  filter: contrast(1.05);
 }
 
 .stroke,
@@ -117,4 +132,22 @@
   font-size: 10px;
   opacity: 0.55;
   letter-spacing: 0.02em;
+}
+
+.hintFine {
+  display: none;
+}
+
+.hintCoarse {
+  display: inline;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hintFine {
+    display: inline;
+  }
+
+  .hintCoarse {
+    display: none;
+  }
 }

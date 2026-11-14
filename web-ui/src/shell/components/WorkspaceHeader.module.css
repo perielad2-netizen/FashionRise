@@ -342,25 +342,30 @@
     display: none;
   }
 
+  /* V2-0022: keep autosave status readable beside Stars (was 72px ellipsis). */
   .sessionStatus,
   .statusBusy,
   .statusSaved,
   .statusError {
-    max-width: 72px;
+    max-width: min(42vw, 148px);
     overflow: hidden;
     text-overflow: ellipsis;
   }
 }
 
 @media (max-width: 520px) {
+  /* V2-0004: keep a short Save label so the action stays discoverable. */
   .saveDesignLabel {
-    display: none;
+    display: inline;
+    font-size: 11px;
   }
 
   .saveDesign {
-    width: 40px;
-    padding: 0;
+    width: auto;
+    min-width: 40px;
+    padding: 0 10px;
     justify-content: center;
+    gap: 4px;
   }
 
   .title {

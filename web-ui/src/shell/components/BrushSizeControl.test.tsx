@@ -29,4 +29,23 @@ describe('BrushSizeControl', () => {
     fireEvent.wheel(root, { deltaY: 100 })
     expect(onBrushSize).toHaveBeenCalledWith(2.25)
   })
+
+  it('exposes mobile-safe size hint copy (V2-0027)', () => {
+    render(<BrushSizeControl tool="draw" brushSize={3} opacity={1} onBrushSize={vi.fn()} />)
+    expect(screen.getByTestId('brush-size-hint')).toHaveTextContent(/Drag the slider|Scroll wheel/)
+  })
+
+  it('renders a kind-aware tip preview (V2-0023)', () => {
+    render(
+      <BrushSizeControl
+        tool="draw"
+        brushSize={8}
+        opacity={0.8}
+        brushKind="airbrush"
+        brushColor="#c2185b"
+        onBrushSize={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('brush-tip-preview').className).toMatch(/tipAirbrush/)
+  })
 })

@@ -7,6 +7,7 @@ import {
   snapBrushSizePx,
   type ToolKind,
 } from '@/lib/strokes'
+import type { BrushKind } from '@/lib/professionalBrushes'
 import styles from './BrushSizeControl.module.css'
 
 type Props = {
@@ -18,6 +19,9 @@ type Props = {
   tone?: 'dark' | 'light'
   /** Show a circular tip preview (default) in addition to the stroke strip. */
   showTip?: boolean
+  /** V2-0023: kind-aware tip preview. */
+  brushKind?: BrushKind
+  brushColor?: string
 }
 
 /**
@@ -31,6 +35,8 @@ export function BrushSizeControl({
   onBrushSize,
   tone = 'dark',
   showTip = true,
+  brushKind = 'tapered',
+  brushColor = '#f8fafc',
 }: Props) {
   const inputId = useId()
   const [draft, setDraft] = useState(formatBrushSizePx(brushSize))
@@ -74,12 +80,26 @@ export function BrushSizeControl({
         {showTip ? (
           <div className={styles.tipWell}>
             <span
-              className={erase ? styles.tipErase : styles.tip}
+              className={
+                erase
+                  ? styles.tipErase
+                  : brushKind === 'airbrush'
+                    ? styles.tipAirbrush
+                    : brushKind === 'charcoal'
+                      ? styles.tipCharcoal
+                      : styles.tip
+              }
               style={{
                 width: tipPx,
                 height: tipPx,
-                opacity: erase ? 1 : opacity,
+                opacity: erase ? 1 : Math.max(0.35, opacity),
+                background: erase
+                  ? undefined
+                  : brushKind === 'airbrush'
+                    ? undefined
+                    : brushColor,
               }}
+              data-testid="brush-tip-preview"
             />
           </div>
         ) : null}
@@ -137,7 +157,11 @@ export function BrushSizeControl({
         aria-valuetext={`${formatBrushSizePx(brushSize)} pixels`}
         onChange={(e) => onBrushSize(Number(e.target.value))}
       />
-      <p className={styles.hint}>Scroll wheel over this control to nudge size</p>
+      <p className={styles.hint} data-testid="brush-size-hint">
+        {/* V2-0027: wheel copy only where a fine pointer exists. */}
+        <span className={styles.hintFine}>Scroll wheel over this control to nudge size</span>
+        <span className={styles.hintCoarse}>Drag the slider or type an exact size</span>
+      </p>
     </div>
   )
 }
