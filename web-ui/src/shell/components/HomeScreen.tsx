@@ -72,14 +72,16 @@ export function HomeScreen({ username, onNavigate }: Props) {
           <h1 id="home-brand" className={styles.brand}>
             Fashion<span>Rise</span>
           </h1>
-          <p className={styles.tagline}>Dream + Sketch + Create</p>
+          <p className={styles.tagline}>Sketch a garment. Turn it into a Magic look.</p>
           <p className={styles.lead}>
-            Your studio hub — jump into a blank page, or pick up designs, looks, and models.
+            Draw on a fashion figure in the studio, then generate an AI Magic look from your
+            sketch — or jump back into saved designs, looks, and models.
           </p>
           <button
             type="button"
             className={styles.primaryCta}
             onClick={() => onNavigate('create')}
+            data-testid="home-start-creating"
           >
             <Sparkles size={18} aria-hidden />
             Start creating
