@@ -679,6 +679,7 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               referenceUrl={editor.referenceUrl}
               referenceOpacity={editor.referenceOpacity}
               onStrokeComplete={editor.onStrokeComplete}
+              onRectEraseComplete={editor.onRectEraseComplete}
               onFillComplete={editor.onFillComplete}
               onFillError={editor.onFillError}
               fillCloseSmallGaps={editor.fillCloseSmallGaps}

@@ -120,7 +120,8 @@ export function BrushControls({
   onBrushEnginePatch,
 }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const title = tool === 'erase' ? 'Eraser' : 'Brush'
+  const title =
+    tool === 'erase' ? 'Eraser' : tool === 'rectErase' ? 'Rectangular eraser' : 'Brush'
   const kind = brushEngine?.brushKind ?? 'tapered'
   const layer = brushEngine?.logicalLayer ?? 'ink'
 

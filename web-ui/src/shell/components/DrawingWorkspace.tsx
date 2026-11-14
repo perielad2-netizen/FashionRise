@@ -2,6 +2,7 @@ import { Expand } from 'lucide-react'
 import { DrawingCanvas } from '@/components/studio/DrawingCanvas'
 import type { FillOp, FillStyle } from '@/lib/fills'
 import type { BrushEngineState } from '@/lib/professionalBrushes'
+import type { PaperRect } from '@/lib/rectErase'
 import type { Stroke, ToolKind } from '@/lib/strokes'
 import type { StudioPaperSide } from '@/lib/studioSideArtwork'
 import type { ViewportState } from '@/lib/viewportTransform'
@@ -20,6 +21,7 @@ type Props = {
   referenceUrl: string | null
   referenceOpacity: number
   onStrokeComplete: (stroke: Stroke) => void
+  onRectEraseComplete?: (rect: PaperRect) => void
   onFillComplete: (fill: FillOp) => void
   onFillError: (
     message: string,
@@ -61,6 +63,7 @@ export function DrawingWorkspace({
   referenceUrl,
   referenceOpacity,
   onStrokeComplete,
+  onRectEraseComplete,
   onFillComplete,
   onFillError,
   fillCloseSmallGaps = false,
@@ -125,6 +128,7 @@ export function DrawingWorkspace({
           referenceUrl={referenceUrl}
           referenceOpacity={referenceOpacity}
           onStrokeComplete={onStrokeComplete}
+          onRectEraseComplete={onRectEraseComplete}
           onFillComplete={onFillComplete}
           onFillError={onFillError}
           fillCloseSmallGaps={fillCloseSmallGaps}
