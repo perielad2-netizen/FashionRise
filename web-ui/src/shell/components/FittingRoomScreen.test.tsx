@@ -77,16 +77,15 @@ describe('FittingRoomScreen', () => {
     expect(screen.getByText(/not enabled in this build/i)).toBeInTheDocument()
   })
 
-  it('shows flat 20 Stars cost and try-on disabled until consent + assets', async () => {
+  it('shows flat 20 Stars on try-on and stays disabled until consent + assets', async () => {
     render(<FittingRoomScreen userId="u1" onBackToStudio={() => undefined} />)
     await waitFor(() => expect(mocks.fetchFittingRoomPreflight).toHaveBeenCalled())
     expect(screen.getByTestId('fitting-room-screen')).toBeInTheDocument()
-    expect(screen.getByTestId('fitting-room-stars-cost')).toHaveTextContent(/20 Stars/i)
-    expect(screen.getAllByText(/not a fit guarantee/i).length).toBeGreaterThan(0)
+    expect(screen.queryByTestId('fitting-room-stars-cost')).not.toBeInTheDocument()
     const tryBtn = screen.getByTestId('fitting-room-try-on')
     expect(tryBtn).toBeDisabled()
     expect(tryBtn).toHaveTextContent(/−20 Stars/i)
-    await userEvent.click(screen.getByRole('checkbox', { name: /Preview only/i }))
+    await userEvent.click(screen.getByRole('checkbox', { name: /Preview only|visual concept preview/i }))
     expect(tryBtn).toBeDisabled()
   })
 })

@@ -470,15 +470,6 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         </p>
       </header>
 
-      <p className={styles.disclaimer} role="note">
-        {preflight?.preview_disclaimer ||
-          'Concept preview only — not a fit guarantee. Results may differ from real garments.'}
-      </p>
-      <p className={styles.starsNote} data-testid="fitting-room-stars-cost">
-        {preflight?.stars_cost_note ||
-          `${starsCost} Stars per successful Fitting Room preview — flat rate whether the clothing image shows one garment or several.`}
-      </p>
-
       {serverOff ? (
         <p className={`${styles.status} ${styles.statusError}`} role="status">
           Fitting Room is disabled on this server. Ask an operator to enable it for testing.
