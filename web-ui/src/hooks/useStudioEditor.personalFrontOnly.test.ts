@@ -23,6 +23,13 @@ describe('useStudioEditor personal FRONT-only (V2-0034)', () => {
     const body = pinFn.slice(0, pinFn.indexOf('requestPersonalCroquisPin'))
     expect(body).toMatch(/activeSide: 'front'/)
     expect(body.match(/activeSide: 'front'/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    // Same-pin early return still coerces Front (does not leave Back stuck).
+    expect(body).toMatch(/activeSide !== 'front'/)
+    expect(body).toMatch(/My Model loaded on Front/)
+  })
+
+  it('Flip chrome uses canOpenBackPaper so personal hides FRONT/BACK', () => {
+    expect(SRC).toMatch(/const rearAvailable = canOpenBackPaper\(model\)/)
   })
 
   it('applyDocument coerces personal Back drafts to Front without clearing bags', () => {
@@ -33,5 +40,12 @@ describe('useStudioEditor personal FRONT-only (V2-0034)', () => {
 
   it('changeActiveSide still blocks Back when canOpenBackPaper is false', () => {
     expect(SRC).toMatch(/if \(side === 'back' && !canOpenBackPaper\(model\)\) return/)
+  })
+
+  it('requestPersonalCroquisPin same-pin still applies Front coerce (no silent return)', () => {
+    const req = SRC.slice(SRC.indexOf('const requestPersonalCroquisPin'))
+    const body = req.slice(0, 800)
+    expect(body).toMatch(/Same pin: still coerce Front/)
+    expect(body).toMatch(/applyPersonalCroquisPin\(croquisId, version, false\)/)
   })
 })
