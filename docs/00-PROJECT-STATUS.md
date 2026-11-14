@@ -3,20 +3,51 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch E COMPLETE** — all Batch E implementation PRs merged. V2-0031 gallery activation still pending authorized marketing images. PR #303 still open; no store/push/billing enable.)
+**Last updated:** 2026-11-14 (**iOS TestFlight RC** — Batch E complete; Codemagic iOS App Store IPA preflight clean on `main` `bd87bfe9`. Owner must start **one** manual Codemagic build. PR #303 still open; push/billing/store OFF.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
+
+## iOS TestFlight release candidate (2026-11-14) — PREFLIGHT CLEAN · BUILD NOT STARTED
+
+| Status | Detail |
+|---|---|
+| Tip | `main` **`bd87bfe99ecceb2d0f4f5d2b3a68b33753ae9e7f`** (`bd87bfe9`) — includes Batch E complete (#315) |
+| Workflow | `fashionrise-ios-app-store` · UI **FashionRise iOS (App Store IPA)** · `codemagic.yaml` assert **ok** |
+| Version | Marketing **1.0** · `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` (fail closed if ASC ahead) |
+| Signing / publish | `ios_signing` app_store · ASC integration **`codemagic access`** · upload IPA only · `submit_to_testflight: false` · `submit_to_app_store: false` |
+| Native API | `.env.native` → `https://fashionrise.app/api/v1` |
+| Gates | **#303 unmerged** · native push not enabled · public `IAP_APPLE_PURCHASING/CREDIT` remain OFF · sandbox tester allowlist preserved (ops-side) |
+| Agent trigger | **No Codemagic API token in this environment** — cannot start the build from the agent |
+| Codemagic result | **Not started** |
+| Stop line | No FE/BE deploy · no public IAP flip · no App Review submit · do not claim TestFlight device QA until a real device is tested |
+| **Exact next step (owner)** | Start **one** Codemagic build on `main` @ `bd87bfe9` (steps below), then wait ASC **Ready to Test** and run the real-device checklist |
+
+### Codemagic manual start (owner) — exactly one build
+
+1. Open [Codemagic](https://codemagic.io/apps) → FashionRise.
+2. Branch **`main`** — confirm tip **`bd87bfe9…`** (Batch E complete).
+3. Workflow **FashionRise iOS (App Store IPA)** (`fashionrise-ios-app-store`).
+4. Start **once**. Logs must show `CFBundleVersion = PROJECT_BUILD_NUMBER + 100` and exactly one `App.ipa` uploaded to ASC.
+5. App Store Connect → wait **Processing → Ready to Test**. Do **not** start a second build.
+
+### Remaining TestFlight / Stars sandbox checklist (real device)
+
+1. Install TestFlight build on a real iPhone (do not mark validation passed until this).
+2. Confirm production API session (`fashionrise.app`) · Magic / Studio basic smoke.
+3. Stars shop: public gates OFF for normal accounts; allowlisted Sandbox tester can Buy + credit (existing `IAP_APPLE_SANDBOX_TESTER_EMAILS` config).
+4. Sandbox buy `stars_50` → balance +50 → spend → duplicate confirm → interrupted recovery.
+5. Keep #303 unmerged; do not enable native push or public purchasing/credit.
 
 ## QA V2 Batch E (2026-11-14) — COMPLETE
 
 | Status | Detail |
 |---|---|
-| Baseline | `main` includes #314 (`7b5334b1`) |
-| Merged | **V2-0030** #309 · **V2-0032** #310 · **V2-0026** #311 · **V2-0031** #312 · **V2-0021** #313 · **V2-0010** #314 |
+| Baseline | `main` includes #314 / #315 |
+| Merged | **V2-0030** #309 · **V2-0032** #310 · **V2-0026** #311 · **V2-0031** #312 · **V2-0021** #313 · **V2-0010** #314 · docs #315 |
 | Planning | #308 |
 | Gallery note | V2-0031 UI shipped; `AUTHORIZED_HOME_EXAMPLES` empty — **activation pending** authorized marketing pairs |
 | Gates | Push / Stars billing / store submit / #303 merge — **unchanged (OFF / open separately)** |
-| **Exact next step** | Master-plan checkpoint with PM — do not start new Batch E work; decide App Store / #303 / gallery assets next |
+| **Exact next step** | Owner starts one Codemagic iOS IPA (TestFlight RC) — see section above |
 
 ## QA V2 Batch D (2026-11-14) — MERGED #307
 
