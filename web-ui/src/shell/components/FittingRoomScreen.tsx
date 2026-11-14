@@ -632,9 +632,6 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
                   ? `Retry (−${starsCost} Stars)`
                   : `Try on (−${starsCost} Stars)`}
             </button>
-            <button type="button" className={styles.btnGhost} onClick={onBackToStudio}>
-              Back to Studio
-            </button>
           </div>
           {phase === 'running' ? (
             <p className={`${styles.status} ${styles.loadingPulse}`} role="status">
