@@ -133,7 +133,7 @@ export function BrushControls({
     >
       {variant === 'sheet' ? <p className={styles.title}>{title}</p> : null}
 
-      {tool !== 'erase' && onBrushKind ? (
+      {tool !== 'erase' && tool !== 'rectErase' && onBrushKind ? (
         <div className={styles.kindGrid} role="radiogroup" aria-label="Brush type">
           {BRUSH_OPTIONS.map((opt) => {
             const selected = kind === opt.id
@@ -157,27 +157,32 @@ export function BrushControls({
       ) : null}
 
       {onBrushEnginePatch ? (
-        <div className={styles.layerRow} role="radiogroup" aria-label="Paint layer">
-          <span className={styles.layerLabel}>Layer</span>
-          {LAYER_OPTIONS.map((opt) => {
-            const selected = layer === opt.id
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                className={selected ? styles.layerActive : styles.layerBtn}
-                onClick={() => onBrushEnginePatch({ logicalLayer: opt.id })}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
+        <div className={styles.layerBlock}>
+          <div className={styles.layerRow} role="radiogroup" aria-label="Paint layer">
+            <span className={styles.layerLabel}>Layer</span>
+            {LAYER_OPTIONS.map((opt) => {
+              const selected = layer === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className={selected ? styles.layerActive : styles.layerBtn}
+                  onClick={() => onBrushEnginePatch({ logicalLayer: opt.id })}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          <p className={styles.settingHint} data-testid="brush-layer-hint">
+            Ink, Shadows, and Highlights stay on separate stacks.
+          </p>
         </div>
       ) : null}
 
-      {tool !== 'erase' && (onBrushColor || onOpenMaterials) ? (
+      {tool !== 'erase' && tool !== 'rectErase' && (onBrushColor || onOpenMaterials) ? (
         <div className={styles.colorRow} data-testid="brush-color-row">
           <span>Color</span>
           {onBrushColor ? (
@@ -216,6 +221,9 @@ export function BrushControls({
         <span>Opacity</span>
         <strong>{Math.round(opacity * 100)}%</strong>
       </div>
+      <p className={styles.settingHint} data-testid="brush-opacity-hint">
+        How see-through each new stroke is.
+      </p>
       <input
         className={styles.slider}
         type="range"
@@ -224,26 +232,33 @@ export function BrushControls({
         step={1}
         value={Math.round(opacity * 100)}
         aria-label="Brush opacity"
-        disabled={tool === 'erase'}
+        disabled={tool === 'erase' || tool === 'rectErase'}
         onChange={(e) => onOpacity(Number(e.target.value) / 100)}
       />
 
-      {tool !== 'erase' && brushEngine && onBrushEnginePatch ? (
+      {tool !== 'erase' && tool !== 'rectErase' && brushEngine && onBrushEnginePatch ? (
         <div className={styles.advanced}>
           <button
             type="button"
             className={styles.advancedToggle}
             aria-expanded={advancedOpen}
             onClick={() => setAdvancedOpen((v) => !v)}
+            data-testid="brush-advanced-toggle"
           >
             {advancedOpen ? 'Hide advanced' : 'Advanced'}
           </button>
           {advancedOpen ? (
-            <div className={styles.advancedBody}>
+            <div className={styles.advancedBody} data-testid="brush-advanced-body">
+              <p className={styles.settingHint} data-testid="brush-advanced-intro">
+                These change how new stamps land — they do not rewrite strokes you already drew.
+              </p>
               <label className={styles.advRow}>
                 <span>Flow</span>
                 <strong>{Math.round(brushEngine.flow * 100)}%</strong>
               </label>
+              <p className={styles.settingHint} data-testid="brush-flow-hint">
+                How much paint each stamp lays down as you move.
+              </p>
               <input
                 className={styles.slider}
                 type="range"
@@ -257,6 +272,11 @@ export function BrushControls({
                 <span>Softness</span>
                 <strong>{Math.round(brushEngine.softness * 100)}%</strong>
               </label>
+              <p className={styles.settingHint} data-testid="brush-softness-hint">
+                {kind === 'tapered'
+                  ? 'Softness applies to Charcoal and Airbrush only.'
+                  : 'How soft the stamp edge is (higher = softer fade).'}
+              </p>
               <input
                 className={styles.slider}
                 type="range"
@@ -272,9 +292,13 @@ export function BrushControls({
                 <strong>{Math.round(brushEngine.textureIntensity * 100)}%</strong>
               </label>
               {kind !== 'charcoal' ? (
-                <p className={styles.textureHint}>Texture applies to Charcoal only.</p>
+                <p className={styles.settingHint} data-testid="brush-texture-hint">
+                  Texture applies to Charcoal only.
+                </p>
               ) : (
-                <p className={styles.textureHint}>0% = smooth grain · 100% = heavy tooth</p>
+                <p className={styles.settingHint} data-testid="brush-texture-hint">
+                  0% = smooth grain · 100% = heavy tooth
+                </p>
               )}
               <input
                 className={`${styles.slider} ${kind === 'charcoal' ? styles.sliderAccent : ''}`}
@@ -305,6 +329,9 @@ export function BrushControls({
                   ))}
                 </select>
               </label>
+              <p className={styles.settingHint} data-testid="brush-blend-hint">
+                How new strokes mix with paint already on the canvas.
+              </p>
               <label className={styles.checkRow}>
                 <input
                   type="checkbox"
