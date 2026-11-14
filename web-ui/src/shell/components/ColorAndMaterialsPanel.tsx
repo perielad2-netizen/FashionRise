@@ -496,19 +496,29 @@ export function ColorAndMaterialsPanel({
             )}
 
             {fillStyle.kind === 'uploaded-fabric' ? (
-              <label className={styles.scaleRow}>
-                <span>Pattern scale</span>
-                <input
-                  type="range"
-                  min={UPLOADED_FABRIC_SCALE_MIN}
-                  max={UPLOADED_FABRIC_SCALE_MAX}
-                  step={0.05}
-                  value={scale}
-                  aria-label="Uploaded fabric pattern scale"
-                  onChange={(e) => onScaleChange(Number(e.target.value))}
-                />
-                <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
-              </label>
+              <div className={styles.scaleBlock}>
+                <label className={styles.scaleRow}>
+                  <span>Pattern scale</span>
+                  <input
+                    type="range"
+                    min={UPLOADED_FABRIC_SCALE_MIN}
+                    max={UPLOADED_FABRIC_SCALE_MAX}
+                    step={0.05}
+                    value={scale}
+                    aria-label="Uploaded fabric pattern scale"
+                    onChange={(e) => onScaleChange(Number(e.target.value))}
+                  />
+                  <span className={styles.scaleValue}>{scale.toFixed(2)}×</span>
+                </label>
+                {/* V2-0028 */}
+                <p className={styles.scaleHint}>
+                  Higher = larger fabric repeats (fewer tiles). Lower = finer, denser pattern.
+                </p>
+                <div className={styles.scaleEnds} aria-hidden>
+                  <span>Fine</span>
+                  <span>Coarse</span>
+                </div>
+              </div>
             ) : null}
           </section>
         ) : null}

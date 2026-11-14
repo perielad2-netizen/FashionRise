@@ -8,11 +8,15 @@ type Props = {
   tool: ToolKind
   brushSize: number
   opacity: number
+  /** Current stroke color (V2-0029 — exposed on brush sheet). */
+  brushColor?: string
   brushEngine?: BrushEngineState
   /** `flat` embeds into SettingsInspector without the floating sheet chrome. */
   variant?: 'sheet' | 'flat'
   onBrushSize: (px: number) => void
   onOpacity: (value: number) => void
+  onBrushColor?: (hex: string) => void
+  onOpenMaterials?: () => void
   onBrushKind?: (kind: BrushKind) => void
   onBrushEnginePatch?: (patch: Partial<BrushEngineState>) => void
 }
@@ -94,7 +98,7 @@ function BrushPreview({ kind }: { kind: BrushKind }) {
         stroke="currentColor"
         strokeWidth={kind === 'tapered' ? 3.5 : kind === 'charcoal' ? 0 : 8}
         strokeLinecap="round"
-        opacity={kind === 'airbrush' ? 0.55 : kind === 'charcoal' ? 0 : 0.9}
+        opacity={kind === 'airbrush' ? 0.72 : kind === 'charcoal' ? 0 : 0.9}
       />
     </svg>
   )
@@ -105,10 +109,13 @@ export function BrushControls({
   tool,
   brushSize,
   opacity,
+  brushColor = '#1c1c1e',
   brushEngine,
   variant = 'sheet',
   onBrushSize,
   onOpacity,
+  onBrushColor,
+  onOpenMaterials,
   onBrushKind,
   onBrushEnginePatch,
 }: Props) {
@@ -169,10 +176,38 @@ export function BrushControls({
         </div>
       ) : null}
 
+      {tool !== 'erase' && (onBrushColor || onOpenMaterials) ? (
+        <div className={styles.colorRow} data-testid="brush-color-row">
+          <span>Color</span>
+          {onBrushColor ? (
+            <input
+              type="color"
+              className={styles.colorSwatch}
+              value={/^#[0-9a-fA-F]{6}$/.test(brushColor) ? brushColor : '#1c1c1e'}
+              aria-label="Brush color"
+              onChange={(e) => onBrushColor(e.target.value)}
+            />
+          ) : (
+            <span
+              className={styles.colorSwatchReadonly}
+              style={{ background: brushColor }}
+              aria-hidden
+            />
+          )}
+          {onOpenMaterials ? (
+            <button type="button" className={styles.colorMore} onClick={onOpenMaterials}>
+              Materials
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <BrushSizeControl
         tool={tool}
         brushSize={brushSize}
         opacity={opacity}
+        brushKind={kind}
+        brushColor={brushColor}
         onBrushSize={onBrushSize}
         tone="light"
       />
@@ -235,8 +270,13 @@ export function BrushControls({
                 <span>Texture</span>
                 <strong>{Math.round(brushEngine.textureIntensity * 100)}%</strong>
               </label>
+              {kind !== 'charcoal' ? (
+                <p className={styles.textureHint}>Texture applies to Charcoal only.</p>
+              ) : (
+                <p className={styles.textureHint}>0% = smooth grain · 100% = heavy tooth</p>
+              )}
               <input
-                className={styles.slider}
+                className={`${styles.slider} ${kind === 'charcoal' ? styles.sliderAccent : ''}`}
                 type="range"
                 min={0}
                 max={100}

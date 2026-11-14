@@ -30,7 +30,7 @@ type Props = {
   onAccountMenuOpenChange?: (open: boolean) => void
 }
 
-type Panel = 'about' | 'contact' | 'delete' | 'stars' | null
+type Panel = 'settings' | 'about' | 'contact' | 'delete' | 'stars' | null
 
 function opsFor(balance: number | null, unlimited: boolean, cost: number): string {
   if (unlimited) return 'Unlimited'
@@ -248,17 +248,72 @@ export function GlobalHeader({
         <button
           type="button"
           className={styles.settingsBtn}
-          aria-label="Settings and About"
-          title="Settings / About"
+          aria-label="Settings"
+          title="Settings"
+          data-testid="global-settings"
           onClick={() => {
             setMenuOpen(false)
             setSentHint(null)
-            setPanel('about')
+            setPanel('settings')
           }}
         >
           <Settings size={16} />
         </button>
       </div>
+
+      {panel === 'settings' ? (
+        <div className={styles.aboutScrim} role="presentation" onClick={closePanel}>
+          <div
+            className={styles.aboutCard}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fr-settings-title"
+            data-testid="global-settings-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.aboutHeader}>
+              <h2 id="fr-settings-title">Settings</h2>
+              <button
+                type="button"
+                className={styles.aboutClose}
+                aria-label="Close settings"
+                onClick={closePanel}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className={styles.aboutBody}>
+              App information and account helpers. Studio canvas preferences live in Studio → More →
+              Settings.
+            </p>
+            <div className={styles.settingsList}>
+              <button
+                type="button"
+                className={styles.settingsItem}
+                onClick={() => setPanel('about')}
+              >
+                About FashionRise
+              </button>
+              <a className={styles.settingsItem} href="/privacy">
+                Privacy Policy
+              </a>
+              <button type="button" className={styles.settingsItem} onClick={openContact}>
+                Contact us
+              </button>
+              <button
+                type="button"
+                className={styles.settingsItem}
+                onClick={() => {
+                  void reload()
+                  setPanel('stars')
+                }}
+              >
+                My Stars &amp; Billing
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {panel === 'stars' ? (
         <div className={styles.aboutScrim} role="presentation" onClick={closePanel}>

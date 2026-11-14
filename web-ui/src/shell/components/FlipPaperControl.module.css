@@ -55,9 +55,12 @@
   font-size: 10px;
 }
 
-.seg:hover {
-  background: rgba(214, 51, 132, 0.08);
-  color: #9d174d;
+/* V2-0003: avoid sticky hover looking like a second active side on touch. */
+@media (hover: hover) and (pointer: fine) {
+  .seg:hover {
+    background: rgba(214, 51, 132, 0.08);
+    color: #9d174d;
+  }
 }
 
 .seg:focus-visible,
@@ -74,6 +77,10 @@
   background: rgba(214, 51, 132, 0.16);
   color: #9d174d;
   box-shadow: inset 0 0 0 1px rgba(214, 51, 132, 0.28);
+}
+
+.segActive:active {
+  transform: none;
 }
 
 .segDisabled {

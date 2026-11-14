@@ -80,7 +80,10 @@ export function SettingsInspector({ dimmed, onToggleDim }: Props) {
               </div>
               <div className={styles.shortcut}>
                 <span>Brush size</span>
-                <span className={styles.kbd}>Alt + wheel</span>
+                <span className={styles.kbd}>
+                  <span className={styles.kbdFine}>Alt + wheel</span>
+                  <span className={styles.kbdCoarse}>Size slider</span>
+                </span>
               </div>
               <div className={styles.shortcut}>
                 <span>Undo</span>

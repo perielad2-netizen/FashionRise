@@ -160,7 +160,12 @@ function renderDraftBrushImage(
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
   ctx.translate(-PAPER_ORIGIN_X, -PAPER_ORIGIN_Y)
-  paintProfessionalDrawStroke(ctx, stroke, {
+  // V2-0024: boost airbrush draft opacity so the live preview stays visible while drawing.
+  const draftStroke =
+    kind === 'airbrush'
+      ? { ...stroke, opacity: Math.min(1, Math.max(0.22, stroke.opacity) * 1.35) }
+      : stroke
+  paintProfessionalDrawStroke(ctx, draftStroke, {
     garmentAlpha: stroke.garmentMask ? garmentAlpha : null,
   })
   const img = new window.Image()

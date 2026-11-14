@@ -123,6 +123,58 @@
   margin-bottom: 8px;
 }
 
+.sliderAccent {
+  accent-color: var(--fr-pink, #d63384);
+}
+
+.sliderAccent:disabled {
+  opacity: 0.45;
+}
+
+.textureHint {
+  margin: 0 0 4px;
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.colorRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.colorSwatch {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.colorSwatchReadonly {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+}
+
+.colorMore {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
 .advanced {
   margin-top: 8px;
   border-top: 1px solid rgba(15, 23, 42, 0.08);

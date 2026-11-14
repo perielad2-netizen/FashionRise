@@ -753,13 +753,17 @@ function paintAirbrush(ctx: Ctx2d, stroke: Stroke): void {
   for (const s of stamps) {
     const press = 0.4 + s.p * 0.6
     const r = radius * (0.75 + press * 0.35)
-    const alpha = Math.min(1, stroke.opacity * flow * (0.18 + press * 0.28) * (0.55 + softness * 0.45))
+    // V2-0024: slightly stronger stamp presence so live draft doesn’t vanish on soft airbrush.
+    const alpha = Math.min(
+      1,
+      stroke.opacity * flow * (0.28 + press * 0.34) * (0.62 + softness * 0.42),
+    )
     const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r)
     const mid = 0.35 + softness * 0.4
     const edge = hexWithAlpha(stroke.color, 0)
     const core = hexWithAlpha(stroke.color, 1)
     g.addColorStop(0, core)
-    g.addColorStop(Math.min(0.92, mid), hexWithAlpha(stroke.color, 0.55))
+    g.addColorStop(Math.min(0.92, mid), hexWithAlpha(stroke.color, 0.62))
     g.addColorStop(1, edge)
     ctx.globalAlpha = alpha
     ctx.fillStyle = g

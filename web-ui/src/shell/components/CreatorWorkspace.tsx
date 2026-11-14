@@ -839,9 +839,12 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
               tool={editor.tool}
               brushSize={editor.brushSize}
               opacity={editor.opacity}
+              brushColor={editor.color}
               brushEngine={editor.brushEngine}
               onBrushSize={editor.setBrushSizePx}
               onOpacity={editor.setBrushOpacity}
+              onBrushColor={editor.setColor}
+              onOpenMaterials={() => setDock('materials')}
               onBrushKind={editor.setBrushKind}
               onBrushEnginePatch={editor.patchBrushEngine}
             />

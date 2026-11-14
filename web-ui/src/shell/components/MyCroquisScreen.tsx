@@ -212,7 +212,9 @@ export function MyCroquisScreen({
       // Stay on My Models gallery after Create New so the owner can preview
       // and choose Use in Studio explicitly (#154). Do not auto-navigate away.
       setWizardOpen(false)
-      setNotice('New model ready — preview it here, then Use in Studio when you want.')
+      setNotice(
+        'New model ready — creating does not select it in Studio. Preview here, then tap Use in Studio.',
+      )
       reload()
     },
     [reload],

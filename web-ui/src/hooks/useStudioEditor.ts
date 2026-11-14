@@ -18,6 +18,7 @@ import {
   documentHasAnyInk,
   patchActiveSideInk,
   canOpenBackPaper,
+  displaySideForModel,
   rearReferenceAvailable,
   referenceUrlForModelSide,
   sideStateFromDocument,
@@ -510,13 +511,20 @@ export function useStudioEditor() {
     historyFront.current = new StrokeHistory()
     historyBack.current = new StrokeHistory()
     const sides = sideStateFromDocument(doc)
+    // V2-0034: personal drafts may store activeSide=back from an older session —
+    // show Front without wiping preserved Back artwork bags.
+    const viewSide = displaySideForModel(doc.model, sides.activeSide)
     // Avoid a spurious revision bump when React state mirrors an already-committed doc.
     skipNextAutosaveRef.current = true
-    setActiveSide(sides.activeSide)
+    setActiveSide(viewSide)
     setFrontStrokes(sides.frontStrokes)
     setFrontFills(sides.frontFills)
     setBackStrokes(sides.backStrokes)
     setBackFills(sides.backFills)
+    // Coerce persisted view preference for personal without dropping Back bags.
+    if (viewSide !== sides.activeSide) {
+      authoritativeDocRef.current = { ...doc, activeSide: viewSide }
+    }
     setModelState(doc.model)
     setCustomUrl(doc.customReferenceUrl)
     setCustomKey(doc.customReferenceKey)
@@ -930,9 +938,8 @@ export function useStudioEditor() {
   const brushSize = brushSizePx
   const sizeId = nearestBrushSizeId(brushSizePx)
 
-  // Canvas Flip control only when a published rear croquis image exists.
-  // Personal / atelier-without-rear stay Front-only in the paper chrome.
-  const rearAvailable = rearReferenceAvailable(model)
+  // Canvas Flip only when Back paper is allowed (V2-0034: personal excluded).
+  const rearAvailable = canOpenBackPaper(model)
   const personalUnderlayMatchesPin = useMemo(() => {
     if (model !== 'personal' || !personalObjectUrl) return false
     return underlayMatchesPin(personalUnderlayIdentity, {
@@ -3983,13 +3990,25 @@ export function useStudioEditor() {
     (croquisId: string, version: number, clearStrokes: boolean) => {
       setPersonalPinPrompt(null)
       setCroquisWizardOpen(false)
-      // Already on this exact accepted pin — no document change.
+      // Already on this exact accepted pin — still coerce Front + ensure underlay (V2-0034).
       if (
         model === 'personal' &&
         personalCroquisId === croquisId &&
         personalCroquisVersion === version &&
         !(clearStrokes && designHasInk())
       ) {
+        if (activeSide !== 'front') {
+          skipNextAutosaveRef.current = true
+          setActiveSide('front')
+          commitFromEditor({ activeSide: 'front' })
+          publishStudioNotice('Switched to Front — My Model is front-only.')
+        }
+        // Re-fetch underlay if it never painted (e.g. stuck after create → Use in Studio).
+        if (!personalObjectUrl || personalUnavailable) {
+          setPersonalUnavailable(false)
+          personalLoadGenRef.current += 1
+          setPersonalUnderlayReloadToken((n) => n + 1)
+        }
         return
       }
       // Invalidate any prior underlay synchronously so A→B never paints A's PNG as B.
@@ -4000,8 +4019,9 @@ export function useStudioEditor() {
       setPersonalUnavailable(false)
       setPersonalCroquisId(croquisId)
       setPersonalCroquisVersion(version)
-      // Keep Back accessible (blank underlay) — do not force Front solely because personal
-      // has no rear croquis image. Clear-strokes path still resets both bags.
+      // V2-0034: personal is FRONT-only — always land on Front (Back bags preserved unless clearing).
+      setActiveSide('front')
+      setPersonalUnderlayReloadToken((n) => n + 1)
       if (clearStrokes && designHasInk()) {
         historyFront.current.push(artwork())
         historyBack.current.push(artwork())
@@ -4011,8 +4031,6 @@ export function useStudioEditor() {
         setBackFills([])
         syncHistoryFlags()
         setModelState('personal')
-        const nextSide = activeSide === 'back' && canOpenBackPaper('personal') ? 'back' : 'front'
-        if (activeSide !== nextSide) setActiveSide(nextSide)
         commitFromEditor({
           model: 'personal',
           personalCroquisId: croquisId,
@@ -4021,7 +4039,7 @@ export function useStudioEditor() {
           frontFills: [],
           backStrokes: [],
           backFills: [],
-          activeSide: nextSide,
+          activeSide: 'front',
         })
       } else {
         setModelState('personal')
@@ -4029,9 +4047,10 @@ export function useStudioEditor() {
           model: 'personal',
           personalCroquisId: croquisId,
           personalCroquisVersion: version,
-          activeSide,
+          activeSide: 'front',
         })
       }
+      publishStudioNotice('My Model loaded on Front.')
     },
     [
       activeSide,
@@ -4041,6 +4060,9 @@ export function useStudioEditor() {
       model,
       personalCroquisId,
       personalCroquisVersion,
+      personalObjectUrl,
+      personalUnavailable,
+      publishStudioNotice,
       syncHistoryFlags,
     ],
   )
@@ -4048,13 +4070,13 @@ export function useStudioEditor() {
   /** Select a personal croquis pin — prompt Keep/Clear when the canvas already has ink. */
   const requestPersonalCroquisPin = useCallback(
     (croquisId: string, version: number) => {
+      // Same pin: still coerce Front + refresh underlay (V2-0034) — no Keep/Clear prompt.
       if (
         model === 'personal' &&
         personalCroquisId === croquisId &&
         personalCroquisVersion === version
       ) {
-        setCroquisWizardOpen(false)
-        setPersonalPinPrompt(null)
+        applyPersonalCroquisPin(croquisId, version, false)
         return
       }
       if (designHasInk()) {

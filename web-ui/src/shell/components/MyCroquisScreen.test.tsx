@@ -165,7 +165,9 @@ describe('MyCroquisScreen', () => {
     expect(screen.getByRole('dialog', { name: /Create Model/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Accept new' }))
     expect(onUse).not.toHaveBeenCalled()
-    expect(await screen.findByText(/New model ready/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/creating does not select it in Studio/i),
+    ).toBeInTheDocument()
     expect(await screen.findByText('New croquis')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'My Models' })).toBeInTheDocument()
   })

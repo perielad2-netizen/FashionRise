@@ -132,6 +132,24 @@
   gap: 8px;
 }
 
+.kbdFine {
+  display: none;
+}
+
+.kbdCoarse {
+  display: inline;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .kbdFine {
+    display: inline;
+  }
+
+  .kbdCoarse {
+    display: none;
+  }
+}
+
 .kbd {
   color: #e5e7eb;
   font-weight: 600;

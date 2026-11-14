@@ -3,29 +3,33 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch B** — Runway/Friends + My Looks native download V2-0033. Batch A #304 merged; PR #303 still open; no store/push enable.)
+**Last updated:** 2026-11-14 (**QA V2 Batch C** — Studio/mobile polish. Batch B #305 merged; PR #303 still open; no store/push enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## QA V2 Batch B (2026-11-14) — Runway / Friends / native download
+## QA V2 Batch C (2026-11-14) — Studio / mobile polish
 
 | Status | Detail |
 |---|---|
-| Source | Master Plan + V2-0033 (Android My Looks download) |
-| Baseline | `main` `6a405ccf` (#304 Batch A). **PR #303 open / not merged** |
-| Branch | `cursor/web-qa-v2-batch-b-77c6` |
-| IDs | V2-0007–0011 (+ 0010 stays E), **V2-0033** |
-| Fixes | Capacitor Media/Share image save; `apiRequestBlob` for look images; Android keyboard `adjustResize` + Friends sticky form; native push toggle messaging (flags still OFF) |
-| Not in this PR | Batches C–E; CTL-*; push enable; store submit; merge #303 |
-| **Exact next step** | Review/merge Batch B → Batch C |
+| Baseline | `main` `a78dfc89` (#305 Batch B) |
+| Branch | `cursor/web-qa-v2-batch-c-77c6` |
+| IDs | V2-0001–0004, 0006, 0022–0025, 0027–0029, **V2-0034** |
+| Fixes | More outside-dismiss; hover-gated selection; Save label; global Settings panel; autosave width; brush tip/color/texture/scale/hints; airbrush draft presence; **personal My Model FRONT-only** |
+| **Exact next step** | Review/merge Batch C → Batch D (AI) or E (features) |
+
+## QA V2 Batch B (2026-11-14) — MERGED #305
+
+| Status | Detail |
+|---|---|
+| Merge | `a78dfc89` on `main` |
+| IDs | V2-0007–0011, **V2-0033** |
+| Head amenity | recursive `fr-dl/` cache write; #303 push reconcile note |
 
 ## QA V2 Batch A (2026-11-14) — MERGED #304
 
 | Status | Detail |
 |---|---|
-| Merge | `6a405ccf` on `main` |
 | IDs | V2-0005, 0012–0016, 0018–0020 |
-| Fixes | refresh-on-401 + session isolation; Save design label; text-safety tests |
 
 ## Mobile QA fixes (2026-11-13) — password reset · overlays · Stars UX
 

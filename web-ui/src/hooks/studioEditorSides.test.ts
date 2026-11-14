@@ -4,12 +4,24 @@ vi.stubEnv('VITE_STUDIO_FRONT_BACK_ENABLED', 'true')
 import { createEmptyDraftDocument } from '@/lib/draftDocument'
 import {
   buildDocumentFromEditor,
+  canOpenBackPaper,
+  displaySideForModel,
+  rearReferenceAvailable,
   sideStateFromDocument,
   switchEditorSide,
   visibleInkFromState,
 } from '@/hooks/studioEditorSides'
 
 describe('studioEditorSides', () => {
+  it('V2-0034: personal models are FRONT-only for Flip / display', () => {
+    expect(canOpenBackPaper('personal')).toBe(false)
+    expect(rearReferenceAvailable('personal')).toBe(false)
+    expect(displaySideForModel('personal', 'back')).toBe('front')
+    expect(displaySideForModel('personal', 'front')).toBe('front')
+    expect(canOpenBackPaper('female-straight')).toBe(true)
+    expect(displaySideForModel('female-straight', 'back')).toBe('back')
+  })
+
   it('keeps inactive side ink when committing active-side edits', () => {
     const prev = createEmptyDraftDocument()
     const state = {

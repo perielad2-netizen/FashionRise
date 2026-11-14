@@ -31,13 +31,23 @@ export function rearReferenceAvailable(model: ModelChoice): boolean {
 
 /**
  * True when Flip Paper may open the Back bag.
- * Personal croquis is front-only for underlay imagery, but existing Back ink
- * must remain accessible on a blank underlay (V2 back-draft semantics).
+ * V2-0034: personal (My Model) is FRONT-only — no Back switch while selected.
+ * Stored Back artwork is preserved in the draft; it is not shown or edited
+ * until the user returns to a library model that supports rear.
  */
 export function canOpenBackPaper(model: ModelChoice): boolean {
   if (!isStudioFrontBackEnabled()) return false
-  if (model === 'personal') return true
+  if (model === 'personal') return false
   return modelHasRearAsset(model)
+}
+
+/** Display side for the given model — personal always presents Front. */
+export function displaySideForModel(
+  model: ModelChoice,
+  activeSide: StudioPaperSide,
+): StudioPaperSide {
+  if (model === 'personal') return 'front'
+  return activeSide
 }
 
 export function referenceUrlForModelSide(
