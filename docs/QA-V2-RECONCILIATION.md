@@ -33,6 +33,7 @@
 | V2-0029 | **Confirmed** | C | Brush color on brush sheet + Materials link |
 | V2-0030–0032 | **Feature** | E | Roadmap |
 | **V2-0033** | **Confirmed** | B | Native Media/Share download; recursive `fr-dl/` |
+| **V2-0034** | **Confirmed** P1 | C | Personal My Model FRONT-only; coerce activeSide on pin/restore; Flip hidden; Back bags preserved |
 
 ## 21 CTL proposals
 
@@ -40,6 +41,7 @@ Roadmap only. Not in Batch C.
 
 ## Batch C PR scope
 
-Studio/mobile polish: V2-0001–0004, 0006, 0022–0025, 0027–0029.
+Studio/mobile polish: V2-0001–0004, 0006, 0022–0025, 0027–0029.  
+**+ V2-0034** personal model FRONT-only (Android: created My Model missing after return because canvas stayed on BACK).
 
 **Out of scope:** Batches D–E, CTL-*, push enable, store submit, merging #303.

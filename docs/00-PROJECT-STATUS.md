@@ -13,8 +13,8 @@
 |---|---|
 | Baseline | `main` `a78dfc89` (#305 Batch B) |
 | Branch | `cursor/web-qa-v2-batch-c-77c6` |
-| IDs | V2-0001–0004, 0006, 0022–0025, 0027–0029 |
-| Fixes | More outside-dismiss; hover-gated selection; Save label; global Settings panel; autosave width; brush tip/color/texture/scale/hints; airbrush draft presence |
+| IDs | V2-0001–0004, 0006, 0022–0025, 0027–0029, **V2-0034** |
+| Fixes | More outside-dismiss; hover-gated selection; Save label; global Settings panel; autosave width; brush tip/color/texture/scale/hints; airbrush draft presence; **personal My Model FRONT-only** |
 | **Exact next step** | Review/merge Batch C → Batch D (AI) or E (features) |
 
 ## QA V2 Batch B (2026-11-14) — MERGED #305

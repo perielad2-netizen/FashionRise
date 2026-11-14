@@ -18,6 +18,7 @@ import {
   documentHasAnyInk,
   patchActiveSideInk,
   canOpenBackPaper,
+  displaySideForModel,
   rearReferenceAvailable,
   referenceUrlForModelSide,
   sideStateFromDocument,
@@ -510,13 +511,20 @@ export function useStudioEditor() {
     historyFront.current = new StrokeHistory()
     historyBack.current = new StrokeHistory()
     const sides = sideStateFromDocument(doc)
+    // V2-0034: personal drafts may store activeSide=back from an older session —
+    // show Front without wiping preserved Back artwork bags.
+    const viewSide = displaySideForModel(doc.model, sides.activeSide)
     // Avoid a spurious revision bump when React state mirrors an already-committed doc.
     skipNextAutosaveRef.current = true
-    setActiveSide(sides.activeSide)
+    setActiveSide(viewSide)
     setFrontStrokes(sides.frontStrokes)
     setFrontFills(sides.frontFills)
     setBackStrokes(sides.backStrokes)
     setBackFills(sides.backFills)
+    // Coerce persisted view preference for personal without dropping Back bags.
+    if (viewSide !== sides.activeSide) {
+      authoritativeDocRef.current = { ...doc, activeSide: viewSide }
+    }
     setModelState(doc.model)
     setCustomUrl(doc.customReferenceUrl)
     setCustomKey(doc.customReferenceKey)
@@ -4000,8 +4008,8 @@ export function useStudioEditor() {
       setPersonalUnavailable(false)
       setPersonalCroquisId(croquisId)
       setPersonalCroquisVersion(version)
-      // Keep Back accessible (blank underlay) — do not force Front solely because personal
-      // has no rear croquis image. Clear-strokes path still resets both bags.
+      // V2-0034: personal is FRONT-only — always land on Front (Back bags preserved unless clearing).
+      setActiveSide('front')
       if (clearStrokes && designHasInk()) {
         historyFront.current.push(artwork())
         historyBack.current.push(artwork())
@@ -4011,8 +4019,6 @@ export function useStudioEditor() {
         setBackFills([])
         syncHistoryFlags()
         setModelState('personal')
-        const nextSide = activeSide === 'back' && canOpenBackPaper('personal') ? 'back' : 'front'
-        if (activeSide !== nextSide) setActiveSide(nextSide)
         commitFromEditor({
           model: 'personal',
           personalCroquisId: croquisId,
@@ -4021,7 +4027,7 @@ export function useStudioEditor() {
           frontFills: [],
           backStrokes: [],
           backFills: [],
-          activeSide: nextSide,
+          activeSide: 'front',
         })
       } else {
         setModelState('personal')
@@ -4029,12 +4035,11 @@ export function useStudioEditor() {
           model: 'personal',
           personalCroquisId: croquisId,
           personalCroquisVersion: version,
-          activeSide,
+          activeSide: 'front',
         })
       }
     },
     [
-      activeSide,
       artwork,
       commitFromEditor,
       designHasInk,

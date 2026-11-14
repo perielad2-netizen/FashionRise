@@ -12,8 +12,10 @@ describe('personal croquis front-only underlay, accessible Back ink', () => {
       '@/hooks/studioEditorSides'
     )
     expect(rearReferenceAvailable('personal')).toBe(false)
-    expect(canOpenBackPaper('personal')).toBe(true)
+    // V2-0034: personal is FRONT-only — Flip must not open Back.
+    expect(canOpenBackPaper('personal')).toBe(false)
     expect(referenceUrlForModelSide('personal', 'back', null, 'blob:front')).toBeNull()
+    expect(referenceUrlForModelSide('personal', 'front', null, 'blob:front')).toBe('blob:front')
     expect(referenceUrlForModelSide('personal', 'front', null, 'blob:front')).toBe('blob:front')
   })
 })
