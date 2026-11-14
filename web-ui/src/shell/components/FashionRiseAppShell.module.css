@@ -115,7 +115,8 @@
     top: 0;
     bottom: 0;
     width: min(220px, 82vw);
-    z-index: 30;
+    /* Above MagicLookPanel overlay (z-index 40) so drawer is not trapped under results */
+    z-index: 55;
     background: #0a0f1c;
     box-shadow: 16px 0 40px rgba(0, 0, 0, 0.45);
   }
@@ -126,7 +127,8 @@
     inset: 0;
     border: 0;
     background: rgba(0, 0, 0, 0.45);
-    z-index: 25;
+    /* Above Magic results; below the open nav drawer */
+    z-index: 50;
     cursor: pointer;
   }
 }
