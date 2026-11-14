@@ -3,11 +3,21 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MyLooksScreen } from '@/shell/components/MyLooksScreen'
 import type { LookRecord } from '@/services/looksApi'
 
-const listLooks = vi.fn()
-const updateLook = vi.fn()
-const deleteLook = vi.fn()
-const fetchJobImageBlob = vi.fn()
-const openOrCreateTechpackForLook = vi.fn()
+const {
+  listLooks,
+  updateLook,
+  deleteLook,
+  fetchJobImageBlob,
+  openOrCreateTechpackForLook,
+  saveOrDownloadBlob,
+} = vi.hoisted(() => ({
+  listLooks: vi.fn(),
+  updateLook: vi.fn(),
+  deleteLook: vi.fn(),
+  fetchJobImageBlob: vi.fn(),
+  openOrCreateTechpackForLook: vi.fn(),
+  saveOrDownloadBlob: vi.fn(),
+}))
 
 vi.mock('@/services/looksApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/looksApi')>()
@@ -26,6 +36,14 @@ vi.mock('@/services/ai/magicApi', () => ({
 vi.mock('@/services/techpacksApi', () => ({
   openOrCreateTechpackForLook: (...args: unknown[]) => openOrCreateTechpackForLook(...args),
 }))
+
+vi.mock('@/lib/exportCanvas', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/exportCanvas')>()
+  return {
+    ...actual,
+    saveOrDownloadBlob,
+  }
+})
 
 const LOOK_A: LookRecord = {
   id: 'look-a',
@@ -80,7 +98,9 @@ describe('MyLooksScreen', () => {
     deleteLook.mockReset()
     fetchJobImageBlob.mockReset()
     openOrCreateTechpackForLook.mockReset()
+    saveOrDownloadBlob.mockReset()
     fetchJobImageBlob.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }))
+    saveOrDownloadBlob.mockResolvedValue('gallery')
     openOrCreateTechpackForLook.mockResolvedValue({ id: 'draft-99' })
     // IntersectionObserver may be missing / inert in jsdom — treat as immediately visible.
     // @ts-expect-error test polyfill
@@ -128,14 +148,73 @@ describe('MyLooksScreen', () => {
     expect(within(dialog).getByRole('button', { name: 'Close look details' })).toBeInTheDocument()
   })
 
-  it('downloads the active look side from the detail dialog', async () => {
+  it('downloads the active look side and shows Saved to your gallery ✓', async () => {
+    saveOrDownloadBlob.mockResolvedValue('gallery')
     listLooks.mockResolvedValue({ items: [LOOK_A], total: 1, limit: 24, offset: 0 })
     render(<MyLooksScreen onBackToStudio={() => undefined} />)
     await screen.findByText('Blush gown')
     fireEvent.click(screen.getByRole('button', { name: 'View details for Blush gown' }))
     const dialog = await screen.findByRole('dialog', { name: 'Blush gown' })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Download' }))
+    const downloadBtn = within(dialog).getByTestId('look-download')
+    await waitFor(() => expect(downloadBtn).not.toBeDisabled())
+    fireEvent.click(downloadBtn)
     await waitFor(() => expect(fetchJobImageBlob).toHaveBeenCalledWith('job-a'))
+    await waitFor(() => expect(saveOrDownloadBlob).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(within(dialog).getByTestId('look-download-notice')).toHaveTextContent(
+        'Saved to your gallery ✓',
+      ),
+    )
+  })
+
+  it('does not claim gallery success when only the share sheet opened', async () => {
+    saveOrDownloadBlob.mockResolvedValue('share')
+    listLooks.mockResolvedValue({ items: [LOOK_A], total: 1, limit: 24, offset: 0 })
+    render(<MyLooksScreen onBackToStudio={() => undefined} />)
+    await screen.findByText('Blush gown')
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Blush gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Blush gown' })
+    const downloadBtn = within(dialog).getByTestId('look-download')
+    await waitFor(() => expect(downloadBtn).not.toBeDisabled())
+    fireEvent.click(downloadBtn)
+    await waitFor(() =>
+      expect(within(dialog).getByTestId('look-download-notice')).toHaveTextContent(
+        /Opened the system share sheet/,
+      ),
+    )
+    expect(within(dialog).queryByText('Saved to your gallery ✓')).toBeNull()
+  })
+
+  it('shows Saving…, blocks repeat taps, then surfaces gallery save errors', async () => {
+    let rejectSave: ((err: Error) => void) | undefined
+    saveOrDownloadBlob.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectSave = reject
+        }),
+    )
+    listLooks.mockResolvedValue({ items: [LOOK_A], total: 1, limit: 24, offset: 0 })
+    render(<MyLooksScreen onBackToStudio={() => undefined} />)
+    await screen.findByText('Blush gown')
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Blush gown' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Blush gown' })
+    const downloadBtn = within(dialog).getByTestId('look-download')
+    await waitFor(() => expect(downloadBtn).not.toBeDisabled())
+    fireEvent.click(downloadBtn)
+    fireEvent.click(downloadBtn)
+    expect(await within(dialog).findByTestId('look-download-notice')).toHaveTextContent(
+      'Saving image…',
+    )
+    expect(downloadBtn).toBeDisabled()
+    expect(within(dialog).getByTestId('look-share')).toBeDisabled()
+    expect(saveOrDownloadBlob).toHaveBeenCalledTimes(1)
+
+    rejectSave?.(new Error('Gallery permission denied'))
+    await waitFor(() =>
+      expect(within(dialog).getByTestId('look-download-notice')).toHaveTextContent(
+        'Gallery permission denied',
+      ),
+    )
   })
 
   it('favorites and archives from the detail dialog', async () => {

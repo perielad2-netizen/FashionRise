@@ -119,7 +119,7 @@ async function downloadJobImage(
 }
 
 function downloadSuccessCopy(method: 'web' | 'gallery' | 'share'): string {
-  if (method === 'gallery') return 'Saved to Photos (FashionRise album).'
+  if (method === 'gallery') return 'Saved to your gallery ✓'
   if (method === 'share') return 'Opened the system share sheet — save from there to finish.'
   return 'Download started.'
 }
@@ -142,9 +142,32 @@ function LookDetailDialog({
   const titleId = useId()
   const [title, setTitle] = useState(look.title)
   const [busy, setBusy] = useState(false)
+  const [downloadBusy, setDownloadBusy] = useState(false)
+  const downloadInFlight = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null)
+  const [downloadNoticeTone, setDownloadNoticeTone] = useState<'ok' | 'info' | 'error'>('ok')
+  const downloadNoticeTimer = useRef<number | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
+
+  useEffect(() => {
+    return () => {
+      if (downloadNoticeTimer.current != null) window.clearTimeout(downloadNoticeTimer.current)
+    }
+  }, [])
+
+  function showDownloadNotice(message: string, tone: 'ok' | 'info' | 'error') {
+    if (downloadNoticeTimer.current != null) window.clearTimeout(downloadNoticeTimer.current)
+    setDownloadNoticeTone(tone)
+    setDownloadNotice(message)
+    // Keep success/info readable on Android; errors stay until next action.
+    if (tone !== 'error') {
+      downloadNoticeTimer.current = window.setTimeout(() => {
+        setDownloadNotice(null)
+        downloadNoticeTimer.current = null
+      }, 4500)
+    }
+  }
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false)
   const [runwayShareAgreed, setRunwayShareAgreed] = useState(false)
   const [mobileSide, setMobileSide] = useState<'front' | 'back'>(
@@ -331,19 +354,30 @@ function LookDetailDialog({
             </button>
           </div>
           {error ? <p className={styles.stateError}>{error}</p> : null}
-          {downloadNotice ? (
-            <p className={styles.stateOk} role="status" data-testid="look-download-notice">
-              {downloadNotice}
-            </p>
-          ) : null}
         </div>
 
         <div className={styles.dialogActions}>
+          {downloadBusy || downloadNotice ? (
+            <p
+              className={
+                downloadNoticeTone === 'error'
+                  ? styles.downloadToastError
+                  : downloadNoticeTone === 'info'
+                    ? styles.downloadToastInfo
+                    : styles.downloadToastOk
+              }
+              role="status"
+              aria-live="polite"
+              data-testid="look-download-notice"
+            >
+              {downloadBusy ? 'Saving image…' : downloadNotice}
+            </p>
+          ) : null}
           {onCreateRealDesign ? (
             <button
               type="button"
               className={`${styles.primaryBtn} ${styles.actionFull}`}
-              disabled={busy || deleteBusy}
+              disabled={busy || downloadBusy || deleteBusy}
               onClick={() => onCreateRealDesign(look)}
             >
               <FileText size={14} aria-hidden />
@@ -357,6 +391,7 @@ function LookDetailDialog({
               className={styles.ghostBtn}
               disabled={
                 busy ||
+                downloadBusy ||
                 deleteBusy ||
                 !(mobileSide === 'back' ? backJob && backImg.url : frontJob && frontImg.url)
               }
@@ -364,34 +399,54 @@ function LookDetailDialog({
               onClick={() => {
                 const side = mobileSide === 'back' && backJob ? 'back' : 'front'
                 const jobId = side === 'back' ? backJob : frontJob
-                if (!jobId) return
+                if (!jobId || downloadBusy || downloadInFlight.current) return
+                downloadInFlight.current = true
                 setError(null)
-                setDownloadNotice(null)
-                setBusy(true)
+                showDownloadNotice('Saving image…', 'info')
+                setDownloadBusy(true)
                 void downloadJobImage(jobId, `${look.title}-${side}.png`)
                   .then((method) => {
                     setError(null)
-                    setDownloadNotice(downloadSuccessCopy(method))
-                  })
-                  .catch(async (err) => {
-                    setDownloadNotice(null)
-                    const { SaveCancelledError } = await import('@/lib/nativeImageSave')
-                    if (err instanceof SaveCancelledError || (err instanceof Error && err.name === 'SaveCancelledError')) {
-                      setError('Download cancelled.')
+                    // Only gallery/web are confirmed saves. Share sheet is not success.
+                    if (method === 'share') {
+                      showDownloadNotice(downloadSuccessCopy('share'), 'info')
                       return
                     }
-                    setError(err instanceof Error ? err.message : 'Could not download look')
+                    showDownloadNotice(downloadSuccessCopy(method), 'ok')
                   })
-                  .finally(() => setBusy(false))
+                  .catch(async (err) => {
+                    const { SaveCancelledError } = await import('@/lib/nativeImageSave')
+                    if (
+                      err instanceof SaveCancelledError ||
+                      (err instanceof Error && err.name === 'SaveCancelledError')
+                    ) {
+                      showDownloadNotice('Download cancelled.', 'error')
+                      setError(null)
+                      return
+                    }
+                    const message =
+                      err instanceof Error ? err.message : 'Could not save image to your gallery'
+                    showDownloadNotice(message, 'error')
+                    setError(null)
+                  })
+                  .finally(() => {
+                    downloadInFlight.current = false
+                    setDownloadBusy(false)
+                  })
               }}
             >
               <Download size={14} aria-hidden />
-              Download
+              {downloadBusy ? 'Saving…' : 'Download'}
             </button>
             <button
               type="button"
               className={styles.ghostBtn}
-              disabled={busy || deleteBusy || !(mobileSide === 'front' ? frontImg.url : backImg.url)}
+              disabled={
+                busy ||
+                downloadBusy ||
+                deleteBusy ||
+                !(mobileSide === 'front' ? frontImg.url : backImg.url)
+              }
               onClick={() => {
                 void (async () => {
                   const imageUrl = mobileSide === 'back' ? backImg.url : frontImg.url
