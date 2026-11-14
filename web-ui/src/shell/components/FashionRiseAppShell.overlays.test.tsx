@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FashionRiseAppShell } from '@/shell/components/FashionRiseAppShell'
+import shellCss from '@/shell/components/FashionRiseAppShell.module.css?raw'
+import magicCss from '@/shell/components/MagicLookPanel.module.css?raw'
 
 vi.mock('@/services/auth/authApi', () => ({
   deleteAccount: vi.fn(),
@@ -48,6 +50,12 @@ vi.mock('@/services/native/iap', () => ({
 describe('FashionRiseAppShell overlay coordination', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('keeps the mobile nav drawer above MagicLookPanel (z-index 40)', () => {
+    expect(magicCss).toMatch(/\.overlay\s*\{[\s\S]*?z-index:\s*40/)
+    expect(shellCss).toMatch(/\.navSlot\.navOpen\s*\{[\s\S]*?z-index:\s*55/)
+    expect(shellCss).toMatch(/\.scrim\s*\{[\s\S]*?z-index:\s*50/)
   })
 
   it('closes account menu when navigation opens, and Escape closes overlays', () => {
