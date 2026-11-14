@@ -23,6 +23,13 @@ _TINY_PNG = base64.b64encode(
     )
 ).decode("ascii")
 _DATA_URL = f"data:image/png;base64,{_TINY_PNG}"
+# Distinct 1×1 red PNG — different pair_reference fingerprint from _DATA_URL.
+_TINY_PNG_B = base64.b64encode(
+    base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+).decode("ascii")
+_DATA_URL_B = f"data:image/png;base64,{_TINY_PNG_B}"
 
 
 def _auth(tokens: dict) -> dict:
@@ -64,6 +71,29 @@ def test_dual_enqueue_creates_two_jobs_same_operation(client, db_session):
     assert back["input_data"].get("source_revision") == 3
     assert front["input_data"].get("image_fingerprint")
     assert front["input_data"]["image_fingerprint"] == back["input_data"]["image_fingerprint"]
+
+
+def test_dual_back_pair_reference_redacted_but_stored(client, db_session):
+    """V2-0017: Back may carry Front pair sketch; API redacts bytes, DB keeps them."""
+    tokens = register_with_invite(client, db_session, "dual_pair@example.com", "dual_pair")
+    body = _dual_payload()
+    body["back"] = {
+        **body["back"],
+        "pair_reference_base64": _DATA_URL,
+        "notes": "polish concept (back) with pair",
+    }
+    r = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert r.status_code == 201, r.text
+    back = r.json()["back_job"]
+    assert "pair_reference_base64" not in back["input_data"]
+    assert back["input_data"].get("has_pair_reference") is True
+    assert back["input_data"].get("has_sketch_image") is True
+
+    row = db_session.get(AIJob, UUID(back["id"]))
+    assert row is not None
+    assert row.input_data.get("pair_reference_base64") == _DATA_URL
+    assert isinstance(row.input_data.get("pair_reference_fingerprint"), str)
+    assert len(row.input_data["pair_reference_fingerprint"]) == 64
 
 
 def test_dual_idempotent_retry_does_not_duplicate(client, db_session):
@@ -254,6 +284,54 @@ def test_dual_prompt_identity_mismatch_409(client, db_session):
         shared_garment_spec={"silhouette": "column gown"},
     )
     assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=clash).status_code == 409
+
+
+def test_dual_pair_reference_identity_mismatch_409(client, db_session):
+    """V2-0017: same Back idempotency key + different Front pair → identity conflict."""
+    tokens = register_with_invite(client, db_session, "dual_pair_id@example.com", "dual_pair_id")
+    op = str(uuid4())
+    front_key = "pair-id-front"
+    back_key = "pair-id-back"
+    body = _dual_payload(
+        magic_operation_id=op,
+        front={"image_base64": _DATA_URL, "idempotency_key": front_key},
+        back={
+            "image_base64": _DATA_URL,
+            "idempotency_key": back_key,
+            "pair_reference_base64": _DATA_URL,
+            "notes": "polish concept (back) with pair",
+        },
+        shared_garment_spec={"silhouette": "A-line dress", "main_colors": ["black"]},
+    )
+    first = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert first.status_code == 201, first.text
+    first_back_id = first.json()["back_job"]["id"]
+
+    # Same keys / sketch / garment — different paired FRONT image must 409.
+    clash = _dual_payload(
+        magic_operation_id=op,
+        front={"image_base64": _DATA_URL, "idempotency_key": front_key},
+        back={
+            "image_base64": _DATA_URL,
+            "idempotency_key": back_key,
+            "pair_reference_base64": _DATA_URL_B,
+            "notes": "polish concept (back) with pair",
+        },
+        shared_garment_spec={"silhouette": "A-line dress", "main_colors": ["black"]},
+    )
+    assert client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=clash).status_code == 409
+
+    # Same-key / same-input replay still returns the original Back job.
+    replay = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert replay.status_code == 201
+    assert replay.json()["back_job"]["id"] == first_back_id
+    me = client.get("/api/v1/auth/me", headers=_auth(tokens)).json()
+    count = (
+        db_session.query(AIJob)
+        .filter(AIJob.user_id == UUID(me["id"]), AIJob.job_type == "sketch_polish")
+        .count()
+    )
+    assert count == 2
 
 
 def test_failed_single_polish_key_replay_creates_zero_jobs(client, db_session):

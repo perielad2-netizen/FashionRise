@@ -317,6 +317,43 @@ def test_build_image_edit_kwargs_sends_sketch_then_textile_swatch():
     assert textile_buf.getvalue() == textile
 
 
+def test_build_image_edit_kwargs_sends_pair_reference_when_no_fabric():
+    """V2-0017: Back Dual Magic attaches Front pair sketch as Image 2 when no textile."""
+    pair = _TINY_PNG + b"\xaa\xbb"
+    kwargs = sketch_openai.build_image_edit_kwargs(
+        model="gpt-image-2.5-sunburst",
+        prompt="refine with pair",
+        sketch=(_TINY_PNG, "image/png"),
+        size="1024x1536",
+        quality="high",
+        pair_reference=(pair, "image/png"),
+    )
+    assert isinstance(kwargs["image"], list)
+    assert len(kwargs["image"]) == 2
+    sketch_name, sketch_buf, _ = kwargs["image"][0]
+    pair_name, pair_buf, _ = kwargs["image"][1]
+    assert sketch_name.startswith("sketch.")
+    assert pair_name.startswith("pair_front.")
+    assert sketch_buf.getvalue() == _TINY_PNG
+    assert pair_buf.getvalue() == pair
+
+
+def test_fabric_swatch_wins_over_pair_reference_for_image_2():
+    textile = _TINY_PNG + b"\x01"
+    pair = _TINY_PNG + b"\x02"
+    kwargs = sketch_openai.build_image_edit_kwargs(
+        model="gpt-image-2.5-sunburst",
+        prompt="refine",
+        sketch=(_TINY_PNG, "image/png"),
+        size="1024x1536",
+        quality="high",
+        fabric_swatch=(textile, "image/png"),
+        pair_reference=(pair, "image/png"),
+    )
+    assert len(kwargs["image"]) == 2
+    assert kwargs["image"][1][0].startswith("textile.")
+
+
 def test_image_prompt_includes_textile_clause_when_swatch_present():
     job = _job(
         image_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",

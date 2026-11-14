@@ -1,7 +1,7 @@
 # FashionRise QA V2 — reconciliation ledger
 
 **Source of truth:** uploaded Master Plan + Tracker (2026-11-14).  
-**Code baseline:** PR #306 (Batch C) on `cursor/web-qa-v2-batch-c-77c6`.  
+**Code baseline:** Batch D on `cursor/web-qa-v2-batch-d-77c6` (after #306 merged).  
 **PR #303:** open — native nav/push **not merged**; `NATIVE_PUSH_*` remain OFF.  
 **Native evidence caveat:** many screenshots are from an older Android AAB; do not treat web tip deploy as proof the installed app already has the fix.
 
@@ -27,7 +27,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0014 | **Unconfirmed defect** (verified safe) | A | Distinct titles/IDs already; regression tests added |
 | V2-0015 | **Rejected hypothesis** | A | No title-based overwrite; regression only |
 | V2-0016 | **Confirmed mechanism** | A | Fingerprint+OCC+dialog already non-destructive; no silent overwrite; no speculative auto-resolve |
-| V2-0017 | **Investigation** | D | AI FRONT/BACK consistency — Batch D |
+| V2-0017 | **Improved** (bounded) | D | Dual Magic: Back gets Front pair reference + stronger shared-spec/pair prompts; targeted Back retry preserves good Front; Ready ≠ perfect match; no extra Stars on failed-key replay |
 | V2-0018 | **Security review — not exploit** | A | Parameterized + React text; synthetic tests |
 | V2-0019 | **Security review — not exploit** | A | Same as 0018 |
 | V2-0020 | **Security review — not exploit** | A | Same as 0018 |
@@ -71,4 +71,13 @@ Remain **roadmap only** (CTL-M01…M06, CTL-B01…B07, CTL-T01…T08). Not defec
 Studio/mobile polish: V2-0001–0004, 0006, 0022–0025, 0027–0029.  
 **+ V2-0034** personal model FRONT-only (Android: created My Model missing after return because canvas stayed on BACK).
 
-**Out of scope:** Batch D–E, CTL-*, push enable, store submit, merging #303.
+## Batch D PR scope (#307 candidate)
+
+V2-0017 AI FRONT/BACK consistency (bounded):
+1. Investigation: Dual jobs shared text `shared_garment_spec` but Back only saw its own sketch — divergence / invented bodysuit risk.  
+2. Back Dual enqueue attaches Front sketch as `pair_reference_base64` (Image 2 when no fabric swatch).  
+3. Stronger Back vision/edit + FRONT/BACK PAIR text contracts; shared-spec details mark `pair_mode` / no-bodysuit.  
+4. Targeted Back retry reuses shared spec + Front pair capture; does not overwrite a good Front.  
+5. Billing: failed-key replay still returns original job (no new charge); notice clarifies Ready is per-side.
+
+**Out of scope:** CTL-M03/T05 anatomy/material features, Batch E, push enable, store submit, merging #303.

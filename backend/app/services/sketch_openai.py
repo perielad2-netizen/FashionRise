@@ -87,6 +87,23 @@ _FABRIC_SWATCH_EDIT_CONTRACT = (
     "skin/coverage boundaries."
 )
 
+# V2-0017: paired Front sketch as Image 2 when Back Dual Magic has no fabric swatch.
+_PAIR_REFERENCE_EDIT_CONTRACT = (
+    "PAIR REFERENCE (Front→Back consistency): Image 1 is the BACK sketch to polish. "
+    "Image 2 is the paired FRONT sketch from the same Dual Magic design — use it ONLY for "
+    "garment identity (category, silhouette/cut, color story, materials, construction). "
+    "Do NOT copy the front pose as a front view, invent a different garment, or substitute "
+    "a plain bodysuit/modesty panel. Deliver a coherent BACK view of the SAME garment."
+)
+
+# Text-only Dual Magic Back contract (also used when Image 2 is a fabric swatch).
+_FRONT_BACK_PAIR_TEXT_CONTRACT = (
+    "FRONT/BACK PAIR: This Back job is part of a coordinated Dual Magic operation. Match "
+    "SHARED GARMENT SPEC and Front garment identity. Never invent an unrelated outfit or "
+    "bodysuit. Each side Ready means that side succeeded — Back must still depict the same "
+    "design concept as Front."
+)
+
 # Front + Back: elevate the design; do not pixel-trace sketch mistakes.
 # Protected — must survive IMAGE_PROMPT_MAX_CHARS evidence bounding.
 _DESIGN_ENHANCEMENT_CONTRACT = (
@@ -325,6 +342,18 @@ def _raw_sketch_bytes(job: AIJob) -> tuple[bytes, str] | None:
             logger.warning("OpenAI job %s: bad image_base64: %s", job.id, e)
             return None
     return None
+
+
+def _raw_pair_reference_bytes(job: AIJob) -> tuple[bytes, str] | None:
+    d = job.input_data if isinstance(job.input_data, dict) else {}
+    b64raw = d.get("pair_reference_base64")
+    if not isinstance(b64raw, str) or not b64raw.strip():
+        return None
+    try:
+        return _decode_inline_base64(b64raw)
+    except Exception as e:
+        logger.warning("OpenAI job %s: bad pair_reference_base64: %s", job.id, e)
+        return None
 
 
 def _raw_fabric_swatch_bytes(job: AIJob) -> tuple[bytes, str] | None:
@@ -571,7 +600,8 @@ def _studio_side_vision_clause(side: str | None) -> str:
             "(dorsal silhouette, back neckline, back straps or ties, rear closures, center-back seams, "
             "rear hem, coverage panels as designed). Target the same polished professional enhancement "
             "quality as Front — not a traced or cartoon back sketch. Do NOT claim this is the front view, "
-            "invent front-only details, or add coverage that is not drawn."
+            "invent front-only details, add coverage that is not drawn, or invent a different garment "
+            "(especially not a plain bodysuit) that contradicts SHARED GARMENT SPEC."
         )
     return ""
 
@@ -586,9 +616,21 @@ def _studio_side_edit_clause(side: str | None) -> str:
         return (
             "VIEW: rear/back fashion illustration — accurate back necklines, straps/ties, "
             "dorsal seams, rear hem as designed; same polished quality as front (not traced/"
-            "cartoon); never describe this upload as a front-facing sketch. "
+            "cartoon); never describe this upload as a front-facing sketch; never invent a "
+            "different garment or bodysuit that contradicts SHARED GARMENT SPEC. "
         )
     return ""
+
+
+def _dual_back_pair_text_clause(input_data: dict[str, Any]) -> str:
+    """V2-0017: reinforce Front↔Back identity on Dual Back jobs."""
+    side = _normalized_studio_side(input_data)
+    if side != "back":
+        return ""
+    op = input_data.get("magic_operation_id")
+    if not isinstance(op, str) or not op.strip():
+        return ""
+    return f"{_FRONT_BACK_PAIR_TEXT_CONTRACT} "
 
 
 def _user_text(job: AIJob) -> str:
@@ -601,6 +643,9 @@ def _user_text(job: AIJob) -> str:
         side_clause = _studio_side_vision_clause(side)
         if side_clause:
             parts.append(side_clause)
+        pair_text = _dual_back_pair_text_clause(d if isinstance(d, dict) else {})
+        if pair_text:
+            parts.append(pair_text.strip())
         spec_clause = _shared_garment_spec_clause(d if isinstance(d, dict) else {})
         if spec_clause:
             parts.append(spec_clause)
@@ -876,28 +921,29 @@ def _build_image_prompt(structured: Any, summary: str, job: AIJob | None = None)
     reference_clause = edit_reference_instructions(ref) + " "
     side_clause = ""
     fabric_clause = ""
+    pair_clause = ""
     if job is not None:
-        side_clause = _studio_side_edit_clause(
-            _normalized_studio_side(job.input_data if isinstance(job.input_data, dict) else {})
-        )
-        shared_edit = _shared_garment_spec_clause(
-            job.input_data if isinstance(job.input_data, dict) else {}
-        )
+        job_input = job.input_data if isinstance(job.input_data, dict) else {}
+        side_clause = _studio_side_edit_clause(_normalized_studio_side(job_input))
+        shared_edit = _shared_garment_spec_clause(job_input)
         if shared_edit:
             side_clause = f"{side_clause}{shared_edit} "
-        swatch_raw = (
-            job.input_data.get("fabric_swatch_base64")
-            if isinstance(job.input_data, dict)
-            else None
-        )
+        pair_text = _dual_back_pair_text_clause(job_input)
+        if pair_text:
+            side_clause = f"{side_clause}{pair_text}"
+        swatch_raw = job_input.get("fabric_swatch_base64")
+        pair_raw = job_input.get("pair_reference_base64")
         if isinstance(swatch_raw, str) and swatch_raw.strip():
             fabric_clause = f"{_FABRIC_SWATCH_EDIT_CONTRACT} "
+        elif isinstance(pair_raw, str) and pair_raw.strip():
+            pair_clause = f"{_PAIR_REFERENCE_EDIT_CONTRACT} "
     protected = (
         "Professionally refine THIS uploaded fashion sketch into a beautiful, polished fashion-design "
         "illustration. The uploaded sketch is the SOURCE OF TRUTH for the designer's creative intent. "
         f"{reference_clause}"
         f"{side_clause}"
         f"{fabric_clause}"
+        f"{pair_clause}"
         f"{_DESIGN_ENHANCEMENT_CONTRACT} "
         f"{_COVERAGE_PRESERVATION_CONTRACT} "
         f"{_COLOR_FIDELITY_CONTRACT} "
@@ -1313,8 +1359,13 @@ def build_image_edit_kwargs(
     size: str,
     quality: str | None,
     fabric_swatch: tuple[bytes, str] | None = None,
+    pair_reference: tuple[bytes, str] | None = None,
 ) -> dict[str, Any]:
-    """Construct images.edit kwargs. With a fabric swatch, send [sketch, textile] as image list."""
+    """Construct images.edit kwargs.
+
+    Image 1 is always the side sketch. Image 2 is fabric swatch when present;
+    otherwise an optional Front pair reference for Back Dual Magic (V2-0017).
+    """
     configured = (model or "").strip()
     caps = assert_image_model_editable(configured)
     sketch_bytes, mime = sketch
@@ -1339,6 +1390,21 @@ def build_image_edit_kwargs(
         )
         # OpenAI images.edit accepts a sequence: image 1 = sketch, image 2 = textile.
         image_arg: Any = [sketch_img, textile_img]
+    elif pair_reference is not None:
+        pr_bytes, pr_mime = pair_reference
+        pr_ext = (
+            "jpg"
+            if ("jpeg" in pr_mime or "jpg" in pr_mime)
+            else "webp"
+            if "webp" in pr_mime
+            else "png"
+        )
+        pair_img = (
+            f"pair_front.{pr_ext}",
+            BytesIO(pr_bytes),
+            pr_mime or f"image/{pr_ext}",
+        )
+        image_arg = [sketch_img, pair_img]
     else:
         image_arg = sketch_img
     # Forward the exact allowlisted model id (canonical or documented snapshot).
@@ -1372,6 +1438,8 @@ def _try_edit_look_from_sketch(
     """Issue exactly one images.edit HTTP attempt with the configured model (SDK max_retries=0)."""
     model = (model or "").strip()
     fabric_swatch = _raw_fabric_swatch_bytes(job)
+    # Fabric wins Image 2; otherwise attach Front pair reference for Back Dual Magic.
+    pair_reference = None if fabric_swatch is not None else _raw_pair_reference_bytes(job)
     try:
         kwargs = build_image_edit_kwargs(
             model=model,
@@ -1380,6 +1448,7 @@ def _try_edit_look_from_sketch(
             size=size,
             quality=quality,
             fabric_swatch=fabric_swatch,
+            pair_reference=pair_reference,
         )
     except SketchCompletionError:
         raise

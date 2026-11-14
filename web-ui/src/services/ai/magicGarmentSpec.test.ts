@@ -81,6 +81,10 @@ describe('magicGarmentSpec palette priority', () => {
     expect(spec.details).toMatch(/color_authority=applied_fills_and_ink_combination/)
     expect(spec.details).toMatch(/accessory_fabric_fills=preserve_as_painted_in_sketch/)
     expect(spec.details).toMatch(/sketch_cleanup=smart_normalize_accidental_gaps/)
+    // V2-0017 Front/Back consistency markers
+    expect(spec.details).toMatch(/back_must_match_front_garment=1/)
+    expect(spec.details).toMatch(/never_invent_bodysuit=1/)
+    expect(spec.details).toMatch(/pair_mode=/)
   })
 
   it('gray-only applied fill keeps main_colors locked to gray (no invented accents in spec)', () => {

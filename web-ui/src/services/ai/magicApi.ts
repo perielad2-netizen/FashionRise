@@ -29,6 +29,11 @@ export type PolishSidePayload = {
    * Sent as images.edit image #2; never invent for solids/gradients.
    */
   fabric_swatch_base64?: string
+  /**
+   * Optional paired Front sketch for Back Dual Magic (V2-0017).
+   * Used as images.edit image #2 when fabric swatch is absent.
+   */
+  pair_reference_base64?: string
   notes?: string
   /** Required for dual polish — unique per side within an operation. */
   idempotency_key: string
@@ -62,6 +67,8 @@ export type PolishSketchInput = {
   imageBase64: string
   /** Optional exact Studio fabric tile PNG data URL (patterned fills). */
   fabricSwatchBase64?: string
+  /** Optional paired Front sketch for Back Dual Magic consistency (V2-0017). */
+  pairReferenceBase64?: string
   notes?: string
   designId?: string | null
   /** WEB-V4J dual-sided polish grouping. */
@@ -96,6 +103,9 @@ export async function enqueueSketchPolishDual(
         ...(input.front.fabric_swatch_base64
           ? { fabric_swatch_base64: input.front.fabric_swatch_base64 }
           : {}),
+        ...(input.front.pair_reference_base64
+          ? { pair_reference_base64: input.front.pair_reference_base64 }
+          : {}),
         notes: input.front.notes,
         idempotency_key: input.front.idempotency_key,
       },
@@ -103,6 +113,9 @@ export async function enqueueSketchPolishDual(
         image_base64: input.back.image_base64,
         ...(input.back.fabric_swatch_base64
           ? { fabric_swatch_base64: input.back.fabric_swatch_base64 }
+          : {}),
+        ...(input.back.pair_reference_base64
+          ? { pair_reference_base64: input.back.pair_reference_base64 }
           : {}),
         notes: input.back.notes,
         idempotency_key: input.back.idempotency_key,
@@ -123,6 +136,9 @@ export async function enqueueSketchPolish(input: PolishSketchInput): Promise<AiJ
         image_base64: input.imageBase64,
         ...(input.fabricSwatchBase64
           ? { fabric_swatch_base64: input.fabricSwatchBase64 }
+          : {}),
+        ...(input.pairReferenceBase64
+          ? { pair_reference_base64: input.pairReferenceBase64 }
           : {}),
         magic_operation_id: input.magic_operation_id,
         studio_side: input.studio_side,

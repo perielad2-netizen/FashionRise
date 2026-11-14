@@ -3,19 +3,27 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch C** — Studio/mobile polish. Batch B #305 merged; PR #303 still open; no store/push enable.)
+**Last updated:** 2026-11-14 (**QA V2 Batch D** — AI FRONT/BACK consistency. Batch C #306 merged; PR #303 still open; no store/push enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
-## QA V2 Batch C (2026-11-14) — Studio / mobile polish
+## QA V2 Batch D (2026-11-14) — AI FRONT/BACK consistency
 
 | Status | Detail |
 |---|---|
-| Baseline | `main` `a78dfc89` (#305 Batch B) |
-| Branch | `cursor/web-qa-v2-batch-c-77c6` |
+| Baseline | `main` `597d24a3` (#306 Batch C) |
+| Branch | `cursor/web-qa-v2-batch-d-77c6` |
+| IDs | **V2-0017** |
+| Fixes | Dual Magic Back attaches Front `pair_reference_base64`; stronger pair/shared-spec prompts; Back-only retry preserves good Front; Ready ≠ perfect match notice |
+| **Exact next step** | Review/merge Batch D → Batch E (features) or stop |
+
+## QA V2 Batch C (2026-11-14) — MERGED #306
+
+| Status | Detail |
+|---|---|
+| Merge | `597d24a3` on `main` |
 | IDs | V2-0001–0004, 0006, 0022–0025, 0027–0029, **V2-0034** |
-| Fixes | More outside-dismiss; hover-gated selection; Save label; global Settings panel; autosave width; brush tip/color/texture/scale/hints; airbrush draft presence; **personal My Model FRONT-only** |
-| **Exact next step** | Review/merge Batch C → Batch D (AI) or E (features) |
+| Fixes | More outside-dismiss; hover-gated selection; Save label; global Settings panel; autosave width; brush tip/color/texture/scale/hints; airbrush draft presence; **personal My Model FRONT-only**; full per-ID ledger |
 
 ## QA V2 Batch B (2026-11-14) — MERGED #305
 

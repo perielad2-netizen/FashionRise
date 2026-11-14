@@ -1564,14 +1564,14 @@ export function useStudioEditor() {
         setMagicPhase('submitting')
         publishStudioNotice(
           smartBack
-            ? 'Magic will polish Front and invent a smart Back from your Front sketch. Two renders may cost more when billing is enabled.'
-            : 'Magic will polish Front and Back. Two renders may cost more when billing is enabled.',
+            ? 'Magic will polish Front and invent a smart Back from your Front sketch. Two renders may cost more when billing is enabled. Good Front is preserved if you retry Back only.'
+            : 'Magic will polish Front and Back with a shared garment brief (Back also sees Front as a pair reference when no fabric swatch). Two renders may cost more when billing is enabled. Ready does not guarantee perfect match — retry Back only to preserve a good Front.',
         )
         const frontIdempotencyKey = `${operationId}:front`
         const backIdempotencyKey = `${operationId}:back`
         const garmentNotes = smartBack
           ? 'polish concept with smart back completion'
-          : 'polish concept'
+          : 'polish concept dual front/back consistency'
         const garmentSpec = buildSharedGarmentSpec(doc, garmentNotes)
         const contentFingerprint = draftContentFingerprint(doc)
         const sourceRevision = doc.clientRevision
@@ -1587,7 +1587,9 @@ export function useStudioEditor() {
           updatedAt: new Date().toISOString(),
         })
         const smartBackNotes =
-          'Smart back completion: designer left Back empty. Invent a coherent rear fashion illustration matching the Front garment silhouette, materials, proportions, and construction. Propose a professional Back view on the rear croquis — do not leave Back blank.'
+          'Smart back completion: designer left Back empty. Invent a coherent rear fashion illustration matching the Front garment silhouette, materials, proportions, and construction. Propose a professional Back view on the rear croquis — do not leave Back blank; never invent an unrelated bodysuit.'
+        const dualBackNotes =
+          'polish concept (back): same garment as Front per SHARED GARMENT SPEC and pair Front sketch — match category/silhouette/color story; never invent an unrelated bodysuit or different outfit; Ready is per-side success, not a perfect-match promise'
         const enqueued = await enqueueDualPolish({
           design_id: designId,
           magic_operation_id: operationId,
@@ -1612,7 +1614,10 @@ export function useStudioEditor() {
               : frontSwatch && smartBack
                 ? { fabric_swatch_base64: frontSwatch.dataUrl }
                 : {}),
-            notes: smartBack ? smartBackNotes : 'polish concept (back)',
+            // V2-0017: when both sides are inked, attach Front sketch as pair reference
+            // (used as Image 2 unless a fabric swatch already occupies that slot).
+            ...(!smartBack ? { pair_reference_base64: frontCap.dataUrl } : {}),
+            notes: smartBack ? smartBackNotes : dualBackNotes,
             idempotency_key: backIdempotencyKey,
           },
           signal: controller.signal,
@@ -3210,7 +3215,8 @@ export function useStudioEditor() {
             side === 'front'
               ? { strokes: doc.strokes, fills: doc.fills ?? [] }
               : doc.back ?? { strokes: [], fills: [] }
-          const [cap, fabricSwatch] = await Promise.all([
+          const frontBag = { strokes: doc.strokes, fills: doc.fills ?? [] }
+          const [cap, fabricSwatch, frontPairCap] = await Promise.all([
             captureSketchForMagic({
               strokes: bag.strokes,
               fills: bag.fills,
@@ -3218,6 +3224,15 @@ export function useStudioEditor() {
               referenceOpacity: doc.dimmed ? 0.4 : 1,
             }),
             captureFabricSwatchForMagic(bag.fills),
+            // V2-0017: Back retry re-captures Front as pair reference; Front retry skips.
+            side === 'back'
+              ? captureSketchForMagic({
+                  strokes: frontBag.strokes,
+                  fills: frontBag.fills,
+                  referenceUrl: referenceUrlForDocument(doc, 'front'),
+                  referenceOpacity: doc.dimmed ? 0.4 : 1,
+                })
+              : Promise.resolve(null),
           ])
 
           // Persist a new per-attempt key before POST so lost responses can replay.
@@ -3231,7 +3246,13 @@ export function useStudioEditor() {
             const job = await enqueueSketchPolish({
               imageBase64: cap.dataUrl,
               ...(fabricSwatch ? { fabricSwatchBase64: fabricSwatch.dataUrl } : {}),
-              notes: `polish concept (${side}) retry`,
+              ...(side === 'back' && frontPairCap
+                ? { pairReferenceBase64: frontPairCap.dataUrl }
+                : {}),
+              notes:
+                side === 'back'
+                  ? 'polish concept (back) retry — match Front garment identity; preserve sibling Front result; never invent an unrelated bodysuit'
+                  : `polish concept (${side}) retry`,
               designId: stored.designId ?? designIdRef.current,
               magic_operation_id: operationId,
               studio_side: side,
