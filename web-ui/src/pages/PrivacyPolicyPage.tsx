@@ -88,7 +88,7 @@ export function PrivacyPolicyPage() {
           <p>
             This page is public. You do not need an account to read it. Apple App Store reviewers and
             anyone visiting fashionrise.app may open{' '}
-            <a href="https://fashionrise.app/privacy">https://fashionrise.app/privacy</a>.
+            <a href="/privacy">fashionrise.app/privacy</a>.
           </p>
         </section>
 

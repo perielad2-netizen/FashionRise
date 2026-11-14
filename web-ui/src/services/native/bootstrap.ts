@@ -1,13 +1,14 @@
 import { App } from '@capacitor/app'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { SplashScreen } from '@capacitor/splash-screen'
-import { installAndroidGoogleOAuthReturnListener } from './googleOAuthReturn'
+import { installNativeDeepLinkRouter } from './deepLinks'
 import {
   isNativeIosStarsShop,
   recoverPendingStarsPurchases,
   startIapTransactionUpdateRecovery,
 } from './iap'
-import { isNativeShell, nativePlatform } from './platform'
+import { isNativeShell } from './platform'
+import { syncNativePushAfterAuth } from './nativePush'
 
 /** Soften native chrome once the SPA mounts. Safe no-op on web. */
 export async function bootstrapNativeShell(): Promise<void> {
@@ -32,10 +33,8 @@ export async function bootstrapNativeShell(): Promise<void> {
     else void App.exitApp()
   })
 
-  // Android Google Sign-In: Custom Tabs → custom-scheme handoff → redeem in-app.
-  if (nativePlatform() === 'android') {
-    void installAndroidGoogleOAuthReturnListener()
-  }
+  // FashionRise-owned deep links + click guard (incl. Android Google OAuth handoff).
+  void installNativeDeepLinkRouter()
 
   // Bounded Apple Stars recovery on resume (cooldown + credit gate inside recover).
   if (isNativeIosStarsShop()) {
@@ -47,4 +46,9 @@ export async function bootstrapNativeShell(): Promise<void> {
       })
     })
   }
+
+  // Native push is fail-closed until operator flags + FCM/APNs are ready.
+  void syncNativePushAfterAuth().catch(() => {
+    /* ignore — Runway UI surfaces unsupported/disabled */
+  })
 }

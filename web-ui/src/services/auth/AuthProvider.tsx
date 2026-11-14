@@ -28,6 +28,10 @@ import {
 import { SESSION_EXPIRED_EVENT } from '@/services/api/client'
 import { tokenStore } from '@/services/auth/tokenStore'
 import { isNativeIosStarsShop, recoverPendingStarsPurchases } from '@/services/native/iap'
+import {
+  clearNativePushForLogout,
+  syncNativePushAfterAuth,
+} from '@/services/native/nativePush'
 import { isNativeShell, nativePlatform } from '@/services/native/platform'
 
 type AuthState = {
@@ -99,6 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await apiLogin(payload)
     bindFabricCacheToUser(result.user.id)
     setUser(result.user)
+    void syncNativePushAfterAuth().catch(() => {
+      /* fail-closed */
+    })
   }, [])
 
   const register = useCallback(async (payload: RegisterPayload) => {
@@ -108,11 +115,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.status === 'authenticated') {
       bindFabricCacheToUser(result.user.id)
       setUser(result.user)
+      void syncNativePushAfterAuth().catch(() => {
+        /* fail-closed */
+      })
     }
     return result
   }, [])
 
   const logout = useCallback(() => {
+    void clearNativePushForLogout()
     logoutLocal()
     bindFabricCacheToUser(null)
     setUser(null)

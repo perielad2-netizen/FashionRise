@@ -21,6 +21,7 @@ from app.models.private_media_cleanup import PrivateMediaCleanupQueue
 from app.models.iap_apple_notification import IapAppleNotification
 from app.models.iap_purchase import IapPurchase
 from app.models.iap_stars_adjustment import IapStarsAdjustment
+from app.models.native_push_device import NativePushDevice
 from app.models.push_subscription import PushSubscription
 from app.models.rating import Rating
 from app.models.email_verification_token import EmailVerificationToken
@@ -61,6 +62,7 @@ __all__ = [
     "IapAppleNotification",
     "IapPurchase",
     "IapStarsAdjustment",
+    "NativePushDevice",
     "PushSubscription",
     "Rating",
     "EmailVerificationToken",

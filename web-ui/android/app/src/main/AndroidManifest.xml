@@ -34,6 +34,28 @@
                     android:pathPrefix="/google" />
             </intent-filter>
 
+            <!-- App Links (https://fashionrise.app) — requires live assetlinks.json + SHA-256.
+                 Until verified, links open in the browser; deepLinks still handle appUrlOpen. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="fashionrise.app" android:pathPrefix="/studio" />
+                <data android:scheme="https" android:host="fashionrise.app" android:pathPrefix="/login" />
+                <data android:scheme="https" android:host="fashionrise.app" android:pathPrefix="/register" />
+                <data android:scheme="https" android:host="fashionrise.app" android:pathPrefix="/forgot-password" />
+                <data android:scheme="https" android:host="fashionrise.app" android:pathPrefix="/reset-password" />
+                <data android:scheme="https" android:host="fashionrise.app" android:pathPrefix="/verify-email" />
+                <data android:scheme="https" android:host="fashionrise.app" android:pathPrefix="/privacy" />
+                <data android:scheme="https" android:host="www.fashionrise.app" android:pathPrefix="/studio" />
+                <data android:scheme="https" android:host="www.fashionrise.app" android:pathPrefix="/login" />
+                <data android:scheme="https" android:host="www.fashionrise.app" android:pathPrefix="/register" />
+                <data android:scheme="https" android:host="www.fashionrise.app" android:pathPrefix="/forgot-password" />
+                <data android:scheme="https" android:host="www.fashionrise.app" android:pathPrefix="/reset-password" />
+                <data android:scheme="https" android:host="www.fashionrise.app" android:pathPrefix="/verify-email" />
+                <data android:scheme="https" android:host="www.fashionrise.app" android:pathPrefix="/privacy" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -50,4 +72,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+ notification permission (requested at runtime after auth). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

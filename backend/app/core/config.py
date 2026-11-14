@@ -263,6 +263,20 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:ops@fashionrise.app"
 
+    # Native push (FCM / APNs). Separate fail-closed flags — incomplete infra must not
+    # break Web Push. Never commit private keys; set paths/IDs via secrets only.
+    native_push_android_enabled: bool = False
+    native_push_ios_enabled: bool = False
+    # Optional FCM HTTP v1: path to service-account JSON (outside repo) + project id.
+    native_push_fcm_service_account_json: str = ""
+    native_push_fcm_project_id: str = ""
+    # Optional APNs: path to .p8 (outside repo), key id, team id, topic (= bundle id).
+    native_push_apns_key_path: str = ""
+    native_push_apns_key_id: str = ""
+    native_push_apns_team_id: str = ""
+    native_push_apns_topic: str = "app.fashionrise.studio"
+    native_push_apns_use_sandbox: bool = True
+
     # Store IAP verification (App Store / Play Store). Confirm stays fail-closed until ready.
     # Never commit real secrets. Legacy shared secret is unused (StoreKit 2 JWS only).
     iap_apple_shared_secret: str = ""

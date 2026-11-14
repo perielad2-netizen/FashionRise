@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl
@@ -26,3 +27,27 @@ class PushSubscriptionRead(BaseModel):
 
 class PushSubscriptionDelete(BaseModel):
     endpoint: HttpUrl
+
+
+class NativePushCapability(BaseModel):
+    android_enabled: bool
+    ios_enabled: bool
+
+
+class NativePushDeviceCreate(BaseModel):
+    platform: Literal["android", "ios"]
+    device_token: str = Field(min_length=16, max_length=4096)
+    app_version: str | None = Field(default=None, max_length=64)
+
+
+class NativePushDeviceRead(BaseModel):
+    id: UUID
+    platform: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class NativePushDeviceDelete(BaseModel):
+    device_token: str = Field(min_length=16, max_length=4096)

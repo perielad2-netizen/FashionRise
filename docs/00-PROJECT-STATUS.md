@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**#318+#319 MERGED + web tip LIVE `fe0dba34`** — header/download toast + Home/Runway polish on fashionrise.app. iOS App Store already published; iOS **1.0.1** later. #303 still open; push/billing gates OFF.)
+**Last updated:** 2026-11-14 (**#303 approved for merge** — native nav + fail-closed FCM/APNs foundation; review fixes included; **`NATIVE_PUSH_*` remain OFF**. #318+#319 already on tip `fe0dba34`. iOS App Store published; Stars purchasing still OFF.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -15,23 +15,32 @@
 | **Android test app** | **Current gate** | Continue device QA on the new web tip until required tests pass. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
-| **Gates** | Unchanged | #303 unmerged · native push OFF · public Stars purchasing/credit OFF |
+| **Gates** | Native push **foundation merged** · **`NATIVE_PUSH_*` OFF** until explicit enable · Stars purchasing/credit OFF |
 
-**Stop line:** No Codemagic iOS builds · no App Store submissions · no push/billing enable · no unrelated feature work.
+**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · no unrelated feature work.
 
-**Exact next step:** Hard-refresh / reopen Android WebView until App **`fe0dba34`**; retest header + download toast + Home/Runway; then plan iOS **1.0.1** after Android approval.
+**Exact next step:** Merge/deploy #303 with flags OFF; then continue Android QA. Enable `NATIVE_PUSH_*` only after operator FCM/APNs setup + explicit approval.
+
+## Native nav + push foundation (2026-11-14) — #303 APPROVED
+
+| Status | Detail |
+|---|---|
+| Scope | Stay-in-app Capacitor URL policy/deep links + fail-closed native push (Alembic **030**, `/push/native/*`, FE `nativePush.ts`) |
+| Flags | **`native_push_android_enabled=false`** · **`native_push_ios_enabled=false`** (no live FCM/APNs send) |
+| Docs | `docs/NATIVE-NAV-PUSH-AUDIT.md` · `docs/deploy/NATIVE-PUSH-OPERATOR.md` |
+| Out of scope | Flipping enable flags · store submit · Stars billing |
 
 ## Web tip deploy (2026-11-14) — #318+#319 LIVE
 
 | Status | Detail |
 |---|---|
-| Merge | **#318** + **#319** on `main` tip **`fe0dba34`** (#303 left open) |
+| Merge | **#318** + **#319** on `main` tip **`fe0dba34`** |
 | FE | `/var/www/fashionrise/releases/fe0dba34-android-qa-318-319` · public `/version.json` matches · prior `qa-reset-stars-d7f61f9e` |
 | BE | API+worker restarted on same tip · `sort=top10` cap **50** · `/health` ok |
 | Vite gates | Front/Back+Magic+Dual **ON** · Registration UI assert **false** (backend status still gates Create Account) |
-| Not deployed | Codemagic iOS/Android store builds · push enable · Stars purchasing |
+| Not deployed yet | #303 tip (pending this merge) · Codemagic store builds · push enable · Stars purchasing |
 | Rollback | `ln -sfn /var/www/fashionrise/releases/qa-reset-stars-d7f61f9e /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
-| **Exact next step** | Owner/Android QA on tip `fe0dba34` |
+| **Exact next step** | Owner/Android QA on tip `fe0dba34` (+ #303 after deploy) |
 
 ## Android QA — Home + Runway polish (2026-11-14) — #319
 
@@ -95,6 +104,22 @@ An earlier status block asked to start a Codemagic iOS 1.0 TestFlight RC on `bd8
 | Status | Detail |
 |---|---|
 | IDs | V2-0005, 0012–0016, 0018–0020 |
+
+## Native navigation & push foundation (2026-11-13) — IN PROGRESS / FAIL-CLOSED
+
+| Status | Detail |
+|---|---|
+| Baseline | `main` `d7f61f9e` |
+| Branch | `cursor/web-native-nav-push-77c6` |
+| Nav fixes | Central `urlPolicy` + deep-link/click guard; `allowNavigation: []`; Privacy relative `/privacy`; Android App Links intent filter; iOS entitlements + `UIBackgroundModes` |
+| OAuth | Android Google one-time handoff **unchanged** (reused securely) |
+| Native push | Table `native_push_devices` (Alembic **030**); `/push/native/*` API; FE `nativePush.ts`; Runway toggle routes native vs Web Push; logout cleanup |
+| Review fixes | AppDelegate Capacitor APNs callbacks; push destinations exclude reset/verify/OAuth/tokens; Debug=`development` / Release=`production` entitlements; coexistence docs |
+| Flags | `NATIVE_PUSH_ANDROID_ENABLED` / `NATIVE_PUSH_IOS_ENABLED` default **false** — incomplete infra cannot break Web Push |
+| Operator | `docs/deploy/NATIVE-PUSH-OPERATOR.md` · AASA/assetlinks **templates only** (no live fingerprints committed) |
+| Audit table | `docs/NATIVE-NAV-PUSH-AUDIT.md` |
+| Store / push prod | **Do not** Codemagic IPA/AAB · **do not** enable native push in production until authorized |
+| **Exact next step** | Merge #303 with flags false → QA web push regression → operator secrets + staging native enable → one consolidated iOS build after QA |
 
 ## Mobile QA fixes (2026-11-13) — password reset · overlays · Stars UX
 

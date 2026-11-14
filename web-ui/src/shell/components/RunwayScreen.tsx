@@ -48,6 +48,7 @@ import {
 } from '@/services/friendsApi'
 import { ApiError } from '@/services/api/client'
 import { useAuth } from '@/services/auth/AuthProvider'
+import { isNativeShell } from '@/services/native/platform'
 import {
   disableRunwayPush,
   enableRunwayPush,
@@ -56,7 +57,6 @@ import {
   runwayPushIsEnabled,
 } from '@/services/pushApi'
 import { useAuthGalleryImage } from '@/hooks/useAuthGalleryImage'
-import { isNativeShell } from '@/services/native/platform'
 import { FriendProfilePanel } from '@/shell/components/FriendProfilePanel'
 import styles from './RunwayScreen.module.css'
 
@@ -114,14 +114,7 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
     try {
-      // TEMP (V2-0008): keep native toggle OFF until PR #303 lands with FCM/APNs.
-      // When integrating #303, replace this early-return with #303's native push
-      // enablement path — do not invent a second push implementation here.
-      if (isNativeShell()) {
-        setPushOn(false)
-        setPushNeedsGesture(false)
-        return
-      }
+      // #303: native shell uses fail-closed nativePush via pushApi (flags OFF ⇒ disabled).
       const { on, result } = await ensureDefaultRunwayPush()
       if (on) {
         setPushOn(true)
@@ -136,16 +129,30 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         setPushNeedsGesture(false)
         return
       }
-      if (result === 'denied' && !fromGesture && Notification.permission === 'default') {
+      if (
+        result === 'denied' &&
+        !fromGesture &&
+        !isNativeShell() &&
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'default'
+      ) {
         // Browsers often block permission prompts without a tap — retry on next interaction.
         setPushNeedsGesture(true)
         return
       }
       if (result === 'denied') {
-        setPushNotice('Notifications blocked in browser settings')
+        setPushNotice(
+          isNativeShell()
+            ? 'Notifications blocked in system settings'
+            : 'Notifications blocked in browser settings',
+        )
         setPushNeedsGesture(false)
       } else if (result === 'disabled') {
-        setPushNotice('Push isn’t configured on the server yet')
+        setPushNotice(
+          isNativeShell()
+            ? 'Native push isn’t enabled on the server yet'
+            : 'Push isn’t configured on the server yet',
+        )
       } else if (result === 'unsupported') {
         setPushNotice('Push needs a modern browser (or install the app to Home Screen on iPhone).')
       }
@@ -187,23 +194,14 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
     setPushNotice(null)
     setPushNeedsGesture(false)
     try {
-      // TEMP (V2-0008): reconcile with PR #303 on merge — wire this toggle to
-      // #303's native push APIs/flags instead of a parallel implementation.
-      // Do not pretend Web Push works inside the Capacitor shell.
-      if (isNativeShell()) {
-        setPushOn(false)
-        setPushNotice(
-          'App notifications aren’t enabled in this build yet (needs native push config). Web push still works in a browser.',
-        )
-        return
-      }
+      // #303: Capacitor uses nativePush through pushApi (never Web Push in the shell).
       if (pushOn) {
         await disableRunwayPush()
         setPushOn(false)
         setPushNotice('Push off for this device')
         return
       }
-      if (!pushSupported()) {
+      if (!isNativeShell() && !pushSupported()) {
         setPushNotice('Push needs a modern browser (or install the app to Home Screen on iPhone).')
         return
       }
@@ -212,9 +210,17 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
         setPushOn(true)
         setPushNotice('Push on — we’ll notify likes, scores, and comments')
       } else if (result === 'denied') {
-        setPushNotice('Notifications blocked in browser settings')
+        setPushNotice(
+          isNativeShell()
+            ? 'Notifications blocked in system settings'
+            : 'Notifications blocked in browser settings',
+        )
       } else if (result === 'disabled') {
-        setPushNotice('Push isn’t configured on the server yet')
+        setPushNotice(
+          isNativeShell()
+            ? 'Native push isn’t enabled on the server yet'
+            : 'Push isn’t configured on the server yet',
+        )
       } else {
         setPushNotice('Push isn’t supported here')
       }
