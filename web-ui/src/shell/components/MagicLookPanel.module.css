@@ -1,12 +1,13 @@
 .overlay {
-  /* #180 — fixed + safe-area so Android Chrome/Samsung toolbars cannot clip actions */
+  /* #180 — fixed + safe-area so Android Chrome/Samsung toolbars cannot clip actions.
+     Also clear GlobalHeader so Magic title/copy is not clipped under the chrome. */
   position: fixed;
   inset: 0;
   z-index: 40;
   display: grid;
   place-items: center;
   padding:
-    max(8px, env(safe-area-inset-top, 0px))
+    max(8px, calc(var(--fr-header-h) + env(safe-area-inset-top, 0px)))
     max(8px, env(safe-area-inset-right, 0px))
     max(8px, env(safe-area-inset-bottom, 0px))
     max(8px, env(safe-area-inset-left, 0px));
@@ -27,8 +28,14 @@
   width: min(920px, 100%);
   /* Prefer small viewport height so expanding mobile chrome cannot bury the footer */
   max-height: min(
-    calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px),
-    calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px),
+    calc(
+      100svh - var(--fr-header-h) - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - 16px
+    ),
+    calc(
+      100dvh - var(--fr-header-h) - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - 16px
+    ),
     900px
   );
   height: auto;
@@ -450,8 +457,14 @@
     padding: 10px 10px 0;
     width: 100%;
     max-height: min(
-      calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12px),
-      calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12px)
+      calc(
+        100svh - var(--fr-header-h) - env(safe-area-inset-top, 0px) -
+          env(safe-area-inset-bottom, 0px) - 12px
+      ),
+      calc(
+        100dvh - var(--fr-header-h) - env(safe-area-inset-top, 0px) -
+          env(safe-area-inset-bottom, 0px) - 12px
+      )
     );
     border-radius: 14px;
   }
