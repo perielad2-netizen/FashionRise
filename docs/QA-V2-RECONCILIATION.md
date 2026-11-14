@@ -43,7 +43,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0030 | **Fixed** P1 | E | Rectangular eraser (`rectErase`): clips active-side strokes/fills **inside** the selection (crossing segments kept outside); layer-aware; Undo/Redo; Clear + freehand erase kept |
 | V2-0031 | **Implemented** P1 | E | Home before/after gallery (#312); activation pending authorized examples (`AUTHORIZED_HOME_EXAMPLES` empty) |
 | V2-0032 | **Fixed** P2 | E | Home value copy — sketch→Magic look + Start creating CTA (ahead of carousel) |
-| V2-0033 | **Confirmed** P1 | B | My Looks Download no-op on Android WebView `<a download>`; Capacitor Media (+ Share fallback) + recursive `fr-dl/` + `apiRequestBlob` refresh |
+| V2-0033 | **Confirmed** P1 + UX follow-up | B / Android QA | My Looks Download no-op on Android WebView `<a download>`; Capacitor Media (+ Share fallback) + recursive `fr-dl/` + `apiRequestBlob` refresh. **Android QA follow-up:** sticky save toast — `Saving image…` / `Saved to your gallery ✓` / error; no success on Share-only; in-flight tap guard |
 | V2-0034 | **Confirmed** P1 | C | Personal My Model is FRONT-only (one front image); pin/restore coerce Front; Flip hidden/disabled; Back bags preserved; create does not auto-select — Use in Studio is explicit |
 
 ## 21 CTL proposals
@@ -133,3 +133,12 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 ## Batch E — COMPLETE
 
 All Batch E implementation slices are on `main`. No further Batch E feature PRs unless PM opens a new batch.
+
+## Android QA follow-ups (post Batch E) — header + download toast
+
+Device screenshots after Batches A–E confirmed two remaining Android UX bugs (not new Master Plan IDs):
+
+1. **P1 Header overlap** — Global Stars badge / long balance covered the FashionRise wordmark on narrow Android widths. Fix: responsive header grid, ellipsis wordmark, capped Stars badge, locale-formatted balance; branding preserved.
+2. **P2 Download confirmation** — V2-0033 gallery save worked but showed no feedback. Fix: sticky My Looks footer toast (`Saving image…` / `Saved to your gallery ✓` / error); Share-only is not success; in-flight tap guard.
+
+No billing, push, deploy, or iOS build changes.

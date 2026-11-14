@@ -146,7 +146,9 @@ export function GlobalHeader({
     }
   }
 
-  const starsLabel = unlimited ? '∞' : String(balance ?? 0)
+  const starsLabel = unlimited
+    ? '∞'
+    : Number(balance ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
   const purchaseNote = nativeIos
     ? 'Buy Stars with Apple In‑App Purchase when purchasing is enabled for this build.'
     : nativeAndroid
