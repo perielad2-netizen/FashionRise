@@ -139,11 +139,13 @@ def vision_reference_instructions(ref: ReferenceCroquis | None) -> str:
         return (
             "SELECTED STUDIO REFERENCE: `personal` (Create My Croquis underlay — photo-faithful "
             "personal figure, not a built-in mannequin library entry). "
-            "Preserve the person, body proportions, pose, stance, limbs, and visible anatomy "
-            "exactly as drawn in the attached sketch. "
+            "Preserve the person, body proportions, pose, stance, limbs, visible anatomy, and "
+            "apparent sex / gender presentation exactly as drawn in the attached sketch. "
             "Do NOT replace the figure with female-straight, male-straight, or any other "
             "generic library croquis. Do NOT invent a male or female fashion-model family. "
             "Do NOT default to a female-presenting runway figure. "
+            "Do NOT feminize a male-presenting personal figure or masculinize a female-presenting "
+            "personal figure merely because a garment silhouette is ambiguous. "
             "Refine garment construction, textiles, colors, and presentation only."
         )
     if ref.kind == "utility":
@@ -179,10 +181,12 @@ def edit_reference_instructions(ref: ReferenceCroquis | None) -> str:
     if ref.kind == "personal":
         return (
             "SELECTED STUDIO REFERENCE (authoritative): `personal` Create My Croquis underlay. "
-            "Preserve this exact personal figure's proportions, pose, stance, arms, legs, and "
-            "appearance as drawn in the sketch. "
+            "Preserve this exact personal figure's proportions, pose, stance, arms, legs, "
+            "appearance, and apparent sex / gender presentation as drawn in the sketch. "
             "Do NOT replace with female-straight or any other built-in mannequin. "
             "Do NOT invent a male or female library croquis identity. "
+            "Do NOT feminize a male-presenting personal figure or masculinize a female-presenting "
+            "personal figure. "
             "Professionally refine the garment construction, textiles, colors, and presentation only."
         )
     if ref.kind == "utility":
