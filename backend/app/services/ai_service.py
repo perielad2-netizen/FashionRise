@@ -298,8 +298,10 @@ def _prompt_identity_fingerprint(input_data: dict) -> str | None:
         "reference_model_id": input_data.get("reference_model_id"),
         "notes": input_data.get("notes"),
         "mood_notes": input_data.get("mood_notes"),
-        # Bind textile reference without storing raw private bytes in the fingerprint.
+        # Bind textile / Front pair references without storing raw private bytes.
         "fabric_swatch_fingerprint": input_data.get("fabric_swatch_fingerprint"),
+        # V2-0017: different paired FRONT must not replay under the same idempotency key.
+        "pair_reference_fingerprint": input_data.get("pair_reference_fingerprint"),
     }
     if all(v is None or v == "" for v in payload.values()):
         return None
