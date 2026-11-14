@@ -41,7 +41,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0028 | **Confirmed** | C | Pattern scale Fine↔Coarse + explanation |
 | V2-0029 | **Confirmed** | C | Brush color on brush sheet + Materials link |
 | V2-0030 | **Fixed** P1 | E | Rectangular eraser (`rectErase`): clips active-side strokes/fills **inside** the selection (crossing segments kept outside); layer-aware; Undo/Redo; Clear + freehand erase kept |
-| V2-0031 | **Feature request** P1 | E | Home before/after gallery — authorized examples only; reduced-motion |
+| V2-0031 | **Implemented** P1 (await PM assets) | E | Home before/after gallery wired; production catalog empty until authorized pairs |
 | V2-0032 | **Fixed** P2 | E | Home value copy — sketch→Magic look + Start creating CTA (ahead of carousel) |
 | V2-0033 | **Confirmed** P1 | B | My Looks Download no-op on Android WebView `<a download>`; Capacitor Media (+ Share fallback) + recursive `fr-dl/` + `apiRequestBlob` refresh |
 | V2-0034 | **Confirmed** P1 | C | Personal My Model is FRONT-only (one front image); pin/restore coerce Front; Flip hidden/disabled; Back bags preserved; create does not auto-select — Use in Studio is explicit |
@@ -103,5 +103,14 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 - Commits through existing StrokeHistory + draft document path (save/reopen preserved).
 - Freehand Eraser and Clear canvas unchanged.
 
-**Shipped:** V2-0030 (#309), V2-0032 (#310). **Next:** V2-0026 brush explainers; V2-0031 gallery later.  
+**Shipped:** V2-0030 (#309), V2-0032 (#310), V2-0026 (#311).  
+**Open for PM review:** V2-0031 Home before/after gallery — UI + empty authorized catalog (no invented pairs; fill `AUTHORIZED_HOME_EXAMPLES` only with genuine licensed assets).  
 **Still out of scope:** CTL-*, push enable, store submit, merging #303.
+
+## Batch E — V2-0031 Home before/after gallery
+
+- `HomeBeforeAfterGallery` mounts after the Home hero; FashionRise branding + Start creating CTA unchanged.
+- Renders **only** when `AUTHORIZED_HOME_EXAMPLES` contains validated `home-marketing` pairs; empty catalog → no gallery DOM.
+- Touch scroll-snap + 44px prev/next; `prefers-reduced-motion` disables smooth scroll; first slide eager, others lazy; width/height + aspect-ratio reserve space.
+- Does **not** load My Designs / My Looks / Runway or other private user content.
+- PM gate: add genuine authorized sketch↔Magic pairs to `web-ui/src/shell/homeAuthorizedExamples.ts` before enabling a visible carousel.

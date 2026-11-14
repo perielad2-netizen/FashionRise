@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch E** — V2-0030 #309 + V2-0032 #310 merged; V2-0026 brush explainers shipping. PR #303 still open; no store/push/billing enable.)
+**Last updated:** 2026-11-14 (**QA V2 Batch E** — V2-0030/0032/0026 merged; V2-0031 Home gallery open for PM review with empty authorized catalog. PR #303 still open; no store/push/billing enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
@@ -11,11 +11,12 @@
 
 | Status | Detail |
 |---|---|
-| Baseline | `main` includes #310 (`d5074e55`) |
-| Merged | **V2-0030** rect eraser (#309); **V2-0032** Home value copy (#310) |
-| Branch | `cursor/web-brush-explainers-77c6` (V2-0026) |
-| IDs | **V2-0026** brush explainers (then V2-0031 gallery later) |
-| **Exact next step** | Merge brush explainers; leave V2-0031 / remaining E items for later |
+| Baseline | `main` includes #311 (V2-0026) |
+| Merged | **V2-0030** #309 · **V2-0032** #310 · **V2-0026** #311 |
+| Branch | `cursor/web-home-gallery-77c6` (V2-0031) |
+| IDs | **V2-0031** Home before/after gallery — PM review; do not invent pairs |
+| Gate | Production `AUTHORIZED_HOME_EXAMPLES` stays empty until genuine licensed assets are supplied |
+| **Exact next step** | PM review gallery PR; authorize real example pairs before visible carousel |
 
 ## QA V2 Batch D (2026-11-14) — MERGED #307
 
