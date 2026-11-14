@@ -393,6 +393,50 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     }
   }
 
+  const onDownloadSaved = async (row: FittingRoomSavedResult) => {
+    if (downloadBusy) return
+    setDownloadBusy(true)
+    try {
+      let blob: Blob | null = null
+      if (row.jobId) {
+        try {
+          blob = await fetchJobImageBlob(row.jobId)
+        } catch {
+          blob = null
+        }
+      }
+      if (!blob) {
+        const res = await fetch(row.dataUrl)
+        blob = await res.blob()
+      }
+      const { saveOrDownloadBlob } = await import('@/lib/exportCanvas')
+      const slug = (row.jobId || row.id).slice(0, 8)
+      const method = await saveOrDownloadBlob(blob, `fashionrise-fitting-${slug}.png`)
+      showNotice(downloadSuccessCopy(method), method === 'share' ? 'info' : 'ok')
+    } catch {
+      showNotice('Download failed. Try again.', 'error')
+    } finally {
+      setDownloadBusy(false)
+    }
+  }
+
+  const onShareSaved = async (row: FittingRoomSavedResult) => {
+    try {
+      const outcome = await requestShare({
+        kind: 'look',
+        title: 'FashionRise Fitting Room',
+        imageUrl: row.dataUrl,
+        imageFileName: 'fashionrise-fitting-preview.png',
+      })
+      if (outcome === 'shared') showNotice('Share sheet opened.', 'info')
+      else if (outcome === 'needs-fallback') {
+        showNotice('Sharing is not available — use Download instead.', 'info')
+      }
+    } catch {
+      showNotice('Share failed. Try download instead.', 'error')
+    }
+  }
+
   const onDeleteSaved = async (id: string) => {
     await deleteSavedResult(id)
     const rows = await listSavedResults(userId)
@@ -637,7 +681,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
         <div className={styles.panel} style={{ gridColumn: '1 / -1' }}>
           <h2 className={styles.panelTitle}>4 · Saved previews</h2>
           <p className={styles.panelHint}>
-            Previews you save stay on this device. Use Download or Share from the try-on result above.
+            Previews you save stay on this device. Download, share, or delete anytime.
           </p>
           {saved.length === 0 ? (
             <p className={styles.previewEmpty}>No saved Fitting Room previews yet</p>
@@ -648,6 +692,21 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
                   <img src={row.dataUrl} alt={row.label} />
                   <span className={styles.outfitCat}>{row.label}</span>
                   <div className={styles.actions}>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      disabled={downloadBusy}
+                      onClick={() => void onDownloadSaved(row)}
+                    >
+                      Download
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      onClick={() => void onShareSaved(row)}
+                    >
+                      Share
+                    </button>
                     <button
                       type="button"
                       className={styles.btnGhost}
