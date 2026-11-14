@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**#303 MERGED + LIVE** tip `1a8e6121` — native nav + fail-closed FCM/APNs foundation + #320 tsc hotfix; **`NATIVE_PUSH_*` remain OFF**. Alembic **030**. iOS App Store published; Stars purchasing still OFF.)
+**Last updated:** 2026-11-14 (**#322 LIVE** tip `4c5b859c` — Runway Feed/Top split · push toggle locked while `NATIVE_PUSH_*` OFF · Home sketch→AI look hero. #303 foundation still on tip; Stars purchasing OFF.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -20,6 +20,18 @@
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · no unrelated feature work.
 
 **Exact next step:** Continue Android QA on tip `1a8e6121`. Enable `NATIVE_PUSH_*` only after operator FCM/APNs setup + explicit approval.
+
+## Android QA polish (2026-11-14) — #322 LIVE
+
+| Status | Detail |
+|---|---|
+| Tip | **`4c5b859c`** · FE `/var/www/fashionrise/releases/4c5b859c-runway-feed-top-home-322` |
+| Runway | Separate tabs: **Feed** (friends circle) · **Top** (worldwide 10/20/50) · **Friends** |
+| Push | Toggle locked OFF while server flags disabled — no fake “on” state |
+| Home | Logo plate removed; PM-authorized sketch→AI look hero gallery |
+| Flags | **`NATIVE_PUSH_*` remain OFF** |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/1a8e6121-native-nav-push-303 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| **Exact next step** | Hard-refresh Android WebView to `4c5b859c`; retest Feed/Top/Home |
 
 ## Native nav + push foundation (2026-11-14) — #303 LIVE
 
