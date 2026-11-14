@@ -131,10 +131,16 @@
   opacity: 0.45;
 }
 
-.textureHint {
+.textureHint,
+.settingHint {
   margin: 0 0 4px;
   font-size: 10px;
+  line-height: 1.35;
   color: #6b7280;
+}
+
+.layerBlock {
+  margin-bottom: 8px;
 }
 
 .colorRow {

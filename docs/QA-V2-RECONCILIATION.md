@@ -36,7 +36,7 @@ One row per ID. Earlier findings are preserved; later batch notes update disposi
 | V2-0023 | **Confirmed** | C | Brush footprint; kind-aware brush tip preview |
 | V2-0024 | **Confirmed** | C | Airbrush draft/stamp presence boosted |
 | V2-0025 | **Confirmed** | C | Texture helper copy; charcoal accent slider (0% texture look clarified) |
-| V2-0026 | **Feature request** | E | Brush explainers — truthful short copy + touch-safe hints only |
+| V2-0026 | **Fixed** P2 | E | Brush explainers — truthful short copy + touch-safe hints (no hover-only) |
 | V2-0027 | **Confirmed** | C | Mouse-wheel hint gated to fine pointer; mobile slider copy |
 | V2-0028 | **Confirmed** | C | Pattern scale Fine↔Coarse + explanation |
 | V2-0029 | **Confirmed** | C | Brush color on brush sheet + Materials link |
@@ -103,5 +103,5 @@ Not defects. Do **not** enable push, change Stars billing, or submit store build
 - Commits through existing StrokeHistory + draft document path (save/reopen preserved).
 - Freehand Eraser and Clear canvas unchanged.
 
-**Shipped:** V2-0030 (#309). **Next:** V2-0032 Home copy → V2-0026 brush explainers.  
+**Shipped:** V2-0030 (#309), V2-0032 (#310). **Next:** V2-0026 brush explainers; V2-0031 gallery later.  
 **Still out of scope:** CTL-*, push enable, store submit, merging #303.
