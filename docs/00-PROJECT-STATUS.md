@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**Android QA #318+#319 merged** — header/download toast + Home/Runway polish; web FE/BE tip deploy authorized. iOS App Store already published; iOS **1.0.1** later. #303 still open; push/billing gates OFF.)
+**Last updated:** 2026-11-14 (**#318+#319 MERGED + web tip LIVE `fe0dba34`** — header/download toast + Home/Runway polish on fashionrise.app. iOS App Store already published; iOS **1.0.1** later. #303 still open; push/billing gates OFF.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -12,14 +12,26 @@
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Continue device QA until required tests pass. |
+| **Android test app** | **Current gate** | Continue device QA on the new web tip until required tests pass. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Unchanged | #303 unmerged · native push OFF · public Stars purchasing/credit OFF |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no push/billing enable · no unrelated feature work.
 
-**Exact next step:** Retest Android QA on the new web tip; then plan iOS **1.0.1** after Android approval.
+**Exact next step:** Hard-refresh / reopen Android WebView until App **`fe0dba34`**; retest header + download toast + Home/Runway; then plan iOS **1.0.1** after Android approval.
+
+## Web tip deploy (2026-11-14) — #318+#319 LIVE
+
+| Status | Detail |
+|---|---|
+| Merge | **#318** + **#319** on `main` tip **`fe0dba34`** (#303 left open) |
+| FE | `/var/www/fashionrise/releases/fe0dba34-android-qa-318-319` · public `/version.json` matches · prior `qa-reset-stars-d7f61f9e` |
+| BE | API+worker restarted on same tip · `sort=top10` cap **50** · `/health` ok |
+| Vite gates | Front/Back+Magic+Dual **ON** · Registration UI assert **false** (backend status still gates Create Account) |
+| Not deployed | Codemagic iOS/Android store builds · push enable · Stars purchasing |
+| Rollback | `ln -sfn /var/www/fashionrise/releases/qa-reset-stars-d7f61f9e /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+| **Exact next step** | Owner/Android QA on tip `fe0dba34` |
 
 ## Android QA — Home + Runway polish (2026-11-14) — #319
 
