@@ -23,6 +23,13 @@ class SketchPolishInputData(BaseModel):
             "(patterned fills only). Used as images.edit image #2; redacted from API responses."
         ),
     )
+    pair_reference_base64: str | None = Field(
+        default=None,
+        description=(
+            "Optional paired-side sketch (usually Front) for Back Dual Magic consistency "
+            "(V2-0017). Used as images.edit image #2 when no fabric swatch; redacted from API."
+        ),
+    )
     local_path_placeholder: str | None = None
     reference_model_id: str | None = Field(
         default=None,
@@ -75,6 +82,13 @@ class SketchPolishSidePayload(BaseModel):
     fabric_swatch_base64: str | None = Field(
         default=None,
         description="Optional exact Studio fabric tile for this side (images.edit #2).",
+    )
+    pair_reference_base64: str | None = Field(
+        default=None,
+        description=(
+            "Optional paired Front sketch for Back consistency (V2-0017). "
+            "images.edit #2 when fabric swatch absent."
+        ),
     )
     notes: str | None = None
     idempotency_key: str = Field(min_length=1, max_length=128)

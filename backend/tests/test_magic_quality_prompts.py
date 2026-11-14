@@ -953,3 +953,52 @@ def test_build_sketch_chat_request_polish_uses_new_system_prompt(settings):
     system = req["messages"][0]["content"]
     assert "design_identity" in system
     assert "light color wash" not in system.lower()
+
+
+def test_v2_0017_back_dual_prompt_includes_pair_contracts():
+    """Back Dual Magic prompts carry Front/Back pair + no-bodysuit guidance."""
+    spec = {
+        "main_colors": ["#111111"],
+        "materials": ["solid fill"],
+        "garment_category": "studio",
+        "details": "pair_mode=dual_inked; back_must_match_front_garment=1; never_invent_bodysuit=1",
+    }
+    job = _job(
+        studio_side="back",
+        magic_operation_id=str(uuid4()),
+        shared_garment_spec=spec,
+        pair_reference_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+    )
+    prompt = sketch_openai._build_image_prompt(
+        {
+            "summary": "black evening gown back",
+            "image_prompt": "rear view black gown with center-back zipper",
+        },
+        "black evening gown back",
+        job,
+    )
+    lower = prompt.lower()
+    assert "front/back pair" in lower
+    assert "pair reference" in lower
+    assert "bodysuit" in lower
+    assert "shared garment spec" in lower
+
+
+def test_v2_0017_fabric_swatch_suppresses_pair_image_clause_but_keeps_text():
+    """When Image 2 is textile, pair image clause is omitted but text pair contract remains."""
+    spec = {"main_colors": ["#BE185D"], "materials": ["Satin repeating textile"]}
+    job = _job(
+        studio_side="back",
+        magic_operation_id=str(uuid4()),
+        shared_garment_spec=spec,
+        fabric_swatch_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+        pair_reference_base64=f"data:image/png;base64,{base64.b64encode(_TINY_PNG).decode('ascii')}",
+    )
+    prompt = sketch_openai._build_image_prompt(
+        {"summary": "pink dress back", "image_prompt": "rear pink dress"},
+        "pink dress back",
+        job,
+    )
+    assert "TEXTILE REFERENCE" in prompt
+    assert "PAIR REFERENCE (Front→Back consistency)" not in prompt
+    assert "FRONT/BACK PAIR" in prompt

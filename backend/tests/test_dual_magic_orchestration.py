@@ -66,6 +66,29 @@ def test_dual_enqueue_creates_two_jobs_same_operation(client, db_session):
     assert front["input_data"]["image_fingerprint"] == back["input_data"]["image_fingerprint"]
 
 
+def test_dual_back_pair_reference_redacted_but_stored(client, db_session):
+    """V2-0017: Back may carry Front pair sketch; API redacts bytes, DB keeps them."""
+    tokens = register_with_invite(client, db_session, "dual_pair@example.com", "dual_pair")
+    body = _dual_payload()
+    body["back"] = {
+        **body["back"],
+        "pair_reference_base64": _DATA_URL,
+        "notes": "polish concept (back) with pair",
+    }
+    r = client.post("/api/v1/ai/sketch/polish-dual", headers=_auth(tokens), json=body)
+    assert r.status_code == 201, r.text
+    back = r.json()["back_job"]
+    assert "pair_reference_base64" not in back["input_data"]
+    assert back["input_data"].get("has_pair_reference") is True
+    assert back["input_data"].get("has_sketch_image") is True
+
+    row = db_session.get(AIJob, UUID(back["id"]))
+    assert row is not None
+    assert row.input_data.get("pair_reference_base64") == _DATA_URL
+    assert isinstance(row.input_data.get("pair_reference_fingerprint"), str)
+    assert len(row.input_data["pair_reference_fingerprint"]) == 64
+
+
 def test_dual_idempotent_retry_does_not_duplicate(client, db_session):
     tokens = register_with_invite(client, db_session, "dual_b@example.com", "dual_b")
     body = _dual_payload()

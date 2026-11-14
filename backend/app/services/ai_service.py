@@ -558,6 +558,26 @@ def _validate_optional_fabric_swatch(input_data: dict) -> None:
     input_data["fabric_swatch_fingerprint"] = hashlib.sha256(decoded).hexdigest()
 
 
+def _validate_optional_pair_reference(input_data: dict) -> None:
+    """Bound optional paired-side sketch (V2-0017 Front→Back consistency)."""
+    raw = input_data.get("pair_reference_base64")
+    if raw is None or raw == "":
+        input_data.pop("pair_reference_base64", None)
+        return
+    if not isinstance(raw, str):
+        raise ValidationAppError("pair_reference_base64 must be a string")
+    settings = get_settings()
+    max_bytes = settings.max_upload_bytes
+    match = _DATA_URL_RE.match(raw.strip())
+    b64 = match.group(2) if match else raw.strip()
+    if len(b64) > int(max_bytes * 1.4) + 64:
+        raise ValidationAppError("Pair reference image is too large")
+    decoded = _decode_data_url_image(raw, field="pair_reference_base64")
+    if len(decoded) > max_bytes:
+        raise ValidationAppError("Pair reference image is too large")
+    input_data["pair_reference_fingerprint"] = hashlib.sha256(decoded).hexdigest()
+
+
 def _validate_sketch_image_payload(input_data: dict) -> None:
     """Bound vision payloads before enqueue (no OpenAI call)."""
     if not isinstance(input_data, dict):
@@ -565,6 +585,7 @@ def _validate_sketch_image_payload(input_data: dict) -> None:
     raw = input_data.get("image_base64")
     if raw is None or raw == "":
         _validate_optional_fabric_swatch(input_data)
+        _validate_optional_pair_reference(input_data)
         return
     if not isinstance(raw, str):
         raise ValidationAppError("image_base64 must be a string")
@@ -580,6 +601,7 @@ def _validate_sketch_image_payload(input_data: dict) -> None:
     if len(decoded) > max_bytes:
         raise ValidationAppError("Sketch image is too large")
     _validate_optional_fabric_swatch(input_data)
+    _validate_optional_pair_reference(input_data)
 
 
 def _stamp_revision_fields(raw: dict, source_revision: int | None, content_fingerprint: str | None) -> None:
@@ -609,8 +631,9 @@ def _prepare_sketch_polish_input(
     if design_id is not None:
         raw["design_id"] = str(design_id)
     _stamp_revision_fields(raw, source_revision, content_fingerprint)
-    # Stamp textile fingerprint before prompt identity so Dual merge binds swatch identity.
+    # Stamp textile / pair fingerprints before prompt identity so Dual merge binds them.
     _validate_optional_fabric_swatch(raw)
+    _validate_optional_pair_reference(raw)
     img_fp = _compute_image_fingerprint(raw)
     if img_fp:
         raw["image_fingerprint"] = img_fp
@@ -942,6 +965,8 @@ _REDACTED_IMAGE_KEYS = (
     "imageBase64",
     "fabric_swatch_base64",
     "fabricSwatchBase64",
+    "pair_reference_base64",
+    "pairReferenceBase64",
     "garment_image_base64",
     "garmentImageBase64",
 )
@@ -954,14 +979,19 @@ def sanitize_job_input_for_response(input_data: dict | None) -> dict:
     (notes, local_path_placeholder, etc.) remain. When a sketch was present,
     set has_sketch_image=true. When a textile swatch was present, set
     has_fabric_swatch=true (never return private fabric bytes or URLs).
+    Pair Front references set has_pair_reference=true (V2-0017).
     """
     raw = dict(input_data or {})
     had_image = False
     had_swatch = False
+    had_pair = False
     for key in _REDACTED_IMAGE_KEYS:
         if key in raw:
-            if key.lower().startswith("fabric"):
+            lower = key.lower()
+            if lower.startswith("fabric"):
                 had_swatch = True
+            elif "pair" in lower:
+                had_pair = True
             else:
                 had_image = True
             raw.pop(key, None)
@@ -969,6 +999,8 @@ def sanitize_job_input_for_response(input_data: dict | None) -> dict:
         raw["has_sketch_image"] = True
     if had_swatch:
         raw["has_fabric_swatch"] = True
+    if had_pair:
+        raw["has_pair_reference"] = True
     return raw
 
 

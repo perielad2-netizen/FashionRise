@@ -224,6 +224,9 @@ export function buildSharedGarmentSpec(
   const materials = materialsFromDoc(doc)
   const fingerprint = draftContentFingerprint(doc)
   const bridal = paleBridalNotes(front, back, main_colors)
+  const bothInked =
+    (front.strokes.length > 0 || front.fills.length > 0) &&
+    (back.strokes.length > 0 || back.fills.length > 0)
   const details = [
     `model=${doc.model}`,
     `front_strokes=${front.strokes.length}`,
@@ -235,6 +238,10 @@ export function buildSharedGarmentSpec(
     'color_authority=applied_fills_and_ink_combination',
     'accessory_fabric_fills=preserve_as_painted_in_sketch',
     'sketch_cleanup=smart_normalize_accidental_gaps',
+    // V2-0017 — Front/Back must share garment identity; Ready ≠ perfect match promise.
+    bothInked ? 'pair_mode=dual_inked' : 'pair_mode=single_or_smart_back',
+    'back_must_match_front_garment=1',
+    'never_invent_bodysuit=1',
     ...(bridal.length ? ['pale_bridal_fidelity=1'] : []),
     `fingerprint=${fingerprint.slice(0, 64)}`,
   ].join('; ')
