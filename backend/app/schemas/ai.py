@@ -441,3 +441,31 @@ class PersonalTryOnPreflightRead(BaseModel):
     fashn_max_credits_quality_1k: int | None = None
     fashn_max_estimate_cents_balanced_1k: int | None = None
     fashn_max_estimate_cents_quality_1k: int | None = None
+
+
+class FittingRoomPreflightRead(BaseModel):
+    """AI Fitting Room gate + consent (F1–F3). Fail-closed when ``enabled`` is false."""
+
+    enabled: bool
+    live_http: bool
+    consent_version: str
+    notice_text: str
+    prompt_version: str
+    supported_categories: list[str]
+    preview_disclaimer: str
+    ai_gate: bool = False
+
+
+class FittingRoomTryOnBody(BaseModel):
+    """Person photo + clothing image → Fitting Room try-on job."""
+
+    person_image_base64: str = Field(..., min_length=32)
+    garment_image_base64: str = Field(..., min_length=32)
+    idempotency_key: str = Field(..., min_length=8, max_length=128)
+    consent_acknowledged: bool = False
+    consent_version: str = Field(..., min_length=4, max_length=64)
+    garment_category: str | None = Field(
+        default="auto",
+        max_length=32,
+        description="Optional soft category hint (auto|tops|bottoms|one-pieces|dresses|outerwear|shoes).",
+    )

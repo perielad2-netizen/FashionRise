@@ -1,8 +1,10 @@
 import { useCallback, useMemo } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import { FashionRiseAppShell } from '@/shell/components/FashionRiseAppShell'
 import { CreatorWorkspace } from '@/shell/components/CreatorWorkspace'
+import { FittingRoomScreen } from '@/shell/components/FittingRoomScreen'
 import { HomeScreen } from '@/shell/components/HomeScreen'
 import { RunwayScreen } from '@/shell/components/RunwayScreen'
 import { MyCroquisScreen } from '@/shell/components/MyCroquisScreen'
@@ -20,6 +22,7 @@ export const HOME_PATH = '/studio/home'
 export const MY_DESIGNS_PATH = '/studio/designs'
 export const MY_LOOKS_PATH = '/studio/looks'
 export const MY_CROQUIS_PATH = '/studio/croquis'
+export const FITTING_ROOM_PATH = '/studio/fitting-room'
 export const RUNWAY_PATH = '/studio/runway'
 /** @deprecated legacy Fashion Stars path — redirects to Runway */
 export const FASHION_STARS_PATH = '/studio/fashion-stars'
@@ -40,6 +43,7 @@ export function StudioPage() {
     ? path.slice(`${TECHPACK_PATH_PREFIX}/`.length).split('/').filter(Boolean)[0] || null
     : null
   const croquisEnabled = isMyCroquisUiEnabled()
+  const fittingRoomEnabled = isFittingRoomUiEnabled()
   const view =
     techpackDraftId
       ? 'techpack'
@@ -51,13 +55,17 @@ export function StudioPage() {
             ? croquisEnabled
               ? 'croquis'
               : null
-            : path === HOME_PATH
-              ? 'home'
-              : path === RUNWAY_PATH || path === FASHION_STARS_PATH
-                ? 'runway'
-                : path === STUDIO_PATH
-                  ? 'studio'
-                  : null
+            : path === FITTING_ROOM_PATH
+              ? fittingRoomEnabled
+                ? 'fitting-room'
+                : null
+              : path === HOME_PATH
+                ? 'home'
+                : path === RUNWAY_PATH || path === FASHION_STARS_PATH
+                  ? 'runway'
+                  : path === STUDIO_PATH
+                    ? 'studio'
+                    : null
 
   const onNavigate = useCallback(
     (destination: NavDestination) => {
@@ -65,6 +73,7 @@ export function StudioPage() {
       else if (destination === 'designs') navigate(MY_DESIGNS_PATH)
       else if (destination === 'looks') navigate(MY_LOOKS_PATH)
       else if (destination === 'croquis') navigate(MY_CROQUIS_PATH)
+      else if (destination === 'fitting-room') navigate(FITTING_ROOM_PATH)
       else if (destination === 'runway') navigate(RUNWAY_PATH)
       else navigate(STUDIO_PATH)
     },
@@ -92,6 +101,7 @@ export function StudioPage() {
     if (view === 'library') return 'designs'
     if (view === 'looks' || view === 'techpack') return 'looks'
     if (view === 'croquis') return 'croquis'
+    if (view === 'fitting-room') return 'fitting-room'
     if (view === 'runway') return 'runway'
     return 'create'
   }, [view])
@@ -155,6 +165,8 @@ export function StudioPage() {
             activeStudioPinId={editor.personalCroquisId}
             libraryVersion={editor.libraryVersion}
           />
+        ) : view === 'fitting-room' && editor.user?.id ? (
+          <FittingRoomScreen userId={editor.user.id} onBackToStudio={backToStudio} />
         ) : view === 'techpack' && techpackDraftId ? (
           <TechpackScreen draftId={techpackDraftId} onBack={backToLooks} />
         ) : (

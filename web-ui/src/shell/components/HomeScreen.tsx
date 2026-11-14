@@ -1,4 +1,5 @@
-import { ChevronRight, FolderHeart, Images, Sparkles, Star, UserRound } from 'lucide-react'
+import { ChevronRight, FolderHeart, Images, Shirt, Sparkles, Star, UserRound } from 'lucide-react'
+import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import type { NavDestination } from '@/shell/components/GlobalNavigation'
 import { HomeBeforeAfterGallery } from '@/shell/components/HomeBeforeAfterGallery'
@@ -18,6 +19,7 @@ const DESTINATIONS: Array<{
   hint: string
   icon: typeof Sparkles
   requiresMyCroquis?: boolean
+  requiresFittingRoom?: boolean
 }> = [
   {
     id: 'designs',
@@ -44,14 +46,24 @@ const DESTINATIONS: Array<{
     icon: UserRound,
     requiresMyCroquis: true,
   },
+  {
+    id: 'fitting-room',
+    label: 'Fitting Room',
+    hint: 'AI try-on with your photo and a clothing image.',
+    icon: Shirt,
+    requiresFittingRoom: true,
+  },
 ]
 
 export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
   const croquisEnabled = isMyCroquisUiEnabled()
+  const fittingRoomEnabled = isFittingRoomUiEnabled()
   const firstName = username.trim().split(/\s+/)[0] || 'Creator'
-  const destinations = DESTINATIONS.filter(
-    (item) => !item.requiresMyCroquis || croquisEnabled,
-  )
+  const destinations = DESTINATIONS.filter((item) => {
+    if (item.requiresMyCroquis) return croquisEnabled
+    if (item.requiresFittingRoom) return fittingRoomEnabled
+    return true
+  })
 
   return (
     <section className={styles.screen} aria-labelledby="home-headline">

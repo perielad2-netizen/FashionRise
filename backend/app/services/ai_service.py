@@ -183,7 +183,7 @@ def debit_magic_stars_on_success(db: Session, job: AIJob) -> None:
     if job.job_type == "personal_garment_realism":
         # Intermediate FASHN prep — Stars wait for the final try-on look.
         return
-    if job.job_type not in {"sketch_polish", "personal_try_on"}:
+    if job.job_type not in {"sketch_polish", "personal_try_on", "fitting_room_try_on"}:
         return
     if _job_result_stars_debited(job):
         return
@@ -972,6 +972,8 @@ _REDACTED_IMAGE_KEYS = (
     "pairReferenceBase64",
     "garment_image_base64",
     "garmentImageBase64",
+    "person_image_base64",
+    "personImageBase64",
 )
 
 

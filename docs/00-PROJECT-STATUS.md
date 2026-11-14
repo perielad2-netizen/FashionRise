@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**#322 LIVE** tip `4c5b859c` — Runway Feed/Top split · push toggle locked while `NATIVE_PUSH_*` OFF · Home sketch→AI look hero. #303 foundation still on tip; Stars purchasing OFF.)
+**Last updated:** 2026-11-15 (**AI Fitting Room** parallel track F1–F3 in progress — fail-closed; Android QA tip unchanged until PM approval.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -14,12 +14,26 @@
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
 | **Android test app** | **Current gate** | Continue device QA on the new web tip until required tests pass. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
+| **AI Fitting Room** | **Parallel** | F1–F5 PM-approved track; F1–F3 vertical slice on branch (web test deploy only). **Keep OFF** for Android QA tip until PM approval. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
-| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** until explicit enable · Stars purchasing/credit OFF |
+| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** until explicit enable · Stars purchasing/credit OFF · Fitting Room UI/API **fail-closed** |
 
-**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · no unrelated feature work.
+**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · no Fitting Room enable on Android QA tip without PM approval · no merge of Fitting Room until approval.
 
-**Exact next step:** Continue Android QA on tip `1a8e6121`. Enable `NATIVE_PUSH_*` only after operator FCM/APNs setup + explicit approval.
+**Exact next step:** Continue Android QA on tip `1a8e6121`. Enable `NATIVE_PUSH_*` only after operator FCM/APNs setup + explicit approval. Fitting Room: web-only test tip from feature branch; do not merge until PM approval.
+
+## AI Fitting Room — parallel development track (2026-11-15)
+
+| Status | Detail |
+|---|---|
+| Scope | **F1–F5** only (My Photo · Choose Clothing · AI Try-On · Build Outfit · Save/Compare/Share). No Wardrobe / Stylist / shopping / new billing. |
+| Slice | **F1–F3** first PR (`cursor/web-ai-fitting-room-f1f3-77c6`): person + garment private IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · loading/success/fail/retry · preview disclaimer |
+| Follow-ups | **F4** outfit session · **F5** save/compare/share polish — separate focused PRs |
+| Flags | FE `VITE_FITTING_ROOM_UI_ENABLED` default **OFF** · BE `FITTING_ROOM_ENABLED` / `FITTING_ROOM_LIVE_HTTP` default **OFF** (OpenAI path still needs existing `MY_CROQUIS_AI_LIVE_HTTP` arming) |
+| Android QA | **Do not** point Capacitor tip at Fitting Room-enabled builds until PM approval; keep prior QA tip / flags OFF |
+| Deploy | Web-only test tip from branch — **no merge** until approval |
+| Reuse | OpenAI Try On images.edit adapter · AI job worker · Magic Stars debit-on-success only · My Looks download toast UX |
+| Out of scope | Fabricate AI results · charge Stars on failure · migrations · Android store submit |
 
 ## Android QA polish (2026-11-14) — #322 LIVE
 

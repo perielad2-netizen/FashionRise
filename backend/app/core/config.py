@@ -133,6 +133,14 @@ class Settings(BaseSettings):
     ai_worker_poll_interval_seconds: float = 1.5
     ai_worker_batch_size: int = 12
 
+    # AI Fitting Room (parallel track — person photo + clothing image try-on).
+    # Fail closed: must be explicitly enabled. Independent of Android QA tip.
+    # Does not enable Wardrobe / Stylist / shopping / new billing.
+    fitting_room_enabled: bool = False
+    # Live OpenAI images.edit for Fitting Room. Even with fitting_room_enabled,
+    # real HTTP requires this flag (mirrors MY_CROQUIS_AI_LIVE_HTTP discipline).
+    fitting_room_live_http: bool = False
+
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.
     # Never expose the key to the frontend or commit it.
