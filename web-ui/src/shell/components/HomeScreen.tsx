@@ -2,11 +2,15 @@ import { FolderHeart, Images, Sparkles, Star, UserRound } from 'lucide-react'
 import { UI_ASSETS } from '@/assets/uiAssets'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import type { NavDestination } from '@/shell/components/GlobalNavigation'
+import { HomeBeforeAfterGallery } from '@/shell/components/HomeBeforeAfterGallery'
+import type { AuthorizedHomeExample } from '@/shell/homeAuthorizedExamples'
 import styles from './HomeScreen.module.css'
 
 type Props = {
   username: string
   onNavigate: (destination: NavDestination) => void
+  /** Test-only override for V2-0031 authorized examples. */
+  homeExamples?: readonly AuthorizedHomeExample[]
 }
 
 const DESTINATIONS: Array<{
@@ -49,7 +53,7 @@ const DESTINATIONS: Array<{
   },
 ]
 
-export function HomeScreen({ username, onNavigate }: Props) {
+export function HomeScreen({ username, onNavigate, homeExamples }: Props) {
   const croquisEnabled = isMyCroquisUiEnabled()
   const firstName = username.trim().split(/\s+/)[0] || 'Creator'
   const destinations = DESTINATIONS.filter(
@@ -88,6 +92,8 @@ export function HomeScreen({ username, onNavigate }: Props) {
           </button>
         </div>
       </header>
+
+      <HomeBeforeAfterGallery examples={homeExamples} />
 
       <nav className={styles.destinations} aria-label="Studio destinations">
         {destinations.map((item) => {
