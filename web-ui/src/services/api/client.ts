@@ -1,4 +1,4 @@
-import { tokenStore } from '@/services/auth/tokenStore'
+import { tokenStore, type StoredTokens } from '@/services/auth/tokenStore'
 
 export class ApiError extends Error {
   status: number
@@ -20,11 +20,81 @@ export function getApiBaseUrl(): string {
   return raw.replace(/\/$/, '')
 }
 
+/** Fired when refresh fails and the local session is cleared (V2-0012/0013). */
+export const SESSION_EXPIRED_EVENT = 'fr:session-expired'
+
 type RequestOptions = {
   method?: string
   body?: unknown
   auth?: boolean
   signal?: AbortSignal
+  /** Internal: skip one-shot refresh retry (already retried). */
+  _retriedAfterRefresh?: boolean
+}
+
+type TokenResponse = {
+  access_token: string
+  refresh_token: string
+  token_type: string
+}
+
+let refreshInFlight: Promise<boolean> | null = null
+
+function notifySessionExpired(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT))
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Single-flight access-token refresh using the stored refresh token.
+ * Does not import authApi (avoids circular dependency with apiRequest).
+ */
+export async function refreshAccessToken(): Promise<boolean> {
+  const current = tokenStore.get()
+  if (!current?.refreshToken) return false
+  if (refreshInFlight) return refreshInFlight
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: current.refreshToken }),
+      })
+      const text = await response.text()
+      let parsed: unknown = null
+      if (text) {
+        try {
+          parsed = JSON.parse(text)
+        } catch {
+          parsed = text
+        }
+      }
+      if (!response.ok) return false
+      const body = parsed as TokenResponse
+      if (!body?.access_token || !body?.refresh_token) return false
+      const stored: StoredTokens = {
+        accessToken: body.access_token,
+        refreshToken: body.refresh_token,
+      }
+      tokenStore.set(stored)
+      return true
+    } catch {
+      return false
+    } finally {
+      refreshInFlight = null
+    }
+  })()
+
+  return refreshInFlight
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -36,7 +106,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     headers['Content-Type'] = 'application/json'
   }
 
-  if (options.auth !== false) {
+  const useAuth = options.auth !== false
+  if (useAuth) {
     const tokens = tokenStore.get()
     if (tokens?.accessToken) {
       headers.Authorization = `Bearer ${tokens.accessToken}`
@@ -53,6 +124,22 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     })
   } catch {
     throw new ApiError('Unable to reach FashionRise. Check that the API is running.', 0, null)
+  }
+
+  // Mid-session access expiry (V2-0012 / V2-0013): refresh once, then retry.
+  if (
+    response.status === 401 &&
+    useAuth &&
+    !options._retriedAfterRefresh &&
+    Boolean(tokenStore.get()?.refreshToken)
+  ) {
+    const refreshed = await refreshAccessToken()
+    if (refreshed) {
+      return apiRequest<T>(path, { ...options, _retriedAfterRefresh: true })
+    }
+    tokenStore.clear()
+    notifySessionExpired()
+    throw new ApiError('Your session expired. Please sign in again.', 401, null)
   }
 
   const text = await response.text()
@@ -75,7 +162,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 function extractErrorMessage(parsed: unknown, status: number): string {
   if (typeof parsed === 'object' && parsed !== null && 'detail' in parsed) {
     const detail = (parsed as { detail: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
+    if (typeof detail === 'string' && detail.trim()) {
+      // Prefer actionable copy for mid-session auth failures (before refresh existed).
+      if (status === 401 && /invalid token/i.test(detail)) {
+        return 'Your session expired. Please sign in again.'
+      }
+      return detail
+    }
     if (typeof detail === 'object' && detail !== null && 'message' in detail) {
       const message = (detail as { message: unknown }).message
       if (typeof message === 'string' && message.trim()) return message
@@ -93,7 +186,7 @@ function extractErrorMessage(parsed: unknown, status: number): string {
 }
 
 function friendlyStatus(status: number): string {
-  if (status === 401) return 'Invalid email or password.'
+  if (status === 401) return 'Your session expired. Please sign in again.'
   if (status === 403) {
     return 'This action isn’t available right now. Your sketch is unchanged — please try again shortly.'
   }
