@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-14 (**QA V2 Batch E** — V2-0030 rectangular eraser in progress after #308 planning merge. PR #303 still open; no store/push/billing enable.)
+**Last updated:** 2026-11-14 (**QA V2 Batch E** — V2-0030 merged (#309 clip-mode); V2-0032 Home copy next, then V2-0026. PR #303 still open; no store/push/billing enable.)
 
 **Phase:** Paid App Store launch execution (TestFlight → sandbox matrix → 1.0 + three consumables submit). Not a new architecture phase.
 
@@ -11,11 +11,11 @@
 
 | Status | Detail |
 |---|---|
-| Baseline | `main` `7f25777a` (#308 planning) |
-| Branch | `cursor/web-rect-eraser-77c6` (V2-0030) |
-| IDs | **V2-0030** first → then 0032, 0026 (separate PRs) |
-| Fixes (0030) | Rectangular selection eraser; FRONT/BACK + layer-aware; Undo/Redo; Clear + freehand erase kept |
-| **Exact next step** | Merge rect eraser → V2-0032 Home copy → V2-0026 brush explainers |
+| Baseline | `main` includes #309 (`8210d0d2`) |
+| Merged | **V2-0030** rectangular eraser (clip-mode; exterior preserved) |
+| Branch | `cursor/web-home-value-copy-77c6` (V2-0032) |
+| IDs | **V2-0032** Home copy → then V2-0026 brush explainers |
+| **Exact next step** | Ship V2-0032 → V2-0026; leave V2-0031 gallery for later |
 
 ## QA V2 Batch D (2026-11-14) — MERGED #307
 

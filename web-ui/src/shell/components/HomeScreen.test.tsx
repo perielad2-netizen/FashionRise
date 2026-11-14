@@ -13,11 +13,19 @@ describe('HomeScreen', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: /FashionRise/i })).toBeInTheDocument()
     expect(screen.getByText(/Welcome back, Maya/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Sketch a garment\. Turn it into a Magic look\./i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/generate an AI Magic look from your sketch/i),
+    ).toBeInTheDocument()
     const logo = document.querySelector('img') as HTMLImageElement | null
     expect(logo?.getAttribute('src')).toContain('fashion_rise_login')
     expect(logo?.getAttribute('src') ?? '').not.toMatch(/model|croquis|female/i)
 
-    fireEvent.click(screen.getByRole('button', { name: /Start creating/i }))
+    const cta = screen.getByTestId('home-start-creating')
+    expect(cta).toHaveAccessibleName(/Start creating/i)
+    fireEvent.click(cta)
     expect(onNavigate).toHaveBeenCalledWith('create')
 
     const destinations = screen.getByRole('navigation', { name: 'Studio destinations' })
