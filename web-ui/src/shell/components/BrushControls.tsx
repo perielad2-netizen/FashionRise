@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { BrushEngineState, BrushKind, LogicalLayer, StrokeBlendMode } from '@/lib/professionalBrushes'
 import type { ToolKind } from '@/lib/strokes'
 import { BrushSizeControl } from '@/shell/components/BrushSizeControl'
+import { ProfessionalColorPicker } from '@/shell/components/ProfessionalColorPicker'
 import styles from './BrushControls.module.css'
 
 type Props = {
@@ -120,10 +121,12 @@ export function BrushControls({
   onBrushEnginePatch,
 }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const title =
     tool === 'erase' ? 'Eraser' : tool === 'rectErase' ? 'Rectangular eraser' : 'Brush'
   const kind = brushEngine?.brushKind ?? 'tapered'
   const layer = brushEngine?.logicalLayer ?? 'ink'
+  const safeBrushColor = /^#[0-9a-fA-F]{6}$/.test(brushColor) ? brushColor : '#1c1c1e'
 
   return (
     <div
@@ -186,17 +189,19 @@ export function BrushControls({
         <div className={styles.colorRow} data-testid="brush-color-row">
           <span>Color</span>
           {onBrushColor ? (
-            <input
-              type="color"
-              className={styles.colorSwatch}
-              value={/^#[0-9a-fA-F]{6}$/.test(brushColor) ? brushColor : '#1c1c1e'}
-              aria-label="Brush color"
-              onChange={(e) => onBrushColor(e.target.value)}
+            <button
+              type="button"
+              className={styles.colorSwatchBtn}
+              style={{ background: safeBrushColor }}
+              aria-label="Choose brush color"
+              title="Choose color"
+              data-testid="brush-color-swatch"
+              onClick={() => setColorPickerOpen(true)}
             />
           ) : (
             <span
               className={styles.colorSwatchReadonly}
-              style={{ background: brushColor }}
+              style={{ background: safeBrushColor }}
               aria-hidden
             />
           )}
@@ -206,6 +211,18 @@ export function BrushControls({
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {onBrushColor ? (
+        <ProfessionalColorPicker
+          open={colorPickerOpen}
+          initialColor={safeBrushColor}
+          onApply={(hex) => {
+            onBrushColor(hex)
+            setColorPickerOpen(false)
+          }}
+          onCancel={() => setColorPickerOpen(false)}
+        />
       ) : null}
 
       <BrushSizeControl

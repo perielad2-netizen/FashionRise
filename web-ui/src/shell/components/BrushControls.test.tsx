@@ -54,4 +54,26 @@ describe('BrushControls V2-0026 explainers', () => {
     expect(screen.getByTestId('brush-texture-hint')).toHaveTextContent(/Charcoal only/i)
     expect(screen.getByTestId('brush-blend-hint')).toHaveTextContent(/mix with paint/i)
   })
+
+  it('opens the app Choose color picker instead of a native color input', () => {
+    const onBrushColor = vi.fn()
+    render(
+      <BrushControls
+        tool="draw"
+        brushSize={2}
+        opacity={1}
+        brushColor="#D63384"
+        onBrushSize={vi.fn()}
+        onOpacity={vi.fn()}
+        onBrushColor={onBrushColor}
+      />,
+    )
+
+    expect(document.querySelector('input[type="color"]')).toBeNull()
+    fireEvent.click(screen.getByTestId('brush-color-swatch'))
+    expect(screen.getByRole('dialog', { name: 'Choose color' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(onBrushColor).toHaveBeenCalledWith('#D63384')
+    expect(screen.queryByRole('dialog', { name: 'Choose color' })).toBeNull()
+  })
 })

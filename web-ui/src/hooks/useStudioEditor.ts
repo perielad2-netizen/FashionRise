@@ -1089,9 +1089,9 @@ export function useStudioEditor() {
       setFillGapHint(null)
       setShowCloseSmallGaps(false)
       setFillCloseSmallGaps(false)
-      publishStudioNotice('Region filled. Undo if you need to try again.')
+      // No success toast — fill result is visible on canvas; Undo stays in the toolbar.
     },
-    [activeHistory, artwork, commitFromEditor, editorSideState, publishStudioNotice, syncHistoryFlags],
+    [activeHistory, artwork, commitFromEditor, editorSideState, syncHistoryFlags],
   )
 
   const onFillError = useCallback(
