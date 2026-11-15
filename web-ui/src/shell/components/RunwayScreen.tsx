@@ -786,21 +786,19 @@ function FriendsPanel({
 }) {
   const formRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [keyboardPad, setKeyboardPad] = useState(0)
   const [viewingFriend, setViewingFriend] = useState<FriendUser | null>(null)
 
-  // V2-0011: keep Add friend row above the Android soft keyboard.
+  // V2-0011: keep Add friend row visible when the soft keyboard opens.
+  // Do NOT pad by visualViewport occlusion — that stacked with `--fr-vv-height`
+  // shrinking `#root` and produced a full-bleed black void (Android native).
+  // Android uses adjustResize; scroll the sticky form into view gently instead.
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
     const sync = () => {
-      const occluded = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-      setKeyboardPad(occluded > 40 ? occluded : 0)
-      if (document.activeElement === inputRef.current && occluded > 40) {
-        formRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      }
+      if (document.activeElement !== inputRef.current) return
+      formRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
     }
-    sync()
     vv.addEventListener('resize', sync)
     vv.addEventListener('scroll', sync)
     return () => {
@@ -816,7 +814,7 @@ function FriendsPanel({
   }
 
   return (
-    <div className={styles.friendsPanel} style={{ paddingBottom: keyboardPad || undefined }}>
+    <div className={styles.friendsPanel}>
       <form
         ref={formRef}
         className={styles.addFriendForm}
@@ -834,14 +832,19 @@ function FriendsPanel({
             value={username}
             onChange={(e) => onUsernameChange(e.target.value)}
             onFocus={() => {
-              // Defer until the keyboard animates open.
+              // nearest — center scroll left a black empty band above the keyboard.
               window.setTimeout(() => {
-                formRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-              }, 120)
+                formRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+                inputRef.current?.focus({ preventScroll: true })
+              }, 50)
             }}
             placeholder="e.g. yanivprbk"
             autoComplete="username"
-            enterKeyHint="send"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            inputMode="text"
+            enterKeyHint="done"
             disabled={busy}
           />
           <button type="submit" className={styles.primaryBtn} disabled={busy || !username.trim()}>
