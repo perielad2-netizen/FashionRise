@@ -5,7 +5,6 @@
 
 import { strokeToSvgPath } from '@/lib/freehand'
 import type { FillOp } from '@/lib/fills'
-import { paintFillOps } from '@/lib/paintFills'
 import type { Stroke } from '@/lib/strokes'
 
 export type BrushKind = 'tapered' | 'charcoal' | 'airbrush'
@@ -97,7 +96,8 @@ export function defaultsForBrushKind(kind: BrushKind): Partial<BrushEngineState>
       softness: 0.86,
       // Understated graphite grain — tonal blending first.
       textureIntensity: 0.1,
-      garmentMask: true,
+      // Never auto-clip shade to fill — that wiped charcoal when Fill ran later.
+      garmentMask: false,
     }
   }
   return {
@@ -107,7 +107,8 @@ export function defaultsForBrushKind(kind: BrushKind): Partial<BrushEngineState>
     flow: 0.35,
     softness: 0.75,
     textureIntensity: 0,
-    garmentMask: true,
+    // Same as charcoal: Fill must not erase soft shade strokes.
+    garmentMask: false,
   }
 }
 
@@ -804,39 +805,14 @@ export type ProfessionalPaintOptions = {
 function paintDrawWithOptionalGarmentClip(
   ctx: Ctx2d,
   stroke: Stroke,
-  garmentAlpha: HTMLCanvasElement | null | undefined,
+  _garmentAlpha: HTMLCanvasElement | null | undefined,
   paint: (target: Ctx2d) => void,
 ): void {
-  if (!stroke.garmentMask || !garmentAlpha) {
-    paint(ctx)
-    return
-  }
-  const w = ctx.canvas.width
-  const h = ctx.canvas.height
-  if (w <= 0 || h <= 0) {
-    paint(ctx)
-    return
-  }
-  const tmp = document.createElement('canvas')
-  tmp.width = w
-  tmp.height = h
-  const t = tmp.getContext('2d')
-  if (!t) {
-    paint(ctx)
-    return
-  }
-  // Mirror the layer's design→output transform so stroke points land correctly,
-  // then clip with garment alpha already rasterized in output space.
-  const xform = ctx.getTransform()
-  t.setTransform(xform)
-  paint(t)
-  t.setTransform(1, 0, 0, 1, 0, 0)
-  t.globalCompositeOperation = 'destination-in'
-  t.drawImage(garmentAlpha, 0, 0)
-  ctx.save()
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.drawImage(tmp, 0, 0)
-  ctx.restore()
+  // Soft-clip to garment fill is intentionally disabled.
+  // Charcoal/airbrush defaulted garmentMask=true and destination-in against a
+  // later Fill made shade strokes look deleted. Keep shade fully visible with fills.
+  void stroke
+  paint(ctx)
 }
 
 /**
@@ -962,20 +938,8 @@ export function paintLogicalArtworkLayers(
   }
   const sealTips = options?.sealTips === true
 
-  let garmentAlpha: HTMLCanvasElement | null = null
-  const fills = options?.fills
-  const needsMask = Boolean(
-    fills &&
-      fills.length > 0 &&
-      strokes.some((s) => s.tool === 'draw' && s.garmentMask === true),
-  )
-  if (needsMask && fills) {
-    const g = make()
-    if (g) {
-      paintFillOps(g.ctx, fills)
-      garmentAlpha = g.canvas
-    }
-  }
+  // fills may still be passed for API compatibility; shade is never clipped to them.
+  void options?.fills
 
   const layerCtx = (layer: LogicalLayer): Ctx2d => {
     if (layer === 'shade') return shade.ctx
@@ -993,7 +957,7 @@ export function paintLogicalArtworkLayers(
     if (stroke.tool !== 'draw') continue
     if (sealTips && resolveBrushKind(stroke) !== 'tapered') continue
     const layer = resolveLogicalLayer(stroke)
-    paintProfessionalDrawStroke(layerCtx(layer), stroke, { sealTips, garmentAlpha })
+    paintProfessionalDrawStroke(layerCtx(layer), stroke, { sealTips, garmentAlpha: null })
   }
 
   return { shade: shade.canvas, ink: ink.canvas, highlight: highlight.canvas }

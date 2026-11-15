@@ -101,7 +101,49 @@ describe('professionalBrushes', () => {
     expect(charcoal.blendMode).toBe('multiply')
     expect((charcoal.softness ?? 0) >= 0.75).toBe(true)
     expect((charcoal.textureIntensity ?? 1) <= 0.25).toBe(true)
-    expect(charcoal.garmentMask).toBe(true)
+    expect(charcoal.garmentMask).toBe(false)
+    expect(defaultsForBrushKind('airbrush').garmentMask).toBe(false)
+  })
+
+  it('keeps charcoal shade visible when a garment fill is present (no soft-clip wipe)', () => {
+    const probe = document.createElement('canvas')
+    if (!probe.getContext('2d')) {
+      expect(true).toBe(true)
+      return
+    }
+    const charcoal = sampleStroke({
+      id: 'shade-keep',
+      brushKind: 'charcoal',
+      logicalLayer: 'shade',
+      blendMode: 'multiply',
+      garmentMask: true,
+      textureSeed: 'shade-keep',
+      color: '#222222',
+      size: 24,
+      // Stroke well outside a small fill near the origin — clip would erase it.
+      points: [180, 180, 0.9, 200, 190, 0.9, 220, 200, 0.8],
+    })
+    const tinyFill = {
+      id: 'fill-1',
+      contour: [10, 10, 40, 10, 40, 40, 10, 40],
+      style: { kind: 'solid' as const, color: '#FF00AA' },
+      seedX: 20,
+      seedY: 20,
+      eraseAfterStrokeIndex: 0,
+    }
+    const withoutFill = paintLogicalArtworkLayers(256, 256, [charcoal])
+    const withFill = paintLogicalArtworkLayers(256, 256, [charcoal], { fills: [tinyFill] })
+    const a = withoutFill.shade.getContext('2d')!.getImageData(0, 0, 256, 256).data
+    const b = withFill.shade.getContext('2d')!.getImageData(0, 0, 256, 256).data
+    let inkWithout = 0
+    let inkWith = 0
+    for (let i = 3; i < a.length; i += 4) {
+      if (a[i]! > 8) inkWithout += 1
+      if (b[i]! > 8) inkWith += 1
+    }
+    expect(inkWithout).toBeGreaterThan(20)
+    // Fill must not wipe shade — allow tiny raster jitter only.
+    expect(inkWith).toBeGreaterThanOrEqual(Math.floor(inkWithout * 0.9))
   })
 
   it('resolves absent charcoalRenderer as V1 for saved artwork compatibility', () => {

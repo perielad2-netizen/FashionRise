@@ -355,7 +355,7 @@ export function BrushControls({
                   checked={brushEngine.garmentMask}
                   onChange={(e) => onBrushEnginePatch({ garmentMask: e.target.checked })}
                 />
-                <span>Clip shade to garment fill (when available)</span>
+                <span>Clip shade to garment fill (off — Fill keeps charcoal visible)</span>
               </label>
             </div>
           ) : null}

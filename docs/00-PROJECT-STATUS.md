@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**Remove rectangular area-erase tool** from Studio rails · freehand Eraser remains · tip deploy this turn.)
+**Last updated:** 2026-11-15 (**Fix: Fill no longer wipes charcoal/airbrush** · soft garment-mask clip disabled · tip deploy this turn.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -20,7 +20,15 @@
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Hard-refresh new tip after rect-erase removal; Android build from `main` after merge.
+**Exact next step:** Hard-refresh fill/shade fix tip; Android build from `main` after merge.
+
+## Studio bugfix — Fill wiped charcoal/airbrush (2026-11-15)
+
+| Status | Detail |
+|---|---|
+| Bug | Fill soft-clipped shade strokes (`garmentMask`) via destination-in → charcoal/airbrush looked deleted |
+| Fix | Disable garment soft-clip in paint path · charcoal/airbrush defaults `garmentMask=false` |
+| Branch | `cursor/web-fill-preserve-shade-77c6` |
 
 ## Studio polish — remove rect area erase (2026-11-15)
 
