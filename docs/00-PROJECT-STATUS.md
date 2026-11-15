@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**Magic both short sleeves** — tip+BE `df93307a` live.)
+**Last updated:** 2026-11-15 (**GitHub open issues marked irrelevant** — ignore until owner closes from a PC.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -21,6 +21,30 @@
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
 **Exact next step:** Hard-refresh Studio · re-run Magic on a two-short-sleeve top · confirm both sleeves survive · Android build from `main`.
+
+## GitHub open issues — IRRELEVANT (owner 2026-11-15)
+
+**Directive:** Treat the following open GitHub issues as **outdated / irrelevant**. Do **not** triage, implement, reopen discussion, or prioritize them. Agent tokens cannot close GitHub issues (403); owner will close later from a PC. **No merges** associated with this cleanup.
+
+| # | Title (snapshot) | Status |
+|---|---|---|
+| 166 | P0: Regular OpenAI Try On fails for everyday top/shorts after FASHN changes | **IRRELEVANT — ignore** |
+| 164 | FASHN fidelity: preserve swimwear cut/gradient + remove amount from button | **IRRELEVANT — ignore** |
+| 161 | P0 FASHN mobile review: Confirm unreachable + verify garment plate fidelity | **IRRELEVANT — ignore** |
+| 159 | P0: Fashion Magic rejects `reference_model_id=personal` | **IRRELEVANT — ignore** |
+| 158 | P0: Create My Croquis blocked — Vite consent notice env | **IRRELEVANT — ignore** |
+| 156 | P0 Try On Person: swimwear moderation + contradictory prompt | **IRRELEVANT — ignore** |
+| 154 | Try On Person V2: garment print/accessory fidelity | **IRRELEVANT — ignore** |
+| 151 | P0: My Croquis library tab | **IRRELEVANT — ignore** |
+| 148 | P0 Studio: personal croquis switch draft conflict | **IRRELEVANT — ignore** |
+| 135 | Create My Croquis V1 planning | **IRRELEVANT — ignore** |
+| 131 | Release checkpoint: reconcile issues/PRs baseline | **IRRELEVANT — ignore** |
+| 124 | P0: Fractional measurements + artwork vs specs | **IRRELEVANT — ignore** |
+| 83 | Future: Create Real Design tech-pack PDF | **IRRELEVANT — ignore** |
+| 54 | P1: Magic image edit fails for swimwear/shorts | **IRRELEVANT — ignore** |
+| 42 | Matching rear croquis + independent Front/Back | **IRRELEVANT — ignore** |
+| 18 | Registration — invites vs public signup | **IRRELEVANT — ignore** |
+| 17 | WEB-V3B: Delete saved designs from My Designs | **IRRELEVANT — ignore** |
 
 ## Magic bugfix — missing short sleeve (2026-11-15) — tip LIVE / #339
 
