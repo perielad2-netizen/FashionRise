@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**AI Fitting Room F1–F5** web test tip `1c1cf574` LIVE · flat **20 Stars** · PR **#332** open — **do not merge** · Android QA rollback tip `b69ffb25`.)
+**Last updated:** 2026-11-15 (**AI Fitting Room ENABLED** for web + Android · Stars confirm dialog · PR **#333** merge-to-main · tip deploy pending this turn.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -12,28 +12,27 @@
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Continue device QA on the new web tip until required tests pass. |
+| **Android test app** | **Current gate** | Build from `main` after Fitting Room #333 merge; Fitting Room UI default ON. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
-| **AI Fitting Room** | **Parallel** | F1–F5 PM-approved track; F1–F3 vertical slice on branch (web test deploy only). **Keep OFF** for Android QA tip until PM approval. |
+| **AI Fitting Room** | **ENABLED** | F1–F5 on main path · FE default ON · BE ON on prod API · Magic-style Stars confirm (no −20 on pink button). |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
-| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** until explicit enable · Stars purchasing/credit OFF · Fitting Room UI/API **fail-closed** |
+| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** until explicit enable · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
-**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable · no Fitting Room enable on Android QA tip without PM approval · no merge of Fitting Room until approval.
+**Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Continue Android QA on tip `1a8e6121`. Enable `NATIVE_PUSH_*` only after operator FCM/APNs setup + explicit approval. Fitting Room: web-only test tip from feature branch; do not merge until PM approval.
+**Exact next step:** Merge/deploy Fitting Room #333; Android test build from `main` with Fitting Room ON.
 
 ## AI Fitting Room — parallel development track (2026-11-15)
 
 | Status | Detail |
 |---|---|
 | Scope | **F1–F5** only (My Photo · Choose Clothing · AI Try-On · Build Outfit · Save/Compare/Share). No Wardrobe / Stylist / shopping / new billing. |
-| Slice | **F1–F5 MERGED** via PR **#332** (`1b12f6ab`) (`cursor/web-ai-fitting-room-f1f3-77c6`): person + outfit session IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · save/share (no Left/Right compare slots) · preview disclaimer |
-| Stars | Flat **`ai_stars_fitting_room_cost=20`** per successful try-on — **not** multiplied by garments in the image / outfit collage. No charge on failure. |
-| Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **OFF** (enable at build for web tip) · BE `FITTING_ROOM_*` **OFF** in repo; **ON** on live tip |
-| Web test tip LIVE | FE `/var/www/fashionrise/releases/dbacb0ee-fitting-room-fashn-fallback-332` · OpenAI moderation → silent **FASHN** fallback (swimwear/lingerie) · Saved Download/Share/Delete · `fitting_room_stars: 20` · BE `dbacb0ee` + FASHN live · Nginx allowlist **`/api/v1/ai/fitting-room/*`** |
-| Android QA rollback | Prior tip **`b69ffb25-looks-magic-top-clip-331`** (Fitting Room UI absent). Rollback: `ln -sfn /var/www/fashionrise/releases/b69ffb25-looks-magic-top-clip-331 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
-| Merge | **Do not merge #332** until PM approval |
-| Reuse | OpenAI Try On images.edit adapter · AI job worker · Magic Stars debit-on-success only · My Looks download toast UX |
+| Slice | **F1–F5 MERGED** via PR **#332** (`1b12f6ab`); Stars confirm polish PR **#333** |
+| Stars | Flat **`ai_stars_fitting_room_cost=20`** · confirm dialog only (pink **Try on** has no −20 label) · No charge on failure |
+| Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **ON** (default + `.env.native` / production example) · BE `FITTING_ROOM_*` **OFF** in repo; **ON** on live VPS |
+| Web tip | Deploy tip from #333 branch after enable commit · Nginx allowlist **`/api/v1/ai/fitting-room/*`** |
+| Android | Build from `main` after #333 merge — Fitting Room visible in native shell |
+| Reuse | OpenAI Try On images.edit adapter · FASHN Max swimwear fallback · AI job worker · Magic Stars debit-on-success |
 | Out of scope | Fabricate AI results · charge Stars on failure · migrations · Android store submit |
 
 ## Android QA polish (2026-11-14) — #322 LIVE

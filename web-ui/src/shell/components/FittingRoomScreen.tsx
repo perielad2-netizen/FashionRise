@@ -335,7 +335,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       setResultJobId(settled.id)
       setResultBlobUrl(url)
       setPhase('done')
-      setStatusMsg(`Preview ready — −${starsCost} Stars charged. Concept only, not a fit guarantee.`)
+      setStatusMsg('Preview ready. Concept only, not a fit guarantee.')
     } catch (err) {
       if (ac.signal.aborted) return
       setPhase('failed')
@@ -643,8 +643,8 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
               {phase === 'running'
                 ? 'Working…'
                 : phase === 'failed'
-                  ? `Retry (−${starsCost} Stars)`
-                  : `Try on (−${starsCost} Stars)`}
+                  ? 'Retry'
+                  : 'Try on'}
             </button>
           </div>
           {phase === 'running' ? (
