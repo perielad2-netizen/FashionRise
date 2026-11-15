@@ -30,7 +30,7 @@
 | Slice | **F1–F5** on PR **#332** (`cursor/web-ai-fitting-room-f1f3-77c6`): person + outfit session IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · save/share (no Left/Right compare slots) · preview disclaimer |
 | Stars | Flat **`ai_stars_fitting_room_cost=20`** per successful try-on — **not** multiplied by garments in the image / outfit collage. No charge on failure. |
 | Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **OFF** · BE `FITTING_ROOM_ENABLED` / `FITTING_ROOM_LIVE_HTTP` **OFF** |
-| Web test tip LIVE | FE `/var/www/fashionrise/releases/767fbf77-fitting-room-saved-dl-332` · Saved: Download/Share/Delete · Choose photo · `fitting_room_stars: 20` · BE tip `1c1cf574` · Nginx allowlist **`/api/v1/ai/fitting-room/*`** |
+| Web test tip LIVE | FE `/var/www/fashionrise/releases/dbacb0ee-fitting-room-fashn-fallback-332` · OpenAI moderation → silent **FASHN** fallback (swimwear/lingerie) · Saved Download/Share/Delete · `fitting_room_stars: 20` · BE `dbacb0ee` + FASHN live · Nginx allowlist **`/api/v1/ai/fitting-room/*`** |
 | Android QA rollback | Prior tip **`b69ffb25-looks-magic-top-clip-331`** (Fitting Room UI absent). Rollback: `ln -sfn /var/www/fashionrise/releases/b69ffb25-looks-magic-top-clip-331 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 | Merge | **Do not merge #332** until PM approval |
 | Reuse | OpenAI Try On images.edit adapter · AI job worker · Magic Stars debit-on-success only · My Looks download toast UX |
