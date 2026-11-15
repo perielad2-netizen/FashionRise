@@ -285,6 +285,49 @@ describe('buildTryOnDesignHints', () => {
     expect(colorHint).not.toMatch(/#111111/)
   })
 
+  it('detects centered short sleeves that never reach the page edges (Magic sleeve drop)', () => {
+    // Metallic top ~26–74% of 768px — prior 22%/78% thresholds missed this.
+    const fills: FillOp[] = [
+      {
+        id: 'metallic-top',
+        contour: [220, 140, 548, 140, 540, 420, 228, 420],
+        seedX: 384,
+        seedY: 260,
+        style: { kind: 'solid', color: '#A8A8A8' },
+      },
+      {
+        id: 'left-short-sleeve',
+        contour: [200, 160, 280, 160, 275, 300, 205, 300],
+        seedX: 240,
+        seedY: 220,
+        style: { kind: 'solid', color: '#A8A8A8' },
+      },
+      {
+        id: 'right-short-sleeve',
+        contour: [488, 160, 568, 160, 563, 300, 493, 300],
+        seedX: 528,
+        seedY: 220,
+        style: { kind: 'solid', color: '#A8A8A8' },
+      },
+    ]
+    expect(detectBilateralSleevesFromFills(fills)).toBe(true)
+    const hints = buildTryOnDesignHints({ strokes: [], fills })
+    expect(hints.some((h) => /both.*sleeve/i.test(h))).toBe(true)
+  })
+
+  it('does not treat a sleeveless tank bodice as bilateral sleeves', () => {
+    const fills: FillOp[] = [
+      {
+        id: 'tank',
+        contour: [280, 160, 488, 160, 480, 420, 288, 420],
+        seedX: 384,
+        seedY: 280,
+        style: { kind: 'solid', color: '#A8A8A8' },
+      },
+    ]
+    expect(detectBilateralSleevesFromFills(fills)).toBe(false)
+  })
+
   it('keeps trouser geometry hints inside the 8-hint budget (#172)', () => {
     const fills: FillOp[] = [
       {

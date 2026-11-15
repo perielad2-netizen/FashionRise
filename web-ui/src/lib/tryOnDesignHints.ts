@@ -156,23 +156,74 @@ export function detectOpenNecklineFromFills(
   return false
 }
 
-/** Two sleeve masses in the upper outer thirds of the design plane (#182). */
+/**
+ * Two sleeve masses in the upper body (#182 / Magic short-sleeve fidelity).
+ *
+ * Prior thresholds (outer 22%/78% of the paper) only caught bridal sleeves that
+ * reached the page edges. Centered short sleeves on a fashion croquis often sit
+ * near ~30–70% of width — Magic then never got "keep both sleeves" and dropped
+ * the hand-on-hip arm. Detect via:
+ * 1) upper fill(s) / contour mass past short-sleeve shoulders (~30%/70%), or
+ * 2) legacy edge sleeves (22%/78%) and separate left/right sleeve lobes.
+ */
 export function detectBilateralSleevesFromFills(
   fills: FillOp[],
   designHeight = 1024,
   designWidth = 768,
 ): boolean {
+  const midX = designWidth / 2
+  const upperY0 = designHeight * 0.08
+  const upperY1 = designHeight * 0.55
+  // Page-edge bridal sleeves (kept for #182).
+  const edgeLeftX = designWidth * 0.22
+  const edgeRightX = designWidth * 0.78
+  // Short sleeves on a centered croquis — past bare-shoulder tank width.
+  const shortLeftX = designWidth * 0.3
+  const shortRightX = designWidth * 0.7
+
   let left = false
   let right = false
+  const upperBounds: InkBounds[] = []
+
   for (const fill of fills) {
     const b = fillBounds(fill)
     if (!b) continue
     const cy = (b.minY + b.maxY) / 2
-    if (cy > designHeight * 0.55 || cy < designHeight * 0.08) continue
-    if (b.minX <= designWidth * 0.22) left = true
-    if (b.maxX >= designWidth * 0.78) right = true
+    if (cy > upperY1 || cy < upperY0) continue
+    upperBounds.push(b)
+    if (b.minX <= shortLeftX) left = true
+    if (b.maxX >= shortRightX) right = true
+
+    // Separate sleeve lobes sitting entirely on one side of the torso.
+    if (b.maxX <= midX && b.minX <= shortLeftX) left = true
+    if (b.minX >= midX && b.maxX >= shortRightX) right = true
+
+    const c = fill.contour
+    if (c && c.length >= 4) {
+      let leftHits = 0
+      let rightHits = 0
+      for (let i = 0; i + 1 < c.length; i += 2) {
+        const x = c[i]!
+        const y = c[i + 1]!
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+        if (y < upperY0 || y > upperY1) continue
+        if (x <= shortLeftX) leftHits += 1
+        if (x >= shortRightX) rightHits += 1
+        if (x <= edgeLeftX) leftHits += 1
+        if (x >= edgeRightX) rightHits += 1
+      }
+      if (leftHits >= 2) left = true
+      if (rightHits >= 2) right = true
+    }
   }
-  return left && right
+
+  if (left && right) return true
+
+  const union = unionBounds(upperBounds)
+  if (!union) return false
+  const span = union.maxX - union.minX
+  if (span < designWidth * 0.32) return false
+  return union.minX <= shortLeftX && union.maxX >= shortRightX
 }
 
 /**

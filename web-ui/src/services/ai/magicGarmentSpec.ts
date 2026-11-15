@@ -186,7 +186,7 @@ const MAGIC_ENHANCEMENT_NOTES =
   'ONLY applied fill/gradient/fabric colors — invent no accent colors/panels/trims; ' +
   'only keep clearly designed swim/lingerie/true-crop openings; no traced/cartoon look.'
 
-/** #183 — pale bridal / open neckline / both sleeves (same contract as Try On). */
+/** #183 — pale bridal / open neckline (same contract as Try On). */
 function paleBridalNotes(front: SideBag, back: SideBag, mainColors: string[]): string[] {
   const notes: string[] = []
   const fills = [...front.fills, ...back.fills]
@@ -201,16 +201,11 @@ function paleBridalNotes(front: SideBag, back: SideBag, mainColors: string[]): s
       'neckline: deep open / plunging V as drawn — keep cleavage opening; do not fill or raise to a high neck',
     )
   }
-  if (
-    detectBilateralSleevesFromFills(fills) ||
-    detectBilateralSleevesFromFills(front.fills)
-  ) {
-    notes.push(
-      'sleeves: both arms have sleeves as drawn — keep both; do not invent one-shoulder or drop a sleeve',
-    )
-  }
   return notes
 }
+
+const BOTH_SLEEVES_NOTE =
+  'sleeves: BOTH arms have short/long sleeves as drawn — keep BOTH; do not invent one-shoulder or drop a sleeve on the hip/bent arm'
 
 /** Bounded garment context for dual Magic — no invented garment details. */
 export function buildSharedGarmentSpec(
@@ -224,6 +219,9 @@ export function buildSharedGarmentSpec(
   const materials = materialsFromDoc(doc)
   const fingerprint = draftContentFingerprint(doc)
   const bridal = paleBridalNotes(front, back, main_colors)
+  const bothSleeves =
+    detectBilateralSleevesFromFills([...front.fills, ...back.fills]) ||
+    detectBilateralSleevesFromFills(front.fills)
   const bothInked =
     (front.strokes.length > 0 || front.fills.length > 0) &&
     (back.strokes.length > 0 || back.fills.length > 0)
@@ -242,11 +240,13 @@ export function buildSharedGarmentSpec(
     bothInked ? 'pair_mode=dual_inked' : 'pair_mode=single_or_smart_back',
     'back_must_match_front_garment=1',
     'never_invent_bodysuit=1',
+    ...(bothSleeves ? ['sleeves_both=1'] : []),
     ...(bridal.length ? ['pale_bridal_fidelity=1'] : []),
     `fingerprint=${fingerprint.slice(0, 64)}`,
   ].join('; ')
-  // Keep designer notes when provided; always append enhancement intent for Front+Back.
+  // Sleeve fidelity leads notes so the 500-char clip cannot drop it.
   const notesParts = [
+    ...(bothSleeves ? [BOTH_SLEEVES_NOTE] : []),
     ...(trimmedNotes ? [trimmedNotes] : []),
     ...bridal,
     MAGIC_ENHANCEMENT_NOTES,

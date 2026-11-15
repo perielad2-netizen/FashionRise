@@ -192,6 +192,41 @@ describe('magicGarmentSpec palette priority', () => {
     expect(spec.notes || '').toMatch(/plunging|cleavage|open/i)
     expect(spec.notes || '').toMatch(/both.*sleeve/i)
     expect(spec.details || '').toMatch(/pale_bridal_fidelity=1/)
+    expect(spec.details || '').toMatch(/sleeves_both=1/)
+  })
+
+  it('flags both short sleeves on a centered metallic top (Magic sleeve drop regression)', () => {
+    let doc = createEmptyDraftDocument()
+    doc = bumpDraftDocument(doc, {
+      fills: [
+        {
+          id: 'metallic-top',
+          contour: [220, 140, 548, 140, 540, 420, 228, 420],
+          style: { kind: 'solid', color: '#A8A8A8' },
+          seedX: 384,
+          seedY: 260,
+        },
+        {
+          id: 'left-short-sleeve',
+          contour: [200, 160, 280, 160, 275, 300, 205, 300],
+          style: { kind: 'solid', color: '#A8A8A8' },
+          seedX: 240,
+          seedY: 220,
+        },
+        {
+          id: 'right-short-sleeve',
+          contour: [488, 160, 568, 160, 563, 300, 493, 300],
+          style: { kind: 'solid', color: '#A8A8A8' },
+          seedX: 528,
+          seedY: 220,
+        },
+      ],
+    })
+    const spec = buildSharedGarmentSpec(doc, 'polish concept')
+    expect(spec.notes || '').toMatch(/BOTH.*sleeve/i)
+    expect(spec.notes?.indexOf('sleeves:')).toBe(0)
+    expect(spec.details || '').toMatch(/sleeves_both=1/)
+    expect(spec.details || '').not.toMatch(/pale_bridal_fidelity=1/)
   })
 
   it('uses gradient fill stops in main_colors ahead of outline ink', () => {
