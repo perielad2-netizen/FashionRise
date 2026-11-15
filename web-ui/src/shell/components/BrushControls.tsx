@@ -122,8 +122,8 @@ export function BrushControls({
 }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
-  const title =
-    tool === 'erase' ? 'Eraser' : tool === 'rectErase' ? 'Rectangular eraser' : 'Brush'
+  const title = tool === 'erase' ? 'Eraser' : 'Brush'
+  const eraseLike = tool === 'erase' || tool === 'rectErase'
   const kind = brushEngine?.brushKind ?? 'tapered'
   const layer = brushEngine?.logicalLayer ?? 'ink'
   const safeBrushColor = /^#[0-9a-fA-F]{6}$/.test(brushColor) ? brushColor : '#1c1c1e'
@@ -136,7 +136,7 @@ export function BrushControls({
     >
       {variant === 'sheet' ? <p className={styles.title}>{title}</p> : null}
 
-      {tool !== 'erase' && tool !== 'rectErase' && onBrushKind ? (
+      {!eraseLike && onBrushKind ? (
         <div className={styles.kindGrid} role="radiogroup" aria-label="Brush type">
           {BRUSH_OPTIONS.map((opt) => {
             const selected = kind === opt.id
@@ -185,7 +185,7 @@ export function BrushControls({
         </div>
       ) : null}
 
-      {tool !== 'erase' && tool !== 'rectErase' && (onBrushColor || onOpenMaterials) ? (
+      {!eraseLike && (onBrushColor || onOpenMaterials) ? (
         <div className={styles.colorRow} data-testid="brush-color-row">
           <span>Color</span>
           {onBrushColor ? (
@@ -249,11 +249,11 @@ export function BrushControls({
         step={1}
         value={Math.round(opacity * 100)}
         aria-label="Brush opacity"
-        disabled={tool === 'erase' || tool === 'rectErase'}
+        disabled={eraseLike}
         onChange={(e) => onOpacity(Number(e.target.value) / 100)}
       />
 
-      {tool !== 'erase' && tool !== 'rectErase' && brushEngine && onBrushEnginePatch ? (
+      {!eraseLike && brushEngine && onBrushEnginePatch ? (
         <div className={styles.advanced}>
           <button
             type="button"
