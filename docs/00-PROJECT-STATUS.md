@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**GitHub open issues marked irrelevant** — ignore until owner closes from a PC.)
+**Last updated:** 2026-11-15 (**Friends keyboard black void** — FE tip `d5a3ebf9` live.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -12,15 +12,26 @@
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Build from `main` (`df93307a+`); Fitting Room UI default **ON** in `.env.native`. |
+| **Android test app** | **Current gate** | Build from `main` (`d5a3ebf9+`); Fitting Room UI default **ON** in `.env.native`. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
-| **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm on `main` · FE tip **`df93307a`** · BE `FITTING_ROOM_*` **ON** on VPS. |
+| **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm on `main` · FE tip **`d5a3ebf9`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
 | **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Hard-refresh Studio · re-run Magic on a two-short-sleeve top · confirm both sleeves survive · Android build from `main`.
+**Exact next step:** Hard-refresh Runway Friends on Android · confirm username field types with no black square · Android build from `main`.
+
+## Runway bugfix — Friends keyboard black square (2026-11-15) — tip LIVE / #342
+
+| Status | Detail |
+|---|---|
+| Bug | Runway → Friends → Add friend by username: keyboard opens with large black/navy void; typing does nothing |
+| Root cause | Soft keyboard shrank `#root` via `--fr-vv-height` **and** Friends padded by the same occlusion (`keyboardPad`) + `scrollIntoView(center)` |
+| Fix | Keep layout height while editable focused · remove Friends `keyboardPad` · `scrollIntoView(nearest)` + re-focus |
+| Merge | **#342** → `main` @ **`d5a3ebf9`** |
+| Production FE tip | **`d5a3ebf9`** → `/var/www/fashionrise/releases/d5a3ebf9-friends-keyboard` · prior `df93307a-magic-both-sleeves` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/df93307a-magic-both-sleeves /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## GitHub open issues — IRRELEVANT (owner 2026-11-15)
 
