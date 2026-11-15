@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**AI Fitting Room ENABLED** for web + Android · Stars confirm dialog · PR **#333** merge-to-main · tip deploy pending this turn.)
+**Last updated:** 2026-11-15 (**AI Fitting Room LIVE** on tip `751fe332` · PRs **#332**+#**333** on `main` · Android test builds from `main` include Fitting Room.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -12,28 +12,47 @@
 | Track | Status | Notes |
 |---|---|---|
 | **iOS App Store** | **Already published** | Live store app exists. Do **not** start a new 1.0 TestFlight / Codemagic IPA “first release” path. |
-| **Android test app** | **Current gate** | Build from `main` after Fitting Room #333 merge; Fitting Room UI default ON. |
+| **Android test app** | **Current gate** | Build from `main` (`751fe332+`); Fitting Room UI default **ON** in `.env.native`. |
 | **QA V2 Batches A–E** | **Merged** | Code on `main`; Android device validation still required before the next store milestone. |
-| **AI Fitting Room** | **ENABLED** | F1–F5 on main path · FE default ON · BE ON on prod API · Magic-style Stars confirm (no −20 on pink button). |
+| **AI Fitting Room** | **LIVE / ENABLED** | F1–F5 + Stars confirm on `main` · FE tip **`751fe332`** · BE `FITTING_ROOM_*` **ON** on VPS. |
 | **iOS 1.0.1** | **Later** | Prepare only **after** Android QA approval. |
-| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** until explicit enable · Stars purchasing/credit OFF · Fitting Room UI **ON** |
+| **Gates** | Native push **foundation LIVE** (`1a8e6121`) · **`NATIVE_PUSH_*` OFF** · Stars purchasing/credit OFF · Fitting Room UI **ON** |
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Merge/deploy Fitting Room #333; Android test build from `main` with Fitting Room ON.
+**Exact next step:** Android test build from `main` with Fitting Room ON; hard-refresh web tip `751fe332` for QA.
 
-## AI Fitting Room — parallel development track (2026-11-15)
+## AI Fitting Room — LIVE (2026-11-15)
 
 | Status | Detail |
 |---|---|
-| Scope | **F1–F5** only (My Photo · Choose Clothing · AI Try-On · Build Outfit · Save/Compare/Share). No Wardrobe / Stylist / shopping / new billing. |
-| Slice | **F1–F5 MERGED** via PR **#332** (`1b12f6ab`); Stars confirm polish PR **#333** |
-| Stars | Flat **`ai_stars_fitting_room_cost=20`** · confirm dialog only (pink **Try on** has no −20 label) · No charge on failure |
-| Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **ON** (default + `.env.native` / production example) · BE `FITTING_ROOM_*` **OFF** in repo; **ON** on live VPS |
-| Web tip | Deploy tip from #333 branch after enable commit · Nginx allowlist **`/api/v1/ai/fitting-room/*`** |
-| Android | Build from `main` after #333 merge — Fitting Room visible in native shell |
-| Reuse | OpenAI Try On images.edit adapter · FASHN Max swimwear fallback · AI job worker · Magic Stars debit-on-success |
-| Out of scope | Fabricate AI results · charge Stars on failure · migrations · Android store submit |
+| Scope | **F1–F5** only (My Photo · Choose Clothing · AI Try-On · Build Outfit · Save/Share). No Wardrobe / Stylist / shopping / new billing. |
+| Merge | **#332** (`1b12f6ab`) F1–F5 + FASHN Max swimwear · **#333** (`751fe332`) Stars confirm + FE enable + clean Try on label — **both on `main`** |
+| Production FE tip | **`751fe332`** → `/var/www/fashionrise/releases/751fe332-fitting-room-enable-333` · public `/version.json` matches · prior tip `adf65fde-fitting-room-stars-confirm` |
+| Production BE | `FITTING_ROOM_ENABLED=true` · `FITTING_ROOM_LIVE_HTTP=true` · `AI_STARS_FITTING_ROOM_COST=20` · FASHN Max live (owner allowlist) · Nginx allowlist **`/api/v1/ai/fitting-room/*`** |
+| Stars | Flat **20** per successful try-on · Magic-style **`AiSpendConfirmDialog`** before enqueue · pink **Try on** / **Retry** labels have **no −20 text** · no charge on failure · no “−20 on success” generating copy |
+| FE flags | `isFittingRoomUiEnabled()` defaults **ON** when unset · `.env.native` + `.env.production.example` set `VITE_FITTING_ROOM_UI_ENABLED=true` |
+| BE flags (repo) | `FITTING_ROOM_*` remain fail-closed **OFF** in code defaults; **ON** only via VPS `.env` |
+| Key UX locks | Choose photo (gallery/files — **no** forced camera) · no Left/Right compare slots · Saved: Download / Share / Delete · no Back to Studio · no header concept/Stars cost note |
+| Quality path | OpenAI try-on first · moderation / blocked → silent **FASHN Try-On Max** (quality·2k, preserve skin, ignore props) especially swimwear/lingerie · v1.6 fallback |
+| Core code | BE `backend/app/services/fitting_room.py` + routes/schemas/worker · FE `FittingRoomScreen.tsx` · `fittingRoomStore` · `fittingRoomApi` · `fittingRoomUi.ts` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/adf65fde-fitting-room-stars-confirm /var/www/fashionrise/current && nginx -t && systemctl reload nginx` (or earlier `b69ffb25-looks-magic-top-clip-331` if Fitting Room must be absent) |
+| Android | Native shell builds from `main` include Fitting Room entry (Home/Studio gates) against prod API |
+| Out of scope | Fabricate AI results · charge Stars on failure · migrations · Android/iOS store submit · Wardrobe/Stylist |
+
+### Fitting Room implementation checklist (do not re-litigate)
+
+- [x] F1 person photo session (IndexedDB)
+- [x] F2 clothing / outfit pieces session
+- [x] F3 AI try-on job + poll + result image
+- [x] F4 build outfit collage input
+- [x] F5 save / share / download (no compare slots)
+- [x] Flat 20 Stars debit-on-success only
+- [x] Stars confirm dialog (Magic pattern)
+- [x] OpenAI → FASHN Max moderation fallback
+- [x] Nginx `/ai/fitting-room/*` allowlisted
+- [x] FE enabled for web tip + Android `.env.native`
+- [x] Merged to `main` (#332 + #333)
 
 ## Android QA polish (2026-11-14) — #322 LIVE
 
