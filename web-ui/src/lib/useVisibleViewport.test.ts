@@ -50,4 +50,20 @@ describe('useVisibleViewport', () => {
     renderHook(() => useVisibleViewport(false))
     expect(document.documentElement.style.getPropertyValue('--fr-vv-height')).toBe('')
   })
+
+  it('does not shrink #root for soft-keyboard occlusion while an input is focused', () => {
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    Object.defineProperty(window.visualViewport!, 'height', { configurable: true, value: 420 })
+
+    renderHook(() => useVisibleViewport())
+    // Layout height kept — avoids black void above Android keyboard.
+    expect(document.documentElement.style.getPropertyValue('--fr-vv-height')).toBe('800px')
+    expect(document.documentElement.style.getPropertyValue('--fr-browser-chrome-bottom')).toBe(
+      '0px',
+    )
+    input.remove()
+  })
 })

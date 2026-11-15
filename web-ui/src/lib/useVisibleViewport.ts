@@ -7,10 +7,27 @@ import { useEffect } from 'react'
  * can see (system nav / gesture bar / browser chrome). Internal scroll regions
  * then end "early" while Delete / card footers stay clipped under that overlap.
  *
+ * Soft keyboard is different: shrinking `#root` to `visualViewport.height` while
+ * the layout viewport is still tall (or while screens also pad by the occlusion)
+ * leaves a solid shell-colored void above the keyboard and can drop input focus
+ * (Runway Friends “black square” / untypable username field on Android).
+ *
  * Sets on `document.documentElement`:
  * - `--fr-vv-height` — visible viewport height in px
  * - `--fr-browser-chrome-bottom` — layout vs visible bottom overlap in px
  */
+
+function isEditableTarget(el: EventTarget | null): boolean {
+  if (!el || !(el instanceof Element)) return false
+  const tag = el.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return el instanceof HTMLElement && el.isContentEditable
+}
+
+function isEditableFocused(): boolean {
+  return isEditableTarget(document.activeElement)
+}
+
 export function useVisibleViewport(enabled = true): void {
   useEffect(() => {
     if (!enabled || typeof window === 'undefined') return
@@ -22,8 +39,16 @@ export function useVisibleViewport(enabled = true): void {
       const layoutH = window.innerHeight || 0
       const visibleH = vv?.height ?? layoutH
       const offsetTop = vv?.offsetTop ?? 0
-      const chromeBottom = Math.max(0, Math.round(layoutH - visibleH - offsetTop))
-      const heightPx = Math.max(1, Math.round(visibleH || layoutH))
+      const rawChrome = Math.max(0, Math.round(layoutH - visibleH - offsetTop))
+
+      // Soft keyboard: keep layout height so `#root` does not collapse into a
+      // black band above the keyboard. Browser chrome still uses vv height.
+      const keyboardLikely = isEditableFocused() && rawChrome > 40
+      const chromeBottom = keyboardLikely ? 0 : rawChrome
+      const heightPx = Math.max(
+        1,
+        Math.round(keyboardLikely ? layoutH || visibleH : visibleH || layoutH),
+      )
 
       root.style.setProperty('--fr-vv-height', `${heightPx}px`)
       root.style.setProperty('--fr-browser-chrome-bottom', `${chromeBottom}px`)
@@ -34,12 +59,17 @@ export function useVisibleViewport(enabled = true): void {
     vv?.addEventListener('scroll', sync)
     window.addEventListener('resize', sync)
     window.addEventListener('orientationchange', sync)
+    // focusin/out: keyboard open/close often does not fire window resize first.
+    document.addEventListener('focusin', sync)
+    document.addEventListener('focusout', sync)
 
     return () => {
       vv?.removeEventListener('resize', sync)
       vv?.removeEventListener('scroll', sync)
       window.removeEventListener('resize', sync)
       window.removeEventListener('orientationchange', sync)
+      document.removeEventListener('focusin', sync)
+      document.removeEventListener('focusout', sync)
       root.style.removeProperty('--fr-vv-height')
       root.style.removeProperty('--fr-browser-chrome-bottom')
     }
