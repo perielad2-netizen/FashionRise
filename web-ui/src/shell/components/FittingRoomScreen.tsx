@@ -49,6 +49,25 @@ function comboWarning(categories: string[], sets: string[][]): string | null {
   return null
 }
 
+/** Never show raw OpenAI moderation / BadRequest dumps in the Fitting Room UI. */
+function ownerSafeFittingRoomError(raw: string | null | undefined): string {
+  const text = (raw || '').trim()
+  if (!text) {
+    return 'Fitting Room could not finish this preview. No Stars were charged.'
+  }
+  const lower = text.toLowerCase()
+  if (
+    lower.includes('moderation_blocked') ||
+    lower.includes('badrequesterror') ||
+    lower.includes('request_id=') ||
+    lower.includes('images.edit rejected') ||
+    lower.includes('categories=sexual')
+  ) {
+    return 'Fitting Room could not finish this preview. No Stars were charged.'
+  }
+  return text
+}
+
 export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const personInputId = useId()
   const garmentInputId = useId()
@@ -301,10 +320,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       const settled = await pollAiJobUntilSettled({ jobId: job.id, signal: ac.signal })
       if (settled.status !== 'completed') {
         setPhase('failed')
-        setErrorMsg(
-          settled.error_message?.trim() ||
-            'Fitting Room could not finish this preview. No Stars were charged.',
-        )
+        setErrorMsg(ownerSafeFittingRoomError(settled.error_message))
         setStatusMsg(null)
         return
       }
@@ -319,12 +335,14 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
       setPhase('failed')
       setStatusMsg(null)
       if (err instanceof ApiError) {
-        setErrorMsg(err.message || 'Fitting Room request failed. No Stars were charged.')
+        setErrorMsg(ownerSafeFittingRoomError(err.message || 'Fitting Room request failed. No Stars were charged.'))
       } else {
         setErrorMsg(
-          err instanceof Error
-            ? err.message
-            : 'Fitting Room request failed. No Stars were charged.',
+          ownerSafeFittingRoomError(
+            err instanceof Error
+              ? err.message
+              : 'Fitting Room request failed. No Stars were charged.',
+          ),
         )
       }
     }

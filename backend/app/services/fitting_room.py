@@ -320,11 +320,80 @@ def enqueue_fitting_room_try_on(
     return job
 
 
+def _openai_exc_is_moderation(exc: BaseException) -> bool:
+    """True when OpenAI refused the Fitting Room request for moderation/sexual."""
+    safe_meta = getattr(exc, "safe_meta", None)
+    meta = safe_meta if isinstance(safe_meta, dict) else {}
+    code = str(meta.get("error_code") or "").strip().upper()
+    if code == "PROVIDER_MODERATION_BLOCKED":
+        return True
+    detail = str(exc).lower()
+    if "moderation_blocked" in detail or "moderation_stage" in detail:
+        return True
+    try:
+        from app.services.personal_croquis_provider import provider_rejection_code_from_text
+
+        return provider_rejection_code_from_text(str(exc)) == "moderation_blocked"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _fashn_fallback_armed() -> bool:
+    """Live FASHN (or test provider override) may finish swimwear/lingerie Fitting Room."""
+    from app.services.fashn_try_on_provider import fashn_configured, fashn_live_armed
+    from app.services.personal_try_on_provider import _try_on_provider_override
+
+    if _try_on_provider_override is not None:
+        return True
+    return bool(fashn_configured() and fashn_live_armed())
+
+
+def _fashn_category_for_fitting_room(data: dict[str, Any]) -> str:
+    """Map Fitting Room categories → FASHN v1.6 category (swimwear → one-pieces)."""
+    raw = data.get("outfit_categories")
+    cats = [str(c).strip().lower() for c in raw] if isinstance(raw, list) else []
+    primary = str(data.get("garment_category") or "").strip().lower()
+    if primary and primary not in cats:
+        cats = [primary, *cats]
+    if any(c in {"one-pieces", "dresses"} for c in cats):
+        return "one-pieces"
+    if "tops" in cats and "bottoms" not in cats:
+        return "tops"
+    if "bottoms" in cats and "tops" not in cats:
+        return "bottoms"
+    # Collage / ambiguous / swimwear product plate — one-pieces is the lingerie/swim default.
+    return "one-pieces"
+
+
+def _generate_fitting_room_via_fashn(
+    *,
+    person_png: bytes,
+    garment_png: bytes,
+    data: dict[str, Any],
+) -> tuple[bytes, dict[str, Any]]:
+    """Product-photo FASHN try-on (no sketch realism). Used after OpenAI moderation."""
+    from app.services.fashn_garment_prep import prep_from_approved_product_pieces
+
+    category = _fashn_category_for_fitting_room(data)
+    prep = prep_from_approved_product_pieces(
+        pieces=[(category if category in {"tops", "bottoms", "one-pieces", "auto"} else "one-pieces", garment_png)],
+        source_fingerprint=str(data.get("garment_fingerprint") or "fitting-room"),
+    )
+    provider = get_try_on_provider("fashn")
+    return provider.generate(
+        photo_png=person_png,
+        garment_png=garment_png,
+        prep=prep,
+        v16_experiment={"category": category},
+    )
+
+
 def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
-    """Worker entry — OpenAI try-on; never debit Stars here (ai_worker helper does)."""
+    """Worker entry — OpenAI try-on with silent FASHN fallback; Stars debit elsewhere."""
     data = job.input_data if isinstance(job.input_data, dict) else {}
 
     def _fail(msg: str, *, code: str = "FITTING_ROOM_FAILED") -> dict[str, Any]:
+        # Never leak raw OpenAI moderation / BadRequest text to the client.
         job.status = "failed"
         job.error_message = msg[:240]
         result = {
@@ -349,6 +418,12 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     hints_raw = data.get("design_hints")
     hints = [str(h) for h in hints_raw if isinstance(h, str)] if isinstance(hints_raw, list) else []
 
+    used_provider = "openai"
+    fallback_from: str | None = None
+    openai_operator_detail: str | None = None
+    png: bytes | None = None
+    meta: dict[str, Any] = {}
+
     try:
         from app.services.personal_try_on_provider import _try_on_provider_override
 
@@ -361,8 +436,62 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         png, meta = provider.generate(
             photo_png=person_png, garment_png=garment_png, design_hints=hints
         )
+        if not isinstance(meta, dict):
+            meta = {}
     except ProviderNotAvailableError as exc:
-        return _fail(str(exc)[:240], code="PROVIDER_UNAVAILABLE")
+        openai_operator_detail = str(exc)[:400]
+        if _openai_exc_is_moderation(exc) and _fashn_fallback_armed():
+            logger.info(
+                "Fitting Room job %s OpenAI moderation — falling back to FASHN",
+                job.id,
+            )
+            try:
+                png, meta = _generate_fitting_room_via_fashn(
+                    person_png=person_png, garment_png=garment_png, data=data
+                )
+                if not isinstance(meta, dict):
+                    meta = {}
+                used_provider = str(meta.get("provider") or "fashn")
+                fallback_from = "openai"
+            except ProviderOutcomeUnknownError as fashn_exc:
+                job.status = "failed"
+                job.error_message = (
+                    "Fitting Room could not finish this preview. No Stars were charged."
+                )[:240]
+                job.result_data = {
+                    "status": "failed",
+                    "summary": job.error_message,
+                    "mode": FITTING_ROOM_MODE,
+                    "error_code": "PROVIDER_OUTCOME_UNKNOWN",
+                    "reconciliation_required": True,
+                    "fallback_attempted": "fashn",
+                    "operator_summary": (
+                        f"openai={openai_operator_detail}; fashn={str(fashn_exc)[:200]}"
+                    )[:400],
+                }
+                return job.result_data
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "Fitting Room job %s FASHN fallback failed after OpenAI moderation",
+                    job.id,
+                )
+                return _fail(
+                    "Fitting Room could not finish this swimwear/lingerie preview. "
+                    "No Stars were charged.",
+                    code="PROVIDER_FALLBACK_FAILED",
+                )
+        else:
+            # Non-moderation OpenAI failure — keep copy owner-safe (no raw API dump).
+            if _openai_exc_is_moderation(exc):
+                return _fail(
+                    "Fitting Room could not finish this preview with the current clothing "
+                    "photo. Try a different angle or garment shot. No Stars were charged.",
+                    code="PROVIDER_MODERATION_BLOCKED",
+                )
+            return _fail(
+                "Fitting Room could not finish this preview. No Stars were charged.",
+                code="PROVIDER_UNAVAILABLE",
+            )
     except ProviderOutcomeUnknownError as exc:
         job.status = "failed"
         job.error_message = (
@@ -402,7 +531,7 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         "image_url": url,
         "mode": FITTING_ROOM_MODE,
         "prompt_version": TRY_ON_PROMPT_VERSION,
-        "provider": "openai",
+        "provider": used_provider,
         "person_fingerprint": data.get("person_fingerprint"),
         "garment_fingerprint": data.get("garment_fingerprint"),
         "garment_category": data.get("garment_category"),
@@ -412,6 +541,16 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
         "stars_cost": cost,
         "consent_version": TRY_ON_CONSENT_VERSION,
     }
+    if fallback_from:
+        result["fallback_from"] = fallback_from
+        result["operator_summary"] = (
+            f"Completed via {used_provider} after OpenAI moderation. "
+            f"openai={openai_operator_detail or ''}"
+        )[:400]
+        if isinstance(meta, dict):
+            for k in ("prediction_ids", "credits_used", "fashn_calls", "layout"):
+                if k in meta:
+                    result[k] = meta[k]
     job.status = "completed"
     job.error_message = None
     job.result_data = result
@@ -419,5 +558,8 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     slim.pop("person_image_base64", None)
     slim.pop("garment_image_base64", None)
     slim["images_stripped"] = True
+    if fallback_from:
+        slim["provider"] = used_provider
+        slim["fallback_from"] = fallback_from
     job.input_data = slim
     return result

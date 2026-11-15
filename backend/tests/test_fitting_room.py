@@ -201,3 +201,127 @@ def test_fitting_room_failure_no_success_status(client, db_session, monkeypatch)
     result = job.result_data or {}
     assert result.get("status") == "failed"
     assert result.get("stars_debited") is not True
+    # Owner-safe copy — never dump raw provider exceptions.
+    assert "BadRequestError" not in (job.error_message or "")
+    assert "moderation_blocked" not in (job.error_message or "").lower()
+
+
+class _OpenAiThenFashnMock:
+    """First generate = OpenAI moderation; second = FASHN success (same override)."""
+
+    def __init__(self):
+        self.calls = 0
+        self.kwargs: list[dict] = []
+
+    def generate(self, *, photo_png: bytes, garment_png: bytes, design_hints=None, **kwargs):
+        self.calls += 1
+        self.kwargs.append({"design_hints": design_hints, **kwargs})
+        if self.calls == 1:
+            err = ProviderNotAvailableError(
+                "images.edit rejected by provider: BadRequestError status=400 "
+                "code=moderation_blocked categories=sexual"
+            )
+            err.safe_meta = {
+                "error_code": "PROVIDER_MODERATION_BLOCKED",
+                "provider_code": "moderation_blocked",
+                "moderation_stage": "input",
+                "categories": ["sexual"],
+                "http_status": 400,
+            }
+            raise err
+        out = _png_bytes((80, 120), (90, 40, 160, 255))
+        return out, {"provider": "fashn", "actual_cost_cents": 8, "prediction_ids": ["pred_test"]}
+
+
+def test_fitting_room_openai_moderation_falls_back_to_fashn(client, db_session, monkeypatch):
+    _enable_fitting_room(monkeypatch)
+    mock = _OpenAiThenFashnMock()
+    set_try_on_provider_override(mock)
+    tokens = register_with_invite(
+        client, db_session, email="fr-swim@example.com", username="fr_swim"
+    )
+    _grant_stars(db_session, "fr_swim", amount=40)
+
+    from app.models.user import User
+
+    before = db_session.query(User).filter(User.username == "fr_swim").one().ai_stars
+
+    r = client.post(
+        f"{FR}/try-on",
+        headers=_auth(tokens),
+        json={
+            "person_image_base64": _data_url((180, 120, 90, 255)),
+            "garment_pieces": [
+                {"image_base64": _data_url((40, 180, 200, 255)), "category": "one-pieces"},
+            ],
+            "idempotency_key": f"fitting_room:{uuid.uuid4()}",
+            "consent_acknowledged": True,
+            "consent_version": FITTING_ROOM_CONSENT_VERSION,
+        },
+    )
+    assert r.status_code == 201, r.text
+    job_id = r.json()["id"]
+    processed = run_magic_worker_tick(db_session, limit=4)
+    assert processed >= 1
+    db_session.expire_all()
+    job = db_session.get(AIJob, uuid.UUID(job_id))
+    assert job is not None
+    assert job.status == "completed", (job.error_message, job.result_data)
+    assert mock.calls == 2
+    result = job.result_data or {}
+    assert result.get("provider") == "fashn"
+    assert result.get("fallback_from") == "openai"
+    assert result.get("image_url")
+    assert result.get("stars_cost") == 20
+    assert result.get("stars_debited") is True
+    assert "moderation_blocked" not in (job.error_message or "").lower()
+    after = db_session.query(User).filter(User.username == "fr_swim").one().ai_stars
+    assert after == before - 20
+
+
+def test_fitting_room_moderation_without_fashn_keeps_owner_safe_copy(
+    client, db_session, monkeypatch
+):
+    _enable_fitting_room(monkeypatch)
+    # Fail once; override present so _fashn_fallback_armed is True — force fallback
+    # itself to fail by raising on second call with a non-recoverable mock.
+    class _ModerationOnlyFail(MockTryOnProvider):
+        def generate(self, *, photo_png: bytes, garment_png: bytes, design_hints=None, **kwargs):
+            self.calls += 1
+            err = ProviderNotAvailableError("moderation_blocked sexual")
+            err.safe_meta = {
+                "error_code": "PROVIDER_MODERATION_BLOCKED",
+                "moderation_stage": "input",
+                "categories": ["sexual"],
+            }
+            raise err
+
+    set_try_on_provider_override(_ModerationOnlyFail())
+    tokens = register_with_invite(
+        client, db_session, email="fr-mod@example.com", username="fr_mod"
+    )
+    _grant_stars(db_session, "fr_mod")
+
+    r = client.post(
+        f"{FR}/try-on",
+        headers=_auth(tokens),
+        json={
+            "person_image_base64": _data_url(),
+            "garment_image_base64": _data_url((10, 10, 10, 255)),
+            "idempotency_key": f"fitting_room:{uuid.uuid4()}",
+            "consent_acknowledged": True,
+            "consent_version": FITTING_ROOM_CONSENT_VERSION,
+        },
+    )
+    assert r.status_code == 201, r.text
+    job_id = r.json()["id"]
+    run_magic_worker_tick(db_session, limit=4)
+    job = db_session.get(AIJob, uuid.UUID(job_id))
+    assert job is not None
+    assert job.status == "failed"
+    msg = (job.error_message or "").lower()
+    assert "badrequesterror" not in msg
+    assert "moderation_blocked" not in msg
+    assert "request_id" not in msg
+    assert "no stars were charged" in msg
+    assert (job.result_data or {}).get("error_code") == "PROVIDER_FALLBACK_FAILED"
