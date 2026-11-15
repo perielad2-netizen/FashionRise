@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**AI Fitting Room LIVE** on tip `751fe332` · PRs **#332**+#**333** on `main` · Android test builds from `main` include Fitting Room.)
+**Last updated:** 2026-11-15 (**Studio tip `52355f1e` LIVE** — no fill success toast · brush modal uses app **Choose color** · Fitting Room still on `main` / tip includes Fitting Room enable.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -20,7 +20,17 @@
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Android test build from `main` with Fitting Room ON; hard-refresh web tip `751fe332` for QA.
+**Exact next step:** Hard-refresh tip `52355f1e`; Android test build from `main` (merge #334 when ready). Fitting Room remains enabled.
+
+## Studio polish — fill toast + brush color (2026-11-15) — tip LIVE / PR #334
+
+| Status | Detail |
+|---|---|
+| Tip | **`52355f1e`** → `/var/www/fashionrise/releases/52355f1e-brush-fill-color` · prior `751fe332-fitting-room-enable-333` |
+| Fill | Removed redundant **Region filled / Got it** notice after successful flood fill |
+| Brush color | Brush modal no longer uses native `<input type="color">` (Android Hebrew system picker); opens **`ProfessionalColorPicker`** — same **Choose color** as Materials |
+| PR | [#334](https://github.com/perielad2-netizen/FashionRise/pull/334) `cursor/web-brush-fill-color-77c6` |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/751fe332-fitting-room-enable-333 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
 ## AI Fitting Room — LIVE (2026-11-15)
 
