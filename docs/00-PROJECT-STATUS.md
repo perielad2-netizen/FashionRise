@@ -27,9 +27,9 @@
 | Status | Detail |
 |---|---|
 | Scope | **F1–F5** only (My Photo · Choose Clothing · AI Try-On · Build Outfit · Save/Compare/Share). No Wardrobe / Stylist / shopping / new billing. |
-| Slice | **F1–F5** on PR **#332** (`cursor/web-ai-fitting-room-f1f3-77c6`): person + outfit session IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · save/share (no Left/Right compare slots) · preview disclaimer |
+| Slice | **F1–F5 MERGED** via PR **#332** (`1b12f6ab`) (`cursor/web-ai-fitting-room-f1f3-77c6`): person + outfit session IndexedDB · `/ai/fitting-room/*` · OpenAI try-on reuse · save/share (no Left/Right compare slots) · preview disclaimer |
 | Stars | Flat **`ai_stars_fitting_room_cost=20`** per successful try-on — **not** multiplied by garments in the image / outfit collage. No charge on failure. |
-| Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **OFF** · BE `FITTING_ROOM_ENABLED` / `FITTING_ROOM_LIVE_HTTP` **OFF** |
+| Flags (repo default) | FE `VITE_FITTING_ROOM_UI_ENABLED` **OFF** (enable at build for web tip) · BE `FITTING_ROOM_*` **OFF** in repo; **ON** on live tip |
 | Web test tip LIVE | FE `/var/www/fashionrise/releases/dbacb0ee-fitting-room-fashn-fallback-332` · OpenAI moderation → silent **FASHN** fallback (swimwear/lingerie) · Saved Download/Share/Delete · `fitting_room_stars: 20` · BE `dbacb0ee` + FASHN live · Nginx allowlist **`/api/v1/ai/fitting-room/*`** |
 | Android QA rollback | Prior tip **`b69ffb25-looks-magic-top-clip-331`** (Fitting Room UI absent). Rollback: `ln -sfn /var/www/fashionrise/releases/b69ffb25-looks-magic-top-clip-331 /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 | Merge | **Do not merge #332** until PM approval |
