@@ -1,8 +1,16 @@
-import { FolderHeart, Home, Images, Sparkles, Star, UserRound } from 'lucide-react'
+import { FolderHeart, Home, Images, Shirt, Sparkles, Star, UserRound } from 'lucide-react'
+import { isFittingRoomUiEnabled } from '@/config/fittingRoomUi'
 import { isMyCroquisUiEnabled } from '@/config/myCroquisUi'
 import styles from './GlobalNavigation.module.css'
 
-export type NavDestination = 'home' | 'create' | 'designs' | 'looks' | 'croquis' | 'runway'
+export type NavDestination =
+  | 'home'
+  | 'create'
+  | 'designs'
+  | 'looks'
+  | 'croquis'
+  | 'runway'
+  | 'fitting-room'
 
 const BASE_ITEMS = [
   { id: 'home', label: 'Home', icon: Home, destination: 'home' as NavDestination | null },
@@ -21,6 +29,13 @@ const BASE_ITEMS = [
     requiresMyCroquis: true,
   },
   {
+    id: 'fitting-room',
+    label: 'Fitting Room',
+    icon: Shirt,
+    destination: 'fitting-room' as NavDestination | null,
+    requiresFittingRoom: true,
+  },
+  {
     id: 'runway',
     label: 'Runway',
     icon: Star,
@@ -37,7 +52,12 @@ type Props = {
 
 export function GlobalNavigation({ current = 'create', onNavigate, onComingSoon }: Props) {
   const croquisEnabled = isMyCroquisUiEnabled()
-  const items = BASE_ITEMS.filter((item) => !('requiresMyCroquis' in item && item.requiresMyCroquis) || croquisEnabled)
+  const fittingRoomEnabled = isFittingRoomUiEnabled()
+  const items = BASE_ITEMS.filter((item) => {
+    if ('requiresMyCroquis' in item && item.requiresMyCroquis) return croquisEnabled
+    if ('requiresFittingRoom' in item && item.requiresFittingRoom) return fittingRoomEnabled
+    return true
+  })
   return (
     <nav className={styles.nav} aria-label="FashionRise">
       <div className={styles.items}>

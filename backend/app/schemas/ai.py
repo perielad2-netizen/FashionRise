@@ -441,3 +441,57 @@ class PersonalTryOnPreflightRead(BaseModel):
     fashn_max_credits_quality_1k: int | None = None
     fashn_max_estimate_cents_balanced_1k: int | None = None
     fashn_max_estimate_cents_quality_1k: int | None = None
+
+
+class FittingRoomPreflightRead(BaseModel):
+    """AI Fitting Room gate + consent (F1–F5). Fail-closed when ``enabled`` is false."""
+
+    enabled: bool
+    live_http: bool
+    consent_version: str
+    notice_text: str
+    prompt_version: str
+    supported_categories: list[str]
+    preview_disclaimer: str
+    ai_gate: bool = False
+    stars_cost: int = 20
+    stars_cost_note: str = ""
+    max_outfit_pieces: int = 4
+    conflicting_category_sets: list[list[str]] = Field(default_factory=list)
+
+
+class FittingRoomGarmentPiece(BaseModel):
+    """One outfit slot for F4 — category + clothing image."""
+
+    image_base64: str = Field(..., min_length=32)
+    category: str | None = Field(default="auto", max_length=32)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FittingRoomTryOnBody(BaseModel):
+    """Person photo + clothing image(s) → Fitting Room try-on job.
+
+    Flat Stars cost applies once on success whether the clothing plate shows
+    one garment or several. Prefer ``garment_pieces`` for multi-slot outfits.
+    """
+
+    person_image_base64: str = Field(..., min_length=32)
+    garment_image_base64: str | None = Field(default=None, min_length=32)
+    garment_pieces: list[FittingRoomGarmentPiece] | None = None
+    idempotency_key: str = Field(..., min_length=8, max_length=128)
+    consent_acknowledged: bool = False
+    consent_version: str = Field(..., min_length=4, max_length=64)
+    garment_category: str | None = Field(
+        default="auto",
+        max_length=32,
+        description="Optional soft category hint when using a single garment_image_base64.",
+    )
+
+    @model_validator(mode="after")
+    def _require_garment(self) -> "FittingRoomTryOnBody":
+        has_single = bool(self.garment_image_base64 and self.garment_image_base64.strip())
+        has_pieces = bool(self.garment_pieces)
+        if not has_single and not has_pieces:
+            raise ValueError("Provide garment_image_base64 or garment_pieces.")
+        return self

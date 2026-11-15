@@ -16,6 +16,8 @@ Allow authenticated Cloudflare Access clients (with FashionRise AOP) to call **o
 - `POST /api/v1/ai/personal-try-on/fashn/prepare`
 - `POST /api/v1/ai/personal-try-on/fashn/garment-realism`
 - `POST /api/v1/ai/personal-try-on/fashn/garment-realism/{uuid}/accept` (#169 / #170)
+- `GET /api/v1/ai/fitting-room/preflight` (Fitting Room test tip — applied 2026-11-14)
+- `POST /api/v1/ai/fitting-room/try-on` (Fitting Room test tip — applied 2026-11-14; `client_max_body_size 20m`)
 - `GET /api/v1/ai/jobs/{uuid}`
 - `GET /api/v1/ai/jobs/{uuid}/image`
 
@@ -110,6 +112,34 @@ location = /api/v1/ai/personal-try-on/preflight {
     proxy_set_header X-Forwarded-Proto https;
     proxy_connect_timeout 5s;
     proxy_read_timeout 30s;
+    add_header Cache-Control "no-store" always;
+}
+
+# Fitting Room (applied live 2026-11-14 for PR #332 web test tip)
+location = /api/v1/ai/fitting-room/preflight {
+    limit_except GET OPTIONS { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    add_header Cache-Control "no-store" always;
+}
+
+location = /api/v1/ai/fitting-room/try-on {
+    limit_except POST OPTIONS { deny all; }
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 120s;
+    client_max_body_size 20m;
     add_header Cache-Control "no-store" always;
 }
 

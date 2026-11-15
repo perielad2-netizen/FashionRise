@@ -11,6 +11,8 @@ from app.schemas.ai import (
     AcceptedGarmentRealismJobRead,
     AIJobCreate,
     AIJobRead,
+    FittingRoomPreflightRead,
+    FittingRoomTryOnBody,
     MagicOperationJobsRead,
     PersonalGarmentRealismBody,
     PersonalTryOnBody,
@@ -23,6 +25,7 @@ from app.schemas.ai import (
     TryOnExperimentVerdictBody,
 )
 from app.services import ai_service
+from app.services import fitting_room as fitting_room_service
 from app.services import personal_try_on as try_on_service
 
 router = APIRouter()
@@ -272,6 +275,46 @@ def personal_try_on(
         smart_operation_id=body.smart_operation_id,
         smart_fallback_reason=body.smart_fallback_reason,
         primary_try_on_job_id=body.primary_try_on_job_id,
+    )
+    return AIJobRead.from_job(job)
+
+
+@router.get("/fitting-room/preflight", response_model=FittingRoomPreflightRead)
+@limiter.limit("60/minute")
+def fitting_room_preflight(
+    request: Request, user: CurrentUser
+) -> FittingRoomPreflightRead:
+    """AI Fitting Room gate — no billable work. Fail-closed when disabled."""
+    _ = request.url
+    return FittingRoomPreflightRead(**fitting_room_service.preflight_public(user=user))
+
+
+@router.post(
+    "/fitting-room/try-on",
+    response_model=AIJobRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("12/minute")
+def fitting_room_try_on(
+    request: Request,
+    user: CurrentUser,
+    body: FittingRoomTryOnBody,
+    db: Session = Depends(get_db),
+) -> AIJobRead:
+    """Enqueue person-photo + clothing-image Fitting Room try-on (F3)."""
+    _ = request.url
+    job = fitting_room_service.enqueue_fitting_room_try_on(
+        db,
+        user,
+        person_image_base64=body.person_image_base64,
+        garment_image_base64=body.garment_image_base64,
+        garment_pieces=(
+            [p.model_dump() for p in body.garment_pieces] if body.garment_pieces else None
+        ),
+        idempotency_key=body.idempotency_key,
+        consent_acknowledged=body.consent_acknowledged,
+        consent_version=body.consent_version,
+        garment_category=body.garment_category,
     )
     return AIJobRead.from_job(job)
 

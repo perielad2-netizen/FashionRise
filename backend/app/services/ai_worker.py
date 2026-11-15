@@ -11,6 +11,7 @@ from app.models.personal_croquis import CROQUIS_GENERATE_JOB_TYPE
 from app.services import sketch_openai
 from app.services.personal_croquis_worker import run_croquis_worker_tick
 from app.services.fashn_garment_realism import GARMENT_REALISM_JOB_TYPE
+from app.services.fitting_room import FITTING_ROOM_JOB_TYPE
 from app.services.personal_try_on_provider import TRY_ON_JOB_TYPE
 from app.services.techpack_ai_worker import run_techpack_worker_tick
 
@@ -52,6 +53,10 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
 
                 # complete_try_on_job sets status/result itself (incl. failed paths).
                 complete_try_on_job(db, job)
+            elif job.job_type == FITTING_ROOM_JOB_TYPE:
+                from app.services.fitting_room import complete_fitting_room_job
+
+                complete_fitting_room_job(db, job)
             elif job.job_type == GARMENT_REALISM_JOB_TYPE:
                 from app.services.personal_try_on import complete_garment_realism_job
 
@@ -69,6 +74,7 @@ def run_magic_worker_tick(db: Session, *, limit: int = 12) -> int:
             if job.status == "completed" and job.job_type in {
                 "sketch_polish",
                 TRY_ON_JOB_TYPE,
+                FITTING_ROOM_JOB_TYPE,
             }:
                 from app.services.ai_service import debit_magic_stars_on_success
 

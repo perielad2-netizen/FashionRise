@@ -1,0 +1,357 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  height: 100%;
+  overflow: auto;
+  padding: 0.85rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  background:
+    radial-gradient(900px 420px at 12% -8%, rgba(214, 51, 132, 0.18), transparent 55%),
+    radial-gradient(700px 380px at 100% 0%, rgba(88, 120, 200, 0.14), transparent 50%),
+    var(--fr-navy);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.brand {
+  margin: 0;
+  font-family: var(--fr-serif);
+  font-size: clamp(1.65rem, 5vw, 2.15rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--fr-cream);
+}
+
+.brand span {
+  color: var(--fr-pink-soft);
+}
+
+.lead {
+  margin: 0;
+  max-width: 36rem;
+  color: var(--fr-muted);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.disclaimer {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-left: 3px solid var(--fr-pink);
+  background: rgba(214, 51, 132, 0.08);
+  color: var(--fr-cream-2);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.starsNote {
+  margin: 0;
+  color: var(--fr-pink-soft);
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.outfitGrid,
+.savedGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem;
+}
+
+.outfitCard,
+.savedCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.45rem;
+  border: 1px solid var(--fr-line);
+  border-radius: var(--fr-radius);
+  background: rgba(12, 18, 32, 0.55);
+}
+
+.outfitCard img,
+.savedCard img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--fr-panel);
+}
+
+.outfitCat {
+  font-size: 0.72rem;
+  color: var(--fr-muted);
+  text-transform: lowercase;
+}
+
+.steps {
+  display: grid;
+  gap: 0.9rem;
+}
+
+@media (min-width: 820px) {
+  .steps {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .resultPanel {
+    grid-column: 1 / -1;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem;
+  border: 1px solid var(--fr-line);
+  border-radius: var(--fr-radius-lg);
+  background: linear-gradient(165deg, rgba(26, 36, 56, 0.92), rgba(12, 18, 32, 0.88));
+}
+
+.panelTitle {
+  margin: 0;
+  font-family: var(--fr-serif);
+  font-size: 1.15rem;
+  color: var(--fr-cream);
+}
+
+.panelHint {
+  margin: 0;
+  color: var(--fr-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  max-height: 320px;
+  overflow: hidden;
+  border-radius: var(--fr-radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 40%),
+    repeating-linear-gradient(
+      -12deg,
+      transparent,
+      transparent 10px,
+      rgba(255, 255, 255, 0.02) 10px,
+      rgba(255, 255, 255, 0.02) 11px
+    ),
+    var(--fr-panel);
+}
+
+.previewImg {
+  width: 100%;
+  height: 100%;
+  max-height: 320px;
+  object-fit: contain;
+}
+
+.previewEmpty {
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--fr-muted);
+  font-size: 0.88rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.btn,
+.btnGhost,
+.btnPrimary {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:active,
+.btnGhost:active,
+.btnPrimary:active {
+  transform: scale(0.98);
+}
+
+.btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--fr-line);
+  color: var(--fr-cream);
+}
+
+.btnGhost {
+  background: transparent;
+  border-color: rgba(154, 163, 181, 0.35);
+  color: var(--fr-muted);
+}
+
+.btnPrimary {
+  background: linear-gradient(135deg, var(--fr-pink), var(--fr-pink-deep));
+  color: #fff;
+  box-shadow: var(--fr-glow);
+}
+
+.btn:disabled,
+.btnGhost:disabled,
+.btnPrimary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.categoryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  appearance: none;
+  border: 1px solid var(--fr-line);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  background: transparent;
+  color: var(--fr-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.chipActive {
+  border-color: rgba(244, 114, 182, 0.55);
+  background: rgba(214, 51, 132, 0.18);
+  color: var(--fr-cream);
+}
+
+.consent {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--fr-line);
+  border-radius: var(--fr-radius);
+  background: rgba(21, 29, 48, 0.7);
+}
+
+.consent input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.consent label {
+  color: var(--fr-cream-2);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.tryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.status {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--fr-muted);
+}
+
+.statusError {
+  color: #fca5a5;
+}
+
+.resultStage {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  max-height: min(70dvh, 640px);
+  border-radius: var(--fr-radius);
+  background: var(--fr-panel-2);
+  overflow: hidden;
+}
+
+.resultImg {
+  width: 100%;
+  height: 100%;
+  max-height: min(70dvh, 640px);
+  object-fit: contain;
+}
+
+.toast {
+  position: sticky;
+  bottom: 0.5rem;
+  z-index: 5;
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.toastOk {
+  background: rgba(22, 101, 52, 0.9);
+  color: #ecfdf5;
+}
+
+.toastError {
+  background: rgba(127, 29, 29, 0.92);
+  color: #fee2e2;
+}
+
+.toastInfo {
+  background: rgba(30, 58, 138, 0.92);
+  color: #dbeafe;
+}
+
+.gateOff {
+  margin: auto;
+  max-width: 28rem;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--fr-muted);
+}
+
+.gateOff h1 {
+  margin: 0 0 0.5rem;
+  font-family: var(--fr-serif);
+  color: var(--fr-cream);
+}
+
+.loadingPulse {
+  animation: frPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes frPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}

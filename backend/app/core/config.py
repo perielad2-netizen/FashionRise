@@ -133,6 +133,14 @@ class Settings(BaseSettings):
     ai_worker_poll_interval_seconds: float = 1.5
     ai_worker_batch_size: int = 12
 
+    # AI Fitting Room (parallel track — person photo + clothing image try-on).
+    # Fail closed: must be explicitly enabled. Independent of Android QA tip.
+    # Does not enable Wardrobe / Stylist / shopping / new billing.
+    fitting_room_enabled: bool = False
+    # Live OpenAI images.edit for Fitting Room. Even with fitting_room_enabled,
+    # real HTTP requires this flag (mirrors MY_CROQUIS_AI_LIVE_HTTP discipline).
+    fitting_room_live_http: bool = False
+
     # FASHN Virtual Try-On (optional specialist path — OpenAI try-on remains default).
     # Fail closed: enabled + live_http + non-empty FASHN_API_KEY required for paid calls.
     # Never expose the key to the frontend or commit it.
@@ -246,6 +254,8 @@ class Settings(BaseSettings):
     ai_stars_croquis_cost: int = 10
     ai_stars_pdf_cost: int = 50
     ai_stars_fabric_cost: int = 5
+    # AI Fitting Room — flat Stars per successful try-on (1+ garments in the image = same cost).
+    ai_stars_fitting_room_cost: int = 20
     # Comma-separated emails with endless Stars (never debit).
     ai_stars_unlimited_emails: str = "perielad@gmail.com,perielad2@gmail.com"
     # Opt-in finite-wallet override for purchase testing. Empty by default.

@@ -1,7 +1,7 @@
 """Per-user AI Stars wallet — spend gate for FashionRise AI features.
 
 Costs (defaults):
-  magic=10, croquis=10, pdf=50, fabric=5
+  magic=10, croquis=10, pdf=50, fabric=5, fitting_room=20
 New accounts start with ``AI_STARS_STARTING_BALANCE`` (default 10).
 Owner emails in ``AI_STARS_UNLIMITED_EMAILS`` never debit, unless listed in
 ``AI_STARS_FINITE_OVERRIDE_EMAILS`` (temporary purchase-test override).
@@ -21,13 +21,14 @@ from app.models.user import User
 
 _log = logging.getLogger(__name__)
 
-Feature = Literal["magic", "croquis", "pdf", "fabric"]
+Feature = Literal["magic", "croquis", "pdf", "fabric", "fitting_room"]
 
 _FEATURE_LABELS: dict[str, str] = {
     "magic": "Magic",
     "croquis": "Create Croquis",
     "pdf": "Create PDF",
     "fabric": "Create Fabric",
+    "fitting_room": "Fitting Room",
 }
 
 
@@ -42,6 +43,7 @@ def feature_cost(feature: Feature | str) -> int:
         "croquis": int(settings.ai_stars_croquis_cost),
         "pdf": int(settings.ai_stars_pdf_cost),
         "fabric": int(settings.ai_stars_fabric_cost),
+        "fitting_room": int(settings.ai_stars_fitting_room_cost),
     }
     return max(0, mapping.get(str(feature), 0))
 
@@ -50,12 +52,18 @@ def magic_cost() -> int:
     return feature_cost("magic")
 
 
+def fitting_room_cost() -> int:
+    """Flat Stars per successful Fitting Room try-on (not per garment in the image)."""
+    return feature_cost("fitting_room")
+
+
 def cost_catalog() -> dict[str, int]:
     return {
         "magic": feature_cost("magic"),
         "croquis": feature_cost("croquis"),
         "pdf": feature_cost("pdf"),
         "fabric": feature_cost("fabric"),
+        "fitting_room": feature_cost("fitting_room"),
     }
 
 
@@ -306,3 +314,11 @@ def assert_can_spend_magic(db: Session, user: User) -> None:
 
 def debit_magic_stars(db: Session, user: User) -> int:
     return debit_stars(db, user, "magic")
+
+
+def assert_can_spend_fitting_room(db: Session, user: User) -> None:
+    assert_can_spend(db, user, "fitting_room")
+
+
+def debit_fitting_room_stars(db: Session, user: User) -> int:
+    return debit_stars(db, user, "fitting_room")
