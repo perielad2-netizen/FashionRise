@@ -18,7 +18,6 @@ type Props = {
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
-  onClear: () => void
   onMagic: () => void
   magicEnabled?: boolean
   magicBusy?: boolean
@@ -38,7 +37,6 @@ export function WorkspaceHeader({
   canRedo,
   onUndo,
   onRedo,
-  onClear,
   onMagic,
   magicEnabled = false,
   magicBusy = false,
@@ -200,7 +198,7 @@ export function WorkspaceHeader({
           className={styles.moreBtn}
           aria-label="More"
           aria-expanded={menuOpen}
-          title="More — Settings, Clear canvas"
+          title="More — Save as design, Settings"
           onClick={() => setMenuOpen((v) => !v)}
         >
           <MoreHorizontal size={18} aria-hidden />
@@ -247,17 +245,6 @@ export function WorkspaceHeader({
                 See last result
               </button>
             ) : null}
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.moreItem}
-              onClick={() => {
-                setMenuOpen(false)
-                onClear()
-              }}
-            >
-              Clear canvas
-            </button>
           </div>
         ) : null}
       </div>

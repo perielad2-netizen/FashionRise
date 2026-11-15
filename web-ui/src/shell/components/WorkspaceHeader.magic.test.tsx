@@ -33,7 +33,6 @@ describe('WorkspaceHeader Magic recovery', () => {
         canRedo={false}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
-        onClear={vi.fn()}
         onMagic={vi.fn()}
         magicEnabled
         canRecoverLastMagic
@@ -55,7 +54,6 @@ describe('WorkspaceHeader Magic recovery', () => {
         canRedo={false}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
-        onClear={vi.fn()}
         onMagic={vi.fn()}
         magicEnabled
         magicBusy
@@ -74,7 +72,6 @@ describe('WorkspaceHeader Magic recovery', () => {
         canRedo={false}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
-        onClear={vi.fn()}
         onMagic={vi.fn()}
         magicEnabled
         magicBusy
@@ -94,7 +91,6 @@ describe('WorkspaceHeader Magic recovery', () => {
         canRedo={false}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
-        onClear={vi.fn()}
         onMagic={vi.fn()}
         magicEnabled
         onSaveDesign={vi.fn()}
@@ -114,7 +110,7 @@ describe('WorkspaceHeader Magic recovery', () => {
     expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'My Designs' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /Share FashionRise/i })).toBeNull()
-    expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Clear canvas' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'Save now' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /Export/i })).toBeNull()
   })
@@ -127,7 +123,6 @@ describe('WorkspaceHeader Magic recovery', () => {
         canRedo={false}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
-        onClear={vi.fn()}
         onMagic={onMagic}
         magicEnabled
         saveStatus="idle"

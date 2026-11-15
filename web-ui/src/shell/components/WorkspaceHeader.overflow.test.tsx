@@ -21,7 +21,6 @@ describe('WorkspaceHeader overflow menu (V2-0001)', () => {
     canRedo: false,
     onUndo: vi.fn(),
     onRedo: vi.fn(),
-    onClear: vi.fn(),
     onMagic: vi.fn(),
     saveStatus: 'saved' as const,
     saveStatusLabel: 'Saved',

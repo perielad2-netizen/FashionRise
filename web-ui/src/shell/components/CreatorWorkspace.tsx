@@ -339,7 +339,6 @@ export function CreatorWorkspace({ editor, onOpenLibrary, onOpenLooks }: Props) 
           canRedo={editor.canRedo}
           onUndo={editor.undo}
           onRedo={editor.redo}
-          onClear={editor.clear}
           onMagic={editor.onMagic}
           magicEnabled={editor.magicEnabled}
           magicBusy={editor.magicBusy}

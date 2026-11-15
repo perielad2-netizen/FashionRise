@@ -299,13 +299,13 @@ describe('Save as design', () => {
 })
 
 describe('Studio More menu sketch export removal', () => {
-  it('keeps Save as design / Clear and omits My Designs, Save now, and raw sketch export', async () => {
+  it('keeps Save as design and omits Clear / My Designs / Save now / raw sketch export', async () => {
     cleanRestore(workingDoc({ dimmed: true }))
     renderAt('/studio')
     await ready()
     fireEvent.click(screen.getByRole('button', { name: 'More' }))
     expect(screen.getByRole('menuitem', { name: 'Save as design…' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Clear canvas' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Clear canvas' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'My Designs' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'Save now' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /Export visible side/i })).toBeNull()
