@@ -19,6 +19,8 @@ describe('FloatingToolRail', () => {
     expect(onTool).toHaveBeenCalledWith('fill')
     fireEvent.click(screen.getByRole('button', { name: 'Eyedropper' }))
     expect(onTool).toHaveBeenCalledWith('eyedropper')
+    expect(screen.queryByRole('button', { name: 'Rectangular eraser' })).toBeNull()
+    expect(screen.queryByTestId('tool-rail-rect-erase')).toBeNull()
     expect(screen.queryByText(/coming/i)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Clear canvas' })).toBeNull()
   })

@@ -10,7 +10,6 @@ import {
   Pencil,
   Pipette,
   Redo2,
-  SquareDashed,
   Trash2,
   Undo2,
   ZoomIn,
@@ -113,13 +112,6 @@ export function ImmersiveToolbar({
             <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
               <Eraser size={18} strokeWidth={1.75} />
             </ToolBtn>
-            <ToolBtn
-              active={tool === 'rectErase'}
-              label="Rectangular eraser"
-              onClick={() => onTool('rectErase')}
-            >
-              <SquareDashed size={18} strokeWidth={1.75} />
-            </ToolBtn>
             <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
               <PaintBucket size={18} strokeWidth={1.75} />
             </ToolBtn>
@@ -188,13 +180,6 @@ export function ImmersiveToolbar({
           </ToolBtn>
           <ToolBtn active={tool === 'erase'} label="Eraser" onClick={() => onTool('erase')}>
             <Eraser size={18} strokeWidth={1.75} />
-          </ToolBtn>
-          <ToolBtn
-            active={tool === 'rectErase'}
-            label="Rectangular eraser"
-            onClick={() => onTool('rectErase')}
-          >
-            <SquareDashed size={18} strokeWidth={1.75} />
           </ToolBtn>
           <ToolBtn active={tool === 'fill'} label="Fill" onClick={() => onTool('fill')}>
             <PaintBucket size={18} strokeWidth={1.75} />

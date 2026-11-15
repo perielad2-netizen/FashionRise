@@ -1362,10 +1362,12 @@ export function useStudioEditor() {
 
   const selectTool = useCallback(
     (next: ToolKind) => {
-      setTool(next)
+      // Rectangular area erase removed from the tool rail — freehand eraser covers it.
+      const resolved: ToolKind = next === 'rectErase' ? 'erase' : next
+      setTool(resolved)
       // Armed Gaps / gap markers are fill-session state — clear when leaving fill
       // or switching drawing tools so they cannot mislead after a tool change.
-      if (next !== 'fill') clearFillGapUi()
+      if (resolved !== 'fill') clearFillGapUi()
     },
     [clearFillGapUi],
   )

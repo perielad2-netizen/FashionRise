@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**Studio tip `52355f1e` LIVE** — no fill success toast · brush modal uses app **Choose color** · Fitting Room still on `main` / tip includes Fitting Room enable.)
+**Last updated:** 2026-11-15 (**Remove rectangular area-erase tool** from Studio rails · freehand Eraser remains · tip deploy this turn.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -20,7 +20,16 @@
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Hard-refresh tip `52355f1e`; Android test build from `main` (merge #334 when ready). Fitting Room remains enabled.
+**Exact next step:** Hard-refresh new tip after rect-erase removal; Android build from `main` after merge.
+
+## Studio polish — remove rect area erase (2026-11-15)
+
+| Status | Detail |
+|---|---|
+| Change | Removed dotted-square **Rectangular eraser** from FloatingToolRail + ImmersiveToolbar (minimized + full) |
+| Keep | Freehand **Eraser** · Fill · Eyedropper · Clear |
+| Guard | `selectTool('rectErase')` remaps to `'erase'` |
+| Branch | `cursor/web-remove-rect-erase-77c6` |
 
 ## Studio polish — fill toast + brush color (2026-11-15) — tip LIVE / PR #334
 

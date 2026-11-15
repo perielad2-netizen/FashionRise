@@ -4,7 +4,6 @@ import {
   Pencil,
   Pipette,
   Redo2,
-  SquareDashed,
   Trash2,
   Undo2,
 } from 'lucide-react'
@@ -67,17 +66,6 @@ export function FloatingToolRail({
         onClick={() => onTool('erase')}
       >
         <Eraser size={18} strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        className={tool === 'rectErase' ? styles.btnActive : styles.btn}
-        aria-label="Rectangular eraser"
-        aria-pressed={tool === 'rectErase'}
-        title="Rectangular eraser — drag to erase ink in a selection"
-        data-testid="tool-rail-rect-erase"
-        onClick={() => onTool('rectErase')}
-      >
-        <SquareDashed size={18} strokeWidth={1.75} />
       </button>
       <button
         type="button"

@@ -43,6 +43,7 @@ describe('ImmersiveToolbar', () => {
     expect(screen.getByRole('toolbar', { name: 'Immersive drawing toolbar' })).toBeTruthy()
     expect(screen.getByText('125%')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Export PNG/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Rectangular eraser' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Hand pan' }))
     expect(onTool).toHaveBeenCalledWith('pan')
     fireEvent.click(screen.getByRole('button', { name: 'Fit width' }))
