@@ -230,7 +230,13 @@ class _OpenAiThenFashnMock:
             }
             raise err
         out = _png_bytes((80, 120), (90, 40, 160, 255))
-        return out, {"provider": "fashn", "actual_cost_cents": 8, "prediction_ids": ["pred_test"]}
+        return out, {
+            "provider": "fashn_tryon_max",
+            "actual_cost_cents": 8,
+            "prediction_ids": ["pred_test"],
+            "generation_mode": kwargs.get("generation_mode") or "quality",
+            "resolution": kwargs.get("resolution") or "2k",
+        }
 
 
 def test_fitting_room_openai_moderation_falls_back_to_fashn(client, db_session, monkeypatch):
@@ -268,8 +274,14 @@ def test_fitting_room_openai_moderation_falls_back_to_fashn(client, db_session, 
     assert job is not None
     assert job.status == "completed", (job.error_message, job.result_data)
     assert mock.calls == 2
+    # Second call is Try-On Max quality · 2k (better swimwear/lingerie path).
+    second = mock.kwargs[1]
+    assert second.get("generation_mode") == "quality"
+    assert second.get("resolution") == "2k"
+    assert "skin tone" in (second.get("prompt") or "").lower()
+    assert "bottle" in (second.get("prompt") or "").lower()
     result = job.result_data or {}
-    assert result.get("provider") == "fashn"
+    assert result.get("provider") == "fashn_tryon_max"
     assert result.get("fallback_from") == "openai"
     assert result.get("image_url")
     assert result.get("stars_cost") == 20

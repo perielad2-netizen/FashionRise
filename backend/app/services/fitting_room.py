@@ -339,13 +339,25 @@ def _openai_exc_is_moderation(exc: BaseException) -> bool:
 
 
 def _fashn_fallback_armed() -> bool:
-    """Live FASHN (or test provider override) may finish swimwear/lingerie Fitting Room."""
+    """Live FASHN Max or v1.6 (or test override) may finish swimwear/lingerie Fitting Room."""
+    from app.services.fashn_try_on_max_provider import fashn_max_configured, fashn_max_live_armed
     from app.services.fashn_try_on_provider import fashn_configured, fashn_live_armed
     from app.services.personal_try_on_provider import _try_on_provider_override
 
     if _try_on_provider_override is not None:
         return True
+    if fashn_max_configured() and fashn_max_live_armed():
+        return True
     return bool(fashn_configured() and fashn_live_armed())
+
+
+def _fashn_max_fallback_armed() -> bool:
+    from app.services.fashn_try_on_max_provider import fashn_max_configured, fashn_max_live_armed
+    from app.services.personal_try_on_provider import _try_on_provider_override
+
+    if _try_on_provider_override is not None:
+        return True
+    return bool(fashn_max_configured() and fashn_max_live_armed())
 
 
 def _fashn_category_for_fitting_room(data: dict[str, Any]) -> str:
@@ -365,27 +377,83 @@ def _fashn_category_for_fitting_room(data: dict[str, Any]) -> str:
     return "one-pieces"
 
 
+# Max prompt: garment-only transfer — no props, no skin recolor (Fitting Room product photos).
+FITTING_ROOM_MAX_PROMPT = (
+    "Fit only the clothing, swimwear, or lingerie from the product image onto the person. "
+    "Ignore handheld props, bottles, bags, phones, and background objects in the product "
+    "photo — never transfer them onto the person. Preserve the garment's exact color, "
+    "fabric, straps, trim, cut, and coverage with clean edges. Keep the person's identity, "
+    "face, hair, pose, proportions, lighting, background, and exact natural skin tone "
+    "unchanged — do not darken, bronze, tint, or recolor any skin."
+)
+
+
+def _fitting_room_garment_prep(
+    *,
+    garment_png: bytes,
+    data: dict[str, Any],
+):
+    from app.services.fashn_garment_prep import prep_from_approved_product_pieces
+
+    category = _fashn_category_for_fitting_room(data)
+    piece_cat = (
+        category if category in {"tops", "bottoms", "one-pieces", "auto"} else "one-pieces"
+    )
+    return (
+        piece_cat,
+        prep_from_approved_product_pieces(
+            pieces=[(piece_cat, garment_png)],
+            source_fingerprint=str(data.get("garment_fingerprint") or "fitting-room"),
+        ),
+    )
+
+
 def _generate_fitting_room_via_fashn(
     *,
     person_png: bytes,
     garment_png: bytes,
     data: dict[str, Any],
 ) -> tuple[bytes, dict[str, Any]]:
-    """Product-photo FASHN try-on (no sketch realism). Used after OpenAI moderation."""
-    from app.services.fashn_garment_prep import prep_from_approved_product_pieces
+    """Product-photo FASHN try-on after OpenAI moderation.
 
-    category = _fashn_category_for_fitting_room(data)
-    prep = prep_from_approved_product_pieces(
-        pieces=[(category if category in {"tops", "bottoms", "one-pieces", "auto"} else "one-pieces", garment_png)],
-        source_fingerprint=str(data.get("garment_fingerprint") or "fitting-room"),
-    )
+    Prefers **Try-On Max** (``quality`` · ``2k``) when armed — better swimwear/lingerie
+    fidelity than v1.6. Falls back to v1.6 only if Max is unavailable.
+    """
+    category, prep = _fitting_room_garment_prep(garment_png=garment_png, data=data)
+
+    if _fashn_max_fallback_armed():
+        try:
+            max_provider = get_try_on_provider("fashn_max")
+            png, meta = max_provider.generate(
+                photo_png=person_png,
+                garment_png=garment_png,
+                prep=prep,
+                generation_mode="quality",
+                resolution="2k",
+                prompt=FITTING_ROOM_MAX_PROMPT,
+            )
+            if not isinstance(meta, dict):
+                meta = {}
+            meta.setdefault("provider", "fashn_tryon_max")
+            meta["fitting_room_fashn_path"] = "max_quality_2k"
+            return png, meta
+        except ProviderNotAvailableError:
+            logger.info("Fitting Room Max unavailable — trying FASHN v1.6")
+        except ProviderOutcomeUnknownError:
+            raise
+
     provider = get_try_on_provider("fashn")
-    return provider.generate(
+    png, meta = provider.generate(
         photo_png=person_png,
         garment_png=garment_png,
         prep=prep,
-        v16_experiment={"category": category},
+        v16_experiment={"category": category, "mode": "quality"},
     )
+    if not isinstance(meta, dict):
+        meta = {}
+    meta.setdefault("provider", "fashn")
+    meta["fitting_room_fashn_path"] = "v16_quality"
+    return png, meta
 
 
 def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
@@ -424,93 +492,121 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     png: bytes | None = None
     meta: dict[str, Any] = {}
 
-    try:
-        from app.services.personal_try_on_provider import _try_on_provider_override
+    from app.services.personal_try_on_provider import _try_on_provider_override
 
-        if _try_on_provider_override is None and not fitting_room_live_armed():
-            return _fail(
-                "Fitting Room live AI is not armed on this server.",
-                code="LIVE_HTTP_OFF",
-            )
-        provider = get_try_on_provider("openai")
-        png, meta = provider.generate(
-            photo_png=person_png, garment_png=garment_png, design_hints=hints
+    if _try_on_provider_override is None and not fitting_room_live_armed():
+        return _fail(
+            "Fitting Room live AI is not armed on this server.",
+            code="LIVE_HTTP_OFF",
         )
-        if not isinstance(meta, dict):
-            meta = {}
-    except ProviderNotAvailableError as exc:
-        openai_operator_detail = str(exc)[:400]
-        if _openai_exc_is_moderation(exc) and _fashn_fallback_armed():
+
+    # Swimwear / lingerie / dresses: prefer Try-On Max quality first (skip OpenAI
+    # moderation landmines and get the better garment fidelity model).
+    prefer_max_first = (
+        _fashn_max_fallback_armed()
+        and _fashn_category_for_fitting_room(data) == "one-pieces"
+        and _try_on_provider_override is None
+    )
+    if prefer_max_first:
+        try:
+            png, meta = _generate_fitting_room_via_fashn(
+                person_png=person_png, garment_png=garment_png, data=data
+            )
+            if not isinstance(meta, dict):
+                meta = {}
+            used_provider = str(meta.get("provider") or "fashn_tryon_max")
+            fallback_from = None
+            # Jump straight to success persist below (skip OpenAI).
+            openai_operator_detail = None
+        except Exception:  # noqa: BLE001
             logger.info(
-                "Fitting Room job %s OpenAI moderation — falling back to FASHN",
+                "Fitting Room job %s Max-first path failed — trying OpenAI then fallback",
                 job.id,
             )
-            try:
-                png, meta = _generate_fitting_room_via_fashn(
-                    person_png=person_png, garment_png=garment_png, data=data
-                )
-                if not isinstance(meta, dict):
-                    meta = {}
-                used_provider = str(meta.get("provider") or "fashn")
-                fallback_from = "openai"
-            except ProviderOutcomeUnknownError as fashn_exc:
-                job.status = "failed"
-                job.error_message = (
-                    "Fitting Room could not finish this preview. No Stars were charged."
-                )[:240]
-                job.result_data = {
-                    "status": "failed",
-                    "summary": job.error_message,
-                    "mode": FITTING_ROOM_MODE,
-                    "error_code": "PROVIDER_OUTCOME_UNKNOWN",
-                    "reconciliation_required": True,
-                    "fallback_attempted": "fashn",
-                    "operator_summary": (
-                        f"openai={openai_operator_detail}; fashn={str(fashn_exc)[:200]}"
-                    )[:400],
-                }
-                return job.result_data
-            except Exception:  # noqa: BLE001
-                logger.exception(
-                    "Fitting Room job %s FASHN fallback failed after OpenAI moderation",
+            png = None
+
+    if png is None:
+        try:
+            provider = get_try_on_provider("openai")
+            png, meta = provider.generate(
+                photo_png=person_png, garment_png=garment_png, design_hints=hints
+            )
+            if not isinstance(meta, dict):
+                meta = {}
+            used_provider = "openai"
+        except ProviderNotAvailableError as exc:
+            openai_operator_detail = str(exc)[:400]
+            if _openai_exc_is_moderation(exc) and _fashn_fallback_armed():
+                logger.info(
+                    "Fitting Room job %s OpenAI moderation — falling back to FASHN Max",
                     job.id,
                 )
+                try:
+                    png, meta = _generate_fitting_room_via_fashn(
+                        person_png=person_png, garment_png=garment_png, data=data
+                    )
+                    if not isinstance(meta, dict):
+                        meta = {}
+                    used_provider = str(meta.get("provider") or "fashn_tryon_max")
+                    fallback_from = "openai"
+                except ProviderOutcomeUnknownError as fashn_exc:
+                    job.status = "failed"
+                    job.error_message = (
+                        "Fitting Room could not finish this preview. No Stars were charged."
+                    )[:240]
+                    job.result_data = {
+                        "status": "failed",
+                        "summary": job.error_message,
+                        "mode": FITTING_ROOM_MODE,
+                        "error_code": "PROVIDER_OUTCOME_UNKNOWN",
+                        "reconciliation_required": True,
+                        "fallback_attempted": "fashn_max",
+                        "operator_summary": (
+                            f"openai={openai_operator_detail}; fashn={str(fashn_exc)[:200]}"
+                        )[:400],
+                    }
+                    return job.result_data
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "Fitting Room job %s FASHN fallback failed after OpenAI moderation",
+                        job.id,
+                    )
+                    return _fail(
+                        "Fitting Room could not finish this swimwear/lingerie preview. "
+                        "No Stars were charged.",
+                        code="PROVIDER_FALLBACK_FAILED",
+                    )
+            else:
+                # Non-moderation OpenAI failure — keep copy owner-safe (no raw API dump).
+                if _openai_exc_is_moderation(exc):
+                    return _fail(
+                        "Fitting Room could not finish this preview with the current clothing "
+                        "photo. Try a different angle or garment shot. No Stars were charged.",
+                        code="PROVIDER_MODERATION_BLOCKED",
+                    )
                 return _fail(
-                    "Fitting Room could not finish this swimwear/lingerie preview. "
-                    "No Stars were charged.",
-                    code="PROVIDER_FALLBACK_FAILED",
+                    "Fitting Room could not finish this preview. No Stars were charged.",
+                    code="PROVIDER_UNAVAILABLE",
                 )
-        else:
-            # Non-moderation OpenAI failure — keep copy owner-safe (no raw API dump).
-            if _openai_exc_is_moderation(exc):
-                return _fail(
-                    "Fitting Room could not finish this preview with the current clothing "
-                    "photo. Try a different angle or garment shot. No Stars were charged.",
-                    code="PROVIDER_MODERATION_BLOCKED",
-                )
-            return _fail(
-                "Fitting Room could not finish this preview. No Stars were charged.",
-                code="PROVIDER_UNAVAILABLE",
-            )
-    except ProviderOutcomeUnknownError as exc:
-        job.status = "failed"
-        job.error_message = (
-            "Fitting Room provider outcome is uncertain. No automatic retry — "
-            "check your balance if a charge appears."
-        )[:240]
-        result = {
-            "status": "failed",
-            "summary": job.error_message,
-            "mode": FITTING_ROOM_MODE,
-            "error_code": "PROVIDER_OUTCOME_UNKNOWN",
-            "reconciliation_required": True,
-            "detail": str(exc)[:200],
-        }
-        job.result_data = result
-        return result
-    except Exception:  # noqa: BLE001
-        logger.exception("Fitting Room job %s provider failure", job.id)
-        return _fail("Fitting Room could not finish this preview.", code="PROVIDER_ERROR")
+        except ProviderOutcomeUnknownError as exc:
+            job.status = "failed"
+            job.error_message = (
+                "Fitting Room provider outcome is uncertain. No automatic retry — "
+                "check your balance if a charge appears."
+            )[:240]
+            result = {
+                "status": "failed",
+                "summary": job.error_message,
+                "mode": FITTING_ROOM_MODE,
+                "error_code": "PROVIDER_OUTCOME_UNKNOWN",
+                "reconciliation_required": True,
+                "detail": str(exc)[:200],
+            }
+            job.result_data = result
+            return result
+        except Exception:  # noqa: BLE001
+            logger.exception("Fitting Room job %s provider failure", job.id)
+            return _fail("Fitting Room could not finish this preview.", code="PROVIDER_ERROR")
 
     if not png:
         return _fail("Fitting Room returned an empty image.", code="EMPTY_RESULT")
@@ -547,10 +643,18 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
             f"Completed via {used_provider} after OpenAI moderation. "
             f"openai={openai_operator_detail or ''}"
         )[:400]
-        if isinstance(meta, dict):
-            for k in ("prediction_ids", "credits_used", "fashn_calls", "layout"):
-                if k in meta:
-                    result[k] = meta[k]
+    if isinstance(meta, dict) and used_provider != "openai":
+        for k in (
+            "prediction_ids",
+            "credits_used",
+            "fashn_calls",
+            "layout",
+            "generation_mode",
+            "resolution",
+            "fitting_room_fashn_path",
+        ):
+            if k in meta:
+                result[k] = meta[k]
     job.status = "completed"
     job.error_message = None
     job.result_data = result
@@ -558,8 +662,9 @@ def complete_fitting_room_job(db: Session, job: AIJob) -> dict[str, Any]:
     slim.pop("person_image_base64", None)
     slim.pop("garment_image_base64", None)
     slim["images_stripped"] = True
-    if fallback_from:
+    if used_provider != "openai":
         slim["provider"] = used_provider
+    if fallback_from:
         slim["fallback_from"] = fallback_from
     job.input_data = slim
     return result
