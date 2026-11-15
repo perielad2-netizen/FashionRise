@@ -40,6 +40,7 @@ export type StarsWallet = {
     croquis: number
     pdf: number
     fabric: number
+    fitting_room?: number
   }
 }
 

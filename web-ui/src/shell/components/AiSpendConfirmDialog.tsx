@@ -3,13 +3,14 @@ import { ShoppingBag, Star } from 'lucide-react'
 import { ConfirmDialog } from '@/components/studio/ConfirmDialog'
 import styles from './AiSpendConfirmDialog.module.css'
 
-export type AiSpendFeature = 'magic' | 'croquis' | 'pdf' | 'fabric'
+export type AiSpendFeature = 'magic' | 'croquis' | 'pdf' | 'fabric' | 'fitting_room'
 
 const FEATURE_LABELS: Record<AiSpendFeature, string> = {
   magic: 'Magic',
   croquis: 'Create Model',
   pdf: 'Generate AI PDF',
   fabric: 'AI Fabric',
+  fitting_room: 'Fitting Room',
 }
 
 type Props = {

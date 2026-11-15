@@ -24,6 +24,9 @@ import {
 import { fetchJobImageBlob } from '@/services/ai/magicApi'
 import { pollAiJobUntilSettled } from '@/services/ai/pollAiJob'
 import { ApiError } from '@/services/api/client'
+import { useAiStarsWallet } from '@/hooks/useAiStarsWallet'
+import { AiSpendConfirmDialog } from '@/shell/components/AiSpendConfirmDialog'
+import { StarsShopModal } from '@/shell/components/StarsShopModal'
 import styles from './FittingRoomScreen.module.css'
 
 type Props = {
@@ -91,6 +94,9 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const [noticeTone, setNoticeTone] = useState<'ok' | 'info' | 'error'>('ok')
   const [saved, setSaved] = useState<FittingRoomSavedResult[]>([])
+  const [spendOpen, setSpendOpen] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
+  const { balance, unlimited, costs } = useAiStarsWallet()
 
   const showNotice = useCallback((text: string, tone: 'ok' | 'info' | 'error') => {
     setNotice(text)
@@ -190,7 +196,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     }
   }, [userId, persistOutfit])
 
-  const starsCost = preflight?.stars_cost ?? 20
+  const starsCost = preflight?.stars_cost ?? costs.fitting_room ?? 20
   const maxPieces = preflight?.max_outfit_pieces ?? 4
   const categories = preflight?.supported_categories?.length
     ? preflight.supported_categories
@@ -297,7 +303,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
     const ac = new AbortController()
     abortRef.current = ac
     setPhase('running')
-    setStatusMsg(`Creating your Fitting Room preview (−${starsCost} Stars on success)…`)
+    setStatusMsg('Creating your Fitting Room preview…')
     setErrorMsg(null)
     if (resultBlobUrl) {
       URL.revokeObjectURL(resultBlobUrl)
@@ -531,7 +537,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
           <h2 className={styles.panelTitle}>2 · Build Outfit</h2>
           <p className={styles.panelHint}>
             Add or replace clothing pieces. Previous pieces stay in the session until you remove
-            them. Flat −{starsCost} Stars on success even if a piece shows multiple items.
+            them.
           </p>
           <div className={styles.outfitGrid}>
             {pieces.length === 0 ? (
@@ -623,8 +629,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
             />
             <label htmlFor="fr-consent">
               {preflight?.notice_text ||
-                'I understand this is a visual concept preview only — not an accurate size or fit guarantee.'}{' '}
-              Successful previews cost −{starsCost} Stars (flat).
+                'I understand this is a visual concept preview only — not an accurate size or fit guarantee. Your photo and clothing image stay private.'}
             </label>
           </div>
           <div className={styles.tryRow}>
@@ -632,7 +637,7 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
               type="button"
               className={styles.btnPrimary}
               disabled={!canTry}
-              onClick={() => void runTryOn()}
+              onClick={() => setSpendOpen(true)}
               data-testid="fitting-room-try-on"
             >
               {phase === 'running'
@@ -743,6 +748,23 @@ export function FittingRoomScreen({ userId, onBackToStudio }: Props) {
           {downloadBusy ? 'Saving image…' : notice}
         </p>
       ) : null}
+
+      <AiSpendConfirmDialog
+        open={spendOpen}
+        feature="fitting_room"
+        cost={starsCost}
+        balance={balance}
+        unlimited={unlimited}
+        busy={phase === 'running'}
+        description="Fitting Room creates a private concept preview on your photo. Stars are charged only when the preview succeeds."
+        onCancel={() => setSpendOpen(false)}
+        onApproved={() => {
+          setSpendOpen(false)
+          void runTryOn()
+        }}
+        onOpenShop={() => setShopOpen(true)}
+      />
+      <StarsShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
     </section>
   )
 }

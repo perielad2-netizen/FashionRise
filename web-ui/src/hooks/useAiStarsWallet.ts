@@ -11,6 +11,7 @@ export const DEFAULT_AI_STAR_COSTS: AiStarCosts = Object.freeze({
   croquis: 10,
   pdf: 50,
   fabric: 5,
+  fitting_room: 20,
 })
 
 export type AiStarCosts = {
@@ -18,6 +19,7 @@ export type AiStarCosts = {
   croquis: number
   pdf: number
   fabric: number
+  fitting_room: number
 }
 
 /**
@@ -39,6 +41,8 @@ export function useAiStarsWallet() {
         croquis: wallet.ai_stars_costs?.croquis ?? DEFAULT_AI_STAR_COSTS.croquis,
         pdf: wallet.ai_stars_costs?.pdf ?? DEFAULT_AI_STAR_COSTS.pdf,
         fabric: wallet.ai_stars_costs?.fabric ?? DEFAULT_AI_STAR_COSTS.fabric,
+        fitting_room:
+          wallet.ai_stars_costs?.fitting_room ?? DEFAULT_AI_STAR_COSTS.fitting_room,
       })
       void refreshUser()
     } catch {

@@ -50,6 +50,21 @@ vi.mock('@/lib/sharePromo', () => ({
   requestShare: vi.fn(async () => 'needs-fallback'),
 }))
 
+vi.mock('@/hooks/useAiStarsWallet', () => ({
+  useAiStarsWallet: () => ({
+    balance: null,
+    unlimited: true,
+    costs: { magic: 10, croquis: 10, pdf: 50, fabric: 5, fitting_room: 20 },
+    loaded: true,
+    reload: vi.fn(),
+    refreshUser: vi.fn(),
+  }),
+}))
+
+vi.mock('@/shell/components/StarsShopModal', () => ({
+  StarsShopModal: () => null,
+}))
+
 describe('FittingRoomScreen', () => {
   beforeEach(() => {
     mocks.isFittingRoomUiEnabled.mockReturnValue(true)
@@ -82,10 +97,46 @@ describe('FittingRoomScreen', () => {
     await waitFor(() => expect(mocks.fetchFittingRoomPreflight).toHaveBeenCalled())
     expect(screen.getByTestId('fitting-room-screen')).toBeInTheDocument()
     expect(screen.queryByTestId('fitting-room-stars-cost')).not.toBeInTheDocument()
+    expect(screen.queryByText(/on success/i)).not.toBeInTheDocument()
     const tryBtn = screen.getByTestId('fitting-room-try-on')
     expect(tryBtn).toBeDisabled()
     expect(tryBtn).toHaveTextContent(/−20 Stars/i)
     await userEvent.click(screen.getByRole('checkbox', { name: /Preview only|visual concept preview/i }))
     expect(tryBtn).toBeDisabled()
+  })
+
+  it('opens Stars confirm dialog before enqueueing try-on', async () => {
+    mocks.readFittingRoomAsset.mockResolvedValue({
+      key: 'u1:person',
+      kind: 'person',
+      userId: 'u1',
+      dataUrl: 'data:image/png;base64,person',
+      mimeType: 'image/png',
+      updatedAt: new Date().toISOString(),
+    })
+    const { readOutfitSession } = await import('@/lib/fittingRoomStore')
+    vi.mocked(readOutfitSession).mockResolvedValue({
+      key: 'u1:outfit',
+      userId: 'u1',
+      pieces: [
+        {
+          id: 'piece_1',
+          dataUrl: 'data:image/png;base64,garment',
+          mimeType: 'image/png',
+          category: 'tops',
+          addedAt: new Date().toISOString(),
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    })
+
+    render(<FittingRoomScreen userId="u1" onBackToStudio={() => undefined} />)
+    await waitFor(() => expect(mocks.fetchFittingRoomPreflight).toHaveBeenCalled())
+    await userEvent.click(screen.getByRole('checkbox', { name: /Preview only|visual concept preview/i }))
+    const tryBtn = screen.getByTestId('fitting-room-try-on')
+    await waitFor(() => expect(tryBtn).not.toBeDisabled())
+    await userEvent.click(tryBtn)
+    expect(await screen.findByRole('button', { name: /Approve −20/i })).toBeInTheDocument()
+    expect(mocks.enqueueFittingRoomTryOn).not.toHaveBeenCalled()
   })
 })
