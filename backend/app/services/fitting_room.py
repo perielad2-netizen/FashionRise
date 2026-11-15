@@ -20,7 +20,7 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException, status
-from PIL import Image
+from PIL import Image, ImageOps
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -115,6 +115,37 @@ def preflight_public(*, user: User) -> dict[str, Any]:
     }
 
 
+def _orient_upload_to_png(decoded: bytes, *, field: str) -> bytes:
+    """Bake EXIF orientation into pixel data and strip metadata (PNG).
+
+    Phone portrait JPEGs often store landscape pixels + Orientation=6. Browsers
+    show them upright in <img>, but providers receive sideways bytes unless we
+    transpose here — which produced Fitting Room results rotated 90°.
+    """
+    try:
+        opened = Image.open(io.BytesIO(decoded))
+        oriented = ImageOps.exif_transpose(opened) or opened
+        oriented.load()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{field} is not a readable image.",
+        ) from exc
+    if oriented.mode in ("RGBA", "LA") or (
+        oriented.mode == "P" and "transparency" in oriented.info
+    ):
+        converted = oriented.convert("RGBA")
+    else:
+        converted = oriented.convert("RGB")
+    buf = io.BytesIO()
+    converted.save(buf, format="PNG", optimize=True)
+    out = buf.getvalue()
+    settings = get_settings()
+    if len(out) > settings.max_upload_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field} is too large.")
+    return out
+
+
 def _decode_png(raw: str, *, field: str) -> bytes:
     if not isinstance(raw, str) or not raw.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field} is required.")
@@ -138,7 +169,7 @@ def _decode_png(raw: str, *, field: str) -> bytes:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"{field} must be a PNG or JPEG image.",
             )
-    return decoded
+    return _orient_upload_to_png(decoded, field=field)
 
 
 def _normalize_category(raw: str | None) -> str:
@@ -153,6 +184,7 @@ def _normalize_category(raw: str | None) -> str:
 
 def _bytes_to_rgba(png_or_jpeg: bytes) -> Image.Image:
     img = Image.open(io.BytesIO(png_or_jpeg))
+    img = ImageOps.exif_transpose(img) or img
     return img.convert("RGBA")
 
 

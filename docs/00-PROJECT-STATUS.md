@@ -3,7 +3,7 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
-**Last updated:** 2026-11-15 (**Fix: Fill no longer wipes charcoal/airbrush** · soft garment-mask clip disabled · tip deploy this turn.)
+**Last updated:** 2026-11-15 (**Fitting Room EXIF upright** — phone portrait no longer returns 90°-flipped try-on · tip+BE this turn.)
 
 **Phase:** Native store validation — **Android QA in progress**; published iOS stays as-is until a later **1.0.1** update. Not a new architecture phase.
 
@@ -20,7 +20,15 @@
 
 **Stop line:** No Codemagic iOS builds · no App Store submissions · no live push enable · no Stars purchasing enable.
 
-**Exact next step:** Hard-refresh fill/shade fix tip; Android build from `main` after merge.
+**Exact next step:** Hard-refresh Fitting Room EXIF tip; re-upload person photo (or Replace) then Try on; Android build from `main`.
+
+## Fitting Room bugfix — result rotated 90° (2026-11-15)
+
+| Status | Detail |
+|---|---|
+| Bug | Portrait phone JPEGs display upright in UI (EXIF) but try-on used sideways pixels → result flipped 90° |
+| Fix | FE bakes EXIF via `createImageBitmap`→PNG · BE `_decode_png` runs `ImageOps.exif_transpose` → upright PNG |
+| Branch | `cursor/web-fitting-room-exif-77c6` |
 
 ## Studio bugfix — Fill wiped charcoal/airbrush (2026-11-15)
 

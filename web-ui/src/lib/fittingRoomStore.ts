@@ -237,12 +237,49 @@ export async function deleteSavedResult(id: string): Promise<void> {
   }
 }
 
-export function fileToFittingRoomDataUrl(file: File): Promise<{ dataUrl: string; mimeType: string }> {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      reject(new Error('Please choose a photo or clothing image.'))
-      return
+/**
+ * Read a Fitting Room photo/garment file as an upright PNG data URL.
+ * Bakes EXIF orientation into pixels so try-on providers don't get a 90° flip
+ * (browsers show EXIF-corrected <img>, but raw JPEG bytes are often sideways).
+ */
+export async function fileToFittingRoomDataUrl(
+  file: File,
+): Promise<{ dataUrl: string; mimeType: string }> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please choose a photo or clothing image.')
+  }
+
+  const bakeFromBitmap = async (bitmap: ImageBitmap): Promise<{ dataUrl: string; mimeType: string }> => {
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, bitmap.width)
+    canvas.height = Math.max(1, bitmap.height)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Could not prepare that image.')
+    ctx.drawImage(bitmap, 0, 0)
+    bitmap.close()
+    const dataUrl = canvas.toDataURL('image/png')
+    if (!dataUrl.startsWith('data:image/')) {
+      throw new Error('Could not read that image.')
     }
+    return { dataUrl, mimeType: 'image/png' }
+  }
+
+  // Prefer createImageBitmap with EXIF orientation (Chrome/Android WebView).
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions)
+      return await bakeFromBitmap(bitmap)
+    } catch {
+      try {
+        const bitmap = await createImageBitmap(file)
+        return await bakeFromBitmap(bitmap)
+      } catch {
+        /* fall through to FileReader */
+      }
+    }
+  }
+
+  return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       const dataUrl = typeof reader.result === 'string' ? reader.result : ''
@@ -250,7 +287,31 @@ export function fileToFittingRoomDataUrl(file: File): Promise<{ dataUrl: string;
         reject(new Error('Could not read that image.'))
         return
       }
-      resolve({ dataUrl, mimeType: file.type || 'image/jpeg' })
+      // Last resort: decode via <img> + canvas (many engines apply EXIF on draw).
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = Math.max(1, img.naturalWidth || img.width)
+          canvas.height = Math.max(1, img.naturalHeight || img.height)
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('Could not prepare that image.'))
+            return
+          }
+          ctx.drawImage(img, 0, 0)
+          const baked = canvas.toDataURL('image/png')
+          if (!baked.startsWith('data:image/')) {
+            reject(new Error('Could not read that image.'))
+            return
+          }
+          resolve({ dataUrl: baked, mimeType: 'image/png' })
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error('Could not read that image.'))
+        }
+      }
+      img.onerror = () => reject(new Error('Could not read that image.'))
+      img.src = dataUrl
     }
     reader.onerror = () => reject(reader.error ?? new Error('Could not read that image.'))
     reader.readAsDataURL(file)

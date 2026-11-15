@@ -337,3 +337,31 @@ def test_fitting_room_moderation_without_fashn_keeps_owner_safe_copy(
     assert "request_id" not in msg
     assert "no stars were charged" in msg
     assert (job.result_data or {}).get("error_code") == "PROVIDER_FALLBACK_FAILED"
+
+
+def _jpeg_with_exif_orientation(orientation: int = 6) -> bytes:
+    """Landscape 40×20 JPEG tagged Orientation=6 (display as 20×40 portrait)."""
+    img = Image.new("RGB", (40, 20), (200, 50, 50))
+    exif = img.getexif()
+    exif[274] = orientation
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", exif=exif, quality=90)
+    return buf.getvalue()
+
+
+def test_decode_applies_exif_orientation_before_provider(client, db_session, monkeypatch):
+    """Phone portrait JPEGs must be upright PNG before try-on (no 90° result flip)."""
+    from app.services import fitting_room as fr
+
+    _enable_fitting_room(monkeypatch, live=True)
+    raw = _jpeg_with_exif_orientation(6)
+    before = Image.open(io.BytesIO(raw))
+    assert before.size == (40, 20)
+    assert before.getexif().get(274) == 6
+
+    data_url = "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+    oriented = fr._decode_png(data_url, field="person_image_base64")
+    assert oriented[:8] == b"\x89PNG\r\n\x1a\n"
+    out = Image.open(io.BytesIO(oriented))
+    assert out.size == (20, 40)
+    assert out.getexif().get(274) in (None, 1)
