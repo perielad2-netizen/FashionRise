@@ -1,10 +1,19 @@
 import type { BrushKind } from '@/lib/professionalBrushes'
+import {
+  AirbrushKindIcon,
+  CharcoalKindIcon,
+  InkKindIcon,
+} from '@/shell/components/StudioToolIcons'
 import styles from './BrushKindStrip.module.css'
 
-const OPTIONS: Array<{ id: BrushKind; label: string }> = [
-  { id: 'tapered', label: 'Ink' },
-  { id: 'charcoal', label: 'Charcoal' },
-  { id: 'airbrush', label: 'Airbrush' },
+const OPTIONS: Array<{
+  id: BrushKind
+  label: string
+  Icon: (props: { size?: number }) => JSX.Element
+}> = [
+  { id: 'tapered', label: 'Ink', Icon: InkKindIcon },
+  { id: 'charcoal', label: 'Charcoal', Icon: CharcoalKindIcon },
+  { id: 'airbrush', label: 'Airbrush', Icon: AirbrushKindIcon },
 ]
 
 type Props = {
@@ -31,6 +40,7 @@ export function BrushKindStrip({
     >
       {OPTIONS.map((opt) => {
         const selected = brushKind === opt.id
+        const Icon = opt.Icon
         return (
           <button
             key={opt.id}
@@ -41,7 +51,8 @@ export function BrushKindStrip({
             className={selected ? styles.active : styles.btn}
             onClick={() => onBrushKind(opt.id)}
           >
-            {opt.label}
+            <Icon size={compact ? 13 : 14} />
+            <span>{opt.label}</span>
           </button>
         )
       })}
