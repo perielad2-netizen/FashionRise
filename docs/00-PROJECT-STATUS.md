@@ -3,6 +3,15 @@
 **Purpose:** Single page to align **new chat sessions** and humans on **what exists**, **where it lives**, and **what to do next**.
 **Maintenance:** After each meaningful milestone, update the **last updated** line, **milestone table**, and **suggested next steps**. Keep historical sections below as an archive — do not silently truncate milestones.
 
+## Deployed — Runway Mobbin polish LIVE (2026-11-16 21:08 Asia/Jerusalem)
+
+| Field | Value |
+| --- | --- |
+| Tip | FE **`38648d70`** · `/var/www/fashionrise/releases/38648d70-runway-mobbin-polish` |
+| Change | Mobbin-inspired Runway awards rail, podium top-3, segmented scopes, week chip polish; group chip hidden |
+| Preview | `/preview-mobbin/` removed after promote |
+| Rollback FE | `ln -sfn /var/www/fashionrise/releases/ff2ed43e-runway-category-boards /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
+
 ## Deployed — Runway category profile boards (2026-11-16 20:46 Asia/Jerusalem)
 
 | Field | Value |
@@ -69,7 +78,7 @@
 | Change | Profile photo lightbox; Designer Card Back removed; GlobalHeader on profile + Friends; feed stays immersive |
 | Rollback FE | `ln -sfn /var/www/fashionrise/releases/c1fed241-friends-profile-full /var/www/fashionrise/current && nginx -t && systemctl reload nginx` |
 
-**Last updated:** 2026-11-16 (**Runway category boards LIVE** · tip **`ff2ed43e`** · rewards **OFF**.)
+**Last updated:** 2026-11-16 (**Runway Mobbin polish LIVE** · tip **`38648d70`** · rewards **OFF**.)
 
 **Phase:** FashionRise Social **LIVE**. FashionRise feed and Runway rankings are separate surfaces (#377). Rewards remain **OFF**.
 
