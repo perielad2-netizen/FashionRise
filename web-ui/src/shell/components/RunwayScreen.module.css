@@ -1874,12 +1874,22 @@
   cursor: not-allowed;
 }
 
+.profileScreen {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
 .friendProfile {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 0;
-  padding-bottom: 16px;
+  min-height: min-content;
+  padding:
+    calc(12px + env(safe-area-inset-top, 0px))
+    16px
+    calc(32px + env(safe-area-inset-bottom, 0px) + var(--fr-browser-chrome-bottom, 0px));
 }
 
 .friendProfileHead {
@@ -1887,6 +1897,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
+  /* Clear floating immersive hamburger so Back stays readable/tappable. */
+  padding-left: calc(48px + env(safe-area-inset-left, 0px));
 }
 
 .friendBackBtn {

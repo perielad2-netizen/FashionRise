@@ -70,6 +70,9 @@ import styles from './RunwayScreen.module.css'
 type Props = {
   onOpenCreate: () => void
   onOpenLooks: () => void
+  /** Deep-link from Home header avatar → open own editable profile. */
+  openOwnProfile?: boolean
+  onOwnProfileConsumed?: () => void
 }
 
 type LoadState =
@@ -188,7 +191,12 @@ function formatCount(n: number): string {
   return String(n)
 }
 
-export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
+export function RunwayScreen({
+  onOpenCreate,
+  onOpenLooks,
+  openOwnProfile = false,
+  onOwnProfileConsumed,
+}: Props) {
   const { user } = useAuth()
   const viewerId = user?.id ?? null
   const viewerUsername = user?.username ?? null
@@ -211,6 +219,16 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
   const [viewingDesigner, setViewingDesigner] = useState<DesignerRef | null>(null)
   const [openOwnProfileEditing, setOpenOwnProfileEditing] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (!openOwnProfile || !viewerId) return
+    setOpenOwnProfileEditing(true)
+    setViewingDesigner({
+      user_id: viewerId,
+      username: viewerUsername || undefined,
+    })
+    onOwnProfileConsumed?.()
+  }, [openOwnProfile, onOwnProfileConsumed, viewerId, viewerUsername])
 
   const applyPushAutoEnable = useCallback(async (fromGesture: boolean) => {
     setPushBusy(true)
@@ -590,7 +608,10 @@ export function RunwayScreen({ onOpenCreate, onOpenLooks }: Props) {
 
   if (viewingDesigner) {
     return (
-      <section className={styles.screen} aria-label="Designer profile">
+      <section
+        className={`${styles.screen} ${styles.profileScreen}`}
+        aria-label="Designer profile"
+      >
         <FriendProfilePanel
           friend={viewingDesigner}
           startInEditMode={openOwnProfileEditing && viewingDesigner.user_id === viewerId}

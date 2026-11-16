@@ -187,10 +187,6 @@
     font-size: 15px;
   }
 
-  .avatar {
-    display: none;
-  }
-
   .studioBtn span {
     /* Keep the control; shorten label on the tightest widths. */
     max-width: 4.5rem;
@@ -199,7 +195,8 @@
   }
 }
 
-.avatar {
+.avatar,
+.avatarBtn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -208,6 +205,16 @@
   place-items: center;
   background: rgba(255, 255, 255, 0.04);
   color: var(--fr-pink-soft);
+}
+
+.avatarBtn {
+  padding: 0;
+  cursor: pointer;
+}
+
+.avatarBtn:focus-visible {
+  outline: 2px solid #f9a8d4;
+  outline-offset: 2px;
 }
 
 .studioBtn,

@@ -11,6 +11,8 @@ type Props = {
   onComingSoon?: (label: string) => void
   currentNav?: NavDestination
   onNavigate?: (destination: NavDestination) => void
+  /** Header avatar → My Profile */
+  onOpenProfile?: () => void
   /** FashionRise immersive feed: hide global header; full-bleed main; floating nav exit. */
   immersive?: boolean
 }
@@ -22,6 +24,7 @@ export function FashionRiseAppShell({
   onComingSoon,
   currentNav,
   onNavigate,
+  onOpenProfile,
   immersive = false,
 }: Props) {
   const [navOpen, setNavOpen] = useState(false)
@@ -74,6 +77,7 @@ export function FashionRiseAppShell({
           username={username}
           onLogout={onLogout}
           onComingSoon={onComingSoon}
+          onOpenProfile={onOpenProfile}
           accountMenuOpen={accountMenuOpen}
           onAccountMenuOpenChange={setAccountMenu}
           leading={menuToggle}

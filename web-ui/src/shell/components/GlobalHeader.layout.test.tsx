@@ -55,4 +55,14 @@ describe('GlobalHeader Android layout (header overlap)', () => {
     expect(screen.getByTestId('global-account-menu-panel')).toBeInTheDocument()
     expect(header).toHaveClass(styles.headerMenuOpen)
   })
+
+  it('opens My Profile from the header avatar and account menu', () => {
+    const onOpenProfile = vi.fn()
+    render(<GlobalHeader username="peri" onLogout={vi.fn()} onOpenProfile={onOpenProfile} />)
+    fireEvent.click(screen.getByTestId('global-open-profile'))
+    expect(onOpenProfile).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByTestId('global-account-menu'))
+    fireEvent.click(screen.getByTestId('menu-my-profile'))
+    expect(onOpenProfile).toHaveBeenCalledTimes(2)
+  })
 })

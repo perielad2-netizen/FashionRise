@@ -403,6 +403,32 @@ describe('RunwayScreen', () => {
     fireEvent.click(await screen.findByTestId(`runway-tab-${tabId}`))
   }
 
+  it('opens My Profile when openOwnProfile deep-link is set', async () => {
+    getPublicProfile.mockResolvedValue({
+      user_id: 'viewer-1',
+      username: 'viewer',
+      display_name: 'Viewer',
+      bio: '',
+      avatar_url: null,
+      designs_count: 0,
+      looks_count: 0,
+      followers_count: 0,
+      following_count: 0,
+      reputation_score: 0,
+    })
+    listUserGallery.mockResolvedValue([])
+    render(
+      <RunwayScreen
+        onOpenCreate={vi.fn()}
+        onOpenLooks={vi.fn()}
+        openOwnProfile
+        onOwnProfileConsumed={vi.fn()}
+      />,
+    )
+    expect(await screen.findByTestId('friend-profile-panel')).toBeInTheDocument()
+    expect(await screen.findByTestId('designer-profile-editor')).toBeInTheDocument()
+  })
+
   it('opens My Profile for signed-in users with empty published designs and edits it', async () => {
     getPublicProfile.mockResolvedValue({
       user_id: 'viewer-1',
